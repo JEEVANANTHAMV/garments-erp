@@ -396,3 +396,16 @@ CREATE TABLE mst_document (
   KEY ix_doc_ref (ref_type,ref_id),
   CONSTRAINT fk_doc__company FOREIGN KEY (company_id) REFERENCES mst_company(id)
 ) ENGINE=InnoDB COMMENT='Central document management repository';
+
+CREATE TABLE IF NOT EXISTS cfg_system_setting (
+  id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  company_id    BIGINT UNSIGNED NULL,
+  setting_key   VARCHAR(80) NOT NULL,
+  setting_value TEXT NULL,
+  description   VARCHAR(255) NULL,
+  is_editable   TINYINT(1) NOT NULL DEFAULT 1,
+  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_setting (company_id, setting_key)
+) ENGINE=InnoDB COMMENT='Application system settings';
+

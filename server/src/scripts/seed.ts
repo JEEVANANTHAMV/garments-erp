@@ -234,7 +234,25 @@ async function main() {
                   VALUES (?,?,?,?,?,?,'2026-04-01')`, [companyId, hsn, desc, igst, cgst, sgst]);
     }
   }
-  log(`config: ${PROCESS_STAGES.length} stages, ${DEFECTS.length} defects, ${CERT_TYPES.length} cert types, ${LEDGER_ACCOUNTS.length} accounts`);
+  const SETTINGS: [string, string, string][] = [
+    ['DEFAULT_CURRENCY', 'USD', 'Default transaction currency'],
+    ['FISCAL_YEAR_START', '04-01', 'Fiscal year start (MM-DD)'],
+    ['PO_APPROVAL_LIMIT', '100000', 'PO value above which dual approval needed'],
+    ['LOW_STOCK_ALERT_DAYS', '7', 'Days before OTD to trigger stock alerts'],
+    ['MRP_NET_STOCK', '1', '1=net on-hand stock in MRP'],
+    ['AUDIT_RETENTION_DAYS', '730', 'Days to keep audit log entries'],
+    ['SESSION_TIMEOUT_MINS', '60', 'Idle session timeout in minutes'],
+    ['EMAIL_FROM', '', 'SMTP sender address for system emails'],
+    ['DEFAULT_INCOTERM', 'FOB', 'Default incoterm for export invoices'],
+    ['PACKING_QC_MANDATORY', '1', 'Require passing QC before packing'],
+  ];
+  for (const [k, v, d] of SETTINGS) {
+    await exec(`INSERT INTO cfg_system_setting (company_id,setting_key,setting_value,description)
+                VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE description=VALUES(description)`,
+      [companyId, k, v, d]);
+  }
+
+  log(`config: ${PROCESS_STAGES.length} stages, ${DEFECTS.length} defects, ${CERT_TYPES.length} cert types, ${LEDGER_ACCOUNTS.length} accounts, ${SETTINGS.length} settings`);
 
   // Warehouses
   const WAREHOUSES: [string,string,string][] = [
