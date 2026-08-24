@@ -20,6 +20,9 @@ import CostingsPage from './pages/sales/Costings';
 import SalesOrdersPage from './pages/sales/SalesOrders';
 import SalesOrderDetail from './pages/sales/SalesOrderDetail';
 
+/* Gate & Security */
+import { GateInwardsPage, GateOutwardsPage } from './pages/gate';
+
 /* Procurement */
 import { MrpPage, PurchaseOrdersPage, GrnPage, MaterialIssuePage } from './pages/procurement';
 
@@ -115,6 +118,12 @@ export default function App() {
                   <Route path="quotations" element={<QuotationsPage />} />
                   <Route path="orders" element={<SalesOrdersPage />} />
                   <Route path="orders/:id" element={<SalesOrderDetail />} />
+                </Route>
+
+                {/* Gate & Security */}
+                <Route path="gate">
+                  <Route path="inwards" element={<GateInwardsPage />} />
+                  <Route path="outwards" element={<GateOutwardsPage />} />
                 </Route>
 
                 {/* Procurement */}

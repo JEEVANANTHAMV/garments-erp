@@ -132,6 +132,10 @@ export const MODULES: [string, string, string | null, number][] = [
   ['PURCHASE','Purchase Orders','PROCUREMENT',42],
   ['GRN','Goods Receipt','PROCUREMENT',43],
 
+  ['GATE','Gate Management',null,45],
+  ['GATE_INWARD','Inward Gate Entry','GATE',46],
+  ['GATE_OUTWARD','Outward Gate Pass','GATE',47],
+
   ['INVENTORY','Inventory',null,50],
   ['ISSUE','Material Issue','INVENTORY',51],
 
@@ -372,7 +376,8 @@ export const TAX_RATES: [string, string, number, number, number][] = [
 export const NUMBER_SERIES: [string, string][] = [
   ['ENQUIRY','ENQ-'], ['SAMPLE','SMP-'], ['COSTING','CST-'], ['QUOTATION','QTN-'],
   ['SALES_ORDER','SO-'], ['BOM','BOM-'], ['TECHPACK','TP-'], ['MRP','MRP-'],
-  ['PURCHASE_ORDER','PO-'], ['GRN','GRN-'], ['MAT_ISSUE','ISS-'], ['PROD_PLAN','PLN-'],
+  ['PURCHASE_ORDER','PO-'], ['GRN','GRN-'], ['GATE_INWARD','IGP-'], ['GATE_OUTWARD','OGP-'],
+  ['MAT_ISSUE','ISS-'], ['PROD_PLAN','PLN-'],
   ['PROD_ORDER','WO-'], ['PROCESS_TXN','PRC-'], ['CUTTING','CUT-'], ['PRINTING','PRT-'],
   ['EMBROIDERY','EMB-'], ['WASHING','WSH-'], ['STITCHING','STC-'], ['FINISHING','FIN-'],
   ['QC','QC-'], ['PACKING','PCK-'], ['DISPATCH','DSP-'], ['INVOICE','INV-'],

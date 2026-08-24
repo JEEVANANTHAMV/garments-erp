@@ -863,6 +863,50 @@ async function seedDemo(ctx: {
   }
   log('purchase order and goods receipt with batch traceability');
 
+  // ------------------------------------------------------- Gate Management
+  const gateInExists = await one(`SELECT id FROM trx_gate_inward WHERE company_id=? AND entry_no='IGP-00001'`, [companyId]);
+  if (!gateInExists) {
+    await exec(
+      `INSERT INTO trx_gate_inward (company_id,entry_no,entry_date,entry_time,entry_type,party_id,supplier_dc_no,
+         supplier_dc_date,supplier_inv_no,supplier_inv_date,vehicle_no,driver_name,driver_phone,transporter_name,
+         lr_no,material_type,package_count,gross_weight_kg,tare_weight_kg,net_weight_kg,warehouse_id,status,security_guard,created_by)
+       VALUES (?,'IGP-00001','2026-06-02','09:45:00','PURCHASE_INWARD',?,'DC-8842','2026-06-01','INV-SVS-2291','2026-06-01',
+               'TN39BX4471','R. Manickam','+91 98421 11223','VRL Logistics','LR-99812','FABRIC',48,5120.000,120.000,5000.000,
+               ?,'GRN_COMPLETED','P. Velusamy',?)`,
+      [companyId, partyId.get('S001'), rmWh, adminId]);
+
+    await exec(
+      `INSERT INTO trx_gate_inward (company_id,entry_no,entry_date,entry_time,entry_type,party_id,supplier_dc_no,
+         supplier_dc_date,vehicle_no,driver_name,driver_phone,transporter_name,material_type,package_count,
+         gross_weight_kg,tare_weight_kg,net_weight_kg,warehouse_id,status,security_guard,created_by)
+       VALUES (?,'IGP-00002','2026-06-15','11:30:00','JOBWORK_RETURN',?,'DC-PRT-402','2026-06-15',
+               'TN38AZ9921','S. Kannan','+91 97890 55443','Local Mini Truck','GARMENT',24,1250.000,50.000,1200.000,
+               ?,'GATE_IN','P. Velusamy',?)`,
+      [companyId, partyId.get('V001'), rmWh, adminId]);
+  }
+
+  const gateOutExists = await one(`SELECT id FROM trx_gate_outward WHERE company_id=? AND pass_no='OGP-00001'`, [companyId]);
+  if (!gateOutExists) {
+    await exec(
+      `INSERT INTO trx_gate_outward (company_id,pass_no,pass_date,pass_time,pass_type,party_id,vehicle_no,
+         driver_name,driver_phone,transporter_name,purpose,package_count,total_qty,uom_id,expected_return_date,
+         is_returned,status,security_guard,created_by)
+       VALUES (?,'OGP-00001','2026-06-10','14:15:00','RETURNABLE_JOBWORK',?,'TN38AZ9921',
+               'S. Kannan','+91 97890 55443','Local Mini Truck','Sent cut panels for chest pigment printing',24,1200.000,?,
+               '2026-06-16',1,'RETURNED_FULL','P. Velusamy',?)`,
+      [companyId, partyId.get('V001'), PCS, adminId]);
+
+    await exec(
+      `INSERT INTO trx_gate_outward (company_id,pass_no,pass_date,pass_time,pass_type,party_id,vehicle_no,
+         driver_name,driver_phone,transporter_name,purpose,package_count,total_qty,uom_id,expected_return_date,
+         is_returned,status,security_guard,created_by)
+       VALUES (?,'OGP-00002','2026-07-29','16:30:00','NON_RETURNABLE_DISPATCH',?,'TN39BX8819',
+               'K. Palani','+91 94432 77889','South Indian Roadways','Export shipment dispatch to Tuticorin Port CFS',90,5400.000,?,
+               NULL,0,'GATE_OUT','P. Velusamy',?)`,
+      [companyId, partyId.get('B001'), PCS, adminId]);
+  }
+  log('gate entries (inward & outward returnables) seeded');
+
   // ------------------------------------------------------- packing → export
   const packNo = 'PCK-00001';
   let packId: number;
