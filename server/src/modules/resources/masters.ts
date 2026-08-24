@@ -295,6 +295,7 @@ export const masterResources: ResourceConfig[] = [
     path: 'warehouse-bins', table: 'mst_warehouse_bin', permission: 'WAREHOUSE', label: 'Bin',
     searchable: ['bin_code', 'rack'], sortable: ['bin_code'], defaultSort: 't.bin_code',
     companyScoped: false, softDelete: false, hasAuditCols: false, filters: ['warehouse_id'],
+    selectExtra: 'w.warehouse_name', joins: 'LEFT JOIN mst_warehouse w ON w.id = t.warehouse_id',
     fields: [
       f('warehouse_id', s.idReq()), f('bin_code', s.strReq(30)),
       f('rack', s.nullableStr(20)), f('is_active', s.bool()),

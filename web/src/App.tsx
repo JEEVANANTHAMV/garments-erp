@@ -9,7 +9,7 @@ import Dashboard from './pages/Dashboard';
 /* Masters */
 import {
   PartiesPage, PartyDetailPage, ProductsPage, YarnsPage, FabricsPage, TrimsPage,
-  ColorsPage, WarehousesPage, BranchesPage, UnitsPage, SizeGroupsPage, BatchesPage,
+  ColorsPage, WarehousesPage, WarehouseBinsPage, BranchesPage, UnitsPage, SizeGroupsPage, BatchesPage,
 } from './pages/masters';
 import { StylesPage, StyleDetailPage } from './pages/masters/Styles';
 import { BomsPage, BomDetailPage } from './pages/masters/Boms';
@@ -97,6 +97,7 @@ export default function App() {
                   <Route path="trims" element={<TrimsPage />} />
                   <Route path="colors" element={<ColorsPage />} />
                   <Route path="warehouses" element={<WarehousesPage />} />
+                  <Route path="warehouse-bins" element={<WarehouseBinsPage />} />
                   <Route path="branches" element={<BranchesPage />} />
                   <Route path="units" element={<UnitsPage />} />
                   <Route path="size-groups" element={<SizeGroupsPage />} />

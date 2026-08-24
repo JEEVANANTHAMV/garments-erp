@@ -39,6 +39,7 @@ export const NAV: NavSection[] = [
       { label: 'Colors',            to: '/masters/colors', icon: Palette, perms: ['COLOR.VIEW'] },
       { label: 'Size Groups',       to: '/masters/size-groups', icon: Ruler, perms: ['SIZE.VIEW'] },
       { label: 'Warehouses',        to: '/masters/warehouses', icon: Warehouse, perms: ['WAREHOUSE.VIEW'] },
+      { label: 'Bins & Racks',      to: '/masters/warehouse-bins', icon: Boxes, perms: ['WAREHOUSE.VIEW'] },
       { label: 'Branches & Units',  to: '/masters/branches', icon: Building2, perms: ['BRANCH.VIEW','UNIT.VIEW'] },
     ],
   },

@@ -357,15 +357,17 @@ inventoryRouter.get('/stock', requirePermission('INVENTORY.VIEW'), ah(async (req
 
   const rows = await query(
     `SELECT sl.material_type, sl.warehouse_id, w.warehouse_name,
+            sl.bin_id, bn.bin_code, bn.rack,
             sl.yarn_id, sl.fabric_id, sl.trim_id, sl.sku_id, sl.batch_id,
             COALESCE(y.yarn_name, fb.fabric_name, tr.trim_name, k.sku_code) AS item_name,
             COALESCE(y.yarn_code, fb.fabric_code, tr.trim_code, k.sku_code) AS item_code,
-            b.batch_no, u.code AS uom_code,
+            b.batch_no, b.shade_lot, u.code AS uom_code,
             SUM(sl.qty_in)  AS total_in,
             SUM(sl.qty_out) AS total_out,
             SUM(sl.qty_in) - SUM(sl.qty_out) AS balance
        FROM trx_stock_ledger sl
        LEFT JOIN mst_warehouse w ON w.id = sl.warehouse_id
+       LEFT JOIN mst_warehouse_bin bn ON bn.id = sl.bin_id
        LEFT JOIN mst_yarn y   ON y.id  = sl.yarn_id
        LEFT JOIN mst_fabric fb ON fb.id = sl.fabric_id
        LEFT JOIN mst_trim tr  ON tr.id = sl.trim_id
@@ -374,8 +376,9 @@ inventoryRouter.get('/stock', requirePermission('INVENTORY.VIEW'), ah(async (req
        LEFT JOIN cfg_uom u    ON u.id  = sl.uom_id
       WHERE ${where.join(' AND ')}
       GROUP BY sl.material_type, sl.warehouse_id, w.warehouse_name,
+               sl.bin_id, bn.bin_code, bn.rack,
                sl.yarn_id, sl.fabric_id, sl.trim_id, sl.sku_id, sl.batch_id,
-               item_name, item_code, b.batch_no, u.code
+               item_name, item_code, b.batch_no, b.shade_lot, u.code
       ${q.onlyInStock ? 'HAVING balance > 0' : ''}
       ORDER BY sl.material_type, item_name`, params);
 
@@ -388,6 +391,7 @@ inventoryRouter.get('/ledger', requirePermission('INVENTORY.VIEW'), ah(async (re
     page: z.coerce.number().int().min(1).default(1),
     pageSize: z.coerce.number().int().min(1).max(500).default(50),
     warehouse_id: z.coerce.number().int().optional(),
+    bin_id: z.coerce.number().int().optional(),
     material_type: z.string().optional(),
     yarn_id: z.coerce.number().int().optional(),
     fabric_id: z.coerce.number().int().optional(),
@@ -398,7 +402,7 @@ inventoryRouter.get('/ledger', requirePermission('INVENTORY.VIEW'), ah(async (re
   }).parse(req.query);
 
   const where = ['sl.company_id = ?']; const params: unknown[] = [req.user!.companyId];
-  for (const k of ['warehouse_id','material_type','yarn_id','fabric_id','trim_id','sku_id','batch_id'] as const) {
+  for (const k of ['warehouse_id','bin_id','material_type','yarn_id','fabric_id','trim_id','sku_id','batch_id'] as const) {
     if ((q as any)[k]) { where.push(`sl.${k} = ?`); params.push((q as any)[k]); }
   }
   if (q.dateFrom) { where.push('sl.txn_date >= ?'); params.push(q.dateFrom); }
@@ -407,11 +411,12 @@ inventoryRouter.get('/ledger', requirePermission('INVENTORY.VIEW'), ah(async (re
   const offset = (q.page - 1) * q.pageSize;
 
   const [rows, total] = await Promise.all([
-    query(`SELECT sl.*, w.warehouse_name, u.code AS uom_code, b.batch_no,
+    query(`SELECT sl.*, w.warehouse_name, bn.bin_code, bn.rack, u.code AS uom_code, b.batch_no, b.shade_lot,
                   COALESCE(y.yarn_name, fb.fabric_name, tr.trim_name, k.sku_code) AS item_name,
                   usr.full_name AS created_by_name
              FROM trx_stock_ledger sl
              LEFT JOIN mst_warehouse w ON w.id = sl.warehouse_id
+             LEFT JOIN mst_warehouse_bin bn ON bn.id = sl.bin_id
              LEFT JOIN cfg_uom u ON u.id = sl.uom_id
              LEFT JOIN mst_batch b ON b.id = sl.batch_id
              LEFT JOIN mst_yarn y ON y.id = sl.yarn_id

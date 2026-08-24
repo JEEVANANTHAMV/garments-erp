@@ -55,7 +55,16 @@ export function StockPage() {
           { key: 'item_name', header: 'Item', render: (r: any) => <span className="font-medium">{r.item_name}</span> },
           { key: 'material_type', header: 'Type', render: (r: any) => <Badge tone="blue">{humanize(r.material_type)}</Badge> },
           { key: 'warehouse_name', header: 'Warehouse' },
-          { key: 'batch_no', header: 'Batch' },
+          { key: 'location', header: 'Rack / Bin',
+            render: (r: any) => r.bin_code
+              ? <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+                  {r.rack ? `Rack ${r.rack} / ` : ''}{r.bin_code}
+                </span>
+              : <span className="text-slate-400">—</span> },
+          { key: 'batch_no', header: 'Batch / Lot',
+            render: (r: any) => r.batch_no
+              ? <span className="font-mono text-xs text-brand-700">{r.batch_no}{r.shade_lot ? ` (${r.shade_lot})` : ''}</span>
+              : <span className="text-slate-400">—</span> },
           { key: 'total_in', header: 'In', align: 'right', render: (r: any) => fmtDecimal(r.total_in, 3) },
           { key: 'total_out', header: 'Out', align: 'right', render: (r: any) => fmtDecimal(r.total_out, 3) },
           { key: 'balance', header: 'Balance', align: 'right', render: (r: any) => {
@@ -65,7 +74,7 @@ export function StockPage() {
         ]}
         rows={stock.data ?? []}
         loading={stock.isLoading} error={stock.error} onRetry={() => void stock.refetch()}
-        rowKey={(r: any) => `${r.material_type}-${r.yarn_id}-${r.fabric_id}-${r.trim_id}-${r.sku_id}-${r.batch_id}-${r.warehouse_id}`}
+        rowKey={(r: any) => `${r.material_type}-${r.yarn_id}-${r.fabric_id}-${r.trim_id}-${r.sku_id}-${r.batch_id}-${r.warehouse_id}-${r.bin_id}`}
         emptyTitle="No stock movements yet"
         emptyMessage="Stock appears here once goods are received or adjusted in." />
 
@@ -170,7 +179,14 @@ export function StockLedgerPage() {
           { key: 'txn_type', header: 'Type', render: (r: any) => <Badge tone="violet">{humanize(r.txn_type)}</Badge> },
           { key: 'item_name', header: 'Item', render: (r: any) => <span className="font-medium">{r.item_name}</span> },
           { key: 'warehouse_name', header: 'Warehouse' },
-          { key: 'batch_no', header: 'Batch' },
+          { key: 'location', header: 'Rack / Bin',
+            render: (r: any) => r.bin_code
+              ? <span className="font-mono text-xs text-slate-700">{r.rack ? `R-${r.rack} / ` : ''}{r.bin_code}</span>
+              : <span className="text-slate-400">—</span> },
+          { key: 'batch_no', header: 'Batch / Lot',
+            render: (r: any) => r.batch_no
+              ? <span className="font-mono text-xs text-brand-700">{r.batch_no}{r.shade_lot ? ` (${r.shade_lot})` : ''}</span>
+              : <span className="text-slate-400">—</span> },
           { key: 'ref', header: 'Reference',
             render: (r: any) => <span className="text-[11.5px] text-slate-500">{r.ref_type} #{r.ref_id}</span> },
           { key: 'qty_in', header: 'In', align: 'right',

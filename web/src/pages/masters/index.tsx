@@ -253,6 +253,30 @@ export function WarehousesPage() {
     ]} />;
 }
 
+/* ---------------------------------------------------- Warehouse Bins & Racks */
+export function WarehouseBinsPage() {
+  return <CrudPage
+    path="warehouse-bins" title="Bins & Racks" permission="WAREHOUSE" singular="Bin Location"
+    subtitle="Racks, shelves, and bin locations for fabric rolls and materials"
+    defaultSort={{ key: 'bin_code', dir: 'asc' }}
+    columns={[
+      { key: 'warehouse_name', header: 'Warehouse', sortable: true },
+      { key: 'rack', header: 'Rack / Zone', sortable: true,
+        render: (r: any) => <span className="font-semibold text-slate-800">{r.rack ? `Rack ${r.rack}` : '—'}</span> },
+      { key: 'bin_code', header: 'Bin Code', sortable: true,
+        render: (r: any) => <span className="font-mono text-[12px] font-semibold text-brand-700">{r.bin_code}</span> },
+      { key: 'is_active', header: 'Status',
+        render: (r: any) => r.is_active ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Inactive</Badge> },
+    ]}
+    filters={[{ name: 'warehouse_id', label: 'Warehouse', lookup: 'warehouses' }]}
+    fields={[
+      { name: 'warehouse_id', label: 'Warehouse', required: true, lookup: 'warehouses' },
+      { name: 'rack', label: 'Rack / Shelf / Zone', placeholder: 'e.g. Rack A, Shelf 01' },
+      { name: 'bin_code', label: 'Bin Code', required: true, placeholder: 'e.g. A-01, BIN-102' },
+      activeField,
+    ]} />;
+}
+
 /* ----------------------------------------------------------- Branches */
 export function BranchesPage() {
   return <CrudPage
