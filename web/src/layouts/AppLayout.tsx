@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
-  Menu, X, LogOut, ChevronDown, Search, Bell, Building2
+  Menu, X, LogOut, ChevronDown, Search, Bell, Building2, User as UserIcon,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../lib/auth';
@@ -15,7 +15,15 @@ export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenu, setUserMenu] = useState(false);
   const [filter, setFilter] = useState('');
+  const [textSize, setTextSize] = useState<'sm' | 'md' | 'lg'>(() => {
+    return (localStorage.getItem('erp.textSize') as 'sm' | 'md' | 'lg') || 'md';
+  });
   const location = useLocation();
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-text-size', textSize);
+    localStorage.setItem('erp.textSize', textSize);
+  }, [textSize]);
 
   // Only render sections the user can actually reach.
   const sections = useMemo(() => NAV
@@ -111,6 +119,43 @@ export default function AppLayout() {
           </button>
 
           <div className="flex-1" />
+
+          {/* Accessibility Font Sizer */}
+          <div className="flex items-center rounded-lg border border-surface-border bg-slate-100/80 p-0.5" title="Adjust Text Size">
+            <button
+              type="button"
+              title="Small font size"
+              onClick={() => setTextSize('sm')}
+              className={clsx(
+                'rounded px-2 py-0.5 text-[11px] font-semibold transition-all',
+                textSize === 'sm' ? 'bg-white text-brand-700 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-800'
+              )}
+            >
+              A-
+            </button>
+            <button
+              type="button"
+              title="Default font size"
+              onClick={() => setTextSize('md')}
+              className={clsx(
+                'rounded px-2 py-0.5 text-[12px] font-semibold transition-all',
+                textSize === 'md' ? 'bg-white text-brand-700 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-800'
+              )}
+            >
+              A
+            </button>
+            <button
+              type="button"
+              title="Large font size"
+              onClick={() => setTextSize('lg')}
+              className={clsx(
+                'rounded px-2 py-0.5 text-[13px] font-semibold transition-all',
+                textSize === 'lg' ? 'bg-white text-brand-700 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-800'
+              )}
+            >
+              A+
+            </button>
+          </div>
 
           <button className="relative rounded-lg p-2 text-slate-500 hover:bg-surface-hover" aria-label="Notifications">
             <Bell size={17} />

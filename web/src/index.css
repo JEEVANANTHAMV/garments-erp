@@ -1,11 +1,50 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,600&family=Inter:wght@400;500;600;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  html { -webkit-font-smoothing: antialiased; }
-  body { @apply bg-surface-muted text-slate-800 font-sans text-[13.5px] leading-relaxed; }
+  html {
+    -webkit-font-smoothing: antialiased;
+    font-family: 'Plus Jakarta Sans', Inter, system-ui, -apple-system, sans-serif;
+  }
+  
+  /* Accessibility Font Scaling */
+  html[data-text-size="sm"] {
+    font-size: 14px;
+    --erp-base-font-size: 12px;
+  }
+  html[data-text-size="sm"] body {
+    font-size: 12.5px;
+  }
+  html[data-text-size="sm"] .input {
+    font-size: 12px;
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+  }
+  
+  html[data-text-size="md"] {
+    font-size: 16px;
+    --erp-base-font-size: 13.5px;
+  }
+  html[data-text-size="md"] body {
+    font-size: 13.5px;
+  }
+  
+  html[data-text-size="lg"] {
+    font-size: 18px;
+    --erp-base-font-size: 15.5px;
+  }
+  html[data-text-size="lg"] body {
+    font-size: 15px;
+  }
+  html[data-text-size="lg"] .input {
+    font-size: 14.5px;
+    padding-top: 0.65rem;
+    padding-bottom: 0.65rem;
+  }
+
+  body { @apply bg-surface-muted text-slate-800 font-sans leading-relaxed; }
   * { scrollbar-width: thin; scrollbar-color: #cbd2dc transparent; }
   *::-webkit-scrollbar { width: 9px; height: 9px; }
   *::-webkit-scrollbar-thumb { @apply bg-slate-300 rounded-full border-2 border-solid border-transparent bg-clip-padding; }

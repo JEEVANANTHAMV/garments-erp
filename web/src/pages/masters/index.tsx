@@ -6,6 +6,8 @@ import { useNavigate } from 'react-router-dom';
 const yesNo = [{ value: 1, label: 'Yes' }, { value: 0, label: 'No' }];
 const activeField = { name: 'is_active', label: 'Active', type: 'checkbox' as const, defaultValue: 1 };
 
+export { PartyDetailPage } from './PartyDetail';
+
 /* ------------------------------------------------------------ Parties */
 export function PartiesPage() {
   const nav = useNavigate();
@@ -14,6 +16,7 @@ export function PartiesPage() {
     subtitle="Buyers, suppliers, job-work vendors and agents"
     searchPlaceholder="Search by code, name, email or GSTIN…"
     defaultSort={{ key: 'party_name', dir: 'asc' }}
+    onNew={() => nav('/masters/parties/new')}
     onRowClick={(r) => nav(`/masters/parties/${r.id}`)}
     columns={[
       { key: 'party_code', header: 'Code', sortable: true,

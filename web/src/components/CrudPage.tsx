@@ -56,6 +56,8 @@ export interface CrudConfig<T> {
   defaultSort?: { key: string; dir: 'asc' | 'desc' };
   /** Extra query params always sent with the list request. */
   baseParams?: Record<string, unknown>;
+  /** Custom handler for creating a new record (e.g. navigate to dedicated form). */
+  onNew?: () => void;
   /** Row click handler — omit to open the edit modal. */
   onRowClick?: (row: T) => void;
   /** Extra header buttons. */
@@ -144,7 +146,7 @@ export function CrudPage<T extends { id: number }>(cfg: CrudConfig<T>) {
         actions={<>
           {cfg.headerActions}
           {can(`${cfg.permission}.CREATE`) && (
-            <button className="btn-primary" onClick={openNew}>
+            <button className="btn-primary" onClick={cfg.onNew ?? openNew}>
               <Plus size={15} /> New {cfg.singular}
             </button>
           )}
