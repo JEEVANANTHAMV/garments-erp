@@ -1,16 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Building2, MapPin, Users, FileText, Landmark, ShoppingBag,
-  Save, ArrowLeft, Plus, Trash2, CheckCircle2, ShieldCheck,
-  Phone, Mail, Globe, ExternalLink, AlertCircle
+  Building2, MapPin, Users, Landmark, ShoppingBag,
+  Save, ArrowLeft, Plus, Trash2, ShieldCheck
 } from 'lucide-react';
-import { useItem, useSave, useDelete } from '../../hooks/useResource';
+import { useItem, useSave } from '../../hooks/useResource';
 import { useLookup } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
-import {
-  PageHeader, Badge, Spinner
-} from '../../components/ui';
+import { Spinner } from '../../components/ui';
 
 interface AddressItem {
   id?: number;
@@ -81,7 +78,7 @@ export function PartyDetailPage() {
   const { data: currencies } = useLookup('currencies');
 
   const itemQuery = useItem<any>('parties', isNew ? 0 : Number(id));
-  const saveMutation = useSave<any>('parties');
+  const saveMutation = useSave<any>('parties', 'Business Partner');
 
   const [form, setForm] = useState<any>({
     party_code: '',
@@ -166,7 +163,7 @@ export function PartyDetailPage() {
         currency_id: form.currency_id ? Number(form.currency_id) : null,
       };
 
-      const res = await saveMutation.mutateAsync(payload);
+      await saveMutation.mutateAsync({ id: isNew ? null : Number(id), body: payload });
       toast(isNew ? 'Business partner created successfully' : 'Business partner updated');
 
       if (saveAndNew) {
@@ -307,7 +304,7 @@ export function PartyDetailPage() {
   if (itemQuery.isLoading) {
     return (
       <div className="flex h-96 items-center justify-center">
-        <Spinner size="lg" />
+        <Spinner size={28} />
       </div>
     );
   }
