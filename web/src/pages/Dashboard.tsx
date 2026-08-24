@@ -1,12 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
-  ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis,
-  CartesianGrid, Tooltip, PieChart, Pie, Cell, Legend,
+  ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell, Legend
 } from 'recharts';
 import {
-  ShoppingCart, Factory, Ship, ClipboardCheck, TrendingUp, AlertTriangle,
-  Package, ArrowRight, Clock,
+  ShoppingCart, Factory, Ship, ClipboardCheck, AlertTriangle, ArrowRight, Clock
 } from 'lucide-react';
 import { http } from '../lib/api';
 import { fmtNumber, fmtCompact, fmtDate, humanize } from '../lib/format';
@@ -113,7 +111,7 @@ export default function Dashboard() {
                 <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false}
                   tickFormatter={(v) => fmtCompact(v)} />
-                <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n) => [fmtNumber(v), n]} />
+                <Tooltip contentStyle={tooltipStyle} formatter={((v: unknown, n: unknown) => [fmtNumber(v), n]) as never} />
                 <Area type="monotone" dataKey="Qty" stroke="#3663f3" strokeWidth={2}
                   fill="url(#gQty)" name="Order Qty (pcs)" />
               </AreaChart>
@@ -150,7 +148,7 @@ export default function Dashboard() {
                   tickLine={false} interval={0} angle={-25} textAnchor="end" height={54} />
                 <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false}
                   tickFormatter={(v) => fmtCompact(v)} />
-                <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n) => [fmtNumber(v), n]} />
+                <Tooltip contentStyle={tooltipStyle} formatter={((v: unknown, n: unknown) => [fmtNumber(v), n]) as never} />
                 <Bar dataKey="Output" fill="#3663f3" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="Rejected" fill="#ef4444" radius={[4, 4, 0, 0]} />
               </BarChart>

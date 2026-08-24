@@ -1,7 +1,7 @@
 import { CrudPage } from '../../components/CrudPage';
 import { StatusBadge, Badge } from '../../components/ui';
 import { fmtDate, fmtNumber, fmtDecimal, humanize, today } from '../../lib/format';
-import { useNavigate } from 'react-router-dom';
+ 'react-router-dom';
 
 const INCOTERMS = ['FOB','CIF','CFR','EXW','DDP','DAP','FCA'].map((v) => ({ value: v, label: v }));
 

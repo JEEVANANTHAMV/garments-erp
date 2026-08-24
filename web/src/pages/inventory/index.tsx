@@ -1,17 +1,16 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Boxes, Plus, ArrowDownUp } from 'lucide-react';
+import { ArrowDownUp } from 'lucide-react';
 import { http, ApiError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
 import { DataTable } from '../../components/DataTable';
-import { CrudPage } from '../../components/CrudPage';
+ '../../components/CrudPage';
 import {
-  PageHeader, SearchInput, Select, Input, Modal, Spinner, Badge, Textarea,
-  useDebounced, StatusBadge,
+  PageHeader, SearchInput, Select, Input, Modal, Spinner, Badge, Textarea, useDebounced
 } from '../../components/ui';
-import { fmtNumber, fmtDecimal, fmtDateTime, fmtDate, humanize, today } from '../../lib/format';
+import { fmtDecimal, fmtDateTime, humanize } from '../../lib/format';
 
 /* ------------------------------------------------------- Stock on hand */
 export function StockPage() {

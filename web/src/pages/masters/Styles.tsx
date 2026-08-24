@@ -9,10 +9,9 @@ import { useLookup, toOptions, useStatuses, toPlainOptions } from '../../hooks/u
 import { useToast } from '../../hooks/useToast';
 import { DataTable } from '../../components/DataTable';
 import {
-  PageHeader, SearchInput, Input, Select, Textarea, Spinner, Badge, StatusBadge,
-  LoadingBlock, ErrorState, Tabs, Checkbox, useDebounced,
+  PageHeader, SearchInput, Input, Select, Textarea, Spinner, Badge, StatusBadge, LoadingBlock, ErrorState, Tabs, useDebounced
 } from '../../components/ui';
-import { fmtNumber, fmtDate } from '../../lib/format';
+import { fmtDate } from '../../lib/format';
 
 export function StylesPage() {
   const { can } = useAuth();

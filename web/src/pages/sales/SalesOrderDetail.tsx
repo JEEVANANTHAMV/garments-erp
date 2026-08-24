@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Plus, Trash2, Save, CheckCircle2, Package, Factory, Receipt } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Save, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { http, ApiError } from '../../lib/api';
 import { useLookup, toOptions, useStyleColors, useStyleSkus, useStatuses, toPlainOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
 import {
-  PageHeader, Input, Select, Textarea, Spinner, StatusBadge, Badge,
-  LoadingBlock, ErrorState, Tabs, Modal,
+  PageHeader, Input, Select, Spinner, StatusBadge, LoadingBlock, ErrorState, Tabs, Modal
 } from '../../components/ui';
 import { fmtDate, fmtNumber, fmtDecimal, today, toDateInput } from '../../lib/format';
 

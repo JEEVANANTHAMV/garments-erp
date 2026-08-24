@@ -1,0 +1,17 @@
+node_modules/
+dist/
+build/
+*.log
+.DS_Store
+
+# Local environment — never commit real secrets
+.env
+.env.local
+server/.env
+web/.env
+
+# Deployment keys
+*.pem
+
+# Uploads
+server/uploads/

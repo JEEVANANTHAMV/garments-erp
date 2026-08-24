@@ -5,9 +5,9 @@ import { useAuth } from '../../lib/auth';
 import { useList, useListState } from '../../hooks/useResource';
 import { DataTable } from '../../components/DataTable';
 import {
-  PageHeader, SearchInput, StatusBadge, Badge, Select, useDebounced,
+  PageHeader, SearchInput, StatusBadge, Select, useDebounced
 } from '../../components/ui';
-import { useLookup, toOptions, useStatuses, toPlainOptions } from '../../hooks/useLookup';
+import { useLookup, toOptions } from '../../hooks/useLookup';
 import { fmtDate, fmtNumber, fmtDecimal } from '../../lib/format';
 
 const STATES = ['DRAFT','PENDING','APPROVED','REJECTED','ON_HOLD','CLOSED','CANCELLED'];

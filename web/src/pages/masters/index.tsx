@@ -1,5 +1,5 @@
 import { CrudPage } from '../../components/CrudPage';
-import { StatusBadge, Badge } from '../../components/ui';
+import { Badge } from '../../components/ui';
 import { fmtDecimal, fmtDate, humanize } from '../../lib/format';
 import { useNavigate } from 'react-router-dom';
 

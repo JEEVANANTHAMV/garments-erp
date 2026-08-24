@@ -9,10 +9,9 @@ import { useLookup, toOptions, useStatuses, toPlainOptions } from '../../hooks/u
 import { useToast } from '../../hooks/useToast';
 import { DataTable } from '../../components/DataTable';
 import {
-  PageHeader, SearchInput, Input, Select, Textarea, Spinner, Badge, StatusBadge,
-  LoadingBlock, ErrorState, useDebounced,
+  PageHeader, SearchInput, Input, Select, Spinner, Badge, StatusBadge, LoadingBlock, ErrorState, useDebounced
 } from '../../components/ui';
-import { fmtDate, fmtDecimal, fmtNumber, today, toDateInput } from '../../lib/format';
+import { fmtDate, fmtDecimal, today, toDateInput } from '../../lib/format';
 
 const MATERIALS = ['YARN', 'FABRIC', 'TRIM'] as const;
 

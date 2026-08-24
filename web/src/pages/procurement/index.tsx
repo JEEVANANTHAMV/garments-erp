@@ -4,15 +4,14 @@ import { Plus, Trash2, PlayCircle, Truck } from 'lucide-react';
 import { http, ApiError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { useList, useListState } from '../../hooks/useResource';
-import { useLookup, toOptions, useStatuses, toPlainOptions } from '../../hooks/useLookup';
+import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
 import { DataTable } from '../../components/DataTable';
 import { CrudPage } from '../../components/CrudPage';
 import {
-  PageHeader, SearchInput, Select, Input, Modal, Spinner, Badge, StatusBadge,
-  useDebounced, LoadingBlock, EmptyState,
+  PageHeader, SearchInput, Select, Input, Modal, Spinner, Badge, StatusBadge, useDebounced, LoadingBlock
 } from '../../components/ui';
-import { fmtNumber, fmtDecimal, fmtDate, humanize, today } from '../../lib/format';
+import { fmtDecimal, fmtDate, humanize, today } from '../../lib/format';
 
 /* -------------------------------------------------------- Purchase orders */
 export function PurchaseOrdersPage() {
@@ -257,7 +256,6 @@ function MrpDetailModal({ id, onClose }: { id: number | null; onClose: () => voi
 /* ------------------------------------------------------------------ GRN */
 export function GrnPage() {
   const { can } = useAuth();
-  const toast = useToast();
   const qc = useQueryClient();
   const { page, setPage, search, setSearch } = useListState();
   const debounced = useDebounced(search);
@@ -487,7 +485,6 @@ function GrnModal({ open, onClose, onDone }: { open: boolean; onClose: () => voi
 /* -------------------------------------------------------- Material issue */
 export function MaterialIssuePage() {
   const { can } = useAuth();
-  const toast = useToast();
   const qc = useQueryClient();
   const { page, setPage, search, setSearch } = useListState();
   const debounced = useDebounced(search);
