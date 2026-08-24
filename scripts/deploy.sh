@@ -41,23 +41,20 @@ chmod 400 "$SSH_KEY" 2>/dev/null || true
 echo "🚀 Deploying Garment ERP to ${PROD_USER}@${PROD_HOST}..."
 echo "🔑 Using SSH Key: ${SSH_KEY}"
 
-# 1. Sync local codebase to remote server (excluding node_modules, .git, and server/.env)
-echo "📦 1/4 Syncing codebase to remote server..."
-rsync -avz --delete \
-  -e "ssh -o StrictHostKeyChecking=no -i ${SSH_KEY}" \
-  --exclude "node_modules" \
-  --exclude ".git" \
-  --exclude "*.log" \
-  --exclude ".DS_Store" \
-  --exclude "server/.env" \
-  --exclude "dist" \
-  ./ "${PROD_USER}@${PROD_HOST}:${REMOTE_DIR}/"
+# 1. Push local changes to GitHub repository
+echo "📤 1/4 Pushing latest local commits to origin main..."
+git push origin main || echo "⚠️  Git push skipped (already up to date or no remote set)"
 
-# 2. Run remote installation, database seeding, and PM2 reload
-echo "⚙️  2/4 Updating dependencies, database seeds, and restarting services..."
+# 2. Remote Git Pull, Dependencies, Database Seeds & PM2 Reload
+echo "⚙️  2/4 Pulling latest git code on remote server and reloading services..."
 ssh -o StrictHostKeyChecking=no -i "${SSH_KEY}" "${PROD_USER}@${PROD_HOST}" bash << 'REMOTE_SCRIPT'
   set -e
   cd /home/ubuntu/garments-erp
+
+  # Pull latest code from GitHub
+  echo "📥 Git pulling latest code from origin/main..."
+  git fetch origin main
+  git reset --hard origin/main
 
   # Ensure server .env exists with production DB settings
   if [ ! -f server/.env ]; then
@@ -86,47 +83,16 @@ EOF
   fi
 
   # Install any newly added dependencies
-  echo "Installing server & web packages..."
+  echo "📦 Updating server & web dependencies..."
   (cd server && npm install --prefer-offline --no-audit)
   (cd web && npm install --prefer-offline --no-audit)
 
   # Apply database schema updates & idempotent seeds
-  echo "Applying database seeds and configuration updates..."
+  echo "🌱 Applying database seeds and configuration updates..."
   (cd server && npm run db:seed)
 
-  # Ensure PM2 ecosystem configuration exists
-  if [ ! -f ecosystem.config.cjs ]; then
-    cat << 'EOF' > ecosystem.config.cjs
-module.exports = {
-  apps: [
-    {
-      name: 'garments-erp-api',
-      cwd: '/home/ubuntu/garments-erp/server',
-      script: 'npx',
-      args: 'tsx src/index.ts',
-      env: {
-        NODE_ENV: 'production',
-        PORT: 4000
-      },
-      max_memory_restart: '500M'
-    },
-    {
-      name: 'garments-erp-web',
-      cwd: '/home/ubuntu/garments-erp/web',
-      script: 'npm',
-      args: 'run dev -- --host 0.0.0.0 --port 5173',
-      env: {
-        NODE_ENV: 'production'
-      },
-      max_memory_restart: '500M'
-    }
-  ]
-};
-EOF
-  fi
-
   # Reload services via PM2
-  echo "Restarting applications with PM2..."
+  echo "🔄 Reloading applications with PM2..."
   pm2 startOrRestart ecosystem.config.cjs
   pm2 save
 REMOTE_SCRIPT
@@ -137,7 +103,7 @@ sleep 3
 API_STATUS=$(ssh -o StrictHostKeyChecking=no -i "${SSH_KEY}" "${PROD_USER}@${PROD_HOST}" "curl -s http://127.0.0.1:4000/api/health || echo 'FAILED'")
 WEB_STATUS=$(ssh -o StrictHostKeyChecking=no -i "${SSH_KEY}" "${PROD_USER}@${PROD_HOST}" "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5173/ || echo '000'")
 
-echo "✅ 4/4 Deployment completed successfully!"
+echo "✅ 4/4 Deployment completed successfully via Git Pull & PM2 Reload!"
 echo "--------------------------------------------------------"
 echo "🌐 Web Application: http://${PROD_HOST}:5173"
 echo "🔌 API Health Check: ${API_STATUS}"
