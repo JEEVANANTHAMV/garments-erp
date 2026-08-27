@@ -31,14 +31,18 @@ export function PartiesPage() {
           {r.is_agent ? <Badge tone="amber">Agent</Badge> : null}
         </div>) },
       { key: 'country_name', header: 'Country' },
-      { key: 'currency_code', header: 'Currency' },
       { key: 'payment_terms', header: 'Payment terms' },
       { key: 'credit_days', header: 'Credit days', align: 'right' },
+      { key: 'status', header: 'Status', render: (r: any) => (
+        r.is_draft ? <Badge tone="amber">Draft</Badge> :
+        r.is_active ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Inactive</Badge>
+      )},
     ]}
     filters={[
       { name: 'is_buyer', label: 'Buyer', options: yesNo },
       { name: 'is_supplier', label: 'Supplier', options: yesNo },
       { name: 'is_vendor', label: 'Vendor', options: yesNo },
+      { name: 'is_draft', label: 'Draft Status', options: [{ value: 1, label: 'Drafts' }, { value: 0, label: 'Finalized' }] },
       { name: 'country_id', label: 'Country', lookup: 'countries' },
     ]}
     modalSize="lg"

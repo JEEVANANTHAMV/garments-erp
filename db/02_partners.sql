@@ -54,6 +54,7 @@ CREATE TABLE mst_party (
   phone           VARCHAR(40),
   website         VARCHAR(120),
   remarks         TEXT,
+  is_draft        TINYINT(1) NOT NULL DEFAULT 0,
   is_active       TINYINT(1) NOT NULL DEFAULT 1,
   is_deleted      TINYINT(1) NOT NULL DEFAULT 0,
   created_by      BIGINT UNSIGNED,

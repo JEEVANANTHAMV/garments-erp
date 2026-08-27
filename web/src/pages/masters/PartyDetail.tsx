@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Building2, MapPin, Users, Landmark, ShoppingBag,
-  Save, ArrowLeft, Plus, Trash2, ShieldCheck
+  Save, ArrowLeft, Plus, Trash2, ShieldCheck, FileText, CheckCircle2
 } from 'lucide-react';
 import { useItem, useSave } from '../../hooks/useResource';
 import { useLookup } from '../../hooks/useLookup';
@@ -166,16 +166,34 @@ export function PartyDetailPage() {
     setForm((prev: any) => ({ ...prev, [key]: val }));
   };
 
-  const handleSave = async (saveAndNew = false) => {
-    if (!form.party_code?.trim() || !form.party_name?.trim()) {
-      toast('Partner Code and Partner Name are required', 'error');
-      setTab('general');
-      return;
+  const handleSave = async (mode: 'save' | 'saveAndNew' | 'draft' = 'save') => {
+    const isDraft = mode === 'draft';
+    let code = form.party_code?.trim();
+    const name = form.party_name?.trim();
+
+    if (isDraft) {
+      if (!name && !code) {
+        toast('Please enter at least a Partner Name or Code to save as Draft', 'error');
+        setTab('general');
+        return;
+      }
+      if (!code) {
+        code = `DFT-${Date.now().toString().slice(-6)}`;
+      }
+    } else {
+      if (!code || !name) {
+        toast('Partner Code and Partner Name are required', 'error');
+        setTab('general');
+        return;
+      }
     }
 
     try {
       const payload = {
         ...form,
+        party_code: code,
+        party_name: name || code,
+        is_draft: isDraft ? 1 : 0,
         tds_rate: form.tds_applicable ? (Number(form.tds_rate) || 0) : 0,
         tcs_rate: form.tcs_applicable ? (Number(form.tcs_rate) || 0) : 0,
         credit_limit: Number(form.credit_limit) || 0,
@@ -184,10 +202,17 @@ export function PartyDetailPage() {
         currency_id: form.currency_id ? Number(form.currency_id) : null,
       };
 
-      await saveMutation.mutateAsync({ id: isNew ? null : Number(id), body: payload });
-      toast(isNew ? 'Business partner created successfully' : 'Business partner updated');
-
-      if (saveAndNew) {
+      const res = await saveMutation.mutateAsync({ id: isNew ? null : Number(id), body: payload });
+      
+      if (isDraft) {
+        toast('Saved as Draft. You can resume and complete the profile anytime.');
+        if (isNew && res?.data?.id) {
+          nav(`/masters/parties/${res.data.id}`, { replace: true });
+        } else {
+          setForm((prev: any) => ({ ...prev, is_draft: 1, party_code: code, party_name: name || code }));
+        }
+      } else if (mode === 'saveAndNew') {
+        toast(isNew ? 'Business partner created successfully' : 'Business partner updated');
         nav('/masters/parties/new');
         setForm({
           party_code: '',
@@ -195,6 +220,7 @@ export function PartyDetailPage() {
           is_buyer: 1,
           is_customer: 1,
           party_type: 'EXPORT',
+          is_draft: 0,
           is_active: 1,
           addresses: [],
           contacts: [],
@@ -202,6 +228,7 @@ export function PartyDetailPage() {
         });
         setTab('general');
       } else {
+        toast(isNew ? 'Business partner created successfully' : 'Business partner updated');
         nav('/masters/parties');
       }
     } catch (err: any) {
@@ -355,9 +382,15 @@ export function PartyDetailPage() {
               <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-700">
                 {form.party_code || 'BP-NEW'}
               </span>
-              <span className={`badge ${form.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
-                {form.is_active ? 'Active' : 'Inactive'}
-              </span>
+              {form.is_draft ? (
+                <span className="badge bg-amber-100 text-amber-800 font-bold border border-amber-300">
+                  Draft
+                </span>
+              ) : (
+                <span className={`badge ${form.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
+                  {form.is_active ? 'Active' : 'Inactive'}
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-500">
               Manage multi-role partner profiles, addresses, contacts, tax compliance and banking.
@@ -365,16 +398,36 @@ export function PartyDetailPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button onClick={() => nav('/masters/parties')} className="btn-secondary btn-sm">
             Cancel
           </button>
-          <button onClick={() => void handleSave(true)} disabled={saveMutation.isPending} className="btn-secondary btn-sm">
+          <button
+            type="button"
+            onClick={() => void handleSave('draft')}
+            disabled={saveMutation.isPending}
+            className="btn-secondary btn-sm flex items-center gap-1.5 text-amber-800 bg-amber-50 hover:bg-amber-100 border-amber-300 font-semibold"
+            title="Save as work-in-progress draft to resume later without completing all required fields"
+          >
+            <FileText size={14} className="text-amber-600" />
+            {saveMutation.isPending ? 'Saving…' : 'Save as Draft'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleSave('saveAndNew')}
+            disabled={saveMutation.isPending}
+            className="btn-secondary btn-sm"
+          >
             Save & New
           </button>
-          <button onClick={() => void handleSave(false)} disabled={saveMutation.isPending} className="btn-primary btn-sm flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => void handleSave('save')}
+            disabled={saveMutation.isPending}
+            className="btn-primary btn-sm flex items-center gap-1.5 font-semibold"
+          >
             <Save size={14} />
-            {saveMutation.isPending ? 'Saving…' : 'Save'}
+            {saveMutation.isPending ? 'Saving…' : isNew ? 'Save Business Partner' : form.is_draft ? 'Finalize & Save' : 'Save Changes'}
           </button>
         </div>
       </div>
@@ -1610,6 +1663,55 @@ export function PartyDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Bottom Action Footer */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border border-surface-border bg-white p-4 rounded-xl shadow-card mt-6">
+        <div className="flex items-center gap-2">
+          {form.is_draft ? (
+            <span className="text-xs text-amber-700 font-medium flex items-center gap-1.5 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200">
+              <FileText size={14} className="text-amber-600" />
+              Currently saved as Draft. Complete all details and click &quot;Finalize & Save&quot; when ready.
+            </span>
+          ) : (
+            <span className="text-xs text-slate-500">
+              All changes are validated and saved directly to the database.
+            </span>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={() => nav('/masters/parties')} className="btn-secondary btn-sm">
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleSave('draft')}
+            disabled={saveMutation.isPending}
+            className="btn-secondary btn-sm flex items-center gap-1.5 text-amber-800 bg-amber-50 hover:bg-amber-100 border-amber-300 font-semibold"
+            title="Save your progress as draft to resume later without completing all required fields"
+          >
+            <FileText size={14} className="text-amber-600" />
+            {saveMutation.isPending ? 'Saving…' : 'Save as Draft'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleSave('saveAndNew')}
+            disabled={saveMutation.isPending}
+            className="btn-secondary btn-sm"
+          >
+            Save & New
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleSave('save')}
+            disabled={saveMutation.isPending}
+            className="btn-primary btn-sm flex items-center gap-1.5 font-semibold"
+          >
+            <Save size={14} />
+            {saveMutation.isPending ? 'Saving…' : isNew ? 'Save Business Partner' : form.is_draft ? 'Finalize & Save' : 'Save Changes'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

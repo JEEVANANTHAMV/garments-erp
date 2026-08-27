@@ -124,6 +124,7 @@ export const masterResources: ResourceConfig[] = [
       f('credit_limit', s.dec()), f('credit_days', s.int()),
       f('email', s.email()), f('phone', s.nullableStr(40)), f('website', s.nullableStr(120)),
       f('remarks', s.text()),
+      f('is_draft', s.bool()),
       f('is_active', s.bool()),
     ],
   },
