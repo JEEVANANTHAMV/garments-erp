@@ -8,7 +8,7 @@ import Dashboard from './pages/Dashboard';
 
 /* Masters */
 import {
-  PartiesPage, PartyDetailPage, ProductsPage, YarnsPage, FabricsPage, TrimsPage,
+  PartiesPage, PartyDetailPage, ProductsPage, YarnsPage, YarnDetailPage, FabricsPage, TrimsPage,
   ColorsPage, WarehousesPage, WarehouseBinsPage, BranchesPage, UnitsPage, SizeGroupsPage, BatchesPage,
 } from './pages/masters';
 import { StylesPage, StyleDetailPage } from './pages/masters/Styles';
@@ -96,6 +96,7 @@ export default function App() {
                   <Route path="parties/:id" element={<PartyDetailPage />} />
                   <Route path="products" element={<ProductsPage />} />
                   <Route path="yarns" element={<YarnsPage />} />
+                  <Route path="yarns/:id" element={<YarnDetailPage />} />
                   <Route path="fabrics" element={<FabricsPage />} />
                   <Route path="trims" element={<TrimsPage />} />
                   <Route path="colors" element={<ColorsPage />} />

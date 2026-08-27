@@ -103,40 +103,7 @@ export function ProductsPage() {
 }
 
 /* --------------------------------------------------------------- Yarns */
-export function YarnsPage() {
-  return <CrudPage
-    path="yarns" title="Yarns" permission="MATERIAL" singular="Yarn"
-    subtitle="Yarn master with count, composition and rate"
-    defaultSort={{ key: 'yarn_name', dir: 'asc' }}
-    columns={[
-      { key: 'yarn_code', header: 'Code', sortable: true,
-        render: (r: any) => <span className="font-mono text-[12px] text-brand-700">{r.yarn_code}</span> },
-      { key: 'yarn_name', header: 'Name', sortable: true },
-      { key: 'count_value', header: 'Count' },
-      { key: 'yarn_type', header: 'Type', render: (r: any) => humanize(r.yarn_type) },
-      { key: 'composition_desc', header: 'Composition' },
-      { key: 'uom_code', header: 'UOM' },
-      { key: 'std_rate', header: 'Rate', align: 'right', render: (r: any) => fmtDecimal(r.std_rate, 2) },
-    ]}
-    filters={[
-      { name: 'yarn_type', label: 'Yarn type', options: ['COMBED','CARDED','OE','COMPACT','MELANGE','SLUB','OTHER'].map((v) => ({ value: v, label: humanize(v) })) },
-      { name: 'composition_id', label: 'Composition', lookup: 'compositions' },
-    ]}
-    fields={[
-      { name: 'yarn_code', label: 'Yarn code', required: true },
-      { name: 'yarn_name', label: 'Yarn name', required: true },
-      { name: 'category_id', label: 'Category', lookup: 'material-categories' },
-      { name: 'count_value', label: 'Count', placeholder: 'e.g. 30s' },
-      { name: 'count_type', label: 'Count type', options: ['Ne','Nm','Denier','Tex'].map((v) => ({ value: v, label: v })), defaultValue: 'Ne' },
-      { name: 'composition_id', label: 'Composition', lookup: 'compositions' },
-      { name: 'ply', label: 'Ply', type: 'number', defaultValue: 1 },
-      { name: 'yarn_type', label: 'Yarn type', options: ['COMBED','CARDED','OE','COMPACT','MELANGE','SLUB','OTHER'].map((v) => ({ value: v, label: humanize(v) })) },
-      { name: 'hsn_code', label: 'HSN code' },
-      { name: 'base_uom', label: 'Base UOM', required: true, lookup: 'uoms' },
-      { name: 'std_rate', label: 'Standard rate', type: 'number' },
-      activeField,
-    ]} />;
-}
+export { YarnsPage, YarnDetailPage } from './Yarns';
 
 /* ------------------------------------------------------------- Fabrics */
 export function FabricsPage() {
