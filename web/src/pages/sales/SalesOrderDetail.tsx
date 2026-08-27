@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Plus, Trash2, Save, CheckCircle2, Sparkles, Check, X, PackageSearch, Layers, PlayCircle, ExternalLink, AlertCircle, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Save, CheckCircle2, Sparkles, Check, X, PackageSearch, Layers, PlayCircle, ExternalLink, AlertCircle, CheckCircle, FileText } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { http, ApiError } from '../../lib/api';
 import { useLookup, toOptions, useStyleColors, useStyleSkus, useStatuses, toPlainOptions } from '../../hooks/useLookup';
@@ -151,12 +151,13 @@ export default function SalesOrderDetail() {
     else if (curr?.code === 'INR') setH('exchange_rate', 1);
   };
 
-  const save = async () => {
+  const save = async (asDraft = false) => {
     setErrors({}); setSaving(true);
     try {
       const defaultExcess = Number(head.excess_pct) || 0;
       const payload = {
         ...head,
+        ...(asDraft ? { approval_state: 'DRAFT' } : {}),
         excess_pct: Number(head.excess_pct || 0),
         tolerance_plus_pct: Number(head.tolerance_plus_pct || 0),
         tolerance_minus_pct: Number(head.tolerance_minus_pct || 0),
@@ -180,13 +181,13 @@ export default function SalesOrderDetail() {
             };
           }),
       };
-      if (!payload.lines.length) { toast('Add at least one order line', 'error'); setSaving(false); return; }
+      if (!asDraft && !payload.lines.length) { toast('Add at least one order line', 'error'); setSaving(false); return; }
 
       const res = isNew
         ? await http.post<{ data: any }>('/sales-orders', payload)
         : await http.put<{ data: any }>(`/sales-orders/${id}`, payload);
 
-      toast(`Sales order ${isNew ? 'created' : 'updated'} successfully`);
+      toast(asDraft ? 'Saved as Draft — resume anytime' : `Sales order ${isNew ? 'created' : 'updated'} successfully`);
       void qc.invalidateQueries({ queryKey: ['sales-orders'] });
       if (isNew) nav(`/sales/orders/${res.data.id}`, { replace: true });
     } catch (e) {
@@ -229,9 +230,15 @@ export default function SalesOrderDetail() {
               <CheckCircle2 size={15} /> Change state
             </button>
           )}
+          {editable && isNew && (
+            <button className="btn-secondary" onClick={() => void save(true)} disabled={saving}>
+              {saving ? <Spinner size={15} /> : <FileText size={15} />} Save as Draft
+            </button>
+          )}
           {editable && (
             <button className="btn-primary" onClick={() => void save()} disabled={saving}>
-              {saving ? <Spinner size={15} /> : <Save size={15} />} Save
+              {saving ? <Spinner size={15} /> : <Save size={15} />}
+              {isNew ? 'Create Order' : head.approval_state === 'DRAFT' ? 'Submit Order' : 'Save'}
             </button>
           )}
         </>} />
@@ -240,6 +247,18 @@ export default function SalesOrderDetail() {
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[13px] text-amber-900">
           This order is <strong>{head.approval_state?.toLowerCase()}</strong> and is locked for editing.
           Change its state to make further changes.
+        </div>
+      )}
+
+      {!isNew && !locked && head.approval_state === 'DRAFT' && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-[13px] text-blue-900">
+          <div className="flex items-center gap-2">
+            <FileText size={14} className="shrink-0 text-blue-600" />
+            <span>This order is saved as a <strong>Draft</strong>. Complete the details and click <strong>Submit Order</strong> when ready.</span>
+          </div>
+          <button className="btn-secondary btn-sm shrink-0" onClick={() => void save(true)} disabled={saving}>
+            Update Draft
+          </button>
         </div>
       )}
 

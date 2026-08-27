@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, ArrowLeft, Sparkles, Save } from 'lucide-react';
+import { Plus, ArrowLeft, Sparkles, Save, FileText } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { http, ApiError } from '../../lib/api';
 import { useList, useListState } from '../../hooks/useResource';
@@ -109,7 +109,7 @@ export function StyleDetailPage() {
   const editable = isNew ? can('STYLE.CREATE') : can('STYLE.UPDATE');
   const set = (k: string, val: unknown) => setV((s) => ({ ...s, [k]: val }));
 
-  const save = async () => {
+  const save = async (asDraft = false) => {
     setErrors({}); setSaving(true);
     try {
       const body = {
@@ -118,12 +118,12 @@ export function StyleDetailPage() {
         season: v.season || null, size_group_id: v.size_group_id || null,
         fabric_id: v.fabric_id || null, description: v.description || null,
         image_url: v.image_url || null,
-        status_id: v.status_id || null, is_active: v.is_active ?? 1, colorIds,
+        status_id: v.status_id || null, is_active: asDraft ? 0 : (v.is_active ?? 1), colorIds,
       };
       const res = isNew
         ? await http.post<{ data: any }>('/styles', body)
         : await http.put<{ data: any }>(`/styles/${id}`, body);
-      toast(`Style ${isNew ? 'created' : 'updated'} successfully`);
+      toast(asDraft ? 'Style saved as Draft — resume anytime' : `Style ${isNew ? 'created' : 'updated'} successfully`);
       void qc.invalidateQueries({ queryKey: ['styles'] });
       void qc.invalidateQueries({ queryKey: ['lookup'] });
       if (isNew) nav(`/masters/styles/${res.data.id}`, { replace: true });
@@ -165,9 +165,15 @@ export function StyleDetailPage() {
           <button className="btn-secondary" onClick={() => nav('/masters/styles')}>
             <ArrowLeft size={15} /> Back
           </button>
+          {editable && isNew && (
+            <button className="btn-secondary" onClick={() => void save(true)} disabled={saving}>
+              {saving ? <Spinner size={15} /> : <FileText size={15} />} Save as Draft
+            </button>
+          )}
           {editable && (
             <button className="btn-primary" onClick={() => void save()} disabled={saving}>
-              {saving ? <Spinner size={15} /> : <Save size={15} />} Save
+              {saving ? <Spinner size={15} /> : <Save size={15} />}
+              {isNew ? 'Create Style' : !v.is_active ? 'Activate Style' : 'Save'}
             </button>
           )}
         </>} />

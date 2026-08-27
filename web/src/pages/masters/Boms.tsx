@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, ArrowLeft, Save, Trash2, Layers } from 'lucide-react';
+import { Plus, ArrowLeft, Save, Trash2, Layers, FileText } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { http, ApiError } from '../../lib/api';
 import { useList, useListState } from '../../hooks/useResource';
@@ -146,7 +146,7 @@ export function BomDetailPage() {
   const setLine = (key: string, patch: Partial<BomLine>) =>
     setLines((s) => s.map((l) => (l._key === key ? { ...l, ...patch } : l)));
 
-  const save = async () => {
+  const save = async (asDraft = false) => {
     setErrors({}); setSaving(true);
     try {
       const body = {
@@ -157,7 +157,7 @@ export function BomDetailPage() {
         effective_date: head.effective_date || null,
         status_id: head.status_id || null,
         remarks: head.remarks || null,
-        is_active: head.is_active ?? 1,
+        is_active: asDraft ? 0 : (head.is_active ?? 1),
         lines: lines.filter((l) => l.consumption && (l.yarn_id || l.fabric_id || l.trim_id)).map((l) => ({
           material_type: l.material_type,
           yarn_id: l.material_type === 'YARN' ? Number(l.yarn_id) : null,
@@ -168,12 +168,12 @@ export function BomDetailPage() {
           wastage_pct: Number(l.wastage_pct) || 0, remarks: l.remarks || null,
         })),
       };
-      if (!body.lines.length) { toast('Add at least one component line', 'error'); setSaving(false); return; }
+      if (!asDraft && !body.lines.length) { toast('Add at least one component line', 'error'); setSaving(false); return; }
 
       const res = isNew
         ? await http.post<{ data: any }>('/boms', body)
         : await http.put<{ data: any }>(`/boms/${id}`, body);
-      toast(`BOM ${isNew ? 'created' : 'updated'} successfully`);
+      toast(asDraft ? 'BOM saved as Draft — resume anytime' : `BOM ${isNew ? 'created' : 'updated'} successfully`);
       void qc.invalidateQueries({ queryKey: ['boms'] });
       if (isNew) nav(`/masters/boms/${res.data.id}`, { replace: true });
     } catch (e) {
@@ -195,9 +195,15 @@ export function BomDetailPage() {
           <button className="btn-secondary" onClick={() => nav('/masters/boms')}>
             <ArrowLeft size={15} /> Back
           </button>
+          {editable && isNew && (
+            <button className="btn-secondary" onClick={() => void save(true)} disabled={saving}>
+              {saving ? <Spinner size={15} /> : <FileText size={15} />} Save as Draft
+            </button>
+          )}
           {editable && (
             <button className="btn-primary" onClick={() => void save()} disabled={saving}>
-              {saving ? <Spinner size={15} /> : <Save size={15} />} Save
+              {saving ? <Spinner size={15} /> : <Save size={15} />}
+              {isNew ? 'Create BOM' : !head.is_active ? 'Activate BOM' : 'Save'}
             </button>
           )}
         </>} />
