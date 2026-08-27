@@ -48,6 +48,30 @@ CREATE TABLE mst_party (
   compliance_certifications VARCHAR(255),
   packing_instructions TEXT,
   special_instructions TEXT,
+
+  -- ---- Supplier-specific (is_supplier = 1) --------------------------------
+  supplier_category   VARCHAR(50),                 -- YARN / FABRIC / TRIMS / CHEMICAL / PACKING
+  lead_time_days      INT DEFAULT 0,               -- quoted delivery lead time
+  min_order_qty       DECIMAL(18,3) DEFAULT 0,     -- MOQ in the supplier's base UOM
+  supplier_rating     ENUM('A','B','C','D','UNRATED') DEFAULT 'UNRATED',
+  delivery_terms      VARCHAR(120),                -- e.g. Ex-Works Tiruppur, Door Delivery
+  quality_agreement   TINYINT(1) NOT NULL DEFAULT 0,
+  supplier_remarks    VARCHAR(500),
+
+  -- ---- Job worker / CMT-specific (is_vendor = 1) ---------------------------
+  jobwork_process     VARCHAR(120),                -- CUTTING, STITCHING, PRINTING, EMBROIDERY...
+  jobwork_capacity_day INT DEFAULT 0,              -- pieces per day
+  jobwork_rate_basis  ENUM('PER_PIECE','PER_KG','PER_HOUR','PER_DOZEN','LUMPSUM') DEFAULT 'PER_PIECE',
+  jobwork_rate        DECIMAL(18,4) DEFAULT 0,
+  jobwork_gate_terms  VARCHAR(120),                -- delivery challan / e-way bill handling
+  jobwork_remarks     VARCHAR(500),
+
+  -- ---- Buying agent-specific (is_agent = 1) --------------------------------
+  commission_pct      DECIMAL(6,3) DEFAULT 0,
+  commission_basis    ENUM('FOB','ORDER_VALUE','QTY','INVOICE_VALUE') DEFAULT 'FOB',
+  commission_payout   VARCHAR(120),                -- e.g. On realisation, Monthly
+  agent_territory     VARCHAR(120),                -- region or buyer group represented
+  agent_remarks       VARCHAR(500),
   credit_limit    DECIMAL(18,2) DEFAULT 0,
   credit_days     INT DEFAULT 0,
   email           VARCHAR(120),

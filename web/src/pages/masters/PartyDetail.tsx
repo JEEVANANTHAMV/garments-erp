@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Building2, MapPin, Users, Landmark, ShoppingBag,
-  Save, ArrowLeft, Plus, Trash2, ShieldCheck, FileText
+  Save, ArrowLeft, Plus, Trash2, ShieldCheck, FileText,
+  Truck, Factory, Percent, AlertCircle
 } from 'lucide-react';
 import { useItem, useSave } from '../../hooks/useResource';
 import { useLookup } from '../../hooks/useLookup';
@@ -144,6 +145,31 @@ export function PartyDetailPage() {
     phone: '',
     website: '',
     remarks: '',
+
+    // Supplier-specific
+    supplier_category: '',
+    lead_time_days: 0,
+    min_order_qty: 0,
+    supplier_rating: 'UNRATED',
+    delivery_terms: '',
+    quality_agreement: 0,
+    supplier_remarks: '',
+
+    // Job worker / CMT-specific
+    jobwork_process: '',
+    jobwork_capacity_day: 0,
+    jobwork_rate_basis: 'PER_PIECE',
+    jobwork_rate: 0,
+    jobwork_gate_terms: '',
+    jobwork_remarks: '',
+
+    // Buying agent-specific
+    commission_pct: 0,
+    commission_basis: 'FOB',
+    commission_payout: '',
+    agent_territory: '',
+    agent_remarks: '',
+
     is_active: 1,
     addresses: [] as AddressItem[],
     contacts: [] as ContactItem[],
@@ -166,6 +192,27 @@ export function PartyDetailPage() {
     setForm((prev: any) => ({ ...prev, [key]: val }));
   };
 
+  /* ---------------------------------------------------------------
+     Role-driven form behaviour.
+     Buyer and Customer share one detail tab because they describe the
+     same commercial relationship (who we sell to).
+  ----------------------------------------------------------------*/
+  const isBuyerRole = !!form.is_buyer || !!form.is_customer;
+  const hasAnyRole =
+    isBuyerRole || !!form.is_supplier || !!form.is_vendor || !!form.is_agent;
+
+  // If the user unticks a role while its tab is open, fall back to General
+  // so the form never sits on a tab that no longer exists.
+  useEffect(() => {
+    const stillValid =
+      (tab === 'buyer'    && isBuyerRole) ||
+      (tab === 'supplier' && !!form.is_supplier) ||
+      (tab === 'jobwork'  && !!form.is_vendor) ||
+      (tab === 'agent'    && !!form.is_agent) ||
+      !['buyer', 'supplier', 'jobwork', 'agent'].includes(tab);
+    if (!stillValid) setTab('general');
+  }, [tab, isBuyerRole, form.is_supplier, form.is_vendor, form.is_agent]);
+
   const handleSave = async (mode: 'save' | 'saveAndNew' | 'draft' = 'save') => {
     const isDraft = mode === 'draft';
     let code = form.party_code?.trim();
@@ -186,6 +233,31 @@ export function PartyDetailPage() {
         setTab('general');
         return;
       }
+
+      // At least one role must be chosen — it drives which tabs apply.
+      if (!hasAnyRole) {
+        toast('Select at least one Business Partner Role', 'error');
+        setTab('general');
+        return;
+      }
+
+      // Role-specific mandatory fields. Jump to the offending tab so the
+      // user can see exactly what is missing.
+      if (form.is_agent && !(Number(form.commission_pct) > 0)) {
+        toast('Commission % is required for a Buying Agent', 'error');
+        setTab('agent');
+        return;
+      }
+      if (form.is_supplier && !form.supplier_category) {
+        toast('Supply Category is required for a Supplier', 'error');
+        setTab('supplier');
+        return;
+      }
+      if (form.is_vendor && !form.jobwork_process?.trim()) {
+        toast('Process Offered is required for a Job Worker / CMT', 'error');
+        setTab('jobwork');
+        return;
+      }
     }
 
     try {
@@ -200,6 +272,12 @@ export function PartyDetailPage() {
         credit_days: Number(form.credit_days) || 0,
         country_id: form.country_id ? Number(form.country_id) : null,
         currency_id: form.currency_id ? Number(form.currency_id) : null,
+        // Role-specific numerics — only meaningful for the roles that own them.
+        lead_time_days: Number(form.lead_time_days) || 0,
+        min_order_qty: Number(form.min_order_qty) || 0,
+        jobwork_capacity_day: Number(form.jobwork_capacity_day) || 0,
+        jobwork_rate: Number(form.jobwork_rate) || 0,
+        commission_pct: Number(form.commission_pct) || 0,
       };
 
       const res = await saveMutation.mutateAsync({ id: isNew ? null : Number(id), body: payload });
@@ -357,13 +435,18 @@ export function PartyDetailPage() {
     );
   }
 
+  // Role-driven tabs: a role-specific tab appears only while that role is
+  // ticked on the General tab, and several can be shown at once.
   const TABS = [
     { key: 'general', label: 'General', icon: Building2 },
     { key: 'address', label: 'Address', count: form.addresses.length, icon: MapPin },
     { key: 'contacts', label: 'Contacts', count: form.contacts.length, icon: Users },
     { key: 'statutory', label: 'Statutory', icon: ShieldCheck },
     { key: 'bank', label: 'Bank', count: form.banks.length, icon: Landmark },
-    { key: 'buyer', label: 'Buyer Details', icon: ShoppingBag },
+    ...(isBuyerRole  ? [{ key: 'buyer',    label: 'Buyer Details',    icon: ShoppingBag }] : []),
+    ...(form.is_supplier ? [{ key: 'supplier', label: 'Supplier Details', icon: Truck }] : []),
+    ...(form.is_vendor   ? [{ key: 'jobwork',  label: 'Job Work Details', icon: Factory }] : []),
+    ...(form.is_agent    ? [{ key: 'agent',    label: 'Agent Details',    icon: Percent }] : []),
   ];
 
   return (
@@ -530,6 +613,25 @@ export function PartyDetailPage() {
                   </label>
                 ))}
               </div>
+              {hasAnyRole ? (
+                <p className="mt-2 flex items-center gap-1.5 text-[11px] text-slate-500">
+                  <AlertCircle size={12} className="shrink-0 text-brand-500" />
+                  Detail tabs shown for the selected role(s):
+                  <span className="font-semibold text-brand-700">
+                    {[
+                      isBuyerRole && 'Buyer Details',
+                      form.is_supplier && 'Supplier Details',
+                      form.is_vendor && 'Job Work Details',
+                      form.is_agent && 'Agent Details',
+                    ].filter(Boolean).join(' · ')}
+                  </span>
+                </p>
+              ) : (
+                <p className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-700">
+                  <AlertCircle size={12} className="shrink-0" />
+                  Select at least one role — this decides which detail tabs appear.
+                </p>
+              )}
             </div>
 
             {/* Classification */}
@@ -1663,6 +1765,247 @@ export function PartyDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Tab 7: Supplier Details — shown when "Supplier" is ticked */}
+      {tab === 'supplier' && (
+        <div className="card p-5 space-y-6">
+          <div>
+            <h3 className="text-sm font-bold text-slate-800 border-b border-surface-border pb-2">
+              Supply Terms & Performance
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 pt-3">
+              <div>
+                <label className="label">Supply Category</label>
+                <select
+                  className="input"
+                  value={form.supplier_category || ''}
+                  onChange={(e) => handleField('supplier_category', e.target.value)}
+                >
+                  <option value="">Select category</option>
+                  <option value="YARN">Yarn</option>
+                  <option value="FABRIC">Fabric</option>
+                  <option value="TRIMS">Trims &amp; Accessories</option>
+                  <option value="CHEMICAL">Dyes &amp; Chemicals</option>
+                  <option value="PACKING">Packing Material</option>
+                  <option value="CONSUMABLE">Consumables</option>
+                  <option value="SERVICE">Services</option>
+                </select>
+              </div>
+              <div>
+                <label className="label">Lead Time (days)</label>
+                <input
+                  type="number" min={0} className="input"
+                  value={form.lead_time_days ?? 0}
+                  onChange={(e) => handleField('lead_time_days', e.target.value)}
+                  placeholder="e.g. 21"
+                />
+                <p className="mt-1 text-[11px] text-slate-400">Used when planning purchase order delivery dates.</p>
+              </div>
+              <div>
+                <label className="label">Minimum Order Qty</label>
+                <input
+                  type="number" step="0.001" min={0} className="input"
+                  value={form.min_order_qty ?? 0}
+                  onChange={(e) => handleField('min_order_qty', e.target.value)}
+                  placeholder="e.g. 500"
+                />
+                <p className="mt-1 text-[11px] text-slate-400">In the supplier&rsquo;s base unit of measure.</p>
+              </div>
+              <div>
+                <label className="label">Supplier Rating</label>
+                <select
+                  className="input"
+                  value={form.supplier_rating || 'UNRATED'}
+                  onChange={(e) => handleField('supplier_rating', e.target.value)}
+                >
+                  <option value="UNRATED">Not yet rated</option>
+                  <option value="A">A - Preferred</option>
+                  <option value="B">B - Approved</option>
+                  <option value="C">C - Conditional</option>
+                  <option value="D">D - On hold</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-3">
+              <div>
+                <label className="label">Delivery Terms</label>
+                <input
+                  className="input"
+                  value={form.delivery_terms || ''}
+                  onChange={(e) => handleField('delivery_terms', e.target.value)}
+                  placeholder="e.g. Ex-Works Tiruppur / Door delivery"
+                />
+              </div>
+              <div className="flex items-end pb-2">
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+                  <input
+                    type="checkbox"
+                    className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                    checked={!!form.quality_agreement}
+                    onChange={(e) => handleField('quality_agreement', e.target.checked ? 1 : 0)}
+                  />
+                  <span>Signed quality agreement on file</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="pt-3">
+              <label className="label">Supplier Notes</label>
+              <textarea
+                className="input h-20"
+                value={form.supplier_remarks || ''}
+                onChange={(e) => handleField('supplier_remarks', e.target.value)}
+                placeholder="Preferred shades, packing standards, past quality issues, inspection requirements..."
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab 8: Job Work Details — shown when "Job Worker / CMT" is ticked */}
+      {tab === 'jobwork' && (
+        <div className="card p-5 space-y-6">
+          <div>
+            <h3 className="text-sm font-bold text-slate-800 border-b border-surface-border pb-2">
+              Job Work Capability &amp; Rates
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 pt-3">
+              <div className="sm:col-span-2">
+                <label className="label">Process Offered</label>
+                <input
+                  className="input"
+                  value={form.jobwork_process || ''}
+                  onChange={(e) => handleField('jobwork_process', e.target.value)}
+                  placeholder="e.g. Stitching, Printing, Embroidery, Washing"
+                />
+                <p className="mt-1 text-[11px] text-slate-400">Comma-separate where the vendor handles more than one stage.</p>
+              </div>
+              <div>
+                <label className="label">Capacity / Day (pcs)</label>
+                <input
+                  type="number" min={0} className="input"
+                  value={form.jobwork_capacity_day ?? 0}
+                  onChange={(e) => handleField('jobwork_capacity_day', e.target.value)}
+                  placeholder="e.g. 3000"
+                />
+              </div>
+              <div>
+                <label className="label">Rate Basis</label>
+                <select
+                  className="input"
+                  value={form.jobwork_rate_basis || 'PER_PIECE'}
+                  onChange={(e) => handleField('jobwork_rate_basis', e.target.value)}
+                >
+                  <option value="PER_PIECE">Per Piece</option>
+                  <option value="PER_KG">Per Kg</option>
+                  <option value="PER_DOZEN">Per Dozen</option>
+                  <option value="PER_HOUR">Per Hour</option>
+                  <option value="LUMPSUM">Lump Sum</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-3">
+              <div>
+                <label className="label">Standard Rate</label>
+                <input
+                  type="number" step="0.0001" min={0} className="input"
+                  value={form.jobwork_rate ?? 0}
+                  onChange={(e) => handleField('jobwork_rate', e.target.value)}
+                  placeholder="e.g. 18.50"
+                />
+                <p className="mt-1 text-[11px] text-slate-400">Default rate applied to job-work purchase orders.</p>
+              </div>
+              <div className="sm:col-span-2">
+                <label className="label">Gate / Documentation Terms</label>
+                <input
+                  className="input"
+                  value={form.jobwork_gate_terms || ''}
+                  onChange={(e) => handleField('jobwork_gate_terms', e.target.value)}
+                  placeholder="e.g. Delivery challan + e-way bill for every outward movement"
+                />
+              </div>
+            </div>
+
+            <div className="pt-3">
+              <label className="label">Job Work Notes</label>
+              <textarea
+                className="input h-20"
+                value={form.jobwork_remarks || ''}
+                onChange={(e) => handleField('jobwork_remarks', e.target.value)}
+                placeholder="Machine types, shift pattern, typical turnaround, wastage norms agreed..."
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab 9: Agent Details — shown when "Buying Agent" is ticked */}
+      {tab === 'agent' && (
+        <div className="card p-5 space-y-6">
+          <div>
+            <h3 className="text-sm font-bold text-slate-800 border-b border-surface-border pb-2">
+              Commission Structure
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 pt-3">
+              <div>
+                <label className="label">
+                  Commission % <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number" step="0.001" min={0} max={100} className="input"
+                  value={form.commission_pct ?? 0}
+                  onChange={(e) => handleField('commission_pct', e.target.value)}
+                  placeholder="e.g. 3.5"
+                />
+              </div>
+              <div>
+                <label className="label">Commission Basis</label>
+                <select
+                  className="input"
+                  value={form.commission_basis || 'FOB'}
+                  onChange={(e) => handleField('commission_basis', e.target.value)}
+                >
+                  <option value="FOB">FOB Value</option>
+                  <option value="ORDER_VALUE">Order Value</option>
+                  <option value="INVOICE_VALUE">Invoice Value</option>
+                  <option value="QTY">Per Piece</option>
+                </select>
+              </div>
+              <div>
+                <label className="label">Payout Terms</label>
+                <input
+                  className="input"
+                  value={form.commission_payout || ''}
+                  onChange={(e) => handleField('commission_payout', e.target.value)}
+                  placeholder="e.g. On realisation of export proceeds"
+                />
+              </div>
+              <div>
+                <label className="label">Territory / Buyers Represented</label>
+                <input
+                  className="input"
+                  value={form.agent_territory || ''}
+                  onChange={(e) => handleField('agent_territory', e.target.value)}
+                  placeholder="e.g. EU region - H&M, Primark"
+                />
+              </div>
+            </div>
+
+            <div className="pt-3">
+              <label className="label">Agent Notes</label>
+              <textarea
+                className="input h-20"
+                value={form.agent_remarks || ''}
+                onChange={(e) => handleField('agent_remarks', e.target.value)}
+                placeholder="Agreement reference and validity, exclusivity, escalation contacts..."
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* Bottom Action Footer */}
       <div className="flex flex-wrap items-center justify-between gap-3 border border-surface-border bg-white p-4 rounded-xl shadow-card mt-6">

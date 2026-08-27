@@ -121,6 +121,22 @@ export const masterResources: ResourceConfig[] = [
       f('lab_testing_required', s.bool()),
       f('compliance_certifications', s.nullableStr(255)),
       f('packing_instructions', s.text()), f('special_instructions', s.text()),
+      // Supplier-specific
+      f('supplier_category', s.nullableStr(50)), f('lead_time_days', s.int()),
+      f('min_order_qty', s.dec()),
+      f('supplier_rating', s.enum(['A','B','C','D','UNRATED'])),
+      f('delivery_terms', s.nullableStr(120)), f('quality_agreement', s.bool()),
+      f('supplier_remarks', s.nullableStr(500)),
+      // Job worker / CMT-specific
+      f('jobwork_process', s.nullableStr(120)), f('jobwork_capacity_day', s.int()),
+      f('jobwork_rate_basis', s.enum(['PER_PIECE','PER_KG','PER_HOUR','PER_DOZEN','LUMPSUM'])),
+      f('jobwork_rate', s.dec()), f('jobwork_gate_terms', s.nullableStr(120)),
+      f('jobwork_remarks', s.nullableStr(500)),
+      // Buying agent-specific
+      f('commission_pct', s.dec()),
+      f('commission_basis', s.enum(['FOB','ORDER_VALUE','QTY','INVOICE_VALUE'])),
+      f('commission_payout', s.nullableStr(120)), f('agent_territory', s.nullableStr(120)),
+      f('agent_remarks', s.nullableStr(500)),
       f('credit_limit', s.dec()), f('credit_days', s.int()),
       f('email', s.email()), f('phone', s.nullableStr(40)), f('website', s.nullableStr(120)),
       f('remarks', s.text()),
