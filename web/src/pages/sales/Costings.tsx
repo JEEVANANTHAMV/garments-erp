@@ -409,7 +409,7 @@ export function CostingDetailPage() {
   // Load Existing Costing if editing
   const costingQuery = useQuery({
     queryKey: ['costings', 'item', id],
-    queryFn: async () => (await http.get<{ data: any }>(`/resources/costings/${id}`)).data,
+    queryFn: async () => (await http.get<{ data: any }>(`/costings/${id}`)).data,
     enabled: !isNew,
   });
 
@@ -562,8 +562,8 @@ export function CostingDetailPage() {
       };
 
       const res = isNew
-        ? await http.post<{ data: any }>('/resources/costings', payload)
-        : await http.put<{ data: any }>(`/resources/costings/${id}`, payload);
+        ? await http.post<{ data: any }>('/costings', payload)
+        : await http.put<{ data: any }>(`/costings/${id}`, payload);
 
       toast(mode === 'draft' ? 'Costing sheet saved as Draft' : `Costing ${isNew ? 'created' : 'updated'} successfully`);
       void qc.invalidateQueries({ queryKey: ['costings'] });

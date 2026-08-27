@@ -350,14 +350,14 @@ export function FabricDetailPage() {
   // Load Existing Fabric
   const fabricQuery = useQuery({
     queryKey: ['fabrics', 'item', id],
-    queryFn: async () => (await http.get<{ data: any }>(`/resources/fabrics/${id}`)).data,
+    queryFn: async () => (await http.get<{ data: any }>(`/fabrics/${id}`)).data,
     enabled: !isNew,
   });
 
   // Load Existing Composition if linked
   const compQuery = useQuery({
     queryKey: ['compositions', 'item', head.composition_id],
-    queryFn: async () => (await http.get<{ data: any }>(`/resources/compositions/${head.composition_id}`)).data,
+    queryFn: async () => (await http.get<{ data: any }>(`/compositions/${head.composition_id}`)).data,
     enabled: !isNew && !!head.composition_id,
   });
 
@@ -499,9 +499,9 @@ export function FabricDetailPage() {
 
       let compId = head.composition_id;
       if (compId) {
-        await http.put(`/resources/compositions/${compId}`, compPayload).catch(() => {});
+        await http.put(`/compositions/${compId}`, compPayload).catch(() => {});
       } else {
-        const compRes = await http.post<{ data: any }>('/resources/compositions', compPayload).catch(() => null);
+        const compRes = await http.post<{ data: any }>('/compositions', compPayload).catch(() => null);
         if (compRes?.data?.id) compId = compRes.data.id;
       }
 
@@ -525,8 +525,8 @@ export function FabricDetailPage() {
       };
 
       const res = isNew
-        ? await http.post<{ data: any }>('/resources/fabrics', fabricPayload)
-        : await http.put<{ data: any }>(`/resources/fabrics/${id}`, fabricPayload);
+        ? await http.post<{ data: any }>('/fabrics', fabricPayload)
+        : await http.put<{ data: any }>(`/fabrics/${id}`, fabricPayload);
 
       toast(mode === 'draft' ? 'Fabric saved as Draft — resume anytime' : `Fabric ${isNew ? 'created' : 'updated'} successfully`);
       void qc.invalidateQueries({ queryKey: ['fabrics'] });

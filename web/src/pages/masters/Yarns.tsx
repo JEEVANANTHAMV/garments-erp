@@ -295,14 +295,14 @@ export function YarnDetailPage() {
   // Load Existing Yarn
   const yarnQuery = useQuery({
     queryKey: ['yarns', 'item', id],
-    queryFn: async () => (await http.get<{ data: any }>(`/resources/yarns/${id}`)).data,
+    queryFn: async () => (await http.get<{ data: any }>(`/yarns/${id}`)).data,
     enabled: !isNew,
   });
 
   // Load Existing Composition if linked
   const compQuery = useQuery({
     queryKey: ['compositions', 'item', head.composition_id],
-    queryFn: async () => (await http.get<{ data: any }>(`/resources/compositions/${head.composition_id}`)).data,
+    queryFn: async () => (await http.get<{ data: any }>(`/compositions/${head.composition_id}`)).data,
     enabled: !isNew && !!head.composition_id,
   });
 
@@ -444,9 +444,9 @@ export function YarnDetailPage() {
 
       let compId = head.composition_id;
       if (compId) {
-        await http.put(`/resources/compositions/${compId}`, compPayload).catch(() => {});
+        await http.put(`/compositions/${compId}`, compPayload).catch(() => {});
       } else {
-        const compRes = await http.post<{ data: any }>('/resources/compositions', compPayload).catch(() => null);
+        const compRes = await http.post<{ data: any }>('/compositions', compPayload).catch(() => null);
         if (compRes?.data?.id) compId = compRes.data.id;
       }
 
@@ -467,8 +467,8 @@ export function YarnDetailPage() {
       };
 
       const res = isNew
-        ? await http.post<{ data: any }>('/resources/yarns', yarnPayload)
-        : await http.put<{ data: any }>(`/resources/yarns/${id}`, yarnPayload);
+        ? await http.post<{ data: any }>('/yarns', yarnPayload)
+        : await http.put<{ data: any }>(`/yarns/${id}`, yarnPayload);
 
       toast(mode === 'draft' ? 'Yarn saved as Draft — resume anytime' : `Yarn ${isNew ? 'created' : 'updated'} successfully`);
       void qc.invalidateQueries({ queryKey: ['yarns'] });
