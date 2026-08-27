@@ -16,7 +16,7 @@ import { BomsPage, BomDetailPage } from './pages/masters/Boms';
 
 /* Sales */
 import { EnquiriesPage, SamplesPage, QuotationsPage } from './pages/sales';
-import CostingsPage from './pages/sales/Costings';
+import CostingsPage, { CostingDetailPage } from './pages/sales/Costings';
 import SalesOrdersPage from './pages/sales/SalesOrders';
 import SalesOrderDetail from './pages/sales/SalesOrderDetail';
 
@@ -117,6 +117,7 @@ export default function App() {
                   <Route path="enquiries" element={<EnquiriesPage />} />
                   <Route path="samples" element={<SamplesPage />} />
                   <Route path="costings" element={<CostingsPage />} />
+                  <Route path="costings/:id" element={<CostingDetailPage />} />
                   <Route path="quotations" element={<QuotationsPage />} />
                   <Route path="orders" element={<SalesOrdersPage />} />
                   <Route path="orders/:id" element={<SalesOrderDetail />} />
