@@ -106,44 +106,7 @@ export function ProductsPage() {
 export { YarnsPage, YarnDetailPage } from './Yarns';
 
 /* ------------------------------------------------------------- Fabrics */
-export function FabricsPage() {
-  return <CrudPage
-    path="fabrics" title="Fabrics" permission="MATERIAL" singular="Fabric"
-    subtitle="Knit and woven fabric master"
-    defaultSort={{ key: 'fabric_name', dir: 'asc' }}
-    columns={[
-      { key: 'fabric_code', header: 'Code', sortable: true,
-        render: (r: any) => <span className="font-mono text-[12px] text-brand-700">{r.fabric_code}</span> },
-      { key: 'fabric_name', header: 'Name', sortable: true },
-      { key: 'fabric_type', header: 'Type', render: (r: any) => <Badge tone="blue">{humanize(r.fabric_type)}</Badge> },
-      { key: 'knit_structure', header: 'Structure' },
-      { key: 'gsm_value', header: 'GSM', align: 'right' },
-      { key: 'composition_desc', header: 'Composition' },
-      { key: 'std_rate', header: 'Rate', align: 'right', render: (r: any) => fmtDecimal(r.std_rate, 2) },
-    ]}
-    filters={[
-      { name: 'fabric_type', label: 'Fabric type', options: ['KNIT','WOVEN','NONWOVEN'].map((v) => ({ value: v, label: humanize(v) })) },
-      { name: 'gsm_id', label: 'GSM', lookup: 'gsm' },
-      { name: 'composition_id', label: 'Composition', lookup: 'compositions' },
-    ]}
-    fields={[
-      { name: 'fabric_code', label: 'Fabric code', required: true },
-      { name: 'fabric_name', label: 'Fabric name', required: true },
-      { name: 'category_id', label: 'Category', lookup: 'material-categories' },
-      { name: 'fabric_type', label: 'Fabric type', required: true, options: ['KNIT','WOVEN','NONWOVEN'].map((v) => ({ value: v, label: humanize(v) })), defaultValue: 'KNIT' },
-      { name: 'knit_structure', label: 'Knit structure', placeholder: 'e.g. Single Jersey' },
-      { name: 'composition_id', label: 'Composition', lookup: 'compositions' },
-      { name: 'gsm_id', label: 'GSM', lookup: 'gsm' },
-      { name: 'width_cm', label: 'Width (cm)', type: 'number' },
-      { name: 'dia_inch', label: 'Diameter (inch)', type: 'number' },
-      { name: 'yarn_id', label: 'Primary yarn', lookup: 'yarns' },
-      { name: 'finish_type', label: 'Finish', placeholder: 'e.g. Bio-wash' },
-      { name: 'hsn_code', label: 'HSN code' },
-      { name: 'base_uom', label: 'Base UOM', required: true, lookup: 'uoms' },
-      { name: 'std_rate', label: 'Standard rate', type: 'number' },
-      activeField,
-    ]} />;
-}
+export { FabricsPage, FabricDetailPage } from './Fabrics';
 
 /* --------------------------------------------------------------- Trims */
 export function TrimsPage() {
