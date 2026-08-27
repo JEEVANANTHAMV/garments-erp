@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Plus, Trash2, Save, CheckCircle2, Sparkles, Check, X } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Save, CheckCircle2, Sparkles, Check, X, PackageSearch, Layers, PlayCircle, ExternalLink, AlertCircle, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { http, ApiError } from '../../lib/api';
 import { useLookup, toOptions, useStyleColors, useStyleSkus, useStatuses, toPlainOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
 import {
-  PageHeader, Input, Select, Spinner, StatusBadge, LoadingBlock, ErrorState, Tabs, Modal
+  PageHeader, Input, Select, Spinner, Badge, StatusBadge, LoadingBlock, ErrorState, Tabs, Modal
 } from '../../components/ui';
 import { fmtDate, fmtNumber, fmtDecimal, today, toDateInput } from '../../lib/format';
 
@@ -363,7 +363,9 @@ export default function SalesOrderDetail() {
 
       {!isNew && (
         <Tabs active={tab} onChange={setTab} tabs={[
-          { key: 'lines', label: 'Order lines', count: lines.length },
+          { key: 'lines', label: 'Order Lines', count: lines.length },
+          { key: 'bom', label: 'Bill of Materials' },
+          { key: 'requirements', label: 'Material Requirements' },
           { key: 'production', label: 'Production', count: d?.production_orders?.length ?? 0 },
           { key: 'invoices', label: 'Invoices', count: d?.invoices?.length ?? 0 },
         ]} />
@@ -544,26 +546,64 @@ export default function SalesOrderDetail() {
         </div>
       )}
 
+      {!isNew && tab === 'bom' && (
+        <BomTab lines={lines} soId={Number(id)} />
+      )}
+
+      {!isNew && tab === 'requirements' && (
+        <RequirementsTab soId={Number(id)} soNo={d?.so_no ?? ''} />
+      )}
+
       {!isNew && tab === 'production' && (
         <div className="card overflow-hidden">
           {d?.production_orders?.length ? (
-            <table className="w-full">
-              <thead><tr>
-                <th className="th">Work order</th><th className="th text-right">Order qty</th>
-                <th className="th text-right">Produced</th><th className="th">State</th>
-              </tr></thead>
-              <tbody>
-                {d.production_orders.map((p: any) => (
-                  <tr key={p.id} className="row-hover">
-                    <td className="td font-mono text-[12px] text-brand-700">{p.po_prod_no}</td>
-                    <td className="td text-right tabular-nums">{fmtNumber(p.order_qty)}</td>
-                    <td className="td text-right tabular-nums">{fmtNumber(p.produced_qty)}</td>
-                    <td className="td"><StatusBadge value={p.approval_state} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : <p className="p-8 text-center text-[13px] text-slate-400">No production orders raised yet.</p>}
+            <>
+              <div className="border-b border-slate-100 px-4 py-3">
+                <span className="text-[12px] font-semibold text-slate-700">{d.production_orders.length} work order{d.production_orders.length !== 1 ? 's' : ''} linked to this order</span>
+              </div>
+              <table className="w-full">
+                <thead><tr>
+                  <th className="th">Work Order</th>
+                  <th className="th text-right">Order Qty</th>
+                  <th className="th text-right">Produced</th>
+                  <th className="th">Progress</th>
+                  <th className="th">State</th>
+                </tr></thead>
+                <tbody>
+                  {d.production_orders.map((p: any) => {
+                    const pct = p.order_qty > 0 ? Math.min(100, Math.round((Number(p.produced_qty) / Number(p.order_qty)) * 100)) : 0;
+                    return (
+                      <tr key={p.id} className="row-hover">
+                        <td className="td font-mono text-[12px] text-brand-700 font-semibold">{p.po_prod_no}</td>
+                        <td className="td text-right tabular-nums">{fmtNumber(p.order_qty)}</td>
+                        <td className="td text-right tabular-nums">{fmtNumber(p.produced_qty)}</td>
+                        <td className="td">
+                          <div className="flex items-center gap-2">
+                            <div className="h-1.5 w-28 rounded-full bg-slate-100 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-emerald-500' : pct > 50 ? 'bg-brand-500' : 'bg-amber-500'}`}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <span className="text-[11.5px] tabular-nums text-slate-600 font-medium">{pct}%</span>
+                          </div>
+                        </td>
+                        <td className="td"><StatusBadge value={p.approval_state} /></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </>
+          ) : (
+            <div className="flex flex-col items-center justify-center gap-3 py-14">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
+                <Layers size={22} />
+              </div>
+              <p className="text-[13px] font-medium text-slate-500">No production orders raised yet</p>
+              <p className="text-[12px] text-slate-400">Production orders will appear here once they are created against this sales order.</p>
+            </div>
+          )}
         </div>
       )}
 
@@ -572,19 +612,26 @@ export default function SalesOrderDetail() {
           {d?.invoices?.length ? (
             <table className="w-full">
               <thead><tr>
-                <th className="th">Invoice</th><th className="th">Date</th><th className="th text-right">Value</th>
+                <th className="th">Invoice No.</th><th className="th">Date</th><th className="th text-right">Value</th>
               </tr></thead>
               <tbody>
                 {d.invoices.map((i: any) => (
                   <tr key={i.id} className="row-hover">
-                    <td className="td font-mono text-[12px] text-brand-700">{i.invoice_no}</td>
+                    <td className="td font-mono text-[12px] text-brand-700 font-semibold">{i.invoice_no}</td>
                     <td className="td">{fmtDate(i.invoice_date)}</td>
-                    <td className="td text-right tabular-nums">{fmtDecimal(i.total_value, 2)}</td>
+                    <td className="td text-right tabular-nums font-medium">{fmtDecimal(i.total_value, 2)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          ) : <p className="p-8 text-center text-[13px] text-slate-400">No invoices raised yet.</p>}
+          ) : (
+            <div className="flex flex-col items-center justify-center gap-3 py-14">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
+                <PackageSearch size={22} />
+              </div>
+              <p className="text-[13px] font-medium text-slate-500">No invoices raised yet</p>
+            </div>
+          )}
         </div>
       )}
 
@@ -601,6 +648,336 @@ export default function SalesOrderDetail() {
         </div>
       </Modal>
     </>
+  );
+}
+
+/* ============================================================ BOM TAB */
+function BomTab({ lines }: { lines: Line[]; soId?: number }) {
+  // Unique style IDs across all lines
+  const styleIds = useMemo(() =>
+    [...new Set(lines.map((l) => l.style_id).filter((id): id is number => !!id))],
+    [lines]
+  );
+
+  const boms = useQuery({
+    queryKey: ['boms', 'so-tab', styleIds],
+    queryFn: async () => {
+      if (!styleIds.length) return [];
+      const results = await Promise.all(
+        styleIds.map((sid) =>
+          http.get<{ data: any[] }>(`/boms?style_id=${sid}&pageSize=1`).then((r) => r.data ?? [])
+        )
+      );
+      return results.flat();
+    },
+    enabled: styleIds.length > 0,
+  });
+
+  // For each BOM, load its lines
+  const bomIds = useMemo(() => (boms.data ?? []).map((b: any) => b.id), [boms.data]);
+  const bomDetails = useQuery({
+    queryKey: ['boms', 'so-tab-lines', bomIds],
+    queryFn: async () => {
+      if (!bomIds.length) return {};
+      const details = await Promise.all(
+        bomIds.map((bid: number) =>
+          http.get<{ data: any }>(`/boms/${bid}`).then((r) => r.data)
+        )
+      );
+      return Object.fromEntries(details.map((d: any) => [d.style_id, d]));
+    },
+    enabled: bomIds.length > 0,
+  });
+
+  if (!styleIds.length) {
+    return (
+      <div className="card flex flex-col items-center justify-center gap-3 py-14">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-400"><PackageSearch size={22} /></div>
+        <p className="text-[13px] text-slate-500">Add order lines to see Bill of Materials.</p>
+      </div>
+    );
+  }
+
+  if (boms.isLoading || bomDetails.isLoading) return <div className="card"><LoadingBlock rows={6} /></div>;
+  if (boms.error) return <div className="card"><ErrorState error={boms.error} onRetry={() => void boms.refetch()} /></div>;
+
+  return (
+    <div className="space-y-4">
+      {styleIds.map((sid) => {
+        const bom = (bomDetails.data as any)?.[sid];
+        return (
+          <div key={sid} className="card overflow-hidden">
+            {/* Style header */}
+            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/60 px-4 py-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-100 text-brand-700">
+                  <Layers size={14} />
+                </div>
+                <div>
+                  <span className="text-[13px] font-bold text-slate-900">
+                    {bom ? `${bom.style_code} — ${bom.style_name}` : `Style ID ${sid}`}
+                  </span>
+                  {bom && (
+                    <span className="ml-2 text-[11px] text-slate-400">BOM {bom.bom_no} · v{bom.version}</span>
+                  )}
+                </div>
+              </div>
+              {bom ? (
+                <div className="flex items-center gap-2">
+                  <Badge tone="blue">{bom.lines?.length ?? 0} components</Badge>
+                  <a
+                    href={`/masters/boms/${bom.id}`}
+                    className="inline-flex items-center gap-1 text-[12px] font-medium text-brand-600 hover:text-brand-800"
+                    target="_blank" rel="noreferrer"
+                  >
+                    Open BOM <ExternalLink size={11} />
+                  </a>
+                </div>
+              ) : (
+                <a
+                  href={`/masters/boms/new`}
+                  className="inline-flex items-center gap-1 text-[12px] font-medium text-amber-700 hover:text-amber-900 rounded-lg bg-amber-50 px-2.5 py-1 border border-amber-200"
+                  target="_blank" rel="noreferrer"
+                >
+                  <Plus size={12} /> Create BOM
+                </a>
+              )}
+            </div>
+
+            {/* BOM lines table */}
+            {bom?.lines?.length ? (
+              <table className="w-full">
+                <thead>
+                  <tr>
+                    <th className="th">Type</th>
+                    <th className="th">Material</th>
+                    <th className="th">Colour</th>
+                    <th className="th text-right">Consumption</th>
+                    <th className="th">UOM</th>
+                    <th className="th text-right">Wastage %</th>
+                    <th className="th text-right">Gross / gmt</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bom.lines.map((l: any) => {
+                    const name = l.yarn_name || l.fabric_name || l.trim_name || '—';
+                    const gross = Number(l.consumption) * (1 + Number(l.wastage_pct || 0) / 100);
+                    const typeColor: Record<string, string> = {
+                      YARN: 'blue', FABRIC: 'green', TRIM: 'purple',
+                    };
+                    return (
+                      <tr key={l.id} className="row-hover">
+                        <td className="td"><Badge tone={typeColor[l.material_type] as any ?? 'blue'}>{l.material_type}</Badge></td>
+                        <td className="td font-medium text-slate-900">{name}</td>
+                        <td className="td text-slate-500">{l.color_name ?? '—'}</td>
+                        <td className="td text-right tabular-nums">{fmtDecimal(l.consumption, 4)}</td>
+                        <td className="td text-slate-500">{l.uom_code}</td>
+                        <td className="td text-right tabular-nums text-amber-700">
+                          {Number(l.wastage_pct) > 0 ? `+${l.wastage_pct}%` : '—'}
+                        </td>
+                        <td className="td text-right tabular-nums font-semibold text-brand-800">{fmtDecimal(gross, 4)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            ) : !bom ? (
+              <div className="flex items-center gap-2.5 px-4 py-5 text-[12.5px] text-amber-800 bg-amber-50">
+                <AlertCircle size={15} />
+                No active BOM found for this style. Create a BOM to enable MRP explosion and material planning.
+              </div>
+            ) : (
+              <p className="px-4 py-5 text-[12.5px] text-slate-400">This BOM has no component lines yet.</p>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ============================================================ REQUIREMENTS TAB */
+type ReqFilter = 'ALL' | 'YARN' | 'FABRIC' | 'TRIM';
+
+function RequirementsTab({ soId, soNo }: { soId: number; soNo: string }) {
+  const toast = useToast();
+  const qc = useQueryClient();
+  const { can } = useAuth();
+  const [filter, setFilter] = useState<ReqFilter>('ALL');
+  const [running, setRunning] = useState(false);
+
+  // Fetch latest MRP run for this SO
+  const mrpList = useQuery({
+    queryKey: ['mrp', 'by-so', soId],
+    queryFn: async () => (await http.get<{ data: any[] }>(`/mrp?so_id=${soId}&pageSize=1`)).data ?? [],
+    enabled: !!soId,
+  });
+
+  const latestRun = (mrpList.data as any[])?.[0] ?? null;
+
+  // Load requirements if a run exists
+  const mrpDetail = useQuery({
+    queryKey: ['mrp', 'so-tab-detail', latestRun?.id],
+    queryFn: async () => (await http.get<{ data: any }>(`/mrp/${latestRun.id}`)).data,
+    enabled: !!latestRun?.id,
+  });
+
+  const requirements: any[] = mrpDetail.data?.requirements ?? [];
+
+  const filtered = filter === 'ALL' ? requirements : requirements.filter((r) => r.material_type === filter);
+
+  const shortfalls = requirements.filter((r) => Number(r.net_required) > 0).length;
+  const yarn = requirements.filter((r) => r.material_type === 'YARN').length;
+  const fabric = requirements.filter((r) => r.material_type === 'FABRIC').length;
+  const trim = requirements.filter((r) => r.material_type === 'TRIM').length;
+
+  const runMrp = async () => {
+    setRunning(true);
+    try {
+      await http.post('/mrp/run', { so_id: soId, run_date: today() });
+      toast('MRP run completed — requirements loaded');
+      void mrpList.refetch();
+      void qc.invalidateQueries({ queryKey: ['mrp'] });
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : 'MRP run failed', 'error');
+    } finally { setRunning(false); }
+  };
+
+  if (mrpList.isLoading) return <div className="card"><LoadingBlock rows={6} /></div>;
+
+  // No MRP run yet
+  if (!latestRun) {
+    return (
+      <div className="card">
+        <div className="flex flex-col items-center justify-center gap-4 py-16">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-500">
+            <PlayCircle size={28} />
+          </div>
+          <div className="text-center">
+            <p className="text-[15px] font-bold text-slate-800">No MRP run for this order</p>
+            <p className="mt-1 text-[13px] text-slate-500 max-w-sm">
+              Run Material Requirements Planning to explode the BOM against this order's quantities
+              and calculate yarn, fabric and accessory needs.
+            </p>
+          </div>
+          {can('MRP.CREATE') && (
+            <button className="btn-primary" onClick={() => void runMrp()} disabled={running}>
+              {running ? <Spinner size={15} /> : <PlayCircle size={15} />}
+              Run MRP for {soNo}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Run summary bar */}
+      <div className="card p-0 overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/60 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-4 text-[12.5px]">
+            <span className="font-mono font-bold text-brand-700">{latestRun.mrp_no}</span>
+            <span className="text-slate-500">Run date: <strong className="text-slate-800">{fmtDate(latestRun.run_date)}</strong></span>
+            {shortfalls > 0 ? (
+              <span className="inline-flex items-center gap-1 rounded-md bg-red-50 border border-red-200 px-2 py-0.5 text-[11.5px] font-semibold text-red-700">
+                <AlertCircle size={12} /> {shortfalls} shortfall{shortfalls !== 1 ? 's' : ''}
+              </span>
+            ) : requirements.length > 0 ? (
+              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[11.5px] font-semibold text-emerald-700">
+                <CheckCircle size={12} /> All materials covered
+              </span>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-2">
+            {can('MRP.CREATE') && (
+              <button
+                className="btn-secondary btn-sm"
+                onClick={() => void runMrp()} disabled={running}
+                title="Re-run MRP to refresh requirements"
+              >
+                {running ? <Spinner size={13} /> : <PlayCircle size={13} />}
+                Re-run MRP
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Type filter pills */}
+        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-100">
+          {([
+            { key: 'ALL', label: `All (${requirements.length})` },
+            { key: 'YARN', label: `Yarn (${yarn})` },
+            { key: 'FABRIC', label: `Fabric (${fabric})` },
+            { key: 'TRIM', label: `Accessories (${trim})` },
+          ] as { key: ReqFilter; label: string }[]).map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setFilter(key)}
+              className={`rounded-full px-3 py-1 text-[12px] font-semibold transition-all border ${
+                filter === key
+                  ? 'bg-brand-600 text-white border-brand-600 shadow-xs'
+                  : 'bg-white text-slate-600 border-slate-200 hover:border-brand-300 hover:text-brand-700'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Requirements table */}
+        {mrpDetail.isLoading ? (
+          <div className="p-4"><LoadingBlock rows={5} /></div>
+        ) : filtered.length ? (
+          <table className="w-full">
+            <thead>
+              <tr>
+                <th className="th">Type</th>
+                <th className="th">Material</th>
+                <th className="th">Style</th>
+                <th className="th text-right">Gross Required</th>
+                <th className="th text-right">In Stock</th>
+                <th className="th text-right">On Order</th>
+                <th className="th text-right">Net Required</th>
+                <th className="th">UOM</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((r: any) => {
+                const net = Number(r.net_required);
+                const name = r.yarn_name || r.fabric_name || r.trim_name || '—';
+                const typeColor: Record<string, string> = { YARN: 'blue', FABRIC: 'green', TRIM: 'purple' };
+                return (
+                  <tr key={r.id} className={net > 0 ? 'bg-red-50/30' : ''}>
+                    <td className="td">
+                      <Badge tone={typeColor[r.material_type] as any ?? 'blue'}>{r.material_type}</Badge>
+                    </td>
+                    <td className="td font-medium text-slate-900">{name}</td>
+                    <td className="td text-[12px] font-mono text-slate-500">{r.style_code ?? '—'}</td>
+                    <td className="td text-right tabular-nums">{fmtDecimal(r.gross_required, 3)}</td>
+                    <td className="td text-right tabular-nums text-emerald-700">{fmtDecimal(r.in_stock, 3)}</td>
+                    <td className="td text-right tabular-nums text-blue-700">{fmtDecimal(r.on_order, 3)}</td>
+                    <td className="td text-right">
+                      <span className={`font-bold tabular-nums ${
+                        net > 0 ? 'text-red-600' : 'text-emerald-600'
+                      }`}>
+                        {net > 0 ? `+${fmtDecimal(net, 3)}` : fmtDecimal(0, 3)}
+                      </span>
+                    </td>
+                    <td className="td text-slate-500">{r.uom_code}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        ) : (
+          <div className="flex flex-col items-center justify-center gap-2 py-10">
+            <CheckCircle className="text-emerald-500" size={22} />
+            <p className="text-[13px] text-slate-500">No {filter !== 'ALL' ? filter.toLowerCase() : ''} requirements for this filter.</p>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
