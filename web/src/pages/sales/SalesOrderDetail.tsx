@@ -90,12 +90,41 @@ export default function SalesOrderDetail() {
     return { qty, amount };
   }, [lines]);
 
+  const selectedCurrency = currencies.data?.find((c) => c.id === Number(head.currency_id));
+  const currencyCode = selectedCurrency?.code || 'USD';
+  const currencySymbol = selectedCurrency?.symbol || (currencyCode === 'INR' ? '₹' : '$');
+  const isForeign = currencyCode !== 'INR';
+  const exchangeRate = Number(head.exchange_rate) > 0 ? Number(head.exchange_rate) : (isForeign ? 83.5 : 1);
+  const inrAmount = totals.amount * (Number(head.exchange_rate) || 1);
+
   const locked = !isNew && ['APPROVED', 'CLOSED', 'CANCELLED'].includes(head.approval_state);
   const editable = (isNew ? can('SALES_ORDER.CREATE') : can('SALES_ORDER.UPDATE')) && !locked;
 
   const setH = (k: string, v: unknown) => setHead((s) => ({ ...s, [k]: v }));
   const setLine = (key: string, patch: Partial<Line>) =>
     setLines((s) => s.map((l) => (l._key === key ? { ...l, ...patch } : l)));
+
+  const handleBuyerChange = (bId: string) => {
+    setH('buyer_id', bId);
+    const buyer = buyers.data?.find((b: any) => b.id === Number(bId));
+    if (buyer?.currency_id && (!head.currency_id || isNew)) {
+      setH('currency_id', buyer.currency_id);
+      const curr = currencies.data?.find((c: any) => c.id === Number(buyer.currency_id));
+      if (curr?.code === 'USD' && (!head.exchange_rate || Number(head.exchange_rate) === 1)) setH('exchange_rate', 83.5);
+      else if (curr?.code === 'EUR' && (!head.exchange_rate || Number(head.exchange_rate) === 1)) setH('exchange_rate', 91.0);
+      else if (curr?.code === 'GBP' && (!head.exchange_rate || Number(head.exchange_rate) === 1)) setH('exchange_rate', 106.0);
+      else if (curr?.code === 'INR') setH('exchange_rate', 1);
+    }
+  };
+
+  const handleCurrencyChange = (cId: string) => {
+    setH('currency_id', cId);
+    const curr = currencies.data?.find((c: any) => c.id === Number(cId));
+    if (curr?.code === 'USD' && (!head.exchange_rate || Number(head.exchange_rate) === 1)) setH('exchange_rate', 83.5);
+    else if (curr?.code === 'EUR' && (!head.exchange_rate || Number(head.exchange_rate) === 1)) setH('exchange_rate', 91.0);
+    else if (curr?.code === 'GBP' && (!head.exchange_rate || Number(head.exchange_rate) === 1)) setH('exchange_rate', 106.0);
+    else if (curr?.code === 'INR') setH('exchange_rate', 1);
+  };
 
   const save = async () => {
     setErrors({}); setSaving(true);
@@ -187,7 +216,7 @@ export default function SalesOrderDetail() {
           <Input label="SO date" type="date" required value={head.so_date ?? ''}
             onChange={(e) => setH('so_date', e.target.value)} disabled={!editable} error={errors.so_date} />
           <Select label="Buyer" required options={toOptions(buyers.data)} placeholder="— Select buyer —"
-            value={head.buyer_id ?? ''} onChange={(e) => setH('buyer_id', e.target.value)}
+            value={head.buyer_id ?? ''} onChange={(e) => handleBuyerChange(e.target.value)}
             disabled={!editable} error={errors.buyer_id} />
           <Select label="Agent" options={toOptions(agents.data)} placeholder="— None —"
             value={head.agent_id ?? ''} onChange={(e) => setH('agent_id', e.target.value)} disabled={!editable} />
@@ -202,10 +231,18 @@ export default function SalesOrderDetail() {
             value={head.branch_id ?? ''} onChange={(e) => setH('branch_id', e.target.value)} disabled={!editable} />
 
           <Select label="Currency" required options={toOptions(currencies.data)} placeholder="— Select —"
-            value={head.currency_id ?? ''} onChange={(e) => setH('currency_id', e.target.value)}
+            value={head.currency_id ?? ''} onChange={(e) => handleCurrencyChange(e.target.value)}
             disabled={!editable} error={errors.currency_id} />
-          <Input label="Exchange rate" type="number" step="0.000001" value={head.exchange_rate ?? ''}
-            onChange={(e) => setH('exchange_rate', e.target.value)} disabled={!editable} />
+          <Input
+            label="Exchange rate (to INR)"
+            type="number"
+            step="0.0001"
+            value={head.exchange_rate ?? ''}
+            hint={isForeign ? `1 ${currencyCode} = ₹ ${exchangeRate.toFixed(2)} INR` : '1.00 for INR'}
+            placeholder={isForeign ? '83.50' : '1.00'}
+            onChange={(e) => setH('exchange_rate', e.target.value)}
+            disabled={!editable}
+          />
           <Select label="Incoterm" options={INCOTERMS.map((v) => ({ value: v, label: v }))}
             value={head.incoterm ?? 'FOB'} onChange={(e) => setH('incoterm', e.target.value)} disabled={!editable} />
           <Select label="Payment term" options={PAY_TERMS.map((v) => ({ value: v, label: v.replace(/_/g, ' ') }))}
@@ -243,10 +280,19 @@ export default function SalesOrderDetail() {
       {(isNew || tab === 'lines') && (
         <div className="space-y-3">
           {lines.map((line, idx) => (
-            <LineCard key={line._key} line={line} index={idx} editable={editable}
+            <LineCard
+              key={line._key}
+              line={line}
+              index={idx}
+              editable={editable}
+              currencyCode={currencyCode}
+              currencySymbol={currencySymbol}
+              exchangeRate={exchangeRate}
+              isForeign={isForeign}
               onChange={(patch) => setLine(line._key, patch)}
               onRemove={() => setLines((s) => s.filter((l) => l._key !== line._key))}
-              canRemove={lines.length > 1} />
+              canRemove={lines.length > 1}
+            />
           ))}
 
           {editable && (
@@ -256,17 +302,57 @@ export default function SalesOrderDetail() {
             </button>
           )}
 
-          <div className="card flex flex-wrap items-center justify-end gap-6 p-4">
-            <div className="text-right">
-              <p className="text-[11px] uppercase tracking-wide text-slate-500">Total quantity</p>
-              <p className="text-[19px] font-semibold tabular-nums text-slate-900">{fmtNumber(totals.qty)} pcs</p>
+          <div className="card flex flex-wrap items-center justify-between gap-6 p-4.5 bg-gradient-to-r from-slate-50 to-brand-50/20 border border-surface-border rounded-xl shadow-card">
+            <div className="flex flex-wrap items-center gap-3 text-xs">
+              {isForeign ? (
+                <div className="inline-flex items-center gap-2 rounded-lg bg-white border border-brand-200/80 px-3 py-1.5 shadow-xs">
+                  <span className="text-slate-500 font-medium">Applied Exchange Rate:</span>
+                  <span className="font-mono font-bold text-brand-800">
+                    1 {currencyCode} = ₹ {exchangeRate.toFixed(2)} INR
+                  </span>
+                </div>
+              ) : (
+                <div className="inline-flex items-center gap-2 rounded-lg bg-white border border-slate-200 px-3 py-1.5 shadow-xs">
+                  <span className="text-slate-500 font-medium">Order Currency:</span>
+                  <span className="font-mono font-bold text-slate-800">INR (Domestic)</span>
+                </div>
+              )}
             </div>
-            <div className="text-right">
-              <p className="text-[11px] uppercase tracking-wide text-slate-500">Total value</p>
-              <p className="text-[19px] font-semibold tabular-nums text-slate-900">
-                {currencies.data?.find((c) => c.id === Number(head.currency_id))?.code ?? ''}{' '}
-                {totals.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </p>
+
+            <div className="flex flex-wrap items-center gap-6 sm:gap-8">
+              <div className="text-right">
+                <p className="text-[11px] uppercase tracking-wider font-semibold text-slate-500">Total Quantity</p>
+                <p className="text-[20px] font-bold tabular-nums text-slate-900">
+                  {fmtNumber(totals.qty)} <span className="text-xs font-normal text-slate-500">pcs</span>
+                </p>
+              </div>
+
+              <div className="text-right border-l border-slate-200/80 pl-6">
+                <p className="text-[11px] uppercase tracking-wider font-semibold text-slate-500">
+                  Total Value ({currencyCode})
+                </p>
+                <p className="text-[20px] font-bold tabular-nums text-slate-900">
+                  {currencyCode} {currencySymbol}{' '}
+                  {totals.amount.toLocaleString(isForeign ? 'en-US' : 'en-IN', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </p>
+              </div>
+
+              {isForeign && (
+                <div className="text-right border-l border-brand-200 pl-6 bg-brand-50/70 py-1.5 px-3.5 rounded-lg border border-brand-200">
+                  <p className="text-[11px] uppercase tracking-wider font-bold text-brand-700">
+                    Total Value in INR (₹)
+                  </p>
+                  <p className="text-[20px] font-extrabold tabular-nums text-brand-800">
+                    ₹ {inrAmount.toLocaleString('en-IN', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -333,8 +419,11 @@ export default function SalesOrderDetail() {
 }
 
 /* ------------------------------------------------------ order line card */
-function LineCard({ line, index, editable, onChange, onRemove, canRemove }: {
+function LineCard({
+  line, index, editable, currencyCode, currencySymbol, exchangeRate, isForeign, onChange, onRemove, canRemove
+}: {
   line: Line; index: number; editable: boolean;
+  currencyCode: string; currencySymbol: string; exchangeRate: number; isForeign: boolean;
   onChange: (p: Partial<Line>) => void; onRemove: () => void; canRemove: boolean;
 }) {
   const styles = useLookup('styles');
@@ -376,7 +465,7 @@ function LineCard({ line, index, editable, onChange, onRemove, canRemove }: {
           placeholder={line.style_id ? '— All colours —' : 'Select a style first'}
           value={line.color_id} disabled={!editable || !line.style_id}
           onChange={(e) => onChange({ color_id: e.target.value ? Number(e.target.value) : '', skus: {} })} />
-        <Input label="Unit price" type="number" step="0.0001" value={line.unit_price}
+        <Input label={`Unit price (${currencyCode})`} type="number" step="0.0001" placeholder="0.00" value={line.unit_price}
           disabled={!editable}
           onChange={(e) => onChange({ unit_price: e.target.value === '' ? '' : Number(e.target.value) })} />
         <Input label="Line ship date" type="date" value={line.ship_date} disabled={!editable}
@@ -385,14 +474,19 @@ function LineCard({ line, index, editable, onChange, onRemove, canRemove }: {
 
       {/* Size grid */}
       <div className="mt-4">
-        <div className="mb-2 flex items-center justify-between">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <p className="text-[12px] font-semibold text-slate-700">Size-wise breakdown</p>
           {lineQty > 0 && (
             <p className="text-[12px] text-slate-500">
               <span className="font-semibold text-slate-800">{fmtNumber(lineQty)}</span> pcs ·{' '}
               <span className="font-semibold text-slate-800">
-                {lineAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {currencyCode} {currencySymbol}{lineAmount.toLocaleString(isForeign ? 'en-US' : 'en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
+              {isForeign && (
+                <span className="ml-1 font-bold text-brand-700">
+                  (₹ {(lineAmount * exchangeRate).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                </span>
+              )}
             </p>
           )}
         </div>
