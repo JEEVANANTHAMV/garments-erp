@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, ArrowLeft, Save, Trash2, Calculator, Layers, FileText,
-  Scale, DollarSign, Printer, Scissors, Shirt, Droplets, Tag, Box
+  Printer, Scissors, Shirt, Tag, Box
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { http, ApiError } from '../../lib/api';
@@ -20,16 +20,10 @@ import { fmtDate, fmtDecimal, fmtNumber, today, toDateInput } from '../../lib/fo
 /* ------------------------------------------------------ Types & Interfaces */
 export interface FabricCostLine {
   _key: string;
-  id?: number;
-  fabric_type: 'Main Fabric' | 'Rib' | 'Neck Tape' | 'Pocketing' | 'Lining' | 'Collar / Cuff';
+  fabric_type: string;
   fabric_name: string;
-  construction: string;
   gsm: number | '';
-  composition: string;
-  yarn_count: string;
-  process_details: string;
   consumption_kg: number | '';
-  excess_pct: number | '';
   rate_per_kg: number | '';
 }
 
@@ -43,13 +37,11 @@ export interface EmbellishmentLine {
   _key: string;
   process: string;
   description: string;
-  qty: number | '';
   rate: number | '';
 }
 
 export interface TrimCostLine {
   _key: string;
-  trim_code: string;
   description: string;
   uom: string;
   consumption: number | '';
@@ -59,16 +51,8 @@ export interface TrimCostLine {
 export interface PackingCostLine {
   _key: string;
   item: string;
-  uom: string;
   consumption: number | '';
   rate: number | '';
-}
-
-export interface OtherChargeLine {
-  _key: string;
-  charge_name: string;
-  basis: 'Per Order' | 'Per Piece' | 'Percentage';
-  amount: number | '';
 }
 
 let lineSeq = 0;
@@ -263,7 +247,7 @@ export default function CostingsPage() {
 }
 
 /* ==============================================================================
-   2. COSTING DETAIL COCKPIT (Matching Screenshot & F14 Sheet)
+   2. COSTING DETAIL COCKPIT (Clean Essential Fields)
    ============================================================================== */
 export function CostingDetailPage() {
   const { id } = useParams();
@@ -283,29 +267,22 @@ export function CostingDetailPage() {
 
   // Header & Buyer Context State
   const [head, setHead] = useState({
-    costing_no: 'CST/26-27/000125',
+    costing_no: '',
     costing_date: today(),
     status_id: '',
     status_label: 'Draft',
-    version: 0,
-    department: 'KIDSWEAR',
+    version: 1,
+    department: 'MENSWEAR',
     buyer_id: '',
-    buyer_name: 'NEXT RETAIL LTD',
     style_id: '',
-    style_ref_no: 'NXK241025T01',
-    description: 'BOYS T-SHIRT (SS26 ORGANIC COTTON)',
-    product_category: 'T-SHIRT',
-    size_range: 'XS - XXL',
-    order_qty: 9000,
+    style_ref_no: '',
+    description: '',
+    order_qty: 1000,
     currency_id: '',
     currency_code: 'USD',
     exchange_rate: 83.2,
     profit_pct: 15.0,
-    rejection_pct: 3.0,
-    fob_inspection_testing_pct: 7.0,
-    payment_terms: '30% Advance, 70% LC',
-    price_validity_days: 30,
-    remarks: 'Tirupur export FOB quotation based on GOTS certified combed organic cotton.',
+    remarks: '',
   });
 
   // Section 1: Fabric Details Table
@@ -313,97 +290,46 @@ export function CostingDetailPage() {
     {
       _key: `fab_${++lineSeq}`,
       fabric_type: 'Main Fabric',
-      fabric_name: 'Jersey 160 GSM',
-      construction: 'Single Jersey',
+      fabric_name: 'Single Jersey',
       gsm: 160,
-      composition: '100% Organic Cotton',
-      yarn_count: "30's Combed",
-      process_details: 'Knitting + Dyeing + Washing + Stentering + Compacting',
-      consumption_kg: 0.226,
-      excess_pct: 10.0,
-      rate_per_kg: 6.85,
+      consumption_kg: 0.22,
+      rate_per_kg: 6.5,
     },
     {
       _key: `fab_${++lineSeq}`,
       fabric_type: 'Rib',
-      fabric_name: '1x1 Rib 240 GSM',
-      construction: 'Rib 1x1',
+      fabric_name: '1x1 Rib',
       gsm: 240,
-      composition: '92% Organic Cotton / 8% Elastane',
-      yarn_count: "30's + 20D Lycra",
-      process_details: 'Knitting + Dyeing + Washing + Heat Setting',
-      consumption_kg: 0.023,
-      excess_pct: 10.0,
+      consumption_kg: 0.025,
       rate_per_kg: 7.2,
     },
   ]);
 
-  // Section 2: Garment Consumption Breakdown (F14 Matrix)
-  const [consMatrix] = useState({
-    body_fabric_kg: 0.226,
-    rib_fabric_kg: 0.023,
-    neck_tape_kg: 0.005,
-    wastage_pct: 10.0,
-    garment_weight_gms: 210,
-  });
-
-  // Section 3: Fabric Rate Breakdown (Per KG of Main Fabric)
-  const [rateBreakdown] = useState({
-    raw_material_yarn: 3.45,
-    knitting: 0.65,
-    dyeing: 0.95,
-    washing: 0.65,
-    brushing: 0.0,
-    heat_setting: 0.0,
-    aop: 0.0,
-    stentering: 0.25,
-    compacting: 0.2,
-  });
-
-  // Section 4: CMT / Making Cost Lines
+  // Section 2: CMT / Making Cost Lines
   const [cmtLines, setCmtLines] = useState<OperationCostLine[]>([
-    { _key: `cmt_${++lineSeq}`, component: 'Cutting', rate: 8.0 },
-    { _key: `cmt_${++lineSeq}`, component: 'Sewing', rate: 16.0 },
-    { _key: `cmt_${++lineSeq}`, component: 'Finishing', rate: 3.0 },
-    { _key: `cmt_${++lineSeq}`, component: 'Checking', rate: 2.0 },
-    { _key: `cmt_${++lineSeq}`, component: 'Packing', rate: 1.0 },
+    { _key: `cmt_${++lineSeq}`, component: 'Cutting', rate: 0.1 },
+    { _key: `cmt_${++lineSeq}`, component: 'Sewing', rate: 0.2 },
+    { _key: `cmt_${++lineSeq}`, component: 'Finishing', rate: 0.05 },
+    { _key: `cmt_${++lineSeq}`, component: 'Packing', rate: 0.05 },
   ]);
 
-  // Section 5: Printing & Embroidery Lines
+  // Section 3: Printing & Washing
   const [embellishments, setEmbellishments] = useState<EmbellishmentLine[]>([
-    { _key: `emb_${++lineSeq}`, process: 'Print', description: '2 Grade Panel Print (Discharge)', qty: 1, rate: 35.0 },
-    { _key: `emb_${++lineSeq}`, process: 'Embroidery', description: 'Chest Logo Embroidery', qty: 0, rate: 0.0 },
+    { _key: `emb_${++lineSeq}`, process: 'Printing', description: 'Chest Print', rate: 0.25 },
+    { _key: `emb_${++lineSeq}`, process: 'Washing', description: 'Bio-wash', rate: 0.15 },
   ]);
 
-  // Section 6: Washing / Finishing Lines
-  const [washings, setWashings] = useState<EmbellishmentLine[]>([
-    { _key: `wsh_${++lineSeq}`, process: 'Bio Wash', description: 'Soft Flow Enzyme Wash', qty: 1, rate: 12.0 },
-  ]);
-
-  // Section 7: Trims Details Lines
+  // Section 4: Trims Details Lines
   const [trims, setTrims] = useState<TrimCostLine[]>([
-    { _key: `trm_${++lineSeq}`, trim_code: 'LBL-MAIN', description: 'Main Woven Brand Label', uom: 'Nos', consumption: 1, rate: 1.0 },
-    { _key: `trm_${++lineSeq}`, trim_code: 'LBL-SIZE', description: 'Size Loop Label', uom: 'Nos', consumption: 1, rate: 0.4 },
-    { _key: `trm_${++lineSeq}`, trim_code: 'LBL-CARE', description: 'Wash Care Satin Label', uom: 'Nos', consumption: 1, rate: 0.75 },
-    { _key: `trm_${++lineSeq}`, trim_code: 'TAG-BRAND', description: 'Barcode & Brand Hangtag', uom: 'Nos', consumption: 1, rate: 0.6 },
-    { _key: `trm_${++lineSeq}`, trim_code: 'HGR-BLACK', description: 'Black Export Garment Hanger', uom: 'Nos', consumption: 1, rate: 4.5 },
+    { _key: `trm_${++lineSeq}`, description: 'Main Brand Label', uom: 'Nos', consumption: 1, rate: 0.03 },
+    { _key: `trm_${++lineSeq}`, description: 'Care / Size Label', uom: 'Nos', consumption: 1, rate: 0.02 },
+    { _key: `trm_${++lineSeq}`, description: 'Brand Hangtag', uom: 'Nos', consumption: 1, rate: 0.05 },
   ]);
 
-  // Section 8: Packing Materials Lines
+  // Section 5: Packing Materials Lines
   const [packings, setPackings] = useState<PackingCostLine[]>([
-    { _key: `pkg_${++lineSeq}`, item: 'Master Polybag', uom: 'Nos', consumption: 1, rate: 0.35 },
-    { _key: `pkg_${++lineSeq}`, item: 'Carton Box (7 Ply)', uom: 'Nos', consumption: 1, rate: 0.65 },
-    { _key: `pkg_${++lineSeq}`, item: 'Carton Stickers & Labels', uom: 'Nos', consumption: 1, rate: 0.15 },
-    { _key: `pkg_${++lineSeq}`, item: 'Kimble Tag Pin', uom: 'Nos', consumption: 1, rate: 0.05 },
-    { _key: `pkg_${++lineSeq}`, item: 'BOPP Gum Tape', uom: 'Mtr', consumption: 0.1, rate: 0.2 },
-  ]);
-
-  // Section 9: Other Charges Lines (Order Level)
-  const [otherCharges, setOtherCharges] = useState<OtherChargeLine[]>([
-    { _key: `oth_${++lineSeq}`, charge_name: 'Final Inspection (TUV / SGS)', basis: 'Per Order', amount: 12000 },
-    { _key: `oth_${++lineSeq}`, charge_name: 'Lab Testing (Shrinkage & Fastness)', basis: 'Per Order', amount: 8000 },
-    { _key: `oth_${++lineSeq}`, charge_name: 'GOTS Certification Transaction Fee', basis: 'Per Order', amount: 2000 },
-    { _key: `oth_${++lineSeq}`, charge_name: 'Forwarding & Documentation', basis: 'Per Order', amount: 1000 },
+    { _key: `pkg_${++lineSeq}`, item: 'Individual Polybag', consumption: 1, rate: 0.02 },
+    { _key: `pkg_${++lineSeq}`, item: 'Export Carton Box', consumption: 0.04, rate: 0.05 },
   ]);
 
   // Load Existing Costing if editing
@@ -434,34 +360,17 @@ export function CostingDetailPage() {
     }, 0);
   }, [fabrics]);
 
-  const totalFabricOrderAmount = useMemo(() => {
-    return totalFabricCostPerPc * (Number(head.order_qty) || 0);
-  }, [totalFabricCostPerPc, head.order_qty]);
-
-  // 2. CMT Total Cost Per Pc (in local currency / USD normalized)
+  // 2. CMT Total Cost Per Pc
   const totalCmtPerPc = useMemo(() => {
     return cmtLines.reduce((sum, c) => sum + (Number(c.rate) || 0), 0);
   }, [cmtLines]);
 
-  // 3. Printing / Embroidery Total Per Pc
+  // 3. Embellishments Total Per Pc
   const totalEmbellishmentPerPc = useMemo(() => {
-    return embellishments.reduce((sum, e) => {
-      const q = Number(e.qty) || 0;
-      const r = Number(e.rate) || 0;
-      return sum + q * r;
-    }, 0);
+    return embellishments.reduce((sum, e) => sum + (Number(e.rate) || 0), 0);
   }, [embellishments]);
 
-  // 4. Washing / Finishing Total Per Pc
-  const totalWashingPerPc = useMemo(() => {
-    return washings.reduce((sum, w) => {
-      const q = Number(w.qty) || 0;
-      const r = Number(w.rate) || 0;
-      return sum + q * r;
-    }, 0);
-  }, [washings]);
-
-  // 5. Trims Total Per Pc
+  // 4. Trims Total Per Pc
   const totalTrimsPerPc = useMemo(() => {
     return trims.reduce((sum, t) => {
       const c = Number(t.consumption) || 0;
@@ -470,7 +379,7 @@ export function CostingDetailPage() {
     }, 0);
   }, [trims]);
 
-  // 6. Packing Total Per Pc
+  // 5. Packing Total Per Pc
   const totalPackingPerPc = useMemo(() => {
     return packings.reduce((sum, p) => {
       const c = Number(p.consumption) || 0;
@@ -479,48 +388,27 @@ export function CostingDetailPage() {
     }, 0);
   }, [packings]);
 
-  // 7. Other Charges Total (Order Level converted to Per Piece)
-  const totalOtherChargesOrder = useMemo(() => {
-    return otherCharges.reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
-  }, [otherCharges]);
-
-  const totalOtherChargesPerPc = useMemo(() => {
-    const qty = Number(head.order_qty) || 1;
-    return qty > 0 ? totalOtherChargesOrder / qty : 0;
-  }, [totalOtherChargesOrder, head.order_qty]);
-
-  // Combined Total Cost Per Garment
-  // Note: if fabric is in USD ($1.88) and CMT/trims in INR, we convert at exchange rate if USD
-  const isUSD = head.currency_code === 'USD';
-  const exch = Number(head.exchange_rate) || 83.2;
-
-  // Normalized Per-Piece Cost
+  // Total Cost Per Piece
   const totalCostPerPc = useMemo(() => {
     return (
       totalFabricCostPerPc +
       totalCmtPerPc +
       totalEmbellishmentPerPc +
-      totalWashingPerPc +
       totalTrimsPerPc +
-      totalPackingPerPc +
-      totalOtherChargesPerPc
+      totalPackingPerPc
     );
   }, [
     totalFabricCostPerPc,
     totalCmtPerPc,
     totalEmbellishmentPerPc,
-    totalWashingPerPc,
     totalTrimsPerPc,
     totalPackingPerPc,
-    totalOtherChargesPerPc,
   ]);
 
   // Profit & Quoted FOB Calculations
   const profitPct = Number(head.profit_pct) || 15.0;
   const profitAmountPerPc = (totalCostPerPc * profitPct) / 100;
-  const rawSellingPrice = totalCostPerPc + profitAmountPerPc;
-  const finalFobPerPc = Math.ceil(rawSellingPrice * 100) / 100;
-  const roundOffPerPc = finalFobPerPc - rawSellingPrice;
+  const finalFobPerPc = totalCostPerPc + profitAmountPerPc;
 
   // Total Order Values
   const orderQty = Number(head.order_qty) || 0;
@@ -546,14 +434,12 @@ export function CostingDetailPage() {
         currency_id: head.currency_id ? Number(head.currency_id) : (currencies.data?.[0]?.id ?? 1),
         order_qty: Number(head.order_qty) || 0,
         fabric_cost: totalFabricCostPerPc,
-        cutting_cost: Number(cmtLines.find((c) => c.component === 'Cutting')?.rate) || 8,
-        stitching_cost: Number(cmtLines.find((c) => c.component === 'Sewing')?.rate) || 16,
-        finishing_cost: Number(cmtLines.find((c) => c.component === 'Finishing')?.rate) || 3,
+        cutting_cost: Number(cmtLines.find((c) => c.component === 'Cutting')?.rate) || 0,
+        stitching_cost: Number(cmtLines.find((c) => c.component === 'Sewing')?.rate) || 0,
+        finishing_cost: Number(cmtLines.find((c) => c.component === 'Finishing')?.rate) || 0,
         printing_cost: totalEmbellishmentPerPc,
-        washing_cost: totalWashingPerPc,
         trim_cost: totalTrimsPerPc,
         packing_cost: totalPackingPerPc,
-        overhead_cost: totalOtherChargesPerPc,
         total_cost: totalCostPerPc,
         margin_pct: profitPct,
         fob_price: finalFobPerPc,
@@ -596,13 +482,13 @@ export function CostingDetailPage() {
             </span>
           </div>
         }
-        subtitle={`Style: ${head.style_ref_no}  |  ${head.description}  |  Order Qty: ${fmtNumber(head.order_qty)} pcs  |  FOB: ${head.currency_code} ${finalFobPerPc.toFixed(2)}`}
+        subtitle={`Order Qty: ${fmtNumber(head.order_qty)} pcs  |  Total Cost: ${head.currency_code} ${totalCostPerPc.toFixed(2)}  |  Quoted FOB: ${head.currency_code} ${finalFobPerPc.toFixed(2)}`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <button className="btn-secondary" onClick={() => nav('/sales/costings')}>
               <ArrowLeft size={15} /> Back
             </button>
-            <button className="btn-secondary" onClick={() => window.print()} title="Print F14 Costing Sheet">
+            <button className="btn-secondary" onClick={() => window.print()} title="Print Costing Sheet">
               <Printer size={15} /> Print
             </button>
             {editable && isNew && (
@@ -626,7 +512,7 @@ export function CostingDetailPage() {
       />
 
       {/* ──────────────────────────────────────────────────────────────────────────
-          1. COSTING HEADER CARD
+          1. COSTING HEADER CARD (Clean & Essential)
           ────────────────────────────────────────────────────────────────────────── */}
       <div className="card mb-4 overflow-hidden shadow-xs">
         <div className="flex items-center justify-between border-b border-surface-border bg-slate-50/70 px-4 py-2.5">
@@ -634,12 +520,13 @@ export function CostingDetailPage() {
             <Calculator size={15} className="text-brand-600" />
             <h3 className="text-[12.5px] font-bold uppercase tracking-wider text-slate-800">Costing Header</h3>
           </div>
-          <span className="text-xs text-slate-500 font-mono">F14 Standard Garment Export Model</span>
+          <span className="text-xs text-slate-500 font-mono">Style Pre-Order Cost Build-Up</span>
         </div>
 
-        <div className="p-4 grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-6 text-xs">
+        <div className="p-4 grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4 text-xs">
           <Input
             label="Costing No"
+            placeholder="Auto-generated if blank"
             value={head.costing_no}
             onChange={(e) => setHead((s) => ({ ...s, costing_no: e.target.value }))}
             disabled={!editable}
@@ -653,41 +540,7 @@ export function CostingDetailPage() {
             disabled={!editable}
           />
           <Select
-            label="Costing Status"
-            options={[
-              { value: 'Draft', label: 'Draft' },
-              { value: 'Under Review', label: 'Under Review' },
-              { value: 'Approved', label: 'Approved' },
-              { value: 'Submitted to Buyer', label: 'Submitted to Buyer' },
-            ]}
-            value={head.status_label}
-            onChange={(e) => setHead((s) => ({ ...s, status_label: e.target.value }))}
-            disabled={!editable}
-          />
-          <Input
-            label="Revision No"
-            type="number"
-            value={head.version}
-            onChange={(e) => setHead((s) => ({ ...s, version: Number(e.target.value) || 0 }))}
-            disabled={!editable}
-          />
-          <Select
-            label="Department"
-            options={['KIDSWEAR', 'MENSWEAR', 'WOMENSWEAR', 'ACTIVEWEAR', 'INFANT'].map((v) => ({ value: v, label: v }))}
-            value={head.department}
-            onChange={(e) => setHead((s) => ({ ...s, department: e.target.value }))}
-            disabled={!editable}
-          />
-          <Select
-            label="Buyer"
-            options={toOptions(buyers.data)}
-            value={head.buyer_id}
-            onChange={(e) => setHead((s) => ({ ...s, buyer_id: e.target.value }))}
-            disabled={!editable}
-          />
-
-          <Select
-            label="Style / Ref No"
+            label="Style"
             options={toOptions(styles.data)}
             value={head.style_id}
             onChange={(e) => {
@@ -701,26 +554,14 @@ export function CostingDetailPage() {
             }}
             disabled={!editable}
           />
-          <div className="lg:col-span-2">
-            <Input
-              label="Description"
-              value={head.description}
-              onChange={(e) => setHead((s) => ({ ...s, description: e.target.value }))}
-              disabled={!editable}
-            />
-          </div>
-          <Input
-            label="Product Category"
-            value={head.product_category}
-            onChange={(e) => setHead((s) => ({ ...s, product_category: e.target.value }))}
+          <Select
+            label="Buyer"
+            options={toOptions(buyers.data)}
+            value={head.buyer_id}
+            onChange={(e) => setHead((s) => ({ ...s, buyer_id: e.target.value }))}
             disabled={!editable}
           />
-          <Input
-            label="Size Range"
-            value={head.size_range}
-            onChange={(e) => setHead((s) => ({ ...s, size_range: e.target.value }))}
-            disabled={!editable}
-          />
+
           <Input
             label="Order Qty (Pcs)"
             type="number"
@@ -729,7 +570,6 @@ export function CostingDetailPage() {
             onChange={(e) => setHead((s) => ({ ...s, order_qty: Number(e.target.value) || 0 }))}
             disabled={!editable}
           />
-
           <Select
             label="Currency"
             options={toOptions(currencies.data)}
@@ -746,14 +586,6 @@ export function CostingDetailPage() {
             disabled={!editable}
           />
           <Input
-            label="Exch. Rate (to INR)"
-            type="number"
-            step="0.0001"
-            value={head.exchange_rate}
-            onChange={(e) => setHead((s) => ({ ...s, exchange_rate: Number(e.target.value) || 83.2 }))}
-            disabled={!editable}
-          />
-          <Input
             label="Profit Margin (%)"
             type="number"
             step="0.1"
@@ -761,22 +593,17 @@ export function CostingDetailPage() {
             onChange={(e) => setHead((s) => ({ ...s, profit_pct: Number(e.target.value) || 0 }))}
             disabled={!editable}
           />
-          <Input
-            label="Rejection Buffer (%)"
-            type="number"
-            step="0.1"
-            value={head.rejection_pct}
-            onChange={(e) => setHead((s) => ({ ...s, rejection_pct: Number(e.target.value) || 0 }))}
+          <Select
+            label="Costing Status"
+            options={[
+              { value: 'Draft', label: 'Draft' },
+              { value: 'Under Review', label: 'Under Review' },
+              { value: 'Approved', label: 'Approved' },
+            ]}
+            value={head.status_label}
+            onChange={(e) => setHead((s) => ({ ...s, status_label: e.target.value }))}
             disabled={!editable}
           />
-          <div className="lg:col-span-2">
-            <Input
-              label="Payment Terms"
-              value={head.payment_terms}
-              onChange={(e) => setHead((s) => ({ ...s, payment_terms: e.target.value }))}
-              disabled={!editable}
-            />
-          </div>
         </div>
       </div>
 
@@ -789,356 +616,188 @@ export function CostingDetailPage() {
           onChange={setActiveTab}
           tabs={[
             { key: '1. Fabric', label: '1. Fabric & Consumption' },
-            { key: '3. CMT / Making', label: '2. CMT & Operations' },
-            { key: '4. Printing / Embroidery', label: '3. Embellishments' },
-            { key: '6. Trims', label: '4. Trims & Packing' },
-            { key: '8. Other Charges', label: '5. Order Overheads' },
-            { key: '10. Cost Summary', label: '6. FOB Commercials' },
+            { key: '2. CMT', label: '2. CMT & Making' },
+            { key: '3. Embellishments', label: '3. Embellishments' },
+            { key: '4. Trims & Packing', label: '4. Trims & Packing' },
           ]}
         />
       </div>
 
-      {/* Main Content Grid: Left Workspace (68%) + Right Cost Summary Sidebar (32%) */}
+      {/* Main Content Grid: Left Inputs (68%) + Right Cost Summary Sidebar (32%) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-        {/* ── LEFT 8 COLS: DETAILED BREAKDOWN ACCORDING TO ACTIVE TAB ──────── */}
+        {/* ── LEFT 8 COLS: TAB CONTENT ────────────────────────────────────── */}
         <div className="lg:col-span-8 space-y-4">
-          {/* TAB 1: FABRIC DETAILS & CONSUMPTION MATRIX */}
-          {(activeTab === '1. Fabric' || activeTab === '10. Cost Summary') && (
-            <div className="space-y-4">
-              {/* Card A: Fabric Details Table */}
-              <div className="card overflow-hidden">
-                <div className="flex items-center justify-between border-b border-surface-border bg-slate-50/70 px-4 py-2.5">
-                  <div className="flex items-center gap-2">
-                    <Layers size={15} className="text-brand-600" />
-                    <h3 className="text-[13px] font-bold uppercase tracking-wider text-slate-800">Fabric Details</h3>
-                  </div>
-                  {editable && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setFabrics((prev) => [
-                          ...prev,
-                          {
-                            _key: `fab_${++lineSeq}`,
-                            fabric_type: 'Main Fabric',
-                            fabric_name: 'Single Jersey',
-                            construction: 'Single Jersey',
-                            gsm: 160,
-                            composition: '100% Cotton',
-                            yarn_count: "30's Combed",
-                            process_details: 'Knitting + Dyeing + Compacting',
-                            consumption_kg: 0.2,
-                            excess_pct: 10,
-                            rate_per_kg: 6.5,
-                          },
-                        ])
-                      }
-                      className="btn-primary btn-sm text-xs py-1 px-2.5 flex items-center gap-1"
-                    >
-                      <Plus size={13} /> Add Fabric
-                    </button>
-                  )}
+          {/* TAB 1: FABRIC DETAILS */}
+          {activeTab === '1. Fabric' && (
+            <div className="card overflow-hidden">
+              <div className="flex items-center justify-between border-b border-surface-border bg-slate-50/70 px-4 py-2.5">
+                <div className="flex items-center gap-2">
+                  <Layers size={15} className="text-brand-600" />
+                  <h3 className="text-[13px] font-bold uppercase tracking-wider text-slate-800">Fabric Components</h3>
                 </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-surface-border bg-slate-100/60 text-[11px] font-bold uppercase text-slate-600">
-                        <th className="py-2 px-2.5 w-8">#</th>
-                        <th className="py-2 px-2">Type</th>
-                        <th className="py-2 px-2 min-w-[130px]">Fabric Name</th>
-                        <th className="py-2 px-2 w-16">GSM</th>
-                        <th className="py-2 px-2 min-w-[120px]">Composition</th>
-                        <th className="py-2 px-2 min-w-[140px]">Process Details</th>
-                        <th className="py-2 px-2 w-20 text-right">Cons (Kg)</th>
-                        <th className="py-2 px-2 w-16 text-right">Exc %</th>
-                        <th className="py-2 px-2 w-20 text-right">Rate/Kg</th>
-                        <th className="py-2 px-2 w-20 text-right font-bold text-slate-900">Amt/Pc</th>
-                        <th className="py-2 px-2 w-24 text-right font-bold text-brand-700">Total Amt</th>
-                        {editable && <th className="py-2 px-2 w-8 text-center" />}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {fabrics.map((f, idx) => {
-                        const cons = Number(f.consumption_kg) || 0;
-                        const rate = Number(f.rate_per_kg) || 0;
-                        const amtPc = cons * rate;
-                        const totalAmt = amtPc * (Number(head.order_qty) || 0);
-                        return (
-                          <tr key={f._key} className="hover:bg-slate-50/70">
-                            <td className="py-2 px-2.5 font-bold text-slate-400">{idx + 1}</td>
-                            <td className="py-1 px-1">
-                              <select
-                                value={f.fabric_type}
-                                disabled={!editable}
-                                onChange={(e) =>
-                                  setFabrics((prev) =>
-                                    prev.map((item) =>
-                                      item._key === f._key ? { ...item, fabric_type: e.target.value as any } : item
-                                    )
-                                  )
-                                }
-                                className="input py-1 px-1.5 text-xs font-semibold text-slate-700 w-24"
-                              >
-                                <option value="Main Fabric">Main Fabric</option>
-                                <option value="Rib">Rib</option>
-                                <option value="Neck Tape">Neck Tape</option>
-                                <option value="Pocketing">Pocketing</option>
-                                <option value="Lining">Lining</option>
-                                <option value="Collar / Cuff">Collar / Cuff</option>
-                              </select>
-                            </td>
-                            <td className="py-1 px-1">
-                              <input
-                                type="text"
-                                value={f.fabric_name}
-                                disabled={!editable}
-                                onChange={(e) =>
-                                  setFabrics((prev) =>
-                                    prev.map((item) =>
-                                      item._key === f._key ? { ...item, fabric_name: e.target.value } : item
-                                    )
-                                  )
-                                }
-                                className="input py-1 px-1.5 text-xs w-full"
-                              />
-                            </td>
-                            <td className="py-1 px-1">
-                              <input
-                                type="number"
-                                value={f.gsm}
-                                disabled={!editable}
-                                onChange={(e) =>
-                                  setFabrics((prev) =>
-                                    prev.map((item) =>
-                                      item._key === f._key ? { ...item, gsm: Number(e.target.value) } : item
-                                    )
-                                  )
-                                }
-                                className="input py-1 px-1.5 text-xs font-mono w-16"
-                              />
-                            </td>
-                            <td className="py-1 px-1">
-                              <input
-                                type="text"
-                                value={f.composition}
-                                disabled={!editable}
-                                onChange={(e) =>
-                                  setFabrics((prev) =>
-                                    prev.map((item) =>
-                                      item._key === f._key ? { ...item, composition: e.target.value } : item
-                                    )
-                                  )
-                                }
-                                className="input py-1 px-1.5 text-xs w-full"
-                              />
-                            </td>
-                            <td className="py-1 px-1">
-                              <input
-                                type="text"
-                                value={f.process_details}
-                                disabled={!editable}
-                                onChange={(e) =>
-                                  setFabrics((prev) =>
-                                    prev.map((item) =>
-                                      item._key === f._key ? { ...item, process_details: e.target.value } : item
-                                    )
-                                  )
-                                }
-                                className="input py-1 px-1.5 text-xs text-slate-500 w-full"
-                              />
-                            </td>
-                            <td className="py-1 px-1 text-right">
-                              <input
-                                type="number"
-                                step="0.001"
-                                value={f.consumption_kg}
-                                disabled={!editable}
-                                onChange={(e) =>
-                                  setFabrics((prev) =>
-                                    prev.map((item) =>
-                                      item._key === f._key
-                                        ? { ...item, consumption_kg: e.target.value === '' ? '' : Number(e.target.value) }
-                                        : item
-                                    )
-                                  )
-                                }
-                                className="input py-1 px-1.5 text-right font-mono font-bold text-slate-900 w-20 text-xs"
-                              />
-                            </td>
-                            <td className="py-1 px-1 text-right">
-                              <input
-                                type="number"
-                                step="0.1"
-                                value={f.excess_pct}
-                                disabled={!editable}
-                                onChange={(e) =>
-                                  setFabrics((prev) =>
-                                    prev.map((item) =>
-                                      item._key === f._key ? { ...item, excess_pct: Number(e.target.value) } : item
-                                    )
-                                  )
-                                }
-                                className="input py-1 px-1 text-right font-mono text-xs w-14"
-                              />
-                            </td>
-                            <td className="py-1 px-1 text-right">
-                              <input
-                                type="number"
-                                step="0.01"
-                                value={f.rate_per_kg}
-                                disabled={!editable}
-                                onChange={(e) =>
-                                  setFabrics((prev) =>
-                                    prev.map((item) =>
-                                      item._key === f._key
-                                        ? { ...item, rate_per_kg: e.target.value === '' ? '' : Number(e.target.value) }
-                                        : item
-                                    )
-                                  )
-                                }
-                                className="input py-1 px-1.5 text-right font-mono font-bold text-slate-900 w-20 text-xs"
-                              />
-                            </td>
-                            <td className="py-2 px-2 text-right font-mono font-bold text-slate-900">
-                              {head.currency_code} {amtPc.toFixed(2)}
-                            </td>
-                            <td className="py-2 px-2 text-right font-mono font-black text-brand-700">
-                              {head.currency_code} {fmtNumber(Math.round(totalAmt))}
-                            </td>
-                            {editable && (
-                              <td className="py-1 px-1 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => setFabrics((prev) => prev.filter((item) => item._key !== f._key))}
-                                  disabled={fabrics.length <= 1}
-                                  className="p-1 text-slate-400 hover:text-rose-600 rounded"
-                                >
-                                  <Trash2 size={13} />
-                                </button>
-                              </td>
-                            )}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                    <tfoot>
-                      <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold text-xs">
-                        <td colSpan={9} className="py-2.5 px-4 text-slate-800 uppercase tracking-wider">
-                          Total Fabric Cost ({head.currency_code})
-                        </td>
-                        <td className="py-2.5 px-2 text-right font-mono font-black text-sm text-slate-900">
-                          {head.currency_code} {totalFabricCostPerPc.toFixed(2)}
-                        </td>
-                        <td className="py-2.5 px-2 text-right font-mono font-black text-sm text-brand-700">
-                          {head.currency_code} {fmtNumber(Math.round(totalFabricOrderAmount))}
-                        </td>
-                        {editable && <td />}
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
+                {editable && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFabrics((prev) => [
+                        ...prev,
+                        {
+                          _key: `fab_${++lineSeq}`,
+                          fabric_type: 'Main Fabric',
+                          fabric_name: 'Single Jersey',
+                          gsm: 160,
+                          consumption_kg: 0.2,
+                          rate_per_kg: 6.5,
+                        },
+                      ])
+                    }
+                    className="btn-primary btn-sm text-xs py-1 px-2.5 flex items-center gap-1"
+                  >
+                    <Plus size={13} /> Add Fabric
+                  </button>
+                )}
               </div>
 
-              {/* Card B: Garment Consumption & Fabric Rate Breakdown (2-Column Grid) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Left: Garment Consumption Matrix */}
-                <div className="card overflow-hidden">
-                  <div className="border-b border-surface-border bg-slate-50/70 px-4 py-2 flex items-center justify-between">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                      <Scale size={14} className="text-brand-600" /> Garment Consumption
-                    </h4>
-                    <span className="text-[11px] font-mono text-slate-500">Basis: Per Piece</span>
-                  </div>
-                  <div className="p-3.5 space-y-2 text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-600">Body Fabric Consumption:</span>
-                      <span className="font-mono font-bold text-slate-900">{consMatrix.body_fabric_kg.toFixed(3)} Kg/Pc</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-600">Rib Fabric Consumption:</span>
-                      <span className="font-mono font-bold text-slate-900">{consMatrix.rib_fabric_kg.toFixed(3)} Kg/Pc</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-600">Neck Tape Consumption:</span>
-                      <span className="font-mono font-bold text-slate-900">{consMatrix.neck_tape_kg.toFixed(3)} Kg/Pc</span>
-                    </div>
-                    <div className="flex items-center justify-between pt-1.5 border-t border-slate-100">
-                      <span className="font-semibold text-slate-800">Total Fabric Consumption:</span>
-                      <span className="font-mono font-bold text-brand-700">
-                        {(consMatrix.body_fabric_kg + consMatrix.rib_fabric_kg + consMatrix.neck_tape_kg).toFixed(3)} Kg/Pc
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-600">Wastage %:</span>
-                      <span className="font-mono font-bold text-amber-600">{consMatrix.wastage_pct.toFixed(2)} %</span>
-                    </div>
-                    <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 font-bold">
-                      <span className="text-slate-900">Total With Wastage:</span>
-                      <span className="font-mono text-emerald-700">
-                        {(
-                          (consMatrix.body_fabric_kg + consMatrix.rib_fabric_kg + consMatrix.neck_tape_kg) *
-                          (1 + consMatrix.wastage_pct / 100)
-                        ).toFixed(4)}{' '}
-                        Kg/Pc
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[11px] text-slate-500">
-                      <span>Garment Weight:</span>
-                      <span className="font-mono font-semibold">{consMatrix.garment_weight_gms} Gms/Pc</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right: Fabric Rate Breakdown (Per KG of Main Fabric) */}
-                <div className="card overflow-hidden">
-                  <div className="border-b border-surface-border bg-slate-50/70 px-4 py-2 flex items-center justify-between">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                      <Droplets size={14} className="text-brand-600" /> Fabric Process Rate (Main Fabric)
-                    </h4>
-                    <span className="text-[11px] font-mono text-slate-500">Rate / Kg ({head.currency_code})</span>
-                  </div>
-                  <div className="p-3.5 space-y-1.5 text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-600">Raw Material (Yarn):</span>
-                      <span className="font-mono font-semibold text-slate-900">{rateBreakdown.raw_material_yarn.toFixed(2)}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-600">Knitting:</span>
-                      <span className="font-mono text-slate-900">{rateBreakdown.knitting.toFixed(2)}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-600">Dyeing & Washing:</span>
-                      <span className="font-mono text-slate-900">{rateBreakdown.dyeing.toFixed(2)}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-600">Stentering & Compacting:</span>
-                      <span className="font-mono text-slate-900">
-                        {(rateBreakdown.stentering + rateBreakdown.compacting).toFixed(2)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-200 font-bold">
-                      <span className="text-slate-900">Total Rate / Kg:</span>
-                      <span className="font-mono text-emerald-700 text-sm">
-                        {head.currency_code}{' '}
-                        {(
-                          rateBreakdown.raw_material_yarn +
-                          rateBreakdown.knitting +
-                          rateBreakdown.dyeing +
-                          rateBreakdown.washing +
-                          rateBreakdown.stentering +
-                          rateBreakdown.compacting
-                        ).toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-surface-border bg-slate-100/60 text-[11px] font-bold uppercase text-slate-600">
+                      <th className="py-2 px-2.5 w-8">#</th>
+                      <th className="py-2 px-2">Type</th>
+                      <th className="py-2 px-2 min-w-[140px]">Fabric Name</th>
+                      <th className="py-2 px-2 w-20">GSM</th>
+                      <th className="py-2 px-2 w-24 text-right">Cons (Kg/pc)</th>
+                      <th className="py-2 px-2 w-24 text-right">Rate/Kg</th>
+                      <th className="py-2 px-2 w-24 text-right font-bold text-slate-900">Amt / Pc</th>
+                      {editable && <th className="py-2 px-2 w-8 text-center" />}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {fabrics.map((f, idx) => {
+                      const cons = Number(f.consumption_kg) || 0;
+                      const rate = Number(f.rate_per_kg) || 0;
+                      const amtPc = cons * rate;
+                      return (
+                        <tr key={f._key} className="hover:bg-slate-50/70">
+                          <td className="py-2 px-2.5 font-bold text-slate-400">{idx + 1}</td>
+                          <td className="py-1 px-1">
+                            <input
+                              type="text"
+                              value={f.fabric_type}
+                              disabled={!editable}
+                              onChange={(e) =>
+                                setFabrics((prev) =>
+                                  prev.map((item) =>
+                                    item._key === f._key ? { ...item, fabric_type: e.target.value } : item
+                                  )
+                                )
+                              }
+                              className="input py-1 px-1.5 text-xs font-semibold text-slate-700 w-28"
+                            />
+                          </td>
+                          <td className="py-1 px-1">
+                            <input
+                              type="text"
+                              value={f.fabric_name}
+                              disabled={!editable}
+                              onChange={(e) =>
+                                setFabrics((prev) =>
+                                  prev.map((item) =>
+                                    item._key === f._key ? { ...item, fabric_name: e.target.value } : item
+                                  )
+                                )
+                              }
+                              className="input py-1 px-1.5 text-xs w-full"
+                            />
+                          </td>
+                          <td className="py-1 px-1">
+                            <input
+                              type="number"
+                              value={f.gsm}
+                              disabled={!editable}
+                              onChange={(e) =>
+                                setFabrics((prev) =>
+                                  prev.map((item) =>
+                                    item._key === f._key ? { ...item, gsm: Number(e.target.value) } : item
+                                  )
+                                )
+                              }
+                              className="input py-1 px-1.5 text-xs font-mono w-20"
+                            />
+                          </td>
+                          <td className="py-1 px-1 text-right">
+                            <input
+                              type="number"
+                              step="0.001"
+                              value={f.consumption_kg}
+                              disabled={!editable}
+                              onChange={(e) =>
+                                setFabrics((prev) =>
+                                  prev.map((item) =>
+                                    item._key === f._key
+                                      ? { ...item, consumption_kg: e.target.value === '' ? '' : Number(e.target.value) }
+                                      : item
+                                  )
+                                )
+                              }
+                              className="input py-1 px-1.5 text-right font-mono font-bold text-slate-900 w-24 text-xs"
+                            />
+                          </td>
+                          <td className="py-1 px-1 text-right">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={f.rate_per_kg}
+                              disabled={!editable}
+                              onChange={(e) =>
+                                setFabrics((prev) =>
+                                  prev.map((item) =>
+                                    item._key === f._key
+                                      ? { ...item, rate_per_kg: e.target.value === '' ? '' : Number(e.target.value) }
+                                      : item
+                                  )
+                                )
+                              }
+                              className="input py-1 px-1.5 text-right font-mono font-bold text-slate-900 w-24 text-xs"
+                            />
+                          </td>
+                          <td className="py-2 px-2 text-right font-mono font-bold text-slate-900">
+                            {head.currency_code} {amtPc.toFixed(2)}
+                          </td>
+                          {editable && (
+                            <td className="py-1 px-1 text-center">
+                              <button
+                                type="button"
+                                onClick={() => setFabrics((prev) => prev.filter((item) => item._key !== f._key))}
+                                disabled={fabrics.length <= 1}
+                                className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold text-xs">
+                      <td colSpan={6} className="py-2.5 px-4 text-slate-800 uppercase tracking-wider">
+                        Total Fabric Cost Per Piece
+                      </td>
+                      <td className="py-2.5 px-2 text-right font-mono font-black text-sm text-slate-900">
+                        {head.currency_code} {totalFabricCostPerPc.toFixed(2)}
+                      </td>
+                      {editable && <td />}
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
             </div>
           )}
 
           {/* TAB 2: CMT / MAKING COST */}
-          {(activeTab === '3. CMT / Making' || activeTab === '10. Cost Summary') && (
+          {activeTab === '2. CMT' && (
             <div className="card overflow-hidden">
               <div className="flex items-center justify-between border-b border-surface-border bg-slate-50/70 px-4 py-2.5">
                 <div className="flex items-center gap-2">
@@ -1151,7 +810,7 @@ export function CostingDetailPage() {
                   Total CMT: {head.currency_code} {totalCmtPerPc.toFixed(2)}
                 </span>
               </div>
-              <div className="p-4 grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
+              <div className="p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                 {cmtLines.map((c) => (
                   <div key={c._key} className="rounded-lg border border-slate-200 bg-slate-50/60 p-2.5">
                     <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600 block mb-1">
@@ -1161,7 +820,7 @@ export function CostingDetailPage() {
                       <span className="text-slate-400 font-medium">{head.currency_code}</span>
                       <input
                         type="number"
-                        step="0.1"
+                        step="0.01"
                         value={c.rate}
                         disabled={!editable}
                         onChange={(e) =>
@@ -1181,38 +840,41 @@ export function CostingDetailPage() {
           )}
 
           {/* TAB 3: EMBELLISHMENTS & WASHING */}
-          {(activeTab === '4. Printing / Embroidery' || activeTab === '10. Cost Summary') && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Left: Printing & Embroidery */}
-              <div className="card overflow-hidden">
-                <div className="flex items-center justify-between border-b border-surface-border bg-slate-50/70 px-4 py-2.5">
-                  <h3 className="text-[12.5px] font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                    <Shirt size={14} className="text-brand-600" /> Printing / Embroidery
+          {activeTab === '3. Embellishments' && (
+            <div className="card overflow-hidden">
+              <div className="flex items-center justify-between border-b border-surface-border bg-slate-50/70 px-4 py-2.5">
+                <div className="flex items-center gap-2">
+                  <Shirt size={15} className="text-brand-600" />
+                  <h3 className="text-[13px] font-bold uppercase tracking-wider text-slate-800">
+                    Embellishments & Washing (Per Piece)
                   </h3>
-                  <span className="font-mono font-bold text-slate-700 text-xs">
-                    {head.currency_code} {totalEmbellishmentPerPc.toFixed(2)}
-                  </span>
                 </div>
-                <div className="p-3 space-y-2 text-xs">
-                  {embellishments.map((emb) => (
-                    <div key={emb._key} className="grid grid-cols-12 gap-2 items-center">
-                      <span className="col-span-3 font-semibold text-slate-700">{emb.process}</span>
-                      <input
-                        type="text"
-                        value={emb.description}
-                        disabled={!editable}
-                        onChange={(e) =>
-                          setEmbellishments((prev) =>
-                            prev.map((item) =>
-                              item._key === emb._key ? { ...item, description: e.target.value } : item
-                            )
+                <span className="font-mono font-bold text-slate-700 text-xs">
+                  Total: {head.currency_code} {totalEmbellishmentPerPc.toFixed(2)}
+                </span>
+              </div>
+              <div className="p-4 space-y-2.5 text-xs">
+                {embellishments.map((emb) => (
+                  <div key={emb._key} className="grid grid-cols-12 gap-2 items-center">
+                    <span className="col-span-3 font-semibold text-slate-700">{emb.process}</span>
+                    <input
+                      type="text"
+                      value={emb.description}
+                      disabled={!editable}
+                      onChange={(e) =>
+                        setEmbellishments((prev) =>
+                          prev.map((item) =>
+                            item._key === emb._key ? { ...item, description: e.target.value } : item
                           )
-                        }
-                        className="input col-span-5 py-1 px-1.5 text-xs"
-                      />
+                        )
+                      }
+                      className="input col-span-6 py-1 px-2 text-xs"
+                    />
+                    <div className="col-span-3 flex items-center gap-1 font-mono">
+                      <span className="text-slate-400">{head.currency_code}</span>
                       <input
                         type="number"
-                        step="0.5"
+                        step="0.01"
                         value={emb.rate}
                         disabled={!editable}
                         onChange={(e) =>
@@ -1222,83 +884,34 @@ export function CostingDetailPage() {
                             )
                           )
                         }
-                        className="input col-span-4 py-1 px-1.5 text-right font-mono font-bold text-slate-900 text-xs"
+                        className="input py-1 px-2 text-right font-mono font-bold text-slate-900 text-xs w-full"
                       />
                     </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Right: Washing / Finishing */}
-              <div className="card overflow-hidden">
-                <div className="flex items-center justify-between border-b border-surface-border bg-slate-50/70 px-4 py-2.5">
-                  <h3 className="text-[12.5px] font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                    <Droplets size={14} className="text-brand-600" /> Washing / Finishing
-                  </h3>
-                  <span className="font-mono font-bold text-slate-700 text-xs">
-                    {head.currency_code} {totalWashingPerPc.toFixed(2)}
-                  </span>
-                </div>
-                <div className="p-3 space-y-2 text-xs">
-                  {washings.map((w) => (
-                    <div key={w._key} className="grid grid-cols-12 gap-2 items-center">
-                      <span className="col-span-3 font-semibold text-slate-700">{w.process}</span>
-                      <input
-                        type="text"
-                        value={w.description}
-                        disabled={!editable}
-                        onChange={(e) =>
-                          setWashings((prev) =>
-                            prev.map((item) =>
-                              item._key === w._key ? { ...item, description: e.target.value } : item
-                            )
-                          )
-                        }
-                        className="input col-span-5 py-1 px-1.5 text-xs"
-                      />
-                      <input
-                        type="number"
-                        step="0.5"
-                        value={w.rate}
-                        disabled={!editable}
-                        onChange={(e) =>
-                          setWashings((prev) =>
-                            prev.map((item) =>
-                              item._key === w._key ? { ...item, rate: Number(e.target.value) || 0 } : item
-                            )
-                          )
-                        }
-                        className="input col-span-4 py-1 px-1.5 text-right font-mono font-bold text-slate-900 text-xs"
-                      />
-                    </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
 
-          {/* TAB 4: TRIMS & PACKING MATERIALS */}
-          {(activeTab === '6. Trims' || activeTab === '10. Cost Summary') && (
+          {/* TAB 4: TRIMS & PACKING */}
+          {activeTab === '4. Trims & Packing' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Trims Details */}
+              {/* Trims */}
               <div className="card overflow-hidden">
                 <div className="flex items-center justify-between border-b border-surface-border bg-slate-50/70 px-4 py-2.5">
                   <h3 className="text-[12.5px] font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                    <Tag size={14} className="text-brand-600" /> Trims Details (Per Pc)
+                    <Tag size={14} className="text-brand-600" /> Trims Total: {head.currency_code} {totalTrimsPerPc.toFixed(2)}
                   </h3>
-                  <span className="font-mono font-bold text-slate-700 text-xs">
-                    {head.currency_code} {totalTrimsPerPc.toFixed(2)}
-                  </span>
                 </div>
                 <div className="p-3 space-y-2 text-xs">
                   {trims.map((t) => (
                     <div key={t._key} className="flex items-center justify-between gap-2">
-                      <span className="w-36 truncate font-medium text-slate-700">{t.description}</span>
+                      <span className="w-40 truncate font-medium text-slate-700">{t.description}</span>
                       <div className="flex items-center gap-1 font-mono">
                         <span className="text-slate-400">{head.currency_code}</span>
                         <input
                           type="number"
-                          step="0.05"
+                          step="0.01"
                           value={t.rate}
                           disabled={!editable}
                           onChange={(e) =>
@@ -1316,25 +929,22 @@ export function CostingDetailPage() {
                 </div>
               </div>
 
-              {/* Packing Materials */}
+              {/* Packing */}
               <div className="card overflow-hidden">
                 <div className="flex items-center justify-between border-b border-surface-border bg-slate-50/70 px-4 py-2.5">
                   <h3 className="text-[12.5px] font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                    <Box size={14} className="text-brand-600" /> Packing Materials (Per Pc)
+                    <Box size={14} className="text-brand-600" /> Packing Total: {head.currency_code} {totalPackingPerPc.toFixed(2)}
                   </h3>
-                  <span className="font-mono font-bold text-slate-700 text-xs">
-                    {head.currency_code} {totalPackingPerPc.toFixed(2)}
-                  </span>
                 </div>
                 <div className="p-3 space-y-2 text-xs">
                   {packings.map((p) => (
                     <div key={p._key} className="flex items-center justify-between gap-2">
-                      <span className="w-36 truncate font-medium text-slate-700">{p.item}</span>
+                      <span className="w-40 truncate font-medium text-slate-700">{p.item}</span>
                       <div className="flex items-center gap-1 font-mono">
                         <span className="text-slate-400">{head.currency_code}</span>
                         <input
                           type="number"
-                          step="0.05"
+                          step="0.01"
                           value={p.rate}
                           disabled={!editable}
                           onChange={(e) =>
@@ -1350,47 +960,6 @@ export function CostingDetailPage() {
                     </div>
                   ))}
                 </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 5: OTHER CHARGES */}
-          {(activeTab === '8. Other Charges' || activeTab === '10. Cost Summary') && (
-            <div className="card overflow-hidden">
-              <div className="flex items-center justify-between border-b border-surface-border bg-slate-50/70 px-4 py-2.5">
-                <div className="flex items-center gap-2">
-                  <DollarSign size={15} className="text-brand-600" />
-                  <h3 className="text-[13px] font-bold uppercase tracking-wider text-slate-800">
-                    Other Charges & Order Overheads
-                  </h3>
-                </div>
-                <span className="font-mono font-bold text-slate-700 text-xs">
-                  Total: ₹ {fmtNumber(totalOtherChargesOrder)} (≈ {head.currency_code} {totalOtherChargesPerPc.toFixed(2)}/pc)
-                </span>
-              </div>
-              <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                {otherCharges.map((oth) => (
-                  <div key={oth._key} className="flex items-center justify-between p-2.5 rounded-lg border border-slate-200 bg-slate-50/50">
-                    <span className="font-semibold text-slate-700">{oth.charge_name}</span>
-                    <div className="flex items-center gap-1 font-mono">
-                      <span className="text-slate-400">₹</span>
-                      <input
-                        type="number"
-                        step="500"
-                        value={oth.amount}
-                        disabled={!editable}
-                        onChange={(e) =>
-                          setOtherCharges((prev) =>
-                            prev.map((item) =>
-                              item._key === oth._key ? { ...item, amount: Number(e.target.value) || 0 } : item
-                            )
-                          )
-                        }
-                        className="input py-1 px-2 text-right font-mono font-bold text-slate-900 text-xs w-28"
-                      />
-                    </div>
-                  </div>
-                ))}
               </div>
             </div>
           )}
@@ -1415,24 +984,16 @@ export function CostingDetailPage() {
                 <span className="font-mono font-semibold text-slate-900">{totalCmtPerPc.toFixed(2)}</span>
               </div>
               <div className="flex items-center justify-between text-slate-600">
-                <span>3. Printing / Embroidery</span>
+                <span>3. Embellishments / Wash</span>
                 <span className="font-mono font-semibold text-slate-900">{totalEmbellishmentPerPc.toFixed(2)}</span>
               </div>
               <div className="flex items-center justify-between text-slate-600">
-                <span>4. Washing / Finishing</span>
-                <span className="font-mono font-semibold text-slate-900">{totalWashingPerPc.toFixed(2)}</span>
-              </div>
-              <div className="flex items-center justify-between text-slate-600">
-                <span>5. Trims Total</span>
+                <span>4. Trims Total</span>
                 <span className="font-mono font-semibold text-slate-900">{totalTrimsPerPc.toFixed(2)}</span>
               </div>
               <div className="flex items-center justify-between text-slate-600">
-                <span>6. Packing Total</span>
+                <span>5. Packing Total</span>
                 <span className="font-mono font-semibold text-slate-900">{totalPackingPerPc.toFixed(2)}</span>
-              </div>
-              <div className="flex items-center justify-between text-slate-600">
-                <span>7. Other Charges (Per Pc)</span>
-                <span className="font-mono font-semibold text-slate-900">{totalOtherChargesPerPc.toFixed(2)}</span>
               </div>
 
               {/* Total Cost Row */}
@@ -1449,7 +1010,7 @@ export function CostingDetailPage() {
           <div className="card overflow-hidden shadow-xs border border-emerald-200 bg-gradient-to-b from-white to-emerald-50/30">
             <div className="border-b border-emerald-200 bg-emerald-700 text-white px-4 py-2.5 flex items-center justify-between">
               <h3 className="text-[12.5px] font-bold uppercase tracking-wider">Commercial &amp; FOB Pricing</h3>
-              <span className="rounded-full bg-emerald-800 px-2 py-0.5 text-[10px] font-mono font-bold">FOB Tirupur</span>
+              <span className="rounded-full bg-emerald-800 px-2 py-0.5 text-[10px] font-mono font-bold">FOB Quote</span>
             </div>
 
             <div className="p-4 space-y-2.5 text-xs">
@@ -1463,10 +1024,6 @@ export function CostingDetailPage() {
                   {head.currency_code} {profitAmountPerPc.toFixed(2)}
                 </span>
               </div>
-              <div className="flex items-center justify-between text-slate-400 text-[11px]">
-                <span>Round Off Adjustment:</span>
-                <span className="font-mono">{roundOffPerPc.toFixed(2)}</span>
-              </div>
 
               {/* FINAL FOB PRICE */}
               <div className="rounded-xl border-2 border-emerald-400 bg-emerald-100/60 p-3 text-center my-2">
@@ -1476,11 +1033,6 @@ export function CostingDetailPage() {
                 <span className="text-3xl font-black tabular-nums text-emerald-900 font-mono">
                   {head.currency_code} {finalFobPerPc.toFixed(2)}
                 </span>
-                {isUSD && (
-                  <p className="text-[11px] font-mono text-emerald-800 font-medium mt-1">
-                    ≈ ₹ {(finalFobPerPc * exch).toFixed(2)} INR
-                  </p>
-                )}
               </div>
 
               {/* Order Level Commercial Summary */}
@@ -1504,22 +1056,6 @@ export function CostingDetailPage() {
                   </span>
                 </div>
               </div>
-            </div>
-          </div>
-
-          {/* Card 3: Terms & Reference */}
-          <div className="card p-3.5 space-y-2 text-[11.5px] text-slate-600 bg-slate-50/60">
-            <div className="flex items-center justify-between">
-              <span className="font-medium text-slate-500">Inspection & Testing:</span>
-              <span className="font-mono font-semibold text-slate-800">TUV / SGS Certified</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="font-medium text-slate-500">Payment Terms:</span>
-              <span className="font-mono font-semibold text-slate-800">{head.payment_terms}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="font-medium text-slate-500">Price Validity:</span>
-              <span className="font-mono font-semibold text-slate-800">{head.price_validity_days} Days</span>
             </div>
           </div>
         </div>
