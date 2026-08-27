@@ -64,20 +64,20 @@ interface BankItem {
 }
 
 const TDS_SECTIONS = [
-  { value: '194C', label: '194C - Payment to Contractors / Job-Work (1% / 2%)', rate: '1% - 2%' },
-  { value: '194Q', label: '194Q - Purchase of Goods > ₹50 Lakhs (0.1%)', rate: '0.1%' },
-  { value: '194J', label: '194J - Professional & Technical Fees (2% / 10%)', rate: '2% / 10%' },
-  { value: '194H', label: '194H - Commission or Brokerage / Buying Agents (5%)', rate: '5%' },
-  { value: '194I_PLANT', label: '194I(a) - Rent on Machinery & Equipment (2%)', rate: '2%' },
-  { value: '194I_BUILDING', label: '194I(b) - Rent on Land, Building & Factory Shed (10%)', rate: '10%' },
-  { value: '194A', label: '194A - Interest other than securities (10%)', rate: '10%' },
-  { value: '194R', label: '194R - Business Perquisites & Benefits (10%)', rate: '10%' },
-  { value: '195', label: '195 - Payments to Non-Resident / Foreign Entity', rate: 'As per DTAA' },
+  { value: '194C', label: '194C - Payment to Contractors / Job-Work', defaultRate: 2.0, hint: '1% Ind / 2% Co' },
+  { value: '194Q', label: '194Q - Purchase of Goods > ₹50 Lakhs', defaultRate: 0.1, hint: '0.1%' },
+  { value: '194J', label: '194J - Professional & Technical Fees', defaultRate: 10.0, hint: '2% / 10%' },
+  { value: '194H', label: '194H - Commission or Brokerage / Agents', defaultRate: 5.0, hint: '5%' },
+  { value: '194I_PLANT', label: '194I(a) - Rent on Machinery & Equipment', defaultRate: 2.0, hint: '2%' },
+  { value: '194I_BUILDING', label: '194I(b) - Rent on Land, Building & Factory Shed', defaultRate: 10.0, hint: '10%' },
+  { value: '194A', label: '194A - Interest other than securities', defaultRate: 10.0, hint: '10%' },
+  { value: '194R', label: '194R - Business Perquisites & Benefits', defaultRate: 10.0, hint: '10%' },
+  { value: '195', label: '195 - Payments to Non-Resident / Foreign Entity', defaultRate: 20.0, hint: 'As per DTAA' },
 ];
 
 const TCS_SECTIONS = [
-  { value: '206C(1H)', label: '206C(1H) - TCS on Sale of Goods > ₹50 Lakhs (0.1%)', rate: '0.1%' },
-  { value: '206C(1)', label: '206C(1) - TCS on Scrap & Waste Material (1%)', rate: '1%' },
+  { value: '206C(1H)', label: '206C(1H) - TCS on Sale of Goods > ₹50 Lakhs', defaultRate: 0.1, hint: '0.1%' },
+  { value: '206C(1)', label: '206C(1) - TCS on Scrap & Waste Material', defaultRate: 1.0, hint: '1%' },
 ];
 
 export function PartyDetailPage() {
@@ -121,8 +121,10 @@ export function PartyDetailPage() {
     iec_no: '',
     tds_applicable: 0,
     tds_section: '',
+    tds_rate: 0,
     tcs_applicable: 0,
     tcs_section: '',
+    tcs_rate: 0,
     payment_terms: 'LC 60 DAYS',
     default_incoterm: 'FOB',
     default_pol: 'Tuticorin (INTUT)',
@@ -174,6 +176,8 @@ export function PartyDetailPage() {
     try {
       const payload = {
         ...form,
+        tds_rate: form.tds_applicable ? (Number(form.tds_rate) || 0) : 0,
+        tcs_rate: form.tcs_applicable ? (Number(form.tcs_rate) || 0) : 0,
         credit_limit: Number(form.credit_limit) || 0,
         credit_days: Number(form.credit_days) || 0,
         country_id: form.country_id ? Number(form.country_id) : null,
@@ -1120,100 +1124,156 @@ export function PartyDetailPage() {
             <h3 className="text-sm font-bold text-slate-800 border-b border-surface-border pb-2">
               TDS & TCS Applicability
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 pt-3">
-              <div>
-                <label className="label">TDS Applicable</label>
-                <select
-                  className="input font-semibold"
-                  value={form.tds_applicable ? '1' : '0'}
-                  onChange={(e) => {
-                    const isYes = e.target.value === '1';
-                    handleField('tds_applicable', isYes ? 1 : 0);
-                    if (!isYes) {
-                      handleField('tds_section', '');
-                    } else if (!form.tds_section) {
-                      handleField('tds_section', '194C');
-                    }
-                  }}
-                >
-                  <option value="0">No</option>
-                  <option value="1">Yes</option>
-                </select>
-              </div>
-
-              {form.tds_applicable ? (
-                <div>
-                  <label className="label">TDS Section *</label>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-3">
+              {/* TDS Configuration Card */}
+              <div className="p-4 rounded-lg border border-surface-border bg-slate-50/50 space-y-3">
+                <div className="flex items-center justify-between pb-1 border-b border-slate-200/60">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Tax Deducted at Source (TDS)</h4>
+                    <p className="text-[11px] text-slate-500">Applicable on payments made to suppliers, CMT job workers & contractors</p>
+                  </div>
                   <select
-                    className="input font-medium text-slate-800"
-                    value={form.tds_section || '194C'}
-                    onChange={(e) => handleField('tds_section', e.target.value)}
+                    className="input py-1 text-xs font-bold w-24 bg-white"
+                    value={form.tds_applicable ? '1' : '0'}
+                    onChange={(e) => {
+                      const isYes = e.target.value === '1';
+                      handleField('tds_applicable', isYes ? 1 : 0);
+                      if (!isYes) {
+                        handleField('tds_section', '');
+                        handleField('tds_rate', 0);
+                      } else {
+                        const defSec = form.tds_section || '194C';
+                        const secObj = TDS_SECTIONS.find((s) => s.value === defSec);
+                        handleField('tds_section', defSec);
+                        handleField('tds_rate', form.tds_rate || secObj?.defaultRate || 2.0);
+                      }
+                    }}
                   >
-                    <option value="">Select TDS Section</option>
-                    {TDS_SECTIONS.map((sec) => (
-                      <option key={sec.value} value={sec.value}>
-                        {sec.label}
-                      </option>
-                    ))}
+                    <option value="0">No (N/A)</option>
+                    <option value="1">Yes</option>
                   </select>
                 </div>
-              ) : (
-                <div>
-                  <label className="label text-slate-400">TDS Section</label>
-                  <input
-                    className="input bg-slate-50 text-slate-400 cursor-not-allowed"
-                    disabled
-                    value="Not Applicable"
-                  />
-                </div>
-              )}
 
-              <div>
-                <label className="label">TCS Applicable</label>
-                <select
-                  className="input font-semibold"
-                  value={form.tcs_applicable ? '1' : '0'}
-                  onChange={(e) => {
-                    const isYes = e.target.value === '1';
-                    handleField('tcs_applicable', isYes ? 1 : 0);
-                    if (!isYes) {
-                      handleField('tcs_section', '');
-                    } else if (!form.tcs_section) {
-                      handleField('tcs_section', '206C(1H)');
-                    }
-                  }}
-                >
-                  <option value="0">No</option>
-                  <option value="1">Yes</option>
-                </select>
+                {form.tds_applicable ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                    <div className="sm:col-span-2">
+                      <label className="label text-xs">TDS Section *</label>
+                      <select
+                        className="input font-medium text-slate-800 text-xs bg-white"
+                        value={form.tds_section || '194C'}
+                        onChange={(e) => {
+                          const secVal = e.target.value;
+                          handleField('tds_section', secVal);
+                          const secObj = TDS_SECTIONS.find((s) => s.value === secVal);
+                          if (secObj) {
+                            handleField('tds_rate', secObj.defaultRate);
+                          }
+                        }}
+                      >
+                        <option value="">Select TDS Section</option>
+                        {TDS_SECTIONS.map((sec) => (
+                          <option key={sec.value} value={sec.value}>
+                            {sec.label} ({sec.hint})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="label text-xs">TDS Rate (%) *</label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          max="100"
+                          className="input font-bold text-brand-700 pr-7 bg-white text-xs"
+                          value={form.tds_rate !== undefined && form.tds_rate !== null ? form.tds_rate : ''}
+                          onChange={(e) => handleField('tds_rate', parseFloat(e.target.value) || 0)}
+                          placeholder="2.0"
+                        />
+                        <span className="absolute right-2.5 top-2 text-xs font-bold text-slate-400 pointer-events-none">%</span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 italic py-1">TDS is not applicable for this business partner.</p>
+                )}
               </div>
 
-              {form.tcs_applicable ? (
-                <div>
-                  <label className="label">TCS Section *</label>
+              {/* TCS Configuration Card */}
+              <div className="p-4 rounded-lg border border-surface-border bg-slate-50/50 space-y-3">
+                <div className="flex items-center justify-between pb-1 border-b border-slate-200/60">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Tax Collected at Source (TCS)</h4>
+                    <p className="text-[11px] text-slate-500">Applicable on domestic sales & scrap sales under Income Tax</p>
+                  </div>
                   <select
-                    className="input font-medium text-slate-800"
-                    value={form.tcs_section || '206C(1H)'}
-                    onChange={(e) => handleField('tcs_section', e.target.value)}
+                    className="input py-1 text-xs font-bold w-24 bg-white"
+                    value={form.tcs_applicable ? '1' : '0'}
+                    onChange={(e) => {
+                      const isYes = e.target.value === '1';
+                      handleField('tcs_applicable', isYes ? 1 : 0);
+                      if (!isYes) {
+                        handleField('tcs_section', '');
+                        handleField('tcs_rate', 0);
+                      } else {
+                        const defSec = form.tcs_section || '206C(1H)';
+                        const secObj = TCS_SECTIONS.find((s) => s.value === defSec);
+                        handleField('tcs_section', defSec);
+                        handleField('tcs_rate', form.tcs_rate || secObj?.defaultRate || 0.1);
+                      }
+                    }}
                   >
-                    <option value="">Select TCS Section</option>
-                    {TCS_SECTIONS.map((sec) => (
-                      <option key={sec.value} value={sec.value}>
-                        {sec.label}
-                      </option>
-                    ))}
+                    <option value="0">No (N/A)</option>
+                    <option value="1">Yes</option>
                   </select>
                 </div>
-              ) : (
-                <div>
-                  <label className="label text-slate-400">TCS Section</label>
-                  <input
-                    className="input bg-slate-50 text-slate-400 cursor-not-allowed"
-                    disabled
-                    value="Not Applicable"
-                  />
-                </div>
-              )}
+
+                {form.tcs_applicable ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                    <div className="sm:col-span-2">
+                      <label className="label text-xs">TCS Section *</label>
+                      <select
+                        className="input font-medium text-slate-800 text-xs bg-white"
+                        value={form.tcs_section || '206C(1H)'}
+                        onChange={(e) => {
+                          const secVal = e.target.value;
+                          handleField('tcs_section', secVal);
+                          const secObj = TCS_SECTIONS.find((s) => s.value === secVal);
+                          if (secObj) {
+                            handleField('tcs_rate', secObj.defaultRate);
+                          }
+                        }}
+                      >
+                        <option value="">Select TCS Section</option>
+                        {TCS_SECTIONS.map((sec) => (
+                          <option key={sec.value} value={sec.value}>
+                            {sec.label} ({sec.hint})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="label text-xs">TCS Rate (%) *</label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          max="100"
+                          className="input font-bold text-brand-700 pr-7 bg-white text-xs"
+                          value={form.tcs_rate !== undefined && form.tcs_rate !== null ? form.tcs_rate : ''}
+                          onChange={(e) => handleField('tcs_rate', parseFloat(e.target.value) || 0)}
+                          placeholder="0.1"
+                        />
+                        <span className="absolute right-2.5 top-2 text-xs font-bold text-slate-400 pointer-events-none">%</span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 italic py-1">TCS is not applicable for this business partner.</p>
+                )}
+              </div>
             </div>
           </div>
         </div>

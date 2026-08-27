@@ -31,8 +31,10 @@ CREATE TABLE mst_party (
   iec_no          VARCHAR(20),
   tds_applicable  TINYINT(1) NOT NULL DEFAULT 0,
   tds_section     VARCHAR(30),
+  tds_rate        DECIMAL(5,2) DEFAULT 0,
   tcs_applicable  TINYINT(1) NOT NULL DEFAULT 0,
   tcs_section     VARCHAR(30),
+  tcs_rate        DECIMAL(5,2) DEFAULT 0,
   payment_terms   VARCHAR(120),                  -- e.g. LC 60 DAYS, TT ADVANCE
   default_incoterm ENUM('FOB','CIF','CFR','EXW','DDP','DAP','FCA') DEFAULT 'FOB',
   default_pol     VARCHAR(80),
