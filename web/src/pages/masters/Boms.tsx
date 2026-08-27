@@ -43,7 +43,7 @@ export function BomsPage() {
             <Plus size={15} /> New BOM
           </button>)} />
 
-      <SearchInput value={search} onChange={setSearch} placeholder="Search BOM or style code…"
+      <SearchInput value={search} onChange={setSearch} placeholder="Search BOM, style or order no…"
         className="mb-3 w-full max-w-sm" />
 
       <DataTable
@@ -54,6 +54,19 @@ export function BomsPage() {
           { key: 'style_code', header: 'Style',
             render: (r: any) => <div><p className="font-medium">{r.style_code}</p>
               <p className="text-[11px] text-slate-500">{r.style_name}</p></div> },
+          { key: 'so_no', header: 'Mapped Order',
+            render: (r: any) => r.so_no ? (
+              <div>
+                <span className="inline-flex items-center gap-1 font-mono text-[11.5px] font-semibold text-brand-800 bg-brand-50 px-2 py-0.5 rounded border border-brand-200">
+                  {r.so_no}
+                </span>
+                {r.buyer_po_no && <p className="text-[10.5px] text-slate-400">PO: {r.buyer_po_no}</p>}
+              </div>
+            ) : (
+              <span className="inline-flex items-center text-[11px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                Master (All Orders)
+              </span>
+            ) },
           { key: 'line_count', header: 'Components', align: 'right',
             render: (r: any) => <Badge tone="blue">{r.line_count}</Badge> },
           { key: 'effective_date', header: 'Effective', render: (r: any) => fmtDate(r.effective_date) },
@@ -85,6 +98,7 @@ export function BomDetailPage() {
   const [explodeQty, setExplodeQty] = useState(1000);
 
   const styles = useLookup('styles');
+  const salesOrders = useLookup('sales-orders');
   const yarns = useLookup('yarns');
   const fabrics = useLookup('fabrics');
   const trims = useLookup('trims');
@@ -101,7 +115,7 @@ export function BomDetailPage() {
   useEffect(() => {
     if (!detail.data) return;
     const d = detail.data;
-    setHead({ ...d, effective_date: toDateInput(d.effective_date) });
+    setHead({ ...d, so_id: d.so_id ?? '', effective_date: toDateInput(d.effective_date) });
     setLines((d.lines ?? []).map((l: any) => ({
       _key: `b${++seq}`, material_type: l.material_type,
       yarn_id: l.yarn_id ?? '', fabric_id: l.fabric_id ?? '', trim_id: l.trim_id ?? '',
@@ -136,9 +150,14 @@ export function BomDetailPage() {
     setErrors({}); setSaving(true);
     try {
       const body = {
-        style_id: head.style_id, bom_no: head.bom_no || undefined, version: head.version || 1,
-        effective_date: head.effective_date || null, status_id: head.status_id || null,
-        remarks: head.remarks || null, is_active: head.is_active ?? 1,
+        style_id: head.style_id,
+        so_id: head.so_id ? Number(head.so_id) : null,
+        bom_no: head.bom_no || undefined,
+        version: head.version || 1,
+        effective_date: head.effective_date || null,
+        status_id: head.status_id || null,
+        remarks: head.remarks || null,
+        is_active: head.is_active ?? 1,
         lines: lines.filter((l) => l.consumption && (l.yarn_id || l.fabric_id || l.trim_id)).map((l) => ({
           material_type: l.material_type,
           yarn_id: l.material_type === 'YARN' ? Number(l.yarn_id) : null,
@@ -171,7 +190,7 @@ export function BomDetailPage() {
         breadcrumb={['Master Data', 'Bill of Materials']}
         title={isNew ? 'New BOM' : detail.data?.bom_no ?? 'BOM'}
         subtitle={isNew ? 'Define per-garment material consumption'
-          : `${detail.data?.style_code ?? ''} — ${detail.data?.style_name ?? ''}`}
+          : `${detail.data?.style_code ?? ''} — ${detail.data?.style_name ?? ''}${detail.data?.so_no ? ` (Order: ${detail.data.so_no})` : ' (Master)'}`}
         actions={<>
           <button className="btn-secondary" onClick={() => nav('/masters/boms')}>
             <ArrowLeft size={15} /> Back
@@ -184,7 +203,7 @@ export function BomDetailPage() {
         </>} />
 
       <div className="card mb-4 p-4">
-        <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2 lg:grid-cols-6">
           <Input label="BOM no" hint={isNew ? 'Blank to auto-generate' : undefined}
             value={head.bom_no ?? ''} disabled={!editable}
             onChange={(e) => setHead((s) => ({ ...s, bom_no: e.target.value }))} error={errors.bom_no} />
@@ -193,6 +212,15 @@ export function BomDetailPage() {
           <Select label="Style" required options={toOptions(styles.data)} placeholder="— Select style —"
             value={head.style_id ?? ''} disabled={!editable}
             onChange={(e) => setHead((s) => ({ ...s, style_id: e.target.value }))} error={errors.style_id} />
+          <Select
+            label="Sales order (optional)"
+            options={toOptions(salesOrders.data)}
+            placeholder="— Master (All Orders) —"
+            value={head.so_id ?? ''}
+            disabled={!editable}
+            hint="Blank = Master for all orders"
+            onChange={(e) => setHead((s) => ({ ...s, so_id: e.target.value }))}
+          />
           <Input label="Effective date" type="date" value={head.effective_date ?? ''} disabled={!editable}
             onChange={(e) => setHead((s) => ({ ...s, effective_date: e.target.value }))} />
           <Select label="Status" options={toPlainOptions(statuses.data)} placeholder="— Select —"

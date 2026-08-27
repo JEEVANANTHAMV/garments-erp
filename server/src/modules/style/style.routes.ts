@@ -103,7 +103,8 @@ styleRouter.get('/:id', requirePermission('STYLE.VIEW'), ah(async (req, res) => 
              FROM map_style_color sc JOIN mst_color c ON c.id = sc.color_id
             WHERE sc.style_id = ? ORDER BY c.color_name`, [id]),
     query(SKU_SELECT, [id]),
-    query(`SELECT b.*, cs.label AS status_label FROM trx_bom b
+    query(`SELECT b.*, cs.label AS status_label, so.so_no, so.buyer_po_no FROM trx_bom b
+             LEFT JOIN trx_sales_order so ON so.id = b.so_id
              LEFT JOIN cfg_status cs ON cs.id = b.status_id
             WHERE b.style_id = ? ORDER BY b.version DESC`, [id]),
     query(`SELECT * FROM trx_techpack WHERE style_id = ? ORDER BY version DESC`, [id]),

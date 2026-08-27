@@ -277,6 +277,7 @@ export function StyleDetailPage() {
             <table className="w-full">
               <thead><tr>
                 <th className="th">BOM no</th><th className="th">Version</th>
+                <th className="th">Scope / Order</th>
                 <th className="th">Effective</th><th className="th">Status</th>
               </tr></thead>
               <tbody>
@@ -284,6 +285,17 @@ export function StyleDetailPage() {
                   <tr key={b.id} className="row-hover cursor-pointer" onClick={() => nav(`/masters/boms/${b.id}`)}>
                     <td className="td font-mono text-[12px] text-brand-700">{b.bom_no}</td>
                     <td className="td">v{b.version}</td>
+                    <td className="td">
+                      {b.so_no ? (
+                        <span className="font-mono text-[11.5px] font-semibold text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded border border-brand-200">
+                          {b.so_no}
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                          Master (All Orders)
+                        </span>
+                      )}
+                    </td>
                     <td className="td">{fmtDate(b.effective_date)}</td>
                     <td className="td"><StatusBadge value={b.status_label} /></td>
                   </tr>

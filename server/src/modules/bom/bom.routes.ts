@@ -27,6 +27,7 @@ const lineSchema = z.object({
 
 const bomSchema = z.object({
   style_id: s.idReq(),
+  so_id: s.id().nullish(),
   bom_no: s.nullableStr(40),
   version: z.coerce.number().int().min(1).default(1),
   effective_date: s.date(),
@@ -54,25 +55,34 @@ bomRouter.get('/', requirePermission('BOM.VIEW'), ah(async (req, res) => {
     page: z.coerce.number().int().min(1).default(1),
     pageSize: z.coerce.number().int().min(1).max(200).default(25),
     style_id: z.coerce.number().int().optional(),
+    so_id: z.coerce.number().int().optional(),
     q: z.string().trim().optional(),
   }).parse(req.query);
 
   const where = ['b.company_id = ?', 'b.is_active = 1'];
   const params: unknown[] = [req.user!.companyId];
   if (q.style_id) { where.push('b.style_id = ?'); params.push(q.style_id); }
-  if (q.q) { where.push('(b.bom_no LIKE ? OR st.style_code LIKE ?)'); params.push(`%${q.q}%`, `%${q.q}%`); }
+  if (q.so_id)    { where.push('b.so_id = ?'); params.push(q.so_id); }
+  if (q.q) {
+    where.push('(b.bom_no LIKE ? OR st.style_code LIKE ? OR so.so_no LIKE ? OR so.buyer_po_no LIKE ?)');
+    params.push(`%${q.q}%`, `%${q.q}%`, `%${q.q}%`, `%${q.q}%`);
+  }
   const clause = where.join(' AND ');
   const offset = (q.page - 1) * q.pageSize;
 
   const [rows, total] = await Promise.all([
     query(`SELECT b.*, st.style_code, st.style_name, cs.label AS status_label,
+                  so.so_no, so.buyer_po_no,
                   (SELECT COUNT(*) FROM trx_bom_line l WHERE l.bom_id = b.id) AS line_count
              FROM trx_bom b
              LEFT JOIN mst_style st ON st.id = b.style_id
+             LEFT JOIN trx_sales_order so ON so.id = b.so_id
              LEFT JOIN cfg_status cs ON cs.id = b.status_id
             WHERE ${clause} ORDER BY b.id DESC LIMIT ${q.pageSize} OFFSET ${offset}`, params),
     queryOne<{ total: number }>(
-      `SELECT COUNT(*) AS total FROM trx_bom b LEFT JOIN mst_style st ON st.id = b.style_id
+      `SELECT COUNT(*) AS total FROM trx_bom b
+         LEFT JOIN mst_style st ON st.id = b.style_id
+         LEFT JOIN trx_sales_order so ON so.id = b.so_id
         WHERE ${clause}`, params),
   ]);
   res.json({ data: rows, pagination: { page: q.page, pageSize: q.pageSize,
@@ -82,9 +92,11 @@ bomRouter.get('/', requirePermission('BOM.VIEW'), ah(async (req, res) => {
 bomRouter.get('/:id', requirePermission('BOM.VIEW'), ah(async (req, res) => {
   const id = Number(req.params.id);
   const bom = await queryOne(
-    `SELECT b.*, st.style_code, st.style_name, cs.label AS status_label
+    `SELECT b.*, st.style_code, st.style_name, cs.label AS status_label,
+            so.so_no, so.buyer_po_no
        FROM trx_bom b
        LEFT JOIN mst_style st ON st.id = b.style_id
+       LEFT JOIN trx_sales_order so ON so.id = b.so_id
        LEFT JOIN cfg_status cs ON cs.id = b.status_id
       WHERE b.id = ? AND b.company_id = ?`, [id, req.user!.companyId]);
   if (!bom) throw NotFound('BOM not found');
@@ -109,10 +121,10 @@ bomRouter.post('/', requirePermission('BOM.CREATE'), ah(async (req, res) => {
   const created = await transaction(async (tx) => {
     const bomNo = body.bom_no || await nextDocNumber(tx, req.user!.companyId, 'BOM');
     const r = await txExecute(tx,
-      `INSERT INTO trx_bom (company_id, style_id, bom_no, version, effective_date,
+      `INSERT INTO trx_bom (company_id, style_id, so_id, bom_no, version, effective_date,
                             status_id, remarks, is_active, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?)`,
-      [req.user!.companyId, body.style_id, bomNo, body.version, body.effective_date ?? null,
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      [req.user!.companyId, body.style_id, body.so_id ?? null, bomNo, body.version, body.effective_date ?? null,
        body.status_id ?? null, body.remarks ?? null, body.is_active ?? 1, req.user!.id]);
     await writeLines(tx, r.insertId, body.lines);
     return txQueryOne(tx, `SELECT * FROM trx_bom WHERE id = ?`, [r.insertId]);

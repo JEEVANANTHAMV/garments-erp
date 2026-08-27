@@ -86,9 +86,9 @@ mrpRouter.post('/run', requirePermission('MRP.CREATE'), ah(async (req, res) => {
   if (!so) throw NotFound('Sales order not found');
 
   const created = await transaction(async (tx) => {
-    const lines = await txQuery<{ id: number; style_id: number; order_qty: number; color_id: number | null }>(
+    const lines = await txQuery<{ id: number; style_id: number; order_qty: number; plan_cut_qty: number; color_id: number | null }>(
       tx,
-      `SELECT id, style_id, order_qty, color_id FROM trx_sales_order_line WHERE so_id = ?`, [body.so_id]);
+      `SELECT id, style_id, order_qty, plan_cut_qty, color_id FROM trx_sales_order_line WHERE so_id = ?`, [body.so_id]);
     if (!lines.length) throw BadRequest('This sales order has no lines to plan against');
 
     const mrpNo = body.mrp_no || await nextDocNumber(tx, req.user!.companyId, 'MRP');
@@ -108,11 +108,21 @@ mrpRouter.post('/run', requirePermission('MRP.CREATE'), ah(async (req, res) => {
 
     let bomsFound = 0;
     for (const line of lines) {
-      const bom = await txQueryOne<{ id: number }>(
+      // 1. Check for Order-Specific BOM first
+      let bom = await txQueryOne<{ id: number }>(
         tx,
         `SELECT id FROM trx_bom
-          WHERE style_id = ? AND company_id = ? AND is_active = 1
-          ORDER BY version DESC LIMIT 1`, [line.style_id, req.user!.companyId]);
+          WHERE style_id = ? AND so_id = ? AND company_id = ? AND is_active = 1
+          ORDER BY version DESC LIMIT 1`, [line.style_id, body.so_id, req.user!.companyId]);
+
+      // 2. Fallback to Style Master BOM
+      if (!bom) {
+        bom = await txQueryOne<{ id: number }>(
+          tx,
+          `SELECT id FROM trx_bom
+            WHERE style_id = ? AND (so_id IS NULL OR so_id = 0) AND company_id = ? AND is_active = 1
+            ORDER BY version DESC LIMIT 1`, [line.style_id, req.user!.companyId]);
+      }
       if (!bom) continue;   // style without a BOM contributes nothing
       bomsFound++;
 
@@ -121,9 +131,11 @@ mrpRouter.post('/run', requirePermission('MRP.CREATE'), ah(async (req, res) => {
         `SELECT material_type, yarn_id, fabric_id, trim_id, color_id, consumption, uom_id, wastage_pct
            FROM trx_bom_line WHERE bom_id = ?`, [bom.id]);
 
+      const planQty = Number(line.plan_cut_qty && line.plan_cut_qty > 0 ? line.plan_cut_qty : line.order_qty);
+
       for (const bl of bomLines) {
         const perUnit = Number(bl.consumption) * (1 + Number(bl.wastage_pct ?? 0) / 100);
-        const gross = perUnit * Number(line.order_qty);
+        const gross = perUnit * planQty;
         // BOM line colour wins; otherwise inherit the order line's colour.
         const colorId = bl.color_id ?? line.color_id ?? null;
         const key = [bl.material_type, bl.yarn_id, bl.fabric_id, bl.trim_id, colorId].join(':');

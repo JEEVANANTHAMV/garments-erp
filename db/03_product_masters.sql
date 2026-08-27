@@ -252,6 +252,7 @@ CREATE TABLE trx_bom (
   id              BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   company_id      BIGINT UNSIGNED NOT NULL,
   style_id        BIGINT UNSIGNED NOT NULL,
+  so_id           BIGINT UNSIGNED,        -- optional link to specific sales order
   bom_no          VARCHAR(40) NOT NULL,
   version         INT NOT NULL DEFAULT 1,
   effective_date  DATE,
@@ -263,6 +264,7 @@ CREATE TABLE trx_bom (
   updated_by      BIGINT UNSIGNED,
   updated_at      DATETIME ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_bom (company_id,bom_no,version),
+  KEY ix_bom_so (so_id),
   CONSTRAINT fk_bom__company FOREIGN KEY (company_id) REFERENCES mst_company(id),
   CONSTRAINT fk_bom__style   FOREIGN KEY (style_id)   REFERENCES mst_style(id),
   CONSTRAINT fk_bom__status  FOREIGN KEY (status_id)  REFERENCES cfg_status(id)
