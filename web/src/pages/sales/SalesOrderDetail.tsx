@@ -445,7 +445,7 @@ export default function SalesOrderDetail() {
               <div className="flex flex-col justify-between px-3 pt-2 sm:pt-0">
                 <div>
                   <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
-                    Contract Order Qty
+                    Order Qty
                   </span>
                   <div className="flex items-baseline gap-1.5">
                     <span className="text-2xl font-black tabular-nums text-slate-900">
