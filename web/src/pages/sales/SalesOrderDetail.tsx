@@ -243,121 +243,108 @@ export default function SalesOrderDetail() {
         </div>
       )}
 
-      {/* Header form */}
-      <div className="card mb-4 space-y-4 p-4.5">
-        {/* Section 1: Order Information */}
-        <div>
-          <h4 className="text-[12px] font-bold uppercase tracking-wider text-slate-700 mb-2.5 flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-brand-500"></span>
-            Order & Buyer Details
-          </h4>
-          <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Input label="SO number" hint={isNew ? 'Blank to auto-generate' : undefined}
-              value={head.so_no ?? ''} onChange={(e) => setH('so_no', e.target.value)}
-              disabled={!editable} error={errors.so_no} />
-            <Input label="SO date" type="date" required value={head.so_date ?? ''}
-              onChange={(e) => setH('so_date', e.target.value)} disabled={!editable} error={errors.so_date} />
-            <Select label="Buyer" required options={toOptions(buyers.data)} placeholder="— Select buyer —"
-              value={head.buyer_id ?? ''} onChange={(e) => handleBuyerChange(e.target.value)}
-              disabled={!editable} error={errors.buyer_id} />
-            <Select label="Agent" options={toOptions(agents.data)} placeholder="— None —"
-              value={head.agent_id ?? ''} onChange={(e) => setH('agent_id', e.target.value)} disabled={!editable} />
-            <Input label="Buyer PO no" value={head.buyer_po_no ?? ''}
-              onChange={(e) => setH('buyer_po_no', e.target.value)} disabled={!editable} />
-            <Input label="Buyer PO date" type="date" value={head.buyer_po_date ?? ''}
-              onChange={(e) => setH('buyer_po_date', e.target.value)} disabled={!editable} />
-            <Input label="Season" placeholder="e.g. SS26" value={head.season ?? ''}
-              onChange={(e) => setH('season', e.target.value)} disabled={!editable} />
-            <Select label="Branch" options={toOptions(branches.data)} placeholder="— Select —"
-              value={head.branch_id ?? ''} onChange={(e) => setH('branch_id', e.target.value)} disabled={!editable} />
-          </div>
+      {/* Section 1: Order & Buyer Details */}
+      <div className="card mb-3 overflow-hidden">
+        <div className="flex items-center gap-2 border-b border-surface-border bg-slate-50/60 px-4 py-2.5">
+          <span className="h-2 w-2 rounded-full bg-brand-500" />
+          <h4 className="text-[12px] font-bold uppercase tracking-wider text-slate-700">Order &amp; Buyer Details</h4>
         </div>
-
-        {/* Section 2: Pricing, Currency & Tolerances */}
-        <div className="pt-3 border-t border-slate-100">
-          <h4 className="text-[12px] font-bold uppercase tracking-wider text-slate-700 mb-2.5 flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-amber-500"></span>
-            Commercial Terms & Tolerances
-          </h4>
-          <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Select label="Currency" required options={toOptions(currencies.data)} placeholder="— Select —"
-              value={head.currency_id ?? ''} onChange={(e) => handleCurrencyChange(e.target.value)}
-              disabled={!editable} error={errors.currency_id} />
-            <Input
-              label="Exchange rate (to INR)"
-              type="number"
-              step="0.0001"
-              value={head.exchange_rate ?? ''}
-              hint={isForeign ? `1 ${currencyCode} = ₹ ${exchangeRate.toFixed(2)}` : '1.00 for INR'}
-              placeholder={isForeign ? '83.50' : '1.00'}
-              onChange={(e) => setH('exchange_rate', e.target.value)}
-              disabled={!editable}
-            />
-            <Select label="Incoterm" options={INCOTERMS.map((v) => ({ value: v, label: v }))}
-              value={head.incoterm ?? 'FOB'} onChange={(e) => setH('incoterm', e.target.value)} disabled={!editable} />
-            <Select label="Payment term" options={PAY_TERMS.map((v) => ({ value: v, label: v.replace(/_/g, ' ') }))}
-              value={head.payment_term ?? 'LC'} onChange={(e) => setH('payment_term', e.target.value)} disabled={!editable} />
-            <Input
-              label="Excess Cutting % (Factory Buffer)"
-              type="number"
-              step="0.1"
-              min="0"
-              placeholder="5.0"
-              value={head.excess_pct ?? ''}
-              hint="Factory defect buffer (e.g. 5%)"
-              onChange={(e) => setH('excess_pct', e.target.value === '' ? '' : Number(e.target.value))}
-              disabled={!editable}
-            />
-            <Input
-              label="Shipment Tolerance + % (Max Overage)"
-              type="number"
-              step="0.1"
-              min="0"
-              placeholder="5.0"
-              value={head.tolerance_plus_pct ?? ''}
-              hint="Max allowable overage (+%)"
-              onChange={(e) => setH('tolerance_plus_pct', e.target.value === '' ? '' : Number(e.target.value))}
-              disabled={!editable}
-            />
-            <Input
-              label="Shipment Tolerance - % (Max Shortage)"
-              type="number"
-              step="0.1"
-              min="0"
-              placeholder="3.0"
-              value={head.tolerance_minus_pct ?? ''}
-              hint="Max allowable shortage (-%)"
-              onChange={(e) => setH('tolerance_minus_pct', e.target.value === '' ? '' : Number(e.target.value))}
-              disabled={!editable}
-            />
-            <Select label="Status" options={toPlainOptions(statuses.data)} placeholder="— Select —"
-              value={head.status_id ?? ''} onChange={(e) => setH('status_id', e.target.value)} disabled={!editable} />
-          </div>
+        <div className="grid grid-cols-1 gap-x-4 gap-y-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Input label="SO number" hint={isNew ? 'Blank to auto-generate' : undefined}
+            value={head.so_no ?? ''} onChange={(e) => setH('so_no', e.target.value)}
+            disabled={!editable} error={errors.so_no} />
+          <Input label="SO date" type="date" required value={head.so_date ?? ''}
+            onChange={(e) => setH('so_date', e.target.value)} disabled={!editable} error={errors.so_date} />
+          <Select label="Buyer" required options={toOptions(buyers.data)} placeholder="— Select buyer —"
+            value={head.buyer_id ?? ''} onChange={(e) => handleBuyerChange(e.target.value)}
+            disabled={!editable} error={errors.buyer_id} />
+          <Select label="Agent" options={toOptions(agents.data)} placeholder="— None —"
+            value={head.agent_id ?? ''} onChange={(e) => setH('agent_id', e.target.value)} disabled={!editable} />
+          <Input label="Buyer PO no" value={head.buyer_po_no ?? ''}
+            onChange={(e) => setH('buyer_po_no', e.target.value)} disabled={!editable} />
+          <Input label="Buyer PO date" type="date" value={head.buyer_po_date ?? ''}
+            onChange={(e) => setH('buyer_po_date', e.target.value)} disabled={!editable} />
+          <Input label="Season" placeholder="e.g. SS26" value={head.season ?? ''}
+            onChange={(e) => setH('season', e.target.value)} disabled={!editable} />
+          <Select label="Branch" options={toOptions(branches.data)} placeholder="— Select —"
+            value={head.branch_id ?? ''} onChange={(e) => setH('branch_id', e.target.value)} disabled={!editable} />
         </div>
+      </div>
 
-        {/* Section 3: Shipment Logistics & LC */}
-        <div className="pt-3 border-t border-slate-100">
-          <h4 className="text-[12px] font-bold uppercase tracking-wider text-slate-700 mb-2.5 flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
-            Shipping Logistics & Letter of Credit
-          </h4>
-          <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Input label="Port of loading" value={head.port_of_loading ?? ''}
-              onChange={(e) => setH('port_of_loading', e.target.value)} disabled={!editable} />
-            <Select label="Destination country" options={toOptions(countries.data)} placeholder="— Select —"
-              value={head.destination_country ?? ''} onChange={(e) => setH('destination_country', e.target.value)}
-              disabled={!editable} />
-            <Input label="Destination port" value={head.destination_port ?? ''}
-              onChange={(e) => setH('destination_port', e.target.value)} disabled={!editable} />
-            <Input label="Ship date" type="date" value={head.ship_date ?? ''}
-              onChange={(e) => setH('ship_date', e.target.value)} disabled={!editable} />
-            <Input label="Delivery date" type="date" value={head.delivery_date ?? ''}
-              onChange={(e) => setH('delivery_date', e.target.value)} disabled={!editable} />
-            <Input label="LC number" value={head.lc_no ?? ''}
-              onChange={(e) => setH('lc_no', e.target.value)} disabled={!editable} />
-            <Input label="LC expiry" type="date" value={head.lc_expiry ?? ''}
-              onChange={(e) => setH('lc_expiry', e.target.value)} disabled={!editable} />
-          </div>
+      {/* Section 2: Commercial Terms & Tolerances */}
+      <div className="card mb-3 overflow-hidden">
+        <div className="flex items-center gap-2 border-b border-surface-border bg-slate-50/60 px-4 py-2.5">
+          <span className="h-2 w-2 rounded-full bg-amber-500" />
+          <h4 className="text-[12px] font-bold uppercase tracking-wider text-slate-700">Commercial Terms &amp; Tolerances</h4>
+        </div>
+        <div className="grid grid-cols-1 gap-x-4 gap-y-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Select label="Currency" required options={toOptions(currencies.data)} placeholder="— Select —"
+            value={head.currency_id ?? ''} onChange={(e) => handleCurrencyChange(e.target.value)}
+            disabled={!editable} error={errors.currency_id} />
+          <Input
+            label="Exchange rate (to INR)"
+            type="number" step="0.0001"
+            value={head.exchange_rate ?? ''}
+            hint={isForeign ? `1 ${currencyCode} = ₹ ${exchangeRate.toFixed(2)}` : '1.00 for INR'}
+            placeholder={isForeign ? '83.50' : '1.00'}
+            onChange={(e) => setH('exchange_rate', e.target.value)}
+            disabled={!editable}
+          />
+          <Select label="Incoterm" options={INCOTERMS.map((v) => ({ value: v, label: v }))}
+            value={head.incoterm ?? 'FOB'} onChange={(e) => setH('incoterm', e.target.value)} disabled={!editable} />
+          <Select label="Payment term" options={PAY_TERMS.map((v) => ({ value: v, label: v.replace(/_/g, ' ') }))}
+            value={head.payment_term ?? 'LC'} onChange={(e) => setH('payment_term', e.target.value)} disabled={!editable} />
+          <Input
+            label="Excess Cutting %"
+            type="number" step="0.1" min="0" placeholder="5.0"
+            value={head.excess_pct ?? ''}
+            hint="Factory defect buffer"
+            onChange={(e) => setH('excess_pct', e.target.value === '' ? '' : Number(e.target.value))}
+            disabled={!editable}
+          />
+          <Input
+            label="Shipment Tolerance + %"
+            type="number" step="0.1" min="0" placeholder="5.0"
+            value={head.tolerance_plus_pct ?? ''}
+            hint="Max allowable overage"
+            onChange={(e) => setH('tolerance_plus_pct', e.target.value === '' ? '' : Number(e.target.value))}
+            disabled={!editable}
+          />
+          <Input
+            label="Shipment Tolerance - %"
+            type="number" step="0.1" min="0" placeholder="3.0"
+            value={head.tolerance_minus_pct ?? ''}
+            hint="Max allowable shortage"
+            onChange={(e) => setH('tolerance_minus_pct', e.target.value === '' ? '' : Number(e.target.value))}
+            disabled={!editable}
+          />
+          <Select label="Status" options={toPlainOptions(statuses.data)} placeholder="— Select —"
+            value={head.status_id ?? ''} onChange={(e) => setH('status_id', e.target.value)} disabled={!editable} />
+        </div>
+      </div>
+
+      {/* Section 3: Shipping Logistics & LC */}
+      <div className="card mb-4 overflow-hidden">
+        <div className="flex items-center gap-2 border-b border-surface-border bg-slate-50/60 px-4 py-2.5">
+          <span className="h-2 w-2 rounded-full bg-emerald-500" />
+          <h4 className="text-[12px] font-bold uppercase tracking-wider text-slate-700">Shipping &amp; Letter of Credit</h4>
+        </div>
+        <div className="grid grid-cols-1 gap-x-4 gap-y-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Input label="Port of loading" value={head.port_of_loading ?? ''}
+            onChange={(e) => setH('port_of_loading', e.target.value)} disabled={!editable} />
+          <Select label="Destination country" options={toOptions(countries.data)} placeholder="— Select —"
+            value={head.destination_country ?? ''} onChange={(e) => setH('destination_country', e.target.value)}
+            disabled={!editable} />
+          <Input label="Destination port" value={head.destination_port ?? ''}
+            onChange={(e) => setH('destination_port', e.target.value)} disabled={!editable} />
+          <Input label="Ship date" type="date" value={head.ship_date ?? ''}
+            onChange={(e) => setH('ship_date', e.target.value)} disabled={!editable} />
+          <Input label="Delivery date" type="date" value={head.delivery_date ?? ''}
+            onChange={(e) => setH('delivery_date', e.target.value)} disabled={!editable} />
+          <Input label="LC number" value={head.lc_no ?? ''}
+            onChange={(e) => setH('lc_no', e.target.value)} disabled={!editable} />
+          <Input label="LC expiry" type="date" value={head.lc_expiry ?? ''}
+            onChange={(e) => setH('lc_expiry', e.target.value)} disabled={!editable} />
         </div>
       </div>
 
