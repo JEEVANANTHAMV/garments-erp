@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Plus, Trash2, Save, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Save, CheckCircle2, Sparkles, Check, X, Calculator, Sliders } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { http, ApiError } from '../../lib/api';
 import { useLookup, toOptions, useStyleColors, useStyleSkus, useStatuses, toPlainOptions } from '../../hooks/useLookup';
@@ -418,6 +418,419 @@ export default function SalesOrderDetail() {
   );
 }
 
+/** Hare-Niemeyer Largest Remainder Distribution for exact integer split with 0 rounding discrepancies */
+function distributeByRatio(
+  targetQty: number,
+  ratios: { key: string; ratio: number }[]
+): Record<string, number> {
+  const valid = ratios.map((r) => ({ ...r, ratio: Math.max(0, Number(r.ratio) || 0) }));
+  const totalRatio = valid.reduce((sum, r) => sum + r.ratio, 0);
+
+  if (totalRatio <= 0 || targetQty <= 0) {
+    return Object.fromEntries(valid.map((r) => [r.key, 0]));
+  }
+
+  const allocations = valid.map((r) => {
+    const exact = (targetQty * r.ratio) / totalRatio;
+    const base = Math.floor(exact);
+    const remainder = exact - base;
+    return { key: r.key, base, remainder, ratio: r.ratio };
+  });
+
+  const currentSum = allocations.reduce((sum, a) => sum + a.base, 0);
+  const diff = targetQty - currentSum;
+
+  const sorted = [...allocations].sort((a, b) => b.remainder - a.remainder);
+  for (let i = 0; i < diff; i++) {
+    sorted[i % sorted.length].base += 1;
+  }
+
+  return Object.fromEntries(sorted.map((a) => [a.key, a.base]));
+}
+
+/* ------------------------------------------------------ Ratio Split Assistant */
+function RatioSplitAssistant({
+  sizes,
+  colorGroups,
+  activeColorId,
+  onApply,
+  onClear,
+  onClose,
+}: {
+  sizes: { size_code: string; sort_order: number }[];
+  colorGroups: [string, any[]][];
+  activeColorId?: number | '';
+  onApply: (skusToSet: Record<number, number>) => void;
+  onClear: () => void;
+  onClose: () => void;
+}) {
+  const [mode, setMode] = useState<'target' | 'pack'>('target');
+  const [targetQty, setTargetQty] = useState<string>('10000');
+  const [packCount, setPackCount] = useState<string>('500');
+  const [ratioStr, setRatioStr] = useState<string>('');
+  const [selectedColor, setSelectedColor] = useState<string>('ALL');
+  const [splitMultiColor, setSplitMultiColor] = useState<'each' | 'equal'>('each');
+
+  // Initial default ratio (1 for each size or standard preset)
+  const [ratios, setRatios] = useState<Record<string, number>>(() => {
+    const init: Record<string, number> = {};
+    if (sizes.length === 4) {
+      [1, 2, 2, 1].forEach((r, idx) => { if (sizes[idx]) init[sizes[idx].size_code] = r; });
+    } else if (sizes.length === 5) {
+      [1, 2, 3, 2, 1].forEach((r, idx) => { if (sizes[idx]) init[sizes[idx].size_code] = r; });
+    } else if (sizes.length === 6) {
+      [1, 2, 3, 3, 2, 1].forEach((r, idx) => { if (sizes[idx]) init[sizes[idx].size_code] = r; });
+    } else {
+      sizes.forEach((s) => { init[s.size_code] = 1; });
+    }
+    return init;
+  });
+
+  const totalRatioUnits = useMemo(() => {
+    return sizes.reduce((sum, s) => sum + (Number(ratios[s.size_code]) || 0), 0);
+  }, [sizes, ratios]);
+
+  // Handle quick text ratio string change (e.g. "1:2:3:2:1" or "1 2 3 2 1" or "1-2-2-1")
+  const applyRatioString = (str: string) => {
+    setRatioStr(str);
+    const parts = str.trim().split(/[:\s,\-_/]+/).map((v) => Number(v)).filter((v) => !isNaN(v) && v >= 0);
+    if (parts.length > 0) {
+      const next: Record<string, number> = { ...ratios };
+      sizes.forEach((s, idx) => {
+        if (idx < parts.length) {
+          next[s.size_code] = parts[idx];
+        }
+      });
+      setRatios(next);
+    }
+  };
+
+  const applyPreset = (preset: number[]) => {
+    const next: Record<string, number> = { ...ratios };
+    sizes.forEach((s, idx) => {
+      next[s.size_code] = idx < preset.length ? preset[idx] : 1;
+    });
+    setRatios(next);
+    setRatioStr(preset.join(':'));
+  };
+
+  // Determine presets based on size count
+  const presets: { label: string; values: number[] }[] = useMemo(() => {
+    if (sizes.length === 4) {
+      return [
+        { label: '1 : 2 : 2 : 1 (6-pack)', values: [1, 2, 2, 1] },
+        { label: '1 : 2 : 3 : 2 (8-pack)', values: [1, 2, 3, 2] },
+        { label: '2 : 3 : 3 : 2 (10-pack)', values: [2, 3, 3, 2] },
+        { label: '1 : 1 : 1 : 1 (Equal)', values: [1, 1, 1, 1] },
+      ];
+    }
+    if (sizes.length === 5) {
+      return [
+        { label: '1 : 2 : 3 : 2 : 1 (9-pack)', values: [1, 2, 3, 2, 1] },
+        { label: '1 : 2 : 2 : 2 : 1 (8-pack)', values: [1, 2, 2, 2, 1] },
+        { label: '1 : 3 : 4 : 3 : 1 (12-pack)', values: [1, 3, 4, 3, 1] },
+        { label: '2 : 3 : 4 : 3 : 2 (14-pack)', values: [2, 3, 4, 3, 2] },
+        { label: '1 : 1 : 1 : 1 : 1 (Equal)', values: [1, 1, 1, 1, 1] },
+      ];
+    }
+    if (sizes.length === 6) {
+      return [
+        { label: '1 : 2 : 3 : 3 : 2 : 1 (12-pack)', values: [1, 2, 3, 3, 2, 1] },
+        { label: '1 : 2 : 4 : 4 : 2 : 1 (14-pack)', values: [1, 2, 4, 4, 2, 1] },
+        { label: '1 : 1 : 1 : 1 : 1 : 1 (Equal)', values: [1, 1, 1, 1, 1, 1] },
+      ];
+    }
+    return [
+      { label: 'Equal (1:1:...:1)', values: sizes.map(() => 1) },
+    ];
+  }, [sizes]);
+
+  // Target per color calculation
+  const effectiveTargetPerColor = useMemo(() => {
+    if (mode === 'pack') {
+      const p = Number(packCount) || 0;
+      return p * totalRatioUnits;
+    }
+    const t = Number(targetQty) || 0;
+    const targetColorsCount = (selectedColor === 'ALL' && !activeColorId) ? colorGroups.length : 1;
+    if (targetColorsCount > 1 && splitMultiColor === 'equal') {
+      return Math.round(t / targetColorsCount);
+    }
+    return t;
+  }, [mode, packCount, targetQty, totalRatioUnits, selectedColor, activeColorId, colorGroups.length, splitMultiColor]);
+
+  // Size distribution breakdown per color
+  const sizeDistribution = useMemo(() => {
+    if (mode === 'pack') {
+      const p = Number(packCount) || 0;
+      const res: Record<string, number> = {};
+      sizes.forEach((s) => {
+        res[s.size_code] = (Number(ratios[s.size_code]) || 0) * p;
+      });
+      return res;
+    }
+    const ratioItems = sizes.map((s) => ({ key: s.size_code, ratio: Number(ratios[s.size_code]) || 0 }));
+    return distributeByRatio(effectiveTargetPerColor, ratioItems);
+  }, [mode, packCount, sizes, ratios, effectiveTargetPerColor]);
+
+  const previewColorCount = (selectedColor === 'ALL' && !activeColorId) ? colorGroups.length : 1;
+  const singleColorTotal = Object.values(sizeDistribution).reduce((a, b) => a + b, 0);
+  const grandTotalPreview = singleColorTotal * previewColorCount;
+
+  // Handle Apply
+  const handleApply = () => {
+    const nextSkus: Record<number, number> = {};
+    const targetGroups = (selectedColor === 'ALL' && !activeColorId)
+      ? colorGroups
+      : colorGroups.filter(([cName]) => cName === selectedColor || activeColorId);
+
+    targetGroups.forEach(([, skusList]) => {
+      skusList.forEach((sku) => {
+        const qty = sizeDistribution[sku.size_code] ?? 0;
+        nextSkus[sku.id] = qty;
+      });
+    });
+
+    onApply(nextSkus);
+  };
+
+  return (
+    <div className="mb-4 rounded-xl border-2 border-brand-300 bg-gradient-to-br from-brand-50/40 via-white to-slate-50 p-4 shadow-md">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-brand-100 pb-3">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white shadow-xs">
+            <Sparkles size={16} />
+          </div>
+          <div>
+            <h4 className="text-sm font-bold text-slate-900">⚡ Ratio-Based Size Split Assistant</h4>
+            <p className="text-xs text-slate-500">Auto-distribute bulk order quantities or pre-pack cartons across sizes</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onClear}
+            className="text-xs text-rose-600 hover:text-rose-800 font-semibold px-2 py-1 hover:bg-rose-50 rounded"
+          >
+            Clear Quantities
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      </div>
+
+      {/* Modes & Settings */}
+      <div className="mt-3.5 grid grid-cols-1 md:grid-cols-3 gap-3.5">
+        {/* Mode Selector */}
+        <div>
+          <label className="text-[11.5px] font-bold text-slate-700 uppercase tracking-wide block mb-1.5">
+            Distribution Mode
+          </label>
+          <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-lg border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setMode('target')}
+              className={`text-xs py-1.5 px-2 rounded-md font-semibold transition-all ${
+                mode === 'target'
+                  ? 'bg-white text-brand-800 shadow-xs border border-brand-200'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              🎯 Total Qty Split
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('pack')}
+              className={`text-xs py-1.5 px-2 rounded-md font-semibold transition-all ${
+                mode === 'pack'
+                  ? 'bg-white text-brand-800 shadow-xs border border-brand-200'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              📦 Pack Multiplier
+            </button>
+          </div>
+        </div>
+
+        {/* Input Target */}
+        <div>
+          <label className="text-[11.5px] font-bold text-slate-700 uppercase tracking-wide block mb-1.5">
+            {mode === 'target' ? 'Target Total Quantity (pcs)' : 'Number of Packs / Cartons'}
+          </label>
+          <input
+            type="number"
+            min="1"
+            className="input font-bold text-base text-brand-800"
+            value={mode === 'target' ? targetQty : packCount}
+            onChange={(e) => mode === 'target' ? setTargetQty(e.target.value) : setPackCount(e.target.value)}
+            placeholder={mode === 'target' ? 'e.g. 10000' : 'e.g. 500'}
+          />
+        </div>
+
+        {/* Colour Scope */}
+        {colorGroups.length > 1 && !activeColorId ? (
+          <div>
+            <label className="text-[11.5px] font-bold text-slate-700 uppercase tracking-wide block mb-1.5">
+              Apply to Colour
+            </label>
+            <select
+              className="input text-xs"
+              value={selectedColor}
+              onChange={(e) => setSelectedColor(e.target.value)}
+            >
+              <option value="ALL">All {colorGroups.length} Colours</option>
+              {colorGroups.map(([cName]) => (
+                <option key={cName} value={cName}>{cName}</option>
+              ))}
+            </select>
+            {selectedColor === 'ALL' && mode === 'target' && (
+              <div className="mt-1.5 flex items-center gap-3 text-[11px] text-slate-600">
+                <label className="flex items-center gap-1 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="multiColorMode"
+                    checked={splitMultiColor === 'each'}
+                    onChange={() => setSplitMultiColor('each')}
+                  />
+                  <span>Each colour</span>
+                </label>
+                <label className="flex items-center gap-1 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="multiColorMode"
+                    checked={splitMultiColor === 'equal'}
+                    onChange={() => setSplitMultiColor('equal')}
+                  />
+                  <span>Split equally</span>
+                </label>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center pt-5">
+            <span className="text-xs text-slate-500 bg-slate-100 px-3 py-2 rounded-lg border border-slate-200">
+              Applying to: <strong className="text-slate-800">{colorGroups[0]?.[0] || 'Selected Colour'}</strong>
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Preset Quick Buttons & Text Parser */}
+      <div className="mt-3 pt-3 border-t border-slate-200">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+          <span className="text-[11.5px] font-bold text-slate-700 uppercase tracking-wide">
+            Industry Ratio Presets:
+          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-slate-500 font-medium">Quick Paste Ratio:</span>
+            <input
+              type="text"
+              placeholder="e.g. 1:2:3:2:1"
+              value={ratioStr}
+              onChange={(e) => applyRatioString(e.target.value)}
+              className="w-28 rounded border border-slate-300 px-2 py-0.5 text-xs font-mono focus:border-brand-500 focus:outline-none"
+            />
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {presets.map((p) => (
+            <button
+              key={p.label}
+              type="button"
+              onClick={() => applyPreset(p.values)}
+              className="text-xs bg-white hover:bg-brand-50 text-slate-700 hover:text-brand-700 border border-slate-200 hover:border-brand-300 px-2.5 py-1 rounded-lg font-medium shadow-2xs transition-colors"
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Interactive Size Ratio Inputs */}
+      <div className="mt-3.5 rounded-lg bg-slate-50/80 p-3 border border-slate-200">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-bold text-slate-800">Set Ratio per Size:</span>
+          <span className="text-xs font-semibold px-2.5 py-0.5 bg-brand-100 text-brand-800 rounded-full border border-brand-200">
+            Pack Ratio Sum: <strong className="font-bold">{totalRatioUnits}</strong> units
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
+          {sizes.map((s) => {
+            const pieces = sizeDistribution[s.size_code] ?? 0;
+            const pct = singleColorTotal > 0 ? ((pieces / singleColorTotal) * 100).toFixed(1) : '0';
+
+            return (
+              <div
+                key={s.size_code}
+                className="flex flex-col rounded-lg bg-white p-2 border border-slate-200 shadow-2xs text-center"
+              >
+                <span className="text-xs font-extrabold text-slate-900 mb-1">{s.size_code}</span>
+                <div className="flex items-center justify-center gap-1 mb-1.5">
+                  <span className="text-[11px] text-slate-400 font-semibold">Ratio:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={ratios[s.size_code] ?? ''}
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? 0 : Math.max(0, Number(e.target.value));
+                      setRatios((prev) => ({ ...prev, [s.size_code]: val }));
+                    }}
+                    className="w-12 rounded border border-slate-300 py-0.5 px-1 text-center font-bold text-brand-700 text-sm focus:border-brand-500 focus:outline-none"
+                  />
+                </div>
+                <div className="mt-auto border-t border-slate-100 pt-1 text-[11px]">
+                  <p className="font-bold text-slate-800 tabular-nums">{fmtNumber(pieces)} pcs</p>
+                  <p className="text-[10px] text-slate-400 font-medium">{pct}%</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Live Preview Summary Bar & Apply Button */}
+      <div className="mt-3.5 flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-brand-100">
+        <div className="text-xs text-slate-600">
+          <span>Will distribute: </span>
+          <strong className="text-sm font-bold text-brand-800 tabular-nums">
+            {fmtNumber(grandTotalPreview)} pcs
+          </strong>
+          {previewColorCount > 1 && (
+            <span className="text-slate-500">
+              {' '}({fmtNumber(singleColorTotal)} pcs $\times$ {previewColorCount} colours)
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn-secondary btn-sm"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleApply}
+            className="btn-primary btn-sm flex items-center gap-1.5 shadow-sm font-semibold"
+          >
+            <Check size={14} />
+            Apply Ratio to Order Grid
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------ order line card */
 function LineCard({
   line, index, editable, currencyCode, currencySymbol, exchangeRate, isForeign, onChange, onRemove, canRemove
@@ -426,6 +839,8 @@ function LineCard({
   currencyCode: string; currencySymbol: string; exchangeRate: number; isForeign: boolean;
   onChange: (p: Partial<Line>) => void; onRemove: () => void; canRemove: boolean;
 }) {
+  const toast = useToast();
+  const [showRatioTool, setShowRatioTool] = useState(false);
   const styles = useLookup('styles');
   const colors = useStyleColors(line.style_id ? Number(line.style_id) : null);
   const skus = useStyleSkus(line.style_id ? Number(line.style_id) : null);
@@ -435,6 +850,13 @@ function LineCard({
     const all = skus.data ?? [];
     return line.color_id ? all.filter((s) => s.color_id === Number(line.color_id)) : all;
   }, [skus.data, line.color_id]);
+
+  const distinctSizes = useMemo(() => {
+    return [...new Map(visibleSkus.map((s) => [s.size_code, s])).values()]
+      .sort((a, b) => a.sort_order - b.sort_order);
+  }, [visibleSkus]);
+
+  const colorGroups = useMemo(() => groupByColor(visibleSkus), [visibleSkus]);
 
   const lineQty = Object.entries(line.skus)
     .filter(([id]) => visibleSkus.some((s) => s.id === Number(id)))
@@ -475,7 +897,24 @@ function LineCard({
       {/* Size grid */}
       <div className="mt-4">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-[12px] font-semibold text-slate-700">Size-wise breakdown</p>
+          <div className="flex items-center gap-3">
+            <p className="text-[12px] font-semibold text-slate-700">Size-wise breakdown</p>
+            {editable && line.style_id && visibleSkus.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowRatioTool((s) => !s)}
+                className={`btn-xs flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-all ${
+                  showRatioTool
+                    ? 'border-brand-400 bg-brand-100 text-brand-900 shadow-xs'
+                    : 'border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100 hover:border-brand-300'
+                }`}
+                title="Open ratio calculator to auto-split quantities by size ratio"
+              >
+                <Sparkles size={13} className="text-brand-600" />
+                {showRatioTool ? 'Close Ratio Tool' : '⚡ Ratio Split / Auto-Distribute'}
+              </button>
+            )}
+          </div>
           {lineQty > 0 && (
             <p className="text-[12px] text-slate-500">
               <span className="font-semibold text-slate-800">{fmtNumber(lineQty)}</span> pcs ·{' '}
@@ -490,6 +929,27 @@ function LineCard({
             </p>
           )}
         </div>
+
+        {/* Ratio Split Assistant Drawer */}
+        {showRatioTool && distinctSizes.length > 0 && (
+          <RatioSplitAssistant
+            sizes={distinctSizes}
+            colorGroups={colorGroups}
+            activeColorId={line.color_id}
+            onApply={(newSkus) => {
+              onChange({ skus: { ...line.skus, ...newSkus } });
+              toast('Applied ratio split across sizes');
+              setShowRatioTool(false);
+            }}
+            onClear={() => {
+              const resetSkus: Record<number, number> = {};
+              visibleSkus.forEach((s) => { resetSkus[s.id] = 0; });
+              onChange({ skus: { ...line.skus, ...resetSkus } });
+              toast('Cleared size quantities');
+            }}
+            onClose={() => setShowRatioTool(false)}
+          />
+        )}
 
         {!line.style_id ? (
           <p className="rounded-lg bg-surface-muted px-3 py-3 text-[12.5px] text-slate-400">
