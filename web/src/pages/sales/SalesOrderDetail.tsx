@@ -244,98 +244,120 @@ export default function SalesOrderDetail() {
       )}
 
       {/* Header form */}
-      <div className="card mb-4 p-4">
-        <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-3 lg:grid-cols-4">
-          <Input label="SO number" hint={isNew ? 'Blank to auto-generate' : undefined}
-            value={head.so_no ?? ''} onChange={(e) => setH('so_no', e.target.value)}
-            disabled={!editable} error={errors.so_no} />
-          <Input label="SO date" type="date" required value={head.so_date ?? ''}
-            onChange={(e) => setH('so_date', e.target.value)} disabled={!editable} error={errors.so_date} />
-          <Select label="Buyer" required options={toOptions(buyers.data)} placeholder="— Select buyer —"
-            value={head.buyer_id ?? ''} onChange={(e) => handleBuyerChange(e.target.value)}
-            disabled={!editable} error={errors.buyer_id} />
-          <Select label="Agent" options={toOptions(agents.data)} placeholder="— None —"
-            value={head.agent_id ?? ''} onChange={(e) => setH('agent_id', e.target.value)} disabled={!editable} />
+      <div className="card mb-4 space-y-4 p-4.5">
+        {/* Section 1: Order Information */}
+        <div>
+          <h4 className="text-[12px] font-bold uppercase tracking-wider text-slate-700 mb-2.5 flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-brand-500"></span>
+            Order & Buyer Details
+          </h4>
+          <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Input label="SO number" hint={isNew ? 'Blank to auto-generate' : undefined}
+              value={head.so_no ?? ''} onChange={(e) => setH('so_no', e.target.value)}
+              disabled={!editable} error={errors.so_no} />
+            <Input label="SO date" type="date" required value={head.so_date ?? ''}
+              onChange={(e) => setH('so_date', e.target.value)} disabled={!editable} error={errors.so_date} />
+            <Select label="Buyer" required options={toOptions(buyers.data)} placeholder="— Select buyer —"
+              value={head.buyer_id ?? ''} onChange={(e) => handleBuyerChange(e.target.value)}
+              disabled={!editable} error={errors.buyer_id} />
+            <Select label="Agent" options={toOptions(agents.data)} placeholder="— None —"
+              value={head.agent_id ?? ''} onChange={(e) => setH('agent_id', e.target.value)} disabled={!editable} />
+            <Input label="Buyer PO no" value={head.buyer_po_no ?? ''}
+              onChange={(e) => setH('buyer_po_no', e.target.value)} disabled={!editable} />
+            <Input label="Buyer PO date" type="date" value={head.buyer_po_date ?? ''}
+              onChange={(e) => setH('buyer_po_date', e.target.value)} disabled={!editable} />
+            <Input label="Season" placeholder="e.g. SS26" value={head.season ?? ''}
+              onChange={(e) => setH('season', e.target.value)} disabled={!editable} />
+            <Select label="Branch" options={toOptions(branches.data)} placeholder="— Select —"
+              value={head.branch_id ?? ''} onChange={(e) => setH('branch_id', e.target.value)} disabled={!editable} />
+          </div>
+        </div>
 
-          <Input label="Buyer PO no" value={head.buyer_po_no ?? ''}
-            onChange={(e) => setH('buyer_po_no', e.target.value)} disabled={!editable} />
-          <Input label="Buyer PO date" type="date" value={head.buyer_po_date ?? ''}
-            onChange={(e) => setH('buyer_po_date', e.target.value)} disabled={!editable} />
-          <Input label="Season" placeholder="e.g. SS26" value={head.season ?? ''}
-            onChange={(e) => setH('season', e.target.value)} disabled={!editable} />
-          <Select label="Branch" options={toOptions(branches.data)} placeholder="— Select —"
-            value={head.branch_id ?? ''} onChange={(e) => setH('branch_id', e.target.value)} disabled={!editable} />
+        {/* Section 2: Pricing, Currency & Tolerances */}
+        <div className="pt-3 border-t border-slate-100">
+          <h4 className="text-[12px] font-bold uppercase tracking-wider text-slate-700 mb-2.5 flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-amber-500"></span>
+            Commercial Terms & Tolerances
+          </h4>
+          <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Select label="Currency" required options={toOptions(currencies.data)} placeholder="— Select —"
+              value={head.currency_id ?? ''} onChange={(e) => handleCurrencyChange(e.target.value)}
+              disabled={!editable} error={errors.currency_id} />
+            <Input
+              label="Exchange rate (to INR)"
+              type="number"
+              step="0.0001"
+              value={head.exchange_rate ?? ''}
+              hint={isForeign ? `1 ${currencyCode} = ₹ ${exchangeRate.toFixed(2)}` : '1.00 for INR'}
+              placeholder={isForeign ? '83.50' : '1.00'}
+              onChange={(e) => setH('exchange_rate', e.target.value)}
+              disabled={!editable}
+            />
+            <Select label="Incoterm" options={INCOTERMS.map((v) => ({ value: v, label: v }))}
+              value={head.incoterm ?? 'FOB'} onChange={(e) => setH('incoterm', e.target.value)} disabled={!editable} />
+            <Select label="Payment term" options={PAY_TERMS.map((v) => ({ value: v, label: v.replace(/_/g, ' ') }))}
+              value={head.payment_term ?? 'LC'} onChange={(e) => setH('payment_term', e.target.value)} disabled={!editable} />
+            <Input
+              label="Excess Cutting % (Factory Buffer)"
+              type="number"
+              step="0.1"
+              min="0"
+              placeholder="5.0"
+              value={head.excess_pct ?? ''}
+              hint="Factory defect buffer (e.g. 5%)"
+              onChange={(e) => setH('excess_pct', e.target.value === '' ? '' : Number(e.target.value))}
+              disabled={!editable}
+            />
+            <Input
+              label="Shipment Tolerance + % (Max Overage)"
+              type="number"
+              step="0.1"
+              min="0"
+              placeholder="5.0"
+              value={head.tolerance_plus_pct ?? ''}
+              hint="Max allowable overage (+%)"
+              onChange={(e) => setH('tolerance_plus_pct', e.target.value === '' ? '' : Number(e.target.value))}
+              disabled={!editable}
+            />
+            <Input
+              label="Shipment Tolerance - % (Max Shortage)"
+              type="number"
+              step="0.1"
+              min="0"
+              placeholder="3.0"
+              value={head.tolerance_minus_pct ?? ''}
+              hint="Max allowable shortage (-%)"
+              onChange={(e) => setH('tolerance_minus_pct', e.target.value === '' ? '' : Number(e.target.value))}
+              disabled={!editable}
+            />
+            <Select label="Status" options={toPlainOptions(statuses.data)} placeholder="— Select —"
+              value={head.status_id ?? ''} onChange={(e) => setH('status_id', e.target.value)} disabled={!editable} />
+          </div>
+        </div>
 
-          <Select label="Currency" required options={toOptions(currencies.data)} placeholder="— Select —"
-            value={head.currency_id ?? ''} onChange={(e) => handleCurrencyChange(e.target.value)}
-            disabled={!editable} error={errors.currency_id} />
-          <Input
-            label="Exchange rate (to INR)"
-            type="number"
-            step="0.0001"
-            value={head.exchange_rate ?? ''}
-            hint={isForeign ? `1 ${currencyCode} = ₹ ${exchangeRate.toFixed(2)} INR` : '1.00 for INR'}
-            placeholder={isForeign ? '83.50' : '1.00'}
-            onChange={(e) => setH('exchange_rate', e.target.value)}
-            disabled={!editable}
-          />
-          <Input
-            label="Excess cutting % (Factory Buffer)"
-            type="number"
-            step="0.1"
-            min="0"
-            placeholder="5.0"
-            value={head.excess_pct ?? ''}
-            hint="Extra cutting buffer for defect allowance (e.g. 5%)"
-            onChange={(e) => setH('excess_pct', e.target.value === '' ? '' : Number(e.target.value))}
-            disabled={!editable}
-          />
-          <Input
-            label="Shipment Tolerance + % (Max Overage)"
-            type="number"
-            step="0.1"
-            min="0"
-            placeholder="5.0"
-            value={head.tolerance_plus_pct ?? ''}
-            hint="Buyer contract max overage (e.g. +5%)"
-            onChange={(e) => setH('tolerance_plus_pct', e.target.value === '' ? '' : Number(e.target.value))}
-            disabled={!editable}
-          />
-          <Input
-            label="Shipment Tolerance - % (Max Shortage)"
-            type="number"
-            step="0.1"
-            min="0"
-            placeholder="3.0"
-            value={head.tolerance_minus_pct ?? ''}
-            hint="Buyer contract max shortage (e.g. -3%)"
-            onChange={(e) => setH('tolerance_minus_pct', e.target.value === '' ? '' : Number(e.target.value))}
-            disabled={!editable}
-          />
-
-          <Select label="Incoterm" options={INCOTERMS.map((v) => ({ value: v, label: v }))}
-            value={head.incoterm ?? 'FOB'} onChange={(e) => setH('incoterm', e.target.value)} disabled={!editable} />
-          <Select label="Payment term" options={PAY_TERMS.map((v) => ({ value: v, label: v.replace(/_/g, ' ') }))}
-            value={head.payment_term ?? 'LC'} onChange={(e) => setH('payment_term', e.target.value)} disabled={!editable} />
-
-          <Input label="Port of loading" value={head.port_of_loading ?? ''}
-            onChange={(e) => setH('port_of_loading', e.target.value)} disabled={!editable} />
-          <Select label="Destination country" options={toOptions(countries.data)} placeholder="— Select —"
-            value={head.destination_country ?? ''} onChange={(e) => setH('destination_country', e.target.value)}
-            disabled={!editable} />
-          <Input label="Destination port" value={head.destination_port ?? ''}
-            onChange={(e) => setH('destination_port', e.target.value)} disabled={!editable} />
-          <Select label="Status" options={toPlainOptions(statuses.data)} placeholder="— Select —"
-            value={head.status_id ?? ''} onChange={(e) => setH('status_id', e.target.value)} disabled={!editable} />
-
-          <Input label="Ship date" type="date" value={head.ship_date ?? ''}
-            onChange={(e) => setH('ship_date', e.target.value)} disabled={!editable} />
-          <Input label="Delivery date" type="date" value={head.delivery_date ?? ''}
-            onChange={(e) => setH('delivery_date', e.target.value)} disabled={!editable} />
-          <Input label="LC number" value={head.lc_no ?? ''}
-            onChange={(e) => setH('lc_no', e.target.value)} disabled={!editable} />
-          <Input label="LC expiry" type="date" value={head.lc_expiry ?? ''}
-            onChange={(e) => setH('lc_expiry', e.target.value)} disabled={!editable} />
+        {/* Section 3: Shipment Logistics & LC */}
+        <div className="pt-3 border-t border-slate-100">
+          <h4 className="text-[12px] font-bold uppercase tracking-wider text-slate-700 mb-2.5 flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
+            Shipping Logistics & Letter of Credit
+          </h4>
+          <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Input label="Port of loading" value={head.port_of_loading ?? ''}
+              onChange={(e) => setH('port_of_loading', e.target.value)} disabled={!editable} />
+            <Select label="Destination country" options={toOptions(countries.data)} placeholder="— Select —"
+              value={head.destination_country ?? ''} onChange={(e) => setH('destination_country', e.target.value)}
+              disabled={!editable} />
+            <Input label="Destination port" value={head.destination_port ?? ''}
+              onChange={(e) => setH('destination_port', e.target.value)} disabled={!editable} />
+            <Input label="Ship date" type="date" value={head.ship_date ?? ''}
+              onChange={(e) => setH('ship_date', e.target.value)} disabled={!editable} />
+            <Input label="Delivery date" type="date" value={head.delivery_date ?? ''}
+              onChange={(e) => setH('delivery_date', e.target.value)} disabled={!editable} />
+            <Input label="LC number" value={head.lc_no ?? ''}
+              onChange={(e) => setH('lc_no', e.target.value)} disabled={!editable} />
+            <Input label="LC expiry" type="date" value={head.lc_expiry ?? ''}
+              onChange={(e) => setH('lc_expiry', e.target.value)} disabled={!editable} />
+          </div>
         </div>
       </div>
 
@@ -373,82 +395,148 @@ export default function SalesOrderDetail() {
             </button>
           )}
 
-          <div className="card flex flex-wrap items-center justify-between gap-6 p-4.5 bg-gradient-to-r from-slate-50 to-brand-50/20 border border-surface-border rounded-xl shadow-card">
-            <div className="flex flex-wrap items-center gap-3 text-xs">
-              {isForeign ? (
-                <div className="inline-flex items-center gap-2 rounded-lg bg-white border border-brand-200/80 px-3 py-1.5 shadow-xs">
-                  <span className="text-slate-500 font-medium">Applied Exchange Rate:</span>
-                  <span className="font-mono font-bold text-brand-800">
-                    1 {currencyCode} = ₹ {exchangeRate.toFixed(2)} INR
-                  </span>
-                </div>
-              ) : (
-                <div className="inline-flex items-center gap-2 rounded-lg bg-white border border-slate-200 px-3 py-1.5 shadow-xs">
-                  <span className="text-slate-500 font-medium">Order Currency:</span>
-                  <span className="font-mono font-bold text-slate-800">INR (Domestic)</span>
-                </div>
-              )}
-              {totals.qty > 0 && (
-                <div className="inline-flex items-center gap-2 rounded-lg bg-white border border-slate-200 px-3 py-1.5 shadow-xs" title="Buyer contract allowed shipment window">
-                  <span className="text-slate-500 font-medium">Shipment Window:</span>
-                  <span className="font-mono font-bold text-slate-800">
-                    {fmtNumber(totals.minShipment)} – {fmtNumber(totals.maxShipment)} pcs
-                  </span>
-                  <span className="text-[10.5px] text-slate-400">
-                    (-{totals.tolMinusPct}% / +{totals.tolPlusPct}%)
-                  </span>
-                </div>
-              )}
+          {/* Unified Order Totals & Values Card */}
+          <div className="card overflow-hidden border border-slate-200/90 bg-white shadow-sm">
+            {/* Contextual Top Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/80 px-5 py-2.5">
+              <div className="flex flex-wrap items-center gap-2.5 text-xs">
+                {isForeign ? (
+                  <div className="inline-flex items-center gap-1.5 rounded-md bg-white border border-brand-200 px-2.5 py-1 text-slate-700 shadow-2xs">
+                    <span className="font-semibold text-slate-500">Applied Exchange Rate:</span>
+                    <span className="font-mono font-bold text-brand-800">
+                      1 {currencyCode} = ₹ {exchangeRate.toFixed(2)} INR
+                    </span>
+                  </div>
+                ) : (
+                  <div className="inline-flex items-center gap-1.5 rounded-md bg-white border border-slate-200 px-2.5 py-1 text-slate-700 shadow-2xs">
+                    <span className="font-semibold text-slate-500">Order Currency:</span>
+                    <span className="font-mono font-bold text-slate-800">INR (Domestic)</span>
+                  </div>
+                )}
+                {totals.qty > 0 && (
+                  <div className="inline-flex items-center gap-1.5 rounded-md bg-white border border-slate-200 px-2.5 py-1 text-slate-700 shadow-2xs">
+                    <span className="font-semibold text-slate-500">Shipment Tolerance Window:</span>
+                    <span className="font-mono font-bold text-slate-900">
+                      {fmtNumber(totals.minShipment)} – {fmtNumber(totals.maxShipment)} pcs
+                    </span>
+                    <span className="text-[11px] font-medium text-slate-400">
+                      (-{totals.tolMinusPct}% / +{totals.tolPlusPct}%)
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="text-xs font-medium text-slate-500">
+                {lines.filter(l => l.style_id).length} Style Line{lines.filter(l => l.style_id).length === 1 ? '' : 's'}
+              </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-5 sm:gap-6">
-              <div className="text-right">
-                <p className="text-[11px] uppercase tracking-wider font-semibold text-slate-500">Order Qty (Invoice)</p>
-                <p className="text-[20px] font-bold tabular-nums text-slate-900">
-                  {fmtNumber(totals.qty)} <span className="text-xs font-normal text-slate-500">pcs</span>
-                </p>
+            {/* Metrics KPI Grid */}
+            <div className="grid grid-cols-2 gap-y-4 gap-x-2 p-5 sm:grid-cols-3 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
+              {/* Tile 1: Order Qty */}
+              <div className="flex flex-col justify-between px-3 pt-2 sm:pt-0">
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                    Contract Order Qty
+                  </span>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-2xl font-black tabular-nums text-slate-900">
+                      {fmtNumber(totals.qty)}
+                    </span>
+                    <span className="text-xs font-semibold text-slate-400">pcs</span>
+                  </div>
+                </div>
+                <p className="mt-1.5 text-[11px] text-slate-400">Buyer invoice contracted volume</p>
               </div>
 
-              <div className="text-right border-l border-slate-200/80 pl-4">
-                <p className="text-[11px] uppercase tracking-wider font-semibold text-amber-700">
-                  Excess Buffer ({totals.excessPct.toFixed(1)}%)
-                </p>
-                <p className="text-[20px] font-bold tabular-nums text-amber-800">
-                  +{fmtNumber(totals.excessQty)} <span className="text-xs font-normal text-slate-500">pcs</span>
-                </p>
+              {/* Tile 2: Excess Buffer */}
+              <div className="flex flex-col justify-between px-3 pt-2 sm:pt-0 sm:pl-5">
+                <div>
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-amber-800">
+                      Cutting Buffer
+                    </span>
+                    <span className="rounded bg-amber-100/80 px-1.5 py-0.5 text-[10.5px] font-bold text-amber-800 border border-amber-200">
+                      +{totals.excessPct.toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-2xl font-black tabular-nums text-amber-700">
+                      +{fmtNumber(totals.excessQty)}
+                    </span>
+                    <span className="text-xs font-semibold text-amber-600">pcs</span>
+                  </div>
+                </div>
+                <p className="mt-1.5 text-[11px] text-amber-700/80">Factory reject & defect buffer</p>
               </div>
 
-              <div className="text-right border-l border-slate-200/80 pl-4">
-                <p className="text-[11px] uppercase tracking-wider font-semibold text-brand-700">Planned Cut Qty</p>
-                <p className="text-[20px] font-extrabold tabular-nums text-brand-900">
-                  {fmtNumber(totals.planCutQty)} <span className="text-xs font-normal text-slate-500">pcs</span>
-                </p>
+              {/* Tile 3: Planned Cut Qty */}
+              <div className="flex flex-col justify-between px-3 pt-2 sm:pt-0 sm:pl-5">
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-brand-800 block mb-1">
+                    Planned Cut Qty
+                  </span>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-2xl font-black tabular-nums text-brand-900">
+                      {fmtNumber(totals.planCutQty)}
+                    </span>
+                    <span className="text-xs font-semibold text-brand-600">pcs</span>
+                  </div>
+                </div>
+                <p className="mt-1.5 text-[11px] text-brand-700/80">Feeds fabric & trims MRP explosion</p>
               </div>
 
-              <div className="text-right border-l border-slate-200/80 pl-4">
-                <p className="text-[11px] uppercase tracking-wider font-semibold text-slate-500">
-                  Total Value ({currencyCode})
-                </p>
-                <p className="text-[20px] font-bold tabular-nums text-slate-900">
-                  {currencyCode} {currencySymbol}{' '}
-                  {totals.amount.toLocaleString(isForeign ? 'en-US' : 'en-IN', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </p>
+              {/* Tile 4: Total Value in Foreign Currency */}
+              <div className="flex flex-col justify-between px-3 pt-2 sm:pt-0 sm:pl-5">
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                    Total Value ({currencyCode})
+                  </span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-sm font-bold text-slate-500">{currencySymbol}</span>
+                    <span className="text-2xl font-black tabular-nums text-slate-900">
+                      {totals.amount.toLocaleString(isForeign ? 'en-US' : 'en-IN', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </span>
+                  </div>
+                </div>
+                <p className="mt-1.5 text-[11px] text-slate-400">Order Qty × Unit Price</p>
               </div>
 
-              {isForeign && (
-                <div className="text-right border-l border-brand-200 pl-4 bg-brand-50/70 py-1.5 px-3 rounded-lg border border-brand-200">
-                  <p className="text-[11px] uppercase tracking-wider font-bold text-brand-700">
-                    Total Value in INR (₹)
+              {/* Tile 5: Total Value in INR */}
+              {isForeign ? (
+                <div className="flex flex-col justify-between rounded-xl bg-gradient-to-br from-brand-50 to-brand-100/50 p-3.5 border border-brand-200/80 sm:ml-3">
+                  <div>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-brand-800 block mb-1">
+                      Total Value in INR (₹)
+                    </span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-sm font-bold text-brand-700">₹</span>
+                      <span className="text-2xl font-black tabular-nums text-brand-950">
+                        {inrAmount.toLocaleString('en-IN', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                  <p className="mt-1.5 text-[11px] font-medium text-brand-700">
+                    Converted at 1 {currencyCode} = ₹{exchangeRate.toFixed(2)}
                   </p>
-                  <p className="text-[20px] font-extrabold tabular-nums text-brand-800">
-                    ₹ {inrAmount.toLocaleString('en-IN', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </p>
+                </div>
+              ) : (
+                <div className="flex flex-col justify-between px-3 pt-2 sm:pt-0 sm:pl-5">
+                  <div>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                      Settlement Mode
+                    </span>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-lg font-bold text-slate-800">Domestic (INR)</span>
+                    </div>
+                  </div>
+                  <p className="mt-1.5 text-[11px] text-slate-400">Direct INR billing without FX</p>
                 </div>
               )}
             </div>
