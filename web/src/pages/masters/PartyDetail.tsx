@@ -63,6 +63,23 @@ interface BankItem {
   is_default?: boolean | number;
 }
 
+const TDS_SECTIONS = [
+  { value: '194C', label: '194C - Payment to Contractors / Job-Work (1% / 2%)', rate: '1% - 2%' },
+  { value: '194Q', label: '194Q - Purchase of Goods > ₹50 Lakhs (0.1%)', rate: '0.1%' },
+  { value: '194J', label: '194J - Professional & Technical Fees (2% / 10%)', rate: '2% / 10%' },
+  { value: '194H', label: '194H - Commission or Brokerage / Buying Agents (5%)', rate: '5%' },
+  { value: '194I_PLANT', label: '194I(a) - Rent on Machinery & Equipment (2%)', rate: '2%' },
+  { value: '194I_BUILDING', label: '194I(b) - Rent on Land, Building & Factory Shed (10%)', rate: '10%' },
+  { value: '194A', label: '194A - Interest other than securities (10%)', rate: '10%' },
+  { value: '194R', label: '194R - Business Perquisites & Benefits (10%)', rate: '10%' },
+  { value: '195', label: '195 - Payments to Non-Resident / Foreign Entity', rate: 'As per DTAA' },
+];
+
+const TCS_SECTIONS = [
+  { value: '206C(1H)', label: '206C(1H) - TCS on Sale of Goods > ₹50 Lakhs (0.1%)', rate: '0.1%' },
+  { value: '206C(1)', label: '206C(1) - TCS on Scrap & Waste Material (1%)', rate: '1%' },
+];
+
 export function PartyDetailPage() {
   const { id } = useParams();
   const isNew = !id || id === 'new';
@@ -1107,43 +1124,96 @@ export function PartyDetailPage() {
               <div>
                 <label className="label">TDS Applicable</label>
                 <select
-                  className="input"
+                  className="input font-semibold"
                   value={form.tds_applicable ? '1' : '0'}
-                  onChange={(e) => handleField('tds_applicable', e.target.value === '1' ? 1 : 0)}
+                  onChange={(e) => {
+                    const isYes = e.target.value === '1';
+                    handleField('tds_applicable', isYes ? 1 : 0);
+                    if (!isYes) {
+                      handleField('tds_section', '');
+                    } else if (!form.tds_section) {
+                      handleField('tds_section', '194C');
+                    }
+                  }}
                 >
                   <option value="0">No</option>
                   <option value="1">Yes</option>
                 </select>
               </div>
-              <div>
-                <label className="label">TDS Section</label>
-                <input
-                  className="input"
-                  value={form.tds_section || ''}
-                  onChange={(e) => handleField('tds_section', e.target.value)}
-                  placeholder="e.g. 194C (Job Work) / 194Q"
-                />
-              </div>
+
+              {form.tds_applicable ? (
+                <div>
+                  <label className="label">TDS Section *</label>
+                  <select
+                    className="input font-medium text-slate-800"
+                    value={form.tds_section || '194C'}
+                    onChange={(e) => handleField('tds_section', e.target.value)}
+                  >
+                    <option value="">Select TDS Section</option>
+                    {TDS_SECTIONS.map((sec) => (
+                      <option key={sec.value} value={sec.value}>
+                        {sec.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <label className="label text-slate-400">TDS Section</label>
+                  <input
+                    className="input bg-slate-50 text-slate-400 cursor-not-allowed"
+                    disabled
+                    value="Not Applicable"
+                  />
+                </div>
+              )}
+
               <div>
                 <label className="label">TCS Applicable</label>
                 <select
-                  className="input"
+                  className="input font-semibold"
                   value={form.tcs_applicable ? '1' : '0'}
-                  onChange={(e) => handleField('tcs_applicable', e.target.value === '1' ? 1 : 0)}
+                  onChange={(e) => {
+                    const isYes = e.target.value === '1';
+                    handleField('tcs_applicable', isYes ? 1 : 0);
+                    if (!isYes) {
+                      handleField('tcs_section', '');
+                    } else if (!form.tcs_section) {
+                      handleField('tcs_section', '206C(1H)');
+                    }
+                  }}
                 >
                   <option value="0">No</option>
                   <option value="1">Yes</option>
                 </select>
               </div>
-              <div>
-                <label className="label">TCS Section</label>
-                <input
-                  className="input"
-                  value={form.tcs_section || ''}
-                  onChange={(e) => handleField('tcs_section', e.target.value)}
-                  placeholder="e.g. 206C(1H)"
-                />
-              </div>
+
+              {form.tcs_applicable ? (
+                <div>
+                  <label className="label">TCS Section *</label>
+                  <select
+                    className="input font-medium text-slate-800"
+                    value={form.tcs_section || '206C(1H)'}
+                    onChange={(e) => handleField('tcs_section', e.target.value)}
+                  >
+                    <option value="">Select TCS Section</option>
+                    {TCS_SECTIONS.map((sec) => (
+                      <option key={sec.value} value={sec.value}>
+                        {sec.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <label className="label text-slate-400">TCS Section</label>
+                  <input
+                    className="input bg-slate-50 text-slate-400 cursor-not-allowed"
+                    disabled
+                    value="Not Applicable"
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>
