@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Plus, Trash2, Save, CheckCircle2, Sparkles, Check, X, Calculator, Sliders } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Save, CheckCircle2, Sparkles, Check, X } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { http, ApiError } from '../../lib/api';
 import { useLookup, toOptions, useStyleColors, useStyleSkus, useStatuses, toPlainOptions } from '../../hooks/useLookup';
@@ -22,6 +22,8 @@ interface Line {
   color_id: number | '';
   description: string;
   unit_price: number | '';
+  excess_pct?: number | '';
+  plan_cut_qty?: number;
   ship_date: string;
   /** skuId -> qty */
   skus: Record<number, number>;
@@ -30,7 +32,7 @@ interface Line {
 let keySeq = 0;
 const newLine = (): Line => ({
   _key: `l${++keySeq}`, style_id: '', color_id: '', description: '',
-  unit_price: '', ship_date: '', skus: {},
+  unit_price: '', excess_pct: '', plan_cut_qty: 0, ship_date: '', skus: {},
 });
 
 export default function SalesOrderDetail() {
@@ -43,7 +45,13 @@ export default function SalesOrderDetail() {
 
   const [tab, setTab] = useState('lines');
   const [head, setHead] = useState<Record<string, any>>({
-    so_date: today(), incoterm: 'FOB', payment_term: 'LC', exchange_rate: 1,
+    so_date: today(),
+    incoterm: 'FOB',
+    payment_term: 'LC',
+    exchange_rate: 1,
+    excess_pct: 5,
+    tolerance_plus_pct: 5,
+    tolerance_minus_pct: 3,
   });
   const [lines, setLines] = useState<Line[]>([newLine()]);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -69,6 +77,9 @@ export default function SalesOrderDetail() {
     const d = detail.data;
     setHead({
       ...d,
+      excess_pct: d.excess_pct !== null && d.excess_pct !== undefined ? Number(d.excess_pct) : 5,
+      tolerance_plus_pct: d.tolerance_plus_pct !== null && d.tolerance_plus_pct !== undefined ? Number(d.tolerance_plus_pct) : 5,
+      tolerance_minus_pct: d.tolerance_minus_pct !== null && d.tolerance_minus_pct !== undefined ? Number(d.tolerance_minus_pct) : 3,
       so_date: toDateInput(d.so_date), buyer_po_date: toDateInput(d.buyer_po_date),
       lc_date: toDateInput(d.lc_date), lc_expiry: toDateInput(d.lc_expiry),
       ship_date: toDateInput(d.ship_date), delivery_date: toDateInput(d.delivery_date),
@@ -76,23 +87,37 @@ export default function SalesOrderDetail() {
     setLines((d.lines ?? []).map((l: any) => ({
       _key: `l${++keySeq}`, id: l.id, style_id: l.style_id, color_id: l.color_id ?? '',
       description: l.description ?? '', unit_price: Number(l.unit_price),
+      excess_pct: l.excess_pct !== null && l.excess_pct !== undefined ? Number(l.excess_pct) : '',
+      plan_cut_qty: Number(l.plan_cut_qty || 0),
       ship_date: toDateInput(l.ship_date),
       skus: Object.fromEntries((l.skus ?? []).map((s: any) => [s.sku_id, Number(s.qty)])),
     })));
   }, [detail.data]);
 
   const totals = useMemo(() => {
-    let qty = 0, amount = 0;
+    let qty = 0, amount = 0, planCutQty = 0;
+    const defaultExcess = Number(head.excess_pct) || 0;
     for (const l of lines) {
       const q = Object.values(l.skus).reduce((a, b) => a + (Number(b) || 0), 0);
-      qty += q; amount += q * (Number(l.unit_price) || 0);
+      const lineExcess = (l.excess_pct !== '' && l.excess_pct !== undefined) ? Number(l.excess_pct) : defaultExcess;
+      const linePlanCut = Math.round(q * (1 + (lineExcess || 0) / 100));
+      qty += q;
+      planCutQty += linePlanCut;
+      amount += q * (Number(l.unit_price) || 0);
     }
-    return { qty, amount };
-  }, [lines]);
+    const excessQty = Math.max(0, planCutQty - qty);
+    const excessPct = qty > 0 ? (excessQty / qty) * 100 : defaultExcess;
+    const tolPlusPct = Number(head.tolerance_plus_pct) || 0;
+    const tolMinusPct = Number(head.tolerance_minus_pct) || 0;
+    const maxShipment = Math.round(qty * (1 + tolPlusPct / 100));
+    const minShipment = Math.round(qty * (1 - tolMinusPct / 100));
+
+    return { qty, amount, planCutQty, excessQty, excessPct, tolPlusPct, tolMinusPct, maxShipment, minShipment };
+  }, [lines, head.excess_pct, head.tolerance_plus_pct, head.tolerance_minus_pct]);
 
   const selectedCurrency = currencies.data?.find((c) => c.id === Number(head.currency_id));
-  const currencyCode = selectedCurrency?.code || 'USD';
-  const currencySymbol = selectedCurrency?.symbol || (currencyCode === 'INR' ? '₹' : '$');
+  const currencyCode = String(selectedCurrency?.code ?? 'USD');
+  const currencySymbol = String((selectedCurrency as any)?.symbol ?? (currencyCode === 'INR' ? '₹' : '$'));
   const isForeign = currencyCode !== 'INR';
   const exchangeRate = Number(head.exchange_rate) > 0 ? Number(head.exchange_rate) : (isForeign ? 83.5 : 1);
   const inrAmount = totals.amount * (Number(head.exchange_rate) || 1);
@@ -129,20 +154,31 @@ export default function SalesOrderDetail() {
   const save = async () => {
     setErrors({}); setSaving(true);
     try {
+      const defaultExcess = Number(head.excess_pct) || 0;
       const payload = {
         ...head,
+        excess_pct: Number(head.excess_pct || 0),
+        tolerance_plus_pct: Number(head.tolerance_plus_pct || 0),
+        tolerance_minus_pct: Number(head.tolerance_minus_pct || 0),
         lines: lines
           .filter((l) => l.style_id)
-          .map((l) => ({
-            style_id: Number(l.style_id),
-            color_id: l.color_id === '' ? null : Number(l.color_id),
-            description: l.description || null,
-            unit_price: Number(l.unit_price) || 0,
-            ship_date: l.ship_date || null,
-            skus: Object.entries(l.skus)
-              .filter(([, q]) => Number(q) > 0)
-              .map(([sku_id, qty]) => ({ sku_id: Number(sku_id), qty: Number(qty) })),
-          })),
+          .map((l) => {
+            const lineQty = Object.values(l.skus).reduce((a, b) => a + (Number(b) || 0), 0);
+            const lineExcess = (l.excess_pct !== '' && l.excess_pct !== undefined) ? Number(l.excess_pct) : defaultExcess;
+            const planCut = Math.round(lineQty * (1 + lineExcess / 100));
+            return {
+              style_id: Number(l.style_id),
+              color_id: l.color_id === '' ? null : Number(l.color_id),
+              description: l.description || null,
+              unit_price: Number(l.unit_price) || 0,
+              excess_pct: l.excess_pct === '' || l.excess_pct === undefined ? null : Number(l.excess_pct),
+              plan_cut_qty: planCut,
+              ship_date: l.ship_date || null,
+              skus: Object.entries(l.skus)
+                .filter(([, q]) => Number(q) > 0)
+                .map(([sku_id, qty]) => ({ sku_id: Number(sku_id), qty: Number(qty) })),
+            };
+          }),
       };
       if (!payload.lines.length) { toast('Add at least one order line', 'error'); setSaving(false); return; }
 
@@ -243,6 +279,40 @@ export default function SalesOrderDetail() {
             onChange={(e) => setH('exchange_rate', e.target.value)}
             disabled={!editable}
           />
+          <Input
+            label="Excess cutting % (Factory Buffer)"
+            type="number"
+            step="0.1"
+            min="0"
+            placeholder="5.0"
+            value={head.excess_pct ?? ''}
+            hint="Extra cutting buffer for defect allowance (e.g. 5%)"
+            onChange={(e) => setH('excess_pct', e.target.value === '' ? '' : Number(e.target.value))}
+            disabled={!editable}
+          />
+          <Input
+            label="Shipment Tolerance + % (Max Overage)"
+            type="number"
+            step="0.1"
+            min="0"
+            placeholder="5.0"
+            value={head.tolerance_plus_pct ?? ''}
+            hint="Buyer contract max overage (e.g. +5%)"
+            onChange={(e) => setH('tolerance_plus_pct', e.target.value === '' ? '' : Number(e.target.value))}
+            disabled={!editable}
+          />
+          <Input
+            label="Shipment Tolerance - % (Max Shortage)"
+            type="number"
+            step="0.1"
+            min="0"
+            placeholder="3.0"
+            value={head.tolerance_minus_pct ?? ''}
+            hint="Buyer contract max shortage (e.g. -3%)"
+            onChange={(e) => setH('tolerance_minus_pct', e.target.value === '' ? '' : Number(e.target.value))}
+            disabled={!editable}
+          />
+
           <Select label="Incoterm" options={INCOTERMS.map((v) => ({ value: v, label: v }))}
             value={head.incoterm ?? 'FOB'} onChange={(e) => setH('incoterm', e.target.value)} disabled={!editable} />
           <Select label="Payment term" options={PAY_TERMS.map((v) => ({ value: v, label: v.replace(/_/g, ' ') }))}
@@ -289,6 +359,7 @@ export default function SalesOrderDetail() {
               currencySymbol={currencySymbol}
               exchangeRate={exchangeRate}
               isForeign={isForeign}
+              headExcessPct={Number(head.excess_pct) || 5}
               onChange={(patch) => setLine(line._key, patch)}
               onRemove={() => setLines((s) => s.filter((l) => l._key !== line._key))}
               canRemove={lines.length > 1}
@@ -317,17 +388,44 @@ export default function SalesOrderDetail() {
                   <span className="font-mono font-bold text-slate-800">INR (Domestic)</span>
                 </div>
               )}
+              {totals.qty > 0 && (
+                <div className="inline-flex items-center gap-2 rounded-lg bg-white border border-slate-200 px-3 py-1.5 shadow-xs" title="Buyer contract allowed shipment window">
+                  <span className="text-slate-500 font-medium">Shipment Window:</span>
+                  <span className="font-mono font-bold text-slate-800">
+                    {fmtNumber(totals.minShipment)} – {fmtNumber(totals.maxShipment)} pcs
+                  </span>
+                  <span className="text-[10.5px] text-slate-400">
+                    (-{totals.tolMinusPct}% / +{totals.tolPlusPct}%)
+                  </span>
+                </div>
+              )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-6 sm:gap-8">
+            <div className="flex flex-wrap items-center gap-5 sm:gap-6">
               <div className="text-right">
-                <p className="text-[11px] uppercase tracking-wider font-semibold text-slate-500">Total Quantity</p>
+                <p className="text-[11px] uppercase tracking-wider font-semibold text-slate-500">Order Qty (Invoice)</p>
                 <p className="text-[20px] font-bold tabular-nums text-slate-900">
                   {fmtNumber(totals.qty)} <span className="text-xs font-normal text-slate-500">pcs</span>
                 </p>
               </div>
 
-              <div className="text-right border-l border-slate-200/80 pl-6">
+              <div className="text-right border-l border-slate-200/80 pl-4">
+                <p className="text-[11px] uppercase tracking-wider font-semibold text-amber-700">
+                  Excess Buffer ({totals.excessPct.toFixed(1)}%)
+                </p>
+                <p className="text-[20px] font-bold tabular-nums text-amber-800">
+                  +{fmtNumber(totals.excessQty)} <span className="text-xs font-normal text-slate-500">pcs</span>
+                </p>
+              </div>
+
+              <div className="text-right border-l border-slate-200/80 pl-4">
+                <p className="text-[11px] uppercase tracking-wider font-semibold text-brand-700">Planned Cut Qty</p>
+                <p className="text-[20px] font-extrabold tabular-nums text-brand-900">
+                  {fmtNumber(totals.planCutQty)} <span className="text-xs font-normal text-slate-500">pcs</span>
+                </p>
+              </div>
+
+              <div className="text-right border-l border-slate-200/80 pl-4">
                 <p className="text-[11px] uppercase tracking-wider font-semibold text-slate-500">
                   Total Value ({currencyCode})
                 </p>
@@ -341,7 +439,7 @@ export default function SalesOrderDetail() {
               </div>
 
               {isForeign && (
-                <div className="text-right border-l border-brand-200 pl-6 bg-brand-50/70 py-1.5 px-3.5 rounded-lg border border-brand-200">
+                <div className="text-right border-l border-brand-200 pl-4 bg-brand-50/70 py-1.5 px-3 rounded-lg border border-brand-200">
                   <p className="text-[11px] uppercase tracking-wider font-bold text-brand-700">
                     Total Value in INR (₹)
                   </p>
@@ -453,6 +551,7 @@ function RatioSplitAssistant({
   sizes,
   colorGroups,
   activeColorId,
+  excessPct = 0,
   onApply,
   onClear,
   onClose,
@@ -460,6 +559,7 @@ function RatioSplitAssistant({
   sizes: { size_code: string; sort_order: number }[];
   colorGroups: [string, any[]][];
   activeColorId?: number | '';
+  excessPct?: number;
   onApply: (skusToSet: Record<number, number>) => void;
   onClear: () => void;
   onClose: () => void;
@@ -671,6 +771,11 @@ function RatioSplitAssistant({
             onChange={(e) => mode === 'target' ? setTargetQty(e.target.value) : setPackCount(e.target.value)}
             placeholder={mode === 'target' ? 'e.g. 10000' : 'e.g. 500'}
           />
+          {mode === 'target' && Number(targetQty) > 0 && excessPct > 0 && (
+            <p className="mt-1 text-[11px] text-amber-800 font-medium">
+              +{excessPct}% Cutting Buffer: +{fmtNumber(Math.round(Number(targetQty) * excessPct / 100))} pcs → <strong className="font-bold">{fmtNumber(Math.round(Number(targetQty) * (1 + excessPct / 100)))} pcs Planned Cut</strong>
+            </p>
+          )}
         </div>
 
         {/* Colour Scope */}
@@ -833,10 +938,11 @@ function RatioSplitAssistant({
 
 /* ------------------------------------------------------ order line card */
 function LineCard({
-  line, index, editable, currencyCode, currencySymbol, exchangeRate, isForeign, onChange, onRemove, canRemove
+  line, index, editable, currencyCode, currencySymbol, exchangeRate, isForeign, headExcessPct, onChange, onRemove, canRemove
 }: {
   line: Line; index: number; editable: boolean;
   currencyCode: string; currencySymbol: string; exchangeRate: number; isForeign: boolean;
+  headExcessPct: number;
   onChange: (p: Partial<Line>) => void; onRemove: () => void; canRemove: boolean;
 }) {
   const toast = useToast();
@@ -863,6 +969,12 @@ function LineCard({
     .reduce((a, [, q]) => a + (Number(q) || 0), 0);
   const lineAmount = lineQty * (Number(line.unit_price) || 0);
 
+  const lineExcessPct = (line.excess_pct !== '' && line.excess_pct !== undefined)
+    ? Number(line.excess_pct)
+    : headExcessPct;
+  const linePlanCutQty = Math.round(lineQty * (1 + (lineExcessPct || 0) / 100));
+  const lineExcessPcs = Math.max(0, linePlanCutQty - lineQty);
+
   return (
     <div className="card p-4">
       <div className="mb-3 flex items-center justify-between">
@@ -877,7 +989,7 @@ function LineCard({
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2 lg:grid-cols-5">
         <Select label="Style" required options={toOptions(styles.data)} placeholder="— Select style —"
           value={line.style_id} disabled={!editable}
           onChange={(e) => onChange({
@@ -890,6 +1002,17 @@ function LineCard({
         <Input label={`Unit price (${currencyCode})`} type="number" step="0.0001" placeholder="0.00" value={line.unit_price}
           disabled={!editable}
           onChange={(e) => onChange({ unit_price: e.target.value === '' ? '' : Number(e.target.value) })} />
+        <Input
+          label="Excess % (Cut buffer)"
+          type="number"
+          step="0.1"
+          min="0"
+          placeholder={`${headExcessPct}%`}
+          value={line.excess_pct !== undefined ? line.excess_pct : ''}
+          disabled={!editable}
+          hint={line.excess_pct !== '' && line.excess_pct !== undefined ? `${line.excess_pct}% custom` : `Default (${headExcessPct}%)`}
+          onChange={(e) => onChange({ excess_pct: e.target.value === '' ? '' : Number(e.target.value) })}
+        />
         <Input label="Line ship date" type="date" value={line.ship_date} disabled={!editable}
           onChange={(e) => onChange({ ship_date: e.target.value })} />
       </div>
@@ -916,17 +1039,25 @@ function LineCard({
             )}
           </div>
           {lineQty > 0 && (
-            <p className="text-[12px] text-slate-500">
-              <span className="font-semibold text-slate-800">{fmtNumber(lineQty)}</span> pcs ·{' '}
-              <span className="font-semibold text-slate-800">
+            <div className="flex flex-wrap items-center gap-2.5 text-[11.5px]">
+              <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 font-medium text-slate-700 border border-slate-200">
+                Order: <strong className="font-bold text-slate-900">{fmtNumber(lineQty)}</strong> pcs
+              </span>
+              <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 font-medium text-amber-800 border border-amber-200" title={`Cutting allowance: +${lineExcessPct}%`}>
+                +{lineExcessPct}% Excess: <strong className="font-bold text-amber-900">+{fmtNumber(lineExcessPcs)} pcs</strong>
+              </span>
+              <span className="inline-flex items-center gap-1 rounded bg-brand-50 px-2 py-0.5 font-semibold text-brand-800 border border-brand-200" title="Total planned cutting quantity with buffer">
+                Planned Cut: <strong className="font-bold text-brand-950">{fmtNumber(linePlanCutQty)}</strong> pcs
+              </span>
+              <span className="font-semibold text-slate-800 ml-1">
                 {currencyCode} {currencySymbol}{lineAmount.toLocaleString(isForeign ? 'en-US' : 'en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
               {isForeign && (
-                <span className="ml-1 font-bold text-brand-700">
+                <span className="font-bold text-brand-700">
                   (₹ {(lineAmount * exchangeRate).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                 </span>
               )}
-            </p>
+            </div>
           )}
         </div>
 
@@ -936,6 +1067,7 @@ function LineCard({
             sizes={distinctSizes}
             colorGroups={colorGroups}
             activeColorId={line.color_id}
+            excessPct={lineExcessPct}
             onApply={(newSkus) => {
               onChange({ skus: { ...line.skus, ...newSkus } });
               toast('Applied ratio split across sizes');

@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
-  Menu, X, LogOut, ChevronDown, Search, Bell, Building2, User as UserIcon,
+  Menu, X, LogOut, ChevronDown, Search, Bell, Building2,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../lib/auth';

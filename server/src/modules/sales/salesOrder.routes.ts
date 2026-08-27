@@ -23,6 +23,8 @@ const lineSchema = z.object({
   color_id: s.id(),
   description: s.nullableStr(255),
   unit_price: z.coerce.number().min(0),
+  excess_pct: s.dec(),
+  plan_cut_qty: z.coerce.number().int().min(0).optional(),
   ship_date: s.date(),
   /** Size-wise breakdown. Line order_qty is derived from the sum. */
   skus: z.array(skuLineSchema).default([]),
@@ -48,6 +50,9 @@ const soSchema = z.object({
   destination_port: s.nullableStr(80),
   payment_term: z.enum(PAYMENT).nullish(),
   lc_no: s.nullableStr(60), lc_date: s.date(), lc_expiry: s.date(),
+  excess_pct: s.dec(),
+  tolerance_plus_pct: s.dec(),
+  tolerance_minus_pct: s.dec(),
   ship_date: s.date(), delivery_date: s.date(),
   status_id: s.id(),
   remarks: s.text(),
@@ -77,28 +82,35 @@ async function loadLines(id: number) {
   return lines;
 }
 
-/** Recalculate header order_qty / total_amount from the persisted lines. */
+/** Recalculate header order_qty / total_amount / plan_cut_qty from the persisted lines. */
 async function recalcHeader(tx: Tx, soId: number) {
-  const agg = await txQueryOne<{ qty: number; amt: number }>(
+  const agg = await txQueryOne<{ qty: number; amt: number; plan_cut: number }>(
     tx,
-    `SELECT COALESCE(SUM(order_qty),0) AS qty, COALESCE(SUM(amount),0) AS amt
+    `SELECT COALESCE(SUM(order_qty),0) AS qty,
+            COALESCE(SUM(amount),0) AS amt,
+            COALESCE(SUM(plan_cut_qty),0) AS plan_cut
        FROM trx_sales_order_line WHERE so_id = ?`, [soId]);
-  await txExecute(tx, `UPDATE trx_sales_order SET order_qty = ?, total_amount = ? WHERE id = ?`,
-    [agg?.qty ?? 0, agg?.amt ?? 0, soId]);
+  await txExecute(tx,
+    `UPDATE trx_sales_order SET order_qty = ?, total_amount = ?, plan_cut_qty = ? WHERE id = ?`,
+    [agg?.qty ?? 0, agg?.amt ?? 0, agg?.plan_cut ?? (agg?.qty ?? 0), soId]);
 }
 
-async function writeLines(tx: Tx, soId: number, lines: z.infer<typeof lineSchema>[]) {
+async function writeLines(tx: Tx, soId: number, lines: z.infer<typeof lineSchema>[], headerExcessPct = 0) {
   for (const l of lines) {
     const skuQty = l.skus.reduce((a, x) => a + x.qty, 0);
     const qty = l.skus.length ? skuQty : (l.order_qty ?? 0);
     if (qty <= 0) throw BadRequest('Each order line needs a quantity greater than zero');
     const amount = Number((qty * l.unit_price).toFixed(4));
+    const excessPct = Number(l.excess_pct !== undefined && l.excess_pct !== null ? l.excess_pct : headerExcessPct);
+    const planCutQty = l.plan_cut_qty && l.plan_cut_qty > 0
+      ? l.plan_cut_qty
+      : Math.round(qty * (1 + (excessPct || 0) / 100));
 
     const r = await txExecute(tx,
       `INSERT INTO trx_sales_order_line
-         (so_id, style_id, color_id, description, order_qty, unit_price, amount, ship_date)
-       VALUES (?,?,?,?,?,?,?,?)`,
-      [soId, l.style_id, l.color_id ?? null, l.description ?? null, qty, l.unit_price, amount,
+         (so_id, style_id, color_id, description, order_qty, excess_pct, plan_cut_qty, unit_price, amount, ship_date)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      [soId, l.style_id, l.color_id ?? null, l.description ?? null, qty, excessPct, planCutQty, l.unit_price, amount,
        l.ship_date ?? null]);
 
     for (const sk of l.skus) {
@@ -199,18 +211,20 @@ salesOrderRouter.post('/', requirePermission('SALES_ORDER.CREATE'), ah(async (re
         (company_id, branch_id, so_no, so_date, buyer_id, agent_id, quotation_id,
          buyer_po_no, buyer_po_date, season, currency_id, exchange_rate, incoterm,
          port_of_loading, destination_country, destination_port, payment_term,
-         lc_no, lc_date, lc_expiry, ship_date, delivery_date, status_id,
+         lc_no, lc_date, lc_expiry, excess_pct, tolerance_plus_pct, tolerance_minus_pct,
+         ship_date, delivery_date, status_id,
          approval_state, remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'DRAFT',?,?)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'DRAFT',?,?)`,
       [req.user!.companyId, h.branch_id ?? null, soNo, h.so_date ?? null, h.buyer_id,
        h.agent_id ?? null, h.quotation_id ?? null, h.buyer_po_no ?? null, h.buyer_po_date ?? null,
        h.season ?? null, h.currency_id, h.exchange_rate ?? 1, h.incoterm ?? 'FOB',
        h.port_of_loading ?? null, h.destination_country ?? null, h.destination_port ?? null,
        h.payment_term ?? 'LC', h.lc_no ?? null, h.lc_date ?? null, h.lc_expiry ?? null,
+       h.excess_pct ?? 0, h.tolerance_plus_pct ?? 0, h.tolerance_minus_pct ?? 0,
        h.ship_date ?? null, h.delivery_date ?? null, h.status_id ?? null, h.remarks ?? null,
        req.user!.id]);
 
-    await writeLines(tx, r.insertId, lines);
+    await writeLines(tx, r.insertId, lines, Number(h.excess_pct) || 0);
     await recalcHeader(tx, r.insertId);
     return txQueryOne(tx, `SELECT * FROM trx_sales_order WHERE id = ?`, [r.insertId]);
   });
@@ -248,7 +262,7 @@ salesOrderRouter.put('/:id', requirePermission('SALES_ORDER.UPDATE'), ah(async (
         await txExecute(tx, `DELETE FROM trx_sales_order_sku WHERE so_line_id = ?`, [l.id]);
       }
       await txExecute(tx, `DELETE FROM trx_sales_order_line WHERE so_id = ?`, [id]);
-      await writeLines(tx, id, lines);
+      await writeLines(tx, id, lines, Number(h.excess_pct ?? before.excess_pct) || 0);
     }
     await recalcHeader(tx, id);
     return txQueryOne(tx, `SELECT * FROM trx_sales_order WHERE id = ?`, [id]);

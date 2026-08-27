@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Building2, MapPin, Users, Landmark, ShoppingBag,
-  Save, ArrowLeft, Plus, Trash2, ShieldCheck, FileText, CheckCircle2
+  Save, ArrowLeft, Plus, Trash2, ShieldCheck, FileText
 } from 'lucide-react';
 import { useItem, useSave } from '../../hooks/useResource';
 import { useLookup } from '../../hooks/useLookup';

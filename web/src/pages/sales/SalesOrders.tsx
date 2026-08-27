@@ -53,7 +53,16 @@ export default function SalesOrdersPage() {
               {r.buyer_po_no && <p className="text-[11px] text-slate-500">PO: {r.buyer_po_no}</p>}</div>) },
           { key: 'season', header: 'Season' },
           { key: 'order_qty', header: 'Order qty', align: 'right', sortable: true,
-            render: (r: any) => fmtNumber(r.order_qty) },
+            render: (r: any) => (
+              <div className="text-right">
+                <p className="font-semibold text-slate-800 tabular-nums">{fmtNumber(r.order_qty)} pcs</p>
+                {Number(r.plan_cut_qty) > Number(r.order_qty) && (
+                  <p className="text-[10.5px] text-amber-700 font-medium tabular-nums" title="Planned Cutting Qty with buffer">
+                    Plan: {fmtNumber(r.plan_cut_qty)} ({r.excess_pct ? `+${Number(r.excess_pct)}%` : ''})
+                  </p>
+                )}
+              </div>
+            ) },
           { key: 'progress', header: 'Produced', align: 'right', render: (r: any) => {
             const pct = Number(r.order_qty) > 0 ? (Number(r.produced_qty) / Number(r.order_qty)) * 100 : 0;
             return (
