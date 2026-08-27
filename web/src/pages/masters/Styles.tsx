@@ -119,6 +119,7 @@ export function StyleDetailPage() {
         : await http.put<{ data: any }>(`/styles/${id}`, body);
       toast(`Style ${isNew ? 'created' : 'updated'} successfully`);
       void qc.invalidateQueries({ queryKey: ['styles'] });
+      void qc.invalidateQueries({ queryKey: ['lookup'] });
       if (isNew) nav(`/masters/styles/${res.data.id}`, { replace: true });
     } catch (e) {
       if (e instanceof ApiError) { setErrors(e.fieldErrors); toast(e.message, 'error'); }

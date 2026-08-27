@@ -15,8 +15,9 @@ export function useLookup(name: string | null, enabled = true) {
     queryKey: ['lookup', name],
     queryFn: async () => (await http.get<{ data: LookupItem[] }>(`/lookups/${name}`)).data,
     enabled: !!name && enabled,
-    staleTime: 10 * 60 * 1000,
-    gcTime: 30 * 60 * 1000,
+    staleTime: 15 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: true,
   });
 }
 

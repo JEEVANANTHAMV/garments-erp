@@ -32,6 +32,7 @@ export function useSave<T>(path: string, label: string) {
          : (await http.post<ItemResponse<T>>(`/${path}`, body)).data,
     onSuccess: (_d, vars) => {
       void qc.invalidateQueries({ queryKey: [path] });
+      void qc.invalidateQueries({ queryKey: ['lookup'] });
       toast(`${label} ${vars.id ? 'updated' : 'created'} successfully`);
     },
     onError: (e) => toast(e instanceof ApiError ? e.message : `Could not save ${label.toLowerCase()}`, 'error'),
@@ -46,6 +47,7 @@ export function useRemove(path: string, label: string) {
     mutationFn: async (id: number) => await http.del(`/${path}/${id}`),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: [path] });
+      void qc.invalidateQueries({ queryKey: ['lookup'] });
       toast(`${label} deleted`);
     },
     onError: (e) => toast(e instanceof ApiError ? e.message : `Could not delete ${label.toLowerCase()}`, 'error'),
