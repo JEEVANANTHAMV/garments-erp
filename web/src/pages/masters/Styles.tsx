@@ -9,7 +9,8 @@ import { useLookup, toOptions, useStatuses, toPlainOptions } from '../../hooks/u
 import { useToast } from '../../hooks/useToast';
 import { DataTable } from '../../components/DataTable';
 import {
-  PageHeader, SearchInput, Input, Select, Textarea, Spinner, Badge, StatusBadge, LoadingBlock, ErrorState, Tabs, useDebounced
+  PageHeader, SearchInput, Input, Select, Textarea, Spinner, Badge, StatusBadge, LoadingBlock, ErrorState, Tabs, useDebounced,
+  ImageUpload, ImageThumbnail,
 } from '../../components/ui';
 import { fmtDate } from '../../lib/format';
 
@@ -41,6 +42,10 @@ export function StylesPage() {
 
       <DataTable
         columns={[
+          { key: 'image_url', header: 'Photo', width: '56px',
+            render: (r: any) => (
+              <ImageThumbnail url={r.image_url} alt={r.style_code} title={`${r.style_code} — ${r.style_name}`} size="md" />
+            ) },
           { key: 'style_code', header: 'Style code', sortable: true,
             render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.style_code}</span> },
           { key: 'style_name', header: 'Name', sortable: true,
@@ -112,6 +117,7 @@ export function StyleDetailPage() {
         buyer_id: v.buyer_id || null, buyer_style_ref: v.buyer_style_ref || null,
         season: v.season || null, size_group_id: v.size_group_id || null,
         fabric_id: v.fabric_id || null, description: v.description || null,
+        image_url: v.image_url || null,
         status_id: v.status_id || null, is_active: v.is_active ?? 1, colorIds,
       };
       const res = isNew
@@ -146,7 +152,14 @@ export function StyleDetailPage() {
     <>
       <PageHeader
         breadcrumb={['Master Data', 'Styles']}
-        title={isNew ? 'New Style' : d?.style_code ?? 'Style'}
+        title={
+          <div className="flex items-center gap-3">
+            {!isNew && v.image_url && (
+              <ImageThumbnail url={v.image_url} alt={d?.style_code} title={`${d?.style_code} — ${d?.style_name}`} size="md" />
+            )}
+            <span>{isNew ? 'New Style' : d?.style_code ?? 'Style'}</span>
+          </div>
+        }
         subtitle={isNew ? 'Define a buyer style and its colourways' : d?.style_name}
         actions={<>
           <button className="btn-secondary" onClick={() => nav('/masters/styles')}>
@@ -169,31 +182,47 @@ export function StyleDetailPage() {
 
       {(isNew || tab === 'details') && (
         <>
-          <div className="card mb-4 p-4">
-            <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2 lg:grid-cols-3">
-              <Input label="Style code" required value={v.style_code ?? ''} disabled={!editable}
-                onChange={(e) => set('style_code', e.target.value)} error={errors.style_code} />
-              <Input label="Style name" required value={v.style_name ?? ''} disabled={!editable}
-                onChange={(e) => set('style_name', e.target.value)} error={errors.style_name} />
-              <Select label="Product" required options={toOptions(products.data)} placeholder="— Select product —"
-                value={v.product_id ?? ''} disabled={!editable}
-                onChange={(e) => set('product_id', e.target.value)} error={errors.product_id} />
-              <Select label="Buyer" options={toOptions(buyers.data)} placeholder="— Select buyer —"
-                value={v.buyer_id ?? ''} disabled={!editable} onChange={(e) => set('buyer_id', e.target.value)} />
-              <Input label="Buyer style ref" value={v.buyer_style_ref ?? ''} disabled={!editable}
-                onChange={(e) => set('buyer_style_ref', e.target.value)} />
-              <Input label="Season" placeholder="e.g. SS26" value={v.season ?? ''} disabled={!editable}
-                onChange={(e) => set('season', e.target.value)} />
-              <Select label="Size group" options={toOptions(sizeGroups.data)} placeholder="— Select —"
-                value={v.size_group_id ?? ''} disabled={!editable}
-                onChange={(e) => set('size_group_id', e.target.value)}
-                hint="Required before SKUs can be generated" />
-              <Select label="Body fabric" options={toOptions(fabrics.data)} placeholder="— Select —"
-                value={v.fabric_id ?? ''} disabled={!editable} onChange={(e) => set('fabric_id', e.target.value)} />
-              <Select label="Status" options={toPlainOptions(statuses.data)} placeholder="— Select —"
-                value={v.status_id ?? ''} disabled={!editable} onChange={(e) => set('status_id', e.target.value)} />
-              <Textarea className="sm:col-span-2 lg:col-span-3" label="Description" value={v.description ?? ''}
-                disabled={!editable} onChange={(e) => set('description', e.target.value)} />
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 mb-4">
+            {/* Left 2 Cols: Main Metadata Form */}
+            <div className="card p-4 lg:col-span-2">
+              <h3 className="mb-3 text-[13px] font-bold uppercase tracking-wider text-slate-700">Style Specifications</h3>
+              <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2">
+                <Input label="Style code" required value={v.style_code ?? ''} disabled={!editable}
+                  onChange={(e) => set('style_code', e.target.value)} error={errors.style_code} />
+                <Input label="Style name" required value={v.style_name ?? ''} disabled={!editable}
+                  onChange={(e) => set('style_name', e.target.value)} error={errors.style_name} />
+                <Select label="Product" required options={toOptions(products.data)} placeholder="— Select product —"
+                  value={v.product_id ?? ''} disabled={!editable}
+                  onChange={(e) => set('product_id', e.target.value)} error={errors.product_id} />
+                <Select label="Buyer" options={toOptions(buyers.data)} placeholder="— Select buyer —"
+                  value={v.buyer_id ?? ''} disabled={!editable} onChange={(e) => set('buyer_id', e.target.value)} />
+                <Input label="Buyer style ref" value={v.buyer_style_ref ?? ''} disabled={!editable}
+                  onChange={(e) => set('buyer_style_ref', e.target.value)} />
+                <Input label="Season" placeholder="e.g. SS26" value={v.season ?? ''} disabled={!editable}
+                  onChange={(e) => set('season', e.target.value)} />
+                <Select label="Size group" options={toOptions(sizeGroups.data)} placeholder="— Select —"
+                  value={v.size_group_id ?? ''} disabled={!editable}
+                  onChange={(e) => set('size_group_id', e.target.value)}
+                  hint="Required before SKUs can be generated" />
+                <Select label="Body fabric" options={toOptions(fabrics.data)} placeholder="— Select —"
+                  value={v.fabric_id ?? ''} disabled={!editable} onChange={(e) => set('fabric_id', e.target.value)} />
+                <Select label="Status" options={toPlainOptions(statuses.data)} placeholder="— Select —"
+                  value={v.status_id ?? ''} disabled={!editable} onChange={(e) => set('status_id', e.target.value)} />
+                <Textarea className="sm:col-span-2" label="Description" value={v.description ?? ''}
+                  disabled={!editable} onChange={(e) => set('description', e.target.value)} />
+              </div>
+            </div>
+
+            {/* Right 1 Col: Garment Photo & Sketch Upload */}
+            <div className="card p-4">
+              <h3 className="mb-3 text-[13px] font-bold uppercase tracking-wider text-slate-700">Garment Photo / Sketch</h3>
+              <ImageUpload
+                label=""
+                hint="PNG, JPG, WEBP or SVG up to 10MB"
+                value={v.image_url}
+                disabled={!editable}
+                onChange={(url: string | null) => set('image_url', url)}
+              />
             </div>
           </div>
 

@@ -199,6 +199,7 @@ CREATE TABLE mst_style (
   size_group_id   INT UNSIGNED,
   fabric_id       BIGINT UNSIGNED,        -- primary body fabric
   description     TEXT,
+  image_url       TEXT,                   -- garment sketch or photo URL
   sketch_doc_id   BIGINT UNSIGNED,        -- link to mst_document
   status_id       INT UNSIGNED,           -- cfg_status domain STYLE
   is_active       TINYINT(1) NOT NULL DEFAULT 1,

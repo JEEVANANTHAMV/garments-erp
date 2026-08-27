@@ -3,6 +3,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
+import path from 'path';
+import fs from 'fs';
 import { env } from './config/env.js';
 import { pingDb } from './config/db.js';
 import { authenticate } from './middleware/auth.js';
@@ -22,17 +24,25 @@ import { mrpRouter } from './modules/mrp/mrp.routes.js';
 import { cartonRouter } from './modules/packing/packing.routes.js';
 import { dashboardRouter } from './modules/dashboard/dashboard.routes.js';
 import { reportsRouter } from './modules/reports/reports.routes.js';
+import { uploadRouter } from './modules/upload/upload.routes.js';
 
 export function createApp() {
   const app = express();
 
   app.set('trust proxy', 1);
-  app.use(helmet());
+  app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.use(cors({ origin: env.corsOrigin, credentials: true }));
   app.use(compression());
-  app.use(express.json({ limit: '5mb' }));
-  app.use(express.urlencoded({ extended: true }));
+  app.use(express.json({ limit: '25mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '25mb' }));
   if (!env.isProd) app.use(morgan('dev'));
+
+  // Ensure uploads directory exists and serve static uploads
+  const uploadsDir = path.resolve(process.cwd(), 'uploads');
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+  app.use('/uploads', express.static(uploadsDir));
 
   // ---------------------------------------------------------- health
   app.get('/api/health', async (_req, res) => {
@@ -62,6 +72,7 @@ export function createApp() {
   api.use('/sales-orders', salesOrderRouter);
   api.use('/inventory', inventoryRouter);
   api.use('/mrp', mrpRouter);
+  api.use('/uploads', uploadRouter);
   api.use('/', cartonRouter);          // /packings/:id/cartons, /cartons/:id
 
   // Metadata-driven resources.

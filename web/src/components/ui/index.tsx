@@ -7,7 +7,7 @@ import clsx from 'clsx';
 
 /* ------------------------------------------------------------------ Page */
 export function PageHeader({ title, subtitle, actions, breadcrumb }: {
-  title: string; subtitle?: string; actions?: ReactNode; breadcrumb?: string[];
+  title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; breadcrumb?: string[];
 }) {
   return (
     <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
@@ -298,3 +298,5 @@ export function Tabs({ tabs, active, onChange }: {
     </div>
   );
 }
+
+export * from './ImageUpload';

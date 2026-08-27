@@ -4,6 +4,8 @@
  *
  *   npm run db:seed
  */
+import fs from 'fs';
+import path from 'path';
 import bcrypt from 'bcryptjs';
 import { pool } from '../config/db.js';
 import { env } from '../config/env.js';
@@ -514,25 +516,43 @@ async function seedDemo(ctx: {
       [companyId, code], `product ${code}`));
   }
 
+  // Ensure default style SVG sketches exist on disk
+  const sampleUploadsDir = path.resolve(process.cwd(), 'uploads', 'styles');
+  if (!fs.existsSync(sampleUploadsDir)) fs.mkdirSync(sampleUploadsDir, { recursive: true });
+
+  const SVG_MAP: Record<string, string> = {
+    'mens_crew_tee.svg': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%"><defs><linearGradient id="teeGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#3b82f6" /><stop offset="100%" stop-color="#1d4ed8" /></linearGradient></defs><rect width="200" height="200" rx="24" fill="#f1f5f9" /><g transform="translate(10, 10)"><path d="M55 40 L70 30 C80 42 100 42 110 30 L125 40 L155 60 L140 85 L125 78 L125 150 C125 153 122 155 119 155 L61 155 C58 155 55 153 55 150 L55 78 L40 85 L25 60 Z" fill="url(#teeGrad)" stroke="#1e40af" stroke-width="2" /><path d="M70 30 C80 44 100 44 110 30" fill="none" stroke="#93c5fd" stroke-width="3" stroke-linecap="round" /><path d="M30 67 L42 80 M150 67 L138 80 M57 148 L123 148" stroke="#60a5fa" stroke-width="1.5" stroke-dasharray="2,2" /></g></svg>`,
+    'mens_polo_pique.svg': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%"><defs><linearGradient id="poloGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#0284c7" /><stop offset="100%" stop-color="#0369a1" /></linearGradient></defs><rect width="200" height="200" rx="24" fill="#f0fdf4" /><g transform="translate(10, 10)"><path d="M55 42 L70 32 C80 38 100 38 110 32 L125 42 L155 62 L140 86 L125 80 L125 152 C125 155 122 157 119 157 L61 157 C58 157 55 155 55 152 L55 80 L40 86 L25 62 Z" fill="url(#poloGrad)" stroke="#075985" stroke-width="2" /><path d="M68 31 L85 46 L95 46 L112 31 C102 38 78 38 68 31 Z" fill="#0f172a" stroke="#075985" stroke-width="1.5" /><rect x="85" y="44" width="10" height="30" rx="2" fill="#0f172a" /><circle cx="90" cy="51" r="1.5" fill="#e2e8f0" /><circle cx="90" cy="60" r="1.5" fill="#e2e8f0" /></g></svg>`,
+    'unisex_hoodie.svg': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%"><defs><linearGradient id="hoodieGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#475569" /><stop offset="100%" stop-color="#1e293b" /></linearGradient></defs><rect width="200" height="200" rx="24" fill="#faf5ff" /><g transform="translate(10, 10)"><path d="M70 20 C70 10 110 10 110 20 C120 30 115 45 90 45 C65 45 60 30 70 20 Z" fill="#334155" stroke="#0f172a" stroke-width="2" /><path d="M50 46 L68 36 C80 44 100 44 112 36 L130 46 L160 88 L142 98 L126 72 L126 150 L54 150 L54 72 L38 98 L20 88 Z" fill="url(#hoodieGrad)" stroke="#0f172a" stroke-width="2" /><path d="M66 108 L114 108 L122 135 L58 135 Z" fill="#334155" stroke="#64748b" stroke-width="1.5" /></g></svg>`,
+    'womens_leggings.svg': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%"><defs><linearGradient id="legGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#881337" /><stop offset="100%" stop-color="#4c0519" /></linearGradient></defs><rect width="200" height="200" rx="24" fill="#fff1f2" /><g transform="translate(10, 10)"><rect x="62" y="25" width="56" height="14" rx="3" fill="#9f1239" stroke="#4c0519" stroke-width="1.5" /><path d="M62 39 L56 75 L62 165 C62 167 65 168 67 168 L77 168 C79 168 81 167 81 165 L89 85 L91 85 L99 165 C99 167 101 168 103 168 L113 168 C115 168 118 167 118 165 L124 75 L118 39 Z" fill="url(#legGrad)" stroke="#4c0519" stroke-width="2" /><path d="M90 40 L90 85 M64 163 L79 163 M101 163 L116 163" stroke="#f43f5e" stroke-width="1.5" stroke-dasharray="2,2" /></g></svg>`,
+    'kids_tee.svg': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%"><defs><linearGradient id="kidGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#f59e0b" /><stop offset="100%" stop-color="#d97706" /></linearGradient></defs><rect width="200" height="200" rx="24" fill="#fef3c7" /><g transform="translate(10, 10)"><path d="M58 45 L72 36 C80 46 100 46 108 36 L122 45 L148 64 L134 86 L122 79 L122 144 C122 147 119 149 116 149 L64 149 C61 149 58 147 58 144 L58 79 L46 86 L32 64 Z" fill="url(#kidGrad)" stroke="#b45309" stroke-width="2" /><circle cx="90" cy="85" r="14" fill="#ef4444" stroke="#fff" stroke-width="1.5" /></g></svg>`,
+    'mens_sweatshirt.svg': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%"><defs><linearGradient id="swtGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#059669" /><stop offset="100%" stop-color="#065f46" /></linearGradient></defs><rect width="200" height="200" rx="24" fill="#ecfdf5" /><g transform="translate(10, 10)"><path d="M52 46 L70 36 C80 44 100 44 110 36 L128 46 L158 86 L140 96 L125 72 L125 148 L55 148 L55 72 L40 96 L22 86 Z" fill="url(#swtGrad)" stroke="#064e3b" stroke-width="2" /><path d="M70 36 C80 44 100 44 110 36" fill="none" stroke="#6ee7b7" stroke-width="3" stroke-linecap="round" /><rect x="55" y="142" width="70" height="8" fill="#064e3b" /></g></svg>`,
+  };
+
+  for (const [file, content] of Object.entries(SVG_MAP)) {
+    const target = path.join(sampleUploadsDir, file);
+    if (!fs.existsSync(target)) fs.writeFileSync(target, content, 'utf-8');
+  }
+
   const styleActive = await status('STYLE', 'ACTIVE');
-  const STYLES: [string,string,string,string,string,string,string,string[]][] = [
-    ['ST-2601','Mens Crew Neck Tee','P-TSH','B001','SS26','ALPHA','F-SJ180',['BLK','WHT','NVY']],
-    ['ST-2602','Mens Polo Pique','P-POL','B002','SS26','ALPHA','F-PQ220',['NVY','WHT','GRY']],
-    ['ST-2603','Unisex Hoodie','P-HOD','B003','AW26','ALPHA','F-FL280',['BLK','GRY','OLV']],
-    ['ST-2604','Womens Leggings','P-LEG','B004','SS26','ALPHA','F-RIB200',['BLK','MRN']],
-    ['ST-2605','Kids Printed Tee','P-KID','B001','SS26','KIDS','F-SJ160',['SKY','RED','WHT']],
-    ['ST-2606','Mens Sweatshirt','P-SWT','B002','AW26','ALPHA','F-FL280',['NVY','BEG']],
+  const STYLES: [string,string,string,string,string,string,string,string[],string][] = [
+    ['ST-2601','Mens Crew Neck Tee','P-TSH','B001','SS26','ALPHA','F-SJ180',['BLK','WHT','NVY'],'/uploads/styles/mens_crew_tee.svg'],
+    ['ST-2602','Mens Polo Pique','P-POL','B002','SS26','ALPHA','F-PQ220',['NVY','WHT','GRY'],'/uploads/styles/mens_polo_pique.svg'],
+    ['ST-2603','Unisex Hoodie','P-HOD','B003','AW26','ALPHA','F-FL280',['BLK','GRY','OLV'],'/uploads/styles/unisex_hoodie.svg'],
+    ['ST-2604','Womens Leggings','P-LEG','B004','SS26','ALPHA','F-RIB200',['BLK','MRN'],'/uploads/styles/womens_leggings.svg'],
+    ['ST-2605','Kids Printed Tee','P-KID','B001','SS26','KIDS','F-SJ160',['SKY','RED','WHT'],'/uploads/styles/kids_tee.svg'],
+    ['ST-2606','Mens Sweatshirt','P-SWT','B002','AW26','ALPHA','F-FL280',['NVY','BEG'],'/uploads/styles/mens_sweatshirt.svg'],
   ];
   const styleId = new Map<string, number>();
-  for (const [code, name, prod, buyer, season, szGrp, fab, colors] of STYLES) {
+  for (const [code, name, prod, buyer, season, szGrp, fab, colors, imgUrl] of STYLES) {
     await exec(
       `INSERT INTO mst_style (company_id,style_code,style_name,product_id,buyer_id,buyer_style_ref,
-         season,size_group_id,fabric_id,description,status_id,created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-       ON DUPLICATE KEY UPDATE style_name=VALUES(style_name)`,
+         season,size_group_id,fabric_id,description,image_url,status_id,created_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+       ON DUPLICATE KEY UPDATE style_name=VALUES(style_name), image_url=VALUES(image_url)`,
       [companyId, code, name, productId.get(prod), partyId.get(buyer), `${buyer}-${code}`,
        season, sizeGroupId.get(szGrp), fabricId.get(fab),
-       `${name} for ${season} season`, styleActive, adminId]);
+       `${name} for ${season} season`, imgUrl, styleActive, adminId]);
     const sid = await id(`SELECT id FROM mst_style WHERE company_id=? AND style_code=?`,
       [companyId, code], `style ${code}`);
     styleId.set(code, sid);

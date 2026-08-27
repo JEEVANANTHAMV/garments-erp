@@ -19,6 +19,7 @@ const styleSchema = z.object({
   size_group_id: s.id(),
   fabric_id: s.id(),
   description: s.text(),
+  image_url: s.nullableStr(2000),
   status_id: s.id(),
   is_active: s.bool(),
   colorIds: z.array(z.coerce.number().int().positive()).optional(),

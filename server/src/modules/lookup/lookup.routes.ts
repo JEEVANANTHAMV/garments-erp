@@ -39,7 +39,7 @@ const LOOKUPS: Record<string, LookupDef> = {
   fabrics:     { sql: `SELECT id, fabric_code AS code, fabric_name AS label, base_uom, std_rate FROM mst_fabric WHERE company_id=? AND is_active=1 AND is_deleted=0 ORDER BY fabric_name`, scoped: true },
   trims:       { sql: `SELECT id, trim_code AS code, trim_name AS label, base_uom, std_rate, trim_type FROM mst_trim WHERE company_id=? AND is_active=1 AND is_deleted=0 ORDER BY trim_name`, scoped: true },
   products:    { sql: `SELECT id, product_code AS code, product_name AS label, product_type, default_uom FROM mst_product WHERE company_id=? AND is_active=1 AND is_deleted=0 ORDER BY product_name`, scoped: true },
-  styles:      { sql: `SELECT id, style_code AS code, style_name AS label, buyer_id, product_id, size_group_id, fabric_id FROM mst_style WHERE company_id=? AND is_active=1 AND is_deleted=0 ORDER BY style_code`, scoped: true },
+  styles:      { sql: `SELECT id, style_code AS code, style_name AS label, image_url, buyer_id, product_id, size_group_id, fabric_id FROM mst_style WHERE company_id=? AND is_active=1 AND is_deleted=0 ORDER BY style_code`, scoped: true },
 
   'sales-orders': { sql: `SELECT id, so_no AS code, CONCAT(so_no,' — ',COALESCE(buyer_po_no,'')) AS label, buyer_id, currency_id FROM trx_sales_order WHERE company_id=? AND is_deleted=0 ORDER BY so_date DESC LIMIT 500`, scoped: true },
   'production-orders': { sql: `SELECT id, po_prod_no AS code, po_prod_no AS label, so_id, style_id, order_qty FROM trx_production_order WHERE company_id=? ORDER BY id DESC LIMIT 500`, scoped: true },
