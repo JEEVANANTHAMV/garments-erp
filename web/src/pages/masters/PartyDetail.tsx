@@ -246,6 +246,11 @@ export function PartyDetailPage() {
         nature_of_business,
       } = gstData;
 
+      const indiaId =
+        (countries || []).find(
+          (c: any) => c.iso2 === 'IN' || /india/i.test(c.country_name || c.name || '')
+        )?.id || form.country_id || 101;
+
       setForm((prev: any) => {
         const newAddresses = [...(prev.addresses || [])];
 
@@ -259,13 +264,14 @@ export function PartyDetailPage() {
             city: principal_address.city || '',
             district: principal_address.district || '',
             state: principal_address.state || '',
-            country_id: 101, // India
+            country_id: indiaId,
             pincode: principal_address.pincode || '',
             is_default: 1,
             is_active: 1,
-            remarks: Array.isArray(nature_of_business) && nature_of_business.length > 0
-              ? `Nature of Business: ${nature_of_business.join(', ')}`
-              : '',
+            remarks:
+              Array.isArray(nature_of_business) && nature_of_business.length > 0
+                ? `Nature of Business: ${nature_of_business.join(', ')}`
+                : '',
           };
 
           if (existingRegIdx >= 0) {
@@ -285,13 +291,14 @@ export function PartyDetailPage() {
               city: ad.city || '',
               district: ad.district || '',
               state: ad.state || '',
-              country_id: 101,
+              country_id: indiaId,
               pincode: ad.pincode || '',
               is_default: 0,
               is_active: 1,
-              remarks: Array.isArray(ad.nature_of_business) && ad.nature_of_business.length > 0
-                ? `Nature: ${ad.nature_of_business.join(', ')}`
-                : '',
+              remarks:
+                Array.isArray(ad.nature_of_business) && ad.nature_of_business.length > 0
+                  ? `Nature: ${ad.nature_of_business.join(', ')}`
+                  : '',
             };
             const exists = newAddresses.some(
               (a) => a.pincode === addAddr.pincode && a.address_line1 === addAddr.address_line1
@@ -303,9 +310,10 @@ export function PartyDetailPage() {
         }
 
         const resolvedPan = pan || (cleanGst.length === 15 ? cleanGst.substring(2, 12) : prev.pan);
-        const resolvedPartyName = prev.party_name && prev.party_name.trim() !== ''
-          ? prev.party_name
-          : (trade_name || legal_name || '');
+        const resolvedPartyName =
+          prev.party_name && prev.party_name.trim() !== ''
+            ? prev.party_name
+            : trade_name || legal_name || '';
 
         return {
           ...prev,
@@ -315,7 +323,7 @@ export function PartyDetailPage() {
           short_name: trade_name || prev.short_name,
           party_name: resolvedPartyName,
           party_type: 'DOMESTIC',
-          country_id: 101,
+          country_id: indiaId,
           addresses: newAddresses,
         };
       });
@@ -682,12 +690,7 @@ export function PartyDetailPage() {
                     <Sparkles size={16} />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-xs font-bold text-slate-900 tracking-tight">GSTIN Quick Lookup & Auto-Fill</h4>
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                        Live Sandbox API
-                      </span>
-                    </div>
+                    <h4 className="text-xs font-bold text-slate-900 tracking-tight">GSTIN Quick Lookup & Auto-Fill</h4>
                     <p className="text-[11px] text-slate-500">
                       Enter a 15-digit GSTIN to auto-fetch Legal Name, Trade Name, PAN, and Registered Business Address.
                     </p>
