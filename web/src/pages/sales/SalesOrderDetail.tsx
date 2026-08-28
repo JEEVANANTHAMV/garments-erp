@@ -45,6 +45,7 @@ export default function SalesOrderDetail() {
 
   const [tab, setTab] = useState('lines');
   const [head, setHead] = useState<Record<string, any>>({
+    order_type: 'EXPORT',
     so_date: today(),
     incoterm: 'FOB',
     payment_term: 'LC',
@@ -275,6 +276,18 @@ export default function SalesOrderDetail() {
           <Input label="IO number (Internal Order)" placeholder="e.g. IO-2601"
             value={head.io_no ?? ''} onChange={(e) => setH('io_no', e.target.value)}
             disabled={!editable} error={errors.io_no} />
+          <Select
+            label="Order Type"
+            options={[
+              { value: 'SAMPLE', label: 'Sample' },
+              { value: 'PROJECTION', label: 'Projection' },
+              { value: 'DOMESTIC', label: 'Domestic' },
+              { value: 'EXPORT', label: 'Export' },
+            ]}
+            value={head.order_type ?? 'EXPORT'}
+            onChange={(e) => setH('order_type', e.target.value)}
+            disabled={!editable}
+          />
           <Input label="SO date" type="date" required value={head.so_date ?? ''}
             onChange={(e) => setH('so_date', e.target.value)} disabled={!editable} error={errors.so_date} />
           <Select label="Buyer" required options={toOptions(buyers.data)} placeholder="— Select buyer —"

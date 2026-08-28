@@ -19,11 +19,13 @@ export default function SalesOrdersPage() {
   const debounced = useDebounced(search);
   const [buyerId, setBuyerId] = useState('');
   const [state, setState] = useState('');
-
+  const [orderType, setOrderType] = useState('');
   const buyers = useLookup('buyers');
+
   const list = useList<any>('sales-orders', {
     page, pageSize: 25, q: debounced || undefined,
     buyer_id: buyerId || undefined, approval_state: state || undefined,
+    order_type: orderType || undefined,
   });
 
   return (
@@ -35,9 +37,16 @@ export default function SalesOrdersPage() {
           </button>)} />
 
       <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <SearchInput value={search} onChange={setSearch} placeholder="Search SO no, buyer PO, LC…" />
+        <SearchInput value={search} onChange={setSearch} placeholder="Search SO no, IO no, buyer PO…" />
         <Select placeholder="All buyers" options={toOptions(buyers.data)}
           value={buyerId} onChange={(e) => { setBuyerId(e.target.value); setPage(1); }} />
+        <Select placeholder="All Order Types" options={[
+          { value: 'SAMPLE', label: 'Sample' },
+          { value: 'PROJECTION', label: 'Projection' },
+          { value: 'DOMESTIC', label: 'Domestic' },
+          { value: 'EXPORT', label: 'Export' },
+        ]}
+          value={orderType} onChange={(e) => { setOrderType(e.target.value); setPage(1); }} />
         <Select placeholder="All states" options={STATES.map((s) => ({ value: s, label: s.replace(/_/g, ' ') }))}
           value={state} onChange={(e) => { setState(e.target.value); setPage(1); }} />
       </div>
@@ -47,8 +56,15 @@ export default function SalesOrdersPage() {
           { key: 'so_no', header: 'SO / IO no', sortable: true,
             render: (r: any) => (
               <div>
-                <Link to={`/sales/orders/${r.id}`}
-                  className="font-mono text-[12px] font-bold text-brand-700 hover:underline">{r.so_no}</Link>
+                <div className="flex items-center gap-1.5">
+                  <Link to={`/sales/orders/${r.id}`}
+                    className="font-mono text-[12px] font-bold text-brand-700 hover:underline">{r.so_no}</Link>
+                  {r.order_type && (
+                    <span className="rounded bg-slate-100 px-1.5 py-0.2 text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                      {r.order_type}
+                    </span>
+                  )}
+                </div>
                 {r.io_no && (
                   <p className="text-[11px] font-mono text-slate-500 font-medium">IO: {r.io_no}</p>
                 )}

@@ -199,6 +199,7 @@ CREATE TABLE trx_sales_order (
   branch_id       BIGINT UNSIGNED,
   so_no           VARCHAR(40) NOT NULL,
   io_no           VARCHAR(60),            -- factory / internal order number
+  order_type      ENUM('SAMPLE','PROJECTION','DOMESTIC','EXPORT') DEFAULT 'EXPORT',
   so_date         DATE NOT NULL,
   buyer_id        BIGINT UNSIGNED NOT NULL,
   agent_id        BIGINT UNSIGNED,

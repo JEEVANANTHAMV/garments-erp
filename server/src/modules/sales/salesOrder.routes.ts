@@ -12,6 +12,7 @@ export const salesOrderRouter = Router();
 
 const INCOTERM = ['FOB','CIF','CFR','EXW','DDP','DAP','FCA'] as const;
 const PAYMENT  = ['LC','TT_ADVANCE','TT_AGAINST_DOC','DA','DP','CAD','OPEN'] as const;
+const ORDER_TYPES = ['SAMPLE','PROJECTION','DOMESTIC','EXPORT'] as const;
 
 const skuLineSchema = z.object({
   sku_id: s.idReq(),
@@ -36,6 +37,7 @@ const soSchema = z.object({
   branch_id: s.id(),
   so_no: s.nullableStr(40),
   io_no: s.nullableStr(60),
+  order_type: z.enum(ORDER_TYPES).nullish(),
   so_date: s.date(),
   buyer_id: s.idReq(),
   agent_id: s.id(),
@@ -211,14 +213,14 @@ salesOrderRouter.post('/', requirePermission('SALES_ORDER.CREATE'), ah(async (re
 
     const r = await txExecute(tx,
       `INSERT INTO trx_sales_order
-        (company_id, branch_id, so_no, io_no, so_date, buyer_id, agent_id, quotation_id,
+        (company_id, branch_id, so_no, io_no, order_type, so_date, buyer_id, agent_id, quotation_id,
          buyer_po_no, buyer_po_date, season, currency_id, exchange_rate, incoterm,
          port_of_loading, destination_country, destination_port, payment_term,
          lc_no, lc_date, lc_expiry, excess_pct, tolerance_plus_pct, tolerance_minus_pct,
          ship_date, delivery_date, status_id,
          approval_state, remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'DRAFT',?,?)`,
-      [req.user!.companyId, h.branch_id ?? null, soNo, h.io_no ?? null, h.so_date ?? null, h.buyer_id,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'DRAFT',?,?)`,
+      [req.user!.companyId, h.branch_id ?? null, soNo, h.io_no ?? null, h.order_type ?? 'EXPORT', h.so_date ?? null, h.buyer_id,
        h.agent_id ?? null, h.quotation_id ?? null, h.buyer_po_no ?? null, h.buyer_po_date ?? null,
        h.season ?? null, h.currency_id, h.exchange_rate ?? 1, h.incoterm ?? 'FOB',
        h.port_of_loading ?? null, h.destination_country ?? null, h.destination_port ?? null,
