@@ -27,7 +27,8 @@ const LOOKUPS: Record<string, LookupDef> = {
   suppliers:   { sql: `SELECT id, party_code AS code, party_name AS label, currency_id FROM mst_party WHERE company_id=? AND is_supplier=1 AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },
   vendors:     { sql: `SELECT id, party_code AS code, party_name AS label FROM mst_party WHERE company_id=? AND is_vendor=1 AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },
   agents:      { sql: `SELECT id, party_code AS code, party_name AS label FROM mst_party WHERE company_id=? AND is_agent=1 AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },
-  parties:     { sql: `SELECT id, party_code AS code, party_name AS label, is_buyer, is_supplier, is_vendor, is_agent FROM mst_party WHERE company_id=? AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },
+  merchandisers: { sql: `SELECT id, party_code AS code, party_name AS label FROM mst_party WHERE company_id=? AND is_merchandiser=1 AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },
+  parties:     { sql: `SELECT id, party_code AS code, party_name AS label, is_buyer, is_supplier, is_vendor, is_agent, is_merchandiser FROM mst_party WHERE company_id=? AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },
 
   colors:      { sql: `SELECT id, color_code AS code, color_name AS label, hex_value FROM mst_color WHERE company_id=? AND is_active=1 ORDER BY color_name`, scoped: true },
   'size-groups': { sql: `SELECT id, group_code AS code, group_name AS label FROM mst_size_group WHERE company_id=? ORDER BY group_name`, scoped: true },

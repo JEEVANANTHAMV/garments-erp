@@ -46,4 +46,13 @@ CALL add_col_if_missing('mst_party','commission_payout', "VARCHAR(120)");
 CALL add_col_if_missing('mst_party','agent_territory',   "VARCHAR(120)");
 CALL add_col_if_missing('mst_party','agent_remarks',     "VARCHAR(500)");
 
+-- ---- Merchandiser-specific (is_merchandiser = 1) --------------------
+CALL add_col_if_missing('mst_party','is_merchandiser',          "TINYINT(1) NOT NULL DEFAULT 0");
+CALL add_col_if_missing('mst_party','merchandiser_type',        "VARCHAR(50)");
+CALL add_col_if_missing('mst_party','merchandiser_division',    "VARCHAR(100)");
+CALL add_col_if_missing('mst_party','merchandiser_brands',      "VARCHAR(255)");
+CALL add_col_if_missing('mst_party','merchandiser_target',      "DECIMAL(18,2) DEFAULT 0");
+CALL add_col_if_missing('mst_party','merchandiser_commission',  "DECIMAL(6,3) DEFAULT 0");
+CALL add_col_if_missing('mst_party','merchandiser_remarks',     "VARCHAR(500)");
+
 DROP PROCEDURE IF EXISTS add_col_if_missing;

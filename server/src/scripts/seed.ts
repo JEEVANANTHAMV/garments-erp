@@ -317,6 +317,7 @@ async function seedDemo(ctx: {
     ['V002','Lakshmi Embroidery Unit',{is_vendor:1},'DOMESTIC','IN',null,'15 DAYS CREDIT'],
     ['V003','Perfect Wash Company',{is_vendor:1},'DOMESTIC','IN',null,'30 DAYS CREDIT'],
     ['A001','EuroSource Buying Agents',{is_agent:1},'EXPORT','GB',null,'ON REALIZATION'],
+    ['M001','Apex Garment Sourcing & Merchandising',{is_merchandiser:1},'EXPORT','IN',null,'30 DAYS CREDIT'],
     ['F001','Blue Dart Logistics',{is_vendor:1},'DOMESTIC','IN',null,'IMMEDIATE'],
   ];
   const partyId = new Map<string, number>();
@@ -327,11 +328,11 @@ async function seedDemo(ctx: {
       : inrId;
     await exec(
       `INSERT INTO mst_party (company_id,party_code,party_name,is_customer,is_buyer,is_supplier,
-         is_vendor,is_agent,party_type,country_id,currency_id,payment_terms,credit_days,email,created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         is_vendor,is_agent,is_merchandiser,party_type,country_id,currency_id,payment_terms,credit_days,email,created_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
        ON DUPLICATE KEY UPDATE party_name=VALUES(party_name)`,
       [companyId, code, name, flags.is_customer ?? 0, flags.is_buyer ?? 0, flags.is_supplier ?? 0,
-       flags.is_vendor ?? 0, flags.is_agent ?? 0, ptype, cid, curId, terms, 45,
+       flags.is_vendor ?? 0, flags.is_agent ?? 0, (flags as any).is_merchandiser ?? 0, ptype, cid, curId, terms, 45,
        `contact@${code.toLowerCase()}.example.com`, adminId]);
     partyId.set(code, await id(`SELECT id FROM mst_party WHERE company_id=? AND party_code=?`,
       [companyId, code], `party ${code}`));
@@ -641,6 +642,18 @@ async function seedDemo(ctx: {
     );
     if (!colOrderType) {
       await exec(`ALTER TABLE trx_sales_order ADD COLUMN order_type ENUM('SAMPLE','PROJECTION','DOMESTIC','EXPORT') DEFAULT 'EXPORT' AFTER io_no`);
+    }
+    const colMerch = await one<{ COLUMN_NAME: string }>(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='mst_party' AND COLUMN_NAME='is_merchandiser'`
+    );
+    if (!colMerch) {
+      await exec(`ALTER TABLE mst_party ADD COLUMN is_merchandiser TINYINT(1) NOT NULL DEFAULT 0 AFTER is_agent`);
+      await exec(`ALTER TABLE mst_party ADD COLUMN merchandiser_type VARCHAR(50)`);
+      await exec(`ALTER TABLE mst_party ADD COLUMN merchandiser_division VARCHAR(100)`);
+      await exec(`ALTER TABLE mst_party ADD COLUMN merchandiser_brands VARCHAR(255)`);
+      await exec(`ALTER TABLE mst_party ADD COLUMN merchandiser_target DECIMAL(18,2) DEFAULT 0`);
+      await exec(`ALTER TABLE mst_party ADD COLUMN merchandiser_commission DECIMAL(6,3) DEFAULT 0`);
+      await exec(`ALTER TABLE mst_party ADD COLUMN merchandiser_remarks VARCHAR(500)`);
     }
   } catch (err) {
     // Column already exists or permission issue

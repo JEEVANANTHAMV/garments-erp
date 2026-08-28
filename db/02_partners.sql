@@ -17,6 +17,7 @@ CREATE TABLE mst_party (
   is_supplier     TINYINT(1) NOT NULL DEFAULT 0,
   is_vendor       TINYINT(1) NOT NULL DEFAULT 0,  -- job-work / CMT contractor
   is_agent        TINYINT(1) NOT NULL DEFAULT 0,
+  is_merchandiser TINYINT(1) NOT NULL DEFAULT 0,
   party_type      ENUM('DOMESTIC','EXPORT','BOTH') NOT NULL DEFAULT 'EXPORT',
   country_id      SMALLINT UNSIGNED,
   currency_id     SMALLINT UNSIGNED,             -- default trading currency
@@ -72,6 +73,14 @@ CREATE TABLE mst_party (
   commission_payout   VARCHAR(120),                -- e.g. On realisation, Monthly
   agent_territory     VARCHAR(120),                -- region or buyer group represented
   agent_remarks       VARCHAR(500),
+
+  -- ---- Merchandiser-specific (is_merchandiser = 1) --------------------------
+  merchandiser_type   VARCHAR(50),                 -- SAMPLING / PRODUCTION / SOURCING / BRAND_LIAISON / SENIOR
+  merchandiser_division VARCHAR(100),              -- KNITS / WOVEN / KIDSWEAR / MENSWEAR / WOMENSWEAR / ACTIVEWEAR
+  merchandiser_brands VARCHAR(255),                -- Brand accounts managed (Next, Zara, H&M, etc.)
+  merchandiser_target DECIMAL(18,2) DEFAULT 0,     -- Annual target turnover in INR
+  merchandiser_commission DECIMAL(6,3) DEFAULT 0,  -- Performance incentive / commission %
+  merchandiser_remarks VARCHAR(500),
   credit_limit    DECIMAL(18,2) DEFAULT 0,
   credit_days     INT DEFAULT 0,
   email           VARCHAR(120),

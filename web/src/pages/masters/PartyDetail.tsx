@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   Building2, MapPin, Users, Landmark, ShoppingBag,
   Save, ArrowLeft, Plus, Trash2, ShieldCheck, FileText,
-  Truck, Factory, Percent, AlertCircle, Search, CheckCircle2, Sparkles
+  Truck, Factory, Percent, Shirt, AlertCircle, Search, CheckCircle2, Sparkles
 } from 'lucide-react';
 import { useItem, useSave } from '../../hooks/useResource';
 import { useLookup } from '../../hooks/useLookup';
@@ -171,6 +171,15 @@ export function PartyDetailPage() {
     agent_territory: '',
     agent_remarks: '',
 
+    // Merchandiser-specific
+    is_merchandiser: 0,
+    merchandiser_type: 'PRODUCTION',
+    merchandiser_division: 'Knitted Apparel',
+    merchandiser_brands: '',
+    merchandiser_target: 0,
+    merchandiser_commission: 0,
+    merchandiser_remarks: '',
+
     is_active: 1,
     addresses: [] as AddressItem[],
     contacts: [] as ContactItem[],
@@ -200,19 +209,20 @@ export function PartyDetailPage() {
   ----------------------------------------------------------------*/
   const isBuyerRole = !!form.is_buyer || !!form.is_customer;
   const hasAnyRole =
-    isBuyerRole || !!form.is_supplier || !!form.is_vendor || !!form.is_agent;
+    isBuyerRole || !!form.is_supplier || !!form.is_vendor || !!form.is_agent || !!form.is_merchandiser;
 
   // If the user unticks a role while its tab is open, fall back to General
   // so the form never sits on a tab that no longer exists.
   useEffect(() => {
     const stillValid =
-      (tab === 'buyer'    && isBuyerRole) ||
-      (tab === 'supplier' && !!form.is_supplier) ||
-      (tab === 'jobwork'  && !!form.is_vendor) ||
-      (tab === 'agent'    && !!form.is_agent) ||
-      !['buyer', 'supplier', 'jobwork', 'agent'].includes(tab);
+      (tab === 'buyer'        && isBuyerRole) ||
+      (tab === 'supplier'     && !!form.is_supplier) ||
+      (tab === 'jobwork'      && !!form.is_vendor) ||
+      (tab === 'agent'        && !!form.is_agent) ||
+      (tab === 'merchandiser' && !!form.is_merchandiser) ||
+      !['buyer', 'supplier', 'jobwork', 'agent', 'merchandiser'].includes(tab);
     if (!stillValid) setTab('general');
-  }, [tab, isBuyerRole, form.is_supplier, form.is_vendor, form.is_agent]);
+  }, [tab, isBuyerRole, form.is_supplier, form.is_vendor, form.is_agent, form.is_merchandiser]);
 
   const [gstInput, setGstInput] = useState('');
   const [isGstLoading, setIsGstLoading] = useState(false);
@@ -411,6 +421,8 @@ export function PartyDetailPage() {
         jobwork_capacity_day: Number(form.jobwork_capacity_day) || 0,
         jobwork_rate: Number(form.jobwork_rate) || 0,
         commission_pct: Number(form.commission_pct) || 0,
+        merchandiser_target: Number(form.merchandiser_target) || 0,
+        merchandiser_commission: Number(form.merchandiser_commission) || 0,
       };
 
       const res = await saveMutation.mutateAsync({ id: isNew ? null : Number(id), body: payload });
@@ -580,6 +592,7 @@ export function PartyDetailPage() {
     ...(form.is_supplier ? [{ key: 'supplier', label: 'Supplier Details', icon: Truck }] : []),
     ...(form.is_vendor   ? [{ key: 'jobwork',  label: 'Job Work Details', icon: Factory }] : []),
     ...(form.is_agent    ? [{ key: 'agent',    label: 'Agent Details',    icon: Percent }] : []),
+    ...(form.is_merchandiser ? [{ key: 'merchandiser', label: 'Merchandiser Details', icon: Shirt }] : []),
   ];
 
   return (
@@ -808,6 +821,7 @@ export function PartyDetailPage() {
                   { key: 'is_supplier', label: 'Supplier', color: 'emerald' },
                   { key: 'is_vendor', label: 'Job Worker / CMT', color: 'purple' },
                   { key: 'is_agent', label: 'Buying Agent', color: 'amber' },
+                  { key: 'is_merchandiser', label: 'Merchandiser', color: 'sky' },
                 ].map((r) => (
                   <label key={r.key} className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
                     <input
@@ -830,6 +844,7 @@ export function PartyDetailPage() {
                       form.is_supplier && 'Supplier Details',
                       form.is_vendor && 'Job Work Details',
                       form.is_agent && 'Agent Details',
+                      form.is_merchandiser && 'Merchandiser Details',
                     ].filter(Boolean).join(' · ')}
                   </span>
                 </p>
@@ -2207,6 +2222,88 @@ export function PartyDetailPage() {
                 value={form.agent_remarks || ''}
                 onChange={(e) => handleField('agent_remarks', e.target.value)}
                 placeholder="Agreement reference and validity, exclusivity, escalation contacts..."
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab 10: Merchandiser Details — shown when "Merchandiser" is ticked */}
+      {tab === 'merchandiser' && (
+        <div className="card p-5 space-y-6">
+          <div>
+            <h3 className="text-sm font-bold text-slate-800 border-b border-surface-border pb-2">
+              Merchandiser Role &amp; Operations
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-3">
+              <div>
+                <label className="label">Merchandiser Category</label>
+                <select
+                  className="input"
+                  value={form.merchandiser_type || 'PRODUCTION'}
+                  onChange={(e) => handleField('merchandiser_type', e.target.value)}
+                >
+                  <option value="PRODUCTION">Production Merchandiser</option>
+                  <option value="SAMPLING">Sampling Merchandiser</option>
+                  <option value="SOURCING">Sourcing Merchandiser</option>
+                  <option value="BRAND_LIAISON">Brand Liaison / Key Account Merchant</option>
+                  <option value="SENIOR">Senior Merchant / Group Merchant</option>
+                </select>
+              </div>
+              <div>
+                <label className="label">Division / Department</label>
+                <input
+                  className="input"
+                  value={form.merchandiser_division || ''}
+                  onChange={(e) => handleField('merchandiser_division', e.target.value)}
+                  placeholder="e.g. Knitted Apparel, Kidswear, Wovens"
+                />
+              </div>
+              <div>
+                <label className="label">Brand Accounts Handled</label>
+                <input
+                  className="input"
+                  value={form.merchandiser_brands || ''}
+                  onChange={(e) => handleField('merchandiser_brands', e.target.value)}
+                  placeholder="e.g. Next, H&M, Zara, Primark"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
+              <div>
+                <label className="label">Annual Target Turnover (₹)</label>
+                <input
+                  type="number"
+                  min={0}
+                  className="input font-mono"
+                  value={form.merchandiser_target ?? 0}
+                  onChange={(e) => handleField('merchandiser_target', e.target.value)}
+                  placeholder="e.g. 50000000"
+                />
+              </div>
+              <div>
+                <label className="label">Incentive / Commission %</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  max={100}
+                  className="input font-mono"
+                  value={form.merchandiser_commission ?? 0}
+                  onChange={(e) => handleField('merchandiser_commission', e.target.value)}
+                  placeholder="e.g. 1.5"
+                />
+              </div>
+            </div>
+
+            <div className="pt-4">
+              <label className="label">Merchandiser Remarks &amp; Special Instructions</label>
+              <textarea
+                className="input h-24"
+                value={form.merchandiser_remarks || ''}
+                onChange={(e) => handleField('merchandiser_remarks', e.target.value)}
+                placeholder="Product expertise, sampling lead times, factory floor assignment, communication guidelines..."
               />
             </div>
           </div>

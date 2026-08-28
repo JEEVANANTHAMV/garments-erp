@@ -29,6 +29,7 @@ export function PartiesPage() {
           {r.is_supplier ? <Badge tone="green">Supplier</Badge> : null}
           {r.is_vendor ? <Badge tone="violet">Vendor</Badge> : null}
           {r.is_agent ? <Badge tone="amber">Agent</Badge> : null}
+          {r.is_merchandiser ? <Badge tone="sky">Merchandiser</Badge> : null}
         </div>) },
       { key: 'country_name', header: 'Country' },
       { key: 'payment_terms', header: 'Payment terms' },
@@ -42,6 +43,8 @@ export function PartiesPage() {
       { name: 'is_buyer', label: 'Buyer', options: yesNo },
       { name: 'is_supplier', label: 'Supplier', options: yesNo },
       { name: 'is_vendor', label: 'Vendor', options: yesNo },
+      { name: 'is_agent', label: 'Agent', options: yesNo },
+      { name: 'is_merchandiser', label: 'Merchandiser', options: yesNo },
       { name: 'is_draft', label: 'Draft Status', options: [{ value: 1, label: 'Drafts' }, { value: 0, label: 'Finalized' }] },
       { name: 'country_id', label: 'Country', lookup: 'countries' },
     ]}
@@ -68,6 +71,7 @@ export function PartiesPage() {
       { name: 'is_supplier', label: 'Is supplier', type: 'checkbox' },
       { name: 'is_vendor', label: 'Is job-work vendor', type: 'checkbox' },
       { name: 'is_agent', label: 'Is agent', type: 'checkbox' },
+      { name: 'is_merchandiser', label: 'Is merchandiser', type: 'checkbox' },
       activeField,
     ]} />;
 }
