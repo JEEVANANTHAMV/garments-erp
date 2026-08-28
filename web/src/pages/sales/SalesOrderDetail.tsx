@@ -268,10 +268,13 @@ export default function SalesOrderDetail() {
           <span className="h-2 w-2 rounded-full bg-brand-500" />
           <h4 className="text-[12px] font-bold uppercase tracking-wider text-slate-700">Order &amp; Buyer Details</h4>
         </div>
-        <div className="grid grid-cols-1 gap-x-4 gap-y-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-x-4 gap-y-3 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           <Input label="SO number" hint={isNew ? 'Blank to auto-generate' : undefined}
             value={head.so_no ?? ''} onChange={(e) => setH('so_no', e.target.value)}
             disabled={!editable} error={errors.so_no} />
+          <Input label="IO number (Internal Order)" placeholder="e.g. IO-2601"
+            value={head.io_no ?? ''} onChange={(e) => setH('io_no', e.target.value)}
+            disabled={!editable} error={errors.io_no} />
           <Input label="SO date" type="date" required value={head.so_date ?? ''}
             onChange={(e) => setH('so_date', e.target.value)} disabled={!editable} error={errors.so_date} />
           <Select label="Buyer" required options={toOptions(buyers.data)} placeholder="— Select buyer —"

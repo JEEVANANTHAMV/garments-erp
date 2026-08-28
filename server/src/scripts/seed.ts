@@ -628,6 +628,18 @@ async function seedDemo(ctx: {
     ['SO-00005','B001','2026-07-01','2026-10-18','SS26','USD',0,
       [['ST-2605','SKY',5000,3.95],['ST-2605','RED',5000,3.95]]],
   ];
+  // Ensure io_no column exists in trx_sales_order
+  try {
+    const col = await one<{ COLUMN_NAME: string }>(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_sales_order' AND COLUMN_NAME='io_no'`
+    );
+    if (!col) {
+      await exec(`ALTER TABLE trx_sales_order ADD COLUMN io_no VARCHAR(60) AFTER so_no`);
+    }
+  } catch (err) {
+    // Column already exists or permission issue
+  }
+
   const soId = new Map<string, number>();
   for (const [soNo, buyer, soDate, shipDate, season, curCode, useAgent, lines] of ORDERS) {
     const existing = await one<{id:number}>(`SELECT id FROM trx_sales_order WHERE company_id=? AND so_no=?`,
@@ -637,13 +649,14 @@ async function seedDemo(ctx: {
     const curId = await id(`SELECT id FROM cfg_currency WHERE code=?`, [curCode], `currency ${curCode}`);
     const buyerRow = await one<{ country_id: number }>(`SELECT country_id FROM mst_party WHERE id=?`,
       [partyId.get(buyer)]);
+    const ioNo = `IO-26${soNo.slice(-3)}`;
 
     const r = await exec(
-      `INSERT INTO trx_sales_order (company_id,branch_id,so_no,so_date,buyer_id,agent_id,buyer_po_no,
+      `INSERT INTO trx_sales_order (company_id,branch_id,so_no,io_no,so_date,buyer_id,agent_id,buyer_po_no,
          buyer_po_date,season,currency_id,exchange_rate,incoterm,port_of_loading,destination_country,
          destination_port,payment_term,ship_date,delivery_date,status_id,approval_state,created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,'FOB','Tuticorin',?,'Rotterdam','LC',?,?,?,'APPROVED',?)`,
-      [companyId, hoBranch, soNo, soDate, partyId.get(buyer), useAgent ? partyId.get('A001') : null,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'FOB','Tuticorin',?,'Rotterdam','LC',?,?,?,'APPROVED',?)`,
+      [companyId, hoBranch, soNo, ioNo, soDate, partyId.get(buyer), useAgent ? partyId.get('A001') : null,
        `PO-${buyer}-${soNo.slice(-4)}`, soDate, season, curId, curCode === 'USD' ? 83.2 : curCode === 'EUR' ? 90.1 : 105.4,
        buyerRow?.country_id ?? null, shipDate, shipDate, soApproved, adminId]);
     const sid = r.insertId;

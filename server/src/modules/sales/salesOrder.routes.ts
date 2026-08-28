@@ -35,6 +35,7 @@ const lineSchema = z.object({
 const soSchema = z.object({
   branch_id: s.id(),
   so_no: s.nullableStr(40),
+  io_no: s.nullableStr(60),
   so_date: s.date(),
   buyer_id: s.idReq(),
   agent_id: s.id(),
@@ -138,10 +139,12 @@ salesOrderRouter.get('/', requirePermission('SALES_ORDER.VIEW'), ah(async (req, 
   const where = ['t.company_id = ?', 't.is_deleted = 0'];
   const params: unknown[] = [req.user!.companyId];
   if (q.q) {
-    where.push('(t.so_no LIKE ? OR t.buyer_po_no LIKE ? OR t.lc_no LIKE ?)');
-    params.push(`%${q.q}%`, `%${q.q}%`, `%${q.q}%`);
+    where.push('(t.so_no LIKE ? OR t.io_no LIKE ? OR t.buyer_po_no LIKE ? OR b.party_name LIKE ?)');
+    params.push(`%${q.q}%`, `%${q.q}%`, `%${q.q}%`, `%${q.q}%`);
   }
-  for (const k of ['buyer_id', 'status_id', 'approval_state', 'season'] as const) {
+  if (q.buyer_id) { where.push('t.buyer_id = ?'); params.push(q.buyer_id); }
+  if (q.approval_state) { where.push('t.approval_state = ?'); params.push(q.approval_state); }
+  for (const k of ['branch_id', 'agent_id', 'status_id', 'currency_id', 'season'] as const) {
     if ((q as any)[k]) { where.push(`t.${k} = ?`); params.push((q as any)[k]); }
   }
   if (q.dateFrom) { where.push('t.so_date >= ?'); params.push(q.dateFrom); }
@@ -208,14 +211,14 @@ salesOrderRouter.post('/', requirePermission('SALES_ORDER.CREATE'), ah(async (re
 
     const r = await txExecute(tx,
       `INSERT INTO trx_sales_order
-        (company_id, branch_id, so_no, so_date, buyer_id, agent_id, quotation_id,
+        (company_id, branch_id, so_no, io_no, so_date, buyer_id, agent_id, quotation_id,
          buyer_po_no, buyer_po_date, season, currency_id, exchange_rate, incoterm,
          port_of_loading, destination_country, destination_port, payment_term,
          lc_no, lc_date, lc_expiry, excess_pct, tolerance_plus_pct, tolerance_minus_pct,
          ship_date, delivery_date, status_id,
          approval_state, remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'DRAFT',?,?)`,
-      [req.user!.companyId, h.branch_id ?? null, soNo, h.so_date ?? null, h.buyer_id,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'DRAFT',?,?)`,
+      [req.user!.companyId, h.branch_id ?? null, soNo, h.io_no ?? null, h.so_date ?? null, h.buyer_id,
        h.agent_id ?? null, h.quotation_id ?? null, h.buyer_po_no ?? null, h.buyer_po_date ?? null,
        h.season ?? null, h.currency_id, h.exchange_rate ?? 1, h.incoterm ?? 'FOB',
        h.port_of_loading ?? null, h.destination_country ?? null, h.destination_port ?? null,

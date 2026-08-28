@@ -44,9 +44,16 @@ export default function SalesOrdersPage() {
 
       <DataTable
         columns={[
-          { key: 'so_no', header: 'SO no', sortable: true,
-            render: (r: any) => <Link to={`/sales/orders/${r.id}`}
-              className="font-mono text-[12px] font-medium text-brand-700 hover:underline">{r.so_no}</Link> },
+          { key: 'so_no', header: 'SO / IO no', sortable: true,
+            render: (r: any) => (
+              <div>
+                <Link to={`/sales/orders/${r.id}`}
+                  className="font-mono text-[12px] font-bold text-brand-700 hover:underline">{r.so_no}</Link>
+                {r.io_no && (
+                  <p className="text-[11px] font-mono text-slate-500 font-medium">IO: {r.io_no}</p>
+                )}
+              </div>
+            ) },
           { key: 'so_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.so_date) },
           { key: 'buyer_name', header: 'Buyer', render: (r: any) => (
             <div><p className="font-medium text-slate-800">{r.buyer_name}</p>
