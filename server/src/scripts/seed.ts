@@ -34,8 +34,33 @@ async function id(sql: string, p: any[], what: string): Promise<number> {
 
 const log = (msg: string) => console.log(`[seed] ${msg}`);
 
+async function ensureColumn(table: string, col: string, ddl: string) {
+  try {
+    const exists = await one<{ COLUMN_NAME: string }>(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?`,
+      [table, col]
+    );
+    if (!exists) {
+      await exec(`ALTER TABLE \`${table}\` ADD COLUMN \`${col}\` ${ddl}`);
+    }
+  } catch (e) {
+    // ignore
+  }
+}
+
 async function main() {
   log('starting...');
+
+  // Ensure recent schema columns exist before any seeding runs
+  await ensureColumn('trx_sales_order', 'io_no', 'VARCHAR(60) AFTER so_no');
+  await ensureColumn('trx_sales_order', 'order_type', "ENUM('SAMPLE','PROJECTION','DOMESTIC','EXPORT') DEFAULT 'EXPORT' AFTER io_no");
+  await ensureColumn('mst_party', 'is_merchandiser', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER is_agent');
+  await ensureColumn('mst_party', 'merchandiser_type', 'VARCHAR(50)');
+  await ensureColumn('mst_party', 'merchandiser_division', 'VARCHAR(100)');
+  await ensureColumn('mst_party', 'merchandiser_brands', 'VARCHAR(255)');
+  await ensureColumn('mst_party', 'merchandiser_target', 'DECIMAL(18,2) DEFAULT 0');
+  await ensureColumn('mst_party', 'merchandiser_commission', 'DECIMAL(6,3) DEFAULT 0');
+  await ensureColumn('mst_party', 'merchandiser_remarks', 'VARCHAR(500)');
 
   // ===================================================== 1. GLOBAL LOOKUPS
   for (const [iso2, iso3, name, dial] of COUNTRIES) {
@@ -629,36 +654,6 @@ async function seedDemo(ctx: {
     ['SO-00005','B001','2026-07-01','2026-10-18','SS26','USD',0,
       [['ST-2605','SKY',5000,3.95],['ST-2605','RED',5000,3.95]]],
   ];
-  // Ensure io_no and order_type columns exist in trx_sales_order
-  try {
-    const colIo = await one<{ COLUMN_NAME: string }>(
-      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_sales_order' AND COLUMN_NAME='io_no'`
-    );
-    if (!colIo) {
-      await exec(`ALTER TABLE trx_sales_order ADD COLUMN io_no VARCHAR(60) AFTER so_no`);
-    }
-    const colOrderType = await one<{ COLUMN_NAME: string }>(
-      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_sales_order' AND COLUMN_NAME='order_type'`
-    );
-    if (!colOrderType) {
-      await exec(`ALTER TABLE trx_sales_order ADD COLUMN order_type ENUM('SAMPLE','PROJECTION','DOMESTIC','EXPORT') DEFAULT 'EXPORT' AFTER io_no`);
-    }
-    const colMerch = await one<{ COLUMN_NAME: string }>(
-      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='mst_party' AND COLUMN_NAME='is_merchandiser'`
-    );
-    if (!colMerch) {
-      await exec(`ALTER TABLE mst_party ADD COLUMN is_merchandiser TINYINT(1) NOT NULL DEFAULT 0 AFTER is_agent`);
-      await exec(`ALTER TABLE mst_party ADD COLUMN merchandiser_type VARCHAR(50)`);
-      await exec(`ALTER TABLE mst_party ADD COLUMN merchandiser_division VARCHAR(100)`);
-      await exec(`ALTER TABLE mst_party ADD COLUMN merchandiser_brands VARCHAR(255)`);
-      await exec(`ALTER TABLE mst_party ADD COLUMN merchandiser_target DECIMAL(18,2) DEFAULT 0`);
-      await exec(`ALTER TABLE mst_party ADD COLUMN merchandiser_commission DECIMAL(6,3) DEFAULT 0`);
-      await exec(`ALTER TABLE mst_party ADD COLUMN merchandiser_remarks VARCHAR(500)`);
-    }
-  } catch (err) {
-    // Column already exists or permission issue
-  }
-
   const soId = new Map<string, number>();
   for (const [soNo, buyer, soDate, shipDate, season, curCode, useAgent, lines] of ORDERS) {
     const existing = await one<{id:number}>(`SELECT id FROM trx_sales_order WHERE company_id=? AND so_no=?`,
