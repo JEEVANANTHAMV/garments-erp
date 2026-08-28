@@ -71,9 +71,16 @@ export default function SalesOrdersPage() {
               </div>
             ) },
           { key: 'so_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.so_date) },
-          { key: 'buyer_name', header: 'Buyer', render: (r: any) => (
-            <div><p className="font-medium text-slate-800">{r.buyer_name}</p>
-              {r.buyer_po_no && <p className="text-[11px] text-slate-500">PO: {r.buyer_po_no}</p>}</div>) },
+          { key: 'buyer_name', header: 'Buyer & Merchandiser', render: (r: any) => (
+            <div>
+              <p className="font-medium text-slate-800">{r.buyer_name}</p>
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
+                {r.buyer_po_no && <span>PO: {r.buyer_po_no}</span>}
+                {r.merchandiser_name && (
+                  <span className="font-medium text-sky-700">· {r.merchandiser_name}</span>
+                )}
+              </div>
+            </div>) },
           { key: 'season', header: 'Season' },
           { key: 'order_qty', header: 'Order qty', align: 'right', sortable: true,
             render: (r: any) => (

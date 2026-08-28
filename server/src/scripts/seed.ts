@@ -54,6 +54,7 @@ async function main() {
   // Ensure recent schema columns exist before any seeding runs
   await ensureColumn('trx_sales_order', 'io_no', 'VARCHAR(60) AFTER so_no');
   await ensureColumn('trx_sales_order', 'order_type', "ENUM('SAMPLE','PROJECTION','DOMESTIC','EXPORT') DEFAULT 'EXPORT' AFTER io_no");
+  await ensureColumn('trx_sales_order', 'merchandiser_id', 'BIGINT UNSIGNED AFTER agent_id');
   await ensureColumn('mst_party', 'is_merchandiser', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER is_agent');
   await ensureColumn('mst_party', 'merchandiser_type', 'VARCHAR(50)');
   await ensureColumn('mst_party', 'merchandiser_division', 'VARCHAR(100)');

@@ -61,6 +61,7 @@ export default function SalesOrderDetail() {
 
   const buyers = useLookup('buyers');
   const agents = useLookup('agents');
+  const merchandisers = useLookup('merchandisers');
   const currencies = useLookup('currencies');
   const countries = useLookup('countries');
   const branches = useLookup('branches');
@@ -295,6 +296,8 @@ export default function SalesOrderDetail() {
             disabled={!editable} error={errors.buyer_id} />
           <Select label="Agent" options={toOptions(agents.data)} placeholder="— None —"
             value={head.agent_id ?? ''} onChange={(e) => setH('agent_id', e.target.value)} disabled={!editable} />
+          <Select label="Merchandiser" options={toOptions(merchandisers.data)} placeholder="— Select merchandiser —"
+            value={head.merchandiser_id ?? ''} onChange={(e) => setH('merchandiser_id', e.target.value)} disabled={!editable} />
           <Input label="Buyer PO no" value={head.buyer_po_no ?? ''}
             onChange={(e) => setH('buyer_po_no', e.target.value)} disabled={!editable} />
           <Input label="Buyer PO date" type="date" value={head.buyer_po_date ?? ''}

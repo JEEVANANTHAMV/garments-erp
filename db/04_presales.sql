@@ -203,6 +203,7 @@ CREATE TABLE trx_sales_order (
   so_date         DATE NOT NULL,
   buyer_id        BIGINT UNSIGNED NOT NULL,
   agent_id        BIGINT UNSIGNED,
+  merchandiser_id BIGINT UNSIGNED,
   quotation_id    BIGINT UNSIGNED,
   buyer_po_no     VARCHAR(60),            -- buyer's purchase order number
   buyer_po_date   DATE,
