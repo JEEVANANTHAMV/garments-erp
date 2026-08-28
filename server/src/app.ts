@@ -25,6 +25,7 @@ import { cartonRouter } from './modules/packing/packing.routes.js';
 import { dashboardRouter } from './modules/dashboard/dashboard.routes.js';
 import { reportsRouter } from './modules/reports/reports.routes.js';
 import { uploadRouter } from './modules/upload/upload.routes.js';
+import { gstRouter } from './modules/gst/gst.routes.js';
 
 export function createApp() {
   const app = express();
@@ -73,6 +74,7 @@ export function createApp() {
   api.use('/inventory', inventoryRouter);
   api.use('/mrp', mrpRouter);
   api.use('/uploads', uploadRouter);
+  api.use('/gst', gstRouter);
   api.use('/', cartonRouter);          // /packings/:id/cartons, /cartons/:id
 
   // Metadata-driven resources.

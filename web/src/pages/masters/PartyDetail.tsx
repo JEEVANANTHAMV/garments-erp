@@ -3,12 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   Building2, MapPin, Users, Landmark, ShoppingBag,
   Save, ArrowLeft, Plus, Trash2, ShieldCheck, FileText,
-  Truck, Factory, Percent, AlertCircle
+  Truck, Factory, Percent, AlertCircle, Search, CheckCircle2, Sparkles
 } from 'lucide-react';
 import { useItem, useSave } from '../../hooks/useResource';
 import { useLookup } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
 import { Spinner } from '../../components/ui';
+import { http } from '../../lib/api';
 
 interface AddressItem {
   id?: number;
@@ -212,6 +213,130 @@ export function PartyDetailPage() {
       !['buyer', 'supplier', 'jobwork', 'agent'].includes(tab);
     if (!stillValid) setTab('general');
   }, [tab, isBuyerRole, form.is_supplier, form.is_vendor, form.is_agent]);
+
+  const [gstInput, setGstInput] = useState('');
+  const [isGstLoading, setIsGstLoading] = useState(false);
+  const [gstFeedback, setGstFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const handleGstLookup = async () => {
+    const cleanGst = gstInput.trim().toUpperCase().replace(/\s+/g, '');
+    if (!cleanGst || cleanGst.length !== 15) {
+      toast('Please enter a valid 15-character GSTIN (e.g. 33AALCD8217G1ZO)', 'error');
+      return;
+    }
+
+    setIsGstLoading(true);
+    setGstFeedback(null);
+
+    try {
+      const res: any = await http.post('/gst/search', { gstin: cleanGst });
+      const gstData = res?.data;
+
+      if (!gstData) {
+        throw new Error('No GST information returned for this GSTIN');
+      }
+
+      const {
+        legal_name,
+        trade_name,
+        pan,
+        principal_address,
+        additional_addresses,
+        status,
+        nature_of_business,
+      } = gstData;
+
+      setForm((prev: any) => {
+        const newAddresses = [...(prev.addresses || [])];
+
+        if (principal_address) {
+          const existingRegIdx = newAddresses.findIndex((a) => a.address_type === 'REGISTERED');
+          const regAddr: AddressItem = {
+            address_name: 'Principal Place of Business',
+            address_type: 'REGISTERED',
+            address_line1: principal_address.address_line1 || '',
+            address_line2: principal_address.address_line2 || '',
+            city: principal_address.city || '',
+            district: principal_address.district || '',
+            state: principal_address.state || '',
+            country_id: 101, // India
+            pincode: principal_address.pincode || '',
+            is_default: 1,
+            is_active: 1,
+            remarks: Array.isArray(nature_of_business) && nature_of_business.length > 0
+              ? `Nature of Business: ${nature_of_business.join(', ')}`
+              : '',
+          };
+
+          if (existingRegIdx >= 0) {
+            newAddresses[existingRegIdx] = { ...newAddresses[existingRegIdx], ...regAddr };
+          } else {
+            newAddresses.unshift(regAddr);
+          }
+        }
+
+        if (Array.isArray(additional_addresses) && additional_addresses.length > 0) {
+          additional_addresses.forEach((ad: any, idx: number) => {
+            const addAddr: AddressItem = {
+              address_name: ad.address_name || `Additional Place ${idx + 1}`,
+              address_type: ad.address_type || 'FACTORY',
+              address_line1: ad.address_line1 || '',
+              address_line2: ad.address_line2 || '',
+              city: ad.city || '',
+              district: ad.district || '',
+              state: ad.state || '',
+              country_id: 101,
+              pincode: ad.pincode || '',
+              is_default: 0,
+              is_active: 1,
+              remarks: Array.isArray(ad.nature_of_business) && ad.nature_of_business.length > 0
+                ? `Nature: ${ad.nature_of_business.join(', ')}`
+                : '',
+            };
+            const exists = newAddresses.some(
+              (a) => a.pincode === addAddr.pincode && a.address_line1 === addAddr.address_line1
+            );
+            if (!exists) {
+              newAddresses.push(addAddr);
+            }
+          });
+        }
+
+        const resolvedPan = pan || (cleanGst.length === 15 ? cleanGst.substring(2, 12) : prev.pan);
+        const resolvedPartyName = prev.party_name && prev.party_name.trim() !== ''
+          ? prev.party_name
+          : (trade_name || legal_name || '');
+
+        return {
+          ...prev,
+          gstin: cleanGst,
+          pan: resolvedPan,
+          legal_name: legal_name || prev.legal_name,
+          short_name: trade_name || prev.short_name,
+          party_name: resolvedPartyName,
+          party_type: 'DOMESTIC',
+          country_id: 101,
+          addresses: newAddresses,
+        };
+      });
+
+      setSelectedAddressIdx(0);
+
+      const displayName = trade_name || legal_name || 'Business Partner';
+      const statusText = status ? ` (Status: ${status})` : '';
+      setGstFeedback({
+        type: 'success',
+        message: `Successfully fetched GST details for ${cleanGst}: "${displayName}"${statusText}. Legal name, trade name, PAN, GSTIN, and business address have been autofilled.`,
+      });
+      toast(`GST Details fetched for ${cleanGst}`, 'success');
+    } catch (err: any) {
+      const msg = err?.message || 'Failed to fetch GST details. Please check the GSTIN and try again.';
+      setGstFeedback({ type: 'error', message: msg });
+      toast(msg, 'error');
+    } finally {
+      setIsGstLoading(false);
+    }
+  };
 
   const handleSave = async (mode: 'save' | 'saveAndNew' | 'draft' = 'save') => {
     const isDraft = mode === 'draft';
@@ -549,7 +674,86 @@ export function PartyDetailPage() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           {/* Basic Info */}
           <div className="card p-5 lg:col-span-2 space-y-4">
-            <h3 className="text-sm font-bold text-slate-800 border-b border-surface-border pb-2">
+            {/* Quick GST Lookup & Auto-fill */}
+            <div className="rounded-xl border border-brand-200 bg-gradient-to-br from-brand-50/80 via-indigo-50/40 to-slate-50 p-4 shadow-xs space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-brand-600 text-white flex items-center justify-center shadow-xs">
+                    <Sparkles size={16} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-xs font-bold text-slate-900 tracking-tight">GSTIN Quick Lookup & Auto-Fill</h4>
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        Live Sandbox API
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Enter a 15-digit GSTIN to auto-fetch Legal Name, Trade Name, PAN, and Registered Business Address.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    maxLength={15}
+                    value={gstInput}
+                    onChange={(e) => setGstInput(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        void handleGstLookup();
+                      }
+                    }}
+                    placeholder="Enter 15-digit GSTIN (e.g. 33AALCD8217G1ZO)"
+                    className="input font-mono font-bold tracking-wider uppercase text-brand-900 text-xs pl-8 placeholder:font-normal placeholder:tracking-normal"
+                  />
+                  <FileText className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleGstLookup()}
+                  disabled={isGstLoading || !gstInput.trim()}
+                  className="btn-primary flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold shrink-0 disabled:opacity-60"
+                >
+                  {isGstLoading ? (
+                    <>
+                      <Spinner size={14} />
+                      <span>Fetching GST…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Search size={14} />
+                      <span>Fetch GST Details</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {gstFeedback && (
+                <div
+                  className={`p-3 rounded-lg text-xs flex items-start gap-2.5 ${
+                    gstFeedback.type === 'success'
+                      ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
+                      : 'bg-red-50 text-red-900 border border-red-200'
+                  }`}
+                >
+                  {gstFeedback.type === 'success' ? (
+                    <CheckCircle2 size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertCircle size={16} className="text-red-600 shrink-0 mt-0.5" />
+                  )}
+                  <div className="flex-1 text-[11px] leading-relaxed">
+                    {gstFeedback.message}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <h3 className="text-sm font-bold text-slate-800 border-b border-surface-border pb-2 pt-1">
               Basic Information
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
