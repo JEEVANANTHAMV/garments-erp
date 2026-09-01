@@ -74,11 +74,14 @@ export function ReportsPage() {
 }
 
 /* ---------------------------------------------------------- Audit trail */
+import { Modal } from '../../components/ui';
+
 export function AuditPage() {
   const { page, setPage, search, setSearch } = useListState({ key: 'id', dir: 'desc' });
   const debounced = useDebounced(search);
   const [table, setTable] = useState('');
   const [action, setAction] = useState('');
+  const [inspectRow, setInspectRow] = useState<any | null>(null);
 
   const list = useList<any>('reports/audit-log', {
     page, pageSize: 50, q: debounced || undefined,
@@ -86,6 +89,35 @@ export function AuditPage() {
   });
 
   const ACTIONS = ['INSERT', 'UPDATE', 'DELETE'];
+
+  const formatJson = (val: any) => {
+    if (!val) return '—';
+    if (typeof val === 'object') {
+      try {
+        return JSON.stringify(val, null, 2);
+      } catch {
+        return String(val);
+      }
+    }
+    try {
+      const parsed = JSON.parse(val);
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      return String(val);
+    }
+  };
+
+  const previewJson = (val: any) => {
+    if (!val) return '—';
+    if (typeof val === 'object') {
+      try {
+        return JSON.stringify(val);
+      } catch {
+        return String(val);
+      }
+    }
+    return String(val);
+  };
 
   return (
     <>
@@ -97,7 +129,10 @@ export function AuditPage() {
           options={[
             'trx_sales_order', 'mst_style', 'trx_production_order', 'trx_mrp_run',
             'trx_material_issue', 'mst_party', 'trx_voucher', 'trx_export_invoice',
-            'trx_shipment', 'trx_qc_inspection',
+            'trx_shipment', 'trx_qc_inspection', 'trx_jobwork_challan', 'trx_jobwork_receipt',
+            'trx_jobwork_in', 'trx_daily_production_plan', 'trx_daily_output',
+            'trx_sewing_operation', 'trx_line_allocation', 'trx_supplier_bill',
+            'trx_purchase_return', 'trx_stock_transfer', 'trx_fg_receipt', 'trx_production_cost',
           ].map((v) => ({ value: v, label: v }))} />
         <Select placeholder="All actions" value={action} onChange={(e) => { setAction(e.target.value); setPage(1); }}
           options={ACTIONS.map((v) => ({ value: v, label: v }))} />
@@ -117,20 +152,77 @@ export function AuditPage() {
           { key: 'record_id', header: 'Record', align: 'right',
             render: (r: any) => <span className="font-mono text-[12px] text-slate-500">#{r.record_id}</span> },
           { key: 'changed_by_name', header: 'Changed by',
-            render: (r: any) => <span className="font-medium text-slate-700">{r.changed_by_name}</span> },
+            render: (r: any) => <span className="font-medium text-slate-700">{r.changed_by_name || `User #${r.changed_by ?? '?'}`}</span> },
           { key: 'changed_at', header: 'Timestamp', sortable: true,
             render: (r: any) => <span className="tabular-nums text-[12px] text-slate-500">{fmtDateTime(r.changed_at)}</span> },
-          { key: 'old_values', header: 'Old values', className: 'max-w-[280px]',
-            render: (r: any) => r.old_values
-              ? <code className="block max-w-[280px] truncate text-[10.5px] text-slate-400">{r.old_values}</code>
-              : <span className="text-slate-300">—</span> },
+          { key: 'details', header: 'Snapshot Preview', className: 'max-w-[280px]',
+            render: (r: any) => {
+              const text = r.new_values ? previewJson(r.new_values) : (r.old_values ? previewJson(r.old_values) : '—');
+              return (
+                <code className="block max-w-[280px] truncate text-[10.5px] text-slate-500">
+                  {text}
+                </code>
+              );
+            } },
         ]}
         rows={list.data?.data ?? []}
         loading={list.isLoading} error={list.error} onRetry={() => void list.refetch()}
         rowKey={(r) => r.id}
+        onRowClick={(r) => setInspectRow(r)}
         pagination={list.data?.pagination} onPage={setPage}
         emptyTitle="No audit entries yet"
         emptyMessage="Every INSERT, UPDATE and DELETE will appear here." />
+
+      {inspectRow && (
+        <Modal
+          open={!!inspectRow}
+          onClose={() => setInspectRow(null)}
+          title={`Audit Entry #${inspectRow.id} — ${inspectRow.action} on ${inspectRow.table_name} (#${inspectRow.record_id})`}
+          size="lg"
+          footer={<button className="btn-secondary" onClick={() => setInspectRow(null)}>Close</button>}>
+          <div className="space-y-4 text-xs">
+            <div className="grid grid-cols-2 gap-3 rounded-lg border border-surface-border bg-slate-50 p-3 text-[12px]">
+              <div>
+                <span className="font-semibold text-slate-500">Changed By:</span>{' '}
+                <span className="text-slate-800">{inspectRow.changed_by_name || `User #${inspectRow.changed_by}`}</span>
+              </div>
+              <div>
+                <span className="font-semibold text-slate-500">IP Address:</span>{' '}
+                <span className="font-mono text-slate-800">{inspectRow.ip_address || '—'}</span>
+              </div>
+              <div>
+                <span className="font-semibold text-slate-500">Timestamp:</span>{' '}
+                <span className="text-slate-800">{fmtDateTime(inspectRow.changed_at)}</span>
+              </div>
+              <div>
+                <span className="font-semibold text-slate-500">Action:</span>{' '}
+                <Badge tone={inspectRow.action === 'INSERT' ? 'green' : inspectRow.action === 'DELETE' ? 'red' : 'amber'}>
+                  {inspectRow.action}
+                </Badge>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              {inspectRow.old_values && (
+                <div>
+                  <h4 className="mb-1.5 font-semibold text-slate-700">Previous Values (Before)</h4>
+                  <pre className="max-h-80 overflow-auto rounded-lg bg-slate-900 p-3 font-mono text-[11px] leading-relaxed text-slate-200">
+                    {formatJson(inspectRow.old_values)}
+                  </pre>
+                </div>
+              )}
+              {inspectRow.new_values && (
+                <div className={inspectRow.old_values ? '' : 'lg:col-span-2'}>
+                  <h4 className="mb-1.5 font-semibold text-slate-700">New Values (After)</h4>
+                  <pre className="max-h-80 overflow-auto rounded-lg bg-slate-900 p-3 font-mono text-[11px] leading-relaxed text-emerald-300">
+                    {formatJson(inspectRow.new_values)}
+                  </pre>
+                </div>
+              )}
+            </div>
+          </div>
+        </Modal>
+      )}
     </>
   );
 }
