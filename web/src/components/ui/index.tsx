@@ -42,7 +42,7 @@ export function Field({ label, error, required, hint, children, className }: Fie
       )}
       {children}
       {hint && !error && <p className="mt-1 text-[11px] text-slate-400">{hint}</p>}
-      {error && <p className="help-error">{error}</p>}
+      {error && <p className="help-error">{typeof error === 'string' ? error : (typeof error === 'object' ? JSON.stringify(error) : String(error))}</p>}
     </div>
   );
 }

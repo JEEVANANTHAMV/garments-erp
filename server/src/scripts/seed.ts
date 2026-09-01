@@ -1930,6 +1930,53 @@ async function seedDemo(ctx: {
         [companyId, adminId, title, body]);
     }
   }
+
+  // ------------------------------------------------------- sync number series counters
+  const seriesSync: [string, string][] = [
+    ['JW_CHALLAN', 'trx_jobwork_challan'],
+    ['JW_RECEIPT', 'trx_jobwork_receipt'],
+    ['JW_IN', 'trx_jobwork_in'],
+    ['JW_INVOICE', 'trx_jobwork_invoice'],
+    ['PURCHASE_RET', 'trx_purchase_return'],
+    ['SUPP_BILL', 'trx_supplier_bill'],
+    ['STOCK_TRF', 'trx_stock_transfer'],
+    ['FG_RECEIPT', 'trx_fg_receipt'],
+    ['PROD_COST', 'trx_production_cost'],
+    ['LINE_ALLOC', 'trx_line_allocation'],
+    ['SEW_OP', 'trx_sewing_operation'],
+    ['DAILY_PLAN', 'trx_daily_production_plan'],
+    ['DAILY_OUTPUT', 'trx_daily_output'],
+    ['SALES_ORDER', 'trx_sales_order'],
+    ['PURCHASE_ORDER', 'trx_purchase_order'],
+    ['GRN', 'trx_grn'],
+    ['PROD_ORDER', 'trx_production_order'],
+    ['GATE_INWARD', 'trx_gate_inward'],
+    ['GATE_OUTWARD', 'trx_gate_outward'],
+    ['PACKING', 'trx_packing'],
+    ['DISPATCH', 'trx_dispatch'],
+    ['COMMERCIAL_INVOICE', 'trx_commercial_invoice'],
+    ['SHIPPING_BILL', 'trx_shipping_bill'],
+    ['BOM', 'trx_bom'],
+    ['COSTING', 'trx_costing'],
+    ['ENQUIRY', 'trx_enquiry'],
+    ['QUOTATION', 'trx_quotation'],
+    ['MRP', 'trx_mrp_run'],
+    ['PRODUCTION_PLAN', 'trx_production_plan'],
+  ];
+  for (const [docType, tableName] of seriesSync) {
+    try {
+      const cntRow = await one<{ cnt: number }>(`SELECT COUNT(*) AS cnt FROM \`${tableName}\` WHERE company_id=?`, [companyId]);
+      if (cntRow && cntRow.cnt > 0) {
+        await exec(
+          `UPDATE cfg_number_series SET next_number = GREATEST(next_number, ?) WHERE company_id=? AND doc_type=?`,
+          [cntRow.cnt + 1, companyId, docType]
+        );
+      }
+    } catch {
+      // ignore
+    }
+  }
+  log('synchronized document number series counters');
 }
 
 try {

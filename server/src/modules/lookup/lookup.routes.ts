@@ -24,6 +24,7 @@ const LOOKUPS: Record<string, LookupDef> = {
   'financial-years': { sql: `SELECT id, fy_code AS code, fy_code AS label, start_date, end_date, is_current FROM mst_financial_year WHERE company_id=? ORDER BY start_date DESC`, scoped: true },
 
   buyers:      { sql: `SELECT id, party_code AS code, party_name AS label, currency_id, country_id, payment_terms FROM mst_party WHERE company_id=? AND is_buyer=1 AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },
+  customers:   { sql: `SELECT id, party_code AS code, party_name AS label, currency_id, country_id, payment_terms FROM mst_party WHERE company_id=? AND (is_buyer=1 OR is_vendor=1) AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },
   suppliers:   { sql: `SELECT id, party_code AS code, party_name AS label, currency_id FROM mst_party WHERE company_id=? AND is_supplier=1 AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },
   vendors:     { sql: `SELECT id, party_code AS code, party_name AS label FROM mst_party WHERE company_id=? AND is_vendor=1 AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },
   agents:      { sql: `SELECT id, party_code AS code, party_name AS label FROM mst_party WHERE company_id=? AND is_agent=1 AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },

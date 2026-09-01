@@ -101,5 +101,6 @@ export function DataTable<T>({
 function renderValue(v: unknown): ReactNode {
   if (v === null || v === undefined || v === '') return <span className="text-slate-300">—</span>;
   if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+  if (typeof v === 'object') return <span className="text-slate-500 text-xs font-mono">{JSON.stringify(v)}</span>;
   return String(v);
 }

@@ -13,9 +13,14 @@ let seq = 0;
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<Toast[]>([]);
 
-  const toast = useCallback((message: string, kind: Kind = 'success') => {
+  const toast = useCallback((message: unknown, kind: Kind = 'success') => {
     const id = ++seq;
-    setItems((s) => [...s, { id, kind, message }]);
+    const msgStr = typeof message === 'string'
+      ? message
+      : (message && typeof message === 'object' && 'message' in message
+          ? String((message as any).message)
+          : (typeof message === 'object' ? JSON.stringify(message) : String(message ?? '')));
+    setItems((s) => [...s, { id, kind, message: msgStr }]);
     setTimeout(() => setItems((s) => s.filter((t) => t.id !== id)), 4500);
   }, []);
 
