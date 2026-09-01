@@ -147,10 +147,12 @@ export function buildResourceRouter(cfg: ResourceConfig): Router {
     const { clause, params } = buildWhere(req, opts);
 
     let orderBy = defaultSort;
-    if (opts.sort && IDENT.test(opts.sort) && (sortable.includes(opts.sort) || opts.sort === 'id')) {
-      orderBy = `t.${opts.sort}`;
-    }
     const dir = opts.dir === 'asc' ? 'ASC' : 'DESC';
+    if (opts.sort && IDENT.test(opts.sort) && (sortable.includes(opts.sort) || opts.sort === 'id')) {
+      orderBy = `t.${opts.sort} ${dir}`;
+    } else if (!/\b(asc|desc)\b/i.test(orderBy)) {
+      orderBy = `${orderBy} ${dir}`;
+    }
     const offset = (opts.page - 1) * opts.pageSize;
 
     const [rows, countRow] = await Promise.all([
@@ -158,7 +160,7 @@ export function buildResourceRouter(cfg: ResourceConfig): Router {
         `SELECT t.* ${selectExtra ? ', ' + selectExtra : ''}
            FROM ${table} t ${joins}
           WHERE ${clause}
-          ORDER BY ${orderBy} ${dir}
+          ORDER BY ${orderBy}
           LIMIT ${opts.pageSize} OFFSET ${offset}`,
         params,
       ),
