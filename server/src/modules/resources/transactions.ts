@@ -202,6 +202,7 @@ export const transactionResources: ResourceConfig[] = [
       f('prod_order_id', s.idReq()), f('stage_id', s.idReq()), f('txn_no', s.nullableStr(40)),
       f('txn_date', s.date()), f('from_unit', s.id()), f('to_unit', s.id()), f('vendor_id', s.id()),
       f('input_qty', s.int()), f('output_qty', s.int()), f('rejected_qty', s.int()),
+      f('rework_qty', s.int()), f('shortage_qty', s.int()),
       f('received_qty', s.int()), f('jobwork_rate', s.dec()), f('status_id', s.id()),
       f('remarks', s.nullableStr(500)),
     ],
@@ -224,7 +225,8 @@ export const transactionResources: ResourceConfig[] = [
       f('cut_no', s.nullableStr(40)), f('cut_date', s.date()), f('prod_order_id', s.idReq()),
       f('fabric_id', s.id()), f('batch_id', s.id()), f('lay_length_m', s.dec()),
       f('ply_count', s.int()), f('marker_ref', s.nullableStr(60)), f('marker_eff_pct', s.dec()),
-      f('fabric_used_kg', s.dec()), f('total_pieces', s.int()), f('status_id', s.id()),
+      f('fabric_used_kg', s.dec()), f('total_pieces', s.int()),
+      f('rework_qty', s.int()), f('shortage_qty', s.int()), f('status_id', s.id()),
     ],
   },
   {
@@ -241,6 +243,7 @@ export const transactionResources: ResourceConfig[] = [
       f('print_type', s.enumReq(['SCREEN','DIGITAL','SUBLIMATION','RUBBER','DISCHARGE','FOIL','PUFF','OTHER'])),
       f('placement', s.nullableStr(80)), f('no_of_colors', s.int()), f('vendor_id', s.id()),
       f('input_qty', s.int()), f('output_qty', s.int()), f('rejected_qty', s.int()),
+      f('rework_qty', s.int()), f('shortage_qty', s.int()),
       f('rate', s.dec()), f('status_id', s.id()),
     ],
   },
@@ -257,7 +260,8 @@ export const transactionResources: ResourceConfig[] = [
       f('emb_no', s.nullableStr(40)), f('emb_date', s.date()), f('prod_order_id', s.idReq()),
       f('design_ref', s.nullableStr(60)), f('stitch_count', s.int()), f('placement', s.nullableStr(80)),
       f('vendor_id', s.id()), f('input_qty', s.int()), f('output_qty', s.int()),
-      f('rejected_qty', s.int()), f('rate', s.dec()), f('status_id', s.id()),
+      f('rejected_qty', s.int()), f('rework_qty', s.int()), f('shortage_qty', s.int()),
+      f('rate', s.dec()), f('status_id', s.id()),
     ],
   },
   {
@@ -272,7 +276,8 @@ export const transactionResources: ResourceConfig[] = [
       f('wash_no', s.nullableStr(40)), f('wash_date', s.date()), f('prod_order_id', s.idReq()),
       f('wash_type', s.enumReq(['NORMAL','ENZYME','STONE','ACID','BLEACH','GARMENT_DYE','SILICON','OTHER'])),
       f('vendor_id', s.id()), f('input_qty', s.int()), f('output_qty', s.int()),
-      f('rejected_qty', s.int()), f('shrinkage_pct', s.dec()), f('rate', s.dec()), f('status_id', s.id()),
+      f('rejected_qty', s.int()), f('rework_qty', s.int()), f('shortage_qty', s.int()),
+      f('shrinkage_pct', s.dec()), f('rate', s.dec()), f('status_id', s.id()),
     ],
   },
   {
@@ -294,6 +299,7 @@ export const transactionResources: ResourceConfig[] = [
       f('stitch_no', s.nullableStr(40)), f('stitch_date', s.date()), f('prod_order_id', s.idReq()),
       f('unit_id', s.id()), f('line_no', s.nullableStr(20)), f('vendor_id', s.id()),
       f('input_qty', s.int()), f('output_qty', s.int()), f('rejected_qty', s.int()),
+      f('rework_qty', s.int()), f('shortage_qty', s.int()),
       f('smv', s.dec()), f('rate', s.dec()), f('status_id', s.id()),
     ],
   },
@@ -311,6 +317,7 @@ export const transactionResources: ResourceConfig[] = [
       // SET column — accept a comma-joined list
       f('activity', s.nullableStr(120)),
       f('input_qty', s.int()), f('output_qty', s.int()), f('rejected_qty', s.int()),
+      f('rework_qty', s.int()), f('shortage_qty', s.int()),
       f('status_id', s.id()),
     ],
   },
@@ -612,6 +619,358 @@ export const transactionResources: ResourceConfig[] = [
       f('package_count', s.int()), f('total_qty', s.dec()), f('uom_id', s.id()),
       f('status', s.enum(['DRAFT','APPROVED','GATE_OUT','RETURNED_PARTIAL','RETURNED_FULL','CLOSED'])),
       f('security_guard', s.nullableStr(80)), f('remarks', s.nullableStr(500)),
+    ],
+  },
+
+  // ------------------------------------------------ Daily Production Plan
+  {
+    path: 'daily-production-plans', table: 'trx_daily_production_plan', permission: 'PRODUCTION', label: 'Daily Production Plan',
+    searchable: ['plan_no'], sortable: ['plan_no', 'plan_date'], defaultSort: 't.plan_date DESC, t.id DESC',
+    hasIsActive: false, softDelete: false,
+    filters: ['prod_order_id', 'style_id', 'line_id', 'shift_id', 'unit_id', 'status'],
+    autoNumber: { column: 'plan_no', docType: 'DAILY_PLAN' },
+    selectExtra: `po.po_prod_no, st.style_code, st.style_name, sl.line_name, sh.shift_name,
+                  un.unit_name, u.full_name AS supervisor_name`,
+    joins: `LEFT JOIN trx_production_order po ON po.id = t.prod_order_id
+            LEFT JOIN mst_style st ON st.id = t.style_id
+            LEFT JOIN cfg_sewing_line sl ON sl.id = t.line_id
+            LEFT JOIN cfg_shift sh ON sh.id = t.shift_id
+            LEFT JOIN mst_unit un ON un.id = t.unit_id
+            LEFT JOIN mst_user u ON u.id = t.supervisor_id`,
+    children: [
+      { key: 'sizeColors', table: 'trx_daily_plan_size_color', fk: 'daily_plan_id', fields: [
+        f('color_id', s.idReq()), f('sku_id', s.idReq()), f('plan_qty', s.int()),
+      ]},
+      { key: 'operations', table: 'trx_daily_plan_operation', fk: 'daily_plan_id', fields: [
+        f('stage_id', s.id()), f('line_id', s.id()),
+        f('target_qty', s.int()), f('actual_qty', s.int()), f('balance_qty', s.int()),
+      ]},
+    ],
+    fields: [
+      f('plan_no', s.nullableStr(40)), f('plan_date', s.date()), f('unit_id', s.id()),
+      f('line_id', s.id()), f('shift_id', s.id()), f('supervisor_id', s.id()),
+      f('prod_order_id', s.id()), f('style_id', s.id()),
+      f('planned_qty', s.int()), f('previous_output', s.int()), f('balance_qty', s.int()),
+      f('today_target', s.int()), f('smv', s.dec()), f('line_efficiency', s.dec()),
+      f('capacity_pcs', s.int()),
+      f('status', s.enum(['DRAFT','PLANNED','IN_PROGRESS','COMPLETED','CANCELLED'])),
+      f('remarks', s.nullableStr(500)),
+    ],
+  },
+  {
+    path: 'daily-outputs', table: 'trx_daily_output', permission: 'PRODUCTION', label: 'Daily Output',
+    searchable: ['output_no'], sortable: ['output_no', 'output_date'], defaultSort: 't.output_date DESC, t.id DESC',
+    hasIsActive: false, softDelete: false,
+    filters: ['prod_order_id', 'style_id', 'line_id', 'shift_id', 'stage_id', 'status', 'delay_reason_id'],
+    autoNumber: { column: 'output_no', docType: 'DAILY_OUTPUT' },
+    selectExtra: `dp.plan_no, po.po_prod_no, st.style_code, sl.line_name, sh.shift_name,
+                  ps.stage_name, dr.reason_name AS delay_reason_name`,
+    joins: `LEFT JOIN trx_daily_production_plan dp ON dp.id = t.daily_plan_id
+            LEFT JOIN trx_production_order po ON po.id = t.prod_order_id
+            LEFT JOIN mst_style st ON st.id = t.style_id
+            LEFT JOIN cfg_sewing_line sl ON sl.id = t.line_id
+            LEFT JOIN cfg_shift sh ON sh.id = t.shift_id
+            LEFT JOIN cfg_process_stage ps ON ps.id = t.stage_id
+            LEFT JOIN cfg_delay_reason dr ON dr.id = t.delay_reason_id`,
+    fields: [
+      f('output_no', s.nullableStr(40)), f('output_date', s.date()),
+      f('daily_plan_id', s.id()), f('prod_order_id', s.id()), f('style_id', s.id()),
+      f('line_id', s.id()), f('shift_id', s.id()), f('stage_id', s.id()),
+      f('target_qty', s.int()), f('actual_good', s.int()), f('reject_qty', s.int()),
+      f('rework_qty', s.int()), f('total_output', s.int()), f('achievement_pct', s.dec()),
+      f('delay_reason_id', s.id()),
+      f('status', s.enum(['DRAFT','SUBMITTED','APPROVED'])),
+      f('remarks', s.nullableStr(500)),
+    ],
+  },
+
+  // ------------------------------------------------ Sewing Line Allocation & Operation Tracking
+  {
+    path: 'line-allocations', table: 'trx_line_allocation', permission: 'PRODUCTION', label: 'Line Allocation',
+    searchable: ['allocation_no'], sortable: ['allocation_no', 'allocation_date'],
+    defaultSort: 't.allocation_date DESC', hasIsActive: false, softDelete: false,
+    filters: ['prod_order_id', 'style_id', 'line_id', 'status_id'],
+    autoNumber: { column: 'allocation_no', docType: 'LINE_ALLOC' },
+    selectExtra: 'po.po_prod_no, st.style_code, c.color_name, sl.line_name, cs.label AS status_label',
+    joins: `LEFT JOIN trx_production_order po ON po.id = t.prod_order_id
+            LEFT JOIN mst_style st ON st.id = t.style_id
+            LEFT JOIN mst_color c ON c.id = t.color_id
+            LEFT JOIN cfg_sewing_line sl ON sl.id = t.line_id
+            LEFT JOIN cfg_status cs ON cs.id = t.status_id`,
+    fields: [
+      f('allocation_no', s.nullableStr(40)), f('allocation_date', s.date()),
+      f('prod_order_id', s.idReq()), f('style_id', s.id()), f('color_id', s.id()),
+      f('line_id', s.idReq()), f('allocated_qty', s.intReq()),
+      f('start_date', s.date()), f('end_date', s.date()),
+      f('status_id', s.id()), f('remarks', s.nullableStr(500)),
+    ],
+  },
+  {
+    path: 'sewing-operations', table: 'trx_sewing_operation', permission: 'PRODUCTION', label: 'Sewing Operation',
+    searchable: ['operation_no', 'operator_name'], sortable: ['operation_no', 'operation_date'],
+    defaultSort: 't.operation_date DESC', hasIsActive: false, softDelete: false,
+    filters: ['prod_order_id', 'line_id', 'operation_id', 'status_id'],
+    autoNumber: { column: 'operation_no', docType: 'SEW_OP' },
+    selectExtra: 'po.po_prod_no, sl.line_name, om.operation_name',
+    joins: `LEFT JOIN trx_production_order po ON po.id = t.prod_order_id
+            LEFT JOIN cfg_sewing_line sl ON sl.id = t.line_id
+            LEFT JOIN cfg_sewing_operation_master om ON om.id = t.operation_id`,
+    fields: [
+      f('operation_no', s.nullableStr(40)), f('operation_date', s.date()),
+      f('prod_order_id', s.idReq()), f('line_id', s.id()), f('operation_id', s.idReq()),
+      f('plan_qty', s.int()), f('actual_qty', s.int()), f('rework_qty', s.int()),
+      f('rejected_qty', s.int()), f('wip_qty', s.int()), f('operator_name', s.nullableStr(80)),
+      f('status_id', s.id()),
+    ],
+  },
+
+  // ------------------------------------------------ Job Work Challan / Receipt / In / Invoice
+  {
+    path: 'jobwork-challans', table: 'trx_jobwork_challan', permission: 'PRODUCTION', label: 'Job Work Challan',
+    searchable: ['challan_no'], sortable: ['challan_no', 'challan_date'],
+    defaultSort: 't.challan_date DESC', hasIsActive: false, softDelete: false,
+    filters: ['prod_order_id', 'vendor_id', 'stage_id', 'status'],
+    autoNumber: { column: 'challan_no', docType: 'JW_CHALLAN' },
+    selectExtra: 'po.po_prod_no, v.party_name AS vendor_name, ps.stage_name',
+    joins: `LEFT JOIN trx_production_order po ON po.id = t.prod_order_id
+            LEFT JOIN mst_party v ON v.id = t.vendor_id
+            LEFT JOIN cfg_process_stage ps ON ps.id = t.stage_id`,
+    children: [
+      { key: 'lines', table: 'trx_jobwork_challan_line', fk: 'challan_id', fields: [
+        f('sku_id', s.id()), f('bundle_id', s.id()), f('description', s.nullableStr(255)),
+        f('qty', s.intReq()), f('uom_id', s.id()),
+      ]},
+    ],
+    fields: [
+      f('challan_no', s.nullableStr(40)), f('challan_date', s.date()),
+      f('prod_order_id', s.id()), f('vendor_id', s.idReq()), f('stage_id', s.id()),
+      f('gate_outward_id', s.id()), f('total_qty', s.int()),
+      f('rate', s.dec()), f('total_amount', s.dec()), f('expected_return', s.date()),
+      f('status', s.enum(['DRAFT','ISSUED','PARTIAL_RECEIVED','FULLY_RECEIVED','CLOSED','CANCELLED'])),
+      f('remarks', s.nullableStr(500)),
+    ],
+  },
+  {
+    path: 'jobwork-receipts', table: 'trx_jobwork_receipt', permission: 'PRODUCTION', label: 'Job Work Receipt',
+    searchable: ['receipt_no'], sortable: ['receipt_no', 'receipt_date'],
+    defaultSort: 't.receipt_date DESC', hasIsActive: false, softDelete: false, hasAuditCols: false,
+    filters: ['challan_id', 'vendor_id', 'status'],
+    autoNumber: { column: 'receipt_no', docType: 'JW_RECEIPT' },
+    selectExtra: 'jc.challan_no, v.party_name AS vendor_name',
+    joins: `LEFT JOIN trx_jobwork_challan jc ON jc.id = t.challan_id
+            LEFT JOIN mst_party v ON v.id = t.vendor_id`,
+    children: [
+      { key: 'lines', table: 'trx_jobwork_receipt_line', fk: 'receipt_id', fields: [
+        f('sku_id', s.id()), f('issued_qty', s.int()), f('received_qty', s.int()),
+        f('rejected_qty', s.int()), f('shortage_qty', s.int()), f('remarks', s.nullableStr(255)),
+      ]},
+    ],
+    fields: [
+      f('receipt_no', s.nullableStr(40)), f('receipt_date', s.date()),
+      f('challan_id', s.idReq()), f('vendor_id', s.idReq()), f('gate_inward_id', s.id()),
+      f('issued_qty', s.int()), f('received_qty', s.int()), f('rejected_qty', s.int()),
+      f('shortage_qty', s.int()), f('rework_qty', s.int()),
+      f('rate', s.dec()), f('total_amount', s.dec()),
+      f('status', s.enum(['DRAFT','RECEIVED','QC_PENDING','ACCEPTED','CLOSED'])),
+      f('remarks', s.nullableStr(500)),
+    ],
+  },
+  {
+    path: 'jobwork-ins', table: 'trx_jobwork_in', permission: 'PRODUCTION', label: 'Job Work In',
+    searchable: ['jwin_no', 'customer_dc_no', 'customer_po_ref'], sortable: ['jwin_no', 'jwin_date'],
+    defaultSort: 't.jwin_date DESC', hasIsActive: false, softDelete: false,
+    filters: ['customer_id', 'status'],
+    autoNumber: { column: 'jwin_no', docType: 'JW_IN' },
+    selectExtra: 'c.party_name AS customer_name',
+    joins: 'LEFT JOIN mst_party c ON c.id = t.customer_id',
+    children: [
+      { key: 'lines', table: 'trx_jobwork_in_line', fk: 'jwin_id', fields: [
+        f('description', s.nullableStr(255)),
+        f('material_type', s.enum(['FABRIC','GARMENT','TRIM','OTHER'])),
+        f('qty', s.intReq()), f('uom_id', s.id()),
+        f('received_qty', s.int()), f('processed_qty', s.int()),
+        f('rejected_qty', s.int()), f('returned_qty', s.int()),
+      ]},
+    ],
+    fields: [
+      f('jwin_no', s.nullableStr(40)), f('jwin_date', s.date()),
+      f('customer_id', s.idReq()), f('gate_inward_id', s.id()),
+      f('customer_dc_no', s.nullableStr(60)), f('customer_po_ref', s.nullableStr(60)),
+      f('process_type', s.nullableStr(80)), f('total_qty', s.int()),
+      f('rate', s.dec()), f('total_amount', s.dec()), f('expected_delivery', s.date()),
+      f('status', s.enum(['DRAFT','RECEIVED','IN_PROCESS','QC_DONE','READY_TO_DISPATCH','DISPATCHED','INVOICED','CLOSED'])),
+      f('remarks', s.nullableStr(500)),
+    ],
+  },
+  {
+    path: 'jobwork-invoices', table: 'trx_jobwork_invoice', permission: 'PRODUCTION', label: 'Job Work Invoice',
+    searchable: ['invoice_no'], sortable: ['invoice_no', 'invoice_date'],
+    defaultSort: 't.invoice_date DESC', hasIsActive: false, softDelete: false, hasAuditCols: false,
+    filters: ['party_id', 'invoice_type', 'status', 'jwin_id', 'challan_id'],
+    autoNumber: { column: 'invoice_no', docType: 'JW_INVOICE' },
+    selectExtra: 'p.party_name, cur.code AS currency_code',
+    joins: `LEFT JOIN mst_party p ON p.id = t.party_id
+            LEFT JOIN cfg_currency cur ON cur.id = t.currency_id`,
+    fields: [
+      f('invoice_no', s.nullableStr(40)), f('invoice_date', s.date()),
+      f('jwin_id', s.id()), f('challan_id', s.id()), f('party_id', s.idReq()),
+      f('invoice_type', s.enumReq(['RECEIVABLE','PAYABLE'])),
+      f('currency_id', s.idReq()), f('total_qty', s.int()),
+      f('rate', s.dec()), f('taxable_amount', s.dec()), f('gst_amount', s.dec()),
+      f('total_amount', s.dec()), f('hsn_code', s.nullableStr(10)),
+      f('status', s.enum(['DRAFT','SUBMITTED','APPROVED','PAID','CANCELLED'])),
+      f('voucher_id', s.id()), f('remarks', s.nullableStr(500)),
+    ],
+  },
+
+  // ------------------------------------------------ Purchase Return & Supplier Bill
+  {
+    path: 'purchase-returns', table: 'trx_purchase_return', permission: 'PURCHASE', label: 'Purchase Return',
+    searchable: ['return_no'], sortable: ['return_no', 'return_date'],
+    defaultSort: 't.return_date DESC', hasIsActive: false, softDelete: false, hasAuditCols: false,
+    filters: ['grn_id', 'supplier_id', 'return_reason', 'status'],
+    autoNumber: { column: 'return_no', docType: 'PURCHASE_RETURN' },
+    selectExtra: 'grn.grn_no, sup.party_name AS supplier_name, w.warehouse_name',
+    joins: `LEFT JOIN trx_grn grn ON grn.id = t.grn_id
+            LEFT JOIN mst_party sup ON sup.id = t.supplier_id
+            LEFT JOIN mst_warehouse w ON w.id = t.warehouse_id`,
+    children: [
+      { key: 'lines', table: 'trx_purchase_return_line', fk: 'return_id', fields: [
+        f('grn_line_id', s.id()),
+        f('material_type', s.enumReq(['YARN','FABRIC','TRIM'])),
+        f('yarn_id', s.id()), f('fabric_id', s.id()), f('trim_id', s.id()), f('color_id', s.id()),
+        f('return_qty', s.decReq()), f('uom_id', s.idReq()),
+        f('rate', s.dec()), f('amount', s.dec()), f('reason', s.nullableStr(255)),
+      ]},
+    ],
+    fields: [
+      f('return_no', s.nullableStr(40)), f('return_date', s.date()),
+      f('grn_id', s.idReq()), f('supplier_id', s.idReq()), f('warehouse_id', s.idReq()),
+      f('gate_outward_id', s.id()),
+      f('return_reason', s.enum(['QUALITY_REJECT','EXCESS','WRONG_MATERIAL','DAMAGED','OTHER'])),
+      f('total_qty', s.dec()), f('total_amount', s.dec()), f('debit_note_id', s.id()),
+      f('status', s.enum(['DRAFT','APPROVED','DISPATCHED','ACKNOWLEDGED','CLOSED'])),
+      f('remarks', s.nullableStr(500)),
+    ],
+  },
+  {
+    path: 'supplier-bills', table: 'trx_supplier_bill', permission: 'PURCHASE', label: 'Supplier Bill',
+    searchable: ['bill_no', 'supplier_inv_no'], sortable: ['bill_no', 'bill_date'],
+    defaultSort: 't.bill_date DESC', hasIsActive: false, softDelete: false,
+    filters: ['supplier_id', 'po_id', 'grn_id', 'match_status', 'status'],
+    autoNumber: { column: 'bill_no', docType: 'SUPPLIER_BILL' },
+    selectExtra: 'sup.party_name AS supplier_name, po.po_no, grn.grn_no, cur.code AS currency_code',
+    joins: `LEFT JOIN mst_party sup ON sup.id = t.supplier_id
+            LEFT JOIN trx_purchase_order po ON po.id = t.po_id
+            LEFT JOIN trx_grn grn ON grn.id = t.grn_id
+            LEFT JOIN cfg_currency cur ON cur.id = t.currency_id`,
+    children: [
+      { key: 'lines', table: 'trx_supplier_bill_line', fk: 'bill_id', fields: [
+        f('po_line_id', s.id()), f('grn_line_id', s.id()),
+        f('material_type', s.enumReq(['YARN','FABRIC','TRIM','SERVICE'])),
+        f('description', s.nullableStr(255)),
+        f('bill_qty', s.decReq()), f('po_qty', s.dec()), f('grn_qty', s.dec()),
+        f('uom_id', s.idReq()), f('rate', s.decReq()), f('amount', s.decReq()),
+        f('gst_rate', s.dec()), f('hsn_code', s.nullableStr(10)),
+        f('qty_matched', s.bool()), f('rate_matched', s.bool()),
+      ]},
+    ],
+    fields: [
+      f('bill_no', s.nullableStr(40)), f('bill_date', s.date()),
+      f('supplier_id', s.idReq()), f('supplier_inv_no', s.nullableStr(60)), f('supplier_inv_date', s.date()),
+      f('po_id', s.id()), f('grn_id', s.id()), f('gate_inward_id', s.id()),
+      f('currency_id', s.idReq()), f('subtotal', s.dec()), f('gst_amount', s.dec()),
+      f('tds_amount', s.dec()), f('total_amount', s.dec()),
+      f('po_matched', s.bool()), f('grn_matched', s.bool()), f('gate_matched', s.bool()),
+      f('match_status', s.enum(['UNMATCHED','PARTIAL','FULLY_MATCHED','DISCREPANCY'])),
+      f('payment_due_date', s.date()), f('voucher_id', s.id()),
+      f('status', s.enum(['DRAFT','VERIFIED','APPROVED','PAID','DISPUTED','CANCELLED'])),
+      f('remarks', s.nullableStr(500)),
+    ],
+  },
+
+  // ------------------------------------------------ Stock Transfer
+  {
+    path: 'stock-transfers', table: 'trx_stock_transfer', permission: 'INVENTORY', label: 'Stock Transfer',
+    searchable: ['transfer_no'], sortable: ['transfer_no', 'transfer_date'],
+    defaultSort: 't.transfer_date DESC', hasIsActive: false, softDelete: false, hasAuditCols: false,
+    filters: ['from_warehouse', 'to_warehouse', 'prod_order_id', 'transfer_type', 'status'],
+    autoNumber: { column: 'transfer_no', docType: 'STOCK_TRANSFER' },
+    selectExtra: 'fw.warehouse_name AS from_warehouse_name, tw.warehouse_name AS to_warehouse_name, po.po_prod_no',
+    joins: `LEFT JOIN mst_warehouse fw ON fw.id = t.from_warehouse
+            LEFT JOIN mst_warehouse tw ON tw.id = t.to_warehouse
+            LEFT JOIN trx_production_order po ON po.id = t.prod_order_id`,
+    children: [
+      { key: 'lines', table: 'trx_stock_transfer_line', fk: 'transfer_id', fields: [
+        f('material_type', s.enumReq(['YARN','FABRIC','TRIM','FINISHED','WIP'])),
+        f('yarn_id', s.id()), f('fabric_id', s.id()), f('trim_id', s.id()),
+        f('sku_id', s.id()), f('color_id', s.id()), f('batch_id', s.id()), f('bundle_id', s.id()),
+        f('qty', s.decReq()), f('uom_id', s.idReq()),
+      ]},
+    ],
+    fields: [
+      f('transfer_no', s.nullableStr(40)), f('transfer_date', s.date()),
+      f('from_warehouse', s.idReq()), f('to_warehouse', s.idReq()), f('prod_order_id', s.id()),
+      f('transfer_type', s.enum(['INTER_STORE','FLOOR_TRANSFER','UNIT_TRANSFER','REJECTION_MOVE'])),
+      f('total_qty', s.dec()),
+      f('status', s.enum(['DRAFT','IN_TRANSIT','RECEIVED','CANCELLED'])),
+      f('remarks', s.nullableStr(500)),
+    ],
+  },
+
+  // ------------------------------------------------ FG Receipt
+  {
+    path: 'fg-receipts', table: 'trx_fg_receipt', permission: 'PRODUCTION', label: 'FG Receipt',
+    searchable: ['fg_receipt_no'], sortable: ['fg_receipt_no', 'receipt_date'],
+    defaultSort: 't.receipt_date DESC', hasIsActive: false, softDelete: false, hasAuditCols: false,
+    filters: ['prod_order_id', 'so_id', 'warehouse_id', 'status'],
+    autoNumber: { column: 'fg_receipt_no', docType: 'FG_RECEIPT' },
+    selectExtra: 'po.po_prod_no, so.so_no, w.warehouse_name',
+    joins: `LEFT JOIN trx_production_order po ON po.id = t.prod_order_id
+            LEFT JOIN trx_sales_order so ON so.id = t.so_id
+            LEFT JOIN mst_warehouse w ON w.id = t.warehouse_id`,
+    children: [
+      { key: 'lines', table: 'trx_fg_receipt_line', fk: 'fg_receipt_id', fields: [
+        f('sku_id', s.idReq()), f('carton_id', s.id()), f('qty', s.intReq()),
+      ]},
+    ],
+    fields: [
+      f('fg_receipt_no', s.nullableStr(40)), f('receipt_date', s.date()),
+      f('prod_order_id', s.idReq()), f('so_id', s.id()), f('packing_id', s.id()),
+      f('qc_id', s.id()), f('warehouse_id', s.idReq()), f('total_qty', s.int()),
+      f('status', s.enum(['DRAFT','RECEIVED','CONFIRMED','CANCELLED'])),
+      f('remarks', s.nullableStr(500)),
+    ],
+  },
+
+  // ------------------------------------------------ Actual Production Costing
+  {
+    path: 'production-costs', table: 'trx_production_cost', permission: 'PRODUCTION', label: 'Production Cost',
+    searchable: ['cost_no'], sortable: ['cost_no', 'cost_date'],
+    defaultSort: 't.cost_date DESC', hasIsActive: false, softDelete: false, hasAuditCols: false,
+    filters: ['prod_order_id', 'style_id', 'status'],
+    autoNumber: { column: 'cost_no', docType: 'PROD_COST' },
+    selectExtra: 'po.po_prod_no, st.style_code',
+    joins: `LEFT JOIN trx_production_order po ON po.id = t.prod_order_id
+            LEFT JOIN mst_style st ON st.id = t.style_id`,
+    children: [
+      { key: 'lines', table: 'trx_production_cost_line', fk: 'cost_id', fields: [
+        f('cost_head', s.strReq(60)),
+        f('cost_category', s.enumReq(['MATERIAL','LABOUR','MACHINE','JOBWORK','PROCESS','OVERHEAD','PACKING','OTHER'])),
+        f('ref_type', s.nullableStr(40)), f('ref_id', s.id()),
+        f('quantity', s.dec()), f('uom_id', s.id()), f('rate', s.dec()), f('amount', s.decReq()),
+        f('remarks', s.nullableStr(255)),
+      ]},
+    ],
+    fields: [
+      f('cost_no', s.nullableStr(40)), f('cost_date', s.date()),
+      f('prod_order_id', s.idReq()), f('style_id', s.id()), f('produced_qty', s.int()),
+      f('material_cost', s.dec()), f('labour_cost', s.dec()), f('machine_cost', s.dec()),
+      f('jobwork_cost', s.dec()), f('process_cost', s.dec()), f('overhead_cost', s.dec()),
+      f('packing_cost', s.dec()), f('total_cost', s.dec()), f('cost_per_piece', s.dec()),
+      f('estimated_cost', s.dec()), f('variance', s.dec()), f('variance_pct', s.dec()),
+      f('status', s.enum(['DRAFT','CALCULATED','APPROVED','CLOSED'])),
+      f('remarks', s.nullableStr(500)),
     ],
   },
 ];

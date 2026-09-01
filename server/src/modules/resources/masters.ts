@@ -393,4 +393,48 @@ export const masterResources: ResourceConfig[] = [
       f('effective_from', s.date()), f('effective_to', s.date()), f('is_active', s.bool()),
     ],
   },
+
+  // ------------------------------------------------ Production line & shift config
+  {
+    path: 'sewing-lines', table: 'cfg_sewing_line', permission: 'PRODUCTION', label: 'Sewing Line',
+    searchable: ['line_code', 'line_name'], sortable: ['line_code', 'line_name'],
+    defaultSort: 't.line_code', softDelete: false, hasAuditCols: false,
+    filters: ['unit_id'],
+    selectExtra: 'un.unit_name', joins: 'LEFT JOIN mst_unit un ON un.id = t.unit_id',
+    fields: [
+      f('line_code', s.strReq(20)), f('line_name', s.strReq(80)), f('unit_id', s.id()),
+      f('capacity_pcs', s.int()), f('manpower', s.int()), f('working_hours', s.dec()),
+      f('is_active', s.bool()),
+    ],
+  },
+  {
+    path: 'shifts', table: 'cfg_shift', permission: 'SETTINGS', label: 'Shift',
+    searchable: ['shift_code', 'shift_name'], sortable: ['shift_code'],
+    defaultSort: 't.shift_code', softDelete: false, hasAuditCols: false,
+    fields: [
+      f('shift_code', s.strReq(20)), f('shift_name', s.strReq(80)),
+      f('start_time', s.nullableStr(10)), f('end_time', s.nullableStr(10)),
+      f('break_minutes', s.int()), f('is_active', s.bool()),
+    ],
+  },
+  {
+    path: 'delay-reasons', table: 'cfg_delay_reason', permission: 'PRODUCTION', label: 'Delay Reason',
+    searchable: ['reason_code', 'reason_name'], sortable: ['reason_code'],
+    defaultSort: 't.reason_code', softDelete: false, hasAuditCols: false,
+    filters: ['category'],
+    fields: [
+      f('reason_code', s.strReq(30)), f('reason_name', s.strReq(120)),
+      f('category', s.enum(['MACHINE','MATERIAL','MANPOWER','METHOD','QUALITY','OTHER'])),
+      f('is_active', s.bool()),
+    ],
+  },
+  {
+    path: 'sewing-operation-masters', table: 'cfg_sewing_operation_master', permission: 'PRODUCTION', label: 'Sewing Operation',
+    searchable: ['operation_code', 'operation_name'], sortable: ['sort_order', 'operation_code'],
+    defaultSort: 't.sort_order', softDelete: false, hasAuditCols: false,
+    fields: [
+      f('operation_code', s.strReq(30)), f('operation_name', s.strReq(120)),
+      f('smv', s.dec()), f('sort_order', s.int()), f('is_active', s.bool()),
+    ],
+  },
 ];

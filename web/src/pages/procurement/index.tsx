@@ -324,6 +324,7 @@ function GrnModal({ open, onClose, onDone }: { open: boolean; onClose: () => voi
   const suppliers = useLookup('suppliers');
   const warehouses = useLookup('warehouses');
   const purchaseOrders = useLookup('purchase-orders');
+  const gateInwards = useLookup('gate-inwards');
   const yarns = useLookup('yarns');
   const fabrics = useLookup('fabrics');
   const trims = useLookup('trims');
@@ -378,6 +379,8 @@ function GrnModal({ open, onClose, onDone }: { open: boolean; onClose: () => voi
           value={head.warehouse_id ?? ''} onChange={(e) => setHead((s) => ({ ...s, warehouse_id: e.target.value }))} />
         <Select label="Against PO" options={toOptions(purchaseOrders.data)} placeholder="— None —"
           value={head.po_id ?? ''} onChange={(e) => setHead((s) => ({ ...s, po_id: e.target.value }))} />
+        <Select label="Gate Inward Entry" options={toOptions(gateInwards.data)} placeholder="— None —"
+          value={head.gate_inward_id ?? ''} onChange={(e) => setHead((s) => ({ ...s, gate_inward_id: e.target.value }))} />
         <Input label="Supplier DC no" value={head.supplier_dc_no ?? ''}
           onChange={(e) => setHead((s) => ({ ...s, supplier_dc_no: e.target.value }))} />
         <Input label="Supplier invoice no" value={head.supplier_inv_no ?? ''}
@@ -659,3 +662,6 @@ function IssueModal({ open, onClose, onDone }: { open: boolean; onClose: () => v
     </Modal>
   );
 }
+
+export { PurchaseReturnsPage } from './PurchaseReturn';
+export { SupplierBillsPage } from './SupplierBill';

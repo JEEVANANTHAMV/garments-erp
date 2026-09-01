@@ -129,6 +129,39 @@ dashboardRouter.get('/summary', requirePermission('DASHBOARD.VIEW'), ah(async (r
   });
 }));
 
+/** WIP summary for the dashboard — stage-wise WIP from active production orders. */
+dashboardRouter.get('/wip-widget', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+
+  const wipStages = await query(
+    `SELECT ps.stage_code, ps.stage_name, ps.sort_order,
+            COALESCE(SUM(pt.input_qty),0) AS input_qty,
+            COALESCE(SUM(pt.output_qty),0) AS output_qty,
+            COALESCE(SUM(pt.rejected_qty),0) AS rejected_qty,
+            COALESCE(SUM(pt.rework_qty),0) AS rework_qty,
+            COALESCE(SUM(pt.input_qty),0) - COALESCE(SUM(pt.output_qty),0) - COALESCE(SUM(pt.rejected_qty),0) AS wip_qty
+       FROM cfg_process_stage ps
+       LEFT JOIN trx_process_transaction pt
+         ON pt.stage_id = ps.id
+         AND pt.prod_order_id IN (SELECT id FROM trx_production_order WHERE company_id = ? AND approval_state IN ('APPROVED','IN_PROGRESS'))
+      WHERE ps.company_id = ? AND ps.is_active = 1
+      GROUP BY ps.id, ps.stage_code, ps.stage_name, ps.sort_order
+      ORDER BY ps.sort_order`, [cid, cid]);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const dailyKpi = await queryOne(
+    `SELECT COALESCE(SUM(target_qty), 0) AS total_plan,
+            COALESCE(SUM(actual_good), 0) AS total_actual,
+            COALESCE(SUM(reject_qty),  0) AS total_reject,
+            COALESCE(SUM(rework_qty),  0) AS total_rework,
+            CASE WHEN COALESCE(SUM(target_qty),0) > 0
+              THEN ROUND(COALESCE(SUM(actual_good),0) / COALESCE(SUM(target_qty),0) * 100, 1)
+              ELSE 0 END AS achievement_pct
+       FROM trx_daily_output WHERE company_id = ? AND output_date = ?`, [cid, today]);
+
+  res.json({ data: { wipStages, dailyKpi } });
+}));
+
 /** Order-to-shipment traceability for one sales order. */
 dashboardRouter.get('/order-tracking/:soId', requirePermission('SALES_ORDER.VIEW'), ah(async (req, res) => {
   const soId = Number(req.params.soId);

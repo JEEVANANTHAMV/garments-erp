@@ -24,7 +24,7 @@ import SalesOrderDetail from './pages/sales/SalesOrderDetail';
 import { GateInwardsPage, GateOutwardsPage } from './pages/gate';
 
 /* Procurement */
-import { MrpPage, PurchaseOrdersPage, GrnPage, MaterialIssuePage } from './pages/procurement';
+import { MrpPage, PurchaseOrdersPage, GrnPage, MaterialIssuePage, PurchaseReturnsPage, SupplierBillsPage } from './pages/procurement';
 
 /* Inventory */
 import { StockPage, StockLedgerPage } from './pages/inventory';
@@ -34,6 +34,10 @@ import {
   ProductionPlansPage, ProductionOrdersPage,
   CuttingPage, StitchingPage, PrintingPage, EmbroideryPage,
   WashingPage, FinishingPage, ProcessTransactionsPage,
+  DailyProductionPlansPage, DailyOutputsPage, WipDashboardPage,
+  LineAllocationsPage, SewingOperationsPage,
+  JobWorkChallansPage, JobWorkReceiptsPage, JobWorkInsPage, JobWorkInvoicesPage,
+  StockTransfersPage, FgReceiptsPage, ProductionCostsPage,
 } from './pages/production';
 
 /* Quality */
@@ -134,6 +138,8 @@ export default function App() {
                   <Route path="mrp" element={<MrpPage />} />
                   <Route path="purchase-orders" element={<PurchaseOrdersPage />} />
                   <Route path="grns" element={<GrnPage />} />
+                  <Route path="returns" element={<PurchaseReturnsPage />} />
+                  <Route path="supplier-bills" element={<SupplierBillsPage />} />
                 </Route>
 
                 {/* Inventory */}
@@ -141,11 +147,17 @@ export default function App() {
                   <Route path="stock" element={<StockPage />} />
                   <Route path="ledger" element={<StockLedgerPage />} />
                   <Route path="issues" element={<MaterialIssuePage />} />
+                  <Route path="transfers" element={<StockTransfersPage />} />
                   <Route path="batches" element={<BatchesPage />} />
                 </Route>
 
                 {/* Production */}
                 <Route path="production">
+                  <Route path="wip" element={<WipDashboardPage />} />
+                  <Route path="daily-plans" element={<DailyProductionPlansPage />} />
+                  <Route path="daily-outputs" element={<DailyOutputsPage />} />
+                  <Route path="line-allocations" element={<LineAllocationsPage />} />
+                  <Route path="sewing-operations" element={<SewingOperationsPage />} />
                   <Route path="plans" element={<ProductionPlansPage />} />
                   <Route path="orders" element={<ProductionOrdersPage />} />
                   <Route path="cuttings" element={<CuttingPage />} />
@@ -155,6 +167,12 @@ export default function App() {
                   <Route path="washings" element={<WashingPage />} />
                   <Route path="finishings" element={<FinishingPage />} />
                   <Route path="process-transactions" element={<ProcessTransactionsPage />} />
+                  <Route path="jobwork-challans" element={<JobWorkChallansPage />} />
+                  <Route path="jobwork-receipts" element={<JobWorkReceiptsPage />} />
+                  <Route path="jobwork-ins" element={<JobWorkInsPage />} />
+                  <Route path="jobwork-invoices" element={<JobWorkInvoicesPage />} />
+                  <Route path="fg-receipts" element={<FgReceiptsPage />} />
+                  <Route path="costs" element={<ProductionCostsPage />} />
                 </Route>
 
                 {/* Quality */}

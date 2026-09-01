@@ -26,6 +26,7 @@ import { dashboardRouter } from './modules/dashboard/dashboard.routes.js';
 import { reportsRouter } from './modules/reports/reports.routes.js';
 import { uploadRouter } from './modules/upload/upload.routes.js';
 import { gstRouter } from './modules/gst/gst.routes.js';
+import { wipRouter } from './modules/production/wip.routes.js';
 
 export function createApp() {
   const app = express();
@@ -76,6 +77,7 @@ export function createApp() {
   api.use('/uploads', uploadRouter);
   api.use('/gst', gstRouter);
   api.use('/', cartonRouter);          // /packings/:id/cartons, /cartons/:id
+  api.use('/production', wipRouter);   // /production/wip-summary, /production/daily-dashboard, etc.
 
   // Metadata-driven resources.
   const registry = [...masterResources, ...transactionResources];

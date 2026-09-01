@@ -10,6 +10,12 @@ const qtyCols = [
   { key: 'rejected_qty', header: 'Rejected', align: 'right' as const,
     render: (r: any) => Number(r.rejected_qty) > 0
       ? <span className="font-medium text-red-600">{fmtNumber(r.rejected_qty)}</span> : '—' },
+  { key: 'rework_qty', header: 'Rework', align: 'right' as const,
+    render: (r: any) => Number(r.rework_qty) > 0
+      ? <span className="font-medium text-amber-600">{fmtNumber(r.rework_qty)}</span> : '—' },
+  { key: 'shortage_qty', header: 'Shortage', align: 'right' as const,
+    render: (r: any) => Number(r.shortage_qty) > 0
+      ? <span className="font-medium text-orange-600">{fmtNumber(r.shortage_qty)}</span> : '—' },
   { key: 'eff', header: 'Yield', align: 'right' as const, render: (r: any) => {
     const i = Number(r.input_qty), o = Number(r.output_qty);
     if (!i) return '—';
@@ -23,6 +29,8 @@ const qtyFields = [
   { name: 'input_qty', label: 'Input qty', type: 'number' as const },
   { name: 'output_qty', label: 'Output qty', type: 'number' as const },
   { name: 'rejected_qty', label: 'Rejected qty', type: 'number' as const },
+  { name: 'rework_qty', label: 'Rework qty', type: 'number' as const },
+  { name: 'shortage_qty', label: 'Shortage qty', type: 'number' as const },
 ];
 
 export function ProductionPlansPage() {
@@ -342,3 +350,11 @@ export function ProcessTransactionsPage() {
       { name: 'remarks', label: 'Remarks', type: 'textarea' },
     ]} />;
 }
+
+export { DailyProductionPlansPage, DailyOutputsPage } from './DailyPlan';
+export { WipDashboardPage } from './WipDashboard';
+export { LineAllocationsPage, SewingOperationsPage } from './LineAllocation';
+export { JobWorkChallansPage, JobWorkReceiptsPage, JobWorkInsPage, JobWorkInvoicesPage } from './JobWork';
+export { StockTransfersPage } from './StockTransfer';
+export { FgReceiptsPage } from './FgReceipt';
+export { ProductionCostsPage } from './ProductionCost';

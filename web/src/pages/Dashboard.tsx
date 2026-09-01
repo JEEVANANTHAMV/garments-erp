@@ -137,9 +137,9 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="mb-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="card p-4">
-          <h3 className="mb-3 text-[14px] font-semibold text-slate-800">Production pipeline by stage</h3>
+      <div className="mb-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="card p-4 lg:col-span-2">
+          <h3 className="mb-3 text-[14px] font-semibold text-slate-800">Production pipeline &amp; WIP by stage</h3>
           {pipeline.some((x) => x.Output > 0) ? (
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={pipeline} margin={{ top: 5, right: 8, left: -12, bottom: 0 }}>
@@ -156,6 +156,38 @@ export default function Dashboard() {
           ) : <Placeholder text="No production movements recorded" />}
         </div>
 
+        <div className="card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-[14px] font-semibold text-slate-800">Live Stage WIP</h3>
+            <Link to="/production/wip" className="text-xs font-medium text-brand-600 hover:text-brand-700 flex items-center gap-1">
+              WIP View <ArrowRight size={12} />
+            </Link>
+          </div>
+          {data.productionPipeline.length ? (
+            <div className="space-y-2">
+              {data.productionPipeline.map((s) => {
+                const inQty = Number(s.input_qty || 0);
+                const outQty = Number(s.output_qty || 0);
+                const rejQty = Number(s.rejected_qty || 0);
+                const wip = Math.max(0, inQty - outQty - rejQty);
+                return (
+                  <div key={s.stage_code} className="flex items-center justify-between text-xs py-1 border-b border-surface-border/50 last:border-0">
+                    <span className="font-medium text-slate-700 truncate max-w-[130px]">{s.stage_name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="tabular-nums text-slate-500">{fmtNumber(outQty)} done</span>
+                      <Badge tone={wip > 0 ? 'violet' : 'slate'}>
+                        {fmtNumber(wip)} WIP
+                      </Badge>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : <Placeholder text="No WIP data" pad />}
+        </div>
+      </div>
+
+      <div className="mb-5 grid grid-cols-1 gap-4">
         <div className="card p-4">
           <h3 className="mb-3 text-[14px] font-semibold text-slate-800">Top buyers by order value</h3>
           {data.topBuyers.length ? (
