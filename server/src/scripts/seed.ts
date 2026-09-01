@@ -48,10 +48,489 @@ async function ensureColumn(table: string, col: string, ddl: string) {
   }
 }
 
+async function applySchemaUpdates() {
+  const processTables = [
+    'trx_cutting', 'trx_printing', 'trx_embroidery', 'trx_washing',
+    'trx_stitching', 'trx_finishing', 'trx_process_transaction'
+  ];
+  for (const t of processTables) {
+    await ensureColumn(t, 'rework_qty', 'INT UNSIGNED DEFAULT 0');
+    await ensureColumn(t, 'shortage_qty', 'INT UNSIGNED DEFAULT 0');
+  }
+  await ensureColumn('trx_grn', 'gate_inward_id', 'BIGINT UNSIGNED');
+
+  await exec(`CREATE TABLE IF NOT EXISTS cfg_sewing_line (
+    id INT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    company_id BIGINT UNSIGNED NOT NULL,
+    line_code VARCHAR(20) NOT NULL,
+    line_name VARCHAR(80) NOT NULL,
+    unit_id BIGINT UNSIGNED,
+    capacity_pcs INT UNSIGNED DEFAULT 0,
+    manpower INT UNSIGNED DEFAULT 0,
+    working_hours DECIMAL(4,1) DEFAULT 8.0,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    UNIQUE KEY uq_sewing_line (company_id, line_code)
+  ) ENGINE=InnoDB`);
+
+  await exec(`CREATE TABLE IF NOT EXISTS cfg_shift (
+    id INT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    company_id BIGINT UNSIGNED NOT NULL,
+    shift_code VARCHAR(20) NOT NULL,
+    shift_name VARCHAR(80) NOT NULL,
+    start_time TIME,
+    end_time TIME,
+    break_minutes INT UNSIGNED DEFAULT 0,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    UNIQUE KEY uq_shift (company_id, shift_code)
+  ) ENGINE=InnoDB`);
+
+  await exec(`CREATE TABLE IF NOT EXISTS cfg_delay_reason (
+    id INT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    company_id BIGINT UNSIGNED NOT NULL,
+    reason_code VARCHAR(30) NOT NULL,
+    reason_name VARCHAR(120) NOT NULL,
+    category ENUM('MACHINE','MATERIAL','MANPOWER','METHOD','QUALITY','OTHER') DEFAULT 'OTHER',
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    UNIQUE KEY uq_delay_reason (company_id, reason_code)
+  ) ENGINE=InnoDB`);
+
+  await exec(`CREATE TABLE IF NOT EXISTS cfg_sewing_operation_master (
+    id INT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    company_id BIGINT UNSIGNED NOT NULL,
+    operation_code VARCHAR(30) NOT NULL,
+    operation_name VARCHAR(120) NOT NULL,
+    smv DECIMAL(8,3) DEFAULT 0,
+    sort_order INT DEFAULT 0,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    UNIQUE KEY uq_sew_op (company_id, operation_code)
+  ) ENGINE=InnoDB`);
+
+  await exec(`CREATE TABLE IF NOT EXISTS trx_daily_production_plan (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    company_id BIGINT UNSIGNED NOT NULL,
+    plan_no VARCHAR(40) NOT NULL,
+    plan_date DATE NOT NULL,
+    unit_id BIGINT UNSIGNED,
+    line_id INT UNSIGNED,
+    shift_id INT UNSIGNED,
+    supervisor_id BIGINT UNSIGNED,
+    prod_order_id BIGINT UNSIGNED,
+    style_id BIGINT UNSIGNED,
+    planned_qty INT UNSIGNED DEFAULT 0,
+    previous_output INT UNSIGNED DEFAULT 0,
+    balance_qty INT UNSIGNED DEFAULT 0,
+    today_target INT UNSIGNED DEFAULT 0,
+    smv DECIMAL(8,3),
+    line_efficiency DECIMAL(6,2),
+    capacity_pcs INT UNSIGNED DEFAULT 0,
+    status ENUM('DRAFT','PLANNED','IN_PROGRESS','COMPLETED','CANCELLED') DEFAULT 'DRAFT',
+    remarks VARCHAR(500),
+    created_by BIGINT UNSIGNED,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_by BIGINT UNSIGNED,
+    updated_at DATETIME ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_daily_plan (company_id, plan_no)
+  ) ENGINE=InnoDB`);
+
+  await exec(`CREATE TABLE IF NOT EXISTS trx_daily_plan_size_color (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    daily_plan_id BIGINT UNSIGNED NOT NULL,
+    color_id BIGINT UNSIGNED NOT NULL,
+    sku_id BIGINT UNSIGNED NOT NULL,
+    plan_qty INT UNSIGNED DEFAULT 0
+  ) ENGINE=InnoDB`);
+
+  await exec(`CREATE TABLE IF NOT EXISTS trx_daily_plan_operation (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    daily_plan_id BIGINT UNSIGNED NOT NULL,
+    stage_id INT UNSIGNED,
+    line_id INT UNSIGNED,
+    target_qty INT UNSIGNED DEFAULT 0,
+    actual_qty INT UNSIGNED DEFAULT 0,
+    balance_qty INT UNSIGNED DEFAULT 0
+  ) ENGINE=InnoDB`);
+
+  await exec(`CREATE TABLE IF NOT EXISTS trx_daily_output (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    company_id BIGINT UNSIGNED NOT NULL,
+    output_no VARCHAR(40) NOT NULL,
+    output_date DATE NOT NULL,
+    daily_plan_id BIGINT UNSIGNED,
+    prod_order_id BIGINT UNSIGNED,
+    style_id BIGINT UNSIGNED,
+    line_id INT UNSIGNED,
+    shift_id INT UNSIGNED,
+    stage_id INT UNSIGNED,
+    target_qty INT UNSIGNED DEFAULT 0,
+    actual_good INT UNSIGNED DEFAULT 0,
+    reject_qty INT UNSIGNED DEFAULT 0,
+    rework_qty INT UNSIGNED DEFAULT 0,
+    total_output INT UNSIGNED DEFAULT 0,
+    achievement_pct DECIMAL(6,2) DEFAULT 0,
+    delay_reason_id INT UNSIGNED,
+    status ENUM('DRAFT','SUBMITTED','APPROVED') DEFAULT 'DRAFT',
+    remarks VARCHAR(500),
+    created_by BIGINT UNSIGNED,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_by BIGINT UNSIGNED,
+    updated_at DATETIME ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_daily_output (company_id, output_no)
+  ) ENGINE=InnoDB`);
+
+  await exec(`CREATE TABLE IF NOT EXISTS trx_line_allocation (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    company_id BIGINT UNSIGNED NOT NULL,
+    allocation_no VARCHAR(40) NOT NULL,
+    allocation_date DATE NOT NULL,
+    prod_order_id BIGINT UNSIGNED NOT NULL,
+    style_id BIGINT UNSIGNED,
+    color_id BIGINT UNSIGNED,
+    line_id INT UNSIGNED NOT NULL,
+    allocated_qty INT UNSIGNED NOT NULL,
+    start_date DATE,
+    end_date DATE,
+    status_id INT UNSIGNED,
+    remarks VARCHAR(500),
+    created_by BIGINT UNSIGNED,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_line_alloc (company_id, allocation_no)
+  ) ENGINE=InnoDB`);
+
+  await exec(`CREATE TABLE IF NOT EXISTS trx_sewing_operation (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    company_id BIGINT UNSIGNED NOT NULL,
+    operation_no VARCHAR(40) NOT NULL,
+    operation_date DATE NOT NULL,
+    prod_order_id BIGINT UNSIGNED NOT NULL,
+    line_id INT UNSIGNED,
+    operation_id INT UNSIGNED NOT NULL,
+    plan_qty INT UNSIGNED DEFAULT 0,
+    actual_qty INT UNSIGNED DEFAULT 0,
+    rework_qty INT UNSIGNED DEFAULT 0,
+    rejected_qty INT UNSIGNED DEFAULT 0,
+    wip_qty INT UNSIGNED DEFAULT 0,
+    operator_name VARCHAR(80),
+    status_id INT UNSIGNED,
+    created_by BIGINT UNSIGNED,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_sew_op_txn (company_id, operation_no)
+  ) ENGINE=InnoDB`);
+
+  await exec(`CREATE TABLE IF NOT EXISTS trx_jobwork_challan (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    company_id BIGINT UNSIGNED NOT NULL,
+    challan_no VARCHAR(40) NOT NULL,
+    challan_date DATE NOT NULL,
+    prod_order_id BIGINT UNSIGNED,
+    vendor_id BIGINT UNSIGNED NOT NULL,
+    stage_id INT UNSIGNED,
+    gate_outward_id BIGINT UNSIGNED,
+    total_qty INT UNSIGNED DEFAULT 0,
+    rate DECIMAL(18,4) DEFAULT 0,
+    total_amount DECIMAL(18,4) DEFAULT 0,
+    expected_return DATE,
+    status ENUM('DRAFT','ISSUED','PARTIAL_RECEIVED','FULLY_RECEIVED','CLOSED','CANCELLED') DEFAULT 'DRAFT',
+    remarks VARCHAR(500),
+    created_by BIGINT UNSIGNED,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_by BIGINT UNSIGNED,
+    updated_at DATETIME ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_jw_challan (company_id, challan_no)
+  ) ENGINE=InnoDB`);
+
+  await exec(`CREATE TABLE IF NOT EXISTS trx_jobwork_challan_line (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    challan_id BIGINT UNSIGNED NOT NULL,
+    sku_id BIGINT UNSIGNED,
+    bundle_id BIGINT UNSIGNED,
+    description VARCHAR(255),
+    qty INT UNSIGNED NOT NULL,
+    uom_id SMALLINT UNSIGNED
+  ) ENGINE=InnoDB`);
+
+  await exec(`CREATE TABLE IF NOT EXISTS trx_jobwork_receipt (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    company_id BIGINT UNSIGNED NOT NULL,
+    receipt_no VARCHAR(40) NOT NULL,
+    receipt_date DATE NOT NULL,
+    challan_id BIGINT UNSIGNED NOT NULL,
+    vendor_id BIGINT UNSIGNED NOT NULL,
+    gate_inward_id BIGINT UNSIGNED,
+    issued_qty INT UNSIGNED DEFAULT 0,
+    received_qty INT UNSIGNED DEFAULT 0,
+    rejected_qty INT UNSIGNED DEFAULT 0,
+    shortage_qty INT UNSIGNED DEFAULT 0,
+    rework_qty INT UNSIGNED DEFAULT 0,
+    rate DECIMAL(18,4) DEFAULT 0,
+    total_amount DECIMAL(18,4) DEFAULT 0,
+    status ENUM('DRAFT','RECEIVED','QC_PENDING','ACCEPTED','CLOSED') DEFAULT 'DRAFT',
+    remarks VARCHAR(500),
+    created_by BIGINT UNSIGNED,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_jw_receipt (company_id, receipt_no)
+  ) ENGINE=InnoDB`);
+
+  await exec(`CREATE TABLE IF NOT EXISTS trx_jobwork_receipt_line (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    receipt_id BIGINT UNSIGNED NOT NULL,
+    sku_id BIGINT UNSIGNED,
+    issued_qty INT UNSIGNED DEFAULT 0,
+    received_qty INT UNSIGNED DEFAULT 0,
+    rejected_qty INT UNSIGNED DEFAULT 0,
+    shortage_qty INT UNSIGNED DEFAULT 0,
+    remarks VARCHAR(255)
+  ) ENGINE=InnoDB`);
+
+  await exec(`CREATE TABLE IF NOT EXISTS trx_jobwork_in (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    company_id BIGINT UNSIGNED NOT NULL,
+    jwin_no VARCHAR(40) NOT NULL,
+    jwin_date DATE NOT NULL,
+    customer_id BIGINT UNSIGNED NOT NULL,
+    gate_inward_id BIGINT UNSIGNED,
+    customer_dc_no VARCHAR(60),
+    customer_po_ref VARCHAR(60),
+    process_type VARCHAR(80),
+    total_qty INT UNSIGNED DEFAULT 0,
+    rate DECIMAL(18,4) DEFAULT 0,
+    total_amount DECIMAL(18,4) DEFAULT 0,
+    expected_delivery DATE,
+    status ENUM('DRAFT','RECEIVED','IN_PROCESS','QC_DONE','READY_TO_DISPATCH','DISPATCHED','INVOICED','CLOSED') DEFAULT 'DRAFT',
+    remarks VARCHAR(500),
+    created_by BIGINT UNSIGNED,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_by BIGINT UNSIGNED,
+    updated_at DATETIME ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_jwin (company_id, jwin_no)
+  ) ENGINE=InnoDB`);
+
+  await exec(`CREATE TABLE IF NOT EXISTS trx_jobwork_in_line (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    jwin_id BIGINT UNSIGNED NOT NULL,
+    description VARCHAR(255),
+    material_type ENUM('FABRIC','GARMENT','TRIM','OTHER') DEFAULT 'GARMENT',
+    qty INT UNSIGNED NOT NULL,
+    uom_id SMALLINT UNSIGNED,
+    received_qty INT UNSIGNED DEFAULT 0,
+    processed_qty INT UNSIGNED DEFAULT 0,
+    rejected_qty INT UNSIGNED DEFAULT 0,
+    returned_qty INT UNSIGNED DEFAULT 0
+  ) ENGINE=InnoDB`);
+
+  await exec(`CREATE TABLE IF NOT EXISTS trx_jobwork_invoice (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    company_id BIGINT UNSIGNED NOT NULL,
+    invoice_no VARCHAR(40) NOT NULL,
+    invoice_date DATE NOT NULL,
+    jwin_id BIGINT UNSIGNED,
+    challan_id BIGINT UNSIGNED,
+    party_id BIGINT UNSIGNED NOT NULL,
+    invoice_type ENUM('RECEIVABLE','PAYABLE') NOT NULL,
+    currency_id SMALLINT UNSIGNED NOT NULL,
+    total_qty INT UNSIGNED DEFAULT 0,
+    rate DECIMAL(18,4) DEFAULT 0,
+    taxable_amount DECIMAL(18,4) DEFAULT 0,
+    gst_amount DECIMAL(18,4) DEFAULT 0,
+    total_amount DECIMAL(18,4) DEFAULT 0,
+    hsn_code VARCHAR(10),
+    status ENUM('DRAFT','SUBMITTED','APPROVED','PAID','CANCELLED') DEFAULT 'DRAFT',
+    voucher_id BIGINT UNSIGNED,
+    remarks VARCHAR(500),
+    created_by BIGINT UNSIGNED,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_jw_invoice (company_id, invoice_no)
+  ) ENGINE=InnoDB`);
+
+  await exec(`CREATE TABLE IF NOT EXISTS trx_purchase_return (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    company_id BIGINT UNSIGNED NOT NULL,
+    return_no VARCHAR(40) NOT NULL,
+    return_date DATE NOT NULL,
+    grn_id BIGINT UNSIGNED NOT NULL,
+    supplier_id BIGINT UNSIGNED NOT NULL,
+    warehouse_id BIGINT UNSIGNED NOT NULL,
+    gate_outward_id BIGINT UNSIGNED,
+    return_reason ENUM('QUALITY_REJECT','EXCESS','WRONG_MATERIAL','DAMAGED','OTHER') DEFAULT 'QUALITY_REJECT',
+    total_qty DECIMAL(18,5) DEFAULT 0,
+    total_amount DECIMAL(18,4) DEFAULT 0,
+    debit_note_id BIGINT UNSIGNED,
+    status ENUM('DRAFT','APPROVED','DISPATCHED','ACKNOWLEDGED','CLOSED') DEFAULT 'DRAFT',
+    remarks VARCHAR(500),
+    created_by BIGINT UNSIGNED,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_pr (company_id, return_no)
+  ) ENGINE=InnoDB`);
+
+  await exec(`CREATE TABLE IF NOT EXISTS trx_purchase_return_line (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    return_id BIGINT UNSIGNED NOT NULL,
+    grn_line_id BIGINT UNSIGNED,
+    material_type ENUM('YARN','FABRIC','TRIM') NOT NULL,
+    yarn_id BIGINT UNSIGNED,
+    fabric_id BIGINT UNSIGNED,
+    trim_id BIGINT UNSIGNED,
+    color_id BIGINT UNSIGNED,
+    return_qty DECIMAL(18,5) NOT NULL,
+    uom_id SMALLINT UNSIGNED NOT NULL,
+    rate DECIMAL(18,4) DEFAULT 0,
+    amount DECIMAL(18,4) DEFAULT 0,
+    reason VARCHAR(255)
+  ) ENGINE=InnoDB`);
+
+  await exec(`CREATE TABLE IF NOT EXISTS trx_supplier_bill (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    company_id BIGINT UNSIGNED NOT NULL,
+    bill_no VARCHAR(40) NOT NULL,
+    bill_date DATE NOT NULL,
+    supplier_id BIGINT UNSIGNED NOT NULL,
+    supplier_inv_no VARCHAR(60),
+    supplier_inv_date DATE,
+    po_id BIGINT UNSIGNED,
+    grn_id BIGINT UNSIGNED,
+    gate_inward_id BIGINT UNSIGNED,
+    currency_id SMALLINT UNSIGNED NOT NULL,
+    subtotal DECIMAL(18,4) DEFAULT 0,
+    gst_amount DECIMAL(18,4) DEFAULT 0,
+    tds_amount DECIMAL(18,4) DEFAULT 0,
+    total_amount DECIMAL(18,4) DEFAULT 0,
+    po_matched TINYINT(1) NOT NULL DEFAULT 0,
+    grn_matched TINYINT(1) NOT NULL DEFAULT 0,
+    gate_matched TINYINT(1) NOT NULL DEFAULT 0,
+    match_status ENUM('UNMATCHED','PARTIAL','FULLY_MATCHED','DISCREPANCY') DEFAULT 'UNMATCHED',
+    payment_due_date DATE,
+    voucher_id BIGINT UNSIGNED,
+    status ENUM('DRAFT','VERIFIED','APPROVED','PAID','DISPUTED','CANCELLED') DEFAULT 'DRAFT',
+    remarks VARCHAR(500),
+    created_by BIGINT UNSIGNED,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_by BIGINT UNSIGNED,
+    updated_at DATETIME ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_sbill (company_id, bill_no)
+  ) ENGINE=InnoDB`);
+
+  await exec(`CREATE TABLE IF NOT EXISTS trx_supplier_bill_line (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    bill_id BIGINT UNSIGNED NOT NULL,
+    po_line_id BIGINT UNSIGNED,
+    grn_line_id BIGINT UNSIGNED,
+    material_type ENUM('YARN','FABRIC','TRIM','SERVICE') NOT NULL,
+    description VARCHAR(255),
+    bill_qty DECIMAL(18,5) NOT NULL,
+    po_qty DECIMAL(18,5) DEFAULT 0,
+    grn_qty DECIMAL(18,5) DEFAULT 0,
+    uom_id SMALLINT UNSIGNED NOT NULL,
+    rate DECIMAL(18,4) NOT NULL,
+    amount DECIMAL(18,4) NOT NULL,
+    gst_rate DECIMAL(5,2) DEFAULT 0,
+    hsn_code VARCHAR(10),
+    qty_matched TINYINT(1) NOT NULL DEFAULT 0,
+    rate_matched TINYINT(1) NOT NULL DEFAULT 0
+  ) ENGINE=InnoDB`);
+
+  await exec(`CREATE TABLE IF NOT EXISTS trx_stock_transfer (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    company_id BIGINT UNSIGNED NOT NULL,
+    transfer_no VARCHAR(40) NOT NULL,
+    transfer_date DATE NOT NULL,
+    from_warehouse BIGINT UNSIGNED NOT NULL,
+    to_warehouse BIGINT UNSIGNED NOT NULL,
+    prod_order_id BIGINT UNSIGNED,
+    transfer_type ENUM('INTER_STORE','FLOOR_TRANSFER','UNIT_TRANSFER','REJECTION_MOVE') DEFAULT 'INTER_STORE',
+    total_qty DECIMAL(14,3) DEFAULT 0,
+    status ENUM('DRAFT','IN_TRANSIT','RECEIVED','CANCELLED') DEFAULT 'DRAFT',
+    remarks VARCHAR(500),
+    created_by BIGINT UNSIGNED,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_stxfr (company_id, transfer_no)
+  ) ENGINE=InnoDB`);
+
+  await exec(`CREATE TABLE IF NOT EXISTS trx_stock_transfer_line (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    transfer_id BIGINT UNSIGNED NOT NULL,
+    material_type ENUM('YARN','FABRIC','TRIM','FINISHED','WIP') NOT NULL,
+    yarn_id BIGINT UNSIGNED,
+    fabric_id BIGINT UNSIGNED,
+    trim_id BIGINT UNSIGNED,
+    sku_id BIGINT UNSIGNED,
+    color_id BIGINT UNSIGNED,
+    batch_id BIGINT UNSIGNED,
+    bundle_id BIGINT UNSIGNED,
+    qty DECIMAL(18,5) NOT NULL,
+    uom_id SMALLINT UNSIGNED NOT NULL
+  ) ENGINE=InnoDB`);
+
+  await exec(`CREATE TABLE IF NOT EXISTS trx_fg_receipt (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    company_id BIGINT UNSIGNED NOT NULL,
+    fg_receipt_no VARCHAR(40) NOT NULL,
+    receipt_date DATE NOT NULL,
+    prod_order_id BIGINT UNSIGNED NOT NULL,
+    so_id BIGINT UNSIGNED,
+    packing_id BIGINT UNSIGNED,
+    qc_id BIGINT UNSIGNED,
+    warehouse_id BIGINT UNSIGNED NOT NULL,
+    total_qty INT UNSIGNED DEFAULT 0,
+    status ENUM('DRAFT','RECEIVED','CONFIRMED','CANCELLED') DEFAULT 'DRAFT',
+    remarks VARCHAR(500),
+    created_by BIGINT UNSIGNED,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_fgr (company_id, fg_receipt_no)
+  ) ENGINE=InnoDB`);
+
+  await exec(`CREATE TABLE IF NOT EXISTS trx_fg_receipt_line (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    fg_receipt_id BIGINT UNSIGNED NOT NULL,
+    sku_id BIGINT UNSIGNED NOT NULL,
+    carton_id BIGINT UNSIGNED,
+    qty INT UNSIGNED NOT NULL
+  ) ENGINE=InnoDB`);
+
+  await exec(`CREATE TABLE IF NOT EXISTS trx_production_cost (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    company_id BIGINT UNSIGNED NOT NULL,
+    cost_no VARCHAR(40) NOT NULL,
+    cost_date DATE NOT NULL,
+    prod_order_id BIGINT UNSIGNED NOT NULL,
+    style_id BIGINT UNSIGNED,
+    produced_qty INT UNSIGNED DEFAULT 0,
+    material_cost DECIMAL(18,4) DEFAULT 0,
+    labour_cost DECIMAL(18,4) DEFAULT 0,
+    machine_cost DECIMAL(18,4) DEFAULT 0,
+    jobwork_cost DECIMAL(18,4) DEFAULT 0,
+    process_cost DECIMAL(18,4) DEFAULT 0,
+    overhead_cost DECIMAL(18,4) DEFAULT 0,
+    packing_cost DECIMAL(18,4) DEFAULT 0,
+    total_cost DECIMAL(18,4) DEFAULT 0,
+    cost_per_piece DECIMAL(18,4) DEFAULT 0,
+    estimated_cost DECIMAL(18,4) DEFAULT 0,
+    variance DECIMAL(18,4) DEFAULT 0,
+    variance_pct DECIMAL(6,2) DEFAULT 0,
+    status ENUM('DRAFT','CALCULATED','APPROVED','CLOSED') DEFAULT 'DRAFT',
+    remarks VARCHAR(500),
+    created_by BIGINT UNSIGNED,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_prod_cost (company_id, cost_no)
+  ) ENGINE=InnoDB`);
+
+  await exec(`CREATE TABLE IF NOT EXISTS trx_production_cost_line (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    cost_id BIGINT UNSIGNED NOT NULL,
+    cost_head VARCHAR(60) NOT NULL,
+    cost_category ENUM('MATERIAL','LABOUR','MACHINE','JOBWORK','PROCESS','OVERHEAD','PACKING','OTHER') NOT NULL,
+    ref_type VARCHAR(40),
+    ref_id BIGINT UNSIGNED,
+    quantity DECIMAL(18,5),
+    uom_id SMALLINT UNSIGNED,
+    rate DECIMAL(18,4),
+    amount DECIMAL(18,4) NOT NULL,
+    remarks VARCHAR(255)
+  ) ENGINE=InnoDB`);
+}
+
 async function main() {
   log('starting...');
 
-  // Ensure recent schema columns exist before any seeding runs
+  // Ensure recent schema columns and missing feature tables exist
   await ensureColumn('trx_sales_order', 'io_no', 'VARCHAR(60) AFTER so_no');
   await ensureColumn('trx_sales_order', 'order_type', "ENUM('SAMPLE','PROJECTION','DOMESTIC','EXPORT') DEFAULT 'EXPORT' AFTER io_no");
   await ensureColumn('trx_sales_order', 'merchandiser_id', 'BIGINT UNSIGNED AFTER agent_id');
@@ -62,6 +541,8 @@ async function main() {
   await ensureColumn('mst_party', 'merchandiser_target', 'DECIMAL(18,2) DEFAULT 0');
   await ensureColumn('mst_party', 'merchandiser_commission', 'DECIMAL(6,3) DEFAULT 0');
   await ensureColumn('mst_party', 'merchandiser_remarks', 'VARCHAR(500)');
+
+  await applySchemaUpdates();
 
   // ===================================================== 1. GLOBAL LOOKUPS
   for (const [iso2, iso3, name, dial] of COUNTRIES) {
@@ -768,6 +1249,7 @@ async function seedDemo(ctx: {
   const prodInProg = await status('PROD_ORDER', 'IN_PROGRESS');
 
   // Work orders for the first three sales orders, at varying completion.
+  const prodOrderId = new Map<string, number>();
   const WORK_ORDERS: [string,string,string,string,number,number][] = [
     ['WO-00001','SO-00001','ST-2601','BLK',6000,5400],
     ['WO-00002','SO-00001','ST-2601','WHT',4000,3600],
@@ -788,6 +1270,7 @@ async function seedDemo(ctx: {
          stcUnit, qty, qty, produced, prodInProg, adminId]);
       woId = r.insertId;
     }
+    prodOrderId.set(woNo, woId);
 
     // Cutting
     const cutExists = await one(`SELECT id FROM trx_cutting WHERE company_id=? AND cut_no=?`,
@@ -1127,10 +1610,314 @@ async function seedDemo(ctx: {
          VALUES (?,?,?,?,?,?)`, [pr.insertId, ms, planned, actual, critical, st]);
     }
   }
-  log('production plan with 10 Time & Action milestones');
+  // ------------------------------------------------------- New Production & Missing Features Seeding
+  // 1. Sewing Lines
+  const sewLines = [
+    ['L01', 'Line 01 - Automatic Auto-trim', 1200, 28, 8.0],
+    ['L02', 'Line 02 - Modular Polo Line', 1200, 28, 8.0],
+    ['L03', 'Line 03 - Basic Crew Neck', 1000, 24, 8.0],
+    ['L04', 'Line 04 - Hoodie & Sweatshirt', 800, 26, 8.0],
+    ['L05', 'Line 05 - Sampling & Short Runs', 500, 16, 8.0],
+  ];
+  for (const [code, name, cap, mp, hrs] of sewLines) {
+    await exec(
+      `INSERT INTO cfg_sewing_line (company_id,line_code,line_name,unit_id,capacity_pcs,manpower,working_hours,is_active)
+       VALUES (?,?,?,?,?,?,?,1)
+       ON DUPLICATE KEY UPDATE line_name=VALUES(line_name), capacity_pcs=VALUES(capacity_pcs)`,
+      [companyId, code, name, stcUnit, cap, mp, hrs]);
+  }
+  const line01 = await id(`SELECT id FROM cfg_sewing_line WHERE company_id=? AND line_code='L01'`, [companyId], 'Line 01');
+  const line02 = await id(`SELECT id FROM cfg_sewing_line WHERE company_id=? AND line_code='L02'`, [companyId], 'Line 02');
+
+  // 2. Shifts
+  const shifts = [
+    ['GEN', 'General Shift', '08:30:00', '17:30:00', 60],
+    ['SH-A', 'Shift A (Morning)', '06:00:00', '14:00:00', 30],
+    ['SH-B', 'Shift B (Evening)', '14:00:00', '22:00:00', 30],
+  ];
+  for (const [code, name, start, end, brk] of shifts) {
+    await exec(
+      `INSERT INTO cfg_shift (company_id,shift_code,shift_name,start_time,end_time,break_minutes,is_active)
+       VALUES (?,?,?,?,?,?,1)
+       ON DUPLICATE KEY UPDATE shift_name=VALUES(shift_name)`,
+      [companyId, code, name, start, end, brk]);
+  }
+  const shiftGen = await id(`SELECT id FROM cfg_shift WHERE company_id=? AND shift_code='GEN'`, [companyId], 'General Shift');
+
+  // 3. Delay Reasons
+  const delayReasons = [
+    ['DEL-01', 'Machine Breakdown', 'MACHINE'],
+    ['DEL-02', 'Fabric Shade Variation / Defect', 'MATERIAL'],
+    ['DEL-03', 'Operator Absenteeism', 'MANPOWER'],
+    ['DEL-04', 'Quality Rejection & High Rework', 'QUALITY'],
+    ['DEL-05', 'Trims / Label Shortage', 'MATERIAL'],
+    ['DEL-06', 'Power Outage / Compressor Trip', 'MACHINE'],
+  ];
+  for (const [code, name, cat] of delayReasons) {
+    await exec(
+      `INSERT INTO cfg_delay_reason (company_id,reason_code,reason_name,category,is_active)
+       VALUES (?,?,?,?,1)
+       ON DUPLICATE KEY UPDATE reason_name=VALUES(reason_name)`,
+      [companyId, code, name, cat]);
+  }
+  const delay01 = await id(`SELECT id FROM cfg_delay_reason WHERE company_id=? AND reason_code='DEL-01'`, [companyId], 'Delay 01');
+
+  // 4. Sewing Operations Master
+  const sewOps = [
+    ['OP-01', 'Shoulder Join', 0.450, 1],
+    ['OP-02', 'Neck Rib Attach', 0.850, 2],
+    ['OP-03', 'Sleeve Attach', 1.100, 3],
+    ['OP-04', 'Side Seam Join', 0.900, 4],
+    ['OP-05', 'Bottom Hemming', 0.750, 5],
+    ['OP-06', 'Sleeve Hemming', 0.650, 6],
+  ];
+  for (const [code, name, smv, sort] of sewOps) {
+    await exec(
+      `INSERT INTO cfg_sewing_operation_master (company_id,operation_code,operation_name,smv,sort_order,is_active)
+       VALUES (?,?,?,?,?,1)
+       ON DUPLICATE KEY UPDATE operation_name=VALUES(operation_name), smv=VALUES(smv)`,
+      [companyId, code, name, smv, sort]);
+  }
+  const op01 = await id(`SELECT id FROM cfg_sewing_operation_master WHERE company_id=? AND operation_code='OP-01'`, [companyId], 'Op 01');
+  const op02 = await id(`SELECT id FROM cfg_sewing_operation_master WHERE company_id=? AND operation_code='OP-02'`, [companyId], 'Op 02');
+  const op03 = await id(`SELECT id FROM cfg_sewing_operation_master WHERE company_id=? AND operation_code='OP-03'`, [companyId], 'Op 03');
+  const op04 = await id(`SELECT id FROM cfg_sewing_operation_master WHERE company_id=? AND operation_code='OP-04'`, [companyId], 'Op 04');
+  const op05 = await id(`SELECT id FROM cfg_sewing_operation_master WHERE company_id=? AND operation_code='OP-05'`, [companyId], 'Op 05');
+
+  // 5. Line Allocation
+  const allocExists = await one(`SELECT id FROM trx_line_allocation WHERE company_id=? AND allocation_no='LA-00001'`, [companyId]);
+  if (!allocExists) {
+    await exec(
+      `INSERT INTO trx_line_allocation (company_id,allocation_no,allocation_date,prod_order_id,style_id,
+         color_id,line_id,allocated_qty,start_date,end_date,remarks,created_by)
+       VALUES (?,'LA-00001','2026-06-20',?,?,?,
+               ?,5000,'2026-06-25','2026-07-20','Allocated 5,000 pcs black tees to Line 01',?)`,
+      [companyId, prodOrderId.get('WO-00001'), styleId.get('ST-2601'), colorId.get('BLK'), line01, adminId]);
+
+    await exec(
+      `INSERT INTO trx_line_allocation (company_id,allocation_no,allocation_date,prod_order_id,style_id,
+         color_id,line_id,allocated_qty,start_date,end_date,remarks,created_by)
+       VALUES (?,'LA-00002','2026-06-20',?,?,?,
+               ?,3500,'2026-07-01','2026-07-25','Allocated 3,500 pcs navy polo to Line 02',?)`,
+      [companyId, prodOrderId.get('WO-00002'), styleId.get('ST-2602'), colorId.get('NVY'), line02, adminId]);
+  }
+
+  // 6. Sewing Operations Tracking (Real output & WIP)
+  const sewOpExists = await one(`SELECT id FROM trx_sewing_operation WHERE company_id=? AND operation_no='SOP-00001'`, [companyId]);
+  if (!sewOpExists) {
+    const opsData = [
+      ['SOP-00001', op01, 5000, 4850, 30, 10, 120, 'M. Murugan'],
+      ['SOP-00002', op02, 5000, 4700, 45, 15, 270, 'K. Selvi'],
+      ['SOP-00003', op03, 5000, 4600, 40, 20, 360, 'R. Kavitha'],
+      ['SOP-00004', op04, 5000, 4500, 35, 10, 465, 'S. Lakshmi'],
+      ['SOP-00005', op05, 5000, 4400, 25, 10, 575, 'P. Vasanthi'],
+    ];
+    for (const [ono, opId, planQ, actQ, rwkQ, rejQ, wipQ, opName] of opsData) {
+      await exec(
+        `INSERT INTO trx_sewing_operation (company_id,operation_no,operation_date,prod_order_id,line_id,
+           operation_id,plan_qty,actual_qty,rework_qty,rejected_qty,wip_qty,operator_name,created_by)
+         VALUES (?,?,'2026-06-28',?,?,?,?,?,?,?,?,?,?)`,
+        [companyId, ono, prodOrderId.get('WO-00001'), line01, opId, planQ, actQ, rwkQ, rejQ, wipQ, opName, adminId]);
+    }
+  }
+
+  // 7. Daily Production Plan & Output
+  const todayDate = new Date().toISOString().slice(0, 10);
+  const dpExists = await one(`SELECT id FROM trx_daily_production_plan WHERE company_id=? AND plan_no='DP-2026-0001'`, [companyId]);
+  if (!dpExists) {
+    const dpr = await exec(
+      `INSERT INTO trx_daily_production_plan (company_id,plan_no,plan_date,unit_id,line_id,shift_id,
+         supervisor_id,prod_order_id,style_id,planned_qty,previous_output,balance_qty,today_target,
+         smv,line_efficiency,capacity_pcs,status,remarks,created_by)
+       VALUES (?,'DP-2026-0001',?,?,?,?,?,?,?,5000,3800,1200,1100,4.700,85.00,1150,'IN_PROGRESS',
+               'Shift production target for black crew tees',?)`,
+      [companyId, todayDate, stcUnit, line01, shiftGen, adminId, prodOrderId.get('WO-00001'), styleId.get('ST-2601'), adminId]);
+
+    const dpId = dpr.insertId;
+    const cutStage = await id(`SELECT id FROM cfg_process_stage WHERE company_id=? AND stage_code='CUT'`, [companyId], 'CUT stage');
+    const sewStage = await id(`SELECT id FROM cfg_process_stage WHERE company_id=? AND stage_code='STITCH'`, [companyId], 'STITCH stage');
+
+    await exec(
+      `INSERT INTO trx_daily_plan_operation (daily_plan_id,stage_id,line_id,target_qty,actual_qty,balance_qty)
+       VALUES (?,?,?,1100,1045,55)`, [dpId, sewStage, line01]);
+
+    await exec(
+      `INSERT INTO trx_daily_output (company_id,output_no,output_date,daily_plan_id,prod_order_id,
+         style_id,line_id,shift_id,stage_id,target_qty,actual_good,reject_qty,rework_qty,total_output,
+         achievement_pct,delay_reason_id,status,remarks,created_by)
+       VALUES (?,'DPO-2026-0001',?,?,?,?,?,?,?,1100,1045,12,25,1082,95.00,NULL,'APPROVED',
+               'Achieved 95% target, minor machine maintenance in hour 4',?)`,
+      [companyId, todayDate, dpId, prodOrderId.get('WO-00001'), styleId.get('ST-2601'), line01, shiftGen, sewStage, adminId]);
+
+    await exec(
+      `INSERT INTO trx_daily_output (company_id,output_no,output_date,daily_plan_id,prod_order_id,
+         style_id,line_id,shift_id,stage_id,target_qty,actual_good,reject_qty,rework_qty,total_output,
+         achievement_pct,delay_reason_id,status,remarks,created_by)
+       VALUES (?,'DPO-2026-0002',?,NULL,?,?,?,?,?,950,880,15,18,913,92.63,?, 'SUBMITTED',
+               'Line 2 needle breakage caused 20 min stoppage',?)`,
+      [companyId, todayDate, prodOrderId.get('WO-00002'), styleId.get('ST-2602'), line02, shiftGen, sewStage, delay01, adminId]);
+  }
+
+  // 8. Job Work Outward & Receipt
+  const jwcExists = await one(`SELECT id FROM trx_jobwork_challan WHERE company_id=? AND challan_no='JWC-00001'`, [companyId]);
+  if (!jwcExists) {
+    const prtStage = await id(`SELECT id FROM cfg_process_stage WHERE company_id=? AND stage_code='PRINT'`, [companyId], 'PRINT stage');
+    const jwcr = await exec(
+      `INSERT INTO trx_jobwork_challan (company_id,challan_no,challan_date,prod_order_id,vendor_id,
+         stage_id,total_qty,rate,total_amount,expected_return,status,remarks,created_by)
+       VALUES (?,'JWC-00001','2026-06-10',?,?,?,1200,6.50,7800.00,'2026-06-16','FULLY_RECEIVED',
+               'Sent cut panels for front chest screen printing',?)`,
+      [companyId, prodOrderId.get('WO-00001'), partyId.get('V001'), prtStage, adminId]);
+
+    await exec(
+      `INSERT INTO trx_jobwork_challan_line (challan_id,description,qty,uom_id)
+       VALUES (?,'Front Chest Print on Black Cut Panels (ST-2601)',1200,?)`, [jwcr.insertId, PCS]);
+
+    const jwr = await exec(
+      `INSERT INTO trx_jobwork_receipt (company_id,receipt_no,receipt_date,challan_id,vendor_id,
+         issued_qty,received_qty,rejected_qty,shortage_qty,rework_qty,rate,total_amount,status,remarks,created_by)
+       VALUES (?,'JWR-00001','2026-06-15',?,?,1200,1185,10,5,15,6.50,7702.50,'ACCEPTED',
+               '1,185 panels accepted in QC, 10 printing rejects, 5 shortage',?)`,
+      [companyId, jwcr.insertId, partyId.get('V001'), adminId]);
+
+    await exec(
+      `INSERT INTO trx_jobwork_receipt_line (receipt_id,issued_qty,received_qty,rejected_qty,shortage_qty,remarks)
+       VALUES (?,1200,1185,10,5,'Full batch reconciled')`, [jwr.insertId]);
+  }
+
+  // 9. Job Work In (Processing customer material at our factory)
+  const jwinExists = await one(`SELECT id FROM trx_jobwork_in WHERE company_id=? AND jwin_no='JWI-00001'`, [companyId]);
+  if (!jwinExists) {
+    const jwinr = await exec(
+      `INSERT INTO trx_jobwork_in (company_id,jwin_no,jwin_date,customer_id,customer_dc_no,
+         customer_po_ref,process_type,total_qty,rate,total_amount,expected_delivery,status,remarks,created_by)
+       VALUES (?,'JWI-00001','2026-07-05',?,'DC-DEC-8812','PO-DEC-9941','Screen Printing',
+               2500,8.00,20000.00,'2026-07-15','INVOICED','Customer fabric printed and delivered',?)`,
+      [companyId, partyId.get('B003'), adminId]);
+
+    await exec(
+      `INSERT INTO trx_jobwork_in_line (jwin_id,description,material_type,qty,uom_id,received_qty,processed_qty)
+       VALUES (?,'100% Cotton Single Jersey Panels for Chest Print','GARMENT',2500,?,2500,2500)`,
+      [jwinr.insertId, PCS]);
+
+    await exec(
+      `INSERT INTO trx_jobwork_invoice (company_id,invoice_no,invoice_date,jwin_id,party_id,
+         invoice_type,currency_id,total_qty,rate,taxable_amount,gst_amount,total_amount,hsn_code,status,remarks,created_by)
+       VALUES (?,'JINV-00001','2026-07-16',?,?,'RECEIVABLE',?,2500,8.00,20000.00,3600.00,23600.00,'9988','APPROVED',
+               'Job work printing invoice for Decathlon',?)`,
+      [companyId, jwinr.insertId, partyId.get('B003'), inrId, adminId]);
+  }
+
+  // 10. Purchase Return (Physical Return to Supplier)
+  const prExists = await one(`SELECT id FROM trx_purchase_return WHERE company_id=? AND return_no='PR-00001'`, [companyId]);
+  if (!prExists) {
+    const grn1 = await one<{ id: number }>(`SELECT id FROM trx_grn WHERE company_id=? AND grn_no='GRN-00001'`, [companyId]);
+    if (grn1) {
+      const prRes = await exec(
+        `INSERT INTO trx_purchase_return (company_id,return_no,return_date,grn_id,supplier_id,
+           warehouse_id,return_reason,total_qty,total_amount,status,remarks,created_by)
+         VALUES (?,'PR-00001','2026-06-05',?,?,?,'QUALITY_REJECT',50.000,14250.00,'DISPATCHED',
+                 'Returned 50kg yarn with shade variation',?)`,
+        [companyId, grn1.id, partyId.get('S001'), rmWh, adminId]);
+
+      await exec(
+        `INSERT INTO trx_purchase_return_line (return_id,material_type,yarn_id,return_qty,uom_id,rate,amount,reason)
+         VALUES (?,'YARN',?,50.000,?,285.00,14250.00,'Shade variation beyond tolerance')`,
+        [prRes.insertId, yarnId.get('Y30CC'), KG]);
+    }
+  }
+
+  // 11. Supplier Bill (3-Way Matching: PO -> GRN -> Bill)
+  const sbillExists = await one(`SELECT id FROM trx_supplier_bill WHERE company_id=? AND bill_no='BILL-00001'`, [companyId]);
+  if (!sbillExists) {
+    const grn1 = await one<{ id: number }>(`SELECT id FROM trx_grn WHERE company_id=? AND grn_no='GRN-00001'`, [companyId]);
+    const po1 = await one<{ id: number }>(`SELECT id FROM trx_purchase_order WHERE company_id=? AND po_no='PO-00001'`, [companyId]);
+    if (grn1 && po1) {
+      const sbRes = await exec(
+        `INSERT INTO trx_supplier_bill (company_id,bill_no,bill_date,supplier_id,supplier_inv_no,
+           supplier_inv_date,po_id,grn_id,currency_id,subtotal,gst_amount,total_amount,
+           po_matched,grn_matched,gate_matched,match_status,status,remarks,created_by)
+         VALUES (?,'BILL-00001','2026-06-03',?,'INV-SVS-2291','2026-06-01',?,?,?,
+                 1410750.00,70537.50,1481287.50,1,1,1,'FULLY_MATCHED','APPROVED',
+                 '3-Way Match Verified (PO, Gate Entry, GRN all matched)',?)`,
+        [companyId, partyId.get('S001'), po1.id, grn1.id, inrId, adminId]);
+
+      await exec(
+        `INSERT INTO trx_supplier_bill_line (bill_id,material_type,description,bill_qty,po_qty,grn_qty,
+           uom_id,rate,amount,gst_rate,qty_matched,rate_matched)
+         VALUES (?,'YARN','30s Combed Cotton Yarn',4950,5000,4950,?,285.00,1410750.00,5.00,1,1)`,
+        [sbRes.insertId, KG]);
+    }
+  }
+
+  // 12. Stock Transfer
+  const stxExists = await one(`SELECT id FROM trx_stock_transfer WHERE company_id=? AND transfer_no='STX-00001'`, [companyId]);
+  if (!stxExists) {
+    const stxRes = await exec(
+      `INSERT INTO trx_stock_transfer (company_id,transfer_no,transfer_date,from_warehouse,to_warehouse,
+         prod_order_id,transfer_type,total_qty,status,remarks,created_by)
+       VALUES (?,'STX-00001','2026-06-16',?,?,?,'FLOOR_TRANSFER',450.000,'RECEIVED',
+               'Issued fabric rolls from Main Store to Cutting Floor',?)`,
+      [companyId, rmWh, rmWh, prodOrderId.get('WO-00001'), adminId]);
+
+    await exec(
+      `INSERT INTO trx_stock_transfer_line (transfer_id,material_type,fabric_id,color_id,qty,uom_id)
+       VALUES (?,'FABRIC',?,?,450.000,?)`,
+      [stxRes.insertId, fabricId.get('F-SJ180'), colorId.get('BLK'), KG]);
+  }
+
+  // 13. FG Receipt (Packing -> FG Warehouse)
+  const fgrExists = await one(`SELECT id FROM trx_fg_receipt WHERE company_id=? AND fg_receipt_no='FGR-00001'`, [companyId]);
+  if (!fgrExists) {
+    const fgWh = await id(`SELECT id FROM mst_warehouse WHERE company_id=? AND warehouse_code='WH-FG'`, [companyId], 'WH-FG');
+    const fgrRes = await exec(
+      `INSERT INTO trx_fg_receipt (company_id,fg_receipt_no,receipt_date,prod_order_id,so_id,
+         packing_id,warehouse_id,total_qty,status,remarks,created_by)
+       VALUES (?,'FGR-00001','2026-07-29',?,?,?,
+               ?,5400,'CONFIRMED','Received 90 export cartons into Finished Goods warehouse',?)`,
+      [companyId, prodOrderId.get('WO-00001'), soId.get('SO-00001'), packId, fgWh, adminId]);
+
+    const sku1 = await id(`SELECT id FROM mst_style_sku WHERE style_id=? LIMIT 1`, [styleId.get('ST-2601')], 'SKU 1');
+    await exec(
+      `INSERT INTO trx_fg_receipt_line (fg_receipt_id,sku_id,qty)
+       VALUES (?,?,5400)`, [fgrRes.insertId, sku1]);
+  }
+
+  // 14. Actual Production Costing
+  const pcostExists = await one(`SELECT id FROM trx_production_cost WHERE company_id=? AND cost_no='PCST-00001'`, [companyId]);
+  if (!pcostExists) {
+    const pcostRes = await exec(
+      `INSERT INTO trx_production_cost (company_id,cost_no,cost_date,prod_order_id,style_id,
+         produced_qty,material_cost,labour_cost,machine_cost,jobwork_cost,process_cost,overhead_cost,
+         packing_cost,total_cost,cost_per_piece,estimated_cost,variance,variance_pct,status,remarks,created_by)
+       VALUES (?,'PCST-00001','2026-08-01',?,?,
+               5000,128500.00,42000.00,15000.00,32500.00,18000.00,16500.00,14000.00,
+               266500.00,53.30,54.50,-1.20,-2.20,'APPROVED',
+               'Actual production cost was 2.2% below pre-sales estimate due to higher cutting yield',?)`,
+      [companyId, prodOrderId.get('WO-00001'), styleId.get('ST-2601'), adminId]);
+
+    const costLines = [
+      ['Fabric (Single Jersey 180 GSM)', 'MATERIAL', 112000.00],
+      ['Neck Rib & Sewing Thread', 'MATERIAL', 16500.00],
+      ['Cutting Floor Direct Labour', 'LABOUR', 8500.00],
+      ['Sewing Assembly Direct Labour', 'LABOUR', 26000.00],
+      ['Finishing & Thread Trimming', 'LABOUR', 7500.00],
+      ['Chest Screen Printing (Outsourced)', 'JOBWORK', 32500.00],
+      ['Factory Power & Machine Amortisation', 'MACHINE', 15000.00],
+      ['Factory Admin & Supervisor Overheads', 'OVERHEAD', 16500.00],
+      ['Polybag, Hangtag & 5-Ply Cartons', 'PACKING', 14000.00],
+    ];
+    for (const [head, cat, amt] of costLines) {
+      await exec(
+        `INSERT INTO trx_production_cost_line (cost_id,cost_head,cost_category,amount)
+         VALUES (?,?,?,?)`, [pcostRes.insertId, head, cat, amt]);
+    }
+  }
+  log('new production features seeded: lines, shifts, delay reasons, operations, daily plans, outputs, job work, returns, bills, transfers, costing');
 
   // ------------------------------------------------------- notifications
   const notifExists = await one(`SELECT id FROM trx_notification WHERE company_id=?`, [companyId]);
+
   if (!notifExists) {
     const notes: [string, string][] = [
       ['Order SO-00001 shipped', 'Container MSKU7841239 sailed from Tuticorin on 07 Aug 2026.'],

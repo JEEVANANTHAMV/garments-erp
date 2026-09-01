@@ -383,4 +383,8 @@ export const NUMBER_SERIES: [string, string][] = [
   ['QC','QC-'], ['PACKING','PCK-'], ['DISPATCH','DSP-'], ['INVOICE','INV-'],
   ['PACKING_LIST','PL-'], ['SHIPPING_BILL','SB-'], ['SHIPMENT','SHP-'],
   ['VOUCHER','VCH-'], ['RECEIPT','RCP-'], ['PAYMENT','PAY-'],
+  ['DAILY_PLAN','DP-'], ['DAILY_OUTPUT','DPO-'], ['LINE_ALLOC','LA-'], ['SEW_OP','SOP-'],
+  ['JW_CHALLAN','JWC-'], ['JW_RECEIPT','JWR-'], ['JW_IN','JWI-'], ['JW_INVOICE','JINV-'],
+  ['PURCHASE_RETURN','PR-'], ['SUPPLIER_BILL','BILL-'], ['STOCK_TRANSFER','STX-'],
+  ['FG_RECEIPT','FGR-'], ['PROD_COST','PCST-'],
 ];
