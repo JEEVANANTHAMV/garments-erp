@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, ArrowLeft, Save, Trash2, ArrowUp, ArrowDown, Sparkles, Tag,
-  Layers, Users, Check, Copy, Ruler, CheckCircle2
+  Layers, Copy, Ruler, CheckCircle2
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { http, ApiError } from '../../lib/api';
