@@ -273,21 +273,7 @@ export function UnitsPage() {
 }
 
 /* -------------------------------------------------------- Size groups */
-export function SizeGroupsPage() {
-  return <CrudPage
-    path="size-groups" title="Size Groups" permission="SIZE" singular="Size Group"
-    subtitle="Size scales used by styles"
-    defaultSort={{ key: 'group_name', dir: 'asc' }}
-    columns={[
-      { key: 'group_code', header: 'Code', sortable: true,
-        render: (r: any) => <span className="font-mono text-[12px] text-brand-700">{r.group_code}</span> },
-      { key: 'group_name', header: 'Name', sortable: true },
-    ]}
-    fields={[
-      { name: 'group_code', label: 'Group code', required: true },
-      { name: 'group_name', label: 'Group name', required: true },
-    ]} />;
-}
+export { SizeGroupsPage, SizeGroupDetailPage } from './SizeGroups';
 
 /* -------------------------------------------------------- Individual Sizes */
 export function SizesPage() {

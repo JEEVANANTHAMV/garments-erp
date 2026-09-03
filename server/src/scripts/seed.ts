@@ -863,23 +863,56 @@ async function seedDemo(ctx: {
       [companyId, code], `color ${code}`));
   }
 
-  const SIZE_GROUPS: [string, string, [string,string][]][] = [
-    ['ALPHA','Alpha Sizes (S-XXL)', [['S','Small'],['M','Medium'],['L','Large'],['XL','X-Large'],['XXL','XX-Large']]],
-    ['KIDS','Kids Age Sizes', [['2-3Y','2-3 Years'],['4-5Y','4-5 Years'],['6-7Y','6-7 Years'],['8-9Y','8-9 Years']]],
-    ['NUM-EU','Numeric EU', [['46','EU 46'],['48','EU 48'],['50','EU 50'],['52','EU 52']]],
+  const SIZE_GROUPS: [string, string, string, string, string, [string,string,string][]][] = [
+    ['SG-ADULT-ALPHA','Men\'s & Unisex Alpha (XS - 3XL)','ADULT','UNISEX','Standard T-Shirt & Polo Chest Scale', [
+      ['XS','Extra Small','36" Chest'],['S','Small','38" Chest'],['M','Medium','40" Chest'],
+      ['L','Large','42" Chest'],['XL','X-Large','44" Chest'],['2XL','2X-Large','46" Chest'],['3XL','3X-Large','48" Chest'],
+    ]],
+    ['ALPHA','Alpha Standard (S - XXL)','ADULT','UNISEX','Regular Adult Scale', [
+      ['S','Small','38" Chest'],['M','Medium','40" Chest'],['L','Large','42" Chest'],
+      ['XL','X-Large','44" Chest'],['XXL','XX-Large','46" Chest'],
+    ]],
+    ['KIDS','Kids Age Scale (2Y - 14Y)','KIDS','UNISEX','Boys & Girls Age Scale', [
+      ['2-3Y','2 to 3 Years','92-98 cm'],['4-5Y','4 to 5 Years','104-110 cm'],['6-7Y','6 to 7 Years','116-122 cm'],
+      ['8-9Y','8 to 9 Years','128-134 cm'],['10-11Y','10 to 11 Years','140-146 cm'],['12-13Y','12 to 13 Years','152-158 cm'],['14Y+','14 Years & Above','164 cm'],
+    ]],
+    ['SG-BABY-MTH','Infant & Toddler Months (0M - 24M)','INFANT','BABY','Romper & Bodysuit Months Scale', [
+      ['0-3M','0 to 3 Months','56-62 cm'],['3-6M','3 to 6 Months','62-68 cm'],['6-9M','6 to 9 Months','68-74 cm'],
+      ['9-12M','9 to 12 Months','74-80 cm'],['12-18M','12 to 18 Months','80-86 cm'],['18-24M','18 to 24 Months','86-92 cm'],
+      ['2T','Toddler 2','92 cm'],['3T','Toddler 3','98 cm'],
+    ]],
+    ['SG-EURO-HT','European Kids Height (92 - 164 cm)','KIDS','UNISEX','EU Export Centimeter Height Scale', [
+      ['92','92 cm Height','2 Years'],['98','98 cm Height','3 Years'],['104','104 cm Height','4 Years'],
+      ['110','110 cm Height','5 Years'],['116','116 cm Height','6 Years'],['122','122 cm Height','7 Years'],
+      ['128','128 cm Height','8 Years'],['140','140 cm Height','10 Years'],['152','152 cm Height','12 Years'],['164','164 cm Height','14 Years'],
+    ]],
+    ['NUM-EU','Bottoms / Numeric Waist (28" - 42")','BOTTOMS','MEN','Trousers, Jeans & Shorts Waist Scale', [
+      ['28','28" Waist','71 cm'],['30','30" Waist','76 cm'],['32','32" Waist','81 cm'],['34','34" Waist','86 cm'],
+      ['36','36" Waist','91 cm'],['38','38" Waist','96 cm'],['40','40" Waist','101 cm'],['42','42" Waist','106 cm'],
+    ]],
+    ['SG-PLUS-SIZE','Plus Size Scale (1X - 5X)','PLUS_SIZE','UNISEX','Big & Tall Plus Size Scale', [
+      ['1X','1X Plus','50" Chest'],['2X','2X Plus','54" Chest'],['3X','3X Plus','58" Chest'],
+      ['4X','4X Plus','62" Chest'],['5X','5X Plus','66" Chest'],
+    ]],
+    ['SG-FREE-SIZE','Free Size / One Size','ACCESSORIES','UNISEX','Caps, Towels & Accessories', [
+      ['FREE SIZE','One Size Fits All','Universal'],
+    ]],
   ];
   const sizeGroupId = new Map<string, number>();
-  for (const [code, name, sizes] of SIZE_GROUPS) {
-    await exec(`INSERT INTO mst_size_group (company_id,group_code,group_name) VALUES (?,?,?)
-                ON DUPLICATE KEY UPDATE group_name=VALUES(group_name)`, [companyId, code, name]);
+  for (const [code, name, cat, gnd, desc, sizes] of SIZE_GROUPS) {
+    await exec(`INSERT INTO mst_size_group (company_id,group_code,group_name,category,gender,description,is_active)
+                VALUES (?,?,?,?,?,?,1)
+                ON DUPLICATE KEY UPDATE group_name=VALUES(group_name), category=VALUES(category), gender=VALUES(gender), description=VALUES(description)`,
+      [companyId, code, name, cat, gnd, desc]);
     const gid = await id(`SELECT id FROM mst_size_group WHERE company_id=? AND group_code=?`,
       [companyId, code], `size group ${code}`);
     sizeGroupId.set(code, gid);
     let sort = 1;
-    for (const [sc, sl] of sizes) {
-      await exec(`INSERT INTO mst_size (size_group_id,size_code,size_label,sort_order) VALUES (?,?,?,?)
-                  ON DUPLICATE KEY UPDATE size_label=VALUES(size_label), sort_order=VALUES(sort_order)`,
-        [gid, sc, sl, sort++]);
+    for (const [sc, sl, bodySpec] of sizes) {
+      await exec(`INSERT INTO mst_size (size_group_id,size_code,size_label,body_measurement,sort_order,is_active)
+                  VALUES (?,?,?,?,?,1)
+                  ON DUPLICATE KEY UPDATE size_label=VALUES(size_label), body_measurement=VALUES(body_measurement), sort_order=VALUES(sort_order)`,
+        [gid, sc, sl, bodySpec, sort++]);
     }
   }
 

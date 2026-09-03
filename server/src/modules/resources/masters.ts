@@ -187,24 +187,34 @@ export const masterResources: ResourceConfig[] = [
   },
   {
     path: 'size-groups', table: 'mst_size_group', permission: 'SIZE', label: 'Size Group',
-    searchable: ['group_code', 'group_name'], sortable: ['group_code'], defaultSort: 't.group_name',
-    softDelete: false, hasIsActive: false, hasAuditCols: false,
+    searchable: ['group_code', 'group_name', 'category', 'gender', 'description'],
+    sortable: ['group_code', 'group_name'], defaultSort: 't.group_name',
+    softDelete: false, hasIsActive: true, hasAuditCols: false,
+    selectExtra: 'p.party_name AS buyer_name, (SELECT COUNT(*) FROM mst_size s WHERE s.size_group_id = t.id AND s.is_active=1) AS size_count, (SELECT GROUP_CONCAT(s.size_code ORDER BY s.sort_order SEPARATOR " ➔ ") FROM mst_size s WHERE s.size_group_id = t.id AND s.is_active=1) AS size_scale_preview',
+    joins: `LEFT JOIN mst_party p ON p.id = t.buyer_id`,
     children: [
       { key: 'sizes', table: 'mst_size', fk: 'size_group_id', orderBy: 'sort_order, id', fields: [
         f('size_code', s.strReq(20)), f('size_label', s.strReq(40)),
+        f('body_measurement', s.nullableStr(80)), f('barcode_suffix', s.nullableStr(40)),
         f('sort_order', s.int()), f('is_active', s.bool()),
       ]},
     ],
-    fields: [f('group_code', s.strReq(30)), f('group_name', s.strReq(80))],
+    fields: [
+      f('group_code', s.strReq(30)), f('group_name', s.strReq(80)),
+      f('category', s.nullableStr(40)), f('gender', s.nullableStr(40)),
+      f('buyer_id', s.id()), f('description', s.nullableStr(255)),
+      f('is_active', s.bool()),
+    ],
   },
   {
     path: 'sizes', table: 'mst_size', permission: 'SIZE', label: 'Size',
-    searchable: ['size_code', 'size_label'], sortable: ['sort_order', 'size_code'],
+    searchable: ['size_code', 'size_label', 'body_measurement'], sortable: ['sort_order', 'size_code'],
     defaultSort: 't.sort_order', companyScoped: false, softDelete: false, hasAuditCols: false,
     filters: ['size_group_id'],
     fields: [
       f('size_group_id', s.idReq()), f('size_code', s.strReq(20)),
-      f('size_label', s.strReq(40)), f('sort_order', s.int()), f('is_active', s.bool()),
+      f('size_label', s.strReq(40)), f('body_measurement', s.nullableStr(80)),
+      f('barcode_suffix', s.nullableStr(40)), f('sort_order', s.int()), f('is_active', s.bool()),
     ],
   },
   {
