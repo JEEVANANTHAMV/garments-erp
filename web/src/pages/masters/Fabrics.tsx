@@ -12,7 +12,7 @@ import { useToast } from '../../hooks/useToast';
 import { DataTable } from '../../components/DataTable';
 import {
   PageHeader, SearchInput, Input, Select, Spinner, Badge,
-  LoadingBlock, ErrorState, Tabs, useDebounced
+  LoadingBlock, ErrorState, useDebounced
 } from '../../components/ui';
 import { fmtDecimal } from '../../lib/format';
 
@@ -24,59 +24,67 @@ export interface FibreDetailLine {
   percentage: number | '';
 }
 
+let fibreLineSeq = 0;
+
 const FIBRE_COLOR_PALETTE = [
-  '#0284c7', // Sky blue
-  '#10b981', // Emerald green
+  '#0284c7', // Brand Sky
+  '#10b981', // Emerald
   '#f59e0b', // Amber
   '#8b5cf6', // Violet
   '#ec4899', // Pink
-  '#14b8a6', // Teal
-  '#f97316', // Orange
+  '#06b6d4', // Cyan
+  '#84cc16', // Lime
   '#64748b', // Slate
 ];
 
 const FIBRE_PRESETS = [
   'Cotton (Organic)',
-  'Cotton (Conventional)',
-  'Polyester',
+  'Cotton (BCI)',
+  'Cotton (Carded)',
+  'Cotton (Combed)',
+  'Polyester (Virgin)',
+  'Polyester (Recycled / rPET)',
+  'Elastane / Spandex',
   'Viscose / Rayon',
-  'Elastane / Spandex (Lycra)',
   'Modal',
+  'Tencel / Lyocell',
   'Linen',
-  'Bamboo',
-  'Nylon',
   'Wool',
-  'Acrylic',
+  'Nylon / Polyamide',
   'Silk',
+  'Bamboo Fibre',
+  'Other Blend',
 ];
 
-let fibreLineSeq = 0;
-
 /* ==============================================================================
-   1. FABRICS LIST PAGE (DataTable & Filters)
+   1. FABRIC LIST VIEW
    ============================================================================== */
 export function FabricsPage() {
   const { can } = useAuth();
   const nav = useNavigate();
-  const { page, setPage, search, setSearch, sort, onSort } = useListState({ key: 'fabric_name', dir: 'asc' });
+  const { page, setPage, search, setSearch, sort, onSort } = useListState({
+    key: 'fabric_code',
+    dir: 'asc',
+  });
   const debounced = useDebounced(search);
-  const [fabricType, setFabricType] = useState('');
+  const [catFilter, setCatFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+
+  const categories = useLookup('material-categories');
 
   const list = useList<any>('fabrics', {
     page,
     pageSize: 25,
     q: debounced || undefined,
-    fabric_type: fabricType || undefined,
-    sort: sort.key,
-    dir: sort.dir,
+    category_id: catFilter || undefined,
+    fabric_type: typeFilter || undefined,
   });
 
   return (
     <>
       <PageHeader
-        breadcrumb={['Masters', 'Fabric Master']}
-        title="Fabric Master"
-        subtitle="Manage knit and woven fabric specifications, GSM, composition, finishes and standard rates"
+        title="Fabrics"
+        subtitle="Knitted & woven fabric masters with GSM and fibre composition"
         actions={
           can('MATERIAL.CREATE') && (
             <button className="btn-primary" onClick={() => nav('/masters/fabrics/new')}>
@@ -86,33 +94,36 @@ export function FabricsPage() {
         }
       />
 
-      <div className="mb-3.5 flex flex-wrap items-center gap-2.5">
-        <SearchInput
-          value={search}
-          onChange={setSearch}
-          placeholder="Search fabric code, name, structure…"
-          className="w-full max-w-md"
-        />
-        <div className="w-48">
-          <Select
-            placeholder="All Types"
-            options={[
-              { value: 'KNIT', label: 'Knit' },
-              { value: 'WOVEN', label: 'Woven' },
-              { value: 'NONWOVEN', label: 'Non-Woven' },
-            ]}
-            value={fabricType}
-            onChange={(e) => {
-              setFabricType(e.target.value);
-              setPage(1);
-            }}
+      <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-4">
+        <div className="sm:col-span-2">
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Search fabric code, name, construction or composition…"
           />
         </div>
-        {fabricType && (
-          <button className="btn-ghost btn-sm" onClick={() => { setFabricType(''); setPage(1); }}>
-            Clear filter
-          </button>
-        )}
+        <Select
+          placeholder="All Categories"
+          options={toOptions(categories.data)}
+          value={catFilter}
+          onChange={(e) => {
+            setCatFilter(e.target.value);
+            setPage(1);
+          }}
+        />
+        <Select
+          placeholder="All Types"
+          options={[
+            { value: 'KNIT', label: 'Knit' },
+            { value: 'WOVEN', label: 'Woven' },
+            { value: 'NONWOVEN', label: 'Non-Woven' },
+          ]}
+          value={typeFilter}
+          onChange={(e) => {
+            setTypeFilter(e.target.value);
+            setPage(1);
+          }}
+        />
       </div>
 
       <DataTable
@@ -122,60 +133,73 @@ export function FabricsPage() {
             header: 'Fabric Code',
             sortable: true,
             render: (r: any) => (
-              <span className="font-mono text-[12.5px] font-bold text-brand-700">{r.fabric_code}</span>
+              <span className="font-mono text-[12px] font-semibold text-brand-700">
+                {r.fabric_code}
+              </span>
             ),
           },
           {
             key: 'fabric_name',
-            header: 'Fabric Name & Structure',
+            header: 'Fabric Name',
             sortable: true,
             render: (r: any) => (
-              <div>
-                <p className="font-bold text-slate-900">{r.fabric_name}</p>
-                <p className="text-[11px] text-slate-500 font-mono">
-                  {r.knit_structure || r.fabric_type} {r.gsm_value ? `• ${r.gsm_value} GSM` : ''}
-                </p>
-              </div>
+              <span className="font-medium text-slate-800">{r.fabric_name}</span>
+            ),
+          },
+          {
+            key: 'composition_desc',
+            header: 'Fibre Composition',
+            render: (r: any) => (
+              <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                {r.composition_desc || '100% Cotton'}
+              </span>
+            ),
+          },
+          {
+            key: 'knit_structure',
+            header: 'Structure / Weave',
+            render: (r: any) => (
+              <span className="text-slate-600">{r.knit_structure || '—'}</span>
+            ),
+          },
+          {
+            key: 'gsm_value',
+            header: 'GSM',
+            align: 'right',
+            sortable: true,
+            render: (r: any) => (
+              <span className="font-mono font-medium text-slate-700">
+                {r.gsm_value ? `${r.gsm_value} GSM` : '—'}
+              </span>
             ),
           },
           {
             key: 'fabric_type',
             header: 'Type',
             render: (r: any) => (
-              <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-bold text-slate-700">
+              <Badge tone={r.fabric_type === 'KNIT' ? 'blue' : 'amber'}>
                 {r.fabric_type || 'KNIT'}
-              </span>
-            ),
-          },
-          {
-            key: 'composition_desc',
-            header: 'Composition',
-            render: (r: any) => (
-              <span className="font-medium text-slate-700 text-xs">
-                {r.composition_desc || '—'}
-              </span>
+              </Badge>
             ),
           },
           {
             key: 'std_rate',
-            header: 'Standard Rate',
+            header: 'Std Rate (₹/Kg)',
             align: 'right',
             render: (r: any) => (
-              <span className="font-mono font-bold text-slate-900">
-                ₹ {fmtDecimal(r.std_rate || 0, 2)} <span className="text-[10.5px] text-slate-500 font-normal">/{r.uom_code || 'Kg'}</span>
+              <span className="font-mono text-slate-700">
+                {r.std_rate ? `₹${fmtDecimal(r.std_rate, 2)}` : '—'}
               </span>
             ),
           },
           {
             key: 'is_active',
             header: 'Status',
-            align: 'center',
             render: (r: any) => (
-              r.is_active === 1 || r.is_active === true ? (
-                <Badge tone="success">Active</Badge>
-              ) : (
-                <Badge tone="neutral">Draft</Badge>
-              )
+              <Badge tone={r.is_active ? 'green' : 'slate'}>
+                {r.is_active ? 'Active' : 'Draft'}
+              </Badge>
             ),
           },
         ]}
@@ -208,7 +232,6 @@ export function FabricDetailPage() {
   const { can } = useAuth();
 
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState('1. General');
 
   // Lookups
   const categories = useLookup('material-categories');
@@ -438,154 +461,145 @@ export function FabricDetailPage() {
         }
       />
 
-      {/* Tabs */}
-      <div className="mb-4">
-        <Tabs
-          active={activeTab}
-          onChange={setActiveTab}
-          tabs={[
-            { key: '1. General', label: '1. General Specifications' },
-            { key: '2. Composition', label: '2. Fibre Composition & Chart' },
-          ]}
-        />
-      </div>
-
-      {/* TAB 1: GENERAL SPECIFICATIONS */}
-      {activeTab === '1. General' && (
-        <div className="card p-4 space-y-4">
-          <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4 text-xs">
+      {/* Section 1: General Specifications */}
+      <div className="card p-4 space-y-4 mb-4">
+        <div className="flex items-center gap-2 border-b border-surface-border pb-2.5">
+          <span className="h-2 w-2 rounded-full bg-brand-500" />
+          <h3 className="text-[12.5px] font-bold uppercase tracking-wider text-slate-700">
+            General Specifications
+          </h3>
+        </div>
+        <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4 text-xs">
+          <Input
+            label="Fabric Code"
+            required
+            placeholder="e.g. FAB-SJ-160"
+            value={head.fabric_code}
+            onChange={(e) => setHead((s) => ({ ...s, fabric_code: e.target.value }))}
+            disabled={!editable}
+          />
+          <div className="lg:col-span-2">
             <Input
-              label="Fabric Code"
+              label="Fabric Name"
               required
-              placeholder="e.g. FAB-SJ-160"
-              value={head.fabric_code}
-              onChange={(e) => setHead((s) => ({ ...s, fabric_code: e.target.value }))}
-              disabled={!editable}
-            />
-            <div className="lg:col-span-2">
-              <Input
-                label="Fabric Name"
-                required
-                placeholder="e.g. Single Jersey 160 GSM Combed"
-                value={head.fabric_name}
-                onChange={(e) => setHead((s) => ({ ...s, fabric_name: e.target.value }))}
-                disabled={!editable}
-              />
-            </div>
-            <Select
-              label="Category"
-              options={toOptions(categories.data)}
-              value={head.category_id}
-              onChange={(e) => setHead((s) => ({ ...s, category_id: e.target.value }))}
-              disabled={!editable}
-            />
-
-            <Select
-              label="Fabric Type"
-              options={[
-                { value: 'KNIT', label: 'Knit' },
-                { value: 'WOVEN', label: 'Woven' },
-                { value: 'NONWOVEN', label: 'Non-Woven' },
-              ]}
-              value={head.fabric_type}
-              onChange={(e) => setHead((s) => ({ ...s, fabric_type: e.target.value }))}
-              disabled={!editable}
-            />
-            <Select
-              label="Structure / Construction"
-              options={[
-                { value: 'Single Jersey', label: 'Single Jersey' },
-                { value: '1x1 Rib', label: '1x1 Rib' },
-                { value: '2x2 Rib', label: '2x2 Rib' },
-                { value: 'Interlock', label: 'Interlock' },
-                { value: 'Pique', label: 'Pique (Polo)' },
-                { value: 'French Terry', label: 'French Terry' },
-                { value: 'Fleece (3 Thread)', label: 'Fleece (3 Thread)' },
-                { value: 'Waffle / Thermal', label: 'Waffle / Thermal' },
-                { value: 'Twill', label: 'Twill (Woven)' },
-                { value: 'Poplin', label: 'Poplin (Woven)' },
-                { value: 'Canvas', label: 'Canvas (Woven)' },
-              ]}
-              value={head.knit_structure}
-              onChange={(e) => setHead((s) => ({ ...s, knit_structure: e.target.value }))}
-              disabled={!editable}
-            />
-            <Select
-              label="Standard GSM"
-              options={toOptions(gsms.data)}
-              value={head.gsm_id}
-              onChange={(e) => setHead((s) => ({ ...s, gsm_id: e.target.value }))}
-              disabled={!editable}
-            />
-            <Select
-              label="Primary Yarn Feed"
-              options={toOptions(yarns.data)}
-              value={head.yarn_id}
-              onChange={(e) => setHead((s) => ({ ...s, yarn_id: e.target.value }))}
-              disabled={!editable}
-            />
-
-            <Input
-              label="Width (cm)"
-              type="number"
-              value={head.width_cm}
-              onChange={(e) => setHead((s) => ({ ...s, width_cm: e.target.value }))}
-              disabled={!editable}
-            />
-            <Input
-              label="Diameter (Inch)"
-              type="number"
-              value={head.dia_inch}
-              onChange={(e) => setHead((s) => ({ ...s, dia_inch: e.target.value }))}
-              disabled={!editable}
-            />
-            <Input
-              label="Finish Type"
-              value={head.finish_type}
-              onChange={(e) => setHead((s) => ({ ...s, finish_type: e.target.value }))}
-              disabled={!editable}
-            />
-            <Input
-              label="HSN Code"
-              value={head.hsn_code}
-              onChange={(e) => setHead((s) => ({ ...s, hsn_code: e.target.value }))}
-              disabled={!editable}
-            />
-
-            <Select
-              label="Base UOM"
-              options={toOptions(uoms.data)}
-              value={head.base_uom}
-              onChange={(e) => setHead((s) => ({ ...s, base_uom: e.target.value }))}
-              disabled={!editable}
-            />
-            <Input
-              label="Standard Rate (₹/Kg)"
-              type="number"
-              step="0.01"
-              value={head.std_rate}
-              onChange={(e) => setHead((s) => ({ ...s, std_rate: e.target.value }))}
-              disabled={!editable}
-            />
-            <Select
-              label="Status"
-              options={[
-                { value: '1', label: 'Active' },
-                { value: '0', label: 'Draft' },
-              ]}
-              value={String(head.is_active ?? 1)}
-              onChange={(e) => setHead((s) => ({ ...s, is_active: Number(e.target.value) }))}
+              placeholder="e.g. Single Jersey 160 GSM Combed"
+              value={head.fabric_name}
+              onChange={(e) => setHead((s) => ({ ...s, fabric_name: e.target.value }))}
               disabled={!editable}
             />
           </div>
-        </div>
-      )}
+          <Select
+            label="Category"
+            options={toOptions(categories.data)}
+            value={head.category_id}
+            onChange={(e) => setHead((s) => ({ ...s, category_id: e.target.value }))}
+            disabled={!editable}
+          />
 
-      {/* TAB 2: COMPOSITION & FIBRE DONUT CHART */}
-      {activeTab === '2. Composition' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-          {/* Left 7 Cols: Interactive Fibre Table */}
-          <div className="lg:col-span-7 space-y-4">
+          <Select
+            label="Fabric Type"
+            options={[
+              { value: 'KNIT', label: 'Knit' },
+              { value: 'WOVEN', label: 'Woven' },
+              { value: 'NONWOVEN', label: 'Non-Woven' },
+            ]}
+            value={head.fabric_type}
+            onChange={(e) => setHead((s) => ({ ...s, fabric_type: e.target.value }))}
+            disabled={!editable}
+          />
+          <Select
+            label="Structure / Construction"
+            options={[
+              { value: 'Single Jersey', label: 'Single Jersey' },
+              { value: '1x1 Rib', label: '1x1 Rib' },
+              { value: '2x2 Rib', label: '2x2 Rib' },
+              { value: 'Interlock', label: 'Interlock' },
+              { value: 'Pique', label: 'Pique (Polo)' },
+              { value: 'French Terry', label: 'French Terry' },
+              { value: 'Fleece (3 Thread)', label: 'Fleece (3 Thread)' },
+              { value: 'Waffle / Thermal', label: 'Waffle / Thermal' },
+              { value: 'Twill', label: 'Twill (Woven)' },
+              { value: 'Poplin', label: 'Poplin (Woven)' },
+              { value: 'Canvas', label: 'Canvas (Woven)' },
+            ]}
+            value={head.knit_structure}
+            onChange={(e) => setHead((s) => ({ ...s, knit_structure: e.target.value }))}
+            disabled={!editable}
+          />
+          <Select
+            label="Standard GSM"
+            options={toOptions(gsms.data)}
+            value={head.gsm_id}
+            onChange={(e) => setHead((s) => ({ ...s, gsm_id: e.target.value }))}
+            disabled={!editable}
+          />
+          <Select
+            label="Primary Yarn Feed"
+            options={toOptions(yarns.data)}
+            value={head.yarn_id}
+            onChange={(e) => setHead((s) => ({ ...s, yarn_id: e.target.value }))}
+            disabled={!editable}
+          />
+
+          <Input
+            label="Width (cm)"
+            type="number"
+            value={head.width_cm}
+            onChange={(e) => setHead((s) => ({ ...s, width_cm: e.target.value }))}
+            disabled={!editable}
+          />
+          <Input
+            label="Diameter (Inch)"
+            type="number"
+            value={head.dia_inch}
+            onChange={(e) => setHead((s) => ({ ...s, dia_inch: e.target.value }))}
+            disabled={!editable}
+          />
+          <Input
+            label="Finish Type"
+            value={head.finish_type}
+            onChange={(e) => setHead((s) => ({ ...s, finish_type: e.target.value }))}
+            disabled={!editable}
+          />
+          <Input
+            label="HSN Code"
+            value={head.hsn_code}
+            onChange={(e) => setHead((s) => ({ ...s, hsn_code: e.target.value }))}
+            disabled={!editable}
+          />
+
+          <Select
+            label="Base UOM"
+            options={toOptions(uoms.data)}
+            value={head.base_uom}
+            onChange={(e) => setHead((s) => ({ ...s, base_uom: e.target.value }))}
+            disabled={!editable}
+          />
+          <Input
+            label="Standard Rate (₹/Kg)"
+            type="number"
+            step="0.01"
+            value={head.std_rate}
+            onChange={(e) => setHead((s) => ({ ...s, std_rate: e.target.value }))}
+            disabled={!editable}
+          />
+          <Select
+            label="Status"
+            options={[
+              { value: '1', label: 'Active' },
+              { value: '0', label: 'Draft' },
+            ]}
+            value={String(head.is_active ?? 1)}
+            onChange={(e) => setHead((s) => ({ ...s, is_active: Number(e.target.value) }))}
+            disabled={!editable}
+          />
+        </div>
+      </div>
+
+      {/* Section 2: Fibre Composition & Donut Chart */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+        {/* Left 7 Cols: Interactive Fibre Table */}
+        <div className="lg:col-span-7 space-y-4">
             <div className="card overflow-hidden">
               <div className="flex items-center justify-between border-b border-surface-border bg-slate-50/70 px-4 py-2.5">
                 <div className="flex items-center gap-2">
@@ -750,7 +764,6 @@ export function FabricDetailPage() {
             </div>
           </div>
         </div>
-      )}
     </>
   );
 }

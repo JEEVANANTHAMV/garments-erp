@@ -12,7 +12,7 @@ import { useToast } from '../../hooks/useToast';
 import { DataTable } from '../../components/DataTable';
 import {
   PageHeader, SearchInput, Input, Select, Spinner, Badge,
-  LoadingBlock, ErrorState, Tabs, useDebounced
+  LoadingBlock, ErrorState, useDebounced
 } from '../../components/ui';
 import { fmtDecimal } from '../../lib/format';
 
@@ -211,7 +211,6 @@ export function YarnDetailPage() {
   const { can } = useAuth();
 
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState('1. General');
 
   // Lookups
   const categories = useLookup('material-categories');
@@ -431,129 +430,120 @@ export function YarnDetailPage() {
         }
       />
 
-      {/* Tabs */}
-      <div className="mb-4">
-        <Tabs
-          active={activeTab}
-          onChange={setActiveTab}
-          tabs={[
-            { key: '1. General', label: '1. General Specifications' },
-            { key: '2. Composition', label: '2. Fibre Composition & Chart' },
-          ]}
-        />
-      </div>
-
-      {/* TAB 1: GENERAL SPECIFICATIONS */}
-      {activeTab === '1. General' && (
-        <div className="card p-4 space-y-4">
-          <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4 text-xs">
+      {/* Section 1: General Specifications */}
+      <div className="card p-4 space-y-4 mb-4">
+        <div className="flex items-center gap-2 border-b border-surface-border pb-2.5">
+          <span className="h-2 w-2 rounded-full bg-brand-500" />
+          <h3 className="text-[12.5px] font-bold uppercase tracking-wider text-slate-700">
+            General Specifications
+          </h3>
+        </div>
+        <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4 text-xs">
+          <Input
+            label="Yarn Code"
+            required
+            placeholder="e.g. YRN-30S-COMB"
+            value={head.yarn_code}
+            onChange={(e) => setHead((s) => ({ ...s, yarn_code: e.target.value }))}
+            disabled={!editable}
+          />
+          <div className="lg:col-span-2">
             <Input
-              label="Yarn Code"
+              label="Yarn Name"
               required
-              placeholder="e.g. YRN-30S-COMB"
-              value={head.yarn_code}
-              onChange={(e) => setHead((s) => ({ ...s, yarn_code: e.target.value }))}
-              disabled={!editable}
-            />
-            <div className="lg:col-span-2">
-              <Input
-                label="Yarn Name"
-                required
-                placeholder="e.g. 30s Combed Cotton Yarn"
-                value={head.yarn_name}
-                onChange={(e) => setHead((s) => ({ ...s, yarn_name: e.target.value }))}
-                disabled={!editable}
-              />
-            </div>
-            <Select
-              label="Category"
-              options={toOptions(categories.data)}
-              value={head.category_id}
-              onChange={(e) => setHead((s) => ({ ...s, category_id: e.target.value }))}
-              disabled={!editable}
-            />
-
-            <Input
-              label="Count Value"
-              placeholder="e.g. 30s, 40s, 2/40s"
-              value={head.count_value}
-              onChange={(e) => setHead((s) => ({ ...s, count_value: e.target.value }))}
-              disabled={!editable}
-            />
-            <Select
-              label="Count Type"
-              options={[
-                { value: 'Ne', label: 'Ne (English Cotton Count)' },
-                { value: 'Nm', label: 'Nm (Metric Count)' },
-                { value: 'Denier', label: 'Denier (Filament / Synthetic)' },
-                { value: 'Tex', label: 'Tex (Direct System)' },
-              ]}
-              value={head.count_type}
-              onChange={(e) => setHead((s) => ({ ...s, count_type: e.target.value }))}
-              disabled={!editable}
-            />
-            <Input
-              label="Ply"
-              type="number"
-              min="1"
-              value={head.ply}
-              onChange={(e) => setHead((s) => ({ ...s, ply: Number(e.target.value) || 1 }))}
-              disabled={!editable}
-            />
-            <Select
-              label="Yarn Type"
-              options={[
-                { value: 'COMBED', label: 'Combed' },
-                { value: 'CARDED', label: 'Carded' },
-                { value: 'OE', label: 'Open End (OE)' },
-                { value: 'COMPACT', label: 'Compact' },
-                { value: 'MELANGE', label: 'Melange' },
-                { value: 'SLUB', label: 'Slub' },
-                { value: 'OTHER', label: 'Other' },
-              ]}
-              value={head.yarn_type}
-              onChange={(e) => setHead((s) => ({ ...s, yarn_type: e.target.value }))}
-              disabled={!editable}
-            />
-
-            <Input
-              label="HSN Code"
-              value={head.hsn_code}
-              onChange={(e) => setHead((s) => ({ ...s, hsn_code: e.target.value }))}
-              disabled={!editable}
-            />
-            <Select
-              label="Base UOM"
-              options={toOptions(uoms.data)}
-              value={head.base_uom}
-              onChange={(e) => setHead((s) => ({ ...s, base_uom: e.target.value }))}
-              disabled={!editable}
-            />
-            <Input
-              label="Standard Rate (₹/Kg)"
-              type="number"
-              step="0.01"
-              value={head.std_rate}
-              onChange={(e) => setHead((s) => ({ ...s, std_rate: e.target.value }))}
-              disabled={!editable}
-            />
-            <Select
-              label="Status"
-              options={[
-                { value: '1', label: 'Active' },
-                { value: '0', label: 'Draft' },
-              ]}
-              value={String(head.is_active ?? 1)}
-              onChange={(e) => setHead((s) => ({ ...s, is_active: Number(e.target.value) }))}
+              placeholder="e.g. 30s Combed Cotton Yarn"
+              value={head.yarn_name}
+              onChange={(e) => setHead((s) => ({ ...s, yarn_name: e.target.value }))}
               disabled={!editable}
             />
           </div>
-        </div>
-      )}
+          <Select
+            label="Category"
+            options={toOptions(categories.data)}
+            value={head.category_id}
+            onChange={(e) => setHead((s) => ({ ...s, category_id: e.target.value }))}
+            disabled={!editable}
+          />
 
-      {/* TAB 2: COMPOSITION & FIBRE DONUT CHART */}
-      {activeTab === '2. Composition' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+          <Input
+            label="Count Value"
+            placeholder="e.g. 30s, 40s, 2/40s"
+            value={head.count_value}
+            onChange={(e) => setHead((s) => ({ ...s, count_value: e.target.value }))}
+            disabled={!editable}
+          />
+          <Select
+            label="Count Type"
+            options={[
+              { value: 'Ne', label: 'Ne (English Cotton Count)' },
+              { value: 'Nm', label: 'Nm (Metric Count)' },
+              { value: 'Denier', label: 'Denier (Filament / Synthetic)' },
+              { value: 'Tex', label: 'Tex (Direct System)' },
+            ]}
+            value={head.count_type}
+            onChange={(e) => setHead((s) => ({ ...s, count_type: e.target.value }))}
+            disabled={!editable}
+          />
+          <Input
+            label="Ply"
+            type="number"
+            min="1"
+            value={head.ply}
+            onChange={(e) => setHead((s) => ({ ...s, ply: Number(e.target.value) || 1 }))}
+            disabled={!editable}
+          />
+          <Select
+            label="Yarn Type"
+            options={[
+              { value: 'COMBED', label: 'Combed' },
+              { value: 'CARDED', label: 'Carded' },
+              { value: 'OE', label: 'Open End (OE)' },
+              { value: 'COMPACT', label: 'Compact' },
+              { value: 'MELANGE', label: 'Melange' },
+              { value: 'SLUB', label: 'Slub' },
+              { value: 'OTHER', label: 'Other' },
+            ]}
+            value={head.yarn_type}
+            onChange={(e) => setHead((s) => ({ ...s, yarn_type: e.target.value }))}
+            disabled={!editable}
+          />
+
+          <Input
+            label="HSN Code"
+            value={head.hsn_code}
+            onChange={(e) => setHead((s) => ({ ...s, hsn_code: e.target.value }))}
+            disabled={!editable}
+          />
+          <Select
+            label="Base UOM"
+            options={toOptions(uoms.data)}
+            value={head.base_uom}
+            onChange={(e) => setHead((s) => ({ ...s, base_uom: e.target.value }))}
+            disabled={!editable}
+          />
+          <Input
+            label="Standard Rate (₹/Kg)"
+            type="number"
+            step="0.01"
+            value={head.std_rate}
+            onChange={(e) => setHead((s) => ({ ...s, std_rate: e.target.value }))}
+            disabled={!editable}
+          />
+          <Select
+            label="Status"
+            options={[
+              { value: '1', label: 'Active' },
+              { value: '0', label: 'Draft' },
+            ]}
+            value={String(head.is_active ?? 1)}
+            onChange={(e) => setHead((s) => ({ ...s, is_active: Number(e.target.value) }))}
+            disabled={!editable}
+          />
+        </div>
+      </div>
+
+      {/* Section 2: Fibre Composition & Donut Chart */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
           {/* Left 7 Cols: Interactive Fibre Table */}
           <div className="lg:col-span-7 space-y-4">
             <div className="card overflow-hidden">
@@ -720,7 +710,6 @@ export function YarnDetailPage() {
             </div>
           </div>
         </div>
-      )}
     </>
   );
 }
