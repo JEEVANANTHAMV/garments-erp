@@ -44,13 +44,20 @@ CREATE TABLE IF NOT EXISTS mst_yarn_base (
   CONSTRAINT fk_ybase__uom     FOREIGN KEY (base_uom)       REFERENCES cfg_uom(id)
 ) ENGINE=InnoDB COMMENT='Yarn base master without counts';
 
--- 3. Alter mst_yarn to link to Yarn Base and Count Master
-ALTER TABLE mst_yarn
-  ADD COLUMN IF NOT EXISTS yarn_base_id BIGINT UNSIGNED NULL AFTER category_id,
-  ADD COLUMN IF NOT EXISTS count_id BIGINT UNSIGNED NULL AFTER count_type,
-  ADD COLUMN IF NOT EXISTS twist VARCHAR(10) DEFAULT 'Z' AFTER ply;
+-- 3. Alter mst_yarn to link to Yarn Base and Count Master (Idempotent for MySQL 8)
+SET @col_exist = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mst_yarn' AND COLUMN_NAME = 'yarn_base_id');
+SET @sql = IF(@col_exist = 0, 'ALTER TABLE mst_yarn ADD COLUMN yarn_base_id BIGINT UNSIGNED NULL AFTER category_id', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
--- Add index and foreign key constraints if not exist
+SET @col_exist = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mst_yarn' AND COLUMN_NAME = 'count_id');
+SET @sql = IF(@col_exist = 0, 'ALTER TABLE mst_yarn ADD COLUMN count_id BIGINT UNSIGNED NULL AFTER count_type', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exist = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mst_yarn' AND COLUMN_NAME = 'twist');
+SET @sql = IF(@col_exist = 0, 'ALTER TABLE mst_yarn ADD COLUMN twist VARCHAR(10) DEFAULT \'Z\' AFTER ply', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- Add foreign key constraints if not exist
 SET @fk_ybase_exists = (
   SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
   WHERE CONSTRAINT_SCHEMA = DATABASE() AND CONSTRAINT_NAME = 'fk_yarn__base'
@@ -59,9 +66,7 @@ SET @sql = IF(@fk_ybase_exists = 0,
   'ALTER TABLE mst_yarn ADD CONSTRAINT fk_yarn__base FOREIGN KEY (yarn_base_id) REFERENCES mst_yarn_base(id) ON DELETE SET NULL',
   'SELECT 1'
 );
-PREPARE stmt FROM @sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 SET @fk_ycount_exists = (
   SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
@@ -71,6 +76,4 @@ SET @sql = IF(@fk_ycount_exists = 0,
   'ALTER TABLE mst_yarn ADD CONSTRAINT fk_yarn__count FOREIGN KEY (count_id) REFERENCES mst_yarn_count(id) ON DELETE SET NULL',
   'SELECT 1'
 );
-PREPARE stmt FROM @sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;

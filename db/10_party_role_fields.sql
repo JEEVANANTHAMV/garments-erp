@@ -2,13 +2,10 @@
 --  Role-specific fields on mst_party
 --  Buyer columns already existed; this adds the supplier, job-work and
 --  agent equivalents so each Business Partner role has its own data.
---
---  MySQL 8 has no "ADD COLUMN IF NOT EXISTS", so a helper procedure adds
---  each column only when it is missing. Safe to re-run.
 -- =====================================================================
 
 DROP PROCEDURE IF EXISTS add_col_if_missing;
-DELIMITER //
+
 CREATE PROCEDURE add_col_if_missing(
   IN tbl VARCHAR(64), IN col VARCHAR(64), IN ddl TEXT)
 BEGIN
@@ -19,8 +16,7 @@ BEGIN
     SET @s = CONCAT('ALTER TABLE `', tbl, '` ADD COLUMN `', col, '` ', ddl);
     PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
   END IF;
-END //
-DELIMITER ;
+END;
 
 -- ---- Supplier-specific (is_supplier = 1) ----------------------------
 CALL add_col_if_missing('mst_party','supplier_category',   "VARCHAR(50)");
