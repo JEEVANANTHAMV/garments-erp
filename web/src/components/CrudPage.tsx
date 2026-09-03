@@ -199,7 +199,7 @@ export function CrudPage<T extends { id: number }>(cfg: CrudConfig<T>) {
           ? 'Try adjusting your search or filters.'
           : `Get started by creating your first ${cfg.singular.toLowerCase()}.`}
         emptyAction={can(`${cfg.permission}.CREATE`) && !search && !activeFilters.length
-          ? <button className="btn-primary" onClick={openNew}><Plus size={15} /> New {cfg.singular}</button>
+          ? <button className="btn-primary" onClick={cfg.onNew ?? openNew}><Plus size={15} /> New {cfg.singular}</button>
           : undefined}
       />
 
