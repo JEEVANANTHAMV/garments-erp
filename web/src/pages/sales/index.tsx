@@ -98,9 +98,11 @@ export function QuotationsPage() {
       { key: 'quotation_no', header: 'Quotation no', sortable: true,
         render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.quotation_no}</span> },
       { key: 'quotation_type', header: 'Type',
-        render: (r: any) => r.quotation_type === 'IMPORT'
-          ? <Badge tone="violet">Import</Badge>
-          : <Badge tone="sky">Domestic</Badge> },
+        render: (r: any) => r.quotation_type === 'BUYER'
+          ? <Badge tone="emerald">Buyer</Badge>
+          : r.quotation_type === 'IMPORT'
+            ? <Badge tone="violet">Import</Badge>
+            : <Badge tone="sky">Domestic</Badge> },
       { key: 'quotation_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.quotation_date) },
       { key: 'buyer_name', header: 'Buyer / Supplier',
         render: (r: any) => <span className="font-medium text-slate-800">{r.buyer_name || r.supplier_name || '—'}</span> },
@@ -112,7 +114,7 @@ export function QuotationsPage() {
       { key: 'status_label', header: 'Status', render: (r: any) => <StatusBadge value={r.status_label} /> },
     ]}
     filters={[
-      { name: 'quotation_type', label: 'Type', options: [{ value: 'DOMESTIC', label: 'Domestic' }, { value: 'IMPORT', label: 'Import' }] },
+      { name: 'quotation_type', label: 'Type', options: [{ value: 'BUYER', label: 'Buyer' }, { value: 'DOMESTIC', label: 'Domestic' }, { value: 'IMPORT', label: 'Import' }] },
       { name: 'buyer_id', label: 'Buyer', lookup: 'buyers' },
       { name: 'supplier_id', label: 'Supplier', lookup: 'suppliers' },
       { name: 'status_id', label: 'Status', statusDomain: 'QUOTATION' },

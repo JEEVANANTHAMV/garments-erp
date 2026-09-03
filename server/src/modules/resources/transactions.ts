@@ -114,7 +114,7 @@ export const transactionResources: ResourceConfig[] = [
     ],
     fields: [
       f('branch_id', s.id()), f('quotation_no', s.nullableStr(40)), f('version', s.int()),
-      f('quotation_type', s.enum(['DOMESTIC','IMPORT'])),
+      f('quotation_type', s.enum(['DOMESTIC','IMPORT','BUYER'])),
       f('quotation_date', s.date()),
       f('buyer_id', s.id()), f('supplier_id', s.id()),
       f('buyer_name_override', s.nullableStr(150)),

@@ -16,7 +16,8 @@ import { fmtDecimal, today, toDateInput } from '../../lib/format';
 
 const INCOTERMS = ['FOB','CIF','CFR','EXW','DDP','DAP','FCA'].map(v => ({ value: v, label: v }));
 const QUOTATION_TYPES = [
-  { value: 'DOMESTIC', label: 'Domestic (INR)', desc: 'For local buyers with per-line GST' },
+  { value: 'BUYER',    label: 'Buyer Quotation', desc: 'Direct export offer for buyers in Foreign Currency (USD/EUR/GBP)' },
+  { value: 'DOMESTIC', label: 'Domestic (INR)', desc: 'For local Indian buyers with per-line GST' },
   { value: 'IMPORT',   label: 'Import (Foreign Currency)', desc: 'For foreign suppliers with CIF & Landed Cost' },
 ];
 const GST_OPTIONS = [
@@ -59,16 +60,16 @@ export default function QuotationDetailPage() {
 
   /* ── head state ── */
   const [head, setHead] = useState<Record<string, any>>({
-    quotation_type: 'DOMESTIC',
+    quotation_type: 'BUYER',
     quotation_date: today(),
     version: 1,
-    exchange_rate: 1,
+    exchange_rate: 86.50,
     incoterm: 'FOB',
     // Domestic summary
     discount_pct: 0, discount_amount: 0,
     freight_charges: 0, packing_charges: 0, other_charges: 0,
     cgst_rate: 9, sgst_rate: 9, igst_rate: 0, round_off: 0,
-    // Import summary
+    // Import & Buyer summary
     courier_charges: 0, insurance: 0, bank_charges: 0,
     customs_duty: 0, clearing_charges: 0, margin_pct: 0,
   });
@@ -76,7 +77,9 @@ export default function QuotationDetailPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
-  const isImport = head.quotation_type === 'IMPORT';
+  const isBuyer    = head.quotation_type === 'BUYER';
+  const isImport   = head.quotation_type === 'IMPORT';
+  const isDomestic = head.quotation_type === 'DOMESTIC';
 
   /* ── lookups ── */
   const buyers     = useLookup('buyers');
@@ -92,15 +95,19 @@ export default function QuotationDetailPage() {
   const inrCurrency = currencies.data?.find((c: any) => c.code === 'INR');
   const usdCurrency = currencies.data?.find((c: any) => c.code === 'USD');
 
-  // Ensure default currency is INR for Domestic quotations
+  // Ensure default currency is set properly based on type
   useEffect(() => {
     if (!currencies.data?.length) return;
-    if (head.quotation_type === 'DOMESTIC') {
+    if (isDomestic) {
       if ((!head.currency_id || isNew) && inrCurrency) {
         setHead(h => ({ ...h, currency_id: inrCurrency.id, exchange_rate: 1 }));
       }
+    } else {
+      if ((!head.currency_id || head.currency_id === inrCurrency?.id) && usdCurrency) {
+        setHead(h => ({ ...h, currency_id: usdCurrency.id, exchange_rate: Number(h.exchange_rate) > 1 ? h.exchange_rate : 86.50 }));
+      }
     }
-  }, [currencies.data, isNew, head.quotation_type, inrCurrency]);
+  }, [currencies.data, isNew, isDomestic, inrCurrency, usdCurrency]);
 
   const handleTypeChange = (type: string) => {
     if (type === 'DOMESTIC') {
@@ -110,12 +117,21 @@ export default function QuotationDetailPage() {
         currency_id: inrCurrency?.id ?? 1,
         exchange_rate: 1,
       }));
+    } else if (type === 'BUYER') {
+      setHead(h => ({
+        ...h,
+        quotation_type: 'BUYER',
+        currency_id: (h.currency_id && h.currency_id !== inrCurrency?.id) ? h.currency_id : (usdCurrency?.id ?? ''),
+        exchange_rate: Number(h.exchange_rate) > 1 ? h.exchange_rate : 86.50,
+        incoterm: h.incoterm || 'FOB',
+      }));
     } else {
       setHead(h => ({
         ...h,
         quotation_type: 'IMPORT',
-        currency_id: h.currency_id === inrCurrency?.id ? (usdCurrency?.id ?? '') : h.currency_id,
-        exchange_rate: h.exchange_rate === 1 ? 84.50 : h.exchange_rate,
+        currency_id: (h.currency_id && h.currency_id !== inrCurrency?.id) ? h.currency_id : (usdCurrency?.id ?? ''),
+        exchange_rate: Number(h.exchange_rate) > 1 ? h.exchange_rate : 86.50,
+        incoterm: h.incoterm || 'CIF',
       }));
     }
   };
@@ -160,7 +176,7 @@ export default function QuotationDetailPage() {
       return sum + q * r;
     }, 0);
 
-    if (!isImport) {
+    if (isDomestic) {
       // Domestic
       const discAmt = basicAmount * ((Number(head.discount_pct) || 0) / 100);
       const freight = Number(head.freight_charges) || 0;
@@ -188,7 +204,18 @@ export default function QuotationDetailPage() {
       });
 
       const grandTotal = taxableValue + totalGst + (Number(head.round_off) || 0);
-      return { basicAmount, discAmt, taxableValue, totalGst, grandTotal, gstBreakdown };
+      return { basicAmount, discAmt, taxableValue, totalGst, grandTotal, gstBreakdown, totalAmount: grandTotal };
+    } else if (isBuyer) {
+      // Buyer Export Quotation
+      const discAmt  = basicAmount * ((Number(head.discount_pct) || 0) / 100);
+      const freight  = Number(head.freight_charges)  || 0;
+      const insure   = Number(head.insurance)        || 0;
+      const packing  = Number(head.packing_charges)  || 0;
+      const other    = Number(head.other_charges)     || 0;
+      const finalOffer = Math.max(0, basicAmount - discAmt + freight + insure + packing + other);
+      const rate = Number(head.exchange_rate) || 1;
+      const inrEquivalent = finalOffer * rate;
+      return { basicAmount, discAmt, finalOffer, inrEquivalent, totalAmount: finalOffer };
     } else {
       // Import
       const courier  = Number(head.courier_charges)  || 0;
@@ -202,9 +229,9 @@ export default function QuotationDetailPage() {
       const landedCost = basicAmount + courier + freight + insure + packing + bank + customs + clearing + other;
       const marginAmt  = landedCost * ((Number(head.margin_pct) || 0) / 100);
       const finalSelling = landedCost + marginAmt;
-      return { basicAmount, landedCost, marginAmt, finalSelling };
+      return { basicAmount, landedCost, marginAmt, finalSelling, totalAmount: finalSelling };
     }
-  }, [lines, head, isImport]);
+  }, [lines, head, isDomestic, isBuyer]);
 
   /* ── helpers ── */
   const hSet = (k: string, v: any) => setHead(h => ({ ...h, [k]: v }));
@@ -220,7 +247,7 @@ export default function QuotationDetailPage() {
   async function handleSave(asDraft = false) {
     const errs: Record<string, string> = {};
     if (!head.quotation_date) errs.quotation_date = 'Required';
-    const resolvedCurrencyId = !isImport
+    const resolvedCurrencyId = isDomestic
       ? (inrCurrency?.id ?? head.currency_id ?? 1)
       : head.currency_id;
 
@@ -232,14 +259,15 @@ export default function QuotationDetailPage() {
     if (Object.keys(errs).length) return;
 
     // Build payload
+    const totalAmt = (calc as any).totalAmount || 0;
     const payload = {
       ...head,
       currency_id: Number(resolvedCurrencyId),
-      exchange_rate: isImport ? Number(head.exchange_rate || 1) : 1,
-      total_amount: isImport ? (calc as any).finalSelling : (calc as any).grandTotal,
-      taxable_value: isImport ? undefined : (calc as any).taxableValue,
+      exchange_rate: isDomestic ? 1 : Number(head.exchange_rate || 1),
+      total_amount: totalAmt,
+      taxable_value: isDomestic ? (calc as any).taxableValue : undefined,
       landed_cost: isImport ? (calc as any).landedCost : undefined,
-      final_selling_rate: isImport ? (calc as any).finalSelling : undefined,
+      final_selling_rate: isImport ? (calc as any).finalSelling : (isBuyer ? (calc as any).finalOffer : undefined),
       lines: lines.map((l, i) => ({
         id: l.id,
         job_no: l.job_no || null,
@@ -250,8 +278,8 @@ export default function QuotationDetailPage() {
         qty: Number(l.qty),
         uom_id: l.uom_id || null,
         unit_price: Number(l.unit_price),
-        gst_rate: isImport ? 0 : (Number(l.gst_rate) || 0),
-        gst_amount: isImport ? 0 : ((Number(l.qty) * Number(l.unit_price)) * (Number(l.gst_rate) / 100)),
+        gst_rate: isDomestic ? (Number(l.gst_rate) || 0) : 0,
+        gst_amount: isDomestic ? ((Number(l.qty) * Number(l.unit_price)) * (Number(l.gst_rate) / 100)) : 0,
         amount: (Number(l.qty) || 0) * (Number(l.unit_price) || 0),
         sort_order: i,
       })),
@@ -281,9 +309,11 @@ export default function QuotationDetailPage() {
   if (!isNew && detail.isLoading) return <LoadingBlock label="Loading quotation…" />;
   if (!isNew && detail.isError)   return <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />;
 
-  const currSymbol: string = !isImport
+  const selectedCur = currencies.data?.find((c: any) => c.id === Number(head.currency_id));
+  const currCode: string = isDomestic ? 'INR' : (selectedCur?.code || (isBuyer ? 'USD' : 'USD'));
+  const currSymbol: string = isDomestic
     ? '₹'
-    : String(currencies.data?.find((c: any) => c.id === Number(head.currency_id))?.symbol || '$');
+    : String(selectedCur?.symbol || (currCode === 'USD' ? '$' : currCode === 'EUR' ? '€' : currCode === 'GBP' ? '£' : currCode));
 
   /* ── render ── */
   return (
@@ -293,8 +323,8 @@ export default function QuotationDetailPage() {
         title={
           <div className="flex items-center gap-2.5">
             <span>{isNew ? 'New Quotation' : (head.quotation_no || 'Quotation')}</span>
-            <Badge tone={isImport ? 'violet' : 'sky'}>
-              {isImport ? 'Import Quotation' : 'Domestic Quotation'}
+            <Badge tone={isBuyer ? 'emerald' : isImport ? 'violet' : 'sky'}>
+              {isBuyer ? 'Buyer Quotation' : isImport ? 'Import Quotation' : 'Domestic Quotation'}
             </Badge>
           </div>
         }
@@ -325,6 +355,16 @@ export default function QuotationDetailPage() {
         <div className="flex flex-col sm:flex-row gap-2">
           {QUOTATION_TYPES.map(t => {
             const active = head.quotation_type === t.value;
+            const activeClass = t.value === 'BUYER'
+              ? 'border-emerald-500 bg-emerald-50/80 text-emerald-900 shadow-sm ring-1 ring-emerald-400'
+              : t.value === 'IMPORT'
+                ? 'border-violet-500 bg-violet-50/80 text-violet-900 shadow-sm ring-1 ring-violet-400'
+                : 'border-brand-500 bg-brand-50/80 text-brand-900 shadow-sm ring-1 ring-brand-400';
+            const bulletClass = t.value === 'BUYER'
+              ? 'border-emerald-600 bg-emerald-600'
+              : t.value === 'IMPORT'
+                ? 'border-violet-600 bg-violet-600'
+                : 'border-brand-600 bg-brand-600';
             return (
               <button
                 key={t.value}
@@ -332,9 +372,7 @@ export default function QuotationDetailPage() {
                 onClick={() => handleTypeChange(t.value)}
                 className={`flex-1 flex items-center justify-between p-3 rounded-lg border text-left transition-all ${
                   active
-                    ? t.value === 'IMPORT'
-                      ? 'border-violet-500 bg-violet-50/80 text-violet-900 shadow-sm ring-1 ring-violet-400'
-                      : 'border-brand-500 bg-brand-50/80 text-brand-900 shadow-sm ring-1 ring-brand-400'
+                    ? activeClass
                     : 'border-surface-border bg-slate-50/50 text-slate-600 hover:bg-slate-100 hover:border-slate-300'
                 }`}
               >
@@ -343,9 +381,7 @@ export default function QuotationDetailPage() {
                   <p className="text-[11px] text-slate-500 mt-0.5">{t.desc}</p>
                 </div>
                 <span className={`h-4 w-4 rounded-full border-2 flex items-center justify-center ${
-                  active
-                    ? t.value === 'IMPORT' ? 'border-violet-600 bg-violet-600' : 'border-brand-600 bg-brand-600'
-                    : 'border-slate-300'
+                  active ? bulletClass : 'border-slate-300'
                 }`}>
                   {active && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
                 </span>
@@ -362,9 +398,9 @@ export default function QuotationDetailPage() {
           {/* Header Card */}
           <div className="card overflow-hidden">
             <div className="flex items-center gap-2 border-b border-surface-border bg-slate-50/70 px-4 py-2.5">
-              <span className={`h-2 w-2 rounded-full ${isImport ? 'bg-violet-500' : 'bg-brand-500'}`} />
+              <span className={`h-2 w-2 rounded-full ${isBuyer ? 'bg-emerald-500' : isImport ? 'bg-violet-500' : 'bg-brand-500'}`} />
               <h4 className="text-[12px] font-bold uppercase tracking-wider text-slate-700">
-                {isImport ? 'Import Quotation Header' : 'Domestic Quotation Header'}
+                {isBuyer ? 'Buyer Export Quotation Header' : isImport ? 'Import Quotation Header' : 'Domestic Quotation Header'}
               </h4>
             </div>
 
@@ -405,7 +441,7 @@ export default function QuotationDetailPage() {
                 <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1">
                   Currency *
                 </label>
-                {!isImport ? (
+                {isDomestic ? (
                   <div className="flex items-center justify-between rounded-lg border border-surface-border bg-slate-50 px-3 py-1.5 text-xs text-slate-700 font-medium">
                     <span>INR — Indian Rupee (₹)</span>
                     <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-sky-800">INR</span>
@@ -414,10 +450,12 @@ export default function QuotationDetailPage() {
                   <select
                     value={head.currency_id ?? ''}
                     onChange={e => hSet('currency_id', e.target.value)}
-                    className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-violet-500 focus:outline-none"
+                    className={`w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:outline-none ${
+                      isBuyer ? 'focus:border-emerald-500' : 'focus:border-violet-500'
+                    }`}
                   >
                     <option value="">— Select Currency —</option>
-                    {(currencies.data ?? []).filter((c: any) => c.code !== 'INR').map((c: any) => (
+                    {(currencies.data ?? []).map((c: any) => (
                       <option key={c.id} value={c.id}>{c.code} — {c.label}</option>
                     ))}
                   </select>
@@ -459,7 +497,7 @@ export default function QuotationDetailPage() {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. TT Advance, LC 60 Days"
+                  placeholder={isBuyer ? 'e.g. LC at Sight, TT 30 Days' : 'e.g. 30 Days Net, Advance'}
                   value={head.payment_terms ?? ''}
                   onChange={e => hSet('payment_terms', e.target.value)}
                   className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none"
@@ -480,8 +518,8 @@ export default function QuotationDetailPage() {
                 </select>
               </div>
 
-              {/* Import-only Extra fields */}
-              {isImport && (
+              {/* Buyer & Import Extra fields (Ports & Exchange Rate) */}
+              {!isDomestic && (
                 <>
                   <div>
                     <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1">
@@ -489,10 +527,10 @@ export default function QuotationDetailPage() {
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. Shanghai, China"
+                      placeholder={isBuyer ? 'e.g. Tuticorin / Chennai / Nhava Sheva' : 'e.g. Shanghai, China'}
                       value={head.port_of_loading ?? ''}
                       onChange={e => hSet('port_of_loading', e.target.value)}
-                      className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-violet-500 focus:outline-none"
+                      className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none"
                     />
                   </div>
 
@@ -502,23 +540,23 @@ export default function QuotationDetailPage() {
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. Chennai / Tuticorin"
+                      placeholder={isBuyer ? 'e.g. Felixstowe / Rotterdam / New York' : 'e.g. Chennai / Tuticorin'}
                       value={head.port_of_discharge ?? ''}
                       onChange={e => hSet('port_of_discharge', e.target.value)}
-                      className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-violet-500 focus:outline-none"
+                      className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none"
                     />
                   </div>
 
                   <div>
                     <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1">
-                      Exchange Rate (to INR)
+                      Forex Rate (1 {currCode} to INR)
                     </label>
                     <input
                       type="number"
                       step="0.01"
-                      value={head.exchange_rate ?? 1}
+                      value={head.exchange_rate ?? 86.50}
                       onChange={e => hSet('exchange_rate', Number(e.target.value))}
-                      className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-violet-500 focus:outline-none"
+                      className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none"
                     />
                   </div>
                 </>
@@ -606,7 +644,7 @@ export default function QuotationDetailPage() {
                     <th className="min-w-[110px] px-3 py-2.5">Size (Single)</th>
                     <th className="min-w-[80px] px-3 py-2.5 text-right">Qty</th>
                     <th className="min-w-[95px] px-3 py-2.5 text-right">Rate ({currSymbol})</th>
-                    {!isImport && (
+                    {isDomestic && (
                       <th className="min-w-[80px] px-3 py-2.5 text-center">GST %</th>
                     )}
                     <th className="min-w-[100px] px-3 py-2.5 text-right">Amount ({currSymbol})</th>
@@ -697,7 +735,7 @@ export default function QuotationDetailPage() {
                             className="w-full rounded border border-surface-border px-2 py-1 text-right text-xs font-semibold focus:border-brand-500 focus:outline-none"
                           />
                         </td>
-                        {!isImport && (
+                        {isDomestic && (
                           <td className="px-2 py-1.5">
                             <select
                               value={l.gst_rate}
@@ -729,7 +767,7 @@ export default function QuotationDetailPage() {
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-surface-border bg-slate-50/40">
-                    <td colSpan={!isImport ? 11 : 10} className="px-3 py-2">
+                    <td colSpan={isDomestic ? 11 : 10} className="px-3 py-2">
                       <button
                         type="button"
                         onClick={addLine}
@@ -740,14 +778,14 @@ export default function QuotationDetailPage() {
                     </td>
                   </tr>
                   <tr className="border-t-2 border-surface-border bg-slate-50/90 font-bold text-slate-800">
-                    <td colSpan={!isImport ? 6 : 5} className="px-3 py-2.5 text-right uppercase tracking-wider text-[11px] text-slate-600">
+                    <td colSpan={isDomestic ? 6 : 5} className="px-3 py-2.5 text-right uppercase tracking-wider text-[11px] text-slate-600">
                       Total Basic Value
                     </td>
                     <td className="px-3 py-2.5 text-right font-mono text-xs">
                       {lines.reduce((s, l) => s + (Number(l.qty) || 0), 0)} pcs
                     </td>
                     <td></td>
-                    {!isImport && <td></td>}
+                    {isDomestic && <td></td>}
                     <td className="px-3 py-2.5 text-right font-mono text-sm font-bold text-brand-700">
                       {currSymbol} {fmtDecimal(calc.basicAmount, 2)}
                     </td>
@@ -792,12 +830,12 @@ export default function QuotationDetailPage() {
         <div className="lg:col-span-4 xl:col-span-3 space-y-4">
           <div className="card overflow-hidden shadow-sm">
             <div className={`px-4 py-3 flex items-center justify-between text-white ${
-              isImport ? 'bg-violet-700' : 'bg-brand-700'
+              isBuyer ? 'bg-emerald-700' : isImport ? 'bg-violet-700' : 'bg-brand-700'
             }`}>
               <div className="flex items-center gap-2">
                 <FileText size={15} />
                 <h4 className="text-[12.5px] font-bold">
-                  {isImport ? 'Import Cost & Landing Summary' : 'Domestic Pricing Summary'}
+                  {isBuyer ? 'Buyer Export Pricing Summary' : isImport ? 'Import Cost & Landing Summary' : 'Domestic Pricing Summary'}
                 </h4>
               </div>
               <span className="rounded bg-white/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
@@ -806,8 +844,112 @@ export default function QuotationDetailPage() {
             </div>
 
             <div className="p-4 space-y-2 text-xs divide-y divide-slate-100">
+              {/* ── BUYER EXPORT SUMMARY ── */}
+              {isBuyer && (() => {
+                const d = calc as any;
+                return (
+                  <div className="space-y-2 pt-1">
+                    <div className="flex justify-between items-center py-1">
+                      <span className="text-slate-600 font-medium">Items Total ({currCode})</span>
+                      <span className="font-mono font-bold text-slate-800">{currSymbol} {fmtDecimal(d.basicAmount, 2)}</span>
+                    </div>
+
+                    <div className="flex justify-between items-center py-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-600">Discount %</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.5"
+                          value={head.discount_pct ?? 0}
+                          onChange={e => hSet('discount_pct', Number(e.target.value))}
+                          className="w-14 rounded border border-surface-border px-1.5 py-0.5 text-right text-xs focus:border-emerald-500 focus:outline-none"
+                        />
+                      </div>
+                      <span className="font-mono text-slate-700">- {currSymbol} {fmtDecimal(d.discAmt, 2)}</span>
+                    </div>
+
+                    <div className="flex justify-between items-center py-1">
+                      <span className="text-slate-600">Ocean / Air Freight ({currCode})</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={head.freight_charges ?? 0}
+                        onChange={e => hSet('freight_charges', Number(e.target.value))}
+                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right font-mono text-xs focus:border-emerald-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="flex justify-between items-center py-1">
+                      <span className="text-slate-600">Marine Insurance ({currCode})</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={head.insurance ?? 0}
+                        onChange={e => hSet('insurance', Number(e.target.value))}
+                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right font-mono text-xs focus:border-emerald-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="flex justify-between items-center py-1">
+                      <span className="text-slate-600">Packing &amp; Hangtag ({currCode})</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={head.packing_charges ?? 0}
+                        onChange={e => hSet('packing_charges', Number(e.target.value))}
+                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right font-mono text-xs focus:border-emerald-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="flex justify-between items-center py-1">
+                      <span className="text-slate-600">Other / Handling ({currCode})</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={head.other_charges ?? 0}
+                        onChange={e => hSet('other_charges', Number(e.target.value))}
+                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right font-mono text-xs focus:border-emerald-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="border-t-2 border-emerald-600 pt-2.5 mt-2 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-bold text-slate-900">Total Offer ({currCode})</span>
+                        <span className="text-lg font-bold text-emerald-700 font-mono">
+                          {currSymbol} {fmtDecimal(d.finalOffer, 2)}
+                        </span>
+                      </div>
+
+                      {/* Realization in INR */}
+                      <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-2.5 space-y-1">
+                        <div className="flex justify-between text-[11px] text-emerald-800">
+                          <span>Exchange Rate (1 {currCode})</span>
+                          <span className="font-mono font-bold">₹ {fmtDecimal(head.exchange_rate || 1, 2)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs font-bold text-emerald-950 pt-1 border-t border-emerald-200">
+                          <span>INR Realization Value</span>
+                          <span className="font-mono text-sm">₹ {fmtDecimal(d.inrEquivalent, 2)}</span>
+                        </div>
+                      </div>
+
+                      {/* Tax Note */}
+                      <div className="rounded bg-slate-50 border border-slate-200 px-2 py-1 text-[11px] text-slate-600 flex items-center justify-between">
+                        <span>Export Tax Scheme:</span>
+                        <span className="font-semibold text-slate-800">LUT Export (0% GST)</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* ── DOMESTIC SUMMARY ── */}
-              {!isImport && (() => {
+              {isDomestic && (() => {
                 const d = calc as any;
                 const totalGstBreakdown = d.gstBreakdown ?? [];
                 return (
