@@ -38,16 +38,23 @@ async function main() {
     const files = (await readdir(DB_DIR)).filter((f) => f.endsWith('.sql')).sort();
     if (!files.length) throw new Error(`No .sql files found in ${DB_DIR}`);
 
-    for (const file of files) {
+    // When DB exists and not --fresh, only run incremental migrations (e.g. 10_+)
+    const filesToRun = existing.length && !fresh
+      ? files.filter((f) => {
+          const num = parseInt(f.slice(0, 2), 10);
+          return isNaN(num) || num >= 10;
+        })
+      : files;
+
+    for (const file of filesToRun) {
       const sql = await readFile(join(DB_DIR, file), 'utf8');
-      // 01_foundation.sql creates + selects the database; the rest need USE.
-      const body = file.startsWith('01_') ? sql : `USE \`${env.db.database}\`;\n${sql}`;
+      const body = `USE \`${env.db.database}\`;\n${sql}`;
       process.stdout.write(`[migrate] ${file} ... `);
       try {
         await conn.query(body);
         console.log('ok');
       } catch (err: any) {
-        if (!fresh && (err.message.includes('already exists') || err.message.includes('Duplicate column'))) {
+        if (!fresh && (err.message.includes('already exists') || err.message.includes('Duplicate column') || err.message.includes('Duplicate key'))) {
           console.log('already applied (skipped)');
         } else {
           console.log('warn:', err.message);
