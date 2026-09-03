@@ -3,8 +3,6 @@ import { StatusBadge, Badge } from '../../components/ui';
 import { fmtDate, fmtNumber, fmtDecimal, humanize, today } from '../../lib/format';
 import { useNavigate } from 'react-router-dom';
 
-const INCOTERMS = ['FOB','CIF','CFR','EXW','DDP','DAP','FCA'].map((v) => ({ value: v, label: v }));
-
 export function EnquiriesPage() {
   return <CrudPage
     path="enquiries" title="Enquiries" permission="ENQUIRY" singular="Enquiry"
@@ -119,6 +117,5 @@ export function QuotationsPage() {
       { name: 'supplier_id', label: 'Supplier', lookup: 'suppliers' },
       { name: 'status_id', label: 'Status', statusDomain: 'QUOTATION' },
     ]}
-    hideCreateButton
     fields={[]} />;
 }

@@ -310,7 +310,7 @@ export default function QuotationDetailPage() {
   if (!isNew && detail.isError)   return <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />;
 
   const selectedCur = currencies.data?.find((c: any) => c.id === Number(head.currency_id));
-  const currCode: string = isDomestic ? 'INR' : (selectedCur?.code || (isBuyer ? 'USD' : 'USD'));
+  const currCode: string = isDomestic ? 'INR' : String(selectedCur?.code || 'USD');
   const currSymbol: string = isDomestic
     ? '₹'
     : String(selectedCur?.symbol || (currCode === 'USD' ? '$' : currCode === 'EUR' ? '€' : currCode === 'GBP' ? '£' : currCode));
