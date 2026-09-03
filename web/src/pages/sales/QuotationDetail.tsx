@@ -586,13 +586,6 @@ export default function QuotationDetailPage() {
                   {lines.length} {lines.length === 1 ? 'Item' : 'Items'}
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={addLine}
-                className="btn-primary btn-sm"
-              >
-                <Plus size={14} /> Add Line
-              </button>
             </div>
 
             {errors.lines && (
@@ -735,7 +728,18 @@ export default function QuotationDetailPage() {
                   })}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t-2 border-surface-border bg-slate-50/80 font-bold text-slate-800">
+                  <tr className="border-t border-surface-border bg-slate-50/40">
+                    <td colSpan={!isImport ? 11 : 10} className="px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={addLine}
+                        className="btn-secondary btn-sm w-full border-dashed border-slate-300 hover:border-brand-500 hover:text-brand-700 hover:bg-brand-50/40 transition-colors flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold text-slate-600"
+                      >
+                        <Plus size={14} className="text-brand-600" /> Add Item Line
+                      </button>
+                    </td>
+                  </tr>
+                  <tr className="border-t-2 border-surface-border bg-slate-50/90 font-bold text-slate-800">
                     <td colSpan={!isImport ? 6 : 5} className="px-3 py-2.5 text-right uppercase tracking-wider text-[11px] text-slate-600">
                       Total Basic Value
                     </td>
