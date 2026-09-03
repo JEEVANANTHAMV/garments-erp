@@ -87,7 +87,11 @@ EOF
   (cd server && npm install --prefer-offline --no-audit)
   (cd web && npm install --prefer-offline --no-audit)
 
-  # Apply database schema updates & idempotent seeds
+  # Apply database schema migrations first, then seeds
+  echo "🗃️  Applying database migrations..."
+  (cd server && npm run db:migrate)
+
+  # Apply idempotent seeds (config data, lookups, roles)
   echo "🌱 Applying database seeds and configuration updates..."
   (cd server && npm run db:seed)
 
