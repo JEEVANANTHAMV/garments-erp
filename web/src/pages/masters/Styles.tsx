@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, ArrowLeft, Sparkles, Save, FileText } from 'lucide-react';
+import { Plus, ArrowLeft, Sparkles, Save, FileText, Check, ChevronDown, X, Search } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { http, ApiError } from '../../lib/api';
 import { useList, useListState } from '../../hooks/useResource';
@@ -13,6 +13,207 @@ import {
   ImageUpload, ImageThumbnail,
 } from '../../components/ui';
 import { fmtDate } from '../../lib/format';
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Color Multi-Select with Search & Swatches                                  */
+/* ────────────────────────────────────────────────────────────────────────── */
+function ColorMultiSelect({
+  colors,
+  selectedIds,
+  onChange,
+  disabled = false,
+  error,
+}: {
+  colors: any[];
+  selectedIds: number[];
+  onChange: (ids: number[]) => void;
+  disabled?: boolean;
+  error?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filtered = colors.filter(c =>
+    (c.label || '').toLowerCase().includes(search.toLowerCase()) ||
+    (c.code || '').toLowerCase().includes(search.toLowerCase())
+  );
+
+  const toggle = (id: number) => {
+    if (disabled) return;
+    if (selectedIds.includes(id)) {
+      onChange(selectedIds.filter(x => x !== id));
+    } else {
+      onChange([...selectedIds, id]);
+    }
+  };
+
+  const selectAll = () => {
+    if (disabled) return;
+    onChange(Array.from(new Set([...selectedIds, ...filtered.map(c => c.id)])));
+  };
+
+  const clearAll = () => {
+    if (disabled) return;
+    onChange([]);
+  };
+
+  const selectedColors = colors.filter(c => selectedIds.includes(c.id));
+
+  return (
+    <div className="relative sm:col-span-2" ref={ref}>
+      <div className="flex items-center justify-between mb-1">
+        <label className="block text-[11.5px] font-bold uppercase tracking-wider text-slate-700">
+          Colourways (Colors) <span className="text-slate-400 font-normal lowercase">(search &amp; multi-select)</span>
+        </label>
+        {selectedIds.length > 0 && !disabled && (
+          <button
+            type="button"
+            onClick={clearAll}
+            className="text-[11px] font-medium text-slate-400 hover:text-red-600 transition-colors"
+          >
+            Clear all ({selectedIds.length})
+          </button>
+        )}
+      </div>
+
+      {/* Main Trigger Box */}
+      <div
+        onClick={() => !disabled && setOpen(o => !o)}
+        className={`min-h-[38px] w-full cursor-pointer rounded-lg border bg-white p-1.5 flex flex-wrap items-center gap-1.5 transition-all ${
+          open ? 'border-brand-500 ring-2 ring-brand-100' : 'border-surface-border hover:border-slate-300'
+        } ${disabled ? 'cursor-not-allowed bg-slate-50 opacity-60' : ''}`}
+      >
+        {selectedColors.length === 0 ? (
+          <span className="text-xs text-slate-400 px-2 py-1">
+            — Select colours for this style (click to search &amp; select) —
+          </span>
+        ) : (
+          selectedColors.map(c => (
+            <span
+              key={c.id}
+              className="inline-flex items-center gap-1.5 rounded-md border border-brand-200 bg-brand-50/85 px-2 py-0.5 text-xs font-medium text-brand-900"
+            >
+              <span
+                className="h-2.5 w-2.5 rounded-full border border-black/10 shrink-0"
+                style={{ backgroundColor: c.hex_value || '#cbd5e1' }}
+              />
+              <span>{c.label}</span>
+              {!disabled && (
+                <button
+                  type="button"
+                  onClick={e => {
+                    e.stopPropagation();
+                    toggle(c.id);
+                  }}
+                  className="text-brand-500 hover:text-brand-800 p-0.5 rounded"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </span>
+          ))
+        )}
+
+        <div className="ml-auto flex items-center gap-1 text-slate-400 pr-1.5">
+          <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+        </div>
+      </div>
+
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      <p className="mt-1 text-[11px] text-slate-400">
+        SKUs are generated as colour × size combinations for all selected colours.
+      </p>
+
+      {/* Dropdown Popover */}
+      {open && (
+        <div className="absolute left-0 right-0 z-50 mt-1 rounded-xl border border-surface-border bg-white shadow-popover animate-fade-in p-2">
+          {/* Search Box */}
+          <div className="relative mb-2">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              autoFocus
+              placeholder="Search colours by name or code…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full rounded-lg border border-surface-border bg-slate-50/70 py-1.5 pl-8 pr-3 text-xs text-slate-800 focus:border-brand-500 focus:bg-white focus:outline-none"
+            />
+          </div>
+
+          {/* Quick Action Bar */}
+          <div className="flex items-center justify-between px-1.5 py-1 border-b border-surface-border text-[11px] text-slate-500 mb-1">
+            <span>{filtered.length} colours found</span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={selectAll}
+                className="text-brand-600 hover:text-brand-700 font-semibold"
+              >
+                Select all ({filtered.length})
+              </button>
+              <span>•</span>
+              <button
+                type="button"
+                onClick={clearAll}
+                className="text-slate-500 hover:text-red-600"
+              >
+                Clear all
+              </button>
+            </div>
+          </div>
+
+          {/* Color List */}
+          <div className="max-h-56 overflow-y-auto divide-y divide-slate-50 pr-1">
+            {filtered.length === 0 ? (
+              <p className="py-4 text-center text-xs text-slate-400">No colours match &quot;{search}&quot;</p>
+            ) : (
+              filtered.map(c => {
+                const selected = selectedIds.includes(c.id);
+                return (
+                  <div
+                    key={c.id}
+                    onClick={() => toggle(c.id)}
+                    className={`flex items-center justify-between px-2.5 py-2 rounded-lg cursor-pointer text-xs transition-colors ${
+                      selected ? 'bg-brand-50/70 font-semibold text-brand-900' : 'hover:bg-slate-50 text-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span
+                        className="h-4 w-4 rounded border border-black/10 shadow-sm shrink-0"
+                        style={{ backgroundColor: c.hex_value || '#e2e8f0' }}
+                      />
+                      <span>{c.label}</span>
+                      {c.code && (
+                        <span className="text-[10px] text-slate-400 font-mono">({c.code})</span>
+                      )}
+                    </div>
+
+                    <div className={`h-4 w-4 rounded border flex items-center justify-center ${
+                      selected ? 'bg-brand-600 border-brand-600 text-white' : 'border-slate-300'
+                    }`}>
+                      {selected && <Check size={11} strokeWidth={3} />}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function StylesPage() {
   const { can } = useAuth();
@@ -212,6 +413,7 @@ export function StyleDetailPage() {
                   hint="Required before SKUs can be generated" />
                 <Select label="Body fabric" options={toOptions(fabrics.data)} placeholder="— Select —"
                   value={v.fabric_id ?? ''} disabled={!editable} onChange={(e) => set('fabric_id', e.target.value)} />
+                <ColorMultiSelect colors={colors.data ?? []} selectedIds={colorIds} onChange={setColorIds} disabled={!editable} />
                 <Select label="Status" options={toPlainOptions(statuses.data)} placeholder="— Select —"
                   value={v.status_id ?? ''} disabled={!editable} onChange={(e) => set('status_id', e.target.value)} />
                 <Textarea className="sm:col-span-2" label="Description" value={v.description ?? ''}
@@ -229,30 +431,6 @@ export function StyleDetailPage() {
                 disabled={!editable}
                 onChange={(url: string | null) => set('image_url', url)}
               />
-            </div>
-          </div>
-
-          <div className="card p-4">
-            <h3 className="mb-2.5 text-[13.5px] font-semibold text-slate-800">Colourways</h3>
-            <p className="mb-3 text-[12px] text-slate-500">
-              Select the colours this style is offered in. SKUs are generated as colour × size.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {(colors.data ?? []).map((c: any) => {
-                const on = colorIds.includes(c.id);
-                return (
-                  <button key={c.id} type="button" disabled={!editable}
-                    onClick={() => setColorIds((s) => on ? s.filter((x) => x !== c.id) : [...s, c.id])}
-                    className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[12.5px] transition-colors
-                      ${on ? 'border-brand-400 bg-brand-50 font-medium text-brand-800'
-                           : 'border-surface-border bg-white text-slate-600 hover:bg-surface-hover'}
-                      ${!editable ? 'cursor-not-allowed opacity-60' : ''}`}>
-                    <span className="inline-block h-4 w-4 rounded border border-slate-300"
-                      style={{ background: (c.hex_value as string) || '#f1f5f9' }} />
-                    {c.label}
-                  </button>
-                );
-              })}
             </div>
           </div>
         </>
