@@ -2,7 +2,8 @@ import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Plus, ArrowLeft, Save, Trash2, PieChart as PieIcon, Layers, FileText, CheckCircle2
+  Plus, ArrowLeft, Save, Trash2, PieChart as PieIcon, Layers, FileText, CheckCircle2,
+  SlidersHorizontal, Copy, Check, Info, Sparkles, Tag, Scissors, RefreshCw, Upload, Image as ImageIcon
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { http, ApiError } from '../../lib/api';
@@ -16,7 +17,9 @@ import {
 } from '../../components/ui';
 import { fmtDecimal } from '../../lib/format';
 
-/* ------------------------------------------------------ Fibre Detail Line */
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Types & Constants                                                          */
+/* ────────────────────────────────────────────────────────────────────────── */
 export interface FibreDetailLine {
   _key: string;
   id?: number;
@@ -24,7 +27,22 @@ export interface FibreDetailLine {
   percentage: number | '';
 }
 
+export interface FabricVariantLine {
+  _key: string;
+  id?: number;
+  fabric_code: string;
+  fabric_name: string;
+  gsm_id?: number | string;
+  gsm_value?: number | string;
+  width_cm?: number | string;
+  dia_inch?: number | string;
+  gauge?: string;
+  std_rate: number | string;
+  is_active: number;
+}
+
 let fibreLineSeq = 0;
+let variantLineSeq = 0;
 
 const FIBRE_COLOR_PALETTE = [
   '#0284c7', // Brand Sky
@@ -56,176 +74,434 @@ const FIBRE_PRESETS = [
   'Other Blend',
 ];
 
+const KNIT_STRUCTURES = [
+  'Single Jersey',
+  '1x1 Rib',
+  '2x2 Rib',
+  'Interlock',
+  'Pique / Polo',
+  'Honey Comb',
+  'French Terry',
+  'Fleece (2-Thread)',
+  'Fleece (3-Thread Brushed)',
+  'Waffle',
+  'Pointelle',
+  'Jacquard Knit',
+  'Auto Stripe',
+  'Velour',
+  'Twill (Woven)',
+  'Poplin (Woven)',
+  'Canvas (Woven)',
+  'Oxford (Woven)',
+  'Other Construction',
+];
+
+const FINISH_TYPES = [
+  'Bio-wash + Silicon Softener',
+  'Bio-wash (Enzyme)',
+  'Silicon Softener Finish',
+  'Mercerized + Bio-wash',
+  'Mercerized Finish',
+  'Peached / Sueded Finish',
+  'Brushed Finish',
+  'Anti-Pilling Finish',
+  'Moisture Wicking / Quick Dry',
+  'Water Repellent (DWR)',
+  'Anti-Microbial / Anti-Bacterial',
+  'Greige / Unfinished',
+  'Standard Soft Finish',
+];
+
+const STANDARD_GSM_PRESETS = [
+  { gsm: 140, label: '140 GSM', defaultDia: 30, defaultWidth: 150, rate: 385 },
+  { gsm: 160, label: '160 GSM', defaultDia: 32, defaultWidth: 160, rate: 405 },
+  { gsm: 180, label: '180 GSM', defaultDia: 34, defaultWidth: 170, rate: 420 },
+  { gsm: 200, label: '200 GSM', defaultDia: 34, defaultWidth: 180, rate: 445 },
+  { gsm: 220, label: '220 GSM', defaultDia: 34, defaultWidth: 185, rate: 465 },
+  { gsm: 240, label: '240 GSM', defaultDia: 36, defaultWidth: 190, rate: 485 },
+  { gsm: 280, label: '280 GSM', defaultDia: 36, defaultWidth: 200, rate: 520 },
+];
+
+function parseCompositionToLines(desc?: string): FibreDetailLine[] {
+  if (!desc) return [{ _key: `fl_${++fibreLineSeq}`, fibre_name: 'Cotton (Organic)', percentage: 100 }];
+  const parts = desc.split(/[\/,+]/).map((s) => s.trim()).filter(Boolean);
+  const lines: FibreDetailLine[] = [];
+  for (const part of parts) {
+    const match = part.match(/^(\d+(?:\.\d+)?)\s*%\s*(.+)$/i);
+    if (match) {
+      lines.push({
+        _key: `fl_${++fibreLineSeq}`,
+        percentage: parseFloat(match[1]) || 0,
+        fibre_name: match[2].trim(),
+      });
+    } else {
+      lines.push({
+        _key: `fl_${++fibreLineSeq}`,
+        percentage: parts.length === 1 ? 100 : 0,
+        fibre_name: part,
+      });
+    }
+  }
+  return lines.length > 0 ? lines : [{ _key: `fl_${++fibreLineSeq}`, fibre_name: 'Cotton (Organic)', percentage: 100 }];
+}
+
 /* ==============================================================================
-   1. FABRIC LIST VIEW
+   1. FABRIC LIST VIEW (Base Masters & Count Variants Switcher)
    ============================================================================== */
 export function FabricsPage() {
-  const { can } = useAuth();
   const nav = useNavigate();
+  const { can } = useAuth();
+  const [view, setView] = useState<'bases' | 'variants'>('bases');
+
   const { page, setPage, search, setSearch, sort, onSort } = useListState({
-    key: 'fabric_code',
+    key: view === 'bases' ? 'base_name' : 'fabric_name',
     dir: 'asc',
   });
   const debounced = useDebounced(search);
-  const [catFilter, setCatFilter] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
+  const [fabricType, setFabricType] = useState('');
+  const [certFilter, setCertFilter] = useState('');
+  const [structureFilter, setStructureFilter] = useState('');
 
-  const categories = useLookup('material-categories');
-
-  const list = useList<any>('fabrics', {
+  // List of Fabric Bases
+  const basesList = useList<any>('fabric-bases', {
     page,
     pageSize: 25,
     q: debounced || undefined,
-    category_id: catFilter || undefined,
-    fabric_type: typeFilter || undefined,
+    fabric_type: fabricType || undefined,
+    certification: certFilter || undefined,
+  });
+
+  // List of All SKU Variants
+  const variantsList = useList<any>('fabrics', {
+    page,
+    pageSize: 25,
+    q: debounced || undefined,
+    fabric_type: fabricType || undefined,
+    knit_structure: structureFilter || undefined,
   });
 
   return (
     <>
       <PageHeader
-        title="Fabrics"
-        subtitle="Knitted & woven fabric masters with GSM and fibre composition"
+        title="Fabric Masters"
+        subtitle="2-Tier Architecture: Base structures (Fibre, Weave, Finish, Cert) &amp; GSM/Width Inventory SKUs"
         actions={
           can('MATERIAL.CREATE') && (
             <button className="btn-primary" onClick={() => nav('/masters/fabrics/new')}>
-              <Plus size={15} /> New Fabric
+              <Plus size={15} /> New Fabric Base
             </button>
           )
         }
       />
 
-      <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-4">
-        <div className="sm:col-span-2">
-          <SearchInput
-            value={search}
-            onChange={setSearch}
-            placeholder="Search fabric code, name, construction or composition…"
-          />
+      {/* View Switcher Tabs & Filters */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-surface-border pb-3">
+        <div className="inline-flex rounded-lg bg-slate-100 p-1">
+          <button
+            type="button"
+            onClick={() => { setView('bases'); setPage(1); }}
+            className={`flex items-center gap-2 rounded-md px-3.5 py-1.5 text-xs font-bold transition-all ${
+              view === 'bases'
+                ? 'bg-white text-brand-700 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Layers size={14} />
+            Fabric Base Masters
+          </button>
+          <button
+            type="button"
+            onClick={() => { setView('variants'); setPage(1); }}
+            className={`flex items-center gap-2 rounded-md px-3.5 py-1.5 text-xs font-bold transition-all ${
+              view === 'variants'
+                ? 'bg-white text-brand-700 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <SlidersHorizontal size={14} />
+            All GSM Variants / SKUs
+          </button>
         </div>
-        <Select
-          placeholder="All Categories"
-          options={toOptions(categories.data)}
-          value={catFilter}
-          onChange={(e) => {
-            setCatFilter(e.target.value);
-            setPage(1);
-          }}
-        />
-        <Select
-          placeholder="All Types"
-          options={[
-            { value: 'KNIT', label: 'Knit' },
-            { value: 'WOVEN', label: 'Woven' },
-            { value: 'NONWOVEN', label: 'Non-Woven' },
-          ]}
-          value={typeFilter}
-          onChange={(e) => {
-            setTypeFilter(e.target.value);
-            setPage(1);
-          }}
-        />
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="w-64">
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder={view === 'bases' ? "Search base code, structure, cert…" : "Search item code, GSM, fabric…"}
+            />
+          </div>
+          <div className="w-36">
+            <Select
+              placeholder="All Types"
+              options={[
+                { value: 'KNIT', label: 'Knit' },
+                { value: 'WOVEN', label: 'Woven' },
+                { value: 'NONWOVEN', label: 'Non-Woven' },
+              ]}
+              value={fabricType}
+              onChange={(e) => {
+                setFabricType(e.target.value);
+                setPage(1);
+              }}
+            />
+          </div>
+          {view === 'bases' ? (
+            <div className="w-40">
+              <Select
+                placeholder="All Certifications"
+                options={[
+                  { value: 'GOTS', label: 'GOTS' },
+                  { value: 'OEKO-TEX', label: 'OEKO-TEX' },
+                  { value: 'BCI', label: 'BCI' },
+                  { value: 'GRS', label: 'GRS' },
+                  { value: 'OCS', label: 'OCS' },
+                  { value: 'NONE', label: 'None / Standard' },
+                ]}
+                value={certFilter}
+                onChange={(e) => {
+                  setCertFilter(e.target.value);
+                  setPage(1);
+                }}
+              />
+            </div>
+          ) : (
+            <div className="w-44">
+              <Select
+                placeholder="All Structures"
+                options={KNIT_STRUCTURES.map(s => ({ value: s, label: s }))}
+                value={structureFilter}
+                onChange={(e) => {
+                  setStructureFilter(e.target.value);
+                  setPage(1);
+                }}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
-      <DataTable
-        columns={[
-          {
-            key: 'fabric_code',
-            header: 'Fabric Code',
-            sortable: true,
-            render: (r: any) => (
-              <span className="font-mono text-[12px] font-semibold text-brand-700">
-                {r.fabric_code}
-              </span>
-            ),
-          },
-          {
-            key: 'fabric_name',
-            header: 'Fabric Name',
-            sortable: true,
-            render: (r: any) => (
-              <span className="font-medium text-slate-800">{r.fabric_name}</span>
-            ),
-          },
-          {
-            key: 'composition_desc',
-            header: 'Fibre Composition',
-            render: (r: any) => (
-              <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                {r.composition_desc || '100% Cotton'}
-              </span>
-            ),
-          },
-          {
-            key: 'knit_structure',
-            header: 'Structure / Weave',
-            render: (r: any) => (
-              <span className="text-slate-600">{r.knit_structure || '—'}</span>
-            ),
-          },
-          {
-            key: 'gsm_value',
-            header: 'GSM',
-            align: 'right',
-            sortable: true,
-            render: (r: any) => (
-              <span className="font-mono font-medium text-slate-700">
-                {r.gsm_value ? `${r.gsm_value} GSM` : '—'}
-              </span>
-            ),
-          },
-          {
-            key: 'fabric_type',
-            header: 'Type',
-            render: (r: any) => (
-              <Badge tone={r.fabric_type === 'KNIT' ? 'blue' : 'amber'}>
-                {r.fabric_type || 'KNIT'}
-              </Badge>
-            ),
-          },
-          {
-            key: 'std_rate',
-            header: 'Std Rate (₹/Kg)',
-            align: 'right',
-            render: (r: any) => (
-              <span className="font-mono text-slate-700">
-                {r.std_rate ? `₹${fmtDecimal(r.std_rate, 2)}` : '—'}
-              </span>
-            ),
-          },
-          {
-            key: 'is_active',
-            header: 'Status',
-            render: (r: any) => (
-              <Badge tone={r.is_active ? 'green' : 'slate'}>
-                {r.is_active ? 'Active' : 'Draft'}
-              </Badge>
-            ),
-          },
-        ]}
-        rows={list.data?.data ?? []}
-        loading={list.isLoading}
-        error={list.error}
-        onRetry={() => void list.refetch()}
-        rowKey={(r) => r.id}
-        onRowClick={(r) => nav(`/masters/fabrics/${r.id}`)}
-        sort={sort}
-        onSort={onSort}
-        pagination={list.data?.pagination}
-        onPage={setPage}
-        emptyTitle="No fabrics found"
-        emptyMessage="Define fabrics with knit/woven structure and composition breakdown."
-      />
+      {/* VIEW 1: FABRIC BASES TABLE */}
+      {view === 'bases' ? (
+        <DataTable
+          items={basesList.items}
+          total={basesList.total}
+          page={page}
+          pageSize={25}
+          loading={basesList.isLoading}
+          sort={sort}
+          onSort={onSort}
+          onPageChange={setPage}
+          onRowClick={(row) => nav(`/masters/fabrics/${row.id}`)}
+          columns={[
+            {
+              key: 'base_code',
+              header: 'Base Code',
+              sortable: true,
+              render: (r) => (
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-bold text-brand-700">{r.base_code}</span>
+                  {r.image_url && (
+                    <span className="flex h-5 w-5 items-center justify-center rounded bg-slate-100 text-slate-500" title="Has swatch image">
+                      <ImageIcon size={12} />
+                    </span>
+                  )}
+                </div>
+              ),
+            },
+            {
+              key: 'base_name',
+              header: 'Fabric Base Name',
+              sortable: true,
+              render: (r) => (
+                <div>
+                  <div className="font-bold text-slate-900">{r.base_name}</div>
+                  <div className="text-[11px] text-slate-500 font-medium">
+                    {r.composition_desc || r.composition || '100% Cotton'}
+                  </div>
+                </div>
+              ),
+            },
+            {
+              key: 'knit_structure',
+              header: 'Structure / Weave',
+              render: (r) => (
+                <div className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-800">
+                  <Scissors size={12} className="text-slate-500" />
+                  {r.knit_structure || 'Single Jersey'}
+                </div>
+              ),
+            },
+            {
+              key: 'fabric_type',
+              header: 'Type',
+              render: (r) => (
+                <span className={`inline-flex rounded px-2 py-0.5 text-[11px] font-bold ${
+                  r.fabric_type === 'KNIT' ? 'bg-indigo-50 text-indigo-700' :
+                  r.fabric_type === 'WOVEN' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-700'
+                }`}>
+                  {r.fabric_type}
+                </span>
+              ),
+            },
+            {
+              key: 'finish_type',
+              header: 'Finish & Treatment',
+              render: (r) => (
+                <span className="text-xs text-slate-600 font-medium truncate max-w-[180px] block" title={r.finish_type}>
+                  {r.finish_type || 'Bio-wash + Silicon'}
+                </span>
+              ),
+            },
+            {
+              key: 'certification',
+              header: 'Certification',
+              render: (r) => (
+                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                  r.certification === 'GOTS' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
+                  r.certification === 'OEKO-TEX' ? 'bg-blue-100 text-blue-800 border border-blue-300' :
+                  r.certification === 'BCI' ? 'bg-teal-100 text-teal-800 border border-teal-300' :
+                  r.certification === 'GRS' ? 'bg-purple-100 text-purple-800 border border-purple-300' :
+                  'bg-slate-100 text-slate-600'
+                }`}>
+                  {r.certification || 'NONE'}
+                </span>
+              ),
+            },
+            {
+              key: 'variant_count',
+              header: 'GSM Variants',
+              render: (r) => {
+                const count = Number(r.variant_count) || 0;
+                return (
+                  <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                    count > 0 ? 'bg-brand-50 text-brand-700 border border-brand-200' : 'bg-rose-50 text-rose-700'
+                  }`}>
+                    {count} {count === 1 ? 'GSM SKU' : 'GSM SKUs'}
+                  </span>
+                );
+              },
+            },
+            {
+              key: 'is_active',
+              header: 'Status',
+              render: (r) => (
+                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                  r.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                }`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${r.is_active ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                  {r.is_active ? 'Active' : 'Inactive'}
+                </span>
+              ),
+            },
+          ]}
+        />
+      ) : (
+        /* VIEW 2: ALL SKU VARIANTS TABLE */
+        <DataTable
+          items={variantsList.items}
+          total={variantsList.total}
+          page={page}
+          pageSize={25}
+          loading={variantsList.isLoading}
+          sort={sort}
+          onSort={onSort}
+          onPageChange={setPage}
+          onRowClick={(row) => row.fabric_base_id ? nav(`/masters/fabrics/${row.fabric_base_id}`) : undefined}
+          columns={[
+            {
+              key: 'fabric_code',
+              header: 'Item SKU Code',
+              sortable: true,
+              render: (r) => (
+                <span className="font-mono font-bold text-brand-700">{r.fabric_code}</span>
+              ),
+            },
+            {
+              key: 'fabric_name',
+              header: 'Fabric Item Name',
+              sortable: true,
+              render: (r) => (
+                <div>
+                  <div className="font-bold text-slate-900">{r.fabric_name}</div>
+                  {r.base_name && (
+                    <div className="text-[11px] text-slate-500 font-medium">
+                      Base: {r.base_name} ({r.base_code})
+                    </div>
+                  )}
+                </div>
+              ),
+            },
+            {
+              key: 'gsm_value',
+              header: 'GSM',
+              render: (r) => (
+                <span className="inline-flex rounded bg-blue-50 px-2 py-0.5 font-mono text-xs font-bold text-blue-700">
+                  {r.gsm_value ? `${r.gsm_value} GSM` : '—'}
+                </span>
+              ),
+            },
+            {
+              key: 'dia_inch',
+              header: 'Width / Dia',
+              render: (r) => (
+                <span className="text-xs font-medium text-slate-700">
+                  {r.dia_inch ? `${r.dia_inch}" Dia` : ''} {r.width_cm ? `(${r.width_cm} cm)` : ''}
+                </span>
+              ),
+            },
+            {
+              key: 'gauge',
+              header: 'Gauge',
+              render: (r) => (
+                <span className="font-mono text-xs font-semibold text-slate-600">
+                  {r.gauge || '24 GG'}
+                </span>
+              ),
+            },
+            {
+              key: 'knit_structure',
+              header: 'Structure',
+              render: (r) => (
+                <span className="text-xs text-slate-700 font-medium">
+                  {r.knit_structure || 'Single Jersey'}
+                </span>
+              ),
+            },
+            {
+              key: 'std_rate',
+              header: 'Std Rate (₹/Kg)',
+              render: (r) => (
+                <span className="font-mono text-xs font-bold text-slate-900">
+                  ₹{fmtDecimal(r.std_rate, 2)}
+                </span>
+              ),
+            },
+            {
+              key: 'is_active',
+              header: 'Status',
+              render: (r) => (
+                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                  r.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                }`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${r.is_active ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                  {r.is_active ? 'Active' : 'Draft'}
+                </span>
+              ),
+            },
+          ]}
+        />
+      )}
     </>
   );
 }
 
 /* ==============================================================================
-   2. FABRIC DETAIL COCKPIT (Clean Required Fields)
+   2. 2-TIER FABRIC BASE COCKPIT & GSM VARIANTS GENERATOR
    ============================================================================== */
 export function FabricDetailPage() {
-  const { id } = useParams();
-  const isNew = id === 'new';
+  const { id } = useParams<{ id: string }>();
+  const isNew = !id || id === 'new';
   const nav = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();
@@ -236,534 +512,1026 @@ export function FabricDetailPage() {
   // Lookups
   const categories = useLookup('material-categories');
   const uoms = useLookup('uoms');
+  const gsmList = useLookup('gsm');
   const yarns = useLookup('yarns');
-  const gsms = useLookup('gsm');
 
-  // Fabric General Form State (Clean Initial State)
+  // Base Form State
   const [head, setHead] = useState<Record<string, any>>({
-    fabric_code: '',
-    fabric_name: '',
+    base_code: '',
+    base_name: '',
     category_id: '',
     fabric_type: 'KNIT',
     knit_structure: 'Single Jersey',
-    composition_id: '',
-    gsm_id: '',
-    width_cm: '',
-    dia_inch: '',
     yarn_id: '',
-    finish_type: 'Bio-wash + Silicon',
+    finish_type: 'Bio-wash + Silicon Softener',
+    certification: 'GOTS',
     hsn_code: '6006',
     base_uom: '',
-    std_rate: '',
-    is_active: 1,
-  });
-
-  // Composition State
-  const [compHead, setCompHead] = useState({
-    composition_code: '',
+    image_url: '',
     description: '',
+    is_active: 1,
+    composition_id: '',
   });
 
-  // Fibre Breakdown lines
+  // Fibre Composition Lines
   const [fibreLines, setFibreLines] = useState<FibreDetailLine[]>([
-    { _key: `fl_${++fibreLineSeq}`, fibre_name: 'Cotton (Organic)', percentage: 100 },
+    { _key: 'fl_init_1', fibre_name: 'Cotton (Organic)', percentage: 100 },
   ]);
 
-  // Load Existing Fabric
-  const fabricQuery = useQuery({
-    queryKey: ['fabrics', 'item', id],
-    queryFn: async () => (await http.get<{ data: any }>(`/fabrics/${id}`)).data,
+  // GSM Variants List
+  const [variants, setVariants] = useState<FabricVariantLine[]>([
+    {
+      _key: 'var_1',
+      fabric_code: '',
+      fabric_name: 'Single Jersey 160 GSM 32" Dia',
+      gsm_id: '',
+      gsm_value: 160,
+      width_cm: 160,
+      dia_inch: 32,
+      gauge: '24 GG',
+      std_rate: 405,
+      is_active: 1,
+    },
+    {
+      _key: 'var_2',
+      fabric_code: '',
+      fabric_name: 'Single Jersey 180 GSM 34" Dia',
+      gsm_id: '',
+      gsm_value: 180,
+      width_cm: 170,
+      dia_inch: 34,
+      gauge: '24 GG',
+      std_rate: 420,
+      is_active: 1,
+    },
+  ]);
+
+  // Load existing Base & Variants
+  const qBase = useQuery({
+    queryKey: ['fabric-base-detail', id],
+    queryFn: async () => {
+      const res = await http.get<any>(`/api/resources/fabric-bases/${id}`);
+      return res.data;
+    },
     enabled: !isNew,
   });
 
-  // Load Existing Composition if linked
-  const compQuery = useQuery({
-    queryKey: ['compositions', 'item', head.composition_id],
-    queryFn: async () => (await http.get<{ data: any }>(`/compositions/${head.composition_id}`)).data,
-    enabled: !isNew && !!head.composition_id,
+  const qVariants = useQuery({
+    queryKey: ['fabric-variants-by-base', id],
+    queryFn: async () => {
+      const res = await http.get<any>(`/api/resources/fabrics?fabric_base_id=${id}&pageSize=100`);
+      return res.data?.items || [];
+    },
+    enabled: !isNew,
   });
 
+  // Populate data when loaded
   useEffect(() => {
-    if (!fabricQuery.data) return;
-    const f = fabricQuery.data;
-    setHead((prev) => ({
-      ...prev,
-      ...f,
-      category_id: f.category_id ? String(f.category_id) : '',
-      gsm_id: f.gsm_id ? String(f.gsm_id) : '',
-      yarn_id: f.yarn_id ? String(f.yarn_id) : '',
-      base_uom: f.base_uom ? String(f.base_uom) : '',
-    }));
-  }, [fabricQuery.data]);
+    if (qBase.data) {
+      const b = qBase.data;
+      setHead({
+        base_code: b.base_code || '',
+        base_name: b.base_name || '',
+        category_id: b.category_id || '',
+        fabric_type: b.fabric_type || 'KNIT',
+        knit_structure: b.knit_structure || 'Single Jersey',
+        yarn_id: b.yarn_id || '',
+        finish_type: b.finish_type || 'Bio-wash + Silicon Softener',
+        certification: b.certification || 'GOTS',
+        hsn_code: b.hsn_code || '6006',
+        base_uom: b.base_uom || '',
+        image_url: b.image_url || '',
+        description: b.description || '',
+        is_active: b.is_active ?? 1,
+        composition_id: b.composition_id || '',
+      });
+
+      // Populate fibre composition
+      if (b.composition_desc) {
+        setFibreLines(parseCompositionToLines(b.composition_desc));
+      }
+    }
+  }, [qBase.data]);
 
   useEffect(() => {
-    if (!compQuery.data) return;
-    const c = compQuery.data;
-    setCompHead({
-      composition_code: c.composition_code || '',
-      description: c.description || '',
-    });
-    if (Array.isArray(c.details) && c.details.length > 0) {
-      setFibreLines(
-        c.details.map((d: any) => ({
-          _key: `fl_${++fibreLineSeq}`,
-          id: d.id,
-          fibre_name: d.fibre_name,
-          percentage: Number(d.percentage) || 0,
+    if (qVariants.data && qVariants.data.length > 0) {
+      setVariants(
+        qVariants.data.map((v: any) => ({
+          _key: `var_${v.id}`,
+          id: v.id,
+          fabric_code: v.fabric_code || '',
+          fabric_name: v.fabric_name || '',
+          gsm_id: v.gsm_id || '',
+          gsm_value: v.gsm_value || '',
+          width_cm: v.width_cm || '',
+          dia_inch: v.dia_inch || '',
+          gauge: v.gauge || '24 GG',
+          std_rate: v.std_rate ?? 0,
+          is_active: v.is_active ?? 1,
         }))
       );
     }
-  }, [compQuery.data]);
+  }, [qVariants.data]);
 
-  // Total percentage calculation
+  // Defaults on new form
+  useEffect(() => {
+    if (isNew) {
+      if (categories.data?.length && !head.category_id) {
+        const cat = categories.data.find((c: any) => c.material_type === 'FABRIC' || c.code === 'CAT-FAB');
+        if (cat) setHead((h) => ({ ...h, category_id: cat.id }));
+      }
+      if (uoms.data?.length && !head.base_uom) {
+        const kg = uoms.data.find((u: any) => u.code === 'KG');
+        if (kg) setHead((h) => ({ ...h, base_uom: kg.id }));
+      }
+      if (!head.base_code) {
+        const rnd = Math.floor(1000 + Math.random() * 9000);
+        setHead((h) => ({ ...h, base_code: `FB-${rnd}` }));
+      }
+    }
+  }, [isNew, categories.data, uoms.data]);
+
+  // Total Percentage Validator
   const totalPercentage = useMemo(() => {
-    return fibreLines.reduce((sum, item) => sum + (Number(item.percentage) || 0), 0);
+    return fibreLines.reduce((acc, curr) => acc + (Number(curr.percentage) || 0), 0);
   }, [fibreLines]);
 
-  const isValid100 = Math.abs(totalPercentage - 100) < 0.01;
+  const isValid100 = Math.abs(totalPercentage - 100) < 0.001;
 
-  // Auto-generate composition description
-  const autoGeneratedDesc = useMemo(() => {
-    const valid = fibreLines.filter((f) => (Number(f.percentage) || 0) > 0 && f.fibre_name.trim());
-    if (valid.length === 0) return '';
-    return valid.map((f) => `${f.percentage}% ${f.fibre_name}`).join(' / ');
+  // Auto-derived Composition summary string
+  const autoCompositionString = useMemo(() => {
+    return fibreLines
+      .filter((l) => Number(l.percentage) > 0 && l.fibre_name)
+      .map((l) => `${l.percentage}% ${l.fibre_name}`)
+      .join(' / ');
   }, [fibreLines]);
 
-  // Interactive Fibre Operations
-  const handleAddFibre = () => {
+  // Fibre Line handlers
+  const handleAddFibreLine = () => {
+    const used = new Set(fibreLines.map((l) => l.fibre_name));
+    const nextFibre = FIBRE_PRESETS.find((p) => !used.has(p)) || 'Cotton (Organic)';
     const remaining = Math.max(0, 100 - totalPercentage);
-    setFibreLines((prev) => [
-      ...prev,
+    setFibreLines((s) => [...s, { _key: `fl_${++fibreLineSeq}`, fibre_name: nextFibre, percentage: remaining || 0 }]);
+  };
+
+  const handleUpdateFibreLine = (key: string, patch: Partial<FibreDetailLine>) => {
+    setFibreLines((s) => s.map((line) => (line._key === key ? { ...line, ...patch } : line)));
+  };
+
+  const handleRemoveFibreLine = (key: string) => {
+    if (fibreLines.length <= 1) {
+      toast('At least one fibre is required', 'info');
+      return;
+    }
+    setFibreLines((s) => s.filter((l) => l._key !== key));
+  };
+
+  // Variant handlers
+  const handleAddVariant = (presetGsm?: number, dia?: number, rate?: number) => {
+    const baseCode = (head.base_code || 'FB-01').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const gsmVal = presetGsm || 180;
+    const diaVal = dia || 34;
+    const gsmMatch = (gsmList.data || []).find((g: any) => Number(g.code) === gsmVal);
+
+    setVariants((s) => [
+      ...s,
       {
-        _key: `fl_${++fibreLineSeq}`,
-        fibre_name: 'Elastane / Spandex (Lycra)',
-        percentage: remaining > 0 ? remaining : 0,
+        _key: `var_${++variantLineSeq}`,
+        fabric_code: `FAB-${baseCode}-${gsmVal}-${diaVal}D`,
+        fabric_name: `${head.base_name || 'Fabric'} ${gsmVal} GSM ${diaVal}" Dia`,
+        gsm_id: gsmMatch?.id || '',
+        gsm_value: gsmVal,
+        width_cm: Math.round(diaVal * 5),
+        dia_inch: diaVal,
+        gauge: '24 GG',
+        std_rate: rate || 420,
+        is_active: 1,
       },
     ]);
   };
 
-  const handleRemoveFibre = (key: string) => {
-    setFibreLines((prev) => prev.filter((item) => item._key !== key));
-  };
-
-  const handleUpdateFibre = (key: string, field: keyof FibreDetailLine, value: any) => {
-    setFibreLines((prev) =>
-      prev.map((item) => (item._key === key ? { ...item, [field]: value } : item))
+  const handleUpdateVariant = (key: string, field: keyof FabricVariantLine, val: any) => {
+    setVariants((s) =>
+      s.map((v) => {
+        if (v._key !== key) return v;
+        const updated = { ...v, [field]: val };
+        // If GSM dropdown changed, update gsm_value
+        if (field === 'gsm_id') {
+          const matchedGsm = (gsmList.data || []).find((g: any) => String(g.id) === String(val));
+          if (matchedGsm) {
+            updated.gsm_value = Number(matchedGsm.code) || matchedGsm.code;
+            updated.fabric_name = `${head.base_name || 'Fabric'} ${matchedGsm.code} GSM ${v.dia_inch ? `${v.dia_inch}" Dia` : ''}`;
+          }
+        }
+        return updated;
+      })
     );
   };
 
-  const editable = isNew ? can('MATERIAL.CREATE') : can('MATERIAL.UPDATE');
+  const handleDuplicateVariant = (key: string) => {
+    const target = variants.find((v) => v._key === key);
+    if (!target) return;
+    setVariants((s) => [
+      ...s,
+      {
+        ...target,
+        _key: `var_${++variantLineSeq}`,
+        id: undefined,
+        fabric_code: target.fabric_code ? `${target.fabric_code}-COPY` : '',
+      },
+    ]);
+  };
 
-  // Save Handler
-  const handleSave = async (mode: 'save' | 'draft' = 'save') => {
-    if (!head.fabric_name.trim()) {
-      toast('Fabric Name is required', 'error');
+  const handleRemoveVariant = (key: string) => {
+    if (variants.length <= 1) {
+      toast('At least one GSM variant is required for a Fabric Base', 'info');
       return;
     }
-    if (!isValid100 && mode !== 'draft') {
-      toast(`Fibre composition must total exactly 100% (currently ${totalPercentage}%)`, 'error');
+    setVariants((s) => s.filter((v) => v._key !== key));
+  };
+
+  const editable = can(isNew ? 'MATERIAL.CREATE' : 'MATERIAL.UPDATE');
+
+  // Auto-fill codes if empty
+  const handleAutoGenerateCodes = () => {
+    const baseCode = (head.base_code || 'FB01').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    setVariants((s) =>
+      s.map((v) => {
+        const gsm = v.gsm_value || 180;
+        const dia = v.dia_inch ? `${v.dia_inch}D` : 'OW';
+        return {
+          ...v,
+          fabric_code: `FAB-${baseCode}-${gsm}-${dia}`,
+          fabric_name: `${head.base_name || 'Fabric'} ${gsm} GSM ${v.dia_inch ? `${v.dia_inch}" Dia` : ''}`,
+        };
+      })
+    );
+    toast('Generated standard Fabric Variant Item Codes', 'success');
+  };
+
+  // SAVE BATCH
+  const handleSaveAll = async () => {
+    if (!head.base_code?.trim()) {
+      toast('Fabric Base Code is required', 'info');
+      return;
+    }
+    if (!head.base_name?.trim()) {
+      toast('Fabric Base Name is required', 'info');
+      return;
+    }
+    if (!head.base_uom) {
+      toast('Base UOM is required', 'info');
+      return;
+    }
+    if (!isValid100) {
+      toast(`Fibre composition must total exactly 100% (currently ${totalPercentage.toFixed(1)}%)`, 'info');
+      return;
+    }
+    if (variants.length === 0) {
+      toast('Please add at least one GSM variant', 'info');
       return;
     }
 
     setSaving(true);
     try {
-      // 1. Save or Create Composition
-      const compPayload = {
-        composition_code: compHead.composition_code || `CMP-${head.fabric_code || Date.now()}`,
-        description: compHead.description || autoGeneratedDesc || head.fabric_name,
-        is_active: mode === 'draft' ? 0 : 1,
-        details: fibreLines.map((l) => ({
-          fibre_name: l.fibre_name,
-          percentage: Number(l.percentage) || 0,
-        })),
-      };
-
-      let compId = head.composition_id;
-      if (compId) {
-        await http.put(`/compositions/${compId}`, compPayload).catch(() => {});
-      } else {
-        const compRes = await http.post<{ data: any }>('/compositions', compPayload).catch(() => null);
-        if (compRes?.data?.id) compId = compRes.data.id;
+      // 1. Create or Find Composition Record
+      let compositionId = head.composition_id;
+      if (autoCompositionString) {
+        try {
+          const compRes = await http.post<any>('/api/resources/compositions', {
+            code: `COMP-${Date.now().toString().slice(-6)}`,
+            description: autoCompositionString,
+            is_active: 1,
+          });
+          compositionId = compRes.data?.id;
+        } catch {
+          // ignore duplicate composition error
+        }
       }
 
-      // 2. Save Fabric Record
-      const fabricPayload = {
-        fabric_code: head.fabric_code,
-        fabric_name: head.fabric_name,
+      // 2. Save Fabric Base Master
+      const basePayload = {
+        base_code: head.base_code.trim().toUpperCase(),
+        base_name: head.base_name.trim(),
         category_id: head.category_id || null,
-        fabric_type: head.fabric_type || 'KNIT',
+        fabric_type: head.fabric_type,
         knit_structure: head.knit_structure || null,
-        composition_id: compId || null,
-        gsm_id: head.gsm_id ? Number(head.gsm_id) : (gsms.data?.[0]?.id ?? null),
-        width_cm: Number(head.width_cm) || null,
-        dia_inch: Number(head.dia_inch) || null,
         yarn_id: head.yarn_id || null,
         finish_type: head.finish_type || null,
+        certification: head.certification || 'NONE',
         hsn_code: head.hsn_code || '6006',
-        base_uom: head.base_uom ? Number(head.base_uom) : (uoms.data?.[0]?.id ?? 1),
-        std_rate: Number(head.std_rate) || 0,
-        is_active: mode === 'draft' ? 0 : (head.is_active ?? 1),
+        base_uom: head.base_uom,
+        image_url: head.image_url || null,
+        description: head.description || autoCompositionString,
+        composition_id: compositionId || null,
+        is_active: head.is_active ? 1 : 0,
       };
 
-      const res = isNew
-        ? await http.post<{ data: any }>('/fabrics', fabricPayload)
-        : await http.put<{ data: any }>(`/fabrics/${id}`, fabricPayload);
-
-      toast(mode === 'draft' ? 'Fabric saved as Draft' : `Fabric ${isNew ? 'created' : 'updated'} successfully`);
-      void qc.invalidateQueries({ queryKey: ['fabrics'] });
-
-      if (isNew && res.data?.id) {
-        nav(`/masters/fabrics/${res.data.id}`, { replace: true });
+      let baseId = id;
+      if (isNew) {
+        const created = await http.post<any>('/api/resources/fabric-bases', basePayload);
+        baseId = created.data?.id;
+      } else {
+        await http.put(`/api/resources/fabric-bases/${id}`, basePayload);
       }
-    } catch (e) {
-      if (e instanceof ApiError) toast(e.message, 'error');
-      else toast('Failed to save fabric master', 'error');
+
+      // 3. Save / Synchronize Child Variants
+      for (const v of variants) {
+        const vPayload = {
+          fabric_base_id: baseId,
+          fabric_code: v.fabric_code.trim().toUpperCase(),
+          fabric_name: v.fabric_name.trim(),
+          category_id: head.category_id || null,
+          fabric_type: head.fabric_type,
+          knit_structure: head.knit_structure || null,
+          composition_id: compositionId || null,
+          gsm_id: v.gsm_id || null,
+          width_cm: Number(v.width_cm) || 0,
+          dia_inch: Number(v.dia_inch) || 0,
+          gauge: v.gauge || '24 GG',
+          yarn_id: head.yarn_id || null,
+          finish_type: head.finish_type || null,
+          hsn_code: head.hsn_code || '6006',
+          base_uom: head.base_uom,
+          std_rate: Number(v.std_rate) || 0,
+          is_active: v.is_active ? 1 : 0,
+        };
+
+        if (v.id) {
+          await http.put(`/api/resources/fabrics/${v.id}`, vPayload);
+        } else {
+          await http.post('/api/resources/fabrics', vPayload);
+        }
+      }
+
+      toast('Fabric Base and All Variants saved successfully!', 'success');
+      qc.invalidateQueries({ queryKey: ['fabric-bases'] });
+      qc.invalidateQueries({ queryKey: ['fabrics'] });
+      qc.invalidateQueries({ queryKey: ['fabric-base-detail', String(baseId)] });
+      qc.invalidateQueries({ queryKey: ['fabric-variants-by-base', String(baseId)] });
+
+      if (isNew) {
+        nav(`/masters/fabrics/${baseId}`);
+      }
+    } catch (err: any) {
+      toast(err instanceof ApiError ? err.message : (err?.message || 'Failed to save fabric base'), 'info');
     } finally {
       setSaving(false);
     }
   };
 
-  if (!isNew && fabricQuery.isLoading) return <div className="card"><LoadingBlock rows={8} /></div>;
-  if (!isNew && fabricQuery.error) return <div className="card"><ErrorState error={fabricQuery.error} onRetry={() => void fabricQuery.refetch()} /></div>;
+  const handleDelete = async () => {
+    if (!window.confirm('Are you sure you want to delete this Fabric Base and its variants?')) return;
+    try {
+      await http.delete(`/api/resources/fabric-bases/${id}`);
+      toast('Fabric Base deleted', 'success');
+      qc.invalidateQueries({ queryKey: ['fabric-bases'] });
+      qc.invalidateQueries({ queryKey: ['fabrics'] });
+      nav('/masters/fabrics');
+    } catch (err: any) {
+      toast(err?.message || 'Failed to delete fabric base', 'info');
+    }
+  };
+
+  if (!isNew && qBase.isLoading) return <LoadingBlock />;
+  if (!isNew && qBase.isError) return <ErrorState error={qBase.error} />;
 
   return (
-    <>
+    <div className="space-y-6 pb-20">
+      {/* Top Header */}
       <PageHeader
-        breadcrumb={['Masters', 'Fabrics', isNew ? 'New' : head.fabric_name]}
-        title={
-          <div className="flex items-center gap-3">
-            <span>{head.fabric_name || 'New Fabric Master'}</span>
-            {head.is_active === 0 && (
-              <span className="rounded-full bg-amber-100 text-amber-800 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider">
-                Draft
-              </span>
-            )}
-          </div>
-        }
-        subtitle={head.fabric_code ? `Code: ${head.fabric_code}  |  Type: ${head.fabric_type} (${head.knit_structure || ''})  |  Composition: ${autoGeneratedDesc || '100% Cotton'}` : 'Define fabric structure, GSM and fibre breakdown'}
+        title={isNew ? 'New Fabric Base Master' : `${head.base_name || 'Fabric Base'} (${head.base_code})`}
+        subtitle="2-Tier Parent Master: Base Construction, Finish, Certification &amp; Linked GSM Variants"
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <button className="btn-secondary" onClick={() => nav('/masters/fabrics')}>
-              <ArrowLeft size={15} /> Back
+          <div className="flex items-center gap-2">
+            <button type="button" className="btn-secondary" onClick={() => nav('/masters/fabrics')}>
+              <ArrowLeft size={15} /> Back to List
             </button>
-            {editable && (
-              <button className="btn-secondary" onClick={() => void handleSave('draft')} disabled={saving}>
-                {saving ? <Spinner size={14} /> : <FileText size={14} className="text-amber-600" />} Save as Draft
+            {!isNew && can('MATERIAL.DELETE') && (
+              <button type="button" className="btn-danger" onClick={handleDelete}>
+                <Trash2 size={15} /> Delete
               </button>
             )}
             {editable && (
-              <button className="btn-primary" onClick={() => void handleSave('save')} disabled={saving}>
+              <button
+                type="button"
+                className="btn-primary flex items-center gap-1.5 shadow-md hover:shadow-lg"
+                onClick={handleSaveAll}
+                disabled={saving}
+              >
                 {saving ? <Spinner size={15} /> : <Save size={15} />}
-                {isNew ? 'Create Fabric' : 'Save & Activate'}
+                {isNew ? 'Create Fabric Base & Variants' : 'Save All Changes'}
               </button>
             )}
           </div>
         }
       />
 
-      {/* Section 1: General Specifications */}
-      <div className="card p-4 space-y-4 mb-4">
-        <div className="flex items-center gap-2 border-b border-surface-border pb-2.5">
-          <span className="h-2 w-2 rounded-full bg-brand-500" />
-          <h3 className="text-[12.5px] font-bold uppercase tracking-wider text-slate-700">
-            General Specifications
-          </h3>
+      {/* ────────────────────────────────────────────────────────────────────────── */}
+      {/* SECTION 1: FABRIC BASE SPECIFICATIONS                                     */}
+      {/* ────────────────────────────────────────────────────────────────────────── */}
+      <div className="card p-5 border border-slate-200 shadow-sm bg-white">
+        <div className="flex items-center justify-between border-b border-surface-border pb-3 mb-4">
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+              <Layers size={16} />
+            </span>
+            <div>
+              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900">
+                1. Fabric Base Identity &amp; Construction
+              </h2>
+              <p className="text-xs text-slate-500">
+                Universal identity (Weave, Finish, Certification) applied across all GSM variants
+              </p>
+            </div>
+          </div>
+          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ${
+            head.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
+          }`}>
+            <span className={`h-2 w-2 rounded-full ${head.is_active ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+            {head.is_active ? 'Active Master' : 'Draft Master'}
+          </span>
         </div>
-        <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4 text-xs">
-          <Input
-            label="Fabric Code"
-            required
-            placeholder="e.g. FAB-SJ-160"
-            value={head.fabric_code}
-            onChange={(e) => setHead((s) => ({ ...s, fabric_code: e.target.value }))}
-            disabled={!editable}
-          />
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <label className="label">Fabric Base Code *</label>
+            <div className="flex gap-1">
+              <Input
+                value={head.base_code}
+                disabled={!editable}
+                onChange={(e) => setHead({ ...head, base_code: e.target.value.toUpperCase() })}
+                placeholder="e.g. FB-00001"
+                className="font-mono font-bold text-brand-700"
+              />
+              <button
+                type="button"
+                className="btn-secondary px-2 text-xs font-mono font-bold"
+                title="Auto Generate Code"
+                onClick={() => setHead({ ...head, base_code: `FB-${Math.floor(1000 + Math.random() * 9000)}` })}
+              >
+                Auto
+              </button>
+            </div>
+          </div>
+
           <div className="lg:col-span-2">
+            <label className="label">Fabric Base Name *</label>
             <Input
-              label="Fabric Name"
-              required
-              placeholder="e.g. Single Jersey 160 GSM Combed"
-              value={head.fabric_name}
-              onChange={(e) => setHead((s) => ({ ...s, fabric_name: e.target.value }))}
+              value={head.base_name}
               disabled={!editable}
+              onChange={(e) => setHead({ ...head, base_name: e.target.value })}
+              placeholder="e.g. Single Jersey (100% Combed Cotton)"
+              className="font-semibold text-slate-900"
             />
           </div>
-          <Select
-            label="Category"
-            options={toOptions(categories.data)}
-            value={head.category_id}
-            onChange={(e) => setHead((s) => ({ ...s, category_id: e.target.value }))}
-            disabled={!editable}
-          />
 
-          <Select
-            label="Fabric Type"
-            options={[
-              { value: 'KNIT', label: 'Knit' },
-              { value: 'WOVEN', label: 'Woven' },
-              { value: 'NONWOVEN', label: 'Non-Woven' },
-            ]}
-            value={head.fabric_type}
-            onChange={(e) => setHead((s) => ({ ...s, fabric_type: e.target.value }))}
-            disabled={!editable}
-          />
-          <Select
-            label="Structure / Construction"
-            options={[
-              { value: 'Single Jersey', label: 'Single Jersey' },
-              { value: '1x1 Rib', label: '1x1 Rib' },
-              { value: '2x2 Rib', label: '2x2 Rib' },
-              { value: 'Interlock', label: 'Interlock' },
-              { value: 'Pique', label: 'Pique (Polo)' },
-              { value: 'French Terry', label: 'French Terry' },
-              { value: 'Fleece (3 Thread)', label: 'Fleece (3 Thread)' },
-              { value: 'Waffle / Thermal', label: 'Waffle / Thermal' },
-              { value: 'Twill', label: 'Twill (Woven)' },
-              { value: 'Poplin', label: 'Poplin (Woven)' },
-              { value: 'Canvas', label: 'Canvas (Woven)' },
-            ]}
-            value={head.knit_structure}
-            onChange={(e) => setHead((s) => ({ ...s, knit_structure: e.target.value }))}
-            disabled={!editable}
-          />
-          <Select
-            label="Standard GSM"
-            options={toOptions(gsms.data)}
-            value={head.gsm_id}
-            onChange={(e) => setHead((s) => ({ ...s, gsm_id: e.target.value }))}
-            disabled={!editable}
-          />
-          <Select
-            label="Primary Yarn Feed"
-            options={toOptions(yarns.data)}
-            value={head.yarn_id}
-            onChange={(e) => setHead((s) => ({ ...s, yarn_id: e.target.value }))}
-            disabled={!editable}
-          />
+          <div>
+            <label className="label">Material Category *</label>
+            <Select
+              value={head.category_id}
+              disabled={!editable}
+              onChange={(e) => setHead({ ...head, category_id: e.target.value })}
+              options={toOptions(categories.data || [], 'id', 'label')}
+            />
+          </div>
 
-          <Input
-            label="Width (cm)"
-            type="number"
-            value={head.width_cm}
-            onChange={(e) => setHead((s) => ({ ...s, width_cm: e.target.value }))}
-            disabled={!editable}
-          />
-          <Input
-            label="Diameter (Inch)"
-            type="number"
-            value={head.dia_inch}
-            onChange={(e) => setHead((s) => ({ ...s, dia_inch: e.target.value }))}
-            disabled={!editable}
-          />
-          <Input
-            label="Finish Type"
-            value={head.finish_type}
-            onChange={(e) => setHead((s) => ({ ...s, finish_type: e.target.value }))}
-            disabled={!editable}
-          />
-          <Input
-            label="HSN Code"
-            value={head.hsn_code}
-            onChange={(e) => setHead((s) => ({ ...s, hsn_code: e.target.value }))}
-            disabled={!editable}
-          />
+          <div>
+            <label className="label">Fabric Type *</label>
+            <Select
+              value={head.fabric_type}
+              disabled={!editable}
+              onChange={(e) => setHead({ ...head, fabric_type: e.target.value })}
+              options={[
+                { value: 'KNIT', label: 'Knit Fabric' },
+                { value: 'WOVEN', label: 'Woven Fabric' },
+                { value: 'NONWOVEN', label: 'Non-Woven' },
+              ]}
+            />
+          </div>
 
-          <Select
-            label="Base UOM"
-            options={toOptions(uoms.data)}
-            value={head.base_uom}
-            onChange={(e) => setHead((s) => ({ ...s, base_uom: e.target.value }))}
-            disabled={!editable}
-          />
-          <Input
-            label="Standard Rate (₹/Kg)"
-            type="number"
-            step="0.01"
-            value={head.std_rate}
-            onChange={(e) => setHead((s) => ({ ...s, std_rate: e.target.value }))}
-            disabled={!editable}
-          />
-          <Select
-            label="Status"
-            options={[
-              { value: '1', label: 'Active' },
-              { value: '0', label: 'Draft' },
-            ]}
-            value={String(head.is_active ?? 1)}
-            onChange={(e) => setHead((s) => ({ ...s, is_active: Number(e.target.value) }))}
-            disabled={!editable}
-          />
+          <div>
+            <label className="label">Structure / Construction *</label>
+            <Select
+              value={head.knit_structure}
+              disabled={!editable}
+              onChange={(e) => setHead({ ...head, knit_structure: e.target.value })}
+              options={KNIT_STRUCTURES.map((s) => ({ value: s, label: s }))}
+            />
+          </div>
+
+          <div>
+            <label className="label">Primary Yarn Feed</label>
+            <Select
+              value={head.yarn_id}
+              disabled={!editable}
+              onChange={(e) => setHead({ ...head, yarn_id: e.target.value })}
+              options={[{ value: '', label: '— Select Primary Yarn —' }, ...toOptions(yarns.data || [], 'id', 'label')]}
+            />
+          </div>
+
+          <div>
+            <label className="label">Finish &amp; Treatment</label>
+            <Select
+              value={head.finish_type}
+              disabled={!editable}
+              onChange={(e) => setHead({ ...head, finish_type: e.target.value })}
+              options={FINISH_TYPES.map((f) => ({ value: f, label: f }))}
+            />
+          </div>
+
+          <div>
+            <label className="label">Environmental Certification</label>
+            <Select
+              value={head.certification}
+              disabled={!editable}
+              onChange={(e) => setHead({ ...head, certification: e.target.value })}
+              options={[
+                { value: 'GOTS', label: 'GOTS (Global Organic Textile Standard)' },
+                { value: 'OEKO-TEX', label: 'OEKO-TEX Standard 100' },
+                { value: 'BCI', label: 'BCI (Better Cotton Initiative)' },
+                { value: 'GRS', label: 'GRS (Global Recycled Standard)' },
+                { value: 'OCS', label: 'OCS (Organic Content Standard)' },
+                { value: 'NONE', label: 'None / Standard' },
+              ]}
+            />
+          </div>
+
+          <div>
+            <label className="label">HSN Code</label>
+            <Input
+              value={head.hsn_code}
+              disabled={!editable}
+              onChange={(e) => setHead({ ...head, hsn_code: e.target.value })}
+              placeholder="6006"
+              className="font-mono text-xs"
+            />
+          </div>
+
+          <div>
+            <label className="label">Base Inventory UOM *</label>
+            <Select
+              value={head.base_uom}
+              disabled={!editable}
+              onChange={(e) => setHead({ ...head, base_uom: e.target.value })}
+              options={toOptions(uoms.data || [], 'id', 'label')}
+            />
+          </div>
+
+          <div>
+            <label className="label">Master Status</label>
+            <Select
+              value={head.is_active}
+              disabled={!editable}
+              onChange={(e) => setHead({ ...head, is_active: Number(e.target.value) })}
+              options={[
+                { value: 1, label: 'Active (Available for BOM / PO / Cutting)' },
+                { value: 0, label: 'Inactive / Draft' },
+              ]}
+            />
+          </div>
+
+          <div className="lg:col-span-4">
+            <label className="label">Fabric Description &amp; Technical Notes</label>
+            <Input
+              value={head.description}
+              disabled={!editable}
+              onChange={(e) => setHead({ ...head, description: e.target.value })}
+              placeholder="e.g. 100% Organic Combed Cotton Single Jersey with Bio-wash and silicon finish for ultra-soft handfeel."
+            />
+          </div>
         </div>
       </div>
 
-      {/* Section 2: Fibre Composition & Donut Chart */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-        {/* Left 7 Cols: Interactive Fibre Table */}
+      {/* ────────────────────────────────────────────────────────────────────────── */}
+      {/* SECTION 2: FIBRE COMPOSITION BREAKDOWN & DONUT VISUALIZER                 */}
+      {/* ────────────────────────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        {/* Left 7 Cols: Fibre Composition Table */}
         <div className="lg:col-span-7 space-y-4">
-            <div className="card overflow-hidden">
-              <div className="flex items-center justify-between border-b border-surface-border bg-slate-50/70 px-4 py-2.5">
-                <div className="flex items-center gap-2">
-                  <Layers size={15} className="text-brand-600" />
-                  <h3 className="text-[13px] font-bold uppercase tracking-wider text-slate-800">
-                    Fibre Composition Breakdown
+          <div className="card p-5 border border-slate-200">
+            <div className="flex items-center justify-between border-b border-surface-border pb-3 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-sky-50 text-sky-600">
+                  <Sparkles size={16} />
+                </span>
+                <div>
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800">
+                    2. Fibre Composition Breakdown
                   </h3>
+                  <p className="text-xs text-slate-500">
+                    Must total exactly <span className="font-bold text-slate-700">100%</span>
+                  </p>
                 </div>
-                {editable && (
-                  <button type="button" onClick={handleAddFibre} className="btn-primary btn-sm text-xs py-1 px-2 flex items-center gap-1">
-                    <Plus size={13} /> Add Fibre
-                  </button>
-                )}
               </div>
+              {editable && (
+                <button
+                  type="button"
+                  onClick={handleAddFibreLine}
+                  className="btn-secondary flex items-center gap-1 text-xs"
+                >
+                  <Plus size={13} /> Add Fibre
+                </button>
+              )}
+            </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-surface-border bg-slate-100/60 text-[11px] font-bold uppercase text-slate-600">
-                      <th className="py-2 px-2.5 w-8">#</th>
-                      <th className="py-2 px-2 min-w-[200px]">Fibre Type</th>
-                      <th className="py-2 px-2 w-28 text-right">Share (%)</th>
-                      {editable && <th className="py-2 px-2 w-8 text-center" />}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {fibreLines.map((f, idx) => (
-                      <tr key={f._key} className="hover:bg-slate-50/70">
-                        <td className="py-2 px-2.5 font-bold text-slate-400">
-                          <span
-                            className="inline-block w-2 h-2 rounded-full mr-1.5"
-                            style={{ backgroundColor: FIBRE_COLOR_PALETTE[idx % FIBRE_COLOR_PALETTE.length] }}
-                          />
-                          {idx + 1}
+            {/* Interactive Fibre Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-surface-border bg-slate-50/75 text-[11px] font-bold uppercase text-slate-500">
+                    <th className="py-2 px-2 w-8">#</th>
+                    <th className="py-2 px-2">Fibre Name</th>
+                    <th className="py-2 px-2 w-32 text-right">Ratio (%)</th>
+                    {editable && <th className="py-2 px-2 w-12 text-center">Action</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {fibreLines.map((line, idx) => {
+                    const color = FIBRE_COLOR_PALETTE[idx % FIBRE_COLOR_PALETTE.length];
+                    return (
+                      <tr key={line._key} className="hover:bg-slate-50/50">
+                        <td className="py-2 px-2">
+                          <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: color }} />
                         </td>
-                        <td className="py-1 px-1">
-                          <select
-                            value={f.fibre_name}
-                            disabled={!editable}
-                            onChange={(e) => handleUpdateFibre(f._key, 'fibre_name', e.target.value)}
-                            className="input py-1 px-2 text-xs font-semibold text-slate-700 w-full"
-                          >
-                            {FIBRE_PRESETS.map((p) => (
-                              <option key={p} value={p}>{p}</option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="py-1 px-1 text-right">
+                        <td className="py-1 px-2">
                           <input
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            max="100"
-                            value={f.percentage}
+                            type="text"
+                            list={`fibre-presets-${line._key}`}
+                            value={line.fibre_name}
                             disabled={!editable}
-                            onChange={(e) => handleUpdateFibre(f._key, 'percentage', e.target.value === '' ? '' : Number(e.target.value))}
-                            className="input py-1 px-2 text-right font-mono font-bold text-slate-900 text-xs w-full"
+                            onChange={(e) => handleUpdateFibreLine(line._key, { fibre_name: e.target.value })}
+                            placeholder="Select or type fibre name"
+                            className="input py-1 px-2 font-medium text-slate-800 text-xs w-full"
                           />
+                          <datalist id={`fibre-presets-${line._key}`}>
+                            {FIBRE_PRESETS.map((p) => (
+                              <option key={p} value={p} />
+                            ))}
+                          </datalist>
+                        </td>
+                        <td className="py-1 px-2 text-right">
+                          <div className="relative inline-block w-24">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.1"
+                              value={line.percentage}
+                              disabled={!editable}
+                              onChange={(e) =>
+                                handleUpdateFibreLine(line._key, {
+                                  percentage: e.target.value === '' ? '' : parseFloat(e.target.value) || 0,
+                                })
+                              }
+                              className="input py-1 px-2 text-right font-mono font-bold text-xs w-full pr-6"
+                            />
+                            <span className="absolute right-2 top-1.5 text-xs text-slate-400 font-bold">%</span>
+                          </div>
                         </td>
                         {editable && (
-                          <td className="py-1 px-1 text-center">
+                          <td className="py-1 px-2 text-center">
                             <button
                               type="button"
-                              onClick={() => handleRemoveFibre(f._key)}
-                              disabled={fibreLines.length <= 1}
-                              className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                              onClick={() => handleRemoveFibreLine(line._key)}
+                              className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
                             >
-                              <Trash2 size={13} />
+                              <Trash2 size={14} />
                             </button>
                           </td>
                         )}
                       </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold text-xs">
-                      <td colSpan={2} className="py-2.5 px-3 text-slate-800 uppercase tracking-wider">
-                        Total Composition
-                      </td>
-                      <td className={`py-2.5 px-2 text-right font-mono font-black text-sm ${isValid100 ? 'text-emerald-700' : 'text-rose-600'}`}>
-                        {totalPercentage.toFixed(1)}%
-                      </td>
-                      {editable && <td />}
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          {/* Right 5 Cols: Live Composition Donut Chart */}
-          <div className="lg:col-span-5 space-y-4">
-            <div className="card p-4 overflow-hidden border border-slate-200">
-              <div className="flex items-center justify-between border-b border-surface-border pb-2.5 mb-3">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                  <PieIcon size={14} className="text-brand-600" /> Live Composition Visualizer
-                </h3>
-                {isValid100 ? (
-                  <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-700">
-                    <CheckCircle2 size={13} /> 100% Balanced
-                  </span>
-                ) : (
-                  <span className="text-[11px] font-bold text-rose-600">
-                    {totalPercentage > 100 ? `Over by ${(totalPercentage - 100).toFixed(1)}%` : `Under by ${(100 - totalPercentage).toFixed(1)}%`}
-                  </span>
-                )}
-              </div>
-
-              {/* Dynamic SVG Donut Chart */}
-              <div className="flex flex-col items-center justify-center my-2">
-                <div className="relative w-44 h-44">
-                  <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                    <circle cx="50" cy="50" r="38" fill="transparent" stroke="#e2e8f0" strokeWidth="14" />
-                    {(() => {
-                      let accumulatedPct = 0;
-                      const circumference = 2 * Math.PI * 38;
-                      return fibreLines.map((item, idx) => {
-                        const pct = Number(item.percentage) || 0;
-                        if (pct <= 0) return null;
-                        const strokeLength = (pct / 100) * circumference;
-                        const strokeOffset = (accumulatedPct / 100) * circumference;
-                        accumulatedPct += pct;
-                        return (
-                          <circle
-                            key={item._key}
-                            cx="50"
-                            cy="50"
-                            r="38"
-                            fill="transparent"
-                            stroke={FIBRE_COLOR_PALETTE[idx % FIBRE_COLOR_PALETTE.length]}
-                            strokeWidth="14"
-                            strokeDasharray={`${strokeLength} ${circumference}`}
-                            strokeDashoffset={-strokeOffset}
-                            strokeLinecap="butt"
-                          />
-                        );
-                      });
-                    })()}
-                  </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span className="text-2xl font-black text-slate-800 font-mono">{totalPercentage.toFixed(0)}%</span>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total</span>
-                  </div>
-                </div>
-
-                {/* Legend List */}
-                <div className="w-full mt-4 space-y-1.5">
-                  {fibreLines.map((f, idx) => (
-                    <div key={f._key} className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="w-2.5 h-2.5 rounded-full"
-                          style={{ backgroundColor: FIBRE_COLOR_PALETTE[idx % FIBRE_COLOR_PALETTE.length] }}
-                        />
-                        <span className="font-semibold text-slate-700">{f.fibre_name}</span>
-                      </div>
-                      <span className="font-mono font-bold text-slate-900">{f.percentage}%</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold">
+                    <td colSpan={2} className="py-2.5 px-2 text-right text-xs uppercase text-slate-600">
+                      Total Percentage:
+                    </td>
+                    <td className={`py-2.5 px-2 text-right font-mono font-black text-sm ${isValid100 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                      {totalPercentage.toFixed(1)}%
+                    </td>
+                    {editable && <td />}
+                  </tr>
+                </tfoot>
+              </table>
             </div>
           </div>
         </div>
-    </>
+
+        {/* Right 5 Cols: Live Composition Donut Chart */}
+        <div className="lg:col-span-5 space-y-4">
+          <div className="card p-4 overflow-hidden border border-slate-200">
+            <div className="flex items-center justify-between border-b border-surface-border pb-2.5 mb-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                <PieIcon size={14} className="text-brand-600" /> Live Composition Visualizer
+              </h3>
+              {isValid100 ? (
+                <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-700">
+                  <CheckCircle2 size={13} /> 100% Balanced
+                </span>
+              ) : (
+                <span className="text-[11px] font-bold text-rose-600">
+                  {totalPercentage > 100 ? `Over by ${(totalPercentage - 100).toFixed(1)}%` : `Under by ${(100 - totalPercentage).toFixed(1)}%`}
+                </span>
+              )}
+            </div>
+
+            {/* Dynamic SVG Donut Chart */}
+            <div className="flex flex-col items-center justify-center my-2">
+              <div className="relative w-40 h-40">
+                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="38" fill="transparent" stroke="#e2e8f0" strokeWidth="14" />
+                  {(() => {
+                    let accumulatedPct = 0;
+                    const circumference = 2 * Math.PI * 38;
+                    return fibreLines.map((item, idx) => {
+                      const pct = Number(item.percentage) || 0;
+                      if (pct <= 0) return null;
+                      const strokeLength = (pct / 100) * circumference;
+                      const strokeOffset = ((100 - accumulatedPct) / 100) * circumference;
+                      accumulatedPct += pct;
+                      const color = FIBRE_COLOR_PALETTE[idx % FIBRE_COLOR_PALETTE.length];
+                      return (
+                        <circle
+                          key={item._key}
+                          cx="50"
+                          cy="50"
+                          r="38"
+                          fill="transparent"
+                          stroke={color}
+                          strokeWidth="14"
+                          strokeDasharray={`${strokeLength} ${circumference - strokeLength}`}
+                          strokeDashoffset={strokeOffset}
+                          className="transition-all duration-500 ease-out"
+                        />
+                      );
+                    });
+                  })()}
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
+                  <span className={`text-xl font-black font-mono ${isValid100 ? 'text-slate-800' : 'text-rose-600'}`}>
+                    {totalPercentage.toFixed(0)}%
+                  </span>
+                  <span className="text-[10px] uppercase font-bold text-slate-400">Composition</span>
+                </div>
+              </div>
+
+              {/* Legend Badges */}
+              <div className="mt-3 flex flex-wrap justify-center gap-1.5 w-full">
+                {fibreLines.map((item, idx) => {
+                  const color = FIBRE_COLOR_PALETTE[idx % FIBRE_COLOR_PALETTE.length];
+                  const pct = Number(item.percentage) || 0;
+                  if (pct <= 0) return null;
+                  return (
+                    <div
+                      key={item._key}
+                      className="flex items-center gap-1.5 rounded-full bg-slate-50 border border-slate-200 px-2.5 py-0.5 text-[11px] font-medium text-slate-700"
+                    >
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+                      <span className="truncate max-w-[110px]">{item.fibre_name || 'Fibre'}</span>
+                      <span className="font-mono font-bold text-slate-900">{pct}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Generated String */}
+            <div className="mt-3 rounded bg-slate-50 p-2 text-center text-xs font-semibold text-slate-700 border border-slate-200">
+              <span className="text-slate-400 font-normal">Spec: </span>
+              {autoCompositionString || '100% Organic Cotton'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ────────────────────────────────────────────────────────────────────────── */}
+      {/* SECTION 3: FABRIC GSM & WIDTH VARIANTS GENERATOR TABLE                    */}
+      {/* ────────────────────────────────────────────────────────────────────────── */}
+      <div className="card p-5 border border-slate-200 shadow-sm bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-surface-border pb-3 mb-4">
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+              <SlidersHorizontal size={16} />
+            </span>
+            <div>
+              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900">
+                3. Fabric Variants / GSM &amp; Width Specifications
+              </h2>
+              <p className="text-xs text-slate-500">
+                Individual inventory items (SKUs) with specific GSM, Tube Dia / Width, and Rates for Cutting &amp; Purchase
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {editable && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleAutoGenerateCodes}
+                  className="btn-secondary flex items-center gap-1 text-xs"
+                  title="Auto-format Item Codes based on Base Code + GSM + Dia"
+                >
+                  <RefreshCw size={13} /> Auto-format Codes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAddVariant()}
+                  className="btn-primary flex items-center gap-1 text-xs"
+                >
+                  <Plus size={13} /> Add GSM Variant
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Quick Add Presets Toolbar */}
+        <div className="mb-4 flex flex-wrap items-center gap-1.5 rounded-lg bg-slate-50 p-2.5 border border-slate-200">
+          <span className="text-xs font-bold text-slate-700 flex items-center gap-1 mr-2">
+            <Tag size={13} className="text-brand-600" /> Quick Add GSM Presets:
+          </span>
+          {STANDARD_GSM_PRESETS.map((p) => {
+            const added = variants.some((v) => Number(v.gsm_value) === p.gsm);
+            return (
+              <button
+                key={p.gsm}
+                type="button"
+                onClick={() => handleAddVariant(p.gsm, p.defaultDia, p.rate)}
+                disabled={!editable}
+                className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-bold transition-all ${
+                  added
+                    ? 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                    : 'bg-white text-slate-800 border border-slate-300 hover:border-brand-500 hover:text-brand-700 hover:shadow-sm'
+                }`}
+              >
+                {added && <Check size={12} className="text-brand-600" />}
+                <span>+ {p.label} ({p.defaultDia}" Dia)</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Variants Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-surface-border bg-slate-100/60 text-[11px] font-bold uppercase text-slate-600">
+                <th className="py-2.5 px-3 w-8">#</th>
+                <th className="py-2.5 px-2 min-w-[160px]">Unique Item SKU Code *</th>
+                <th className="py-2.5 px-2 min-w-[220px]">Fabric Item Name *</th>
+                <th className="py-2.5 px-2 w-32">GSM Specification</th>
+                <th className="py-2.5 px-2 w-28">Width (cm)</th>
+                <th className="py-2.5 px-2 w-28">Tube Dia (Inch)</th>
+                <th className="py-2.5 px-2 w-24">Gauge</th>
+                <th className="py-2.5 px-2 w-28 text-right">Std Rate (₹/Kg)</th>
+                <th className="py-2.5 px-2 w-20 text-center">Status</th>
+                {editable && <th className="py-2.5 px-2 w-16 text-center">Actions</th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {variants.map((v, idx) => (
+                <tr key={v._key} className="hover:bg-slate-50/70">
+                  <td className="py-2 px-3 font-bold text-slate-400">{idx + 1}</td>
+                  <td className="py-1 px-1">
+                    <input
+                      type="text"
+                      placeholder="e.g. FAB-SJ-160-32D"
+                      value={v.fabric_code}
+                      disabled={!editable}
+                      onChange={(e) => handleUpdateVariant(v._key, 'fabric_code', e.target.value)}
+                      className="input py-1 px-2 font-mono font-bold text-brand-700 text-xs w-full"
+                    />
+                  </td>
+                  <td className="py-1 px-1">
+                    <input
+                      type="text"
+                      placeholder="e.g. Single Jersey 160 GSM 32 Dia"
+                      value={v.fabric_name}
+                      disabled={!editable}
+                      onChange={(e) => handleUpdateVariant(v._key, 'fabric_name', e.target.value)}
+                      className="input py-1 px-2 font-medium text-slate-800 text-xs w-full"
+                    />
+                  </td>
+                  <td className="py-1 px-1">
+                    <select
+                      value={v.gsm_id}
+                      disabled={!editable}
+                      onChange={(e) => handleUpdateVariant(v._key, 'gsm_id', e.target.value)}
+                      className="select py-1 px-2 font-bold text-xs w-full"
+                    >
+                      <option value="">{v.gsm_value ? `${v.gsm_value} GSM` : 'Select GSM'}</option>
+                      {(gsmList.data ?? []).map((g: any) => (
+                        <option key={g.id} value={g.id}>
+                          {g.label || `${g.code} GSM`}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="py-1 px-1">
+                    <input
+                      type="number"
+                      placeholder="160"
+                      value={v.width_cm}
+                      disabled={!editable}
+                      onChange={(e) => handleUpdateVariant(v._key, 'width_cm', e.target.value)}
+                      className="input py-1 px-2 font-mono text-xs w-full"
+                    />
+                  </td>
+                  <td className="py-1 px-1">
+                    <input
+                      type="number"
+                      placeholder="32"
+                      value={v.dia_inch}
+                      disabled={!editable}
+                      onChange={(e) => handleUpdateVariant(v._key, 'dia_inch', e.target.value)}
+                      className="input py-1 px-2 font-mono text-xs w-full"
+                    />
+                  </td>
+                  <td className="py-1 px-1">
+                    <input
+                      type="text"
+                      placeholder="24 GG"
+                      value={v.gauge}
+                      disabled={!editable}
+                      onChange={(e) => handleUpdateVariant(v._key, 'gauge', e.target.value)}
+                      className="input py-1 px-2 font-mono text-xs w-full"
+                    />
+                  </td>
+                  <td className="py-1 px-1 text-right">
+                    <input
+                      type="number"
+                      step="0.5"
+                      placeholder="420"
+                      value={v.std_rate}
+                      disabled={!editable}
+                      onChange={(e) => handleUpdateVariant(v._key, 'std_rate', e.target.value)}
+                      className="input py-1 px-2 font-mono font-bold text-right text-xs w-full"
+                    />
+                  </td>
+                  <td className="py-1 px-1 text-center">
+                    <button
+                      type="button"
+                      disabled={!editable}
+                      onClick={() => handleUpdateVariant(v._key, 'is_active', v.is_active ? 0 : 1)}
+                      className={`inline-flex rounded px-2 py-0.5 text-[10px] font-bold ${
+                        v.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
+                      }`}
+                    >
+                      {v.is_active ? 'Active' : 'Draft'}
+                    </button>
+                  </td>
+                  {editable && (
+                    <td className="py-1 px-1 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleDuplicateVariant(v._key)}
+                          className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                          title="Duplicate GSM Variant"
+                        >
+                          <Copy size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveVariant(v._key)}
+                          className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                          title="Remove Variant"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Bottom Summary KPI Cards */}
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3 pt-3 border-t border-slate-100">
+          <div className="rounded-lg bg-blue-50/60 border border-blue-200 p-3 text-center">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-blue-700">Total Variants</span>
+            <div className="text-xl font-black text-blue-900 mt-0.5">{variants.length}</div>
+          </div>
+          <div className="rounded-lg bg-emerald-50/60 border border-emerald-200 p-3 text-center">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">Active SKUs</span>
+            <div className="text-xl font-black text-emerald-900 mt-0.5">
+              {variants.filter((v) => v.is_active).length}
+            </div>
+          </div>
+          <div className="rounded-lg bg-amber-50/60 border border-amber-200 p-3 text-center">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700">Inactive / Drafts</span>
+            <div className="text-xl font-black text-amber-900 mt-0.5">
+              {variants.filter((v) => !v.is_active).length}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

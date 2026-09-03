@@ -282,17 +282,38 @@ export const masterResources: ResourceConfig[] = [
     ],
   },
   {
+    path: 'fabric-bases', table: 'mst_fabric_base', permission: 'MATERIAL', label: 'Fabric Base',
+    searchable: ['base_code', 'base_name', 'knit_structure', 'finish_type', 'certification'],
+    sortable: ['base_code', 'base_name'], defaultSort: 't.base_name',
+    filters: ['category_id', 'fabric_type', 'composition_id'],
+    selectExtra: 'u.code AS uom_code, comp.description AS composition_desc, cat.category_name, y.yarn_name, (SELECT COUNT(*) FROM mst_fabric f WHERE f.fabric_base_id = t.id AND f.is_deleted=0) AS variant_count',
+    joins: `LEFT JOIN cfg_uom u ON u.id = t.base_uom
+            LEFT JOIN mst_composition comp ON comp.id = t.composition_id
+            LEFT JOIN mst_material_category cat ON cat.id = t.category_id
+            LEFT JOIN mst_yarn y ON y.id = t.yarn_id`,
+    fields: [
+      f('base_code', s.strReq(40)), f('base_name', s.strReq(150)), f('category_id', s.id()),
+      f('fabric_type', s.enumReq(['KNIT','WOVEN','NONWOVEN'])), f('knit_structure', s.nullableStr(60)),
+      f('composition_id', s.id()), f('yarn_id', s.id()), f('finish_type', s.nullableStr(80)),
+      f('certification', s.nullableStr(80)), f('hsn_code', s.nullableStr(10)),
+      f('base_uom', s.idReq()), f('image_url', s.nullableStr(500)),
+      f('description', s.nullableStr(255)), f('is_active', s.bool()),
+    ],
+  },
+  {
     path: 'fabrics', table: 'mst_fabric', permission: 'MATERIAL', label: 'Fabric',
     searchable: ['fabric_code', 'fabric_name', 'knit_structure'],
     sortable: ['fabric_code', 'fabric_name'], defaultSort: 't.fabric_name',
-    filters: ['category_id', 'fabric_type', 'gsm_id', 'composition_id'],
-    selectExtra: 'u.code AS uom_code, g.gsm_value, comp.description AS composition_desc, y.yarn_name',
+    filters: ['category_id', 'fabric_type', 'gsm_id', 'composition_id', 'fabric_base_id'],
+    selectExtra: 'u.code AS uom_code, g.gsm_value, comp.description AS composition_desc, y.yarn_name, fb.base_code, fb.base_name, fb.finish_type AS base_finish',
     joins: `LEFT JOIN cfg_uom u ON u.id = t.base_uom
             LEFT JOIN mst_gsm g ON g.id = t.gsm_id
             LEFT JOIN mst_composition comp ON comp.id = t.composition_id
-            LEFT JOIN mst_yarn y ON y.id = t.yarn_id`,
+            LEFT JOIN mst_yarn y ON y.id = t.yarn_id
+            LEFT JOIN mst_fabric_base fb ON fb.id = t.fabric_base_id`,
     fields: [
       f('fabric_code', s.strReq(40)), f('fabric_name', s.strReq(150)), f('category_id', s.id()),
+      f('fabric_base_id', s.id()), f('gauge', s.nullableStr(20)),
       f('fabric_type', s.enumReq(['KNIT','WOVEN','NONWOVEN'])), f('knit_structure', s.nullableStr(60)),
       f('composition_id', s.id()), f('gsm_id', s.id()), f('width_cm', s.dec()), f('dia_inch', s.dec()),
       f('yarn_id', s.id()), f('finish_type', s.nullableStr(80)), f('hsn_code', s.nullableStr(10)),

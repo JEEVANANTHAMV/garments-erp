@@ -996,24 +996,45 @@ async function seedDemo(ctx: {
       [companyId, code], `yarn ${code}`));
   }
 
-  // ------------------------------------------------------- fabrics
-  const FABRICS: [string,string,string,string,number,string,number][] = [
-    ['F-SJ180','Single Jersey 180 GSM','KNIT','Single Jersey',180,'C100',420],
-    ['F-SJ160','Single Jersey 160 GSM','KNIT','Single Jersey',160,'C100',405],
-    ['F-PQ220','Pique 220 GSM','KNIT','Pique',220,'C100',445],
-    ['F-RIB200','Rib 1x1 200 GSM','KNIT','Rib 1x1',200,'C955',480],
-    ['F-FL280','Fleece 280 GSM','KNIT','Fleece',280,'CP6040',390],
-    ['F-IN240','Interlock 240 GSM','KNIT','Interlock',240,'C100',455],
+  // ------------------------------------------------------- fabric bases
+  const FABRIC_BASES: [string,string,string,string,string,string,string,string][] = [
+    ['FB-00001','Single Jersey (100% Combed Cotton)','KNIT','Single Jersey','C100','Y30CC','Bio-wash + Silicon','GOTS'],
+    ['FB-00002','Pique Polo Fabric','KNIT','Pique','C100','Y30CC','Bio-wash','OEKO-TEX'],
+    ['FB-00003','Rib 1x1 Collar & Cuff Fabric','KNIT','Rib 1x1','C955','Y30CC','Bio-wash','BCI'],
+    ['FB-00004','Brushed Fleece 3-Thread','KNIT','Fleece','CP6040','Y30CD','Brushed + Bio-wash','NONE'],
+    ['FB-00005','Interlock Double Knit Fabric','KNIT','Interlock','C100','Y40CC','Bio-wash','GOTS'],
+  ];
+  const fbaseId = new Map<string, number>();
+  for (const [code, name, ftype, structure, comp, yrn, finish, cert] of FABRIC_BASES) {
+    await exec(
+      `INSERT INTO mst_fabric_base (company_id,base_code,base_name,category_id,fabric_type,knit_structure,
+         composition_id,yarn_id,finish_type,certification,base_uom)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)
+       ON DUPLICATE KEY UPDATE base_name=VALUES(base_name), finish_type=VALUES(finish_type), certification=VALUES(certification)`,
+      [companyId, code, name, catId.get('CAT-FAB'), ftype, structure, compId.get(comp),
+       yarnId.get(yrn) || null, finish, cert, KG]);
+    fbaseId.set(code, await id(`SELECT id FROM mst_fabric_base WHERE company_id=? AND base_code=?`,
+      [companyId, code], `fabric base ${code}`));
+  }
+
+  // ------------------------------------------------------- fabrics (Variants)
+  const FABRICS: [string,string,string,string,number,string,number,string,number,number][] = [
+    ['F-SJ180','Single Jersey 180 GSM','KNIT','Single Jersey',180,'C100',420,'FB-00001',180,34],
+    ['F-SJ160','Single Jersey 160 GSM','KNIT','Single Jersey',160,'C100',405,'FB-00001',160,32],
+    ['F-PQ220','Pique 220 GSM','KNIT','Pique',220,'C100',445,'FB-00002',200,34],
+    ['F-RIB200','Rib 1x1 200 GSM','KNIT','Rib 1x1',200,'C955',480,'FB-00003',140,28],
+    ['F-FL280','Fleece 280 GSM','KNIT','Fleece',280,'CP6040',390,'FB-00004',220,36],
+    ['F-IN240','Interlock 240 GSM','KNIT','Interlock',240,'C100',455,'FB-00005',180,32],
   ];
   const fabricId = new Map<string, number>();
-  for (const [code, name, ftype, structure, gsm, comp, rate] of FABRICS) {
+  for (const [code, name, ftype, structure, gsm, comp, rate, baseCode, width, dia] of FABRICS) {
     await exec(
-      `INSERT INTO mst_fabric (company_id,fabric_code,fabric_name,category_id,fabric_type,knit_structure,
-         composition_id,gsm_id,width_cm,dia_inch,yarn_id,finish_type,hsn_code,base_uom,std_rate,created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,'Bio-wash','60062200',?,?,?)
-       ON DUPLICATE KEY UPDATE fabric_name=VALUES(fabric_name), std_rate=VALUES(std_rate)`,
-      [companyId, code, name, catId.get('CAT-FAB'), ftype, structure, compId.get(comp),
-       gsmId.get(gsm), 180, 34, yarnId.get('Y30CC'), KG, rate, adminId]);
+      `INSERT INTO mst_fabric (company_id,fabric_code,fabric_name,category_id,fabric_base_id,fabric_type,knit_structure,
+         composition_id,gsm_id,width_cm,dia_inch,gauge,yarn_id,finish_type,hsn_code,base_uom,std_rate,created_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,'24 GG',?,'Bio-wash','60062200',?,?,?)
+       ON DUPLICATE KEY UPDATE fabric_name=VALUES(fabric_name), fabric_base_id=VALUES(fabric_base_id), std_rate=VALUES(std_rate)`,
+      [companyId, code, name, catId.get('CAT-FAB'), fbaseId.get(baseCode) || null, ftype, structure, compId.get(comp),
+       gsmId.get(gsm), width, dia, yarnId.get('Y30CC') || null, KG, rate, adminId]);
     fabricId.set(code, await id(`SELECT id FROM mst_fabric WHERE company_id=? AND fabric_code=?`,
       [companyId, code], `fabric ${code}`));
   }
