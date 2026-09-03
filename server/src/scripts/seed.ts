@@ -989,7 +989,7 @@ async function seedDemo(ctx: {
     await exec(
       `INSERT INTO mst_yarn (company_id,yarn_code,yarn_name,category_id,yarn_base_id,count_id,count_value,count_type,
          composition_id,yarn_type,twist,hsn_code,base_uom,std_rate,created_by)
-       VALUES (?,?,?,?,?,?,?,?,'Ne',?,?,'Z','52051110',?,?,?)
+       VALUES (?,?,?,?,?,?,?,'Ne',?,?,'Z','52051110',?,?,?)
        ON DUPLICATE KEY UPDATE yarn_name=VALUES(yarn_name), yarn_base_id=VALUES(yarn_base_id), count_id=VALUES(count_id), std_rate=VALUES(std_rate)`,
       [companyId, code, name, catId.get('CAT-YRN'), baseId.get(baseCode), countId.get(cntVal), count, compId.get(comp), type, KG, rate, adminId]);
     yarnId.set(code, await id(`SELECT id FROM mst_yarn WHERE company_id=? AND yarn_code=?`,
