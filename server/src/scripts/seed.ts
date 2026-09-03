@@ -1198,7 +1198,7 @@ async function seedDemo(ctx: {
       `INSERT INTO trx_sales_order (company_id,branch_id,so_no,io_no,order_type,so_date,buyer_id,agent_id,buyer_po_no,
          buyer_po_date,season,currency_id,exchange_rate,incoterm,port_of_loading,destination_country,
          destination_port,payment_term,ship_date,delivery_date,status_id,approval_state,created_by)
-       VALUES (?,?,?,?,'EXPORT',?,?,?,?,?,?,?,?,?,'FOB','Tuticorin',?,'Rotterdam','LC',?,?,?,'APPROVED',?)`,
+       VALUES (?,?,?,?,'EXPORT',?,?,?,?,?,?,?, 'FOB','Tuticorin',?,'Rotterdam','LC',?,?,?,'APPROVED',?)`,
       [companyId, hoBranch, soNo, ioNo, soDate, partyId.get(buyer), useAgent ? partyId.get('A001') : null,
        `PO-${buyer}-${soNo.slice(-4)}`, soDate, season, curId, curCode === 'USD' ? 83.2 : curCode === 'EUR' ? 90.1 : 105.4,
        buyerRow?.country_id ?? null, shipDate, shipDate, soApproved, adminId]);
