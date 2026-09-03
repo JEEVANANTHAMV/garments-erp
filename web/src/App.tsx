@@ -9,13 +9,14 @@ import Dashboard from './pages/Dashboard';
 /* Masters */
 import {
   PartiesPage, PartyDetailPage, ProductsPage, YarnsPage, YarnDetailPage, FabricsPage, FabricDetailPage, TrimsPage,
-  ColorsPage, WarehousesPage, WarehouseBinsPage, BranchesPage, UnitsPage, SizeGroupsPage, BatchesPage,
+  ColorsPage, WarehousesPage, WarehouseBinsPage, BranchesPage, UnitsPage, SizeGroupsPage, SizesPage, BatchesPage,
 } from './pages/masters';
 import { StylesPage, StyleDetailPage } from './pages/masters/Styles';
 import { BomsPage, BomDetailPage } from './pages/masters/Boms';
 
 /* Sales */
 import { EnquiriesPage, SamplesPage, QuotationsPage } from './pages/sales';
+import QuotationDetailPage from './pages/sales/QuotationDetail';
 import CostingsPage, { CostingDetailPage } from './pages/sales/Costings';
 import SalesOrdersPage from './pages/sales/SalesOrders';
 import SalesOrderDetail from './pages/sales/SalesOrderDetail';
@@ -110,6 +111,7 @@ export default function App() {
                   <Route path="branches" element={<BranchesPage />} />
                   <Route path="units" element={<UnitsPage />} />
                   <Route path="size-groups" element={<SizeGroupsPage />} />
+                  <Route path="sizes" element={<SizesPage />} />
                   <Route path="styles" element={<StylesPage />} />
                   <Route path="styles/:id" element={<StyleDetailPage />} />
                   <Route path="boms" element={<BomsPage />} />
@@ -123,6 +125,8 @@ export default function App() {
                   <Route path="costings" element={<CostingsPage />} />
                   <Route path="costings/:id" element={<CostingDetailPage />} />
                   <Route path="quotations" element={<QuotationsPage />} />
+                  <Route path="quotations/new" element={<QuotationDetailPage />} />
+                  <Route path="quotations/:id" element={<QuotationDetailPage />} />
                   <Route path="orders" element={<SalesOrdersPage />} />
                   <Route path="orders/:id" element={<SalesOrderDetail />} />
                 </Route>

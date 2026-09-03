@@ -289,6 +289,30 @@ export function SizeGroupsPage() {
     ]} />;
 }
 
+/* -------------------------------------------------------- Individual Sizes */
+export function SizesPage() {
+  return <CrudPage
+    path="sizes" title="Size Master" permission="SIZE" singular="Size"
+    subtitle="Individual sizes — select per line on quotations and orders"
+    defaultSort={{ key: 'sort_order', dir: 'asc' }}
+    columns={[
+      { key: 'size_code', header: 'Code', sortable: true,
+        render: (r: any) => <span className="font-mono text-[12px] text-brand-700">{r.size_code}</span> },
+      { key: 'size_label', header: 'Size Label', sortable: true },
+      { key: 'sort_order', header: 'Sort', align: 'right' },
+      { key: 'is_active', header: 'Active',
+        render: (r: any) => r.is_active ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Inactive</Badge> },
+    ]}
+    filters={[{ name: 'size_group_id', label: 'Group', lookup: 'size-groups' }]}
+    fields={[
+      { name: 'size_group_id', label: 'Size Group', required: true, lookup: 'size-groups' },
+      { name: 'size_code', label: 'Size code', required: true, placeholder: 'e.g. S, M, L, XL, 32, 34' },
+      { name: 'size_label', label: 'Size label', required: true, placeholder: 'e.g. Small, Medium, Large' },
+      { name: 'sort_order', label: 'Sort order', type: 'number', defaultValue: 0 },
+      activeField,
+    ]} />;
+}
+
 /* ------------------------------------------------------------ Batches */
 export function BatchesPage() {
   return <CrudPage
