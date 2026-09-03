@@ -92,6 +92,37 @@ export default function QuotationDetailPage() {
   const sizes      = useLookup('sizes-all');   // individual sizes
   const statuses   = useStatuses('QUOTATION');
 
+  const inrCurrency = currencies.data?.find((c: any) => c.code === 'INR');
+  const usdCurrency = currencies.data?.find((c: any) => c.code === 'USD');
+
+  // Ensure default currency is INR for Domestic quotations
+  useEffect(() => {
+    if (!currencies.data?.length) return;
+    if (head.quotation_type === 'DOMESTIC') {
+      if ((!head.currency_id || isNew) && inrCurrency) {
+        setHead(h => ({ ...h, currency_id: inrCurrency.id, exchange_rate: 1 }));
+      }
+    }
+  }, [currencies.data, isNew, head.quotation_type, inrCurrency]);
+
+  const handleTypeChange = (type: string) => {
+    if (type === 'DOMESTIC') {
+      setHead(h => ({
+        ...h,
+        quotation_type: 'DOMESTIC',
+        currency_id: inrCurrency?.id ?? 1,
+        exchange_rate: 1,
+      }));
+    } else {
+      setHead(h => ({
+        ...h,
+        quotation_type: 'IMPORT',
+        currency_id: h.currency_id === inrCurrency?.id ? (usdCurrency?.id ?? '') : h.currency_id,
+        exchange_rate: h.exchange_rate === 1 ? 84.50 : h.exchange_rate,
+      }));
+    }
+  };
+
   /* ── load existing ── */
   const detail = useQuery({
     queryKey: ['quotations', 'item', id],
@@ -193,7 +224,11 @@ export default function QuotationDetailPage() {
   async function handleSave(draft = false) {
     const errs: Record<string, string> = {};
     if (!head.quotation_date) errs.quotation_date = 'Required';
-    if (!head.currency_id)   errs.currency_id = 'Required';
+    const resolvedCurrencyId = !isImport
+      ? (inrCurrency?.id ?? head.currency_id ?? 1)
+      : head.currency_id;
+
+    if (!resolvedCurrencyId) errs.currency_id = 'Required';
     if (!isImport && !head.buyer_id) errs.buyer_id = 'Required';
     if (isImport && !head.supplier_id) errs.supplier_id = 'Required';
     if (lines.some(l => !l.qty || !l.unit_price)) errs.lines = 'All lines need Qty and Rate';
@@ -203,6 +238,8 @@ export default function QuotationDetailPage() {
     // Build payload
     const payload = {
       ...head,
+      currency_id: Number(resolvedCurrencyId),
+      exchange_rate: isImport ? Number(head.exchange_rate || 1) : 1,
       total_amount: isImport ? (calc as any).finalSelling : (calc as any).grandTotal,
       taxable_value: isImport ? undefined : (calc as any).taxableValue,
       landed_cost: isImport ? (calc as any).landedCost : undefined,
@@ -217,8 +254,8 @@ export default function QuotationDetailPage() {
         qty: Number(l.qty),
         uom_id: l.uom_id || null,
         unit_price: Number(l.unit_price),
-        gst_rate: Number(l.gst_rate) || 0,
-        gst_amount: (Number(l.qty) * Number(l.unit_price)) * (Number(l.gst_rate) / 100),
+        gst_rate: isImport ? 0 : (Number(l.gst_rate) || 0),
+        gst_amount: isImport ? 0 : ((Number(l.qty) * Number(l.unit_price)) * (Number(l.gst_rate) / 100)),
         amount: (Number(l.qty) || 0) * (Number(l.unit_price) || 0),
         sort_order: i,
       })),
@@ -248,7 +285,9 @@ export default function QuotationDetailPage() {
   if (!isNew && detail.isLoading) return <LoadingBlock label="Loading quotation…" />;
   if (!isNew && detail.isError)   return <ErrorState message="Could not load quotation." />;
 
-  const currSymbol = currencies.data?.find((c: any) => c.id === Number(head.currency_id))?.symbol ?? '₹';
+  const currSymbol = !isImport
+    ? '₹'
+    : (currencies.data?.find((c: any) => c.id === Number(head.currency_id))?.symbol ?? '$');
 
   /* ── render ── */
   return (
@@ -306,7 +345,7 @@ export default function QuotationDetailPage() {
             <div className="flex items-center gap-3 mb-6">
               {QUOTATION_TYPES.map(t => (
                 <button key={t.value}
-                  onClick={() => hSet('quotation_type', t.value)}
+                  onClick={() => handleTypeChange(t.value)}
                   className={`flex-1 py-2.5 rounded-lg border-2 text-sm font-semibold transition-all
                     ${head.quotation_type === t.value
                       ? (t.value === 'IMPORT' ? 'border-violet-500 bg-violet-50 text-violet-700' : 'border-sky-500 bg-sky-50 text-sky-700')
@@ -345,11 +384,20 @@ export default function QuotationDetailPage() {
 
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">Currency *</label>
-                <select value={head.currency_id ?? ''} onChange={e => hSet('currency_id', e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-400 bg-white">
-                  <option value="">— Select —</option>
-                  {(currencies.data ?? []).map((c: any) => <option key={c.id} value={c.id}>{c.code} — {c.label}</option>)}
-                </select>
+                {!isImport ? (
+                  <div className="flex items-center justify-between px-3 py-2 rounded-lg border border-slate-200 text-sm bg-slate-50 text-slate-700 font-medium">
+                    <span>INR — Indian Rupee (₹)</span>
+                    <span className="text-[11px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded font-semibold">Domestic INR</span>
+                  </div>
+                ) : (
+                  <select value={head.currency_id ?? ''} onChange={e => hSet('currency_id', e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-400 bg-white">
+                    <option value="">— Select Currency —</option>
+                    {(currencies.data ?? []).filter((c: any) => c.code !== 'INR').map((c: any) => (
+                      <option key={c.id} value={c.id}>{c.code} — {c.label}</option>
+                    ))}
+                  </select>
+                )}
                 {err('currency_id')}
               </div>
 
