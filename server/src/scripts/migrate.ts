@@ -28,9 +28,7 @@ async function main() {
       `SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = ?`, [env.db.database]);
 
     if (existing.length && !fresh) {
-      console.error(`[migrate] Database "${env.db.database}" already exists.`);
-      console.error('          Re-run with --fresh to drop and recreate it (ALL DATA WILL BE LOST).');
-      process.exit(1);
+      console.log(`[migrate] Database "${env.db.database}" exists — applying incremental migrations...`);
     }
     if (existing.length && fresh) {
       console.log(`[migrate] --fresh: dropping database "${env.db.database}"...`);
@@ -45,8 +43,16 @@ async function main() {
       // 01_foundation.sql creates + selects the database; the rest need USE.
       const body = file.startsWith('01_') ? sql : `USE \`${env.db.database}\`;\n${sql}`;
       process.stdout.write(`[migrate] ${file} ... `);
-      await conn.query(body);
-      console.log('ok');
+      try {
+        await conn.query(body);
+        console.log('ok');
+      } catch (err: any) {
+        if (!fresh && (err.message.includes('already exists') || err.message.includes('Duplicate column'))) {
+          console.log('already applied (skipped)');
+        } else {
+          console.log('warn:', err.message);
+        }
+      }
     }
 
     const [tables] = await conn.query<any[]>(

@@ -928,23 +928,70 @@ async function seedDemo(ctx: {
       [companyId, code], `category ${code}`));
   }
 
-  // ------------------------------------------------------- yarns
-  const YARNS: [string,string,string,string,string,number][] = [
-    ['Y30CC','30s Combed Cotton','30s','COMBED','C100',285],
-    ['Y40CC','40s Combed Cotton','40s','COMBED','C100',310],
-    ['Y24CC','24s Combed Cotton','24s','COMBED','C100',268],
-    ['Y30CD','30s Carded Cotton','30s','CARDED','C100',242],
-    ['Y30ML','30s Melange Grey','30s','MELANGE','CV5050',298],
-    ['Y150P','150D Polyester Filament','150D','OTHER','P100',165],
+  // ------------------------------------------------------- yarn counts & bases
+  const YARN_COUNTS: [string, 'Ne' | 'Nm' | 'Denier' | 'Tex', string, number][] = [
+    ['10s', 'Ne', 'Coarse Cotton Count', 10],
+    ['16s', 'Ne', 'Coarse Cotton Count', 16],
+    ['20s', 'Ne', 'Medium Cotton Count', 20],
+    ['24s', 'Ne', 'Medium Cotton Count', 24],
+    ['30s', 'Ne', 'Standard Knit Count', 30],
+    ['34s', 'Ne', 'Fine Knit Count', 34],
+    ['40s', 'Ne', 'Fine Combed Count', 40],
+    ['50s', 'Ne', 'Superfine Count', 50],
+    ['60s', 'Ne', 'Superfine Count', 60],
+    ['80s', 'Ne', 'Ultra-Fine Count', 80],
+    ['75D/36F', 'Denier', 'Polyester Filament', 75],
+    ['100D/48F', 'Denier', 'Polyester Filament', 100],
+    ['150D', 'Denier', 'Polyester Filament', 150],
+  ];
+  const countId = new Map<string, number>();
+  for (const [val, type, desc, ord] of YARN_COUNTS) {
+    await exec(
+      `INSERT INTO mst_yarn_count (company_id, count_value, count_type, description, sort_order)
+       VALUES (?,?,?,?,?)
+       ON DUPLICATE KEY UPDATE description=VALUES(description), sort_order=VALUES(sort_order)`,
+      [companyId, val, type, desc, ord]
+    );
+    countId.set(val, await id(`SELECT id FROM mst_yarn_count WHERE company_id=? AND count_value=? AND count_type=?`,
+      [companyId, val, type], `count ${val}`));
+  }
+
+  const YARN_BASES: [string, string, string, string, string][] = [
+    ['YB-00001', '100% Combed Cotton', 'COMBED', 'C100', 'NONE'],
+    ['YB-00002', '100% Organic Cotton', 'COMBED', 'C100', 'GOTS'],
+    ['YB-00003', '100% Carded Cotton', 'CARDED', 'C100', 'NONE'],
+    ['YB-00004', 'Cotton Viscose Melange', 'MELANGE', 'CV5050', 'OEKO-TEX'],
+    ['YB-00005', 'Polyester Filament', 'OTHER', 'P100', 'GRS'],
+  ];
+  const baseId = new Map<string, number>();
+  for (const [code, name, type, comp, cert] of YARN_BASES) {
+    await exec(
+      `INSERT INTO mst_yarn_base (company_id, base_code, base_name, category_id, composition_id, yarn_type, certification, base_uom)
+       VALUES (?,?,?,?,?,?,?,?)
+       ON DUPLICATE KEY UPDATE base_name=VALUES(base_name), certification=VALUES(certification)`,
+      [companyId, code, name, catId.get('CAT-YRN'), compId.get(comp), type, cert, KG]
+    );
+    baseId.set(code, await id(`SELECT id FROM mst_yarn_base WHERE company_id=? AND base_code=?`,
+      [companyId, code], `base ${code}`));
+  }
+
+  // ------------------------------------------------------- yarns (Variants)
+  const YARNS: [string,string,string,string,string,number,string,string][] = [
+    ['Y30CC','30s Combed Cotton','30s','COMBED','C100',285, 'YB-00001', '30s'],
+    ['Y40CC','40s Combed Cotton','40s','COMBED','C100',310, 'YB-00001', '40s'],
+    ['Y24CC','24s Combed Cotton','24s','COMBED','C100',268, 'YB-00001', '24s'],
+    ['Y30CD','30s Carded Cotton','30s','CARDED','C100',242, 'YB-00003', '30s'],
+    ['Y30ML','30s Melange Grey','30s','MELANGE','CV5050',298, 'YB-00004', '30s'],
+    ['Y150P','150D Polyester Filament','150D','OTHER','P100',165, 'YB-00005', '150D'],
   ];
   const yarnId = new Map<string, number>();
-  for (const [code, name, count, type, comp, rate] of YARNS) {
+  for (const [code, name, count, type, comp, rate, baseCode, cntVal] of YARNS) {
     await exec(
-      `INSERT INTO mst_yarn (company_id,yarn_code,yarn_name,category_id,count_value,count_type,
-         composition_id,yarn_type,hsn_code,base_uom,std_rate,created_by)
-       VALUES (?,?,?,?,?,'Ne',?,?, '52051110',?,?,?)
-       ON DUPLICATE KEY UPDATE yarn_name=VALUES(yarn_name), std_rate=VALUES(std_rate)`,
-      [companyId, code, name, catId.get('CAT-YRN'), count, compId.get(comp), type, KG, rate, adminId]);
+      `INSERT INTO mst_yarn (company_id,yarn_code,yarn_name,category_id,yarn_base_id,count_id,count_value,count_type,
+         composition_id,yarn_type,twist,hsn_code,base_uom,std_rate,created_by)
+       VALUES (?,?,?,?,?,?,?,?,'Ne',?,?,'Z','52051110',?,?,?)
+       ON DUPLICATE KEY UPDATE yarn_name=VALUES(yarn_name), yarn_base_id=VALUES(yarn_base_id), count_id=VALUES(count_id), std_rate=VALUES(std_rate)`,
+      [companyId, code, name, catId.get('CAT-YRN'), baseId.get(baseCode), countId.get(cntVal), count, compId.get(comp), type, KG, rate, adminId]);
     yarnId.set(code, await id(`SELECT id FROM mst_yarn WHERE company_id=? AND yarn_code=?`,
       [companyId, code], `yarn ${code}`));
   }

@@ -237,17 +237,45 @@ export const masterResources: ResourceConfig[] = [
     ],
   },
   {
-    path: 'yarns', table: 'mst_yarn', permission: 'MATERIAL', label: 'Yarn',
-    searchable: ['yarn_code', 'yarn_name', 'count_value'], sortable: ['yarn_code', 'yarn_name'],
-    defaultSort: 't.yarn_name', filters: ['category_id', 'yarn_type', 'composition_id'],
-    selectExtra: 'u.code AS uom_code, comp.description AS composition_desc, cat.category_name',
+    path: 'yarn-counts', table: 'mst_yarn_count', permission: 'MATERIAL', label: 'Yarn Count',
+    searchable: ['count_value', 'description'], sortable: ['sort_order', 'count_value'],
+    defaultSort: 't.sort_order ASC, t.count_value ASC', filters: ['count_type'],
+    fields: [
+      f('count_value', s.strReq(30)), f('count_type', s.enumReq(['Ne','Nm','Denier','Tex'])),
+      f('description', s.nullableStr(120)), f('sort_order', s.int()), f('is_active', s.bool()),
+    ],
+  },
+  {
+    path: 'yarn-bases', table: 'mst_yarn_base', permission: 'MATERIAL', label: 'Yarn Base',
+    searchable: ['base_code', 'base_name', 'certification'], sortable: ['base_code', 'base_name'],
+    defaultSort: 't.base_name', filters: ['category_id', 'yarn_type', 'composition_id'],
+    selectExtra: 'u.code AS uom_code, comp.description AS composition_desc, cat.category_name, (SELECT COUNT(*) FROM mst_yarn y WHERE y.yarn_base_id = t.id AND y.is_deleted=0) AS variant_count',
     joins: `LEFT JOIN cfg_uom u ON u.id = t.base_uom
             LEFT JOIN mst_composition comp ON comp.id = t.composition_id
             LEFT JOIN mst_material_category cat ON cat.id = t.category_id`,
     fields: [
+      f('base_code', s.strReq(40)), f('base_name', s.strReq(150)), f('category_id', s.id()),
+      f('composition_id', s.id()),
+      f('yarn_type', s.enum(['COMBED','CARDED','OE','COMPACT','MELANGE','SLUB','OTHER'])),
+      f('certification', s.nullableStr(80)), f('hsn_code', s.nullableStr(10)),
+      f('base_uom', s.idReq()), f('description', s.nullableStr(255)), f('is_active', s.bool()),
+    ],
+  },
+  {
+    path: 'yarns', table: 'mst_yarn', permission: 'MATERIAL', label: 'Yarn',
+    searchable: ['yarn_code', 'yarn_name', 'count_value'], sortable: ['yarn_code', 'yarn_name'],
+    defaultSort: 't.yarn_name', filters: ['category_id', 'yarn_type', 'composition_id', 'yarn_base_id', 'count_id'],
+    selectExtra: 'u.code AS uom_code, comp.description AS composition_desc, cat.category_name, yb.base_code, yb.base_name, yc.count_value AS count_master_value, yc.count_type AS count_master_type',
+    joins: `LEFT JOIN cfg_uom u ON u.id = t.base_uom
+            LEFT JOIN mst_composition comp ON comp.id = t.composition_id
+            LEFT JOIN mst_material_category cat ON cat.id = t.category_id
+            LEFT JOIN mst_yarn_base yb ON yb.id = t.yarn_base_id
+            LEFT JOIN mst_yarn_count yc ON yc.id = t.count_id`,
+    fields: [
       f('yarn_code', s.strReq(40)), f('yarn_name', s.strReq(150)), f('category_id', s.id()),
+      f('yarn_base_id', s.id()), f('count_id', s.id()),
       f('count_value', s.nullableStr(20)), f('count_type', s.enum(['Ne','Nm','Denier','Tex'])),
-      f('composition_id', s.id()), f('ply', s.int()),
+      f('composition_id', s.id()), f('ply', s.int()), f('twist', s.nullableStr(10)),
       f('yarn_type', s.enum(['COMBED','CARDED','OE','COMPACT','MELANGE','SLUB','OTHER'])),
       f('hsn_code', s.nullableStr(10)), f('base_uom', s.idReq()),
       f('std_rate', s.dec()), f('is_active', s.bool()),

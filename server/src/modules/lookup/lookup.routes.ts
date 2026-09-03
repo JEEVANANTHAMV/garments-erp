@@ -38,7 +38,9 @@ const LOOKUPS: Record<string, LookupDef> = {
   gsm:         { sql: `SELECT id, gsm_value AS code, CONCAT(gsm_value,' GSM') AS label FROM mst_gsm WHERE company_id=? AND is_active=1 ORDER BY gsm_value`, scoped: true },
   'material-categories': { sql: `SELECT id, category_code AS code, category_name AS label, material_type FROM mst_material_category WHERE company_id=? AND is_active=1 ORDER BY category_name`, scoped: true },
 
-  yarns:       { sql: `SELECT id, yarn_code AS code, yarn_name AS label, base_uom, std_rate FROM mst_yarn WHERE company_id=? AND is_active=1 AND is_deleted=0 ORDER BY yarn_name`, scoped: true },
+  yarns:       { sql: `SELECT id, yarn_code AS code, yarn_name AS label, base_uom, std_rate, yarn_base_id, count_id, count_value, count_type, ply, twist FROM mst_yarn WHERE company_id=? AND is_active=1 AND is_deleted=0 ORDER BY yarn_name`, scoped: true },
+  'yarn-counts': { sql: `SELECT id, count_value AS code, CONCAT(count_value, ' ', count_type) AS label, count_value, count_type, sort_order FROM mst_yarn_count WHERE company_id=? AND is_active=1 AND is_deleted=0 ORDER BY sort_order, count_value`, scoped: true },
+  'yarn-bases':  { sql: `SELECT id, base_code AS code, base_name AS label, category_id, composition_id, yarn_type, certification, base_uom FROM mst_yarn_base WHERE company_id=? AND is_active=1 AND is_deleted=0 ORDER BY base_name`, scoped: true },
   fabrics:     { sql: `SELECT id, fabric_code AS code, fabric_name AS label, base_uom, std_rate FROM mst_fabric WHERE company_id=? AND is_active=1 AND is_deleted=0 ORDER BY fabric_name`, scoped: true },
   trims:       { sql: `SELECT id, trim_code AS code, trim_name AS label, base_uom, std_rate, trim_type FROM mst_trim WHERE company_id=? AND is_active=1 AND is_deleted=0 ORDER BY trim_name`, scoped: true },
   products:    { sql: `SELECT id, product_code AS code, product_name AS label, product_type, default_uom FROM mst_product WHERE company_id=? AND is_active=1 AND is_deleted=0 ORDER BY product_name`, scoped: true },
