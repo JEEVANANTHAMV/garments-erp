@@ -2,8 +2,8 @@ import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Plus, ArrowLeft, Save, Trash2, PieChart as PieIcon, Layers, FileText, CheckCircle2,
-  SlidersHorizontal, Copy, Check, Info, Sparkles, Tag, Scissors, RefreshCw, Upload, Image as ImageIcon
+  Plus, ArrowLeft, Save, Trash2, PieChart as PieIcon, Layers, CheckCircle2,
+  SlidersHorizontal, Copy, Check, Sparkles, Tag, Scissors, RefreshCw, Image as ImageIcon
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { http, ApiError } from '../../lib/api';
@@ -284,21 +284,12 @@ export function FabricsPage() {
       {/* VIEW 1: FABRIC BASES TABLE */}
       {view === 'bases' ? (
         <DataTable
-          items={basesList.items}
-          total={basesList.total}
-          page={page}
-          pageSize={25}
-          loading={basesList.isLoading}
-          sort={sort}
-          onSort={onSort}
-          onPageChange={setPage}
-          onRowClick={(row) => nav(`/masters/fabrics/${row.id}`)}
           columns={[
             {
               key: 'base_code',
               header: 'Base Code',
               sortable: true,
-              render: (r) => (
+              render: (r: any) => (
                 <div className="flex items-center gap-2">
                   <span className="font-mono font-bold text-brand-700">{r.base_code}</span>
                   {r.image_url && (
@@ -313,7 +304,7 @@ export function FabricsPage() {
               key: 'base_name',
               header: 'Fabric Base Name',
               sortable: true,
-              render: (r) => (
+              render: (r: any) => (
                 <div>
                   <div className="font-bold text-slate-900">{r.base_name}</div>
                   <div className="text-[11px] text-slate-500 font-medium">
@@ -325,7 +316,7 @@ export function FabricsPage() {
             {
               key: 'knit_structure',
               header: 'Structure / Weave',
-              render: (r) => (
+              render: (r: any) => (
                 <div className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-800">
                   <Scissors size={12} className="text-slate-500" />
                   {r.knit_structure || 'Single Jersey'}
@@ -335,7 +326,7 @@ export function FabricsPage() {
             {
               key: 'fabric_type',
               header: 'Type',
-              render: (r) => (
+              render: (r: any) => (
                 <span className={`inline-flex rounded px-2 py-0.5 text-[11px] font-bold ${
                   r.fabric_type === 'KNIT' ? 'bg-indigo-50 text-indigo-700' :
                   r.fabric_type === 'WOVEN' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-700'
@@ -347,7 +338,7 @@ export function FabricsPage() {
             {
               key: 'finish_type',
               header: 'Finish & Treatment',
-              render: (r) => (
+              render: (r: any) => (
                 <span className="text-xs text-slate-600 font-medium truncate max-w-[180px] block" title={r.finish_type}>
                   {r.finish_type || 'Bio-wash + Silicon'}
                 </span>
@@ -356,7 +347,7 @@ export function FabricsPage() {
             {
               key: 'certification',
               header: 'Certification',
-              render: (r) => (
+              render: (r: any) => (
                 <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ${
                   r.certification === 'GOTS' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
                   r.certification === 'OEKO-TEX' ? 'bg-blue-100 text-blue-800 border border-blue-300' :
@@ -371,7 +362,7 @@ export function FabricsPage() {
             {
               key: 'variant_count',
               header: 'GSM Variants',
-              render: (r) => {
+              render: (r: any) => {
                 const count = Number(r.variant_count) || 0;
                 return (
                   <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ${
@@ -385,35 +376,35 @@ export function FabricsPage() {
             {
               key: 'is_active',
               header: 'Status',
-              render: (r) => (
-                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${
-                  r.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
-                }`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${r.is_active ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+              render: (r: any) => (
+                <Badge tone={r.is_active ? 'green' : 'slate'}>
                   {r.is_active ? 'Active' : 'Inactive'}
-                </span>
+                </Badge>
               ),
             },
           ]}
+          rows={basesList.data?.data ?? []}
+          loading={basesList.isLoading}
+          error={basesList.error}
+          onRetry={() => void basesList.refetch()}
+          rowKey={(r: any) => r.id}
+          onRowClick={(r: any) => nav(`/masters/fabrics/${r.id}`)}
+          sort={sort}
+          onSort={onSort}
+          page={page}
+          pageSize={25}
+          total={basesList.data?.total ?? 0}
+          onPageChange={setPage}
         />
       ) : (
         /* VIEW 2: ALL SKU VARIANTS TABLE */
         <DataTable
-          items={variantsList.items}
-          total={variantsList.total}
-          page={page}
-          pageSize={25}
-          loading={variantsList.isLoading}
-          sort={sort}
-          onSort={onSort}
-          onPageChange={setPage}
-          onRowClick={(row) => row.fabric_base_id ? nav(`/masters/fabrics/${row.fabric_base_id}`) : undefined}
           columns={[
             {
               key: 'fabric_code',
               header: 'Item SKU Code',
               sortable: true,
-              render: (r) => (
+              render: (r: any) => (
                 <span className="font-mono font-bold text-brand-700">{r.fabric_code}</span>
               ),
             },
@@ -421,7 +412,7 @@ export function FabricsPage() {
               key: 'fabric_name',
               header: 'Fabric Item Name',
               sortable: true,
-              render: (r) => (
+              render: (r: any) => (
                 <div>
                   <div className="font-bold text-slate-900">{r.fabric_name}</div>
                   {r.base_name && (
@@ -435,7 +426,7 @@ export function FabricsPage() {
             {
               key: 'gsm_value',
               header: 'GSM',
-              render: (r) => (
+              render: (r: any) => (
                 <span className="inline-flex rounded bg-blue-50 px-2 py-0.5 font-mono text-xs font-bold text-blue-700">
                   {r.gsm_value ? `${r.gsm_value} GSM` : '—'}
                 </span>
@@ -444,7 +435,7 @@ export function FabricsPage() {
             {
               key: 'dia_inch',
               header: 'Width / Dia',
-              render: (r) => (
+              render: (r: any) => (
                 <span className="text-xs font-medium text-slate-700">
                   {r.dia_inch ? `${r.dia_inch}" Dia` : ''} {r.width_cm ? `(${r.width_cm} cm)` : ''}
                 </span>
@@ -453,7 +444,7 @@ export function FabricsPage() {
             {
               key: 'gauge',
               header: 'Gauge',
-              render: (r) => (
+              render: (r: any) => (
                 <span className="font-mono text-xs font-semibold text-slate-600">
                   {r.gauge || '24 GG'}
                 </span>
@@ -462,7 +453,7 @@ export function FabricsPage() {
             {
               key: 'knit_structure',
               header: 'Structure',
-              render: (r) => (
+              render: (r: any) => (
                 <span className="text-xs text-slate-700 font-medium">
                   {r.knit_structure || 'Single Jersey'}
                 </span>
@@ -471,7 +462,7 @@ export function FabricsPage() {
             {
               key: 'std_rate',
               header: 'Std Rate (₹/Kg)',
-              render: (r) => (
+              render: (r: any) => (
                 <span className="font-mono text-xs font-bold text-slate-900">
                   ₹{fmtDecimal(r.std_rate, 2)}
                 </span>
@@ -480,16 +471,25 @@ export function FabricsPage() {
             {
               key: 'is_active',
               header: 'Status',
-              render: (r) => (
-                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${
-                  r.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
-                }`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${r.is_active ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+              render: (r: any) => (
+                <Badge tone={r.is_active ? 'green' : 'slate'}>
                   {r.is_active ? 'Active' : 'Draft'}
-                </span>
+                </Badge>
               ),
             },
           ]}
+          rows={variantsList.data?.data ?? []}
+          loading={variantsList.isLoading}
+          error={variantsList.error}
+          onRetry={() => void variantsList.refetch()}
+          rowKey={(r: any) => r.id}
+          onRowClick={(r: any) => r.fabric_base_id ? nav(`/masters/fabrics/${r.fabric_base_id}`) : undefined}
+          sort={sort}
+          onSort={onSort}
+          page={page}
+          pageSize={25}
+          total={variantsList.data?.total ?? 0}
+          onPageChange={setPage}
         />
       )}
     </>
@@ -883,7 +883,7 @@ export function FabricDetailPage() {
   const handleDelete = async () => {
     if (!window.confirm('Are you sure you want to delete this Fabric Base and its variants?')) return;
     try {
-      await http.delete(`/api/resources/fabric-bases/${id}`);
+      await http.del(`/api/resources/fabric-bases/${id}`);
       toast('Fabric Base deleted', 'success');
       qc.invalidateQueries({ queryKey: ['fabric-bases'] });
       qc.invalidateQueries({ queryKey: ['fabrics'] });
@@ -992,7 +992,7 @@ export function FabricDetailPage() {
               value={head.category_id}
               disabled={!editable}
               onChange={(e) => setHead({ ...head, category_id: e.target.value })}
-              options={toOptions(categories.data || [], 'id', 'label')}
+              options={toOptions(categories.data)}
             />
           </div>
 
@@ -1026,7 +1026,7 @@ export function FabricDetailPage() {
               value={head.yarn_id}
               disabled={!editable}
               onChange={(e) => setHead({ ...head, yarn_id: e.target.value })}
-              options={[{ value: '', label: '— Select Primary Yarn —' }, ...toOptions(yarns.data || [], 'id', 'label')]}
+              options={[{ value: '', label: '— Select Primary Yarn —' }, ...toOptions(yarns.data)]}
             />
           </div>
 
@@ -1074,7 +1074,7 @@ export function FabricDetailPage() {
               value={head.base_uom}
               disabled={!editable}
               onChange={(e) => setHead({ ...head, base_uom: e.target.value })}
-              options={toOptions(uoms.data || [], 'id', 'label')}
+              options={toOptions(uoms.data)}
             />
           </div>
 
