@@ -2309,56 +2309,6 @@ export function PartyDetailPage() {
           </div>
         </div>
       )}
-
-
-      {/* Bottom Action Footer */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border border-surface-border bg-white p-4 rounded-xl shadow-card mt-6">
-        <div className="flex items-center gap-2">
-          {form.is_draft ? (
-            <span className="text-xs text-amber-700 font-medium flex items-center gap-1.5 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200">
-              <FileText size={14} className="text-amber-600" />
-              Currently saved as Draft. Complete all details and click &quot;Finalize & Save&quot; when ready.
-            </span>
-          ) : (
-            <span className="text-xs text-slate-500">
-              All changes are validated and saved directly to the database.
-            </span>
-          )}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <button onClick={() => nav('/masters/parties')} className="btn-secondary btn-sm">
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleSave('draft')}
-            disabled={saveMutation.isPending}
-            className="btn-secondary btn-sm flex items-center gap-1.5 text-amber-800 bg-amber-50 hover:bg-amber-100 border-amber-300 font-semibold"
-            title="Save your progress as draft to resume later without completing all required fields"
-          >
-            <FileText size={14} className="text-amber-600" />
-            {saveMutation.isPending ? 'Saving…' : 'Save as Draft'}
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleSave('saveAndNew')}
-            disabled={saveMutation.isPending}
-            className="btn-secondary btn-sm"
-          >
-            Save & New
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleSave('save')}
-            disabled={saveMutation.isPending}
-            className="btn-primary btn-sm flex items-center gap-1.5 font-semibold"
-          >
-            <Save size={14} />
-            {saveMutation.isPending ? 'Saving…' : isNew ? 'Save Business Partner' : form.is_draft ? 'Finalize & Save' : 'Save Changes'}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
