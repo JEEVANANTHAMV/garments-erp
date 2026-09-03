@@ -391,10 +391,8 @@ export function FabricsPage() {
           onRowClick={(r: any) => nav(`/masters/fabrics/${r.id}`)}
           sort={sort}
           onSort={onSort}
-          page={page}
-          pageSize={25}
-          total={basesList.data?.total ?? 0}
-          onPageChange={setPage}
+          pagination={basesList.data?.pagination}
+          onPage={setPage}
         />
       ) : (
         /* VIEW 2: ALL SKU VARIANTS TABLE */
@@ -486,10 +484,8 @@ export function FabricsPage() {
           onRowClick={(r: any) => r.fabric_base_id ? nav(`/masters/fabrics/${r.fabric_base_id}`) : undefined}
           sort={sort}
           onSort={onSort}
-          page={page}
-          pageSize={25}
-          total={variantsList.data?.total ?? 0}
-          onPageChange={setPage}
+          pagination={variantsList.data?.pagination}
+          onPage={setPage}
         />
       )}
     </>
