@@ -96,11 +96,17 @@ export function QuotationsPage() {
       { key: 'quotation_no', header: 'Quotation no', sortable: true,
         render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.quotation_no}</span> },
       { key: 'quotation_type', header: 'Type',
-        render: (r: any) => r.quotation_type === 'BUYER'
-          ? <Badge tone="emerald">Buyer</Badge>
-          : r.quotation_type === 'IMPORT'
-            ? <Badge tone="violet">Import</Badge>
-            : <Badge tone="sky">Domestic</Badge> },
+        render: (r: any) => {
+          switch (r.quotation_type) {
+            case 'FABRIC':   return <Badge tone="sky">Fabric</Badge>;
+            case 'YARN':     return <Badge tone="amber">Yarn</Badge>;
+            case 'TRIMS':    return <Badge tone="rose">Trims</Badge>;
+            case 'GENERAL':  return <Badge tone="slate">{r.is_io_wise ? 'General (I/O)' : 'General'}</Badge>;
+            case 'BUYER':    return <Badge tone="emerald">Buyer (Export)</Badge>;
+            case 'IMPORT':   return <Badge tone="violet">Import</Badge>;
+            default:         return <Badge tone="sky">{r.quotation_type || 'Domestic'}</Badge>;
+          }
+        } },
       { key: 'quotation_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.quotation_date) },
       { key: 'buyer_name', header: 'Buyer / Supplier',
         render: (r: any) => <span className="font-medium text-slate-800">{r.buyer_name || r.supplier_name || '—'}</span> },
@@ -112,7 +118,15 @@ export function QuotationsPage() {
       { key: 'status_label', header: 'Status', render: (r: any) => <StatusBadge value={r.status_label} /> },
     ]}
     filters={[
-      { name: 'quotation_type', label: 'Type', options: [{ value: 'BUYER', label: 'Buyer' }, { value: 'DOMESTIC', label: 'Domestic' }, { value: 'IMPORT', label: 'Import' }] },
+      { name: 'quotation_type', label: 'Type', options: [
+        { value: 'FABRIC', label: 'Fabric' },
+        { value: 'YARN', label: 'Yarn' },
+        { value: 'TRIMS', label: 'Trims' },
+        { value: 'GENERAL', label: 'General / Sample' },
+        { value: 'BUYER', label: 'Buyer (Export)' },
+        { value: 'IMPORT', label: 'Import' },
+        { value: 'DOMESTIC', label: 'Domestic' },
+      ] },
       { name: 'buyer_id', label: 'Buyer', lookup: 'buyers' },
       { name: 'supplier_id', label: 'Supplier', lookup: 'suppliers' },
       { name: 'status_id', label: 'Status', statusDomain: 'QUOTATION' },

@@ -125,6 +125,8 @@ export function TrimsPage() {
       { key: 'trim_name', header: 'Name', sortable: true },
       { key: 'trim_type', header: 'Type', render: (r: any) => <Badge tone="violet">{humanize(r.trim_type)}</Badge> },
       { key: 'specification', header: 'Specification' },
+      { key: 'certification', header: 'Certification',
+        render: (r: any) => r.certification ? <Badge tone="emerald">{r.certification}</Badge> : '—' },
       { key: 'uom_code', header: 'UOM' },
       { key: 'std_rate', header: 'Rate', align: 'right', render: (r: any) => fmtDecimal(r.std_rate, 2) },
     ]}
@@ -135,6 +137,7 @@ export function TrimsPage() {
       { name: 'category_id', label: 'Category', lookup: 'material-categories' },
       { name: 'trim_type', label: 'Trim type', required: true, options: TYPES.map((v) => ({ value: v, label: humanize(v) })) },
       { name: 'specification', label: 'Specification', span: 2 },
+      { name: 'certification', label: 'Certification', placeholder: 'e.g. OEKO-TEX Standard 100, GOTS, GRS, FSC' },
       { name: 'hsn_code', label: 'HSN code' },
       { name: 'base_uom', label: 'Base UOM', required: true, lookup: 'uoms' },
       { name: 'std_rate', label: 'Standard rate', type: 'number' },

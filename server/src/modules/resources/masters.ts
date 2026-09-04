@@ -340,7 +340,7 @@ export const masterResources: ResourceConfig[] = [
     fields: [
       f('trim_code', s.strReq(40)), f('trim_name', s.strReq(150)), f('category_id', s.id()),
       f('trim_type', s.enumReq(['BUTTON','ZIPPER','LABEL','THREAD','ELASTIC','DRAWCORD','HANGTAG','STICKER','POLYBAG','CARTON','HANGER','TAPE','RIVET','VELCRO','LACE','OTHER'])),
-      f('specification', s.nullableStr(200)), f('hsn_code', s.nullableStr(10)),
+      f('specification', s.nullableStr(200)), f('certification', s.nullableStr(150)), f('hsn_code', s.nullableStr(10)),
       f('base_uom', s.idReq()), f('std_rate', s.dec()), f('is_active', s.bool()),
     ],
   },
