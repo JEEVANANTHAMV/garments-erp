@@ -115,6 +115,7 @@ export default function QuotationDetailPage() {
   const isTrims    = head.quotation_type === 'TRIMS';
   const isGeneral  = head.quotation_type === 'GENERAL';
   const isDomesticLike = !isBuyer && !isImport; // FABRIC, YARN, TRIMS, GENERAL, DOMESTIC
+  const showJobAndStyle = !isGeneral || Boolean(head.is_io_wise);
 
   /* ── lookups ── */
   const buyers     = useLookup('buyers');
@@ -851,12 +852,12 @@ export default function QuotationDetailPage() {
                     <th className="w-8 px-2 py-2 text-center">S.No</th>
                     
                     {/* I/O Num / Job No */}
-                    {(!isGeneral || head.is_io_wise) && (
+                    {showJobAndStyle && (
                       <th className="min-w-[95px] px-2 py-2">I/O Num</th>
                     )}
 
                     {/* Style No */}
-                    {(!isGeneral || head.is_io_wise) && (
+                    {showJobAndStyle && (
                       <th className="min-w-[120px] px-2 py-2">Style No</th>
                     )}
 
@@ -931,7 +932,7 @@ export default function QuotationDetailPage() {
                         </td>
 
                         {/* I/O Num / Job No */}
-                        {(!isGeneral || head.is_io_wise) && (
+                        {showJobAndStyle && (
                           <td className="px-1.5 py-1">
                             <input
                               type="text"
@@ -944,7 +945,7 @@ export default function QuotationDetailPage() {
                         )}
 
                         {/* Style No */}
-                        {(!isGeneral || head.is_io_wise) && (
+                        {showJobAndStyle && (
                           <td className="px-1.5 py-1">
                             <select
                               value={l.style_id}
