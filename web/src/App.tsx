@@ -26,7 +26,11 @@ import SalesOrderDetail from './pages/sales/SalesOrderDetail';
 import { GateInwardsPage, GateOutwardsPage } from './pages/gate';
 
 /* Procurement */
-import { MrpPage, PurchaseOrdersPage, GrnPage, MaterialIssuePage, PurchaseReturnsPage, SupplierBillsPage } from './pages/procurement';
+import {
+  MrpPage, PurchaseOrdersPage, GrnPage, MaterialIssuePage,
+  PurchaseReturnsPage, SupplierBillsPage,
+  GeneralPurchasesPage, GeneralPurchaseDetailPage,
+} from './pages/procurement';
 
 /* Inventory */
 import { StockPage, StockLedgerPage } from './pages/inventory';
@@ -143,6 +147,9 @@ export default function App() {
                 <Route path="procurement">
                   <Route path="mrp" element={<MrpPage />} />
                   <Route path="purchase-orders" element={<PurchaseOrdersPage />} />
+                  <Route path="general-purchases" element={<GeneralPurchasesPage />} />
+                  <Route path="general-purchases/new" element={<GeneralPurchaseDetailPage />} />
+                  <Route path="general-purchases/:id" element={<GeneralPurchaseDetailPage />} />
                   <Route path="grns" element={<GrnPage />} />
                   <Route path="returns" element={<PurchaseReturnsPage />} />
                   <Route path="supplier-bills" element={<SupplierBillsPage />} />

@@ -257,18 +257,26 @@ export const masterResources: ResourceConfig[] = [
   },
   {
     path: 'yarn-bases', table: 'mst_yarn_base', permission: 'MATERIAL', label: 'Yarn Base',
-    searchable: ['base_code', 'base_name', 'certification'], sortable: ['base_code', 'base_name'],
-    defaultSort: 't.base_name', filters: ['category_id', 'yarn_type', 'composition_id'],
-    selectExtra: 'u.code AS uom_code, comp.description AS composition_desc, cat.category_name, (SELECT COUNT(*) FROM mst_yarn y WHERE y.yarn_base_id = t.id AND y.is_deleted=0) AS variant_count',
+    searchable: ['base_code', 'base_name', 'certification', 'spinning_system', 'yarn_construction', 'effect', 'dye_status'], sortable: ['base_code', 'base_name'],
+    defaultSort: 't.base_name', filters: ['category_id', 'yarn_type', 'composition_id', 'dye_status'],
+    selectExtra: 'u.code AS uom_code, comp.description AS composition_desc, cat.category_name, col.color_name, (SELECT COUNT(*) FROM mst_yarn y WHERE y.yarn_base_id = t.id AND y.is_deleted=0) AS variant_count',
     joins: `LEFT JOIN cfg_uom u ON u.id = t.base_uom
             LEFT JOIN mst_composition comp ON comp.id = t.composition_id
-            LEFT JOIN mst_material_category cat ON cat.id = t.category_id`,
+            LEFT JOIN mst_material_category cat ON cat.id = t.category_id
+            LEFT JOIN mst_color col ON col.id = t.colour_id`,
     fields: [
       f('base_code', s.strReq(40)), f('base_name', s.strReq(150)), f('category_id', s.id()),
       f('composition_id', s.id()),
       f('yarn_type', s.enum(['COMBED','CARDED','OE','COMPACT','MELANGE','SLUB','OTHER'])),
+      f('spinning_system', s.nullableStr(60)), f('yarn_construction', s.nullableStr(60)),
+      f('effect', s.nullableStr(80)), f('dye_status', s.nullableStr(60)), f('dyeing_method', s.nullableStr(60)),
+      f('colour_id', s.id()), f('twist_direction', s.enum(['S','Z'])),
+      f('tpi', s.dec()), f('tpm', s.dec()), f('strength', s.nullableStr(40)),
+      f('elongation_pct', s.dec()), f('hairiness', s.dec()), f('cv_pct', s.dec()), f('moisture_pct', s.dec()),
       f('certification', s.nullableStr(80)), f('hsn_code', s.nullableStr(10)),
-      f('base_uom', s.idReq()), f('description', s.nullableStr(255)), f('is_active', s.bool()),
+      f('base_uom', s.idReq()), f('description', s.nullableStr(255)),
+      f('generated_description', s.nullableStr(500)), f('legacy_description', s.nullableStr(500)),
+      f('is_active', s.bool()),
     ],
   },
   {
@@ -281,6 +289,12 @@ export const masterResources: ResourceConfig[] = [
             LEFT JOIN mst_material_category cat ON cat.id = t.category_id
             LEFT JOIN mst_yarn_base yb ON yb.id = t.yarn_base_id
             LEFT JOIN mst_yarn_count yc ON yc.id = t.count_id`,
+    children: [
+      { key: 'components', table: 'mst_yarn_component', fk: 'yarn_id', fields: [
+        f('seq_no', s.int()), f('component_count', s.strReq(30)), f('count_system', s.nullableStr(20)),
+        f('component_fibre', s.nullableStr(80)), f('component_role', s.nullableStr(50)), f('component_ply', s.int()),
+      ]},
+    ],
     fields: [
       f('yarn_code', s.strReq(40)), f('yarn_name', s.strReq(150)), f('category_id', s.id()),
       f('yarn_base_id', s.id()), f('count_id', s.id()),
@@ -293,7 +307,7 @@ export const masterResources: ResourceConfig[] = [
   },
   {
     path: 'fabric-bases', table: 'mst_fabric_base', permission: 'MATERIAL', label: 'Fabric Base',
-    searchable: ['base_code', 'base_name', 'knit_structure', 'finish_type', 'certification'],
+    searchable: ['base_code', 'base_name', 'knit_structure', 'structure', 'effect', 'finish_type', 'certification'],
     sortable: ['base_code', 'base_name'], defaultSort: 't.base_name',
     filters: ['category_id', 'fabric_type', 'composition_id'],
     selectExtra: 'u.code AS uom_code, comp.description AS composition_desc, cat.category_name, y.yarn_name, (SELECT COUNT(*) FROM mst_fabric f WHERE f.fabric_base_id = t.id AND f.is_deleted=0) AS variant_count',
@@ -304,10 +318,14 @@ export const masterResources: ResourceConfig[] = [
     fields: [
       f('base_code', s.strReq(40)), f('base_name', s.strReq(150)), f('category_id', s.id()),
       f('fabric_type', s.enumReq(['KNIT','WOVEN','NONWOVEN'])), f('knit_structure', s.nullableStr(60)),
+      f('structure', s.nullableStr(80)), f('effect', s.nullableStr(80)),
       f('composition_id', s.id()), f('yarn_id', s.id()), f('finish_type', s.nullableStr(80)),
+      f('printing', s.nullableStr(80)), f('decoration', s.nullableStr(80)),
       f('certification', s.nullableStr(80)), f('hsn_code', s.nullableStr(10)),
-      f('base_uom', s.idReq()), f('image_url', s.nullableStr(500)),
-      f('description', s.nullableStr(255)), f('is_active', s.bool()),
+      f('loss_percent', s.dec()), f('base_uom', s.idReq()), f('image_url', s.nullableStr(500)),
+      f('description', s.nullableStr(255)),
+      f('generated_description', s.nullableStr(500)), f('legacy_description', s.nullableStr(500)),
+      f('is_active', s.bool()),
     ],
   },
   {
@@ -325,9 +343,12 @@ export const masterResources: ResourceConfig[] = [
       f('fabric_code', s.strReq(40)), f('fabric_name', s.strReq(150)), f('category_id', s.id()),
       f('fabric_base_id', s.id()), f('gauge', s.nullableStr(20)),
       f('fabric_type', s.enumReq(['KNIT','WOVEN','NONWOVEN'])), f('knit_structure', s.nullableStr(60)),
-      f('composition_id', s.id()), f('gsm_id', s.id()), f('width_cm', s.dec()), f('dia_inch', s.dec()),
-      f('yarn_id', s.id()), f('finish_type', s.nullableStr(80)), f('hsn_code', s.nullableStr(10)),
-      f('base_uom', s.idReq()), f('std_rate', s.dec()), f('is_active', s.bool()),
+      f('composition_id', s.id()), f('gsm_id', s.id()),
+      f('min_gsm', s.int()), f('max_gsm', s.int()),
+      f('width_cm', s.dec()), f('grey_width', s.dec()), f('finished_width', s.dec()), f('usable_width', s.dec()),
+      f('width_uom', s.nullableStr(20)), f('width_form', s.enum(['TUBULAR','OPEN_WIDTH'])),
+      f('dia_inch', s.dec()), f('yarn_id', s.id()), f('finish_type', s.nullableStr(80)),
+      f('hsn_code', s.nullableStr(10)), f('base_uom', s.idReq()), f('std_rate', s.dec()), f('is_active', s.bool()),
     ],
   },
   {

@@ -73,6 +73,60 @@ const FIBRE_PRESETS = [
   'Other Blend',
 ];
 
+const SPINNING_SYSTEMS = [
+  'Ring Spun',
+  'Compact Spun',
+  'Open-End (OE)',
+  'Air-Jet Spun',
+  'Rotor Spun',
+  'Vortex Spun',
+  'Recycled Spun',
+  'Filament',
+  'Other',
+];
+
+const YARN_CONSTRUCTIONS = [
+  'Single',
+  'Plied',
+  'Cabled',
+  'Core Spun',
+  'Covered',
+  'Twisted',
+  'Fancy / Effect',
+  'Textured Filament',
+];
+
+const YARN_EFFECTS = [
+  'None',
+  'Slub',
+  'Neppy',
+  'Melange',
+  'Grindle',
+  'Marl',
+  'Space Dyed',
+  'Flame',
+  'Core Effect',
+  'Other Effect',
+];
+
+const DYE_STATUSES = [
+  'Undyed',
+  'Natural',
+  'Yarn Dyed',
+  'Piece Dyed',
+  'Dope Dyed',
+];
+
+const DYEING_METHODS = [
+  'None',
+  'Reactive',
+  'Disperse',
+  'Vat',
+  'Pigment',
+  'Direct',
+  'Other',
+];
+
 const QUICK_COUNT_PRESETS = [
   { val: '20s', type: 'Ne' as const, rate: 260 },
   { val: '24s', type: 'Ne' as const, rate: 275 },
@@ -85,6 +139,36 @@ const QUICK_COUNT_PRESETS = [
   { val: '75D/36F', type: 'Denier' as const, rate: 155 },
   { val: '150D', type: 'Denier' as const, rate: 165 },
 ];
+
+const MULTI_COMPONENT_PRESETS = [
+  { label: '30s/30s/10s (Fleece/Terry)', val: '30s/30s/10s', type: 'Ne' as const, rate: 340 },
+  { label: '34s/34s/10s (French Terry)', val: '34s/34s/10s', type: 'Ne' as const, rate: 355 },
+  { label: '40s/40s/20s (Fleece/Loop)', val: '40s/40s/20s', type: 'Ne' as const, rate: 380 },
+  { label: '60s/60s/20s (Heavy Jersey)', val: '60s/60s/20s', type: 'Ne' as const, rate: 420 },
+  { label: '2/50s Cotton (2-Ply)', val: '2/50s', type: 'Ne' as const, rate: 410 },
+  { label: '50/1 (1-Ply)', val: '50/1', type: 'Ne' as const, rate: 365 },
+];
+
+export function generateYarnAutoDescription(
+  composition?: string,
+  cert?: string,
+  spinning?: string,
+  countValue?: string,
+  countType?: string,
+  ply?: number | string,
+  effect?: string,
+  dyeStatus?: string
+): string {
+  const parts: string[] = [];
+  if (composition) parts.push(composition.toUpperCase());
+  if (cert && cert !== 'NONE' && cert !== 'None / Standard') parts.push(cert.toUpperCase());
+  if (spinning && spinning !== 'Other') parts.push(spinning.toUpperCase());
+  if (countValue) parts.push(`${countValue} ${countType || 'Ne'}`.toUpperCase());
+  if (ply && Number(ply) > 1) parts.push(`${ply}PLY`);
+  if (effect && effect !== 'None') parts.push(effect.toUpperCase());
+  if (dyeStatus && dyeStatus !== 'Undyed') parts.push(dyeStatus.toUpperCase());
+  return parts.join(' ').replace(/\s+/g, ' ').trim();
+}
 
 /* ==============================================================================
    1. YARN LIST VIEW (Toggle between Yarn Bases and All SKU Variants)
@@ -394,16 +478,34 @@ export function YarnDetailPage() {
   const uoms = useLookup('uoms');
   const yarnCounts = useLookup('yarn-counts');
 
+  const colours = useLookup('colors');
+
   // Base Form State
   const [head, setHead] = useState<Record<string, any>>({
     base_code: '',
     base_name: '',
     category_id: '',
     yarn_type: 'COMBED',
+    spinning_system: 'Ring Spun',
+    yarn_construction: 'Single',
+    effect: 'None',
+    dye_status: 'Undyed',
+    dyeing_method: 'None',
+    colour_id: '',
+    twist_direction: 'Z',
+    tpi: '',
+    tpm: '',
+    strength: '',
+    elongation_pct: '',
+    hairiness: '',
+    cv_pct: '',
+    moisture_pct: '',
     certification: 'GOTS',
     hsn_code: '5205',
     base_uom: '',
     description: '',
+    generated_description: '',
+    legacy_description: '',
     is_active: 1,
     composition_id: '',
   });
@@ -449,10 +551,26 @@ export function YarnDetailPage() {
         base_name: b.base_name || '',
         category_id: b.category_id || '',
         yarn_type: b.yarn_type || 'COMBED',
+        spinning_system: b.spinning_system || 'Ring Spun',
+        yarn_construction: b.yarn_construction || 'Single',
+        effect: b.effect || 'None',
+        dye_status: b.dye_status || 'Undyed',
+        dyeing_method: b.dyeing_method || 'None',
+        colour_id: b.colour_id || '',
+        twist_direction: b.twist_direction || 'Z',
+        tpi: b.tpi || '',
+        tpm: b.tpm || '',
+        strength: b.strength || '',
+        elongation_pct: b.elongation_pct || '',
+        hairiness: b.hairiness || '',
+        cv_pct: b.cv_pct || '',
+        moisture_pct: b.moisture_pct || '',
         certification: b.certification || 'NONE',
         hsn_code: b.hsn_code || '5205',
         base_uom: b.base_uom || '',
         description: b.description || '',
+        generated_description: b.generated_description || '',
+        legacy_description: b.legacy_description || '',
         is_active: b.is_active ?? 1,
         composition_id: b.composition_id || '',
       });
@@ -517,6 +635,19 @@ export function YarnDetailPage() {
       .map((l) => `${l.percentage}% ${l.fibre_name}`)
       .join(' / ');
   }, [fibreLines]);
+
+  const liveYarnAutoDescription = useMemo(() => {
+    return generateYarnAutoDescription(
+      String(autoGeneratedDesc || ''),
+      String(head.certification || ''),
+      String(head.spinning_system || ''),
+      String(variants[0]?.count_value || ''),
+      String(variants[0]?.count_type || 'Ne'),
+      variants[0]?.ply,
+      String(head.effect || ''),
+      String(head.dye_status || '')
+    );
+  }, [autoGeneratedDesc, head.certification, head.spinning_system, variants, head.effect, head.dye_status]);
 
   const totalPercentage = useMemo(() => {
     return fibreLines.reduce((acc, l) => acc + (Number(l.percentage) || 0), 0);
@@ -675,10 +806,26 @@ export function YarnDetailPage() {
         category_id: head.category_id || null,
         composition_id: compId || null,
         yarn_type: head.yarn_type || 'COMBED',
+        spinning_system: head.spinning_system || null,
+        yarn_construction: head.yarn_construction || null,
+        effect: head.effect && head.effect !== 'None' ? head.effect : null,
+        dye_status: head.dye_status || 'Undyed',
+        dyeing_method: head.dyeing_method && head.dyeing_method !== 'None' ? head.dyeing_method : null,
+        colour_id: head.colour_id ? Number(head.colour_id) : null,
+        twist_direction: head.twist_direction || 'Z',
+        tpi: head.tpi ? Number(head.tpi) : null,
+        tpm: head.tpm ? Number(head.tpm) : null,
+        strength: head.strength || null,
+        elongation_pct: head.elongation_pct ? Number(head.elongation_pct) : null,
+        hairiness: head.hairiness ? Number(head.hairiness) : null,
+        cv_pct: head.cv_pct ? Number(head.cv_pct) : null,
+        moisture_pct: head.moisture_pct ? Number(head.moisture_pct) : null,
         certification: head.certification || 'NONE',
         hsn_code: head.hsn_code || '5205',
         base_uom: head.base_uom ? Number(head.base_uom) : (uoms.data?.[0]?.id ?? 1),
         description: head.description || null,
+        generated_description: liveYarnAutoDescription,
+        legacy_description: head.legacy_description || null,
         is_active: mode === 'draft' ? 0 : (head.is_active ?? 1),
       };
 
@@ -827,6 +974,14 @@ export function YarnDetailPage() {
           />
 
           <Select
+            label="Spinning System"
+            options={SPINNING_SYSTEMS.map((s) => ({ value: s, label: s }))}
+            value={head.spinning_system}
+            onChange={(e) => setHead((s) => ({ ...s, spinning_system: e.target.value }))}
+            disabled={!editable}
+          />
+
+          <Select
             label="Spinning / Yarn Type"
             options={[
               { value: 'COMBED', label: 'Combed' },
@@ -839,6 +994,77 @@ export function YarnDetailPage() {
             ]}
             value={head.yarn_type}
             onChange={(e) => setHead((s) => ({ ...s, yarn_type: e.target.value }))}
+            disabled={!editable}
+          />
+
+          <Select
+            label="Yarn Construction"
+            options={YARN_CONSTRUCTIONS.map((c) => ({ value: c, label: c }))}
+            value={head.yarn_construction}
+            onChange={(e) => setHead((s) => ({ ...s, yarn_construction: e.target.value }))}
+            disabled={!editable}
+          />
+
+          <Select
+            label="Yarn Effect / Structure"
+            options={YARN_EFFECTS.map((ef) => ({ value: ef, label: ef }))}
+            value={head.effect}
+            onChange={(e) => setHead((s) => ({ ...s, effect: e.target.value }))}
+            disabled={!editable}
+          />
+
+          <Select
+            label="Dye Status"
+            options={DYE_STATUSES.map((d) => ({ value: d, label: d }))}
+            value={head.dye_status}
+            onChange={(e) => setHead((s) => ({ ...s, dye_status: e.target.value }))}
+            disabled={!editable}
+          />
+
+          <Select
+            label="Dyeing Method"
+            options={DYEING_METHODS.map((dm) => ({ value: dm, label: dm }))}
+            value={head.dyeing_method}
+            onChange={(e) => setHead((s) => ({ ...s, dyeing_method: e.target.value }))}
+            disabled={!editable}
+          />
+
+          <Select
+            label="Specific Shade / Colour"
+            options={toOptions(colours.data)}
+            value={head.colour_id}
+            onChange={(e) => setHead((s) => ({ ...s, colour_id: e.target.value }))}
+            disabled={!editable}
+          />
+
+          <Select
+            label="Twist Direction"
+            options={[
+              { value: 'Z', label: 'Z-Twist (Standard)' },
+              { value: 'S', label: 'S-Twist' },
+            ]}
+            value={head.twist_direction}
+            onChange={(e) => setHead((s) => ({ ...s, twist_direction: e.target.value }))}
+            disabled={!editable}
+          />
+
+          <Input
+            label="TPI (Twist Per Inch)"
+            type="number"
+            step="0.1"
+            placeholder="e.g. 18.5"
+            value={head.tpi}
+            onChange={(e) => setHead((s) => ({ ...s, tpi: e.target.value }))}
+            disabled={!editable}
+          />
+
+          <Input
+            label="TPM (Twist Per Meter)"
+            type="number"
+            step="1"
+            placeholder="e.g. 728"
+            value={head.tpm}
+            onChange={(e) => setHead((s) => ({ ...s, tpm: e.target.value }))}
             disabled={!editable}
           />
 
@@ -863,8 +1089,9 @@ export function YarnDetailPage() {
             onChange={(e) => setHead((s) => ({ ...s, hsn_code: e.target.value }))}
             disabled={!editable}
           />
+
           <Select
-            label="Base UOM"
+            label="Base Inventory UOM"
             options={toOptions(uoms.data)}
             value={head.base_uom}
             onChange={(e) => setHead((s) => ({ ...s, base_uom: e.target.value }))}
@@ -872,21 +1099,100 @@ export function YarnDetailPage() {
           />
 
           <Select
-            label="Status"
+            label="Master Status"
             options={[
-              { value: '1', label: 'Active' },
+              { value: '1', label: 'Active (Available for PO / Stock / Knits)' },
               { value: '0', label: 'Draft' },
             ]}
             value={String(head.is_active ?? 1)}
             onChange={(e) => setHead((s) => ({ ...s, is_active: Number(e.target.value) }))}
             disabled={!editable}
           />
-          <div className="lg:col-span-3">
+
+          {/* Technical Quality Parameters */}
+          <div className="lg:col-span-4 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-2">
+              Technical &amp; Quality Parameters (Lab / Mill Spec)
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              <Input
+                label="Strength / CSP"
+                placeholder="e.g. 2950 CSP"
+                value={head.strength}
+                onChange={(e) => setHead((s) => ({ ...s, strength: e.target.value }))}
+                disabled={!editable}
+              />
+              <Input
+                label="Elongation %"
+                type="number"
+                step="0.1"
+                placeholder="e.g. 5.8"
+                value={head.elongation_pct}
+                onChange={(e) => setHead((s) => ({ ...s, elongation_pct: e.target.value }))}
+                disabled={!editable}
+              />
+              <Input
+                label="Hairiness Index (H)"
+                type="number"
+                step="0.01"
+                placeholder="e.g. 4.2"
+                value={head.hairiness}
+                onChange={(e) => setHead((s) => ({ ...s, hairiness: e.target.value }))}
+                disabled={!editable}
+              />
+              <Input
+                label="CV% (Evenness)"
+                type="number"
+                step="0.1"
+                placeholder="e.g. 11.8"
+                value={head.cv_pct}
+                onChange={(e) => setHead((s) => ({ ...s, cv_pct: e.target.value }))}
+                disabled={!editable}
+              />
+              <Input
+                label="Moisture Regain %"
+                type="number"
+                step="0.1"
+                placeholder="e.g. 8.5"
+                value={head.moisture_pct}
+                onChange={(e) => setHead((s) => ({ ...s, moisture_pct: e.target.value }))}
+                disabled={!editable}
+              />
+            </div>
+          </div>
+
+          {/* Auto-Generated Standard Yarn Description Card */}
+          <div className="lg:col-span-4 rounded-lg border border-brand-200 bg-brand-50/50 p-3.5">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-brand-800 flex items-center gap-1.5">
+                <Sparkles size={14} className="text-brand-600" />
+                Standard Auto-Generated Description (ERP Formula)
+              </span>
+              <span className="text-[10px] text-brand-600 font-medium bg-brand-100 px-2 py-0.5 rounded-full">
+                Formula: Composition + Cert + Spinning + Count/System + Ply + Effect + Dye Status
+              </span>
+            </div>
+            <div className="font-mono text-xs font-bold text-slate-900 bg-white border border-brand-200 rounded p-2 shadow-xs">
+              {liveYarnAutoDescription || '(Configure attributes to generate standardized description)'}
+            </div>
+          </div>
+
+          <div className="lg:col-span-2">
             <Input
               label="Description / Technical Notes"
               placeholder="e.g. Ring spun, high tensile strength, ideal for export-grade single jersey"
               value={head.description}
               onChange={(e) => setHead((s) => ({ ...s, description: e.target.value }))}
+              disabled={!editable}
+            />
+          </div>
+
+          <div className="lg:col-span-2">
+            <Input
+              label="Legacy / ERP Description"
+              placeholder="e.g. YRN-30S-COMBED-ORG-GOTS"
+              value={head.legacy_description}
+              onChange={(e) => setHead((s) => ({ ...s, legacy_description: e.target.value }))}
               disabled={!editable}
             />
           </div>
@@ -1102,7 +1408,7 @@ export function YarnDetailPage() {
         {/* Quick Count Preset Chips */}
         <div className="border-b border-surface-border bg-white px-4 py-2.5 flex flex-wrap items-center gap-1.5">
           <span className="text-[11px] font-bold uppercase text-slate-400 mr-1 flex items-center gap-1">
-            <Sparkles size={12} className="text-amber-500" /> Quick Add Counts:
+            <Sparkles size={12} className="text-amber-500" /> Single Counts:
           </span>
           {QUICK_COUNT_PRESETS.map((p) => {
             const added = variants.some((v) => v.count_value === p.val && v.count_type === p.type);
@@ -1120,6 +1426,32 @@ export function YarnDetailPage() {
               >
                 {added && <Check size={12} className="text-brand-600" />}
                 <span>{p.val} {p.type}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Multi-Component Count Presets (Fleece, Terry, French Terry, Plied) */}
+        <div className="border-b border-surface-border bg-slate-50/50 px-4 py-2 flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] font-bold uppercase text-indigo-500 mr-1 flex items-center gap-1">
+            <Layers size={12} className="text-indigo-600" /> Multi-Component Notations:
+          </span>
+          {MULTI_COMPONENT_PRESETS.map((p) => {
+            const added = variants.some((v) => v.count_value === p.val);
+            return (
+              <button
+                key={p.val}
+                type="button"
+                disabled={!editable}
+                onClick={() => handleAddPresetCount(p)}
+                className={`flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-semibold transition-all ${
+                  added
+                    ? 'border-indigo-300 bg-indigo-50 text-indigo-800 font-bold'
+                    : 'border-indigo-200 bg-white text-indigo-700 hover:border-indigo-400 hover:bg-indigo-50/50'
+                }`}
+              >
+                {added && <Check size={12} className="text-indigo-600" />}
+                <span>{p.label}</span>
               </button>
             );
           })}

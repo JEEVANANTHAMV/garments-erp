@@ -181,6 +181,47 @@ export const transactionResources: ResourceConfig[] = [
       f('remarks', s.text()),
     ],
   },
+  {
+    path: 'general-purchases', table: 'trx_general_purchase', permission: 'PURCHASE', label: 'General Purchase',
+    searchable: ['purchase_no', 'supplier_inv_no', 'remarks'], sortable: ['purchase_no', 'purchase_date'],
+    defaultSort: 't.purchase_date', hasIsActive: false,
+    filters: ['supplier_id', 'purchase_type', 'status_id', 'approval_state', 'branch_id'],
+    autoNumber: { column: 'purchase_no', docType: 'GENERAL_PURCHASE' },
+    selectExtra: 'sup.party_name AS supplier_name, cur.code AS currency_code, cs.label AS status_label, (SELECT COUNT(*) FROM trx_general_purchase_line gpl WHERE gpl.purchase_id = t.id) AS item_count',
+    joins: `LEFT JOIN mst_party sup ON sup.id = t.supplier_id
+            LEFT JOIN cfg_currency cur ON cur.id = t.currency_id
+            LEFT JOIN cfg_status cs ON cs.id = t.status_id`,
+    children: [
+      { key: 'lines', table: 'trx_general_purchase_line', fk: 'purchase_id', fields: [
+        f('item_description', s.strReq(255)),
+        f('material_type', s.enumReq(['TRIM','YARN','FABRIC','CONSUMABLE','EXPENSE','SPARE','OTHER'])),
+        f('material_id', s.id()),
+        f('qty', s.decReq()), f('uom_id', s.idReq()), f('rate', s.decReq()),
+        f('discount_pct', s.dec()), f('gst_rate', s.dec()), f('igst_rate', s.dec()),
+        f('tax_amount', s.dec()), f('amount', s.decReq()),
+        f('stock_type', s.enumReq(['STOCK','CONSUMABLE','EXPENSE','SPARE'])),
+        f('allocation_type', s.enumReq(['GENERAL_STOCK','BUYER_ORDER','PRODUCTION_ORDER','SAMPLE','JOB_WORK','MAINTENANCE','DEPARTMENT','DIRECT_EXPENSE'])),
+        f('buyer_id', s.id()), f('so_id', s.id()), f('prod_order_id', s.id()), f('style_id', s.id()),
+        f('sample_id', s.id()), f('sample_type', s.nullableStr(60)),
+        f('jobwork_id', s.id()), f('process_name', s.nullableStr(60)),
+        f('machine_id', s.nullableStr(60)), f('department_id', s.id()),
+        f('cost_centre', s.nullableStr(80)), f('expense_head', s.nullableStr(80)),
+        f('direct_issue', s.bool()), f('warehouse_id', s.id()), f('remarks', s.nullableStr(255)),
+      ]},
+    ],
+    fields: [
+      f('branch_id', s.id()), f('purchase_no', s.nullableStr(40)), f('purchase_date', s.date()),
+      f('supplier_id', s.idReq()),
+      f('purchase_type', s.enum(['GENERAL','STOCK','ORDER_SPECIFIC','EMERGENCY','MAINTENANCE','SAMPLE'])),
+      f('supplier_inv_no', s.nullableStr(60)), f('supplier_inv_date', s.date()),
+      f('currency_id', s.idReq()), f('exchange_rate', s.dec()),
+      f('payment_terms', s.nullableStr(150)), f('reference_po_id', s.id()),
+      f('subtotal', s.dec()), f('discount_amount', s.dec()), f('tax_amount', s.dec()), f('grand_total', s.dec()),
+      f('status_id', s.id()),
+      f('approval_state', s.enum(['DRAFT','PENDING','APPROVED','REJECTED','POSTED','CANCELLED'])),
+      f('remarks', s.text()),
+    ],
+  },
 
   // ------------------------------------------------ Production processes
   {

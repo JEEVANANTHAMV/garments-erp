@@ -34,7 +34,14 @@ export interface FabricVariantLine {
   fabric_name: string;
   gsm_id?: number | string;
   gsm_value?: number | string;
+  min_gsm?: number | string;
+  max_gsm?: number | string;
   width_cm?: number | string;
+  grey_width?: number | string;
+  finished_width?: number | string;
+  usable_width?: number | string;
+  width_uom?: string;
+  width_form?: 'TUBULAR' | 'OPEN_WIDTH';
   dia_inch?: number | string;
   gauge?: string;
   std_rate: number | string;
@@ -96,6 +103,36 @@ const KNIT_STRUCTURES = [
   'Other Construction',
 ];
 
+const STRUCTURES = [
+  'None / Standard',
+  '1x1 Rib',
+  '2x2 Rib',
+  '4x2 Rib',
+  '1x1 Plated Rib',
+  '2x2 Plated Rib',
+  'Double Layer',
+  'Other Structure',
+];
+
+const EFFECTS = [
+  'None',
+  'Slub',
+  'Melange',
+  'Grindle',
+  'Snow',
+  'Stripe',
+  'Fancy Stripe',
+  'AOP',
+  'Digital AOP',
+  'Neppy',
+  'Space Dyed',
+  'Cross Loop',
+  'Pin Stripe',
+  'Indigo Effect',
+  'Drop Needle',
+  'Quilted',
+];
+
 const FINISH_TYPES = [
   'Bio-wash + Silicon Softener',
   'Bio-wash (Enzyme)',
@@ -104,13 +141,59 @@ const FINISH_TYPES = [
   'Mercerized Finish',
   'Peached / Sueded Finish',
   'Brushed Finish',
+  'Inside Brushed',
+  'Reverse Brushed',
+  'Unbrushed',
   'Anti-Pilling Finish',
   'Moisture Wicking / Quick Dry',
   'Water Repellent (DWR)',
   'Anti-Microbial / Anti-Bacterial',
+  'Carbonised Finish',
   'Greige / Unfinished',
   'Standard Soft Finish',
 ];
+
+const PRINTING_METHODS = [
+  'None',
+  'Reactive Print',
+  'Pigment Print',
+  'Discharge Print',
+  'Digital Print',
+  'Screen Print',
+  'Rotary Print',
+  'AOP Print',
+];
+
+const DECORATIONS = [
+  'None',
+  'Embroidery',
+  'Applique',
+  'Sequin',
+  'Foil',
+  'Flock',
+];
+
+export function generateFabricAutoDescription(
+  composition: string,
+  yarnSpec: string,
+  effect: string,
+  construction: string,
+  structure: string,
+  finish: string,
+  gsm?: number | string
+): string {
+  const parts: string[] = [];
+  if (composition) parts.push(composition.toUpperCase());
+  if (yarnSpec && yarnSpec !== 'None' && yarnSpec !== '—') parts.push(yarnSpec.toUpperCase());
+  if (effect && effect !== 'None') parts.push(effect.toUpperCase());
+  if (construction) parts.push(construction.toUpperCase());
+  if (structure && structure !== 'None' && structure !== 'None / Standard' && structure !== construction) {
+    parts.push(structure.toUpperCase());
+  }
+  if (finish && finish !== 'None') parts.push(finish.toUpperCase());
+  if (gsm) parts.push(`${gsm} GSM`);
+  return parts.join(' ').replace(/\s+/g, ' ').trim();
+}
 
 const STANDARD_GSM_PRESETS = [
   { gsm: 140, label: '140 GSM', defaultDia: 30, defaultWidth: 150, rate: 385 },
@@ -518,13 +601,20 @@ export function FabricDetailPage() {
     category_id: '',
     fabric_type: 'KNIT',
     knit_structure: 'Single Jersey',
+    structure: 'None / Standard',
+    effect: 'None',
     yarn_id: '',
     finish_type: 'Bio-wash + Silicon Softener',
+    printing: 'None',
+    decoration: 'None',
     certification: 'GOTS',
     hsn_code: '6006',
+    loss_percent: 0,
     base_uom: '',
     image_url: '',
     description: '',
+    generated_description: '',
+    legacy_description: '',
     is_active: 1,
     composition_id: '',
   });
@@ -542,7 +632,14 @@ export function FabricDetailPage() {
       fabric_name: 'Single Jersey 160 GSM 32" Dia',
       gsm_id: '',
       gsm_value: 160,
+      min_gsm: 155,
+      max_gsm: 165,
       width_cm: 160,
+      grey_width: 76,
+      finished_width: 72,
+      usable_width: 70,
+      width_uom: 'INCH',
+      width_form: 'TUBULAR',
       dia_inch: 32,
       gauge: '24 GG',
       std_rate: 405,
@@ -554,7 +651,14 @@ export function FabricDetailPage() {
       fabric_name: 'Single Jersey 180 GSM 34" Dia',
       gsm_id: '',
       gsm_value: 180,
+      min_gsm: 175,
+      max_gsm: 185,
       width_cm: 170,
+      grey_width: 78,
+      finished_width: 74,
+      usable_width: 72,
+      width_uom: 'INCH',
+      width_form: 'TUBULAR',
       dia_inch: 34,
       gauge: '24 GG',
       std_rate: 420,
@@ -591,13 +695,20 @@ export function FabricDetailPage() {
         category_id: b.category_id || '',
         fabric_type: b.fabric_type || 'KNIT',
         knit_structure: b.knit_structure || 'Single Jersey',
+        structure: b.structure || 'None / Standard',
+        effect: b.effect || 'None',
         yarn_id: b.yarn_id || '',
         finish_type: b.finish_type || 'Bio-wash + Silicon Softener',
+        printing: b.printing || 'None',
+        decoration: b.decoration || 'None',
         certification: b.certification || 'GOTS',
         hsn_code: b.hsn_code || '6006',
+        loss_percent: b.loss_percent || 0,
         base_uom: b.base_uom || '',
         image_url: b.image_url || '',
         description: b.description || '',
+        generated_description: b.generated_description || '',
+        legacy_description: b.legacy_description || '',
         is_active: b.is_active ?? 1,
         composition_id: b.composition_id || '',
       });
@@ -619,7 +730,14 @@ export function FabricDetailPage() {
           fabric_name: v.fabric_name || '',
           gsm_id: v.gsm_id || '',
           gsm_value: v.gsm_value || '',
+          min_gsm: v.min_gsm || '',
+          max_gsm: v.max_gsm || '',
           width_cm: v.width_cm || '',
+          grey_width: v.grey_width || '',
+          finished_width: v.finished_width || '',
+          usable_width: v.usable_width || '',
+          width_uom: v.width_uom || 'INCH',
+          width_form: v.width_form || 'TUBULAR',
           dia_inch: v.dia_inch || '',
           gauge: v.gauge || '24 GG',
           std_rate: v.std_rate ?? 0,
@@ -661,6 +779,23 @@ export function FabricDetailPage() {
       .map((l) => `${l.percentage}% ${l.fibre_name}`)
       .join(' / ');
   }, [fibreLines]);
+
+  const linkedYarnName = useMemo(() => {
+    if (!head.yarn_id) return '';
+    const y = (yarns.data || []).find((item: any) => String(item.id) === String(head.yarn_id));
+    return y?.label || y?.yarn_name || y?.name || '';
+  }, [head.yarn_id, yarns.data]);
+
+  const liveAutoDescription = useMemo(() => {
+    return generateFabricAutoDescription(
+      String(autoCompositionString || ''),
+      String(linkedYarnName || ''),
+      String(head.effect || ''),
+      String(head.knit_structure || ''),
+      String(head.structure || ''),
+      String(head.finish_type || '')
+    );
+  }, [autoCompositionString, linkedYarnName, head.effect, head.knit_structure, head.structure, head.finish_type]);
 
   // Fibre Line handlers
   const handleAddFibreLine = () => {
@@ -812,13 +947,20 @@ export function FabricDetailPage() {
         category_id: head.category_id || null,
         fabric_type: head.fabric_type,
         knit_structure: head.knit_structure || null,
+        structure: head.structure && head.structure !== 'None / Standard' ? head.structure : null,
+        effect: head.effect && head.effect !== 'None' ? head.effect : null,
         yarn_id: head.yarn_id || null,
         finish_type: head.finish_type || null,
+        printing: head.printing && head.printing !== 'None' ? head.printing : null,
+        decoration: head.decoration && head.decoration !== 'None' ? head.decoration : null,
         certification: head.certification || 'NONE',
         hsn_code: head.hsn_code || '6006',
+        loss_percent: Number(head.loss_percent) || 0,
         base_uom: head.base_uom,
         image_url: head.image_url || null,
         description: head.description || autoCompositionString,
+        generated_description: liveAutoDescription,
+        legacy_description: head.legacy_description || null,
         composition_id: compositionId || null,
         is_active: head.is_active ? 1 : 0,
       };
@@ -842,7 +984,14 @@ export function FabricDetailPage() {
           knit_structure: head.knit_structure || null,
           composition_id: compositionId || null,
           gsm_id: v.gsm_id || null,
+          min_gsm: v.min_gsm ? Number(v.min_gsm) : null,
+          max_gsm: v.max_gsm ? Number(v.max_gsm) : null,
           width_cm: Number(v.width_cm) || 0,
+          grey_width: v.grey_width ? Number(v.grey_width) : null,
+          finished_width: v.finished_width ? Number(v.finished_width) : null,
+          usable_width: v.usable_width ? Number(v.usable_width) : null,
+          width_uom: v.width_uom || 'INCH',
+          width_form: v.width_form || 'TUBULAR',
           dia_inch: Number(v.dia_inch) || 0,
           gauge: v.gauge || '24 GG',
           yarn_id: head.yarn_id || null,
@@ -1007,12 +1156,32 @@ export function FabricDetailPage() {
           </div>
 
           <div>
-            <label className="label">Structure / Construction *</label>
+            <label className="label">Construction / Fabric Type *</label>
             <Select
               value={head.knit_structure}
               disabled={!editable}
               onChange={(e) => setHead({ ...head, knit_structure: e.target.value })}
               options={KNIT_STRUCTURES.map((s) => ({ value: s, label: s }))}
+            />
+          </div>
+
+          <div>
+            <label className="label">Structure (Rib / Double Layer)</label>
+            <Select
+              value={head.structure}
+              disabled={!editable}
+              onChange={(e) => setHead({ ...head, structure: e.target.value })}
+              options={STRUCTURES.map((s) => ({ value: s, label: s }))}
+            />
+          </div>
+
+          <div>
+            <label className="label">Effect / Design</label>
+            <Select
+              value={head.effect}
+              disabled={!editable}
+              onChange={(e) => setHead({ ...head, effect: e.target.value })}
+              options={EFFECTS.map((eff) => ({ value: eff, label: eff }))}
             />
           </div>
 
@@ -1037,6 +1206,26 @@ export function FabricDetailPage() {
           </div>
 
           <div>
+            <label className="label">Printing Method</label>
+            <Select
+              value={head.printing}
+              disabled={!editable}
+              onChange={(e) => setHead({ ...head, printing: e.target.value })}
+              options={PRINTING_METHODS.map((p) => ({ value: p, label: p }))}
+            />
+          </div>
+
+          <div>
+            <label className="label">Decoration / Embellishment</label>
+            <Select
+              value={head.decoration}
+              disabled={!editable}
+              onChange={(e) => setHead({ ...head, decoration: e.target.value })}
+              options={DECORATIONS.map((d) => ({ value: d, label: d }))}
+            />
+          </div>
+
+          <div>
             <label className="label">Environmental Certification</label>
             <Select
               value={head.certification}
@@ -1050,6 +1239,21 @@ export function FabricDetailPage() {
                 { value: 'OCS', label: 'OCS (Organic Content Standard)' },
                 { value: 'NONE', label: 'None / Standard' },
               ]}
+            />
+          </div>
+
+          <div>
+            <label className="label">Loss % (Wastage / Process)</label>
+            <Input
+              type="number"
+              min="0"
+              max="100"
+              step="0.1"
+              value={head.loss_percent}
+              disabled={!editable}
+              onChange={(e) => setHead({ ...head, loss_percent: e.target.value })}
+              placeholder="0.00"
+              className="font-mono text-xs"
             />
           </div>
 
@@ -1087,13 +1291,40 @@ export function FabricDetailPage() {
             />
           </div>
 
-          <div className="lg:col-span-4">
+          {/* Auto-Generated Standard Fabric Description Card */}
+          <div className="lg:col-span-4 rounded-lg border border-brand-200 bg-brand-50/50 p-3.5">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-brand-800 flex items-center gap-1.5">
+                <Sparkles size={14} className="text-brand-600" />
+                Standard Auto-Generated Description (ERP Formula)
+              </span>
+              <span className="text-[10px] text-brand-600 font-medium bg-brand-100 px-2 py-0.5 rounded-full">
+                Formula: Composition + Yarn + Effect + Construction + Finish
+              </span>
+            </div>
+            <div className="font-mono text-xs font-bold text-slate-900 bg-white border border-brand-200 rounded p-2 shadow-xs">
+              {liveAutoDescription || '(Select attributes to generate standardized description)'}
+            </div>
+          </div>
+
+          <div className="lg:col-span-2">
             <label className="label">Fabric Description &amp; Technical Notes</label>
             <Input
               value={head.description}
               disabled={!editable}
               onChange={(e) => setHead({ ...head, description: e.target.value })}
               placeholder="e.g. 100% Organic Combed Cotton Single Jersey with Bio-wash and silicon finish for ultra-soft handfeel."
+            />
+          </div>
+
+          <div className="lg:col-span-2">
+            <label className="label">Legacy Fabric Description (Migration Audit)</label>
+            <Input
+              value={head.legacy_description}
+              disabled={!editable}
+              onChange={(e) => setHead({ ...head, legacy_description: e.target.value })}
+              placeholder="e.g. 100% COTTON Y/D SLUB JERSEY GSM:160 (Raw text from old ERP)"
+              className="font-mono text-xs text-slate-600 bg-slate-50"
             />
           </div>
         </div>
@@ -1377,15 +1608,17 @@ export function FabricDetailPage() {
             <thead>
               <tr className="border-b border-surface-border bg-slate-100/60 text-[11px] font-bold uppercase text-slate-600">
                 <th className="py-2.5 px-3 w-8">#</th>
-                <th className="py-2.5 px-2 min-w-[160px]">Unique Item SKU Code *</th>
-                <th className="py-2.5 px-2 min-w-[220px]">Fabric Item Name *</th>
-                <th className="py-2.5 px-2 w-32">GSM Specification</th>
-                <th className="py-2.5 px-2 w-28">Width (cm)</th>
-                <th className="py-2.5 px-2 w-28">Tube Dia (Inch)</th>
-                <th className="py-2.5 px-2 w-24">Gauge</th>
-                <th className="py-2.5 px-2 w-28 text-right">Std Rate (₹/Kg)</th>
-                <th className="py-2.5 px-2 w-20 text-center">Status</th>
-                {editable && <th className="py-2.5 px-2 w-16 text-center">Actions</th>}
+                <th className="py-2.5 px-2 min-w-[150px]">Item SKU Code *</th>
+                <th className="py-2.5 px-2 min-w-[180px]">Fabric Item Name *</th>
+                <th className="py-2.5 px-2 w-28">Target GSM</th>
+                <th className="py-2.5 px-2 w-28">Min / Max GSM</th>
+                <th className="py-2.5 px-2 w-32">Grey / Fin / Use Width (")</th>
+                <th className="py-2.5 px-2 w-24">Form</th>
+                <th className="py-2.5 px-2 w-20">Dia (")</th>
+                <th className="py-2.5 px-2 w-20">Gauge</th>
+                <th className="py-2.5 px-2 w-24 text-right">Std Rate (₹/Kg)</th>
+                <th className="py-2.5 px-2 w-16 text-center">Status</th>
+                {editable && <th className="py-2.5 px-2 w-14 text-center">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1413,29 +1646,84 @@ export function FabricDetailPage() {
                     />
                   </td>
                   <td className="py-1 px-1">
-                    <select
-                      value={v.gsm_id}
-                      disabled={!editable}
-                      onChange={(e) => handleUpdateVariant(v._key, 'gsm_id', e.target.value)}
-                      className="select py-1 px-2 font-bold text-xs w-full"
-                    >
-                      <option value="">{v.gsm_value ? `${v.gsm_value} GSM` : 'Select GSM'}</option>
-                      {(gsmList.data ?? []).map((g: any) => (
-                        <option key={g.id} value={g.id}>
-                          {g.label || `${g.code} GSM`}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="py-1 px-1">
                     <input
                       type="number"
                       placeholder="160"
-                      value={v.width_cm}
+                      value={v.gsm_value}
                       disabled={!editable}
-                      onChange={(e) => handleUpdateVariant(v._key, 'width_cm', e.target.value)}
-                      className="input py-1 px-2 font-mono text-xs w-full"
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        handleUpdateVariant(v._key, 'gsm_value', val);
+                        if (val && !v.min_gsm) handleUpdateVariant(v._key, 'min_gsm', Math.max(0, Number(val) - 5));
+                        if (val && !v.max_gsm) handleUpdateVariant(v._key, 'max_gsm', Number(val) + 5);
+                      }}
+                      className="input py-1 px-2 font-mono font-bold text-xs w-full"
                     />
+                  </td>
+                  <td className="py-1 px-1">
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        placeholder="Min"
+                        title="Min GSM"
+                        value={v.min_gsm}
+                        disabled={!editable}
+                        onChange={(e) => handleUpdateVariant(v._key, 'min_gsm', e.target.value)}
+                        className="input py-1 px-1 font-mono text-center text-xs w-1/2"
+                      />
+                      <span className="text-slate-400">-</span>
+                      <input
+                        type="number"
+                        placeholder="Max"
+                        title="Max GSM"
+                        value={v.max_gsm}
+                        disabled={!editable}
+                        onChange={(e) => handleUpdateVariant(v._key, 'max_gsm', e.target.value)}
+                        className="input py-1 px-1 font-mono text-center text-xs w-1/2"
+                      />
+                    </div>
+                  </td>
+                  <td className="py-1 px-1">
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        placeholder="Grey"
+                        title="Grey Width (inch)"
+                        value={v.grey_width}
+                        disabled={!editable}
+                        onChange={(e) => handleUpdateVariant(v._key, 'grey_width', e.target.value)}
+                        className="input py-1 px-1 font-mono text-center text-xs w-1/3"
+                      />
+                      <input
+                        type="number"
+                        placeholder="Fin"
+                        title="Finished Width (inch)"
+                        value={v.finished_width}
+                        disabled={!editable}
+                        onChange={(e) => handleUpdateVariant(v._key, 'finished_width', e.target.value)}
+                        className="input py-1 px-1 font-mono text-center text-xs w-1/3"
+                      />
+                      <input
+                        type="number"
+                        placeholder="Use"
+                        title="Usable Width (inch)"
+                        value={v.usable_width}
+                        disabled={!editable}
+                        onChange={(e) => handleUpdateVariant(v._key, 'usable_width', e.target.value)}
+                        className="input py-1 px-1 font-mono text-center text-xs w-1/3"
+                      />
+                    </div>
+                  </td>
+                  <td className="py-1 px-1">
+                    <select
+                      value={v.width_form || 'TUBULAR'}
+                      disabled={!editable}
+                      onChange={(e) => handleUpdateVariant(v._key, 'width_form', e.target.value)}
+                      className="select py-1 px-1 text-[11px] font-semibold text-slate-700 w-full"
+                    >
+                      <option value="TUBULAR">Tubular</option>
+                      <option value="OPEN_WIDTH">Open Width</option>
+                    </select>
                   </td>
                   <td className="py-1 px-1">
                     <input
@@ -1444,7 +1732,7 @@ export function FabricDetailPage() {
                       value={v.dia_inch}
                       disabled={!editable}
                       onChange={(e) => handleUpdateVariant(v._key, 'dia_inch', e.target.value)}
-                      className="input py-1 px-2 font-mono text-xs w-full"
+                      className="input py-1 px-1 font-mono text-center text-xs w-full"
                     />
                   </td>
                   <td className="py-1 px-1">
@@ -1454,7 +1742,7 @@ export function FabricDetailPage() {
                       value={v.gauge}
                       disabled={!editable}
                       onChange={(e) => handleUpdateVariant(v._key, 'gauge', e.target.value)}
-                      className="input py-1 px-2 font-mono text-xs w-full"
+                      className="input py-1 px-1 font-mono text-center text-xs w-full"
                     />
                   </td>
                   <td className="py-1 px-1 text-right">

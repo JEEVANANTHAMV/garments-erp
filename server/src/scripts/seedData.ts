@@ -386,5 +386,5 @@ export const NUMBER_SERIES: [string, string][] = [
   ['DAILY_PLAN','DP-'], ['DAILY_OUTPUT','DPO-'], ['LINE_ALLOC','LA-'], ['SEW_OP','SOP-'],
   ['JW_CHALLAN','JWC-'], ['JW_RECEIPT','JWR-'], ['JW_IN','JWI-'], ['JW_INVOICE','JINV-'],
   ['PURCHASE_RETURN','PR-'], ['SUPPLIER_BILL','BILL-'], ['STOCK_TRANSFER','STX-'],
-  ['FG_RECEIPT','FGR-'], ['PROD_COST','PCST-'],
+  ['FG_RECEIPT','FGR-'], ['PROD_COST','PCST-'], ['GENERAL_PURCHASE','GP-'],
 ];
