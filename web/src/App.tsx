@@ -20,8 +20,11 @@ import { BomsPage, BomDetailPage } from './pages/masters/Boms';
 import { EnquiriesPage, SamplesPage, QuotationsPage } from './pages/sales';
 import QuotationDetailPage from './pages/sales/QuotationDetail';
 import CostingsPage, { CostingDetailPage } from './pages/sales/Costings';
+import PreCostingsPage from './pages/sales/PreCostings';
+import PreCostingDetailPage from './pages/sales/PreCostingDetail';
 import SalesOrdersPage from './pages/sales/SalesOrders';
 import SalesOrderDetail from './pages/sales/SalesOrderDetail';
+import ProductionCostDetailPage from './pages/production/ProductionCostDetail';
 
 /* Gate & Security */
 import { GateInwardsPage, GateOutwardsPage } from './pages/gate';
@@ -134,6 +137,9 @@ export default function App() {
                   <Route path="samples" element={<SamplesPage />} />
                   <Route path="costings" element={<CostingsPage />} />
                   <Route path="costings/:id" element={<CostingDetailPage />} />
+                  <Route path="pre-costings" element={<PreCostingsPage />} />
+                  <Route path="pre-costings/new" element={<PreCostingDetailPage />} />
+                  <Route path="pre-costings/:id" element={<PreCostingDetailPage />} />
                   <Route path="quotations" element={<QuotationsPage />} />
                   <Route path="quotations/new" element={<QuotationDetailPage />} />
                   <Route path="quotations/:id" element={<QuotationDetailPage />} />
@@ -190,6 +196,8 @@ export default function App() {
                   <Route path="jobwork-invoices" element={<JobWorkInvoicesPage />} />
                   <Route path="fg-receipts" element={<FgReceiptsPage />} />
                   <Route path="costs" element={<ProductionCostsPage />} />
+                  <Route path="costs/new" element={<ProductionCostDetailPage />} />
+                  <Route path="costs/:id" element={<ProductionCostDetailPage />} />
                 </Route>
 
                 {/* Quality */}

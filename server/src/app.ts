@@ -27,6 +27,7 @@ import { reportsRouter } from './modules/reports/reports.routes.js';
 import { uploadRouter } from './modules/upload/upload.routes.js';
 import { gstRouter } from './modules/gst/gst.routes.js';
 import { wipRouter } from './modules/production/wip.routes.js';
+import { costingRouter } from './modules/costing/costing.routes.js';
 
 export function createApp() {
   const app = express();
@@ -78,6 +79,7 @@ export function createApp() {
   api.use('/gst', gstRouter);
   api.use('/', cartonRouter);          // /packings/:id/cartons, /cartons/:id
   api.use('/production', wipRouter);   // /production/wip-summary, /production/daily-dashboard, etc.
+  api.use('/', costingRouter);          // /production-costs/order-data/:id, /pre-costings/style-data/:id, etc.
 
   // Metadata-driven resources.
   const registry = [...masterResources, ...transactionResources];

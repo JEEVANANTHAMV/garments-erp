@@ -51,7 +51,8 @@ export const NAV: NavSection[] = [
     items: [
       { label: 'Enquiries',    to: '/sales/enquiries', icon: FileText, perms: ['ENQUIRY.VIEW'] },
       { label: 'Samples',      to: '/sales/samples', icon: Beaker, perms: ['SAMPLE.VIEW'] },
-      { label: 'Costings',     to: '/sales/costings', icon: Calculator, perms: ['COSTING.VIEW'] },
+      { label: 'Costings (Classic)', to: '/sales/costings', icon: Calculator, perms: ['COSTING.VIEW'] },
+      { label: 'Pre-Costing (V2)',   to: '/sales/pre-costings', icon: Layers, perms: ['COSTING.VIEW'] },
       { label: 'Quotations',   to: '/sales/quotations', icon: FileSpreadsheet, perms: ['QUOTATION.VIEW'] },
       { label: 'Sales Orders', to: '/sales/orders', icon: ShoppingCart, perms: ['SALES_ORDER.VIEW'] },
     ],

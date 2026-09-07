@@ -96,6 +96,23 @@ export default function CostingsPage() {
         }
       />
 
+      {/* Top Level Screen Switcher */}
+      <div className="mb-4 flex items-center gap-2 border-b border-slate-200 pb-2">
+        <button
+          type="button"
+          className="px-3 py-1.5 text-xs font-bold rounded-lg bg-brand-600 text-white shadow-xs flex items-center gap-1.5"
+        >
+          <FileText size={14} /> Costing Sheets (Classic F14)
+        </button>
+        <button
+          type="button"
+          onClick={() => nav('/sales/pre-costings')}
+          className="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 flex items-center gap-1.5"
+        >
+          <Layers size={14} /> Merchandiser Pre-Costing (V2 Engine)
+        </button>
+      </div>
+
       <div className="mb-3.5 flex flex-wrap items-center gap-2.5">
         <SearchInput
           value={search}

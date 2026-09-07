@@ -78,10 +78,13 @@ export const transactionResources: ResourceConfig[] = [
       f('knitting_cost', s.dec()), f('dyeing_cost', s.dec()), f('printing_cost', s.dec()),
       f('embroidery_cost', s.dec()), f('washing_cost', s.dec()), f('cutting_cost', s.dec()),
       f('stitching_cost', s.dec()), f('finishing_cost', s.dec()), f('packing_cost', s.dec()),
+      f('smv', s.dec()), f('smv_rate_per_min', s.dec()),
       f('overhead_cost', s.dec()), f('testing_cost', s.dec()), f('freight_cost', s.dec()),
       f('agent_commission', s.dec()), f('finance_cost', s.dec()),
       f('total_cost', s.dec()), f('margin_pct', s.dec()), f('fob_price', s.dec()),
-      f('status_id', s.id()), f('remarks', s.text()),
+      f('season', s.nullableStr(40)), f('buyer_ref', s.nullableStr(80)), f('unit_id', s.id()),
+      f('price_basis', s.nullableStr(30)), f('costing_type', s.nullableStr(30)),
+      f('status_id', s.id()), f('remarks', s.text()), f('data_json', s.text()),
     ],
   },
   {
@@ -1033,27 +1036,32 @@ export const transactionResources: ResourceConfig[] = [
     defaultSort: 't.cost_date DESC', hasIsActive: false, softDelete: false, hasAuditCols: false,
     filters: ['prod_order_id', 'style_id', 'status'],
     autoNumber: { column: 'cost_no', docType: 'PROD_COST' },
-    selectExtra: 'po.po_prod_no, st.style_code',
+    selectExtra: 'po.po_prod_no, st.style_code, st.style_name, b.party_name AS buyer_name, u.unit_name',
     joins: `LEFT JOIN trx_production_order po ON po.id = t.prod_order_id
-            LEFT JOIN mst_style st ON st.id = t.style_id`,
+            LEFT JOIN mst_style st ON st.id = t.style_id
+            LEFT JOIN mst_party b ON b.id = t.buyer_id
+            LEFT JOIN mst_unit u ON u.id = t.unit_id`,
     children: [
       { key: 'lines', table: 'trx_production_cost_line', fk: 'cost_id', fields: [
         f('cost_head', s.strReq(60)),
         f('cost_category', s.enumReq(['MATERIAL','LABOUR','MACHINE','JOBWORK','PROCESS','OVERHEAD','PACKING','OTHER'])),
-        f('ref_type', s.nullableStr(40)), f('ref_id', s.id()),
+        f('stage_name', s.nullableStr(50)), f('item_description', s.nullableStr(255)),
+        f('ref_type', s.nullableStr(40)), f('ref_id', s.id()), f('ref_doc_no', s.nullableStr(60)),
         f('quantity', s.dec()), f('uom_id', s.id()), f('rate', s.dec()), f('amount', s.decReq()),
         f('remarks', s.nullableStr(255)),
       ]},
     ],
     fields: [
       f('cost_no', s.nullableStr(40)), f('cost_date', s.date()),
-      f('prod_order_id', s.idReq()), f('style_id', s.id()), f('produced_qty', s.int()),
+      f('prod_order_id', s.idReq()), f('style_id', s.id()), f('buyer_id', s.id()), f('unit_id', s.id()),
+      f('order_qty', s.int()), f('planned_qty', s.int()), f('produced_qty', s.int()),
+      f('costing_period', s.nullableStr(30)), f('costing_type', s.nullableStr(30)), f('version', s.int()),
       f('material_cost', s.dec()), f('labour_cost', s.dec()), f('machine_cost', s.dec()),
       f('jobwork_cost', s.dec()), f('process_cost', s.dec()), f('overhead_cost', s.dec()),
       f('packing_cost', s.dec()), f('total_cost', s.dec()), f('cost_per_piece', s.dec()),
       f('estimated_cost', s.dec()), f('variance', s.dec()), f('variance_pct', s.dec()),
-      f('status', s.enum(['DRAFT','CALCULATED','APPROVED','CLOSED'])),
-      f('remarks', s.nullableStr(500)),
+      f('status', s.enum(['DRAFT','IN_PROGRESS','DATA_LOADED','CALCULATED','UNDER_REVIEW','APPROVED','FINALIZED','LOCKED','CLOSED'])),
+      f('remarks', s.nullableStr(500)), f('data_json', s.text()),
     ],
   },
 ];

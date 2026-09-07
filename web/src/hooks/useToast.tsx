@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 
-type Kind = 'success' | 'error' | 'info';
+type Kind = 'success' | 'error' | 'info' | 'warning';
 interface Toast { id: number; kind: Kind; message: string; }
 
 const ToastCtx = createContext<{
@@ -30,8 +30,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     success: 'border-emerald-200 bg-emerald-50 text-emerald-900',
     error: 'border-red-200 bg-red-50 text-red-900',
     info: 'border-blue-200 bg-blue-50 text-blue-900',
+    warning: 'border-amber-200 bg-amber-50 text-amber-900',
   };
-  const Icon = { success: CheckCircle2, error: AlertCircle, info: Info };
+  const Icon = { success: CheckCircle2, error: AlertCircle, info: Info, warning: AlertCircle };
 
   return (
     <ToastCtx.Provider value={{ toast }}>
