@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, ArrowLeft, Save, Trash2, PieChart as PieIcon, Layers, CheckCircle2,
-  SlidersHorizontal, Copy, Check, Sparkles, Tag, Scissors, RefreshCw, Image as ImageIcon
+  SlidersHorizontal, Copy, Check, Sparkles, Tag, Scissors, RefreshCw, Image as ImageIcon, Ruler
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { http, ApiError } from '../../lib/api';
@@ -199,6 +199,7 @@ const STANDARD_GSM_PRESETS = [
   { gsm: 220, label: '220 GSM', defaultDia: 34, defaultWidth: 185, rate: 465 },
   { gsm: 240, label: '240 GSM', defaultDia: 36, defaultWidth: 190, rate: 485 },
   { gsm: 280, label: '280 GSM', defaultDia: 36, defaultWidth: 200, rate: 520 },
+  { gsm: 320, label: '320 GSM', defaultDia: 34, defaultWidth: 200, rate: 550 },
 ];
 
 function parseCompositionToLines(desc?: string): FibreDetailLine[] {
@@ -265,11 +266,27 @@ export function FabricsPage() {
         title="Fabric Masters"
         subtitle="2-Tier Architecture: Base structures (Fibre, Weave, Finish, Cert) &amp; GSM/Width Inventory SKUs"
         actions={
-          can('MATERIAL.CREATE') && (
-            <button className="btn-primary" onClick={() => nav('/masters/fabrics/new')}>
-              <Plus size={15} /> New Fabric Base
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => nav('/masters/gsm')}
+              className="btn-secondary flex items-center gap-1.5 text-xs py-1.5 px-3 shadow-xs"
+            >
+              <SlidersHorizontal size={14} /> GSM Master
             </button>
-          )
+            <button
+              type="button"
+              onClick={() => nav('/masters/dias')}
+              className="btn-secondary flex items-center gap-1.5 text-xs py-1.5 px-3 shadow-xs"
+            >
+              <Ruler size={14} /> Tube Dia Master
+            </button>
+            {can('MATERIAL.CREATE') && (
+              <button className="btn-primary flex items-center gap-1.5 text-xs py-1.5 px-3 shadow-xs" onClick={() => nav('/masters/fabrics/new')}>
+                <Plus size={15} /> New Fabric Base
+              </button>
+            )}
+          </div>
         }
       />
 

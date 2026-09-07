@@ -940,11 +940,17 @@ async function seedDemo(ctx: {
     }
   }
   const gsmId = new Map<number, number>();
-  for (const g of [140, 160, 180, 200, 220, 240, 280, 320]) {
+  for (const g of [120, 140, 160, 180, 200, 220, 240, 260, 280, 300, 320, 340, 360, 380, 400]) {
     await exec(`INSERT INTO mst_gsm (company_id,gsm_value,tolerance) VALUES (?,?,5)
                 ON DUPLICATE KEY UPDATE tolerance=5`, [companyId, g]);
     gsmId.set(g, await id(`SELECT id FROM mst_gsm WHERE company_id=? AND gsm_value=?`,
       [companyId, g], `gsm ${g}`));
+  }
+
+  // ------------------------------------------------------- fabric tube dia
+  for (const d of [20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40]) {
+    await exec(`INSERT INTO mst_dia (company_id,dia_value,uom) VALUES (?,?,'INCH')
+                ON DUPLICATE KEY UPDATE uom='INCH'`, [companyId, d]);
   }
 
   // ------------------------------------------------------- material categories

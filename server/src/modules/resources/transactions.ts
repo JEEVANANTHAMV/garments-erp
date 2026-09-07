@@ -88,7 +88,7 @@ export const transactionResources: ResourceConfig[] = [
     path: 'quotations', table: 'trx_quotation', permission: 'QUOTATION', label: 'Quotation',
     searchable: ['quotation_no', 'job_no'], sortable: ['quotation_no', 'quotation_date'],
     defaultSort: 't.quotation_date', hasIsActive: false,
-    filters: ['buyer_id', 'supplier_id', 'quotation_type', 'agent_id', 'status_id', 'enquiry_id', 'branch_id'],
+    filters: ['buyer_id', 'supplier_id', 'quotation_type', 'quotation_category', 'agent_id', 'status_id', 'enquiry_id', 'branch_id'],
     autoNumber: { column: 'quotation_no', docType: 'QUOTATION' },
     selectExtra: `b.party_name AS buyer_name, sup.party_name AS supplier_name,
                   cur.code AS currency_code, cur.symbol AS currency_symbol,
@@ -123,6 +123,8 @@ export const transactionResources: ResourceConfig[] = [
     fields: [
       f('branch_id', s.id()), f('quotation_no', s.nullableStr(40)), f('version', s.int()),
       f('quotation_type', s.enum(['DOMESTIC','IMPORT','BUYER','FABRIC','YARN','TRIMS','GENERAL'])),
+      f('quotation_category', s.enum(['PURCHASE','PROCESS'])),
+      f('process_name', s.nullableStr(100)),
       f('is_io_wise', s.bool()),
       f('quotation_date', s.date()),
       f('buyer_id', s.id()), f('supplier_id', s.id()),

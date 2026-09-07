@@ -36,6 +36,8 @@ export const NAV: NavSection[] = [
       { label: 'Yarns',             to: '/masters/yarns', icon: GitBranch, perms: ['MATERIAL.VIEW'] },
       { label: 'Yarn Counts',       to: '/masters/yarn-counts', icon: SlidersHorizontal, perms: ['MATERIAL.VIEW'] },
       { label: 'Fabrics',           to: '/masters/fabrics', icon: Layers, perms: ['MATERIAL.VIEW'] },
+      { label: 'GSM Master',        to: '/masters/gsm', icon: SlidersHorizontal, perms: ['MATERIAL.VIEW'] },
+      { label: 'Tube Dia Master',   to: '/masters/dias', icon: Ruler, perms: ['MATERIAL.VIEW'] },
       { label: 'Trims',             to: '/masters/trims', icon: Package, perms: ['MATERIAL.VIEW'] },
       { label: 'Colors',            to: '/masters/colors', icon: Palette, perms: ['COLOR.VIEW'] },
       { label: 'Size Groups',       to: '/masters/size-groups', icon: Ruler, perms: ['SIZE.VIEW'] },

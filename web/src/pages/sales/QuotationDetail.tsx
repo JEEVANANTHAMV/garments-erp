@@ -25,6 +25,37 @@ const QUOTATION_TYPES = [
   { value: 'IMPORT',   label: 'Import Quotation', desc: 'For foreign suppliers with CIF & Landed Cost' },
 ];
 
+const MATERIAL_PROCESSES: Record<string, string[]> = {
+  FABRIC: [
+    'Knitting',
+    'Fabric Dyeing',
+    'Washing',
+    'Printing',
+    'Compacting / Finishing',
+    'Mercerizing',
+    'Heat Setting',
+    'Brushing / Peaching',
+  ],
+  YARN: [
+    'Yarn Dyeing',
+    'Twisting',
+    'Doubling',
+    'Gassing / Mercerizing',
+    'Cone Winding',
+  ],
+  TRIMS: [
+    'Button Dyeing',
+    'Zipper Dyeing',
+    'Label Printing',
+    'Custom Coating',
+  ],
+  GENERAL: [
+    'General Job Work',
+    'Sample Processing',
+    'Sub-contracting',
+  ],
+};
+
 const GST_OPTIONS = [
   { value: 0,  label: '0%' },
   { value: 5,  label: '5%' },
@@ -91,6 +122,8 @@ export default function QuotationDetailPage() {
   /* ── head state ── */
   const [head, setHead] = useState<Record<string, any>>({
     quotation_type: 'FABRIC',
+    quotation_category: 'PURCHASE',
+    process_name: '',
     is_io_wise: 0,
     quotation_date: today(),
     version: 1,
@@ -115,6 +148,7 @@ export default function QuotationDetailPage() {
   const isTrims    = head.quotation_type === 'TRIMS';
   const isGeneral  = head.quotation_type === 'GENERAL';
   const isDomesticLike = !isBuyer && !isImport; // FABRIC, YARN, TRIMS, GENERAL, DOMESTIC
+  const isProcess  = isDomesticLike && head.quotation_category === 'PROCESS';
   const showJobAndStyle = !isGeneral || Boolean(head.is_io_wise);
 
   /* ── lookups ── */
@@ -127,6 +161,9 @@ export default function QuotationDetailPage() {
   const colors     = useLookup('colors');
   const sizes      = useLookup('sizes-all');   // individual sizes
   const uoms       = useLookup('uoms');        // unit of measure
+  const gsmLookup  = useLookup('gsm');         // standard GSM values
+  const diaLookup  = useLookup('dias');        // tube diameter values
+  const yarnCounts = useLookup('yarn-counts'); // yarn counts
   const statuses   = useStatuses('QUOTATION');
 
   const inrCurrency = currencies.data?.find((c: any) => c.code === 'INR');
@@ -151,6 +188,8 @@ export default function QuotationDetailPage() {
       setHead(h => ({
         ...h,
         quotation_type: 'BUYER',
+        quotation_category: 'PURCHASE',
+        process_name: '',
         is_io_wise: 0,
         currency_id: (h.currency_id && h.currency_id !== inrCurrency?.id) ? h.currency_id : (usdCurrency?.id ?? ''),
         exchange_rate: Number(h.exchange_rate) > 1 ? h.exchange_rate : 86.50,
@@ -160,6 +199,8 @@ export default function QuotationDetailPage() {
       setHead(h => ({
         ...h,
         quotation_type: 'IMPORT',
+        quotation_category: 'PURCHASE',
+        process_name: '',
         is_io_wise: 0,
         currency_id: (h.currency_id && h.currency_id !== inrCurrency?.id) ? h.currency_id : (usdCurrency?.id ?? ''),
         exchange_rate: Number(h.exchange_rate) > 1 ? h.exchange_rate : 86.50,
@@ -170,6 +211,7 @@ export default function QuotationDetailPage() {
       setHead(h => ({
         ...h,
         quotation_type: type,
+        process_name: h.quotation_category === 'PROCESS' ? (MATERIAL_PROCESSES[type]?.[0] || 'Job Work') : '',
         currency_id: inrCurrency?.id ?? 1,
         exchange_rate: 1,
       }));
@@ -188,6 +230,8 @@ export default function QuotationDetailPage() {
     const d = detail.data;
     setHead({
       ...d,
+      quotation_category: d.quotation_category || 'PURCHASE',
+      process_name: d.process_name || '',
       quotation_date: toDateInput(d.quotation_date),
       valid_until: toDateInput(d.valid_until),
       is_io_wise: d.is_io_wise ? 1 : 0,
@@ -355,6 +399,8 @@ export default function QuotationDetailPage() {
     const totalAmt = (calc as any).totalAmount || 0;
     const payload = {
       ...head,
+      quotation_category: isDomesticLike ? (head.quotation_category || 'PURCHASE') : 'PURCHASE',
+      process_name: (isDomesticLike && head.quotation_category === 'PROCESS') ? (head.process_name || null) : null,
       is_io_wise: isGeneral ? (head.is_io_wise ? 1 : 0) : 0,
       currency_id: Number(resolvedCurrencyId),
       exchange_rate: isDomesticLike ? 1 : Number(head.exchange_rate || 1),
@@ -527,6 +573,95 @@ export default function QuotationDetailPage() {
             );
           })}
         </div>
+
+        {/* ── Quotation Purpose: Purchase vs Process (Job Work) ── */}
+        {isDomesticLike && (
+          <div className="mt-3 pt-3 border-t border-slate-200">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-700">
+                  Quotation Purpose:
+                </span>
+                <div className="inline-flex rounded-lg bg-slate-100 p-0.5 border border-slate-300">
+                  <button
+                    type="button"
+                    onClick={() => setHead(h => ({ ...h, quotation_category: 'PURCHASE', process_name: '' }))}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${
+                      head.quotation_category !== 'PROCESS'
+                        ? 'bg-white text-brand-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    📦 Material Purchase Quotation (Default)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const defaultProc = MATERIAL_PROCESSES[head.quotation_type]?.[0] || 'Job Work';
+                      setHead(h => ({
+                        ...h,
+                        quotation_category: 'PROCESS',
+                        process_name: h.process_name || defaultProc,
+                      }));
+                    }}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${
+                      head.quotation_category === 'PROCESS'
+                        ? 'bg-amber-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    ⚙️ Process / Job Work Quotation (செயல்முறை)
+                  </button>
+                </div>
+              </div>
+
+              {head.quotation_category === 'PROCESS' && (
+                <span className="text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-300 px-2.5 py-0.5 rounded-full">
+                  Rates represent Job Work / Processing charges ({currSymbol}/Kg or {currSymbol}/Unit)
+                </span>
+              )}
+            </div>
+
+            {/* If PROCESS is selected, show category-specific process badges and custom input */}
+            {head.quotation_category === 'PROCESS' && (
+              <div className="mt-2.5 rounded-lg bg-amber-50/80 border border-amber-200 p-2.5">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs font-bold text-amber-900 mr-1 flex items-center gap-1">
+                    <Sparkles size={13} className="text-amber-600" />
+                    Select {head.quotation_type} Process:
+                  </span>
+                  {(MATERIAL_PROCESSES[head.quotation_type] || []).map((proc) => {
+                    const sel = head.process_name === proc;
+                    return (
+                      <button
+                        key={proc}
+                        type="button"
+                        onClick={() => setHead(h => ({ ...h, process_name: proc }))}
+                        className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all border ${
+                          sel
+                            ? 'bg-amber-600 text-white border-amber-700 shadow-xs'
+                            : 'bg-white text-slate-700 border-amber-200 hover:bg-amber-100'
+                        }`}
+                      >
+                        {sel ? `✓ ${proc}` : proc}
+                      </button>
+                    );
+                  })}
+                  <div className="ml-auto flex items-center gap-1">
+                    <span className="text-[11px] text-amber-800 font-medium">Other Process:</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. Specialty Finish"
+                      value={head.process_name || ''}
+                      onChange={(e) => setHead(h => ({ ...h, process_name: e.target.value }))}
+                      className="text-xs px-2 py-1 rounded border border-amber-300 bg-white font-medium text-slate-800 focus:outline-none focus:border-amber-500 w-44"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Sub-Toggle for GENERAL Quotation: Normal vs I/O Wise ── */}
         {isGeneral && (
@@ -906,8 +1041,8 @@ export default function QuotationDetailPage() {
                     {/* COMMON: Qty, UOM, Rates, Taxes, Amount */}
                     <th className="min-w-[75px] px-2 py-2 text-right">Qty</th>
                     <th className="min-w-[85px] px-2 py-2 text-center">UOM</th>
-                    <th className="min-w-[95px] px-2 py-2 text-right">Quotation Rate ({currSymbol})</th>
-                    <th className="min-w-[95px] px-2 py-2 text-right">Confirm Rate ({currSymbol})</th>
+                    <th className="min-w-[95px] px-2 py-2 text-right">{isProcess ? 'Process Rate' : 'Quotation Rate'} ({currSymbol})</th>
+                    <th className="min-w-[95px] px-2 py-2 text-right">{isProcess ? 'Confirm Proc Rate' : 'Confirm Rate'} ({currSymbol})</th>
                     
                     {isDomesticLike && (
                       <>
@@ -966,10 +1101,11 @@ export default function QuotationDetailPage() {
                             <td className="px-1.5 py-1">
                               <input
                                 type="text"
+                                list="quotation-dia-options"
                                 placeholder='Dia (e.g. 30")'
                                 value={l.dia}
                                 onChange={e => setLine(l._key, { dia: e.target.value })}
-                                className="w-full rounded border border-surface-border px-2 py-1 text-xs focus:border-brand-500 focus:outline-none"
+                                className="w-full rounded border border-surface-border px-2 py-1 text-xs font-medium focus:border-brand-500 focus:outline-none"
                               />
                             </td>
                             <td className="px-1.5 py-1">
@@ -996,10 +1132,11 @@ export default function QuotationDetailPage() {
                             <td className="px-1.5 py-1">
                               <input
                                 type="text"
-                                placeholder="GSM"
+                                list="quotation-gsm-options"
+                                placeholder="GSM (e.g. 160)"
                                 value={l.gsm}
                                 onChange={e => setLine(l._key, { gsm: e.target.value })}
-                                className="w-full rounded border border-surface-border px-2 py-1 text-xs focus:border-brand-500 focus:outline-none"
+                                className="w-full rounded border border-surface-border px-2 py-1 text-xs font-medium focus:border-brand-500 focus:outline-none"
                               />
                             </td>
                           </>
@@ -1020,10 +1157,11 @@ export default function QuotationDetailPage() {
                             <td className="px-1.5 py-1">
                               <input
                                 type="text"
-                                placeholder="e.g. 30s, 34s, 40s"
+                                list="quotation-yarn-count-options"
+                                placeholder="e.g. 30s, 2/40s"
                                 value={l.yarn_count}
                                 onChange={e => setLine(l._key, { yarn_count: e.target.value })}
-                                className="w-full rounded border border-surface-border px-2 py-1 text-xs focus:border-brand-500 focus:outline-none"
+                                className="w-full rounded border border-surface-border px-2 py-1 text-xs font-mono font-bold text-brand-700 focus:border-brand-500 focus:outline-none"
                               />
                             </td>
                             <td className="px-1.5 py-1">
@@ -1263,6 +1401,40 @@ export default function QuotationDetailPage() {
                   </tr>
                 </tfoot>
               </table>
+
+              {/* Dropdown Datalists for Tube Dia, GSM, and Yarn Counts */}
+              <datalist id="quotation-dia-options">
+                {(diaLookup.data ?? []).map((d: any) => (
+                  <option key={d.id} value={`${d.code || d.dia_value}" Dia`}>
+                    {d.label}
+                  </option>
+                ))}
+                {['20" Dia', '24" Dia', '26" Dia', '28" Dia', '30" Dia', '32" Dia', '34" Dia', '36" Dia'].map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </datalist>
+
+              <datalist id="quotation-gsm-options">
+                {(gsmLookup.data ?? []).map((g: any) => (
+                  <option key={g.id} value={`${g.code || g.gsm_value} GSM`}>
+                    {g.label}
+                  </option>
+                ))}
+                {['140 GSM', '160 GSM', '180 GSM', '200 GSM', '220 GSM', '240 GSM', '280 GSM', '320 GSM'].map((g) => (
+                  <option key={g} value={g}>{g}</option>
+                ))}
+              </datalist>
+
+              <datalist id="quotation-yarn-count-options">
+                {(yarnCounts.data ?? []).map((yc: any) => (
+                  <option key={yc.id} value={yc.code || yc.count_value}>
+                    {yc.label || `${yc.count_value} ${yc.count_type}`}
+                  </option>
+                ))}
+                {['20s', '24s', '30s', '34s', '40s', '2/30s', '2/40s', '2/50s', '30s/30s/10s'].map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </datalist>
             </div>
           </div>
 

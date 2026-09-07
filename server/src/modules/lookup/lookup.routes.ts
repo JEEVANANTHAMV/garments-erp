@@ -36,6 +36,7 @@ const LOOKUPS: Record<string, LookupDef> = {
   'sizes-all':   { sql: `SELECT sz.id, sz.size_code AS code, CONCAT(sz.size_label,' (',g.group_name,')') AS label, sz.sort_order, sz.size_code, sz.size_label, sz.body_measurement, g.group_name, sz.size_group_id FROM mst_size sz JOIN mst_size_group g ON g.id=sz.size_group_id WHERE g.company_id=? AND sz.is_active=1 ORDER BY g.group_name, sz.sort_order, sz.id`, scoped: true },
   compositions:{ sql: `SELECT id, composition_code AS code, description AS label FROM mst_composition WHERE company_id=? AND is_active=1 ORDER BY composition_code`, scoped: true },
   gsm:         { sql: `SELECT id, gsm_value AS code, CONCAT(gsm_value,' GSM') AS label FROM mst_gsm WHERE company_id=? AND is_active=1 ORDER BY gsm_value`, scoped: true },
+  dias:        { sql: `SELECT id, dia_value AS code, CONCAT(dia_value,'\" Dia') AS label FROM mst_dia WHERE company_id=? AND is_active=1 ORDER BY dia_value`, scoped: true },
   'material-categories': { sql: `SELECT id, category_code AS code, category_name AS label, material_type FROM mst_material_category WHERE company_id=? AND is_active=1 ORDER BY category_name`, scoped: true },
 
   yarns:       { sql: `SELECT id, yarn_code AS code, yarn_name AS label, base_uom, std_rate, yarn_base_id, count_id, count_value, count_type, ply, twist FROM mst_yarn WHERE company_id=? AND is_active=1 AND is_deleted=0 ORDER BY yarn_name`, scoped: true },

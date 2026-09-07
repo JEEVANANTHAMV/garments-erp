@@ -236,6 +236,11 @@ export const masterResources: ResourceConfig[] = [
     fields: [f('gsm_value', s.intReq()), f('tolerance', s.int()), f('is_active', s.bool())],
   },
   {
+    path: 'dias', table: 'mst_dia', permission: 'MATERIAL', label: 'Tube Dia',
+    sortable: ['dia_value'], defaultSort: 't.dia_value', softDelete: false, hasAuditCols: false,
+    fields: [f('dia_value', s.decReq()), f('uom', s.str(20)), f('is_active', s.bool())],
+  },
+  {
     path: 'material-categories', table: 'mst_material_category', permission: 'MATERIAL', label: 'Material Category',
     searchable: ['category_code', 'category_name'], sortable: ['category_code'],
     defaultSort: 't.category_name', softDelete: false, hasAuditCols: false,

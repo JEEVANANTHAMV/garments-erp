@@ -145,6 +145,57 @@ export function YarnCountsPage() {
     ]} />;
 }
 
+/* ----------------------------------------------------------------- GSM */
+export function GsmPage() {
+  return <CrudPage
+    path="gsm" title="GSM Master" permission="MATERIAL" singular="GSM"
+    subtitle="Predefined fabric weight (GSM) specifications for Quotations, POs & Knitting"
+    defaultSort={{ key: 'gsm_value', dir: 'asc' }}
+    searchPlaceholder="Search GSM value…"
+    columns={[
+      { key: 'gsm_value', header: 'GSM Value', sortable: true,
+        render: (r: any) => <span className="font-mono text-[13px] font-bold text-brand-700">{r.gsm_value} GSM</span> },
+      { key: 'tolerance', header: 'Tolerance (± GSM)', align: 'center',
+        render: (r: any) => <span className="font-mono text-slate-600">± {r.tolerance || 5}</span> },
+      { key: 'is_active', header: 'Status', render: (r: any) => (
+        r.is_active ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Inactive</Badge>
+      )},
+    ]}
+    filters={[
+      { name: 'is_active', label: 'Status', options: yesNo },
+    ]}
+    fields={[
+      { name: 'gsm_value', label: 'GSM Value (e.g. 160, 180, 240, 320)', type: 'number', required: true },
+      { name: 'tolerance', label: 'Tolerance (± GSM)', type: 'number', defaultValue: 5 },
+      activeField,
+    ]} />;
+}
+
+/* ------------------------------------------------------------- Tube Dia */
+export function DiasPage() {
+  return <CrudPage
+    path="dias" title="Fabric Tube Dia Master" permission="MATERIAL" singular="Tube Dia"
+    subtitle={'Circular knitting machine diameters (e.g. 24", 30", 32", 34") for Fabric procurement & Knitting'}
+    defaultSort={{ key: 'dia_value', dir: 'asc' }}
+    searchPlaceholder="Search Tube Dia…"
+    columns={[
+      { key: 'dia_value', header: 'Tube Diameter', sortable: true,
+        render: (r: any) => <span className="font-mono text-[13px] font-bold text-brand-700">{r.dia_value}" Dia</span> },
+      { key: 'uom', header: 'Unit of Measure', render: () => <Badge tone="blue">INCH</Badge> },
+      { key: 'is_active', header: 'Status', render: (r: any) => (
+        r.is_active ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Inactive</Badge>
+      )},
+    ]}
+    filters={[
+      { name: 'is_active', label: 'Status', options: yesNo },
+    ]}
+    fields={[
+      { name: 'dia_value', label: 'Diameter Value in Inches (e.g. 24, 30, 32, 34)', type: 'number', required: true },
+      { name: 'uom', label: 'UOM', defaultValue: 'INCH', required: true },
+      activeField,
+    ]} />;
+}
+
 /* ------------------------------------------------------------- Fabrics */
 export { FabricsPage, FabricDetailPage } from './Fabrics';
 

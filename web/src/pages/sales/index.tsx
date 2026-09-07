@@ -95,17 +95,35 @@ export function QuotationsPage() {
     columns={[
       { key: 'quotation_no', header: 'Quotation no', sortable: true,
         render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.quotation_no}</span> },
-      { key: 'quotation_type', header: 'Type',
+      { key: 'quotation_type', header: 'Type / Purpose',
         render: (r: any) => {
-          switch (r.quotation_type) {
-            case 'FABRIC':   return <Badge tone="sky">Fabric</Badge>;
-            case 'YARN':     return <Badge tone="amber">Yarn</Badge>;
-            case 'TRIMS':    return <Badge tone="rose">Trims</Badge>;
-            case 'GENERAL':  return <Badge tone="slate">{r.is_io_wise ? 'General (I/O)' : 'General'}</Badge>;
-            case 'BUYER':    return <Badge tone="emerald">Buyer (Export)</Badge>;
-            case 'IMPORT':   return <Badge tone="violet">Import</Badge>;
-            default:         return <Badge tone="sky">{r.quotation_type || 'Domestic'}</Badge>;
-          }
+          let badgeTone: any = 'sky';
+          let label = r.quotation_type || 'Domestic';
+          if (r.quotation_type === 'FABRIC') { badgeTone = 'sky'; label = 'Fabric'; }
+          else if (r.quotation_type === 'YARN') { badgeTone = 'amber'; label = 'Yarn'; }
+          else if (r.quotation_type === 'TRIMS') { badgeTone = 'rose'; label = 'Trims'; }
+          else if (r.quotation_type === 'GENERAL') { badgeTone = 'slate'; label = r.is_io_wise ? 'General (I/O)' : 'General'; }
+          else if (r.quotation_type === 'BUYER') { badgeTone = 'emerald'; label = 'Buyer (Export)'; }
+          else if (r.quotation_type === 'IMPORT') { badgeTone = 'violet'; label = 'Import'; }
+
+          const isProc = r.quotation_category === 'PROCESS';
+          return (
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-center gap-1">
+                <Badge tone={badgeTone}>{label}</Badge>
+                {isProc && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300">
+                    Process
+                  </span>
+                )}
+              </div>
+              {isProc && r.process_name && (
+                <span className="text-[11px] text-amber-700 font-semibold">
+                  ⚙️ {r.process_name}
+                </span>
+              )}
+            </div>
+          );
         } },
       { key: 'quotation_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.quotation_date) },
       { key: 'buyer_name', header: 'Buyer / Supplier',
@@ -126,6 +144,10 @@ export function QuotationsPage() {
         { value: 'BUYER', label: 'Buyer (Export)' },
         { value: 'IMPORT', label: 'Import' },
         { value: 'DOMESTIC', label: 'Domestic' },
+      ] },
+      { name: 'quotation_category', label: 'Purpose', options: [
+        { value: 'PURCHASE', label: 'Material Purchase' },
+        { value: 'PROCESS', label: 'Process / Job Work' },
       ] },
       { name: 'buyer_id', label: 'Buyer', lookup: 'buyers' },
       { name: 'supplier_id', label: 'Supplier', lookup: 'suppliers' },
