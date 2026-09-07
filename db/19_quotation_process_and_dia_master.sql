@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS mst_dia (
   is_active       TINYINT(1)        DEFAULT 1,
   created_at      TIMESTAMP         DEFAULT CURRENT_TIMESTAMP,
   updated_at      TIMESTAMP         DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT fk_dia__company FOREIGN KEY (company_id) REFERENCES app_company(id),
+  CONSTRAINT fk_dia__company FOREIGN KEY (company_id) REFERENCES mst_company(id),
   UNIQUE KEY uk_dia__company_val (company_id, dia_value)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
