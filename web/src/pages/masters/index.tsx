@@ -109,6 +109,42 @@ export function ProductsPage() {
 /* --------------------------------------------------------------- Yarns */
 export { YarnsPage, YarnDetailPage } from './Yarns';
 
+/* --------------------------------------------------------- Yarn Counts */
+export function YarnCountsPage() {
+  return <CrudPage
+    path="yarn-counts" title="Yarn Counts" permission="MATERIAL" singular="Yarn Count"
+    subtitle="Predefined standard Yarn Count Master (e.g. 30s, 40s, 2/50s, 75D) for Quotations, Purchases & Knitting"
+    defaultSort={{ key: 'sort_order', dir: 'asc' }}
+    searchPlaceholder="Search count value, system, description…"
+    columns={[
+      { key: 'count_value', header: 'Count Value', sortable: true,
+        render: (r: any) => <span className="font-mono text-[13px] font-bold text-brand-700">{r.count_value}</span> },
+      { key: 'count_type', header: 'Count System', sortable: true,
+        render: (r: any) => <Badge tone="blue">{r.count_type || 'Ne'}</Badge> },
+      { key: 'description', header: 'Description / Use Case' },
+      { key: 'sort_order', header: 'Sort Order', align: 'center' },
+      { key: 'is_active', header: 'Status', render: (r: any) => (
+        r.is_active ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Inactive</Badge>
+      )},
+    ]}
+    filters={[
+      { name: 'count_type', label: 'System', options: ['Ne','Nm','Denier','Tex'].map((v) => ({ value: v, label: v })) },
+      { name: 'is_active', label: 'Status', options: yesNo },
+    ]}
+    fields={[
+      { name: 'count_value', label: 'Count Value (e.g. 30s, 2/40s, 75D)', required: true },
+      { name: 'count_type', label: 'Count System', required: true, options: [
+        { value: 'Ne', label: 'Ne (English Cotton Count)' },
+        { value: 'Nm', label: 'Nm (Metric Count)' },
+        { value: 'Denier', label: 'Denier (Filament / Poly)' },
+        { value: 'Tex', label: 'Tex' },
+      ], defaultValue: 'Ne' },
+      { name: 'description', label: 'Description / Use Case', placeholder: 'e.g. Standard single jersey, 3-end fleece loop, etc.' },
+      { name: 'sort_order', label: 'Sort Order', type: 'number', defaultValue: 10 },
+      activeField,
+    ]} />;
+}
+
 /* ------------------------------------------------------------- Fabrics */
 export { FabricsPage, FabricDetailPage } from './Fabrics';
 

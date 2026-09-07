@@ -4,7 +4,7 @@ import {
   FileText, Beaker, Calculator, FileSpreadsheet, ShoppingCart, Boxes, Truck,
   Factory, Scissors, ClipboardCheck, PackageCheck, Ship, Receipt, Landmark,
   BarChart3, Shield, Settings, Warehouse, GitBranch, CalendarClock, FileCheck2,
-  History, Wallet, TrendingUp, Container, Coins,
+  History, Wallet, TrendingUp, Container, Coins, SlidersHorizontal,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -34,6 +34,7 @@ export const NAV: NavSection[] = [
       { label: 'Bill of Materials', to: '/masters/boms', icon: Layers, perms: ['BOM.VIEW'] },
       { label: 'Products',          to: '/masters/products', icon: Package, perms: ['PRODUCT.VIEW'] },
       { label: 'Yarns',             to: '/masters/yarns', icon: GitBranch, perms: ['MATERIAL.VIEW'] },
+      { label: 'Yarn Counts',       to: '/masters/yarn-counts', icon: SlidersHorizontal, perms: ['MATERIAL.VIEW'] },
       { label: 'Fabrics',           to: '/masters/fabrics', icon: Layers, perms: ['MATERIAL.VIEW'] },
       { label: 'Trims',             to: '/masters/trims', icon: Package, perms: ['MATERIAL.VIEW'] },
       { label: 'Colors',            to: '/masters/colors', icon: Palette, perms: ['COLOR.VIEW'] },

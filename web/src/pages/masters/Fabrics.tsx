@@ -133,7 +133,7 @@ const EFFECTS = [
   'Quilted',
 ];
 
-const FINISH_TYPES = [
+export const FINISH_TYPES = [
   'Bio-wash + Silicon Softener',
   'Bio-wash (Enzyme)',
   'Silicon Softener Finish',
@@ -153,7 +153,7 @@ const FINISH_TYPES = [
   'Standard Soft Finish',
 ];
 
-const PRINTING_METHODS = [
+export const PRINTING_METHODS = [
   'None',
   'Reactive Print',
   'Pigment Print',
@@ -164,7 +164,7 @@ const PRINTING_METHODS = [
   'AOP Print',
 ];
 
-const DECORATIONS = [
+export const DECORATIONS = [
   'None',
   'Embroidery',
   'Applique',
@@ -175,22 +175,18 @@ const DECORATIONS = [
 
 export function generateFabricAutoDescription(
   composition: string,
-  yarnSpec: string,
   effect: string,
   construction: string,
   structure: string,
-  finish: string,
   gsm?: number | string
 ): string {
   const parts: string[] = [];
   if (composition) parts.push(composition.toUpperCase());
-  if (yarnSpec && yarnSpec !== 'None' && yarnSpec !== '—') parts.push(yarnSpec.toUpperCase());
   if (effect && effect !== 'None') parts.push(effect.toUpperCase());
   if (construction) parts.push(construction.toUpperCase());
   if (structure && structure !== 'None' && structure !== 'None / Standard' && structure !== construction) {
     parts.push(structure.toUpperCase());
   }
-  if (finish && finish !== 'None') parts.push(finish.toUpperCase());
   if (gsm) parts.push(`${gsm} GSM`);
   return parts.join(' ').replace(/\s+/g, ' ').trim();
 }
@@ -419,11 +415,11 @@ export function FabricsPage() {
               ),
             },
             {
-              key: 'finish_type',
-              header: 'Finish & Treatment',
+              key: 'effect',
+              header: 'Effect / Design',
               render: (r: any) => (
-                <span className="text-xs text-slate-600 font-medium truncate max-w-[180px] block" title={r.finish_type}>
-                  {r.finish_type || 'Bio-wash + Silicon'}
+                <span className="text-xs text-slate-600 font-medium">
+                  {r.effect || 'None'}
                 </span>
               ),
             },
@@ -592,7 +588,6 @@ export function FabricDetailPage() {
   const categories = useLookup('material-categories');
   const uoms = useLookup('uoms');
   const gsmList = useLookup('gsm');
-  const yarns = useLookup('yarns');
 
   // Base Form State
   const [head, setHead] = useState<Record<string, any>>({
@@ -780,22 +775,14 @@ export function FabricDetailPage() {
       .join(' / ');
   }, [fibreLines]);
 
-  const linkedYarnName = useMemo(() => {
-    if (!head.yarn_id) return '';
-    const y = (yarns.data || []).find((item: any) => String(item.id) === String(head.yarn_id));
-    return y?.label || y?.yarn_name || y?.name || '';
-  }, [head.yarn_id, yarns.data]);
-
   const liveAutoDescription = useMemo(() => {
     return generateFabricAutoDescription(
       String(autoCompositionString || ''),
-      String(linkedYarnName || ''),
       String(head.effect || ''),
       String(head.knit_structure || ''),
-      String(head.structure || ''),
-      String(head.finish_type || '')
+      String(head.structure || '')
     );
-  }, [autoCompositionString, linkedYarnName, head.effect, head.knit_structure, head.structure, head.finish_type]);
+  }, [autoCompositionString, head.effect, head.knit_structure, head.structure]);
 
   // Fibre Line handlers
   const handleAddFibreLine = () => {
@@ -1185,45 +1172,6 @@ export function FabricDetailPage() {
             />
           </div>
 
-          <div>
-            <label className="label">Primary Yarn Feed</label>
-            <Select
-              value={head.yarn_id}
-              disabled={!editable}
-              onChange={(e) => setHead({ ...head, yarn_id: e.target.value })}
-              options={[{ value: '', label: '— Select Primary Yarn —' }, ...toOptions(yarns.data)]}
-            />
-          </div>
-
-          <div>
-            <label className="label">Finish &amp; Treatment</label>
-            <Select
-              value={head.finish_type}
-              disabled={!editable}
-              onChange={(e) => setHead({ ...head, finish_type: e.target.value })}
-              options={FINISH_TYPES.map((f) => ({ value: f, label: f }))}
-            />
-          </div>
-
-          <div>
-            <label className="label">Printing Method</label>
-            <Select
-              value={head.printing}
-              disabled={!editable}
-              onChange={(e) => setHead({ ...head, printing: e.target.value })}
-              options={PRINTING_METHODS.map((p) => ({ value: p, label: p }))}
-            />
-          </div>
-
-          <div>
-            <label className="label">Decoration / Embellishment</label>
-            <Select
-              value={head.decoration}
-              disabled={!editable}
-              onChange={(e) => setHead({ ...head, decoration: e.target.value })}
-              options={DECORATIONS.map((d) => ({ value: d, label: d }))}
-            />
-          </div>
 
           <div>
             <label className="label">Environmental Certification</label>
@@ -1299,7 +1247,7 @@ export function FabricDetailPage() {
                 Standard Auto-Generated Description (ERP Formula)
               </span>
               <span className="text-[10px] text-brand-600 font-medium bg-brand-100 px-2 py-0.5 rounded-full">
-                Formula: Composition + Yarn + Effect + Construction + Finish
+                Formula: Composition + Effect + Construction / Structure
               </span>
             </div>
             <div className="font-mono text-xs font-bold text-slate-900 bg-white border border-brand-200 rounded p-2 shadow-xs">
