@@ -610,7 +610,7 @@ export default function QuotationDetailPage() {
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    ⚙️ Process / Job Work Quotation (செயல்முறை)
+                    ⚙️ Process / Job Work Quotation
                   </button>
                 </div>
               </div>
