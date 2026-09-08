@@ -160,7 +160,10 @@ cadRouter.get('/cad-requirements/:id', requirePermission('PRODUCTION.VIEW'), ah(
   res.json({
     data: {
       ...reqRow,
-      pieces,
+      size_breakdown: dataJson.size_breakdown,
+      stripes: dataJson.stripes,
+      loss_rules: dataJson.loss_rules,
+      pieces: (dataJson.pieces && dataJson.pieces.length > 0) ? dataJson.pieces : pieces,
       dataJson,
     },
   });
@@ -183,7 +186,13 @@ cadRouter.post('/cad-requirements', requirePermission('PRODUCTION.CREATE'), ah(a
       finalReqNo = await nextDocNumber(tx, companyId, 'CAD_REQ');
     }
 
-    const dataJsonStr = JSON.stringify(body.data_json || {});
+    const dataJsonStr = JSON.stringify(body.data_json || {
+      size_breakdown: body.size_breakdown,
+      stripes: body.stripes,
+      loss_rules: body.loss_rules,
+      pieces: body.pieces,
+      total_fabric_kg: body.total_fabric_kg,
+    });
 
     if (recId) {
       await txExecute(tx, `
