@@ -36,6 +36,20 @@ import {
   GeneralPurchasesPage, GeneralPurchaseDetailPage,
 } from './pages/procurement';
 
+import FabricPurchaseOrdersPage from './pages/procurement/FabricPurchaseOrders';
+import FabricPurchaseOrderDetailPage from './pages/procurement/FabricPurchaseOrderDetail';
+import FabricGRNsPage from './pages/procurement/FabricGRNs';
+import FabricGRNDetailPage from './pages/procurement/FabricGRNDetail';
+import FabricRollStockPage from './pages/procurement/FabricRollStock';
+
+import YarnPurchaseOrdersPage from './pages/procurement/YarnPurchaseOrders';
+import YarnPurchaseOrderDetailPage from './pages/procurement/YarnPurchaseOrderDetail';
+import YarnGRNsPage from './pages/procurement/YarnGRNs';
+import YarnGRNDetailPage from './pages/procurement/YarnGRNDetail';
+
+import CadRequirementsPage from './pages/production/CadRequirements';
+import CadRequirementDetailPage from './pages/production/CadRequirementDetail';
+
 /* Inventory */
 import { StockPage, StockLedgerPage } from './pages/inventory';
 
@@ -163,6 +177,23 @@ export default function App() {
                   <Route path="grns" element={<GrnPage />} />
                   <Route path="returns" element={<PurchaseReturnsPage />} />
                   <Route path="supplier-bills" element={<SupplierBillsPage />} />
+
+                  {/* Fabric Procurement */}
+                  <Route path="fabric/orders" element={<FabricPurchaseOrdersPage />} />
+                  <Route path="fabric/orders/new" element={<FabricPurchaseOrderDetailPage />} />
+                  <Route path="fabric/orders/:id" element={<FabricPurchaseOrderDetailPage />} />
+                  <Route path="fabric/grn" element={<FabricGRNsPage />} />
+                  <Route path="fabric/grn/new" element={<FabricGRNDetailPage />} />
+                  <Route path="fabric/grn/:id" element={<FabricGRNDetailPage />} />
+                  <Route path="fabric/roll-stock" element={<FabricRollStockPage />} />
+
+                  {/* Yarn Procurement */}
+                  <Route path="yarn/orders" element={<YarnPurchaseOrdersPage />} />
+                  <Route path="yarn/orders/new" element={<YarnPurchaseOrderDetailPage />} />
+                  <Route path="yarn/orders/:id" element={<YarnPurchaseOrderDetailPage />} />
+                  <Route path="yarn/grn" element={<YarnGRNsPage />} />
+                  <Route path="yarn/grn/new" element={<YarnGRNDetailPage />} />
+                  <Route path="yarn/grn/:id" element={<YarnGRNDetailPage />} />
                 </Route>
 
                 {/* Inventory */}
@@ -198,6 +229,11 @@ export default function App() {
                   <Route path="costs" element={<ProductionCostsPage />} />
                   <Route path="costs/new" element={<ProductionCostDetailPage />} />
                   <Route path="costs/:id" element={<ProductionCostDetailPage />} />
+
+                  {/* CAD Auto-Consumption */}
+                  <Route path="cad-requirements" element={<CadRequirementsPage />} />
+                  <Route path="cad-requirements/new" element={<CadRequirementDetailPage />} />
+                  <Route path="cad-requirements/:id" element={<CadRequirementDetailPage />} />
                 </Route>
 
                 {/* Quality */}

@@ -2062,8 +2062,144 @@ async function seedDemo(ctx: {
     }
   }
 
+  // ------------------------------------------------------- Seed CAD Requirement & Auto-Consumption
+  const cadExists = await one(`SELECT id FROM trx_cad_requirement WHERE company_id=? AND req_no='CAD-00001'`, [companyId]);
+  if (!cadExists) {
+    const style1 = await one<{ id: number; buyer_id: number }>(`SELECT id, buyer_id FROM mst_style WHERE company_id=? ORDER BY id ASC LIMIT 1`, [companyId]);
+    if (style1) {
+      const cadJson = {
+        sizes: [
+          { size: 'S', qty: 2000 },
+          { size: 'M', qty: 3000 },
+          { size: 'L', qty: 3000 },
+          { size: 'XL', qty: 1500 },
+          { size: 'XXL', qty: 500 },
+        ],
+        stripe_rules: [
+          { component: 'BODY', stripe_code: 'STRIPE-01', color_name: 'Navy', ratio: 42 },
+          { component: 'BODY', stripe_code: 'STRIPE-01', color_name: 'White', ratio: 33 },
+          { component: 'BODY', stripe_code: 'STRIPE-01', color_name: 'Red', ratio: 25 },
+          { component: 'COLLAR', stripe_code: 'STRIPE-COLLAR-01', color_name: 'Navy/White', ratio: 100 },
+        ],
+        mix_rules: [],
+        multi_materials: [
+          { component: 'BODY', material_type: 'FOAM', material_code: 'FOAM-3MM', material_name: 'Front Chest Reinforcement Foam 3mm', construction: '3 MM', consumption_per_pc: 0.045, uom: 'KG' },
+          { component: 'COLLAR', material_type: 'INTERLINING', material_code: 'INT-60GSM', material_name: 'Fusible Collar Interlining 60 GSM', construction: '60 GSM Fusible', consumption_per_pc: 0.015, uom: 'KG' },
+        ],
+        wastage_rules: { fabric: 5.0, foam: 3.0, interlining: 2.0, yarn: 3.0 },
+        yarn_conversion: { factor: 0.98, process_loss: 3.0 },
+      };
+
+      await exec(`
+        INSERT INTO trx_cad_requirement (
+          company_id, req_no, req_date, internal_ir_no, style_id, buyer_id,
+          order_qty, size_group_id, cad_version, import_source,
+          consumption_source, marker_efficiency, status, remarks, data_json, created_by
+        ) VALUES (?, 'CAD-00001', '2026-09-08', 'IR-2026-000125', ?, ?, 10000, 1, 'V01', 'CSV', 'PIECE_AREA', 85.00, 'APPROVED', 'Seeded CAD auto-consumption specification for Men Crew Tee', ?, ?)
+      `, [companyId, style1.id, style1.buyer_id || null, JSON.stringify(cadJson), adminId]);
+
+      const cadRow = await one<{ id: number }>(`SELECT id FROM trx_cad_requirement WHERE company_id=? AND req_no='CAD-00001'`, [companyId]);
+      if (cadRow) {
+        const cadPieces = [
+          ['P001', 'FRONT', 'BODY', 'M', 650, 420, 0.4200, 1, 'MK001', 'FABRIC', 'FAB-A', 'Navy', 'NVY-01'],
+          ['P002', 'BACK', 'BODY', 'M', 660, 420, 0.4300, 1, 'MK001', 'FABRIC', 'FAB-A', 'Navy', 'NVY-01'],
+          ['P003', 'SLEEVE_LEFT', 'SLEEVE', 'M', 280, 210, 0.1200, 1, 'MK001', 'FABRIC', 'FAB-A', 'Navy', 'NVY-01'],
+          ['P004', 'SLEEVE_RIGHT', 'SLEEVE', 'M', 280, 210, 0.1200, 1, 'MK001', 'FABRIC', 'FAB-A', 'Navy', 'NVY-01'],
+          ['P005', 'COLLAR_RIB', 'COLLAR', 'M', 450, 60, 0.0350, 1, 'MK002', 'FABRIC', 'FAB-B', 'Rib Navy', 'NVY-01'],
+          ['P006', 'CUFF_RIB', 'CUFF', 'M', 320, 50, 0.0250, 2, 'MK002', 'FABRIC', 'FAB-B', 'Rib Navy', 'NVY-01'],
+        ];
+        for (const [pid, pname, comp, sz, len, wid, area, pqty, mk, mtype, mcode, col, shd] of cadPieces) {
+          await exec(`
+            INSERT INTO trx_cad_piece (
+              cad_req_id, piece_id, piece_name, component, size_name,
+              length_mm, width_mm, area_sqm, piece_qty, marker_no,
+              material_type, material_code, color_name, shade_code, status
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'MAPPED')
+          `, [cadRow.id, pid, pname, comp, sz, len, wid, area, pqty, mk, mtype, mcode, col, shd]);
+        }
+      }
+    }
+  }
+
+  // ------------------------------------------------------- Seed Fabric PO, Roll GRN & Yarn PO
+  const fpoExists = await one(`SELECT id FROM trx_purchase_order WHERE company_id=? AND po_no='FPO-00001'`, [companyId]);
+  if (!fpoExists) {
+    const supp = await one<{ id: number }>(`SELECT id FROM mst_party WHERE company_id=? AND is_supplier=1 ORDER BY id ASC LIMIT 1`, [companyId]);
+    const fab1 = await one<{ id: number }>(`SELECT id FROM mst_fabric WHERE company_id=? ORDER BY id ASC LIMIT 1`, [companyId]);
+    const wh1 = await one<{ id: number }>(`SELECT id FROM mst_warehouse WHERE company_id=? ORDER BY id ASC LIMIT 1`, [companyId]);
+
+    if (supp && fab1) {
+      // Fabric PO
+      await exec(`
+        INSERT INTO trx_purchase_order (
+          company_id, po_no, internal_ir_no, po_date, supplier_id,
+          po_type, order_type, currency_id, exchange_rate, delivery_date,
+          payment_terms, total_amount, tax_amount, grand_total, approval_state, remarks, created_by
+        ) VALUES (?, 'FPO-00001', 'IR-2026-000125', '2026-09-08', ?, 'MATERIAL', 'PRODUCTION', 1, 1.0, '2026-09-20', '30 Days Net', 325000, 16250, 341250, 'APPROVED', 'Fabric Purchase Order (Knitted Single Jersey)', ?)
+      `, [companyId, supp.id, adminId]);
+
+      const fpo = await one<{ id: number }>(`SELECT id FROM trx_purchase_order WHERE company_id=? AND po_no='FPO-00001'`, [companyId]);
+      if (fpo) {
+        await exec(`
+          INSERT INTO trx_purchase_order_line (
+            po_id, material_type, fabric_id, description,
+            fabric_type, dia, gsm, composition, shade_code,
+            print_flag, print_color, finish,
+            qty, uom_id, rate, amount, gst_rate, received_qty, no_of_rolls, weight_kg
+          ) VALUES (?, 'FABRIC', ?, '100% Cotton Single Jersey 180 GSM', 'Knitted', '30"', '180', '100% Combed Cotton', 'NVY-01', 0, NULL, 'Compact Finished', 5000, 9, 65.00, 325000, 5.0, 4950, 20, 1240.00)
+        `, [fpo.id, fab1.id]);
+
+        const fpoLine = await one<{ id: number }>(`SELECT id FROM trx_purchase_order_line WHERE po_id=? LIMIT 1`, [fpo.id]);
+
+        // Fabric GRN with Rolls
+        if (wh1 && fpoLine) {
+          await exec(`
+            INSERT INTO trx_grn (
+              company_id, grn_no, internal_ir_no, grn_date, po_id,
+              supplier_id, warehouse_id, supplier_dc_no, supplier_inv_no,
+              qc_status, remarks, created_by
+            ) VALUES (?, 'FGRN-00001', 'IR-2026-000125', '2026-09-08', ?, ?, ?, 'DC-4587', 'INV-9821', 'ACCEPTED', 'Fabric Received in Rolls, QC Cleared', ?)
+          `, [companyId, fpo.id, supp.id, wh1.id, adminId]);
+
+          const fgrn = await one<{ id: number }>(`SELECT id FROM trx_grn WHERE company_id=? AND grn_no='FGRN-00001'`, [companyId]);
+          if (fgrn) {
+            await exec(`
+              INSERT INTO trx_grn_line (
+                grn_id, po_line_id, material_type, fabric_id,
+                received_qty, received_weight, no_of_rolls,
+                accepted_qty, rejected_qty, hold_qty, balance_qty,
+                lot_no, qc_status, uom_id
+              ) VALUES (?, ?, 'FABRIC', ?, 4950, 1240.00, 20, 4900, 50, 0, 50, 'LOT-4587', 'PARTIAL_ACCEPTED', 9)
+            `, [fgrn.id, fpoLine.id, fab1.id]);
+
+            const fgrnLine = await one<{ id: number }>(`SELECT id FROM trx_grn_line WHERE grn_id=? LIMIT 1`, [fgrn.id]);
+            if (fgrnLine) {
+              const rollsData = [
+                ['R-FGRN-00001-01', 'LOT-4587', 250, 62.5, 180, '30"', 'NVY-01', 'ACCEPTED', 'AVAILABLE', 'A-01'],
+                ['R-FGRN-00001-02', 'LOT-4587', 245, 61.2, 181, '30"', 'NVY-01', 'ACCEPTED', 'AVAILABLE', 'A-01'],
+                ['R-FGRN-00001-03', 'LOT-4587', 248, 63.0, 180, '30"', 'NVY-01', 'ACCEPTED', 'AVAILABLE', 'A-02'],
+                ['R-FGRN-00001-04', 'LOT-4587', 252, 64.1, 179, '30"', 'NVY-01', 'ACCEPTED', 'AVAILABLE', 'A-02'],
+                ['R-FGRN-00001-05', 'LOT-4587', 250, 62.0, 180, '30"', 'NVY-01', 'HOLD', 'RESERVED', 'A-03'],
+              ];
+              for (const [rno, lot, mtr, wt, gsm, dia, shd, qc, st, bin] of rollsData) {
+                await exec(`
+                  INSERT INTO trx_fabric_roll (
+                    company_id, grn_id, grn_line_id, fabric_id,
+                    roll_no, lot_no, meters, weight_kg, gsm, dia, shade,
+                    warehouse_id, location_bin, qc_status, stock_status
+                  ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'${qc}','${st}')
+                `, [companyId, fgrn.id, fgrnLine.id, fab1.id, rno, lot, mtr, wt, gsm, dia, shd, wh1.id, bin]);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   // ------------------------------------------------------- sync number series counters
   const seriesSync: [string, string][] = [
+    ['CAD_REQ', 'trx_cad_requirement'],
     ['JW_CHALLAN', 'trx_jobwork_challan'],
     ['JW_RECEIPT', 'trx_jobwork_receipt'],
     ['JW_IN', 'trx_jobwork_in'],

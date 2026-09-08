@@ -1,7 +1,9 @@
+import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Layers, Disc, PackageCheck, FileSpreadsheet } from 'lucide-react';
 import { CrudPage } from '../../components/CrudPage';
 import { StatusBadge, Badge } from '../../components/ui';
 import { fmtDate, fmtNumber, fmtDecimal, humanize, today } from '../../lib/format';
-import { useNavigate } from 'react-router-dom';
 
 export function EnquiriesPage() {
   return <CrudPage
@@ -86,12 +88,54 @@ export function SamplesPage() {
 
 export function QuotationsPage() {
   const nav = useNavigate();
-  return <CrudPage
-    path="quotations" title="Quotations" permission="QUOTATION" singular="Quotation"
-    subtitle="Domestic & import price offers for buyers and suppliers"
-    defaultSort={{ key: 'quotation_date', dir: 'desc' }}
-    onNew={() => nav('/sales/quotations/new')}
-    onRowClick={(r: any) => nav(`/sales/quotations/${r.id}`)}
+  const [activeTab, setActiveTab] = useState<'ALL' | 'FABRIC' | 'YARN' | 'GENERAL' | 'BUYER'>('ALL');
+
+  const baseParams = useMemo(() => {
+    if (activeTab === 'FABRIC') return { quotation_type: 'FABRIC' };
+    if (activeTab === 'YARN') return { quotation_type: 'YARN' };
+    if (activeTab === 'GENERAL') return { quotation_type: 'GENERAL' };
+    if (activeTab === 'BUYER') return { quotation_type: 'BUYER' };
+    return undefined;
+  }, [activeTab]);
+
+  return (
+    <div className="space-y-3">
+      {/* Departmental Quotation Tabs */}
+      <div className="flex border-b border-slate-200 space-x-2 bg-white px-2 pt-2 rounded-t-xl overflow-x-auto">
+        {[
+          { id: 'ALL', label: 'All Quotations', icon: Layers, tone: 'slate' },
+          { id: 'FABRIC', label: 'Fabric Quotations', icon: Layers, tone: 'sky' },
+          { id: 'YARN', label: 'Yarn Quotations', icon: Disc, tone: 'amber' },
+          { id: 'GENERAL', label: 'General & Trims', icon: PackageCheck, tone: 'rose' },
+          { id: 'BUYER', label: 'Buyer & Sales', icon: FileSpreadsheet, tone: 'emerald' },
+        ].map((t) => {
+          const Icon = t.icon;
+          const active = activeTab === t.id;
+          return (
+            <button
+              key={t.id}
+              onClick={() => setActiveTab(t.id as any)}
+              className={`flex items-center gap-1.5 py-2 px-3 text-xs font-semibold border-b-2 transition whitespace-nowrap ${
+                active
+                  ? 'border-brand-600 text-brand-700 bg-brand-50/50'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Icon size={14} />
+              <span>{t.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <CrudPage
+        key={activeTab}
+        baseParams={baseParams}
+        path="quotations" title="Quotations" permission="QUOTATION" singular="Quotation"
+        subtitle="Domestic & import price offers for buyers and suppliers"
+        defaultSort={{ key: 'quotation_date', dir: 'desc' }}
+        onNew={() => nav('/sales/quotations/new')}
+        onRowClick={(r: any) => nav(`/sales/quotations/${r.id}`)}
     columns={[
       { key: 'quotation_no', header: 'Quotation no', sortable: true,
         render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.quotation_no}</span> },
@@ -153,5 +197,7 @@ export function QuotationsPage() {
       { name: 'supplier_id', label: 'Supplier', lookup: 'suppliers' },
       { name: 'status_id', label: 'Status', statusDomain: 'QUOTATION' },
     ]}
-    fields={[]} />;
+    fields={[]} />
+    </div>
+  );
 }

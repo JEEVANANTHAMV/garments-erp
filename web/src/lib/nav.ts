@@ -67,12 +67,17 @@ export const NAV: NavSection[] = [
   {
     label: 'Procurement',
     items: [
-      { label: 'MRP Runs',        to: '/procurement/mrp', icon: TrendingUp, perms: ['MRP.VIEW'] },
-      { label: 'Purchase Orders', to: '/procurement/purchase-orders', icon: ShoppingCart, perms: ['PURCHASE.VIEW'] },
-      { label: 'General Purchases', to: '/procurement/general-purchases', icon: Receipt, perms: ['PURCHASE.VIEW'] },
-      { label: 'Goods Receipt',   to: '/procurement/grns', icon: PackageCheck, perms: ['GRN.VIEW'] },
-      { label: 'Purchase Returns',to: '/procurement/returns', icon: Truck, perms: ['PURCHASE.VIEW'] },
-      { label: 'Supplier Bills',  to: '/procurement/supplier-bills', icon: Receipt, perms: ['PURCHASE.VIEW'] },
+      { label: 'MRP Runs',            to: '/procurement/mrp', icon: TrendingUp, perms: ['MRP.VIEW'] },
+      { label: 'Fabric POs',          to: '/procurement/fabric/orders', icon: Layers, perms: ['PURCHASE.VIEW'] },
+      { label: 'Fabric GRN & Rolls',  to: '/procurement/fabric/grn', icon: PackageCheck, perms: ['GRN.VIEW'] },
+      { label: 'Fabric Roll Stock',   to: '/procurement/fabric/roll-stock', icon: Boxes, perms: ['INVENTORY.VIEW'] },
+      { label: 'Yarn POs',            to: '/procurement/yarn/orders', icon: GitBranch, perms: ['PURCHASE.VIEW'] },
+      { label: 'Yarn GRN',            to: '/procurement/yarn/grn', icon: PackageCheck, perms: ['GRN.VIEW'] },
+      { label: 'General Purchases',   to: '/procurement/general-purchases', icon: Receipt, perms: ['PURCHASE.VIEW'] },
+      { label: 'Purchase Orders (All)', to: '/procurement/purchase-orders', icon: ShoppingCart, perms: ['PURCHASE.VIEW'] },
+      { label: 'Goods Receipt (All)', to: '/procurement/grns', icon: PackageCheck, perms: ['GRN.VIEW'] },
+      { label: 'Purchase Returns',    to: '/procurement/returns', icon: Truck, perms: ['PURCHASE.VIEW'] },
+      { label: 'Supplier Bills',      to: '/procurement/supplier-bills', icon: Receipt, perms: ['PURCHASE.VIEW'] },
     ],
   },
   {
@@ -88,6 +93,7 @@ export const NAV: NavSection[] = [
   {
     label: 'Production',
     items: [
+      { label: 'CAD Auto-Consumption', to: '/production/cad-requirements', icon: Scissors, perms: ['PRODUCTION.VIEW'] },
       { label: 'WIP Dashboard',       to: '/production/wip', icon: BarChart3, perms: ['PRODUCTION.VIEW'] },
       { label: 'Daily Plans',         to: '/production/daily-plans', icon: CalendarClock, perms: ['PRODUCTION.VIEW'] },
       { label: 'Daily Output Entry',  to: '/production/daily-outputs', icon: ClipboardCheck, perms: ['PRODUCTION.VIEW'] },

@@ -28,6 +28,8 @@ import { uploadRouter } from './modules/upload/upload.routes.js';
 import { gstRouter } from './modules/gst/gst.routes.js';
 import { wipRouter } from './modules/production/wip.routes.js';
 import { costingRouter } from './modules/costing/costing.routes.js';
+import { cadRouter } from './modules/cad/cad.routes.js';
+import { fabricYarnProcurementRouter } from './modules/procurement/fabricYarnProcurement.routes.js';
 
 export function createApp() {
   const app = express();
@@ -80,6 +82,8 @@ export function createApp() {
   api.use('/', cartonRouter);          // /packings/:id/cartons, /cartons/:id
   api.use('/production', wipRouter);   // /production/wip-summary, /production/daily-dashboard, etc.
   api.use('/', costingRouter);          // /production-costs/order-data/:id, /pre-costings/style-data/:id, etc.
+  api.use('/', cadRouter);              // /cad-requirements, /cad-requirements/:id/calculate, etc.
+  api.use('/', fabricYarnProcurementRouter); // /fabric-purchase-orders, /fabric-grns, /yarn-grns, etc.
 
   // Metadata-driven resources.
   const registry = [...masterResources, ...transactionResources];

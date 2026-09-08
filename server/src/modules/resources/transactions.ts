@@ -161,23 +161,33 @@ export const transactionResources: ResourceConfig[] = [
     defaultSort: 't.po_date', hasIsActive: false,
     filters: ['supplier_id', 'po_type', 'status_id', 'approval_state', 'so_id', 'branch_id'],
     autoNumber: { column: 'po_no', docType: 'PURCHASE_ORDER' },
-    selectExtra: 'sup.party_name AS supplier_name, cur.code AS currency_code, cs.label AS status_label, so.so_no',
+    selectExtra: 'sup.party_name AS supplier_name, cur.code AS currency_code, cs.label AS status_label, so.so_no, st.style_code',
     joins: `LEFT JOIN mst_party sup ON sup.id = t.supplier_id
             LEFT JOIN cfg_currency cur ON cur.id = t.currency_id
             LEFT JOIN cfg_status cs ON cs.id = t.status_id
-            LEFT JOIN trx_sales_order so ON so.id = t.so_id`,
+            LEFT JOIN trx_sales_order so ON so.id = t.so_id
+            LEFT JOIN mst_style st ON st.id = t.style_id`,
     children: [
       { key: 'lines', table: 'trx_purchase_order_line', fk: 'po_id', fields: [
         f('material_type', s.enumReq(['YARN','FABRIC','TRIM','SERVICE'])),
         f('yarn_id', s.id()), f('fabric_id', s.id()), f('trim_id', s.id()), f('color_id', s.id()),
         f('description', s.nullableStr(255)), f('qty', s.decReq()), f('uom_id', s.idReq()),
+        f('fabric_type', s.nullableStr(40)), f('dia', s.nullableStr(40)), f('gsm', s.nullableStr(30)),
+        f('composition', s.nullableStr(100)), f('shade_code', s.nullableStr(50)),
+        f('print_flag', s.bool()), f('print_color', s.nullableStr(60)), f('finish', s.nullableStr(80)),
+        f('mill_id', s.id()), f('weight_kg', s.dec()), f('no_of_rolls', s.int()),
+        f('yarn_type', s.nullableStr(40)), f('purchase_basis', s.nullableStr(30)),
+        f('yarn_count_str', s.nullableStr(50)), f('yarn_category', s.nullableStr(60)),
+        f('dyeing_mill_id', s.id()), f('packs', s.int()), f('pack_weight_kg', s.dec()),
         f('rate', s.decReq()), f('amount', s.decReq()), f('gst_rate', s.dec()),
+        f('discount_amount', s.dec()), f('freight_amount', s.dec()), f('other_charges', s.dec()), f('net_amount', s.dec()),
       ]},
     ],
     fields: [
-      f('branch_id', s.id()), f('po_no', s.nullableStr(40)), f('po_date', s.date()),
-      f('supplier_id', s.idReq()),
+      f('branch_id', s.id()), f('po_no', s.nullableStr(40)), f('internal_ir_no', s.nullableStr(60)),
+      f('po_date', s.date()), f('supplier_id', s.idReq()),
       f('po_type', s.enum(['MATERIAL','JOBWORK','SERVICE','CAPEX'])),
+      f('order_type', s.nullableStr(40)), f('quotation_id', s.id()), f('style_id', s.id()),
       f('so_id', s.id()), f('mrp_id', s.id()), f('currency_id', s.idReq()),
       f('exchange_rate', s.dec()), f('delivery_date', s.date()),
       f('payment_terms', s.nullableStr(150)), f('total_amount', s.dec()),
