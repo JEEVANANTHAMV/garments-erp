@@ -94,6 +94,7 @@ export const NAV: NavSection[] = [
     label: 'Production',
     items: [
       { label: 'CAD Auto-Consumption', to: '/production/cad-requirements', icon: Scissors, perms: ['PRODUCTION.VIEW'] },
+      { label: 'Cutting Plans',        to: '/production/cutting-plans', icon: Scissors, perms: ['PRODUCTION.VIEW'] },
       { label: 'WIP Dashboard',       to: '/production/wip', icon: BarChart3, perms: ['PRODUCTION.VIEW'] },
       { label: 'Daily Plans',         to: '/production/daily-plans', icon: CalendarClock, perms: ['PRODUCTION.VIEW'] },
       { label: 'Daily Output Entry',  to: '/production/daily-outputs', icon: ClipboardCheck, perms: ['PRODUCTION.VIEW'] },
@@ -127,12 +128,12 @@ export const NAV: NavSection[] = [
     label: 'Packing & Export',
     items: [
       { label: 'Packing',             to: '/logistics/packings', icon: PackageCheck, perms: ['PACKING.VIEW'] },
+      { label: 'Packing Lists',       to: '/logistics/packing-lists', icon: FileCheck2, perms: ['PACKING.VIEW', 'EXPORT.VIEW'] },
+      { label: 'Shipments',           to: '/logistics/shipments', icon: Ship, perms: ['PACKING.VIEW', 'EXPORT.VIEW'] },
       { label: 'Dispatch',            to: '/logistics/dispatches', icon: Truck, perms: ['DISPATCH.VIEW'] },
       { label: 'Containers',          to: '/logistics/containers', icon: Container, perms: ['DISPATCH.VIEW'] },
       { label: 'Commercial Invoices', to: '/export/invoices', icon: Receipt, perms: ['EXPORT.VIEW'] },
-      { label: 'Packing Lists',       to: '/export/packing-lists', icon: FileCheck2, perms: ['EXPORT.VIEW'] },
       { label: 'Shipping Bills',      to: '/export/shipping-bills', icon: FileText, perms: ['EXPORT.VIEW'] },
-      { label: 'Shipments',           to: '/export/shipments', icon: Ship, perms: ['EXPORT.VIEW'] },
       { label: 'Certificates',        to: '/export/certificates', icon: FileCheck2, perms: ['EXPORT.VIEW'] },
     ],
   },

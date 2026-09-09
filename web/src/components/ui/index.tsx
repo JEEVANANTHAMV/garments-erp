@@ -98,15 +98,140 @@ export function Checkbox({ label, checked, onChange, disabled }: {
 const TONE: Record<string, string> = {
   slate: 'bg-slate-100 text-slate-700',
   green: 'bg-emerald-100 text-emerald-800',
+  emerald: 'bg-emerald-100 text-emerald-800',
   amber: 'bg-amber-100 text-amber-800',
   red: 'bg-red-100 text-red-700',
   blue: 'bg-blue-100 text-blue-700',
+  indigo: 'bg-indigo-100 text-indigo-700',
   violet: 'bg-violet-100 text-violet-700',
+  gray: 'bg-slate-100 text-slate-700',
 };
 
-export function Badge({ children, tone = 'slate' }: { children: ReactNode; tone?: keyof typeof TONE | string }) {
-  return <span className={clsx('badge', TONE[tone] ?? TONE.slate)}>{children}</span>;
+export function Badge({
+  children,
+  tone = 'slate',
+  color,
+  variant,
+  size,
+  className,
+}: {
+  children: ReactNode;
+  tone?: string;
+  color?: string;
+  variant?: 'solid' | 'outline' | string;
+  size?: 'sm' | 'md' | 'lg' | string;
+  className?: string;
+}) {
+  const chosenTone = color || tone;
+  const toneClass = TONE[chosenTone] ?? TONE.slate;
+  return (
+    <span
+      className={clsx(
+        'badge',
+        variant === 'outline'
+          ? 'border border-slate-300 bg-transparent text-slate-700'
+          : toneClass,
+        size === 'lg' && 'px-2.5 py-1 text-xs',
+        className
+      )}
+    >
+      {children}
+    </span>
+  );
 }
+
+/* ---------------------------------------------------------------- Card & Button */
+export function Card({
+  title,
+  subtitle,
+  children,
+  actions,
+  className,
+}: {
+  title?: ReactNode;
+  subtitle?: ReactNode;
+  children: ReactNode;
+  actions?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={clsx('rounded-xl border border-surface-border bg-white shadow-sm overflow-hidden', className)}>
+      {(title || actions) && (
+        <div className="flex items-center justify-between border-b border-surface-border px-5 py-3.5 bg-surface-muted/30">
+          <div>
+            {typeof title === 'string' ? (
+              <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
+            ) : (
+              title
+            )}
+            {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
+          </div>
+          {actions && <div className="flex items-center gap-2">{actions}</div>}
+        </div>
+      )}
+      {children}
+    </div>
+  );
+}
+
+export function Button({
+  children,
+  variant = 'primary',
+  size = 'md',
+  loading,
+  className,
+  disabled,
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'outline';
+  size?: 'sm' | 'md' | 'lg';
+  loading?: boolean;
+}) {
+  const variantClass = {
+    primary: 'btn-primary',
+    secondary: 'btn-secondary',
+    danger: 'btn-danger',
+    ghost: 'hover:bg-slate-100 text-slate-700 font-medium px-3 py-1.5 rounded-lg text-xs transition-colors',
+    outline: 'border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium px-3 py-1.5 rounded-lg text-xs transition-colors',
+  }[variant];
+
+  const sizeClass = {
+    sm: 'text-xs py-1 px-2.5',
+    md: '',
+    lg: 'text-sm py-2.5 px-4',
+  }[size];
+
+  return (
+    <button
+      className={clsx(
+        variantClass,
+        sizeClass,
+        loading && 'opacity-70 cursor-not-allowed inline-flex items-center gap-2',
+        className
+      )}
+      disabled={disabled || loading}
+      {...props}
+    >
+      {loading && <Spinner size={14} />}
+      {children}
+    </button>
+  );
+}
+
+import { DataTable as BaseDataTable, type Column } from '../DataTable';
+
+export function DataTable({
+  data,
+  rows,
+  rowKey,
+  ...props
+}: any) {
+  const actualRows = rows || data || [];
+  const actualKey = rowKey || ((r: any, idx?: number) => r?.id ?? idx ?? Math.random());
+  return <BaseDataTable rows={actualRows} rowKey={actualKey} {...props} />;
+}
+export type { Column };
+
 
 /** Maps common ERP state words onto a colour tone. */
 export function StatusBadge({ value }: { value: unknown }) {

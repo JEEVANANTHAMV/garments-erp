@@ -49,6 +49,8 @@ import YarnGRNDetailPage from './pages/procurement/YarnGRNDetail';
 
 import CadRequirementsPage from './pages/production/CadRequirements';
 import CadRequirementDetailPage from './pages/production/CadRequirementDetail';
+import { CuttingPlansPage, CuttingPlanDetailPage } from './pages/production/CuttingPlanDetail';
+import { PackingListPage, PackingListDetailPage, ShipmentListPage, ShipmentDetailPage, DispatchListPage, DispatchDetailPage } from './pages/logistics/PackingListShipment';
 
 /* Inventory */
 import { StockPage, StockLedgerPage } from './pages/inventory';
@@ -69,8 +71,8 @@ import { QcInspectionsPage, DefectsPage } from './pages/quality';
 
 /* Logistics & Export */
 import {
-  PackingsPage, DispatchesPage, ContainersPage,
-  ExportInvoicesPage, PackingListsPage, ShippingBillsPage, ShipmentsPage, CertificatesPage,
+  PackingsPage, ContainersPage,
+  ExportInvoicesPage, ShippingBillsPage, CertificatesPage,
 } from './pages/logistics';
 
 /* Finance */
@@ -234,6 +236,11 @@ export default function App() {
                   <Route path="cad-requirements" element={<CadRequirementsPage />} />
                   <Route path="cad-requirements/new" element={<CadRequirementDetailPage />} />
                   <Route path="cad-requirements/:id" element={<CadRequirementDetailPage />} />
+
+                  {/* Cutting Plans */}
+                  <Route path="cutting-plans" element={<CuttingPlansPage />} />
+                  <Route path="cutting-plans/new" element={<CuttingPlanDetailPage />} />
+                  <Route path="cutting-plans/:id" element={<CuttingPlanDetailPage />} />
                 </Route>
 
                 {/* Quality */}
@@ -245,14 +252,26 @@ export default function App() {
                 {/* Logistics & Export */}
                 <Route path="logistics">
                   <Route path="packings" element={<PackingsPage />} />
-                  <Route path="dispatches" element={<DispatchesPage />} />
+                  <Route path="dispatches" element={<DispatchListPage />} />
+                  <Route path="dispatches/new" element={<DispatchDetailPage />} />
+                  <Route path="dispatches/:id" element={<DispatchDetailPage />} />
                   <Route path="containers" element={<ContainersPage />} />
+                  <Route path="packing-lists" element={<PackingListPage />} />
+                  <Route path="packing-lists/new" element={<PackingListDetailPage />} />
+                  <Route path="packing-lists/:id" element={<PackingListDetailPage />} />
+                  <Route path="shipments" element={<ShipmentListPage />} />
+                  <Route path="shipments/new" element={<ShipmentDetailPage />} />
+                  <Route path="shipments/:id" element={<ShipmentDetailPage />} />
                 </Route>
                 <Route path="export">
                   <Route path="invoices" element={<ExportInvoicesPage />} />
-                  <Route path="packing-lists" element={<PackingListsPage />} />
+                  <Route path="packing-lists" element={<PackingListPage />} />
+                  <Route path="packing-lists/new" element={<PackingListDetailPage />} />
+                  <Route path="packing-lists/:id" element={<PackingListDetailPage />} />
                   <Route path="shipping-bills" element={<ShippingBillsPage />} />
-                  <Route path="shipments" element={<ShipmentsPage />} />
+                  <Route path="shipments" element={<ShipmentListPage />} />
+                  <Route path="shipments/new" element={<ShipmentDetailPage />} />
+                  <Route path="shipments/:id" element={<ShipmentDetailPage />} />
                   <Route path="certificates" element={<CertificatesPage />} />
                 </Route>
 
