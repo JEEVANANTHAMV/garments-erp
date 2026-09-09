@@ -57,6 +57,10 @@ traceabilityRouter.get('/io/:ioNo/traceability', requirePermission('PRODUCTION.V
     packingLists,
     shipments,
     dispatches,
+    knittingOrders,
+    fabricProcessOrders,
+    trimPos,
+    trimGrns,
   ] = await Promise.all([
     query(`SELECT id, so_no, so_date, order_qty, buyer_id FROM trx_sales_order WHERE (so_no = ? OR po_no = ?) AND company_id = ?`, [ioNo, ioNo, cid]),
     query(`SELECT id, po_prod_no, prod_date, order_qty, planned_qty FROM trx_production_order WHERE io_no = ? AND company_id = ?`, [ioNo, cid]),
@@ -75,6 +79,10 @@ traceabilityRouter.get('/io/:ioNo/traceability', requirePermission('PRODUCTION.V
     query(`SELECT id, pl_no, pl_date, shipment_type, total_cartons, total_qty, status FROM trx_packing_list WHERE io_no = ? AND company_id = ?`, [ioNo, cid]),
     query(`SELECT id, shipment_no, shipment_type, mode, total_packages, total_qty, destination FROM trx_shipment WHERE io_no = ? AND company_id = ?`, [ioNo, cid]),
     query(`SELECT id, dispatch_no, dispatch_date, vehicle_no, lr_no, eway_bill_no, total_cartons, total_qty FROM trx_dispatch WHERE io_no = ? AND company_id = ?`, [ioNo, cid]),
+    query(`SELECT id, kwo_no, kwo_date, sub_process, planned_fabric_kg, status FROM trx_knitting_order WHERE io_no = ? AND company_id = ?`, [ioNo, cid]),
+    query(`SELECT id, fpo_no, fpo_date, sub_process, color_name, input_weight_kg, output_weight_kg, status FROM trx_fabric_process_order WHERE io_no = ? AND company_id = ?`, [ioNo, cid]),
+    query(`SELECT id, po_no, po_date, grand_total, status FROM trx_trim_po WHERE io_no = ? AND company_id = ?`, [ioNo, cid]),
+    query(`SELECT id, grn_no, grn_date, status FROM trx_trim_grn WHERE io_no = ? AND company_id = ?`, [ioNo, cid]),
   ]);
 
   res.json({
@@ -97,6 +105,10 @@ traceabilityRouter.get('/io/:ioNo/traceability', requirePermission('PRODUCTION.V
       packingLists,
       shipments,
       dispatches,
+      knittingOrders,
+      fabricProcessOrders,
+      trimPos,
+      trimGrns,
     }
   });
 }));

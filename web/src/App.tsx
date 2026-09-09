@@ -47,6 +47,14 @@ import YarnPurchaseOrderDetailPage from './pages/procurement/YarnPurchaseOrderDe
 import YarnGRNsPage from './pages/procurement/YarnGRNs';
 import YarnGRNDetailPage from './pages/procurement/YarnGRNDetail';
 
+import TrimPurchaseOrdersPage from './pages/procurement/TrimPurchaseOrders';
+import TrimPurchaseOrderDetailPage from './pages/procurement/TrimPurchaseOrderDetail';
+import TrimGRNsPage from './pages/procurement/TrimGRNs';
+import TrimGRNDetailPage from './pages/procurement/TrimGRNDetail';
+
+import KnittingPage from './pages/production/KnittingPage';
+import FabricProcessingPage from './pages/production/FabricProcessingPage';
+
 import CadRequirementsPage from './pages/production/CadRequirements';
 import CadRequirementDetailPage from './pages/production/CadRequirementDetail';
 import { CuttingPlansPage, CuttingPlanDetailPage } from './pages/production/CuttingPlanDetail';
@@ -206,6 +214,14 @@ export default function App() {
                   <Route path="yarn/grn" element={<YarnGRNsPage />} />
                   <Route path="yarn/grn/new" element={<YarnGRNDetailPage />} />
                   <Route path="yarn/grn/:id" element={<YarnGRNDetailPage />} />
+
+                  {/* Trim Procurement */}
+                  <Route path="trim/orders" element={<TrimPurchaseOrdersPage />} />
+                  <Route path="trim/orders/new" element={<TrimPurchaseOrderDetailPage />} />
+                  <Route path="trim/orders/:id" element={<TrimPurchaseOrderDetailPage />} />
+                  <Route path="trim/grn" element={<TrimGRNsPage />} />
+                  <Route path="trim/grn/new" element={<TrimGRNDetailPage />} />
+                  <Route path="trim/grn/:id" element={<TrimGRNDetailPage />} />
                 </Route>
 
                 {/* Inventory */}
@@ -220,6 +236,8 @@ export default function App() {
                 {/* Production */}
                 <Route path="production">
                   <Route path="traceability" element={<TraceabilitySearchPage />} />
+                  <Route path="knitting" element={<KnittingPage />} />
+                  <Route path="fabric-processing" element={<FabricProcessingPage />} />
                   <Route path="fabric-issues" element={<FabricIssuePage />} />
                   <Route path="lay-spreading" element={<LaySpreadingPage />} />
                   <Route path="cut-qc-bundles" element={<CutQcBundlesPage />} />

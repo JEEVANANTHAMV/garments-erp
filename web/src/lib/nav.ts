@@ -5,6 +5,7 @@ import {
   Factory, Scissors, ClipboardCheck, PackageCheck, Ship, Receipt, Landmark,
   BarChart3, Shield, Settings, Warehouse, GitBranch, CalendarClock, FileCheck2,
   History, Wallet, TrendingUp, Container, Coins, SlidersHorizontal, Search,
+  Activity, RefreshCw,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -73,6 +74,8 @@ export const NAV: NavSection[] = [
       { label: 'Fabric Roll Stock',   to: '/procurement/fabric/roll-stock', icon: Boxes, perms: ['INVENTORY.VIEW'] },
       { label: 'Yarn POs',            to: '/procurement/yarn/orders', icon: GitBranch, perms: ['PURCHASE.VIEW'] },
       { label: 'Yarn GRN',            to: '/procurement/yarn/grn', icon: PackageCheck, perms: ['GRN.VIEW'] },
+      { label: 'Trim POs',            to: '/procurement/trim/orders', icon: Scissors, perms: ['PURCHASE.VIEW'] },
+      { label: 'Trim GRN & Stock',    to: '/procurement/trim/grn', icon: PackageCheck, perms: ['GRN.VIEW'] },
       { label: 'General Purchases',   to: '/procurement/general-purchases', icon: Receipt, perms: ['PURCHASE.VIEW'] },
       { label: 'Purchase Orders (All)', to: '/procurement/purchase-orders', icon: ShoppingCart, perms: ['PURCHASE.VIEW'] },
       { label: 'Goods Receipt (All)', to: '/procurement/grns', icon: PackageCheck, perms: ['GRN.VIEW'] },
@@ -94,6 +97,8 @@ export const NAV: NavSection[] = [
     label: 'Production',
     items: [
       { label: 'Traceability Search',  to: '/production/traceability', icon: Search, perms: ['PRODUCTION.VIEW'] },
+      { label: 'Knitting Work Orders', to: '/production/knitting', icon: Activity, perms: ['PRODUCTION.VIEW'] },
+      { label: 'Fabric Processing',    to: '/production/fabric-processing', icon: RefreshCw, perms: ['PRODUCTION.VIEW'] },
       { label: 'CAD Auto-Consumption', to: '/production/cad-requirements', icon: Scissors, perms: ['PRODUCTION.VIEW'] },
       { label: 'Cutting Plans',        to: '/production/cutting-plans', icon: Scissors, perms: ['PRODUCTION.VIEW'] },
       { label: 'Fabric Issues',        to: '/production/fabric-issues', icon: Beaker, perms: ['PRODUCTION.VIEW'] },
