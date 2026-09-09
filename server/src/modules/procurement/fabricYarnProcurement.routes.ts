@@ -19,7 +19,7 @@ export const fabricYarnProcurementRouter = Router();
 fabricYarnProcurementRouter.post('/fabric-purchase-orders/convert-from-quotation', requirePermission('PURCHASE.CREATE'), ah(async (req, res) => {
   const companyId = req.user!.companyId;
   const userId = req.user!.id;
-  const { quotation_id, required_date, remarks } = req.body;
+  const { quotation_id, required_date, remarks, billing_address, shipping_address, shipping_to_party_id } = req.body;
 
   if (!quotation_id) throw BadRequest('Quotation ID is required');
 
@@ -51,8 +51,9 @@ fabricYarnProcurementRouter.post('/fabric-purchase-orders/convert-from-quotation
         company_id, po_no, internal_ir_no, po_date, supplier_id,
         po_type, order_type, quotation_id, style_id, currency_id,
         exchange_rate, delivery_date, payment_terms, total_amount,
-        tax_amount, grand_total, approval_state, remarks, created_by
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        tax_amount, grand_total, approval_state, remarks,
+        billing_address, shipping_address, shipping_to_party_id, created_by
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `, [
       companyId,
       finalPoNo,
@@ -72,6 +73,9 @@ fabricYarnProcurementRouter.post('/fabric-purchase-orders/convert-from-quotation
       quote.total_amount || 0,
       'APPROVED',
       remarks || `Converted from Fabric Quotation ${quote.quotation_no}`,
+      billing_address || null,
+      shipping_address || null,
+      shipping_to_party_id ? Number(shipping_to_party_id) : null,
       userId,
     ]);
 
@@ -142,8 +146,8 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
       INSERT INTO trx_grn (
         company_id, grn_no, internal_ir_no, grn_date, po_id, style_id,
         supplier_id, warehouse_id, supplier_dc_no, supplier_inv_no,
-        vehicle_no, qc_status, remarks, created_by
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        vehicle_no, gate_inward_id, qc_status, remarks, created_by
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `, [
       companyId,
       finalGrnNo,
@@ -156,12 +160,21 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
       body.supplier_dc_no || null,
       body.supplier_inv_no || null,
       body.vehicle_no || null,
+      body.gate_inward_id ? Number(body.gate_inward_id) : null,
       body.qc_status || 'ACCEPTED',
       body.remarks || null,
       userId,
     ]);
 
     const newGrnId = grnRes!.insertId;
+
+    if (body.gate_inward_id) {
+      await txExecute(tx, `
+        UPDATE trx_gate_inward
+           SET status = 'GRN_COMPLETED'
+         WHERE id = ? AND company_id = ?
+      `, [Number(body.gate_inward_id), companyId]);
+    }
 
     // 2. Insert GRN Lines
     const lines = Array.isArray(body.lines) ? body.lines : [];
@@ -281,6 +294,7 @@ fabricYarnProcurementRouter.get('/fabric-grns', requirePermission('GRN.VIEW'), a
            wh.warehouse_name,
            po.po_no,
            st.style_code,
+           gin.entry_no AS gate_entry_no,
            COALESCE((SELECT SUM(gl.received_qty) FROM trx_grn_line gl WHERE gl.grn_id = g.id AND gl.material_type = 'FABRIC'), 0) AS total_meters,
            COALESCE((SELECT SUM(gl.received_weight) FROM trx_grn_line gl WHERE gl.grn_id = g.id AND gl.material_type = 'FABRIC'), 0) AS total_weight_kg,
            COALESCE((SELECT COUNT(*) FROM trx_fabric_roll fr WHERE fr.grn_id = g.id), (SELECT SUM(gl.no_of_rolls) FROM trx_grn_line gl WHERE gl.grn_id = g.id)) AS roll_count
@@ -289,6 +303,7 @@ fabricYarnProcurementRouter.get('/fabric-grns', requirePermission('GRN.VIEW'), a
       LEFT JOIN mst_warehouse wh ON wh.id = g.warehouse_id
       LEFT JOIN trx_purchase_order po ON po.id = g.po_id
       LEFT JOIN mst_style st ON st.id = g.style_id
+      LEFT JOIN trx_gate_inward gin ON gin.id = g.gate_inward_id
      WHERE g.company_id = ?
        AND (EXISTS (SELECT 1 FROM trx_grn_line gl WHERE gl.grn_id = g.id AND gl.material_type = 'FABRIC')
             OR po.po_no LIKE 'FPO%' OR g.grn_no LIKE 'FGRN%')
@@ -308,12 +323,14 @@ fabricYarnProcurementRouter.get('/fabric-grns/:id', requirePermission('GRN.VIEW'
            sup.party_name AS supplier_name,
            wh.warehouse_name,
            po.po_no,
-           st.style_code
+           st.style_code,
+           gin.entry_no AS gate_entry_no
       FROM trx_grn g
       LEFT JOIN mst_party sup ON sup.id = g.supplier_id
       LEFT JOIN mst_warehouse wh ON wh.id = g.warehouse_id
       LEFT JOIN trx_purchase_order po ON po.id = g.po_id
       LEFT JOIN mst_style st ON st.id = g.style_id
+      LEFT JOIN trx_gate_inward gin ON gin.id = g.gate_inward_id
      WHERE g.id = ? AND g.company_id = ?
   `, [id, companyId]);
 
@@ -436,7 +453,7 @@ fabricYarnProcurementRouter.post('/fabric-rolls/:id/status', requirePermission('
 fabricYarnProcurementRouter.post('/yarn-purchase-orders/convert-from-quotation', requirePermission('PURCHASE.CREATE'), ah(async (req, res) => {
   const companyId = req.user!.companyId;
   const userId = req.user!.id;
-  const { quotation_id, required_date, remarks } = req.body;
+  const { quotation_id, required_date, remarks, billing_address, shipping_address, shipping_to_party_id } = req.body;
 
   if (!quotation_id) throw BadRequest('Quotation ID is required');
 
@@ -468,8 +485,9 @@ fabricYarnProcurementRouter.post('/yarn-purchase-orders/convert-from-quotation',
         company_id, po_no, internal_ir_no, po_date, supplier_id,
         po_type, order_type, quotation_id, style_id, currency_id,
         exchange_rate, delivery_date, payment_terms, total_amount,
-        tax_amount, grand_total, approval_state, remarks, created_by
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        tax_amount, grand_total, approval_state, remarks,
+        billing_address, shipping_address, shipping_to_party_id, created_by
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `, [
       companyId,
       finalPoNo,
@@ -489,6 +507,9 @@ fabricYarnProcurementRouter.post('/yarn-purchase-orders/convert-from-quotation',
       quote.total_amount || 0,
       'APPROVED',
       remarks || `Converted from Yarn Quotation ${quote.quotation_no}`,
+      billing_address || null,
+      shipping_address || null,
+      shipping_to_party_id ? Number(shipping_to_party_id) : null,
       userId,
     ]);
 
@@ -550,8 +571,8 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
       INSERT INTO trx_grn (
         company_id, grn_no, internal_ir_no, grn_date, po_id, style_id,
         supplier_id, warehouse_id, supplier_dc_no, supplier_inv_no,
-        vehicle_no, qc_status, remarks, created_by
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        vehicle_no, gate_inward_id, qc_status, remarks, created_by
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `, [
       companyId,
       finalGrnNo,
@@ -564,12 +585,21 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
       body.supplier_dc_no || null,
       body.supplier_inv_no || null,
       body.vehicle_no || null,
+      body.gate_inward_id ? Number(body.gate_inward_id) : null,
       body.qc_status || 'ACCEPTED',
       body.remarks || null,
       userId,
     ]);
 
     const newGrnId = grnRes!.insertId;
+
+    if (body.gate_inward_id) {
+      await txExecute(tx, `
+        UPDATE trx_gate_inward
+           SET status = 'GRN_COMPLETED'
+         WHERE id = ? AND company_id = ?
+      `, [Number(body.gate_inward_id), companyId]);
+    }
 
     const lines = Array.isArray(body.lines) ? body.lines : [];
     for (const line of lines) {
@@ -651,6 +681,7 @@ fabricYarnProcurementRouter.get('/yarn-grns', requirePermission('GRN.VIEW'), ah(
            wh.warehouse_name,
            po.po_no,
            st.style_code,
+           gin.entry_no AS gate_entry_no,
            COALESCE((SELECT SUM(gl.received_qty) FROM trx_grn_line gl WHERE gl.grn_id = g.id AND gl.material_type = 'YARN'), 0) AS total_kg,
            COALESCE((SELECT SUM(gl.no_of_rolls) FROM trx_grn_line gl WHERE gl.grn_id = g.id AND gl.material_type = 'YARN'), 0) AS total_packs
       FROM trx_grn g
@@ -658,6 +689,7 @@ fabricYarnProcurementRouter.get('/yarn-grns', requirePermission('GRN.VIEW'), ah(
       LEFT JOIN mst_warehouse wh ON wh.id = g.warehouse_id
       LEFT JOIN trx_purchase_order po ON po.id = g.po_id
       LEFT JOIN mst_style st ON st.id = g.style_id
+      LEFT JOIN trx_gate_inward gin ON gin.id = g.gate_inward_id
      WHERE g.company_id = ?
        AND (EXISTS (SELECT 1 FROM trx_grn_line gl WHERE gl.grn_id = g.id AND gl.material_type = 'YARN')
             OR po.po_no LIKE 'YPO%' OR g.grn_no LIKE 'YGRN%')
@@ -677,12 +709,14 @@ fabricYarnProcurementRouter.get('/yarn-grns/:id', requirePermission('GRN.VIEW'),
            sup.party_name AS supplier_name,
            wh.warehouse_name,
            po.po_no,
-           st.style_code
+           st.style_code,
+           gin.entry_no AS gate_entry_no
       FROM trx_grn g
       LEFT JOIN mst_party sup ON sup.id = g.supplier_id
       LEFT JOIN mst_warehouse wh ON wh.id = g.warehouse_id
       LEFT JOIN trx_purchase_order po ON po.id = g.po_id
       LEFT JOIN mst_style st ON st.id = g.style_id
+      LEFT JOIN trx_gate_inward gin ON gin.id = g.gate_inward_id
      WHERE g.id = ? AND g.company_id = ?
   `, [id, companyId]);
 

@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Save, Plus, Trash2, Disc,
-  PackageCheck, FileSpreadsheet
+  PackageCheck, FileSpreadsheet, Building2, Truck, RotateCcw
 } from 'lucide-react';
 import { http, ApiError } from '../../lib/api';
 import { useLookup, toOptions } from '../../hooks/useLookup';
@@ -70,6 +70,9 @@ export default function YarnPurchaseOrderDetailPage() {
   const suppliers = useLookup('suppliers');
   const yarns = useLookup('yarns');
   const styles = useLookup('styles');
+  const parties = useLookup('parties');
+
+  const COMPANY_DEFAULT_ADDRESS = "CK Exports\n123 Textile Park, Dharapuram Road\nTirupur - 641604, Tamil Nadu\nGSTIN: 33AAAAA0000A1Z5";
 
   const [saving, setSaving] = useState(false);
   const [quoteModalOpen, setQuoteModalOpen] = useState(false);
@@ -86,6 +89,9 @@ export default function YarnPurchaseOrderDetailPage() {
     payment_terms: '30 Days Credit',
     remarks: '',
     approval_state: 'APPROVED',
+    billing_address: COMPANY_DEFAULT_ADDRESS,
+    shipping_address: '',
+    shipping_to_party_id: '',
   });
 
   const [lines, setLines] = useState<YarnLine[]>([emptyYarnLine()]);
@@ -123,6 +129,9 @@ export default function YarnPurchaseOrderDetailPage() {
         payment_terms: existingPo.payment_terms || '',
         remarks: existingPo.remarks || '',
         approval_state: existingPo.approval_state || 'APPROVED',
+        billing_address: existingPo.billing_address || COMPANY_DEFAULT_ADDRESS,
+        shipping_address: existingPo.shipping_address || '',
+        shipping_to_party_id: existingPo.shipping_to_party_id ? String(existingPo.shipping_to_party_id) : '',
       });
 
       if (existingPo.lines?.length) {
@@ -216,6 +225,29 @@ export default function YarnPurchaseOrderDetailPage() {
     return { totalKg, greyKg, dyedKg, totalPacks, gross, tax, net };
   }, [lines]);
 
+  const handleShipToPartyChange = (partyIdStr: string) => {
+    if (!partyIdStr) {
+      setHeader((h) => ({ ...h, shipping_to_party_id: '', shipping_address: '' }));
+      return;
+    }
+    const found = (parties.data as any[])?.find((p) => String(p.id) === partyIdStr);
+    let addr = '';
+    if (found) {
+      addr = found.label;
+      if (found.default_address) {
+        addr += `\n${found.default_address}`;
+      }
+      if (found.gstin) {
+        addr += `\nGSTIN: ${found.gstin}`;
+      }
+    }
+    setHeader((h) => ({
+      ...h,
+      shipping_to_party_id: partyIdStr,
+      shipping_address: addr || h.shipping_address,
+    }));
+  };
+
   // Convert from Quotation
   const handleConvertQuotation = async () => {
     if (!selectedQuoteId) {
@@ -230,6 +262,9 @@ export default function YarnPurchaseOrderDetailPage() {
           quotation_id: selectedQuoteId,
           required_date: header.delivery_date || undefined,
           remarks: `Converted from Yarn Quotation #${selectedQuoteId}`,
+          billing_address: header.billing_address,
+          shipping_address: header.shipping_address,
+          shipping_to_party_id: header.shipping_to_party_id ? Number(header.shipping_to_party_id) : undefined,
         }
       );
       toast(`Successfully converted to PO ${res.data.po_no}!`, 'success');
@@ -261,6 +296,9 @@ export default function YarnPurchaseOrderDetailPage() {
         payment_terms: header.payment_terms,
         remarks: header.remarks,
         approval_state: header.approval_state,
+        billing_address: header.billing_address || null,
+        shipping_address: header.shipping_address || null,
+        shipping_to_party_id: header.shipping_to_party_id ? Number(header.shipping_to_party_id) : null,
         currency_id: 1,
         exchange_rate: 1.0,
         total_amount: totals.gross,
@@ -456,6 +494,79 @@ export default function YarnPurchaseOrderDetailPage() {
               placeholder="e.g. CSP 3200 min, Contamination free yarn, 50 bags packed in poly covers."
             />
           </div>
+        </div>
+      </div>
+
+      {/* Billing and Shipping Addresses */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Billing Address Card */}
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 text-slate-800 font-semibold text-xs">
+                <span className="p-1 rounded bg-blue-100 text-blue-700">
+                  <Building2 size={13} />
+                </span>
+                <span>Billing Address (Company Invoicing)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHeader((h) => ({ ...h, billing_address: COMPANY_DEFAULT_ADDRESS }))}
+                className="text-[11px] text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                title="Reset to Head Office address"
+              >
+                <RotateCcw size={11} /> Reset Default
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-500 mb-2.5">
+              Buyer company legal entity billed by the spinning mill
+            </p>
+          </div>
+          <textarea
+            rows={4}
+            className="input w-full font-mono text-xs leading-relaxed resize-y"
+            value={header.billing_address}
+            onChange={(e) => setHeader({ ...header, billing_address: e.target.value })}
+            placeholder="Enter company billing address with GSTIN..."
+          />
+        </div>
+
+        {/* Shipping Address Card */}
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 text-slate-800 font-semibold text-xs">
+                <span className="p-1 rounded bg-emerald-100 text-emerald-700">
+                  <Truck size={13} />
+                </span>
+                <span>Shipping Address (Direct Delivery to Knitting Unit / Mill)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHeader((h) => ({ ...h, shipping_to_party_id: '', shipping_address: header.billing_address }))}
+                className="text-[11px] text-slate-600 hover:text-slate-800 font-medium flex items-center gap-1"
+                title="Copy from Billing Address"
+              >
+                Same as Billing
+              </button>
+            </div>
+            <div className="mb-2">
+              <Select
+                label="Destination Knitting Unit / Mill / Warehouse"
+                placeholder="Select knitting unit to auto-populate delivery address..."
+                options={toOptions(parties.data)}
+                value={header.shipping_to_party_id}
+                onChange={(e) => handleShipToPartyChange(e.target.value)}
+              />
+            </div>
+          </div>
+          <textarea
+            rows={3}
+            className="input w-full font-mono text-xs leading-relaxed resize-y"
+            value={header.shipping_address}
+            onChange={(e) => setHeader({ ...header, shipping_address: e.target.value })}
+            placeholder="Enter destination delivery address (Knitting unit, dyeing plant, or company warehouse)..."
+          />
         </div>
       </div>
 

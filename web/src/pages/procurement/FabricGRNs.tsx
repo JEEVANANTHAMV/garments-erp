@@ -25,6 +25,7 @@ export default function FabricGRNsPage() {
         !search ||
         g.grn_no?.toLowerCase().includes(search.toLowerCase()) ||
         g.po_no?.toLowerCase().includes(search.toLowerCase()) ||
+        g.gate_entry_no?.toLowerCase().includes(search.toLowerCase()) ||
         g.internal_ir_no?.toLowerCase().includes(search.toLowerCase()) ||
         g.supplier_name?.toLowerCase().includes(search.toLowerCase()) ||
         g.style_code?.toLowerCase().includes(search.toLowerCase());
@@ -119,35 +120,37 @@ export default function FabricGRNsPage() {
         <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
           <div className="text-xs font-medium text-slate-500">Physical Rolls Logged</div>
           <div className="text-2xl font-bold text-sky-600 mt-1">{fmtNumber(kpis.totalRolls)} rolls</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Individual tagged rolls</div>
+          <div className="text-[11px] text-slate-400 mt-0.5">Barcode / roll tags created</div>
         </div>
       </div>
 
-      {/* Search and Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-white p-3 rounded-xl border border-slate-200/80 shadow-sm">
+      {/* Search & Filter bar */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3 rounded-xl border border-slate-200/80 shadow-sm">
         <div className="relative w-full sm:w-80">
-          <Search size={16} className="absolute left-3 top-2.5 text-slate-400" />
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Search GRN, PO, IR No, Mill, Style..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by GRN#, PO#, Gate Entry#, Supplier..."
             className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
           />
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto">
-          <Filter size={15} className="text-slate-400" />
+          <div className="flex items-center gap-1.5 text-xs text-slate-500">
+            <Filter size={13} />
+            <span>QC Status:</span>
+          </div>
           <select
             value={qcFilter}
             onChange={(e) => setQcFilter(e.target.value)}
-            className="text-xs rounded-lg border border-slate-300 py-1.5 px-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+            className="text-xs rounded-lg border border-slate-300 py-1.5 px-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white"
           >
-            <option value="ALL">All QC Status</option>
+            <option value="ALL">All Statuses</option>
             <option value="ACCEPTED">Accepted</option>
             <option value="CONDITIONAL">Conditional</option>
             <option value="REJECTED">Rejected</option>
-            <option value="PENDING">Pending</option>
           </select>
 
           <button
@@ -168,6 +171,7 @@ export default function FabricGRNsPage() {
               <tr className="bg-slate-50/80 text-slate-600 font-semibold border-b border-slate-200">
                 <th className="py-3 px-4">GRN No & Date</th>
                 <th className="py-3 px-3">PO & IR No</th>
+                <th className="py-3 px-3">Gate Entry</th>
                 <th className="py-3 px-3">Supplier / Mill</th>
                 <th className="py-3 px-3">Style</th>
                 <th className="py-3 px-3">Warehouse</th>
@@ -181,13 +185,13 @@ export default function FabricGRNsPage() {
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {isLoading ? (
                 <tr>
-                  <td colSpan={10} className="py-10 text-center text-slate-400">
+                  <td colSpan={11} className="py-10 text-center text-slate-400">
                     Loading fabric GRNs...
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-slate-400">
+                  <td colSpan={11} className="py-12 text-center text-slate-400">
                     <PackageCheck size={36} className="mx-auto text-slate-300 mb-2" />
                     <p className="text-sm font-medium text-slate-600">No fabric GRN records found</p>
                     <p className="text-xs text-slate-400 mt-1">Receive fabric rolls from approved Fabric POs</p>
@@ -207,6 +211,15 @@ export default function FabricGRNsPage() {
                     <td className="py-3 px-3">
                       <div className="font-medium text-slate-800">{g.po_no || '—'}</div>
                       <div className="text-[10px] text-slate-500 font-mono">{g.internal_ir_no || '—'}</div>
+                    </td>
+                    <td className="py-3 px-3">
+                      {g.gate_entry_no ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                          {g.gate_entry_no}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 text-[11px]">—</span>
+                      )}
                     </td>
                     <td className="py-3 px-3">
                       <div className="font-medium text-slate-800 truncate max-w-[150px]">

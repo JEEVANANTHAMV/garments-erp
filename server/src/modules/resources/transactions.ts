@@ -161,12 +161,13 @@ export const transactionResources: ResourceConfig[] = [
     defaultSort: 't.po_date', hasIsActive: false,
     filters: ['supplier_id', 'po_type', 'status_id', 'approval_state', 'so_id', 'branch_id'],
     autoNumber: { column: 'po_no', docType: 'PURCHASE_ORDER' },
-    selectExtra: 'sup.party_name AS supplier_name, cur.code AS currency_code, cs.label AS status_label, so.so_no, st.style_code',
+    selectExtra: 'sup.party_name AS supplier_name, cur.code AS currency_code, cs.label AS status_label, so.so_no, st.style_code, ship_to.party_name AS shipping_to_party_name',
     joins: `LEFT JOIN mst_party sup ON sup.id = t.supplier_id
             LEFT JOIN cfg_currency cur ON cur.id = t.currency_id
             LEFT JOIN cfg_status cs ON cs.id = t.status_id
             LEFT JOIN trx_sales_order so ON so.id = t.so_id
-            LEFT JOIN mst_style st ON st.id = t.style_id`,
+            LEFT JOIN mst_style st ON st.id = t.style_id
+            LEFT JOIN mst_party ship_to ON ship_to.id = t.shipping_to_party_id`,
     children: [
       { key: 'lines', table: 'trx_purchase_order_line', fk: 'po_id', fields: [
         f('material_type', s.enumReq(['YARN','FABRIC','TRIM','SERVICE'])),
@@ -193,7 +194,8 @@ export const transactionResources: ResourceConfig[] = [
       f('payment_terms', s.nullableStr(150)), f('total_amount', s.dec()),
       f('tax_amount', s.dec()), f('grand_total', s.dec()), f('status_id', s.id()),
       f('approval_state', s.enum(['DRAFT','PENDING','APPROVED','REJECTED','CLOSED','CANCELLED'])),
-      f('remarks', s.text()),
+      f('remarks', s.text()), f('billing_address', s.text()), f('shipping_address', s.text()),
+      f('shipping_to_party_id', s.id()),
     ],
   },
   {

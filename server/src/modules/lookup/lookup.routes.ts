@@ -29,7 +29,12 @@ const LOOKUPS: Record<string, LookupDef> = {
   vendors:     { sql: `SELECT id, party_code AS code, party_name AS label FROM mst_party WHERE company_id=? AND is_vendor=1 AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },
   agents:      { sql: `SELECT id, party_code AS code, party_name AS label FROM mst_party WHERE company_id=? AND is_agent=1 AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },
   merchandisers: { sql: `SELECT id, party_code AS code, party_name AS label FROM mst_party WHERE company_id=? AND is_merchandiser=1 AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },
-  parties:     { sql: `SELECT id, party_code AS code, party_name AS label, is_buyer, is_supplier, is_vendor, is_agent, is_merchandiser FROM mst_party WHERE company_id=? AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },
+  parties:     { sql: `SELECT p.id, p.party_code AS code, p.party_name AS label, p.is_buyer, p.is_supplier, p.is_vendor, p.is_agent, p.is_merchandiser, p.gstin,
+       (SELECT CONCAT_WS(', ', pa.address_line1, pa.address_line2, pa.city, pa.state, pa.pincode)
+          FROM mst_party_address pa
+         WHERE pa.party_id = p.id AND pa.is_active = 1
+         ORDER BY pa.is_default DESC, pa.id ASC LIMIT 1) AS default_address
+  FROM mst_party p WHERE p.company_id=? AND p.is_active=1 AND p.is_deleted=0 ORDER BY p.party_name`, scoped: true },
 
   colors:      { sql: `SELECT id, color_code AS code, color_name AS label, hex_value FROM mst_color WHERE company_id=? AND is_active=1 ORDER BY color_name`, scoped: true },
   'size-groups': { sql: `SELECT id, group_code AS code, group_name AS label, category, gender, description, (SELECT COUNT(*) FROM mst_size s WHERE s.size_group_id = mst_size_group.id AND s.is_active=1) AS size_count FROM mst_size_group WHERE company_id=? AND is_active=1 ORDER BY group_name`, scoped: true },
@@ -84,7 +89,7 @@ const LOOKUPS: Record<string, LookupDef> = {
   'sewing-operation-masters': { sql: `SELECT id, operation_code AS code, operation_name AS label, smv FROM cfg_sewing_operation_master WHERE company_id=? AND is_active=1 ORDER BY sort_order, id`, scoped: true },
 
   grns: { sql: `SELECT id, grn_no AS code, grn_no AS label, po_id, supplier_id FROM trx_grn WHERE company_id=? ORDER BY id DESC LIMIT 500`, scoped: true },
-  'gate-inwards': { sql: `SELECT id, entry_no AS code, entry_no AS label, party_id, vehicle_no FROM trx_gate_inward WHERE company_id=? ORDER BY id DESC LIMIT 500`, scoped: true },
+  'gate-inwards': { sql: `SELECT id, entry_no AS code, entry_no AS label, party_id, vehicle_no, supplier_dc_no, supplier_inv_no, material_type, gross_weight_kg, package_count, warehouse_id, status FROM trx_gate_inward WHERE company_id=? ORDER BY id DESC LIMIT 500`, scoped: true },
   'gate-outwards': { sql: `SELECT id, pass_no AS code, pass_no AS label, party_id, vehicle_no FROM trx_gate_outward WHERE company_id=? ORDER BY id DESC LIMIT 500`, scoped: true },
   'qc-inspections': { sql: `SELECT id, qc_no AS code, qc_no AS label, prod_order_id, stage_id FROM trx_qc_inspection WHERE company_id=? ORDER BY id DESC LIMIT 500`, scoped: true },
   vouchers: { sql: `SELECT id, voucher_no AS code, voucher_no AS label, voucher_date, total_amount FROM trx_voucher WHERE company_id=? ORDER BY id DESC LIMIT 500`, scoped: true },

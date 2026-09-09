@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Save, CheckCircle, Plus, Trash2, Layers,
-  PackageCheck, FileSpreadsheet
+  PackageCheck, FileSpreadsheet, Building2, Truck, RotateCcw
 } from 'lucide-react';
 import { http, ApiError } from '../../lib/api';
 import { useLookup, toOptions } from '../../hooks/useLookup';
@@ -80,6 +80,9 @@ export default function FabricPurchaseOrderDetailPage() {
   const suppliers = useLookup('suppliers');
   const styles = useLookup('styles');
   const fabrics = useLookup('fabrics');
+  const parties = useLookup('parties');
+
+  const COMPANY_DEFAULT_ADDRESS = "CK Exports\n123 Textile Park, Dharapuram Road\nTirupur - 641604, Tamil Nadu\nGSTIN: 33AAAAA0000A1Z5";
 
   // Header state
   const [head, setHead] = useState({
@@ -94,6 +97,9 @@ export default function FabricPurchaseOrderDetailPage() {
     payment_terms: '30 Days Net',
     approval_state: 'DRAFT',
     remarks: '',
+    billing_address: COMPANY_DEFAULT_ADDRESS,
+    shipping_address: '',
+    shipping_to_party_id: '',
   });
 
   const [lines, setLines] = useState<FabricLine[]>([emptyFabricLine()]);
@@ -124,6 +130,9 @@ export default function FabricPurchaseOrderDetailPage() {
         payment_terms: d.payment_terms || '',
         approval_state: d.approval_state || 'DRAFT',
         remarks: d.remarks || '',
+        billing_address: d.billing_address || COMPANY_DEFAULT_ADDRESS,
+        shipping_address: d.shipping_address || '',
+        shipping_to_party_id: d.shipping_to_party_id ? String(d.shipping_to_party_id) : '',
       });
 
       if (Array.isArray(d.lines) && d.lines.length > 0) {
@@ -188,6 +197,29 @@ export default function FabricPurchaseOrderDetailPage() {
     return { totalQty, totalWeight, totalRolls, basicAmount, grandTotal };
   }, [lines]);
 
+  const handleShipToPartyChange = (partyIdStr: string) => {
+    if (!partyIdStr) {
+      setHead((h) => ({ ...h, shipping_to_party_id: '', shipping_address: '' }));
+      return;
+    }
+    const found = (parties.data as any[])?.find((p) => String(p.id) === partyIdStr);
+    let addr = '';
+    if (found) {
+      addr = found.label;
+      if (found.default_address) {
+        addr += `\n${found.default_address}`;
+      }
+      if (found.gstin) {
+        addr += `\nGSTIN: ${found.gstin}`;
+      }
+    }
+    setHead((h) => ({
+      ...h,
+      shipping_to_party_id: partyIdStr,
+      shipping_address: addr || h.shipping_address,
+    }));
+  };
+
   // Save Handler
   const handleSave = async (stateOverride?: string) => {
     if (!head.supplier_id) {
@@ -217,6 +249,9 @@ export default function FabricPurchaseOrderDetailPage() {
         grand_total: totals.grandTotal,
         approval_state: stateOverride || head.approval_state,
         remarks: head.remarks,
+        billing_address: head.billing_address || null,
+        shipping_address: head.shipping_address || null,
+        shipping_to_party_id: head.shipping_to_party_id ? Number(head.shipping_to_party_id) : null,
         lines: lines.map((l) => ({
           fabric_id: Number(l.fabric_id),
           material_type: 'FABRIC',
@@ -280,6 +315,9 @@ export default function FabricPurchaseOrderDetailPage() {
     try {
       const res = await http.post<{ data: any }>('/fabric-purchase-orders/convert-from-quotation', {
         quotation_id: quoteId,
+        billing_address: head.billing_address,
+        shipping_address: head.shipping_address,
+        shipping_to_party_id: head.shipping_to_party_id ? Number(head.shipping_to_party_id) : undefined,
       });
       toast(`Converted into Fabric PO ${res.data.po_no}`, 'success');
       setShowQuoteModal(false);
@@ -421,6 +459,79 @@ export default function FabricPurchaseOrderDetailPage() {
             value={head.remarks}
             onChange={(e) => setHead({ ...head, remarks: e.target.value })}
             placeholder="Special instructions..."
+          />
+        </div>
+      </div>
+
+      {/* Billing and Shipping Addresses */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Billing Address Card */}
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 text-slate-800 font-semibold text-xs">
+                <span className="p-1 rounded bg-blue-100 text-blue-700">
+                  <Building2 size={13} />
+                </span>
+                <span>Billing Address (Company Invoicing)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHead((h) => ({ ...h, billing_address: COMPANY_DEFAULT_ADDRESS }))}
+                className="text-[11px] text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                title="Reset to Head Office address"
+              >
+                <RotateCcw size={11} /> Reset Default
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-500 mb-2.5">
+              Buyer / Company legal office address billed by the fabric mill
+            </p>
+          </div>
+          <textarea
+            rows={4}
+            className="input w-full font-mono text-xs leading-relaxed resize-y"
+            value={head.billing_address}
+            onChange={(e) => setHead({ ...head, billing_address: e.target.value })}
+            placeholder="Enter company billing address with GSTIN..."
+          />
+        </div>
+
+        {/* Shipping Address Card */}
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 text-slate-800 font-semibold text-xs">
+                <span className="p-1 rounded bg-emerald-100 text-emerald-700">
+                  <Truck size={13} />
+                </span>
+                <span>Shipping Address (Delivery Destination Unit / Mill)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHead((h) => ({ ...h, shipping_to_party_id: '', shipping_address: head.billing_address }))}
+                className="text-[11px] text-slate-600 hover:text-slate-800 font-medium flex items-center gap-1"
+                title="Copy from Billing Address"
+              >
+                Same as Billing
+              </button>
+            </div>
+            <div className="mb-2">
+              <Select
+                label="Destination Mill / Party (Knitting, Dyeing, Garment Unit)"
+                placeholder="Select unit to auto-populate shipping address..."
+                options={toOptions(parties.data)}
+                value={head.shipping_to_party_id}
+                onChange={(e) => handleShipToPartyChange(e.target.value)}
+              />
+            </div>
+          </div>
+          <textarea
+            rows={3}
+            className="input w-full font-mono text-xs leading-relaxed resize-y"
+            value={head.shipping_address}
+            onChange={(e) => setHead({ ...head, shipping_address: e.target.value })}
+            placeholder="Enter destination delivery address (Knitting mill, processing unit, or factory warehouse)..."
           />
         </div>
       </div>

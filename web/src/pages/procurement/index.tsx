@@ -282,6 +282,12 @@ export function GrnPage() {
           { key: 'grn_no', header: 'GRN no',
             render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.grn_no}</span> },
           { key: 'grn_date', header: 'Date', render: (r: any) => fmtDate(r.grn_date) },
+          { key: 'gate_entry_no', header: 'Gate entry',
+            render: (r: any) => r.gate_entry_no ? (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                {r.gate_entry_no}
+              </span>
+            ) : <span className="text-slate-400">—</span> },
           { key: 'supplier_name', header: 'Supplier' },
           { key: 'po_no', header: 'Against PO' },
           { key: 'warehouse_name', header: 'Warehouse' },
@@ -330,6 +336,22 @@ function GrnModal({ open, onClose, onDone }: { open: boolean; onClose: () => voi
   const trims = useLookup('trims');
   const uoms = useLookup('uoms');
 
+  const handleGateInwardChange = (ginId: string) => {
+    setHead((s) => {
+      const next: Record<string, any> = { ...s, gate_inward_id: ginId };
+      if (!ginId) return next;
+      const found = (gateInwards.data as any[])?.find((g) => String(g.id) === ginId);
+      if (found) {
+        if (found.party_id) next.supplier_id = String(found.party_id);
+        if (found.warehouse_id) next.warehouse_id = String(found.warehouse_id);
+        if (found.supplier_dc_no) next.supplier_dc_no = found.supplier_dc_no;
+        if (found.supplier_inv_no) next.supplier_inv_no = found.supplier_inv_no;
+        if (found.vehicle_no) next.vehicle_no = found.vehicle_no;
+      }
+      return next;
+    });
+  };
+
   const setLine = (k: string, patch: Partial<GrnLine>) =>
     setLines((s) => s.map((l) => (l._key === k ? { ...l, ...patch } : l)));
 
@@ -373,14 +395,14 @@ function GrnModal({ open, onClose, onDone }: { open: boolean; onClose: () => voi
           onChange={(e) => setHead((s) => ({ ...s, grn_no: e.target.value }))} />
         <Input label="GRN date" type="date" required value={head.grn_date ?? ''}
           onChange={(e) => setHead((s) => ({ ...s, grn_date: e.target.value }))} />
+        <Select label="Gate Inward Entry" options={toOptions(gateInwards.data)} placeholder="— Select to auto-fill —"
+          value={head.gate_inward_id ?? ''} onChange={(e) => handleGateInwardChange(e.target.value)} />
         <Select label="Supplier" required options={toOptions(suppliers.data)} placeholder="— Select —"
           value={head.supplier_id ?? ''} onChange={(e) => setHead((s) => ({ ...s, supplier_id: e.target.value }))} />
         <Select label="Warehouse" required options={toOptions(warehouses.data)} placeholder="— Select —"
           value={head.warehouse_id ?? ''} onChange={(e) => setHead((s) => ({ ...s, warehouse_id: e.target.value }))} />
         <Select label="Against PO" options={toOptions(purchaseOrders.data)} placeholder="— None —"
           value={head.po_id ?? ''} onChange={(e) => setHead((s) => ({ ...s, po_id: e.target.value }))} />
-        <Select label="Gate Inward Entry" options={toOptions(gateInwards.data)} placeholder="— None —"
-          value={head.gate_inward_id ?? ''} onChange={(e) => setHead((s) => ({ ...s, gate_inward_id: e.target.value }))} />
         <Input label="Supplier DC no" value={head.supplier_dc_no ?? ''}
           onChange={(e) => setHead((s) => ({ ...s, supplier_dc_no: e.target.value }))} />
         <Input label="Supplier invoice no" value={head.supplier_inv_no ?? ''}

@@ -25,6 +25,7 @@ export default function YarnGRNsPage() {
         !search ||
         g.grn_no?.toLowerCase().includes(search.toLowerCase()) ||
         g.po_no?.toLowerCase().includes(search.toLowerCase()) ||
+        g.gate_entry_no?.toLowerCase().includes(search.toLowerCase()) ||
         g.internal_ir_no?.toLowerCase().includes(search.toLowerCase()) ||
         g.supplier_name?.toLowerCase().includes(search.toLowerCase()) ||
         g.style_code?.toLowerCase().includes(search.toLowerCase());
@@ -116,7 +117,7 @@ export default function YarnGRNsPage() {
           <Search size={16} className="absolute left-3 top-2.5 text-slate-400" />
           <input
             type="text"
-            placeholder="Search GRN, PO, Mill, Style, IR..."
+            placeholder="Search GRN, PO, Gate Entry, Mill, Style, IR..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
@@ -154,6 +155,7 @@ export default function YarnGRNsPage() {
               <tr className="bg-slate-50/80 text-slate-600 font-semibold border-b border-slate-200">
                 <th className="py-3 px-4">GRN No & Date</th>
                 <th className="py-3 px-3">PO & IR No</th>
+                <th className="py-3 px-3">Gate Entry</th>
                 <th className="py-3 px-3">Spinning Mill / Supplier</th>
                 <th className="py-3 px-3">Style</th>
                 <th className="py-3 px-3">Warehouse</th>
@@ -166,13 +168,13 @@ export default function YarnGRNsPage() {
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {isLoading ? (
                 <tr>
-                  <td colSpan={9} className="py-10 text-center text-slate-400">
+                  <td colSpan={10} className="py-10 text-center text-slate-400">
                     Loading yarn GRNs...
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400">
+                  <td colSpan={10} className="py-12 text-center text-slate-400">
                     <PackageCheck size={36} className="mx-auto text-slate-300 mb-2" />
                     <p className="text-sm font-medium text-slate-600">No yarn GRN records found</p>
                     <p className="text-xs text-slate-400 mt-1">Inward received yarn against approved POs</p>
@@ -192,6 +194,15 @@ export default function YarnGRNsPage() {
                     <td className="py-3 px-3">
                       <div className="font-medium text-slate-800">{g.po_no || '—'}</div>
                       <div className="text-[10px] text-slate-500 font-mono">{g.internal_ir_no || '—'}</div>
+                    </td>
+                    <td className="py-3 px-3">
+                      {g.gate_entry_no ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                          {g.gate_entry_no}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 text-[11px]">—</span>
+                      )}
                     </td>
                     <td className="py-3 px-3">
                       <div className="font-medium text-slate-800">{g.supplier_name || 'Spinning Mill'}</div>

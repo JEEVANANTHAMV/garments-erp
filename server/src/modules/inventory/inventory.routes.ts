@@ -60,6 +60,7 @@ const grnSchema = z.object({
   po_id: s.id(),
   supplier_id: s.idReq(),
   warehouse_id: s.idReq(),
+  gate_inward_id: s.id(),
   supplier_dc_no: s.nullableStr(60),
   supplier_inv_no: s.nullableStr(60),
   vehicle_no: s.nullableStr(30),
@@ -76,12 +77,13 @@ inventoryRouter.get('/grns', requirePermission('GRN.VIEW'), ah(async (req, res) 
     supplier_id: z.coerce.number().int().optional(),
     warehouse_id: z.coerce.number().int().optional(),
     po_id: z.coerce.number().int().optional(),
+    gate_inward_id: z.coerce.number().int().optional(),
   }).parse(req.query);
 
   const where = ['t.company_id = ?']; const params: unknown[] = [req.user!.companyId];
-  if (q.q) { where.push('(t.grn_no LIKE ? OR t.supplier_dc_no LIKE ? OR t.supplier_inv_no LIKE ?)');
-    params.push(`%${q.q}%`, `%${q.q}%`, `%${q.q}%`); }
-  for (const k of ['supplier_id', 'warehouse_id', 'po_id'] as const) {
+  if (q.q) { where.push('(t.grn_no LIKE ? OR t.supplier_dc_no LIKE ? OR t.supplier_inv_no LIKE ? OR gin.entry_no LIKE ?)');
+    params.push(`%${q.q}%`, `%${q.q}%`, `%${q.q}%`, `%${q.q}%`); }
+  for (const k of ['supplier_id', 'warehouse_id', 'po_id', 'gate_inward_id'] as const) {
     if (q[k]) { where.push(`t.${k} = ?`); params.push(q[k]); }
   }
   const clause = where.join(' AND ');
@@ -89,14 +91,16 @@ inventoryRouter.get('/grns', requirePermission('GRN.VIEW'), ah(async (req, res) 
 
   const [rows, total] = await Promise.all([
     query(`SELECT t.*, sup.party_name AS supplier_name, w.warehouse_name, po.po_no,
+                  gin.entry_no AS gate_entry_no,
                   (SELECT COUNT(*) FROM trx_grn_line gl WHERE gl.grn_id = t.id) AS line_count
              FROM trx_grn t
              LEFT JOIN mst_party sup ON sup.id = t.supplier_id
              LEFT JOIN mst_warehouse w ON w.id = t.warehouse_id
              LEFT JOIN trx_purchase_order po ON po.id = t.po_id
+             LEFT JOIN trx_gate_inward gin ON gin.id = t.gate_inward_id
             WHERE ${clause} ORDER BY t.grn_date DESC, t.id DESC
             LIMIT ${q.pageSize} OFFSET ${offset}`, params),
-    queryOne<{ total: number }>(`SELECT COUNT(*) AS total FROM trx_grn t WHERE ${clause}`, params),
+    queryOne<{ total: number }>(`SELECT COUNT(*) AS total FROM trx_grn t LEFT JOIN trx_gate_inward gin ON gin.id = t.gate_inward_id WHERE ${clause}`, params),
   ]);
   res.json({ data: rows, pagination: { page: q.page, pageSize: q.pageSize,
     total: total?.total ?? 0, totalPages: Math.ceil((total?.total ?? 0) / q.pageSize) } });
@@ -105,11 +109,13 @@ inventoryRouter.get('/grns', requirePermission('GRN.VIEW'), ah(async (req, res) 
 inventoryRouter.get('/grns/:id', requirePermission('GRN.VIEW'), ah(async (req, res) => {
   const id = Number(req.params.id);
   const grn = await queryOne(
-    `SELECT t.*, sup.party_name AS supplier_name, w.warehouse_name, po.po_no
+    `SELECT t.*, sup.party_name AS supplier_name, w.warehouse_name, po.po_no,
+            gin.entry_no AS gate_entry_no
        FROM trx_grn t
        LEFT JOIN mst_party sup ON sup.id = t.supplier_id
        LEFT JOIN mst_warehouse w ON w.id = t.warehouse_id
        LEFT JOIN trx_purchase_order po ON po.id = t.po_id
+       LEFT JOIN trx_gate_inward gin ON gin.id = t.gate_inward_id
       WHERE t.id = ? AND t.company_id = ?`, [id, req.user!.companyId]);
   if (!grn) throw NotFound('GRN not found');
 
@@ -139,12 +145,16 @@ inventoryRouter.post('/grns', requirePermission('GRN.CREATE'), ah(async (req, re
     const grnNo = body.grn_no || await nextDocNumber(tx, req.user!.companyId, 'GRN');
     const r = await txExecute(tx,
       `INSERT INTO trx_grn (company_id, grn_no, grn_date, po_id, supplier_id, warehouse_id,
-                            supplier_dc_no, supplier_inv_no, vehicle_no, status_id, remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+                            gate_inward_id, supplier_dc_no, supplier_inv_no, vehicle_no, status_id, remarks, created_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [req.user!.companyId, grnNo, body.grn_date ?? null, body.po_id ?? null, body.supplier_id,
-       body.warehouse_id, body.supplier_dc_no ?? null, body.supplier_inv_no ?? null,
+       body.warehouse_id, body.gate_inward_id ?? null, body.supplier_dc_no ?? null, body.supplier_inv_no ?? null,
        body.vehicle_no ?? null, body.status_id ?? null, body.remarks ?? null, req.user!.id]);
     const grnId = r.insertId;
+
+    if (body.gate_inward_id) {
+      await txExecute(tx, `UPDATE trx_gate_inward SET status = 'GRN_COMPLETED' WHERE id = ? AND company_id = ?`, [body.gate_inward_id, req.user!.companyId]);
+    }
 
     for (const l of body.lines) {
       let batchId = l.batch_id ?? null;

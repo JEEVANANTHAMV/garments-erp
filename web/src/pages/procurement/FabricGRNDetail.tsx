@@ -86,6 +86,7 @@ export default function FabricGRNDetailPage() {
   const warehouses = useLookup('warehouses');
   const fabrics = useLookup('fabrics');
   const styles = useLookup('styles');
+  const gateInwards = useLookup('gate-inwards');
 
   // Load PO options for linking
   const { data: poList = [] } = useQuery({
@@ -112,6 +113,7 @@ export default function FabricGRNDetailPage() {
     grn_no: '',
     grn_date: today(),
     po_id: '',
+    gate_inward_id: '',
     internal_ir_no: 'IR-2026-0001',
     supplier_id: '',
     warehouse_id: '1',
@@ -142,6 +144,7 @@ export default function FabricGRNDetailPage() {
         grn_no: existingData.grn_no || '',
         grn_date: existingData.grn_date?.slice(0, 10) || today(),
         po_id: existingData.po_id ? String(existingData.po_id) : '',
+        gate_inward_id: existingData.gate_inward_id ? String(existingData.gate_inward_id) : '',
         internal_ir_no: existingData.internal_ir_no || '',
         supplier_id: existingData.supplier_id ? String(existingData.supplier_id) : '',
         warehouse_id: existingData.warehouse_id ? String(existingData.warehouse_id) : '1',
@@ -198,6 +201,23 @@ export default function FabricGRNDetailPage() {
       }
     }
   }, [existingData, isNew]);
+
+  // Handle Gate Inward selection: auto-populate supplier, vehicle, DC, inv, warehouse
+  const handleSelectGateInward = (ginIdStr: string) => {
+    setHeader((prev) => {
+      const next = { ...prev, gate_inward_id: ginIdStr };
+      if (!ginIdStr) return next;
+      const found = (gateInwards.data as any[])?.find((g) => String(g.id) === ginIdStr);
+      if (found) {
+        if (found.party_id) next.supplier_id = String(found.party_id);
+        if (found.supplier_dc_no) next.supplier_dc_no = found.supplier_dc_no;
+        if (found.supplier_inv_no) next.supplier_inv_no = found.supplier_inv_no;
+        if (found.vehicle_no) next.vehicle_no = found.vehicle_no;
+        if (found.warehouse_id) next.warehouse_id = String(found.warehouse_id);
+      }
+      return next;
+    });
+  };
 
   // Handle PO selection: populate supplier, style, lines
   const handleSelectPO = async (poIdStr: string) => {
@@ -547,6 +567,32 @@ export default function FabricGRNDetailPage() {
             </div>
           ) : (
             <Input label="GRN No" value={header.grn_no} disabled />
+          )}
+
+          {isNew ? (
+            <div>
+              <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                Map Gate Entry (Auto-fills details)
+              </label>
+              <select
+                value={header.gate_inward_id}
+                onChange={(e) => handleSelectGateInward(e.target.value)}
+                className="w-full text-xs rounded-lg border border-amber-300 bg-amber-50/40 py-1.5 px-2 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+              >
+                <option value="">-- Select Inward Gate Pass --</option>
+                {((gateInwards.data as any[]) || []).map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.code || g.label} {g.vehicle_no ? `(${g.vehicle_no})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <Input
+              label="Gate Inward Entry"
+              value={(existingData as any)?.gate_entry_no || (header.gate_inward_id ? `GIN #${header.gate_inward_id}` : 'None')}
+              disabled
+            />
           )}
 
           <Input
