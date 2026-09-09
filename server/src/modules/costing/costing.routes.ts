@@ -544,32 +544,18 @@ costingRouter.get('/pre-costings/style-data/:styleId', requirePermission('COSTIN
      ORDER BY b.version DESC, l.material_type, l.id
   `, [styleId, companyId]);
 
-  // C. Load Latest Supplier Quotations for Approved Rates
-  const recentQuotes = await query<any>(`
-    SELECT ql.material_type, ql.fabric_id, ql.yarn_id, ql.trim_id,
-           COALESCE(ql.confirm_rate, ql.quotation_rate, 0) AS latest_rate,
-           q.quotation_no, sup.party_name AS supplier_name
-      FROM trx_quotation_line ql
-      JOIN trx_quotation q ON q.id = ql.quotation_id
-      LEFT JOIN mst_party sup ON sup.id = q.supplier_id
-     WHERE q.company_id = ?
-     ORDER BY q.quotation_date DESC, ql.id DESC LIMIT 150
-  `, [companyId]);
-
-  // D. Map rates into BOM lines
+  // C. Map rates into BOM lines with fallback to standard master rates
   const enrichedLines = bomLines.map((l: any) => {
-    let matchedQuote = recentQuotes.find((q: any) => {
-      if (l.material_type === 'FABRIC' && l.fabric_id && q.fabric_id === l.fabric_id) return true;
-      if (l.material_type === 'YARN' && l.yarn_id && q.yarn_id === l.yarn_id) return true;
-      if (l.material_type === 'TRIM' && l.trim_id && q.trim_id === l.trim_id) return true;
-      return false;
-    });
-    const finalRate = matchedQuote ? Number(matchedQuote.latest_rate) : Number(l.std_rate || 0);
-    const rateSource = matchedQuote ? `Supplier Quote (${matchedQuote.supplier_name} - ${matchedQuote.quotation_no})` : 'Standard Rate Master';
+    let stdRate = 0;
+    if (l.material_type === 'FABRIC') stdRate = Number(l.fabric_std_rate) || 420;
+    else if (l.material_type === 'YARN') stdRate = Number(l.yarn_std_rate) || 280;
+    else if (l.material_type === 'TRIM') stdRate = Number(l.trim_std_rate) || 2.5;
+
     return {
       ...l,
-      applied_rate: finalRate,
-      rate_source: rateSource,
+      applied_rate: stdRate,
+      std_rate: stdRate,
+      rate_source: 'Standard Rate Master',
     };
   });
 

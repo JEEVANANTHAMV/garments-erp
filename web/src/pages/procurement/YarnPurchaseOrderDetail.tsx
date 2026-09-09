@@ -92,6 +92,12 @@ export default function YarnPurchaseOrderDetailPage() {
     billing_address: COMPANY_DEFAULT_ADDRESS,
     shipping_address: '',
     shipping_to_party_id: '',
+    freight_charges: 0,
+    other_charges: 0,
+    tcs_applicable: false,
+    tcs_section: '206C(1H)',
+    tcs_rate: 0.1,
+    round_off: 0,
   });
 
   const [lines, setLines] = useState<YarnLine[]>([emptyYarnLine()]);
@@ -132,6 +138,12 @@ export default function YarnPurchaseOrderDetailPage() {
         billing_address: existingPo.billing_address || COMPANY_DEFAULT_ADDRESS,
         shipping_address: existingPo.shipping_address || '',
         shipping_to_party_id: existingPo.shipping_to_party_id ? String(existingPo.shipping_to_party_id) : '',
+        freight_charges: Number(existingPo.freight_charges) || 0,
+        other_charges: Number(existingPo.other_charges) || 0,
+        tcs_applicable: !!existingPo.tcs_applicable,
+        tcs_section: existingPo.tcs_section || '206C(1H)',
+        tcs_rate: Number(existingPo.tcs_rate) || 0.1,
+        round_off: Number(existingPo.round_off) || 0,
       });
 
       if (existingPo.lines?.length) {
@@ -222,8 +234,15 @@ export default function YarnPurchaseOrderDetailPage() {
       net += Number(l.net_amount) || 0;
     }
 
-    return { totalKg, greyKg, dyedKg, totalPacks, gross, tax, net };
-  }, [lines]);
+    const freight = Number(header.freight_charges) || 0;
+    const other = Number(header.other_charges) || 0;
+    const baseBeforeTcs = net + freight + other;
+    const tcsAmt = header.tcs_applicable ? Math.round(((baseBeforeTcs * (Number(header.tcs_rate) || 0)) / 100) * 100) / 100 : 0;
+    const roundOff = Number(header.round_off) || 0;
+    const grandTotal = Math.round((baseBeforeTcs + tcsAmt + roundOff) * 100) / 100;
+
+    return { totalKg, greyKg, dyedKg, totalPacks, gross, tax, net, freight, other, tcsAmt, roundOff, grandTotal };
+  }, [lines, header.freight_charges, header.other_charges, header.tcs_applicable, header.tcs_rate, header.round_off]);
 
   const handleShipToPartyChange = (partyIdStr: string) => {
     if (!partyIdStr) {
@@ -842,8 +861,8 @@ export default function YarnPurchaseOrderDetailPage() {
         </div>
 
         {/* Footer Financial Cockpit */}
-        <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50/50 p-3 rounded-lg">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+        <div className="pt-4 border-t border-slate-200 bg-slate-50/70 p-4 rounded-xl space-y-4">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 text-xs pb-3 border-b border-slate-200">
             <div>
               <span className="text-slate-500 block">Total Yarn Weight</span>
               <span className="font-bold text-amber-700 text-sm">{fmtDecimal(totals.totalKg)} KG</span>
@@ -860,13 +879,84 @@ export default function YarnPurchaseOrderDetailPage() {
             </div>
             <div>
               <span className="text-slate-500 block">GST Taxes</span>
-              <span className="font-medium text-slate-800">₹{fmtDecimal(totals.tax)}</span>
+              <span className="font-bold text-slate-800 text-sm">₹{fmtDecimal(totals.tax)}</span>
+            </div>
+            <div className="text-right sm:text-left">
+              <span className="text-slate-500 block">Items Subtotal</span>
+              <span className="font-bold text-slate-900 text-sm">₹{fmtDecimal(totals.net)}</span>
             </div>
           </div>
 
-          <div className="text-right">
-            <span className="text-xs text-slate-500 block">Net Payable Amount</span>
-            <span className="text-xl font-bold text-amber-800">₹{fmtDecimal(totals.net)}</span>
+          {/* Footer Financial Adjustments & TCS */}
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
+            <div>
+              <label className="label text-[11px] font-bold text-slate-700">Freight / Transport Charges (₹)</label>
+              <input
+                type="number"
+                step="10"
+                value={header.freight_charges}
+                onChange={(e) => setHeader((h) => ({ ...h, freight_charges: parseFloat(e.target.value) || 0 }))}
+                className="input py-1.5 text-xs text-right font-mono"
+                placeholder="0.00"
+              />
+            </div>
+
+            <div>
+              <label className="label text-[11px] font-bold text-slate-700">Other / Unloading Charges (₹)</label>
+              <input
+                type="number"
+                step="10"
+                value={header.other_charges}
+                onChange={(e) => setHeader((h) => ({ ...h, other_charges: parseFloat(e.target.value) || 0 }))}
+                className="input py-1.5 text-xs text-right font-mono"
+                placeholder="0.00"
+              />
+            </div>
+
+            <div className="p-2.5 rounded-lg border border-amber-200 bg-amber-50/60 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-1.5 text-[11px] font-bold text-amber-900 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={header.tcs_applicable}
+                    onChange={(e) => setHeader((h) => ({ ...h, tcs_applicable: e.target.checked }))}
+                    className="rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+                  />
+                  <span>TCS Applicable</span>
+                </label>
+                {header.tcs_applicable && (
+                  <span className="text-[11px] font-bold font-mono text-amber-800">
+                    + ₹{fmtDecimal(totals.tcsAmt)}
+                  </span>
+                )}
+              </div>
+              {header.tcs_applicable && (
+                <div className="flex items-center gap-1.5 text-[11px]">
+                  <select
+                    value={header.tcs_section}
+                    onChange={(e) => setHeader((h) => ({ ...h, tcs_section: e.target.value }))}
+                    className="input py-0.5 px-1.5 text-[10px] w-24"
+                  >
+                    <option value="206C(1H)">206C(1H)</option>
+                    <option value="206C(1)">206C(1)</option>
+                  </select>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={header.tcs_rate}
+                    onChange={(e) => setHeader((h) => ({ ...h, tcs_rate: parseFloat(e.target.value) || 0 }))}
+                    className="input py-0.5 px-1.5 text-[10px] text-right font-mono w-16"
+                    placeholder="0.10"
+                  />
+                  <span className="text-slate-500">%</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col items-end justify-center bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
+              <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider block">Net Payable Amount</span>
+              <span className="text-xl font-black text-brand-900 font-mono">₹{fmtDecimal(totals.grandTotal)}</span>
+            </div>
           </div>
         </div>
       </div>

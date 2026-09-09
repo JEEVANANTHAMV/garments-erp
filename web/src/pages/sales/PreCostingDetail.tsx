@@ -13,7 +13,7 @@ import { fmtDecimal, fmtNumber, today, toDateInput } from '../../lib/format';
 
 export default function PreCostingDetailPage() {
   const { id } = useParams();
-  const isNew = id === 'new';
+  const isNew = !id || id === 'new' || isNaN(Number(id));
   const nav = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();
@@ -21,6 +21,11 @@ export default function PreCostingDetailPage() {
   const [saving, setSaving] = useState(false);
   const [loadingBOM, setLoadingBOM] = useState(false);
   const [activeTab, setActiveTab] = useState('Fabric');
+
+  // Merchandiser Flat Sewing Rate Mode (vs Detailed Operations)
+  const [useFlatSewingRate, setUseFlatSewingRate] = useState(true);
+  const [flatSewingRate, setFlatSewingRate] = useState(20.00);
+  const [flatSewingDesc, setFlatSewingDesc] = useState('Garment Stitching to Ironing Complete');
 
   // Lookups
   const styles = useLookup('styles');
@@ -243,6 +248,9 @@ export default function PreCostingDetailPage() {
         if (parsed.packings) setPackings(parsed.packings);
         if (parsed.otherCharges) setOtherCharges(parsed.otherCharges);
         if (parsed.useYarnRecipe !== undefined) setUseYarnRecipe(parsed.useYarnRecipe);
+        if (parsed.useFlatSewingRate !== undefined) setUseFlatSewingRate(parsed.useFlatSewingRate);
+        if (parsed.flatSewingRate !== undefined) setFlatSewingRate(Number(parsed.flatSewingRate) || 20.0);
+        if (parsed.flatSewingDesc !== undefined) setFlatSewingDesc(parsed.flatSewingDesc);
       } catch (err) {
         // ignore
       }
@@ -395,8 +403,11 @@ export default function PreCostingDetailPage() {
   }, [sewingOps, head.smv]);
 
   const sewingCostPerPc = useMemo(() => {
+    if (useFlatSewingRate) {
+      return Number(flatSewingRate) || 0;
+    }
     return totalSmv * (Number(head.smv_rate_per_min) || 0.85);
-  }, [totalSmv, head.smv_rate_per_min]);
+  }, [useFlatSewingRate, flatSewingRate, totalSmv, head.smv_rate_per_min]);
 
   // 8. Finishing & Packing Cost
   const finishingCostPerPc = Number(head.finishing_cost) || 1.50;
@@ -507,10 +518,14 @@ export default function PreCostingDetailPage() {
           packings,
           otherCharges,
           useYarnRecipe,
+          useFlatSewingRate,
+          flatSewingRate,
+          flatSewingDesc,
         },
       };
 
-      const res = isNew
+      const isActuallyNew = isNew || !costId || isNaN(Number(costId));
+      const res = isActuallyNew
         ? await http.post<{ data: any }>('/costings', payload)
         : await http.put<{ data: any }>(`/costings/${costId}`, payload);
 
@@ -520,7 +535,7 @@ export default function PreCostingDetailPage() {
       toast(`Merchandiser Pre-Costing ${saved.costing_no} saved.`, 'success');
       qc.invalidateQueries({ queryKey: ['costings'] });
       qc.invalidateQueries({ queryKey: ['pre-costings'] });
-      if (isNew) {
+      if (isActuallyNew) {
         nav(`/sales/pre-costings/${saved.id}`, { replace: true });
       }
     } catch (err) {
@@ -1119,26 +1134,89 @@ export default function PreCostingDetailPage() {
         {/* TAB 7: SEWING (SMV ENGINE) */}
         {activeTab === 'Sewing (SMV)' && (
           <div className="space-y-4">
+            {/* Mode Selector */}
             <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg bg-indigo-50 border border-indigo-200">
-              <div>
-                <h3 className="text-sm font-bold text-indigo-950">SMV-Based Sewing Cost Engine</h3>
-                <p className="text-xs text-indigo-800 font-mono">
-                  Sewing Cost = Total SMV ({totalSmv.toFixed(2)} mins) × Rate/Min (₹{head.smv_rate_per_min}) = <strong className="text-brand-900 font-black">₹{sewingCostPerPc.toFixed(2)} / Pc</strong>
-                </p>
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-bold text-indigo-950 uppercase tracking-wider">Sewing Cost Mode:</span>
+                <div className="inline-flex rounded-md shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => setUseFlatSewingRate(true)}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-l-md transition-all ${
+                      useFlatSewingRate
+                        ? 'bg-brand-800 text-white shadow'
+                        : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    👔 Merchandiser Flat Rate (₹/pc)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUseFlatSewingRate(false)}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-r-md transition-all ${
+                      !useFlatSewingRate
+                        ? 'bg-brand-800 text-white shadow'
+                        : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    ⚙️ Detailed SMV Operations
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-indigo-900">Rate / Minute (₹):</span>
-                <input
-                  type="number"
-                  step="0.05"
-                  value={head.smv_rate_per_min}
-                  onChange={(e) => setHead((h) => ({ ...h, smv_rate_per_min: Number(e.target.value) || 0 }))}
-                  className="w-20 rounded border border-indigo-300 px-2 py-1 text-right font-mono text-xs font-bold"
-                />
-              </div>
+              <span className="font-mono font-black text-sm text-brand-950 bg-white border border-indigo-200 px-3 py-1 rounded-md">
+                Sewing Cost: ₹{sewingCostPerPc.toFixed(2)} / Pc
+              </span>
             </div>
 
-            <div className="overflow-x-auto rounded-lg border border-slate-200">
+            {/* Flat Rate View */}
+            {useFlatSewingRate ? (
+              <div className="p-4 bg-white rounded-lg border border-slate-200 shadow-sm space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="label text-xs font-bold text-slate-800">Flat Sewing & Ironing Rate (₹ / Piece) *</label>
+                    <input
+                      type="number"
+                      step="0.50"
+                      value={flatSewingRate}
+                      onChange={(e) => setFlatSewingRate(parseFloat(e.target.value) || 0)}
+                      className="input font-mono font-black text-base text-brand-800 w-full"
+                      placeholder="20.00"
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Standard merchant rate covering stitching, trimming, checking, and ironing.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="label text-xs font-bold text-slate-800">Description / Operations Covered</label>
+                    <input
+                      type="text"
+                      value={flatSewingDesc}
+                      onChange={(e) => setFlatSewingDesc(e.target.value)}
+                      className="input text-xs w-full"
+                      placeholder="e.g. Stitching to Ironing Complete"
+                    />
+                  </div>
+                </div>
+                <div className="p-2.5 rounded bg-amber-50 border border-amber-200 text-xs text-amber-800">
+                  💡 <strong>Merchandiser Note:</strong> Using flat rate simplifies costing quotation without having to calculate individual SMVs for shoulder join, neck attach, sleeve hemming, etc.
+                </div>
+              </div>
+            ) : (
+              /* Detailed SMV View */
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-2 rounded bg-slate-50 border border-slate-200 text-xs">
+                  <span>SMV Calculation: Total SMV ({totalSmv.toFixed(2)} mins) × Rate/Min</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold">Rate / Min (₹):</span>
+                    <input
+                      type="number"
+                      step="0.05"
+                      value={head.smv_rate_per_min}
+                      onChange={(e) => setHead((h) => ({ ...h, smv_rate_per_min: Number(e.target.value) || 0 }))}
+                      className="w-20 rounded border border-slate-300 px-2 py-1 text-right font-mono font-bold"
+                    />
+                  </div>
+                </div>
               <table className="w-full text-left text-xs font-mono">
                 <thead className="bg-slate-50 text-slate-700 font-sans font-bold border-b border-slate-200">
                   <tr>
@@ -1170,8 +1248,9 @@ export default function PreCostingDetailPage() {
                 </tfoot>
               </table>
             </div>
-          </div>
-        )}
+          )}
+        </div>
+      )}
 
         {/* TAB 11: SUMMARY & FOB */}
         {activeTab === 'Summary & FOB' && (

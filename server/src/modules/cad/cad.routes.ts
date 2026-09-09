@@ -83,7 +83,7 @@ cadRouter.get('/cad-requirements/style-data/:styleId', requirePermission('PRODUC
   // Load BOM Items
   const bom = await queryOne<any>(`
     SELECT b.* FROM trx_bom b
-     WHERE b.style_id = ? AND b.company_id = ? AND b.status = 'APPROVED'
+     WHERE b.style_id = ? AND b.company_id = ? AND b.is_active = 1
      ORDER BY b.id DESC LIMIT 1
   `, [styleId, companyId]);
 

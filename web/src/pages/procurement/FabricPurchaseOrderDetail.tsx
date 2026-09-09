@@ -100,6 +100,9 @@ export default function FabricPurchaseOrderDetailPage() {
     billing_address: COMPANY_DEFAULT_ADDRESS,
     shipping_address: '',
     shipping_to_party_id: '',
+    freight_charges: 0,
+    other_charges: 0,
+    round_off: 0,
   });
 
   const [lines, setLines] = useState<FabricLine[]>([emptyFabricLine()]);
@@ -133,6 +136,9 @@ export default function FabricPurchaseOrderDetailPage() {
         billing_address: d.billing_address || COMPANY_DEFAULT_ADDRESS,
         shipping_address: d.shipping_address || '',
         shipping_to_party_id: d.shipping_to_party_id ? String(d.shipping_to_party_id) : '',
+        freight_charges: Number(d.freight_charges) || 0,
+        other_charges: Number(d.other_charges) || 0,
+        round_off: Number(d.round_off) || 0,
       });
 
       if (Array.isArray(d.lines) && d.lines.length > 0) {
@@ -193,9 +199,13 @@ export default function FabricPurchaseOrderDetailPage() {
     const totalWeight = lines.reduce((s, l) => s + (Number(l.weight_kg) || 0), 0);
     const totalRolls = lines.reduce((s, l) => s + (Number(l.no_of_rolls) || 0), 0);
     const basicAmount = lines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
-    const grandTotal = lines.reduce((s, l) => s + (Number(l.net_amount) || 0), 0);
-    return { totalQty, totalWeight, totalRolls, basicAmount, grandTotal };
-  }, [lines]);
+    const itemsNet = lines.reduce((s, l) => s + (Number(l.net_amount) || 0), 0);
+    const freight = Number(head.freight_charges) || 0;
+    const other = Number(head.other_charges) || 0;
+    const roundOff = Number(head.round_off) || 0;
+    const grandTotal = Math.round((itemsNet + freight + other + roundOff) * 100) / 100;
+    return { totalQty, totalWeight, totalRolls, basicAmount, itemsNet, freight, other, roundOff, grandTotal };
+  }, [lines, head.freight_charges, head.other_charges, head.round_off]);
 
   const handleShipToPartyChange = (partyIdStr: string) => {
     if (!partyIdStr) {
@@ -733,14 +743,60 @@ export default function FabricPurchaseOrderDetailPage() {
                 <td className="py-3 px-2 text-right font-mono">{fmtDecimal(totals.totalQty, 2)}</td>
                 <td className="py-3 px-2 text-right font-mono">{fmtDecimal(totals.totalWeight, 2)} KG</td>
                 <td className="py-3 px-2 text-right font-mono">{totals.totalRolls}</td>
-                <td className="py-3 px-2 text-right font-mono text-xs text-slate-500">Net Value:</td>
+                <td className="py-3 px-2 text-right font-mono text-xs text-slate-500">Items Subtotal:</td>
                 <td className="py-3 px-2 text-right font-mono text-base font-black text-slate-900">
-                  ₹{fmtDecimal(totals.grandTotal, 2)}
+                  ₹{fmtDecimal(totals.itemsNet, 2)}
                 </td>
                 <td></td>
               </tr>
             </tfoot>
           </table>
+        </div>
+
+        {/* Footer Financial Adjustments */}
+        <div className="mt-4 border-t border-slate-200 bg-slate-50/70 p-4 rounded-xl">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
+            <div>
+              <label className="label text-[11px] font-bold text-slate-700">Freight / Transport Charges (₹)</label>
+              <input
+                type="number"
+                step="10"
+                value={head.freight_charges}
+                onChange={(e) => setHead((h) => ({ ...h, freight_charges: parseFloat(e.target.value) || 0 }))}
+                className="input py-1.5 text-xs text-right font-mono"
+                placeholder="0.00"
+              />
+            </div>
+
+            <div>
+              <label className="label text-[11px] font-bold text-slate-700">Other / Unloading Charges (₹)</label>
+              <input
+                type="number"
+                step="10"
+                value={head.other_charges}
+                onChange={(e) => setHead((h) => ({ ...h, other_charges: parseFloat(e.target.value) || 0 }))}
+                className="input py-1.5 text-xs text-right font-mono"
+                placeholder="0.00"
+              />
+            </div>
+
+            <div>
+              <label className="label text-[11px] font-bold text-slate-700">Round Off (₹)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={head.round_off}
+                onChange={(e) => setHead((h) => ({ ...h, round_off: parseFloat(e.target.value) || 0 }))}
+                className="input py-1.5 text-xs text-right font-mono"
+                placeholder="0.00"
+              />
+            </div>
+
+            <div className="flex flex-col items-end justify-center bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
+              <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider block">Net Payable Amount</span>
+              <span className="text-xl font-black text-brand-900 font-mono">₹{fmtDecimal(totals.grandTotal)}</span>
+            </div>
+          </div>
         </div>
       </div>
 

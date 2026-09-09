@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Save, RefreshCw, Calculator, Lock, CheckCircle,
-  FileText, ArrowUpRight, ArrowDownRight, Boxes, Copy
+  FileText, ArrowUpRight, ArrowDownRight, Boxes, Copy, Plus, Trash2
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { http, ApiError } from '../../lib/api';
@@ -194,6 +194,88 @@ export default function ProductionCostDetailPage() {
   };
 
   const isLocked = head.status === 'FINALIZED' || head.status === 'LOCKED';
+
+  // Add, update, delete custom/manual material lines
+  const handleAddMaterialLine = () => {
+    const list = sources.materials || [];
+    const newLine = {
+      issue_no: `MAN-ISSUE-${list.length + 1}`,
+      material_type: 'Fabric',
+      item_name: 'Single Jersey 100% Cotton 180 GSM',
+      item_code: 'FAB-MAN-01',
+      quantity: 100,
+      uom_code: 'KG',
+      rate: 420.0,
+      amount: 42000.0,
+      is_manual: true,
+    };
+    const updatedList = [...list, newLine];
+    const newMaterialCost = updatedList.reduce((sum: number, it: any) => sum + (Number(it.amount) || 0), 0);
+
+    setSources((prev: any) => ({ ...prev, materials: updatedList }));
+    setSummary((prev: any) => {
+      const diff = newMaterialCost - prev.material_cost;
+      const newTotal = prev.total_actual_cost + diff;
+      const qty = Number(head.produced_qty) || 1;
+      return {
+        ...prev,
+        material_cost: newMaterialCost,
+        total_actual_cost: newTotal,
+        actual_cost_per_piece: newTotal / qty,
+        variance_amount: newTotal - prev.total_estimated_cost,
+        variance_pct: prev.total_estimated_cost ? ((newTotal - prev.total_estimated_cost) / prev.total_estimated_cost) * 100 : 0,
+      };
+    });
+    toast('Added manual material line.', 'info');
+  };
+
+  const handleUpdateMaterial = (idx: number, patch: any) => {
+    const list = [...(sources.materials || [])];
+    const target = { ...list[idx], ...patch };
+    if ('quantity' in patch || 'rate' in patch) {
+      const q = Number(target.quantity) || 0;
+      const r = Number(target.rate) || 0;
+      target.amount = q * r;
+    }
+    list[idx] = target;
+    const newMaterialCost = list.reduce((sum: number, it: any) => sum + (Number(it.amount) || 0), 0);
+
+    setSources((prev: any) => ({ ...prev, materials: list }));
+    setSummary((prev: any) => {
+      const diff = newMaterialCost - prev.material_cost;
+      const newTotal = prev.total_actual_cost + diff;
+      const qty = Number(head.produced_qty) || 1;
+      return {
+        ...prev,
+        material_cost: newMaterialCost,
+        total_actual_cost: newTotal,
+        actual_cost_per_piece: newTotal / qty,
+        variance_amount: newTotal - prev.total_estimated_cost,
+        variance_pct: prev.total_estimated_cost ? ((newTotal - prev.total_estimated_cost) / prev.total_estimated_cost) * 100 : 0,
+      };
+    });
+  };
+
+  const handleDeleteMaterial = (idx: number) => {
+    const list = (sources.materials || []).filter((_: any, i: number) => i !== idx);
+    const newMaterialCost = list.reduce((sum: number, it: any) => sum + (Number(it.amount) || 0), 0);
+
+    setSources((prev: any) => ({ ...prev, materials: list }));
+    setSummary((prev: any) => {
+      const diff = newMaterialCost - prev.material_cost;
+      const newTotal = prev.total_actual_cost + diff;
+      const qty = Number(head.produced_qty) || 1;
+      return {
+        ...prev,
+        material_cost: newMaterialCost,
+        total_actual_cost: newTotal,
+        actual_cost_per_piece: newTotal / qty,
+        variance_amount: newTotal - prev.total_estimated_cost,
+        variance_pct: prev.total_estimated_cost ? ((newTotal - prev.total_estimated_cost) / prev.total_estimated_cost) * 100 : 0,
+      };
+    });
+    toast('Deleted material line.', 'info');
+  };
 
   // Save Costing
   const handleSave = async (statusOverride?: string) => {
@@ -687,49 +769,163 @@ export default function ProductionCostDetailPage() {
         {/* TAB 2: MATERIAL ISSUES */}
         {activeTab === 'Material Issues' && (
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
                 <h3 className="text-sm font-bold text-slate-900">Material Issues & Valuation</h3>
                 <p className="text-xs text-slate-500">
-                  Calculated from net stock issues (Issue Qty - Return Qty) × Inventory Valuation Rate
+                  Stock issues from inventory + custom manual test lines with live cost roll-up
                 </p>
               </div>
-              <span className="font-mono font-bold text-xs text-brand-800 bg-brand-50 border border-brand-200 px-2.5 py-1 rounded-md">
-                Total Material Cost: ₹{fmtDecimal(summary.material_cost, 2)}
-              </span>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleAddMaterialLine}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-brand-700 hover:bg-brand-800 text-white text-xs font-semibold shadow-sm transition-all"
+                >
+                  <Plus size={14} /> Add Material Line
+                </button>
+                <span className="font-mono font-bold text-xs text-brand-800 bg-brand-50 border border-brand-200 px-2.5 py-1.5 rounded-md">
+                  Total Material Cost: ₹{fmtDecimal(summary.material_cost, 2)}
+                </span>
+              </div>
             </div>
 
             <div className="overflow-x-auto rounded-lg border border-slate-200">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
                   <tr>
-                    <th className="py-2.5 px-3">Issue No</th>
+                    <th className="py-2.5 px-3">Issue No / Ref</th>
                     <th className="py-2.5 px-3">Category</th>
                     <th className="py-2.5 px-3">Material Description</th>
                     <th className="py-2.5 px-3">Code</th>
                     <th className="py-2.5 px-3 text-right">Net Qty</th>
                     <th className="py-2.5 px-3">UOM</th>
-                    <th className="py-2.5 px-3 text-right">Valuation Rate (₹)</th>
+                    <th className="py-2.5 px-3 text-right">Rate (₹)</th>
                     <th className="py-2.5 px-3 text-right">Actual Cost (₹)</th>
+                    <th className="py-2.5 px-2 text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-mono">
                   {sources.materials?.map((m: any, idx: number) => (
                     <tr key={idx} className="hover:bg-slate-50/50">
-                      <td className="py-2.5 px-3 font-bold text-brand-700">{m.issue_no}</td>
-                      <td className="py-2.5 px-3">
-                        <span className="font-sans text-[11px] font-semibold rounded bg-slate-100 px-1.5 py-0.5 text-slate-700">
-                          {m.material_type}
-                        </span>
+                      <td className="py-2 px-3 font-bold text-brand-700">
+                        {m.is_manual ? (
+                          <input
+                            type="text"
+                            value={m.issue_no || ''}
+                            onChange={(e) => handleUpdateMaterial(idx, { issue_no: e.target.value })}
+                            className="input py-1 text-xs w-28 font-mono text-[11px]"
+                          />
+                        ) : (
+                          <span>{m.issue_no}</span>
+                        )}
                       </td>
-                      <td className="py-2.5 px-3 font-sans font-semibold text-slate-900">{m.item_name}</td>
-                      <td className="py-2.5 px-3 text-slate-500">{m.item_code || '—'}</td>
-                      <td className="py-2.5 px-3 text-right font-bold text-slate-800">{fmtNumber(m.quantity)}</td>
-                      <td className="py-2.5 px-3 text-slate-500">{m.uom_code}</td>
-                      <td className="py-2.5 px-3 text-right text-slate-600">{fmtDecimal(m.rate, 2)}</td>
-                      <td className="py-2.5 px-3 text-right font-bold text-slate-900">{fmtDecimal(m.amount, 2)}</td>
+                      <td className="py-2 px-3">
+                        {m.is_manual ? (
+                          <select
+                            value={m.material_type || 'Fabric'}
+                            onChange={(e) => handleUpdateMaterial(idx, { material_type: e.target.value })}
+                            className="input py-1 text-xs font-sans text-[11px]"
+                          >
+                            <option value="Fabric">Fabric</option>
+                            <option value="Yarn">Yarn</option>
+                            <option value="Trim">Trim</option>
+                            <option value="Packing">Packing</option>
+                            <option value="Chemical">Chemical</option>
+                            <option value="Other">Other</option>
+                          </select>
+                        ) : (
+                          <span className="font-sans text-[11px] font-semibold rounded bg-slate-100 px-1.5 py-0.5 text-slate-700">
+                            {m.material_type}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2 px-3 font-sans font-semibold text-slate-900">
+                        {m.is_manual ? (
+                          <input
+                            type="text"
+                            value={m.item_name || ''}
+                            onChange={(e) => handleUpdateMaterial(idx, { item_name: e.target.value })}
+                            placeholder="Material Description"
+                            className="input py-1 text-xs w-full font-sans text-[11px]"
+                          />
+                        ) : (
+                          <span>{m.item_name}</span>
+                        )}
+                      </td>
+                      <td className="py-2 px-3 text-slate-500">
+                        {m.is_manual ? (
+                          <input
+                            type="text"
+                            value={m.item_code || ''}
+                            onChange={(e) => handleUpdateMaterial(idx, { item_code: e.target.value })}
+                            placeholder="Code"
+                            className="input py-1 text-xs w-20 font-mono text-[11px]"
+                          />
+                        ) : (
+                          <span>{m.item_code || '—'}</span>
+                        )}
+                      </td>
+                      <td className="py-2 px-3 text-right font-bold text-slate-800">
+                        {m.is_manual ? (
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={m.quantity || 0}
+                            onChange={(e) => handleUpdateMaterial(idx, { quantity: parseFloat(e.target.value) || 0 })}
+                            className="input py-1 text-xs w-20 text-right font-mono"
+                          />
+                        ) : (
+                          <span>{fmtNumber(m.quantity)}</span>
+                        )}
+                      </td>
+                      <td className="py-2 px-3 text-slate-500">
+                        {m.is_manual ? (
+                          <input
+                            type="text"
+                            value={m.uom_code || 'KG'}
+                            onChange={(e) => handleUpdateMaterial(idx, { uom_code: e.target.value })}
+                            className="input py-1 text-xs w-14 text-center font-mono"
+                          />
+                        ) : (
+                          <span>{m.uom_code}</span>
+                        )}
+                      </td>
+                      <td className="py-2 px-3 text-right text-slate-600">
+                        {m.is_manual ? (
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={m.rate || 0}
+                            onChange={(e) => handleUpdateMaterial(idx, { rate: parseFloat(e.target.value) || 0 })}
+                            className="input py-1 text-xs w-24 text-right font-mono font-bold text-brand-700"
+                          />
+                        ) : (
+                          <span>{fmtDecimal(m.rate, 2)}</span>
+                        )}
+                      </td>
+                      <td className="py-2 px-3 text-right font-bold text-slate-900">
+                        ₹{fmtDecimal(m.amount, 2)}
+                      </td>
+                      <td className="py-2 px-2 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteMaterial(idx)}
+                          className="text-slate-400 hover:text-rose-600 p-1 rounded hover:bg-rose-50 transition-colors"
+                          title="Delete line"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
+                  {(!sources.materials || sources.materials.length === 0) && (
+                    <tr>
+                      <td colSpan={9} className="py-8 text-center text-slate-400 italic">
+                        No material issues recorded yet. Click &ldquo;Add Material Line&rdquo; to add custom lines or load from Production Order.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
