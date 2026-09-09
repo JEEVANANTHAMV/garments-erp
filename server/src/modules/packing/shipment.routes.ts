@@ -563,3 +563,278 @@ shipmentRouter.post('/shipments/:id/documents', requirePermission('PACKING.EDIT'
 
   res.status(201).json({ data: { id: (r as any).insertId } });
 }));
+
+
+// ============================================================
+// SHIPMENT PLANNING
+// ============================================================
+
+/** GET /shipment-plans */
+shipmentRouter.get('/shipment-plans', requirePermission('PACKING.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const rows = await query(
+    `SELECT sp.*, b.party_name AS buyer_name
+       FROM trx_shipment_plan sp
+       LEFT JOIN mst_party b ON b.id = sp.buyer_id
+      WHERE sp.company_id = ?
+      ORDER BY sp.planned_date DESC, sp.id DESC`, [cid]);
+  res.json({ data: rows });
+}));
+
+/** GET /shipment-plans/:id */
+shipmentRouter.get('/shipment-plans/:id', requirePermission('PACKING.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = Number(req.params.id);
+  const row = await queryOne(
+    `SELECT sp.*, b.party_name AS buyer_name
+       FROM trx_shipment_plan sp
+       LEFT JOIN mst_party b ON b.id = sp.buyer_id
+      WHERE sp.id = ? AND sp.company_id = ?`, [id, cid]);
+  if (!row) throw NotFound('Shipment plan not found');
+
+  const packages = await query(
+    `SELECT c.*, p.pack_no
+       FROM trx_shipment_plan_package spp
+       JOIN trx_carton c ON c.id = spp.carton_id
+       JOIN trx_packing p ON p.id = c.packing_id
+      WHERE spp.plan_id = ?`, [id]);
+
+  res.json({ data: { ...(row as any), packages } });
+}));
+
+/** POST /shipment-plans */
+shipmentRouter.post('/shipment-plans', requirePermission('PACKING.CREATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const body = z.object({
+    plan_no: s.nullableStr(40),
+    planned_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    buyer_id: s.id(),
+    shipment_type: z.enum(['DOMESTIC','EXPORT']).default('DOMESTIC'),
+    mode: z.enum(MODES).default('ROAD'),
+    destination: s.nullableStr(120),
+    package_ids: z.array(z.coerce.number().int().positive()).default([]),
+    remarks: s.text(),
+  }).parse(req.body);
+
+  const result = await transaction(async (tx) => {
+    const planNo = body.plan_no || await nextDocNumber(tx, cid, 'SHIP_PLAN');
+
+    let totalGross = 0, totalCbm = 0, totalQty = 0;
+    for (const pkgId of body.package_ids) {
+      const c = await txQueryOne<any>(tx,
+        `SELECT c.*, COALESCE(SUM(cc.qty),0) AS qty
+           FROM trx_carton c LEFT JOIN trx_carton_content cc ON cc.carton_id = c.id
+          WHERE c.id = ? GROUP BY c.id`, [pkgId]);
+      if (c) {
+        totalGross += Number(c.gross_weight_kg || 0);
+        totalCbm += Number(c.cbm || 0);
+        totalQty += Number(c.qty || 0);
+      }
+    }
+
+    const r = await txExecute(tx,
+      `INSERT INTO trx_shipment_plan
+        (company_id, plan_no, planned_date, buyer_id, shipment_type, mode, destination,
+         total_packages, total_qty, gross_weight_kg, total_cbm, status, remarks, created_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [cid, planNo, body.planned_date, body.buyer_id ?? null, body.shipment_type, body.mode,
+       body.destination ?? null, body.package_ids.length, totalQty, totalGross, totalCbm,
+       'DRAFT', body.remarks ?? null, req.user!.id]);
+
+    const planId = r.insertId;
+    for (const pkgId of body.package_ids) {
+      await txExecute(tx,
+        `INSERT INTO trx_shipment_plan_package (plan_id, carton_id) VALUES (?,?)`, [planId, pkgId]);
+    }
+    return txQueryOne(tx, `SELECT * FROM trx_shipment_plan WHERE id = ?`, [planId]);
+  });
+
+  res.status(201).json({ data: result });
+}));
+
+/** POST /shipment-plans/:id/convert — Convert plan directly to Draft Shipment */
+shipmentRouter.post('/shipment-plans/:id/convert', requirePermission('PACKING.CREATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const planId = Number(req.params.id);
+
+  const plan = await queryOne<any>(
+    `SELECT * FROM trx_shipment_plan WHERE id = ? AND company_id = ?`, [planId, cid]);
+  if (!plan) throw NotFound('Shipment plan not found');
+
+  const pkgs = await query<any>(
+    `SELECT carton_id FROM trx_shipment_plan_package WHERE plan_id = ?`, [planId]);
+  const packageIds = pkgs.map(p => p.carton_id);
+
+  const shipment = await transaction(async (tx) => {
+    const shipNo = await nextDocNumber(tx, cid, 'SHIPMENT');
+    const r = await txExecute(tx,
+      `INSERT INTO trx_shipment
+        (company_id, shipment_no, buyer_id, shipment_type, mode, destination,
+         total_packages, total_qty, gross_weight_kg, total_cbm, remarks, created_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [cid, shipNo, plan.buyer_id, plan.shipment_type, plan.mode, plan.destination,
+       plan.total_packages, plan.total_qty, plan.gross_weight_kg, plan.total_cbm,
+       `Converted from Plan ${plan.plan_no}`, req.user!.id]);
+
+    const shipId = r.insertId;
+
+    for (const cartonId of packageIds) {
+      const carton = await txQueryOne<any>(tx,
+        `SELECT c.*, COALESCE(SUM(cc.qty), 0) AS content_qty
+           FROM trx_carton c LEFT JOIN trx_carton_content cc ON cc.carton_id = c.id
+          WHERE c.id = ? GROUP BY c.id`, [cartonId]);
+      if (!carton) continue;
+
+      await txExecute(tx,
+        `INSERT INTO trx_shipment_package (shipment_id, carton_id, packing_id, package_no, allocated_qty, gross_weight_kg, cbm)
+         VALUES (?,?,?,?,?,?,?)`,
+        [shipId, cartonId, carton.packing_id, carton.carton_no,
+         carton.content_qty, carton.gross_weight_kg, carton.cbm]);
+    }
+
+    await txExecute(tx, `UPDATE trx_shipment_plan SET status = 'CONVERTED' WHERE id = ?`, [planId]);
+
+    return txQueryOne(tx, `SELECT * FROM trx_shipment WHERE id = ?`, [shipId]);
+  });
+
+  res.json({ data: shipment });
+}));
+
+
+// ============================================================
+// CONTAINERS
+// ============================================================
+
+/** GET /shipments/:id/containers */
+shipmentRouter.get('/shipments/:id/containers', requirePermission('PACKING.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const shipmentId = Number(req.params.id);
+  const rows = await query(
+    `SELECT * FROM trx_shipment_container WHERE shipment_id = ? AND company_id = ? ORDER BY id DESC`,
+    [shipmentId, cid]);
+  res.json({ data: rows });
+}));
+
+/** POST /shipments/:id/containers */
+shipmentRouter.post('/shipments/:id/containers', requirePermission('PACKING.EDIT'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const shipmentId = Number(req.params.id);
+  const body = z.object({
+    container_no: s.strReq(40),
+    container_type: z.enum(['20FT','40FT','40HC','45HC','LCL']).default('40HC'),
+    seal_no: s.nullableStr(40),
+    tare_weight_kg: s.dec(),
+    net_weight_kg: s.dec(),
+    gross_weight_kg: s.dec(),
+    max_cbm: s.dec(),
+    loaded_cbm: s.dec(),
+    stuffing_date: s.date(),
+    stuffing_location: s.nullableStr(120),
+    status: z.enum(['PLANNED','STUFFED','RELEASED']).default('PLANNED'),
+    remarks: s.nullableStr(255),
+  }).parse(req.body);
+
+  const r = await query(
+    `INSERT INTO trx_shipment_container
+      (company_id, shipment_id, container_no, container_type, seal_no, tare_weight_kg,
+       net_weight_kg, gross_weight_kg, max_cbm, loaded_cbm, stuffing_date, stuffing_location, status, remarks)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [cid, shipmentId, body.container_no, body.container_type, body.seal_no ?? null,
+     body.tare_weight_kg ?? null, body.net_weight_kg ?? null, body.gross_weight_kg ?? null,
+     body.max_cbm ?? null, body.loaded_cbm ?? null, body.stuffing_date ?? null,
+     body.stuffing_location ?? null, body.status, body.remarks ?? null]);
+
+  res.status(201).json({ data: { id: (r as any).insertId } });
+}));
+
+
+// ============================================================
+// SHIPMENT LIFECYCLE ACTIONS
+// ============================================================
+
+/** POST /shipments/:id/ready-to-dispatch */
+shipmentRouter.post('/shipments/:id/ready-to-dispatch', requirePermission('PACKING.EDIT'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = Number(req.params.id);
+
+  const ship = await queryOne<any>(`SELECT * FROM trx_shipment WHERE id = ? AND company_id = ?`, [id, cid]);
+  if (!ship) throw NotFound('Shipment not found');
+
+  const pkgCount = await queryOne<any>(
+    `SELECT COUNT(*) AS c FROM trx_shipment_package WHERE shipment_id = ? AND status != 'CANCELLED'`, [id]);
+  if (!pkgCount?.c) throw BadRequest('Cannot release shipment without allocated packages');
+
+  await query(`UPDATE trx_shipment SET tracking_status = 'BOOKED' WHERE id = ?`, [id]);
+  res.json({ data: { id, status: 'READY_TO_DISPATCH' } });
+}));
+
+/** POST /shipments/:id/tracking — Add tracking event */
+shipmentRouter.post('/shipments/:id/tracking', requirePermission('PACKING.EDIT'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = Number(req.params.id);
+  const body = z.object({
+    event_type: s.strReq(60),
+    event_location: s.nullableStr(120),
+    remarks: s.nullableStr(255),
+  }).parse(req.body);
+
+  await transaction(async (tx) => {
+    await txExecute(tx,
+      `INSERT INTO trx_shipment_event (shipment_id, event_type, event_location, remarks)
+       VALUES (?,?,?,?)`,
+      [id, body.event_type, body.event_location ?? null, body.remarks ?? null]);
+
+    // Update tracking status on shipment
+    if (['GATED_IN','LOADED','SAILED','TRANSIT','ARRIVED','DELIVERED'].includes(body.event_type)) {
+      await txExecute(tx, `UPDATE trx_shipment SET tracking_status = ? WHERE id = ?`, [body.event_type, id]);
+    }
+  });
+
+  res.status(201).json({ data: { shipment_id: id, event: body.event_type } });
+}));
+
+/** POST /shipments/:id/delivery — Confirm POD & delivery */
+shipmentRouter.post('/shipments/:id/delivery', requirePermission('PACKING.EDIT'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = Number(req.params.id);
+  const body = z.object({
+    delivered_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    receiver_name: s.strReq(80),
+    pod_ref: s.nullableStr(60),
+    remarks: s.text(),
+  }).parse(req.body);
+
+  await transaction(async (tx) => {
+    await txExecute(tx,
+      `UPDATE trx_shipment SET tracking_status = 'DELIVERED', ata = ? WHERE id = ?`,
+      [body.delivered_date, id]);
+
+    await txExecute(tx,
+      `UPDATE trx_shipment_package SET status = 'DELIVERED' WHERE shipment_id = ?`, [id]);
+
+    await txExecute(tx,
+      `UPDATE trx_dispatch SET delivered_date = ?, receiver_name = ?, pod_ref = ? WHERE shipment_id = ?`,
+      [body.delivered_date, body.receiver_name, body.pod_ref ?? null, id]);
+  });
+
+  res.json({ data: { id, status: 'DELIVERED' } });
+}));
+
+/** POST /shipments/:id/cancel — Cancel draft shipment & release packages */
+shipmentRouter.post('/shipments/:id/cancel', requirePermission('PACKING.EDIT'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = Number(req.params.id);
+
+  const ship = await queryOne<any>(`SELECT * FROM trx_shipment WHERE id = ? AND company_id = ?`, [id, cid]);
+  if (!ship) throw NotFound('Shipment not found');
+
+  await transaction(async (tx) => {
+    await txExecute(tx,
+      `UPDATE trx_shipment_package SET status = 'CANCELLED' WHERE shipment_id = ?`, [id]);
+    await txExecute(tx,
+      `UPDATE trx_shipment SET tracking_status = 'BOOKED', remarks = CONCAT(COALESCE(remarks,''), ' [CANCELLED]') WHERE id = ?`, [id]);
+  });
+
+  res.json({ data: { id, status: 'CANCELLED' } });
+}));
+

@@ -50,7 +50,17 @@ import YarnGRNDetailPage from './pages/procurement/YarnGRNDetail';
 import CadRequirementsPage from './pages/production/CadRequirements';
 import CadRequirementDetailPage from './pages/production/CadRequirementDetail';
 import { CuttingPlansPage, CuttingPlanDetailPage } from './pages/production/CuttingPlanDetail';
-import { PackingListPage, PackingListDetailPage, ShipmentListPage, ShipmentDetailPage, DispatchListPage, DispatchDetailPage } from './pages/logistics/PackingListShipment';
+import { FabricIssuePage } from './pages/production/FabricIssuePage';
+import { LaySpreadingPage } from './pages/production/LaySpreadingPage';
+import { CutQcBundlesPage } from './pages/production/CutQcBundlesPage';
+import { SewingFinishingFloorPage } from './pages/production/SewingFinishingFloorPage';
+import { TraceabilitySearchPage } from './pages/production/TraceabilitySearchPage';
+import {
+  PackingListPage, PackingListDetailPage,
+  ShipmentPlanPage,
+  ShipmentListPage, ShipmentDetailPage,
+  DispatchListPage, DispatchDetailPage,
+} from './pages/logistics/PackingListShipment';
 
 /* Inventory */
 import { StockPage, StockLedgerPage } from './pages/inventory';
@@ -209,6 +219,11 @@ export default function App() {
 
                 {/* Production */}
                 <Route path="production">
+                  <Route path="traceability" element={<TraceabilitySearchPage />} />
+                  <Route path="fabric-issues" element={<FabricIssuePage />} />
+                  <Route path="lay-spreading" element={<LaySpreadingPage />} />
+                  <Route path="cut-qc-bundles" element={<CutQcBundlesPage />} />
+                  <Route path="sewing-finishing" element={<SewingFinishingFloorPage />} />
                   <Route path="wip" element={<WipDashboardPage />} />
                   <Route path="daily-plans" element={<DailyProductionPlansPage />} />
                   <Route path="daily-outputs" element={<DailyOutputsPage />} />
@@ -259,6 +274,7 @@ export default function App() {
                   <Route path="packing-lists" element={<PackingListPage />} />
                   <Route path="packing-lists/new" element={<PackingListDetailPage />} />
                   <Route path="packing-lists/:id" element={<PackingListDetailPage />} />
+                  <Route path="shipment-plans" element={<ShipmentPlanPage />} />
                   <Route path="shipments" element={<ShipmentListPage />} />
                   <Route path="shipments/new" element={<ShipmentDetailPage />} />
                   <Route path="shipments/:id" element={<ShipmentDetailPage />} />

@@ -32,6 +32,8 @@ import { cadRouter } from './modules/cad/cad.routes.js';
 import { fabricYarnProcurementRouter } from './modules/procurement/fabricYarnProcurement.routes.js';
 import { cuttingPlanRouter } from './modules/production/cuttingPlan.routes.js';
 import { shipmentRouter } from './modules/packing/shipment.routes.js';
+import { productionStagesRouter } from './modules/production/productionStages.routes.js';
+import { traceabilityRouter } from './modules/production/traceability.routes.js';
 
 export function createApp() {
   const app = express();
@@ -88,6 +90,8 @@ export function createApp() {
   api.use('/', fabricYarnProcurementRouter); // /fabric-purchase-orders, /fabric-grns, /yarn-grns, etc.
   api.use('/', cuttingPlanRouter);            // /cutting-plans, /bundles, /fg-receipts
   api.use('/', shipmentRouter);               // /packing-lists, /shipments, /dispatches, /available-packages
+  api.use('/', productionStagesRouter);       // /fabric-issues, /lay-plans, /cut-piece-qc, /sewing, /finishing, /final-qc
+  api.use('/', traceabilityRouter);           // /production/io/:ioNo/styles, /io/:ioNo/traceability, /traceability/search
 
   // Metadata-driven resources.
   const registry = [...masterResources, ...transactionResources];

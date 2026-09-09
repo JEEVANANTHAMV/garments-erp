@@ -176,6 +176,32 @@ export function CuttingPlanDetailPage() {
 
   const STATUSES = ['DRAFT','APPROVED','RELEASED','IN_PROGRESS','COMPLETED','CLOSED','CANCELLED'];
 
+  const handleSoSelect = (soIdVal: string) => {
+    const soId = soIdVal ? Number(soIdVal) : null;
+    const so = salesOrders.find(s => s.id === soId);
+    setHeader((prev: any) => ({
+      ...prev,
+      so_id: soId,
+      io_no: so?.po_no || so?.so_no || prev.io_no,
+      style_id: so?.style_id || prev.style_id,
+      color_id: so?.color_id || prev.color_id,
+      order_qty: so?.order_qty || prev.order_qty,
+    }));
+  };
+
+  const handlePoSelect = (poIdVal: string) => {
+    const poId = poIdVal ? Number(poIdVal) : null;
+    const po = prodOrders.find(p => p.id === poId);
+    setHeader((prev: any) => ({
+      ...prev,
+      prod_order_id: poId,
+      io_no: po?.io_no || po?.code || prev.io_no,
+      style_id: po?.style_id || prev.style_id,
+      color_id: po?.color_id || prev.color_id,
+      order_qty: po?.order_qty || prev.order_qty,
+    }));
+  };
+
   return (
     <div className="space-y-6 max-w-5xl">
       <div className="flex items-center justify-between">
@@ -198,18 +224,23 @@ export function CuttingPlanDetailPage() {
             placeholder="Auto-generate" />
           <Input label="Plan Date" type="date" value={header.plan_date}
             onChange={e => setField('plan_date', e.target.value)} required />
-          <Input label="I/O No" value={header.io_no} onChange={e => setField('io_no', e.target.value)}
-            required placeholder="e.g. IO-2026-00125" />
+          <div>
+            <Input label="I/O No *" value={header.io_no} onChange={e => setField('io_no', e.target.value)}
+              required placeholder="e.g. IO-2026-00125" disabled={Boolean(header.so_id || header.prod_order_id)} />
+            {(header.so_id || header.prod_order_id) && (
+              <span className="text-[10px] text-indigo-600 font-medium">🔒 Auto-inherited from source document</span>
+            )}
+          </div>
 
           <Select label="Sales Order" value={header.so_id || ''}
-            onChange={e => setField('so_id', e.target.value ? Number(e.target.value) : null)}
-            options={[{ value: '', label: '— Select —' }, ...salesOrders.map((s: any) => ({ value: s.id, label: s.label || s.code }))]} />
+            onChange={e => handleSoSelect(e.target.value)}
+            options={[{ value: '', label: '— Select Sales Order —' }, ...salesOrders.map((s: any) => ({ value: s.id, label: s.label || s.code }))]} />
           <Select label="Production Order" value={header.prod_order_id || ''}
-            onChange={e => setField('prod_order_id', e.target.value ? Number(e.target.value) : null)}
-            options={[{ value: '', label: '— Select —' }, ...prodOrders.map((s: any) => ({ value: s.id, label: s.label || s.code }))]} />
-          <Select label="Style" value={header.style_id || ''}
+            onChange={e => handlePoSelect(e.target.value)}
+            options={[{ value: '', label: '— Select Production Order —' }, ...prodOrders.map((s: any) => ({ value: s.id, label: s.label || s.code }))]} />
+          <Select label="Style *" value={header.style_id || ''}
             onChange={e => setField('style_id', e.target.value ? Number(e.target.value) : null)} required
-            options={[{ value: '', label: '— Select —' }, ...styles.map((s: any) => ({ value: s.id, label: s.label || s.code }))]} />
+            options={[{ value: '', label: '— Select Style —' }, ...styles.map((s: any) => ({ value: s.id, label: s.label || s.code }))]} />
 
           <Select label="Colour" value={header.color_id || ''}
             onChange={e => setField('color_id', e.target.value ? Number(e.target.value) : null)}

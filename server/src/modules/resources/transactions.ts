@@ -277,7 +277,7 @@ export const transactionResources: ResourceConfig[] = [
             LEFT JOIN mst_party v  ON v.id  = t.vendor_id
             LEFT JOIN cfg_status cs ON cs.id = t.status_id`,
     fields: [
-      f('po_prod_no', s.nullableStr(40)), f('prod_date', s.date()), f('so_id', s.idReq()),
+      f('po_prod_no', s.nullableStr(40)), f('io_no', s.nullableStr(40)), f('prod_date', s.date()), f('so_id', s.idReq()),
       f('so_line_id', s.id()), f('plan_id', s.id()), f('style_id', s.idReq()), f('color_id', s.id()),
       f('unit_id', s.id()), f('order_qty', s.intReq()), f('planned_qty', s.int()),
       f('produced_qty', s.int()), f('is_jobwork', s.bool()), f('vendor_id', s.id()),
@@ -298,6 +298,7 @@ export const transactionResources: ResourceConfig[] = [
             LEFT JOIN mst_party v ON v.id = t.vendor_id`,
     fields: [
       f('prod_order_id', s.idReq()), f('stage_id', s.idReq()), f('txn_no', s.nullableStr(40)),
+      f('io_no', s.nullableStr(40)),
       f('txn_date', s.date()), f('from_unit', s.id()), f('to_unit', s.id()), f('vendor_id', s.id()),
       f('input_qty', s.int()), f('output_qty', s.int()), f('rejected_qty', s.int()),
       f('rework_qty', s.int()), f('shortage_qty', s.int()),
@@ -316,11 +317,13 @@ export const transactionResources: ResourceConfig[] = [
     children: [
       { key: 'bundles', table: 'trx_cutting_bundle', fk: 'cutting_id', fields: [
         f('sku_id', s.idReq()), f('bundle_no', s.strReq(40)),
+        f('io_no', s.nullableStr(40)), f('style_id', s.id()), f('color_id', s.id()), f('size_id', s.id()),
+        f('component', s.nullableStr(60)),
         f('qty', s.intReq()), f('barcode', s.nullableStr(80)),
       ]},
     ],
     fields: [
-      f('cut_no', s.nullableStr(40)), f('cut_date', s.date()), f('prod_order_id', s.idReq()),
+      f('cut_no', s.nullableStr(40)), f('io_no', s.nullableStr(40)), f('cut_date', s.date()), f('prod_order_id', s.idReq()),
       f('fabric_id', s.id()), f('batch_id', s.id()), f('lay_length_m', s.dec()),
       f('ply_count', s.int()), f('marker_ref', s.nullableStr(60)), f('marker_eff_pct', s.dec()),
       f('fabric_used_kg', s.dec()), f('total_pieces', s.int()),
@@ -337,7 +340,7 @@ export const transactionResources: ResourceConfig[] = [
     joins: `LEFT JOIN trx_production_order po ON po.id = t.prod_order_id
             LEFT JOIN mst_party v ON v.id = t.vendor_id`,
     fields: [
-      f('print_no', s.nullableStr(40)), f('print_date', s.date()), f('prod_order_id', s.idReq()),
+      f('print_no', s.nullableStr(40)), f('io_no', s.nullableStr(40)), f('print_date', s.date()), f('prod_order_id', s.idReq()),
       f('print_type', s.enumReq(['SCREEN','DIGITAL','SUBLIMATION','RUBBER','DISCHARGE','FOIL','PUFF','OTHER'])),
       f('placement', s.nullableStr(80)), f('no_of_colors', s.int()), f('vendor_id', s.id()),
       f('input_qty', s.int()), f('output_qty', s.int()), f('rejected_qty', s.int()),
@@ -355,7 +358,7 @@ export const transactionResources: ResourceConfig[] = [
     joins: `LEFT JOIN trx_production_order po ON po.id = t.prod_order_id
             LEFT JOIN mst_party v ON v.id = t.vendor_id`,
     fields: [
-      f('emb_no', s.nullableStr(40)), f('emb_date', s.date()), f('prod_order_id', s.idReq()),
+      f('emb_no', s.nullableStr(40)), f('io_no', s.nullableStr(40)), f('emb_date', s.date()), f('prod_order_id', s.idReq()),
       f('design_ref', s.nullableStr(60)), f('stitch_count', s.int()), f('placement', s.nullableStr(80)),
       f('vendor_id', s.id()), f('input_qty', s.int()), f('output_qty', s.int()),
       f('rejected_qty', s.int()), f('rework_qty', s.int()), f('shortage_qty', s.int()),
@@ -371,7 +374,7 @@ export const transactionResources: ResourceConfig[] = [
     joins: `LEFT JOIN trx_production_order po ON po.id = t.prod_order_id
             LEFT JOIN mst_party v ON v.id = t.vendor_id`,
     fields: [
-      f('wash_no', s.nullableStr(40)), f('wash_date', s.date()), f('prod_order_id', s.idReq()),
+      f('wash_no', s.nullableStr(40)), f('io_no', s.nullableStr(40)), f('wash_date', s.date()), f('prod_order_id', s.idReq()),
       f('wash_type', s.enumReq(['NORMAL','ENZYME','STONE','ACID','BLEACH','GARMENT_DYE','SILICON','OTHER'])),
       f('vendor_id', s.id()), f('input_qty', s.int()), f('output_qty', s.int()),
       f('rejected_qty', s.int()), f('rework_qty', s.int()), f('shortage_qty', s.int()),
@@ -394,7 +397,7 @@ export const transactionResources: ResourceConfig[] = [
       ]},
     ],
     fields: [
-      f('stitch_no', s.nullableStr(40)), f('stitch_date', s.date()), f('prod_order_id', s.idReq()),
+      f('stitch_no', s.nullableStr(40)), f('io_no', s.nullableStr(40)), f('stitch_date', s.date()), f('prod_order_id', s.idReq()),
       f('unit_id', s.id()), f('line_no', s.nullableStr(20)), f('vendor_id', s.id()),
       f('input_qty', s.int()), f('output_qty', s.int()), f('rejected_qty', s.int()),
       f('rework_qty', s.int()), f('shortage_qty', s.int()),
@@ -410,7 +413,7 @@ export const transactionResources: ResourceConfig[] = [
     joins: `LEFT JOIN trx_production_order po ON po.id = t.prod_order_id
             LEFT JOIN mst_unit un ON un.id = t.unit_id`,
     fields: [
-      f('finish_no', s.nullableStr(40)), f('finish_date', s.date()), f('prod_order_id', s.idReq()),
+      f('finish_no', s.nullableStr(40)), f('io_no', s.nullableStr(40)), f('finish_date', s.date()), f('prod_order_id', s.idReq()),
       f('unit_id', s.id()),
       // SET column — accept a comma-joined list
       f('activity', s.nullableStr(120)),
@@ -459,7 +462,7 @@ export const transactionResources: ResourceConfig[] = [
     joins: `LEFT JOIN trx_sales_order so ON so.id = t.so_id
             LEFT JOIN trx_production_order po ON po.id = t.prod_order_id`,
     fields: [
-      f('pack_no', s.nullableStr(40)), f('pack_date', s.date()), f('so_id', s.idReq()),
+      f('pack_no', s.nullableStr(40)), f('io_no', s.nullableStr(40)), f('style_id', s.id()), f('pack_date', s.date()), f('so_id', s.idReq()),
       f('prod_order_id', s.id()),
       f('pack_method', s.enum(['SOLID_COLOR_SOLID_SIZE','SOLID_COLOR_ASSORTED_SIZE','ASSORTED_COLOR_ASSORTED_SIZE','RATIO_PACK'])),
       f('total_cartons', s.int()), f('total_qty', s.int()),
@@ -475,7 +478,7 @@ export const transactionResources: ResourceConfig[] = [
     joins: `LEFT JOIN trx_sales_order so ON so.id = t.so_id
             LEFT JOIN mst_party b ON b.id = t.buyer_id`,
     fields: [
-      f('dispatch_no', s.nullableStr(40)), f('dispatch_date', s.date()), f('so_id', s.idReq()),
+      f('dispatch_no', s.nullableStr(40)), f('io_no', s.nullableStr(40)), f('dispatch_date', s.date()), f('so_id', s.idReq()),
       f('packing_id', s.id()), f('buyer_id', s.id()),
       f('mode', s.enum(['SEA','AIR','ROAD','COURIER'])),
       f('total_cartons', s.int()), f('total_qty', s.int()),
