@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowLeft, Save, Plus, Trash2, Scissors
+  ArrowLeft, Save, Plus, Trash2, Scissors, Printer
 } from 'lucide-react';
 import { http } from '../../lib/api';
 import { fmtDecimal, today } from '../../lib/format';
@@ -50,6 +50,7 @@ export default function TrimPurchaseOrderDetailPage() {
   const toast = useToast();
 
   const [saving, setSaving] = useState(false);
+  const [showPrintPO, setShowPrintPO] = useState(false);
 
   // Lookups
   const { data: suppliers = [] } = useQuery({
@@ -255,6 +256,15 @@ export default function TrimPurchaseOrderDetailPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          {!isNew && (
+            <button
+              type="button"
+              onClick={() => setShowPrintPO(true)}
+              className="btn-secondary text-xs flex items-center gap-1.5 shadow-sm border border-slate-300 hover:bg-slate-50"
+            >
+              <Printer size={15} /> Print PO
+            </button>
+          )}
           <button
             type="button"
             onClick={handleSave}
@@ -517,6 +527,130 @@ export default function TrimPurchaseOrderDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* PRINTABLE PURCHASE ORDER VOUCHER MODAL */}
+      {showPrintPO && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-slate-200 my-auto flex flex-col max-h-[96vh]">
+            <div className="px-6 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50 no-print">
+              <span className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                <Printer size={16} className="text-emerald-600" /> Print Trim Purchase Order
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="btn-primary text-xs py-1.5 px-4 flex items-center gap-1.5"
+                >
+                  <Printer size={14} /> Print Now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPrintPO(false)}
+                  className="btn-secondary text-xs py-1.5 px-3"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            {/* Printable Document Sheet */}
+            <div className="p-8 overflow-y-auto print-container text-slate-900 bg-white font-sans text-xs">
+              <div className="border-b-2 border-slate-800 pb-4 mb-4 text-center">
+                <h1 className="text-xl font-black uppercase tracking-wider text-slate-900">GARMENT MANUFACTURING ERP</h1>
+                <p className="text-xs text-slate-500 font-medium">Trims & Accessories Procurement Division</p>
+                <div className="inline-block mt-2 px-4 py-1 rounded bg-emerald-100 text-emerald-900 font-bold text-sm tracking-wide">
+                  PURCHASE ORDER VOUCHER
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 border border-slate-300 rounded-lg p-3.5 mb-4 bg-slate-50/50">
+                <div className="space-y-1.5">
+                  <div><span className="text-slate-500 font-medium">PO Number:</span> <span className="font-bold text-slate-900 font-mono text-sm">{head.po_no || id}</span></div>
+                  <div><span className="text-slate-500 font-medium">PO Date:</span> <span className="font-semibold text-slate-800">{head.po_date}</span></div>
+                  <div><span className="text-slate-500 font-medium">Expected Delivery:</span> <span className="font-semibold text-slate-800">{head.delivery_date || '-'}</span></div>
+                  <div><span className="text-slate-500 font-medium">Payment Terms:</span> <span className="font-semibold text-slate-800">{head.payment_terms || '-'}</span></div>
+                </div>
+                <div className="space-y-1.5 border-l border-slate-200 pl-4">
+                  <div><span className="text-slate-500 font-medium">Supplier / Vendor:</span> <span className="font-bold text-slate-900">{suppliers.find((s: any) => String(s.id) === String(head.supplier_id))?.party_name || '-'}</span></div>
+                  <div><span className="text-slate-500 font-medium">Internal Order (I/O No):</span> <span className="font-bold text-sky-800 font-mono">{head.io_no}</span></div>
+                  <div><span className="text-slate-500 font-medium">Style:</span> <span className="font-semibold text-slate-800">{styles.find((s: any) => String(s.id) === String(head.style_id))?.style_code || '-'}</span></div>
+                  <div><span className="text-slate-500 font-medium">Status:</span> <span className="font-bold text-emerald-700">{head.status}</span></div>
+                </div>
+              </div>
+
+              {/* Items Table */}
+              <div className="mb-6">
+                <table className="w-full border-collapse border border-slate-300 text-[11px]">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-700">
+                      <th className="border border-slate-300 py-1.5 px-2 text-left">#</th>
+                      <th className="border border-slate-300 py-1.5 px-2 text-left">Trim Item</th>
+                      <th className="border border-slate-300 py-1.5 px-2 text-left">Specification</th>
+                      <th className="border border-slate-300 py-1.5 px-2 text-center">Color / Size</th>
+                      <th className="border border-slate-300 py-1.5 px-2 text-right">Order Qty</th>
+                      <th className="border border-slate-300 py-1.5 px-2 text-right">Rate (₹)</th>
+                      <th className="border border-slate-300 py-1.5 px-2 text-right">Tax (%)</th>
+                      <th className="border border-slate-300 py-1.5 px-2 text-right">Total (₹)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lines.map((l: any, idx: number) => {
+                      const trimObj = trims.find((t: any) => String(t.id) === String(l.trim_id));
+                      return (
+                        <tr key={l._key || idx}>
+                          <td className="border border-slate-300 py-1 px-2 text-center text-slate-500">{idx + 1}</td>
+                          <td className="border border-slate-300 py-1 px-2 font-semibold text-slate-900">{trimObj?.trim_name || l.trim_name || 'Trim'}</td>
+                          <td className="border border-slate-300 py-1 px-2 text-slate-600">{l.specification || '-'}</td>
+                          <td className="border border-slate-300 py-1 px-2 text-center">{l.color_name || '-'} / {l.trim_size || '-'}</td>
+                          <td className="border border-slate-300 py-1 px-2 text-right font-bold">{fmtDecimal(l.order_qty)}</td>
+                          <td className="border border-slate-300 py-1 px-2 text-right">₹{fmtDecimal(l.rate)}</td>
+                          <td className="border border-slate-300 py-1 px-2 text-right">{l.gst_rate}%</td>
+                          <td className="border border-slate-300 py-1 px-2 text-right font-bold">₹{fmtDecimal(l.net_amount)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-slate-50">
+                      <td colSpan={7} className="border border-slate-300 py-1 px-2 text-right font-semibold text-slate-600">Taxable Subtotal:</td>
+                      <td className="border border-slate-300 py-1 px-2 text-right font-bold">₹{fmtDecimal(totals.totalAmount)}</td>
+                    </tr>
+                    <tr className="bg-slate-50">
+                      <td colSpan={7} className="border border-slate-300 py-1 px-2 text-right font-semibold text-slate-600">Total Tax:</td>
+                      <td className="border border-slate-300 py-1 px-2 text-right font-bold">₹{fmtDecimal(totals.taxAmount)}</td>
+                    </tr>
+                    <tr className="bg-slate-100 font-bold">
+                      <td colSpan={7} className="border border-slate-300 py-1.5 px-2 text-right text-slate-900">Grand Total:</td>
+                      <td className="border border-slate-300 py-1.5 px-2 text-right font-black text-emerald-800 text-sm">₹{fmtDecimal(totals.grandTotal)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              {/* Signatures */}
+              <div className="grid grid-cols-4 gap-4 pt-8 mt-6 border-t border-slate-300 text-center text-[10px]">
+                <div>
+                  <div className="border-b border-slate-400 h-8 mb-1"></div>
+                  <span className="font-semibold text-slate-700">Prepared By</span>
+                </div>
+                <div>
+                  <div className="border-b border-slate-400 h-8 mb-1"></div>
+                  <span className="font-semibold text-slate-700">Merchandiser</span>
+                </div>
+                <div>
+                  <div className="border-b border-slate-400 h-8 mb-1"></div>
+                  <span className="font-semibold text-slate-700">Accounts Manager</span>
+                </div>
+                <div>
+                  <div className="border-b border-slate-400 h-8 mb-1"></div>
+                  <span className="font-semibold text-slate-700">Authorized Signatory</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

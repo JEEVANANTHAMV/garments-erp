@@ -14,6 +14,7 @@ const kwoSchema = z.object({
   kwo_no: s.nullableStr(50),
   kwo_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   io_no: s.strReq(60),
+  customer_po_no: s.nullableStr(60),
   style_id: s.id(),
   sub_process: z.enum(['KNITTING', 'WINDING', 'TWISTING', 'YARN_DYEING', 'COLLAR_KNITTING']).default('KNITTING'),
   vendor_id: s.id(),
@@ -172,11 +173,11 @@ knittingRouter.post('/knitting/orders', requirePermission('PRODUCTION.CREATE'), 
     const resOrder = await txExecute(
       tx,
       `INSERT INTO trx_knitting_order
-         (company_id, kwo_no, kwo_date, io_no, style_id, sub_process, vendor_id, fabric_id,
+         (company_id, kwo_no, kwo_date, io_no, customer_po_no, style_id, sub_process, vendor_id, fabric_id,
           dia, gsm, gauge, loop_length, planned_fabric_kg, planned_yarn_kg, yarn_lot_no, status, remarks, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        cid, kwoNo, body.kwo_date, body.io_no, body.style_id, body.sub_process, body.vendor_id, body.fabric_id,
+        cid, kwoNo, body.kwo_date, body.io_no, body.customer_po_no, body.style_id, body.sub_process, body.vendor_id, body.fabric_id,
         body.dia, body.gsm, body.gauge, body.loop_length, body.planned_fabric_kg, body.planned_yarn_kg,
         body.yarn_lot_no, body.status, body.remarks, uid
       ]
@@ -201,6 +202,7 @@ knittingRouter.put('/knitting/orders/:id', requirePermission('PRODUCTION.UPDATE'
     `UPDATE trx_knitting_order
         SET kwo_date = COALESCE(?, kwo_date),
             io_no = COALESCE(?, io_no),
+            customer_po_no = COALESCE(?, customer_po_no),
             style_id = COALESCE(?, style_id),
             sub_process = COALESCE(?, sub_process),
             vendor_id = COALESCE(?, vendor_id),
@@ -216,7 +218,7 @@ knittingRouter.put('/knitting/orders/:id', requirePermission('PRODUCTION.UPDATE'
             remarks = COALESCE(?, remarks)
       WHERE id = ? AND company_id = ?`,
     [
-      body.kwo_date, body.io_no, body.style_id, body.sub_process, body.vendor_id, body.fabric_id,
+      body.kwo_date, body.io_no, body.customer_po_no, body.style_id, body.sub_process, body.vendor_id, body.fabric_id,
       body.dia, body.gsm, body.gauge, body.loop_length, body.planned_fabric_kg, body.planned_yarn_kg,
       body.yarn_lot_no, body.status, body.remarks, req.params.id, cid
     ]

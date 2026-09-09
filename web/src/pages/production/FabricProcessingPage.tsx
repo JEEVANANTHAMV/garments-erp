@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   RefreshCw, Plus, Search, Eye, Trash2,
-  AlertTriangle, X, Layers, Box, FileText, Check
+  AlertTriangle, X, Layers, Box, FileText, Check, Printer
 } from 'lucide-react';
 import { http } from '../../lib/api';
 import { fmtDate, fmtDecimal, today } from '../../lib/format';
@@ -19,6 +19,7 @@ export default function FabricProcessingPage() {
 
   // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showPrintVoucher, setShowPrintVoucher] = useState(false);
   const [activeFpoId, setActiveFpoId] = useState<number | null>(null);
 
   // Lookups
@@ -64,6 +65,7 @@ export default function FabricProcessingPage() {
     fpo_no: '',
     fpo_date: today(),
     io_no: 'IO-2026-001',
+    customer_po_no: '',
     style_id: '',
     fabric_id: '',
     sub_process: 'DYEING',
@@ -349,7 +351,12 @@ export default function FabricProcessingPage() {
                   <tr key={o.id} className="hover:bg-slate-50/70 transition">
                     <td className="py-3 px-4 font-semibold text-purple-700">{o.fpo_no}</td>
                     <td className="py-3 px-4 text-slate-500">{fmtDate(o.fpo_date)}</td>
-                    <td className="py-3 px-4 font-medium text-slate-900">{o.io_no}</td>
+                    <td className="py-3 px-4 font-medium text-slate-900">
+                      <div>{o.io_no}</div>
+                      {o.customer_po_no && (
+                        <div className="text-[10px] text-purple-600 font-normal">PO: {o.customer_po_no}</div>
+                      )}
+                    </td>
                     <td className="py-3 px-4">
                       {o.style_code ? (
                         <div>
@@ -389,7 +396,7 @@ export default function FabricProcessingPage() {
                         onClick={() => setActiveFpoId(o.id)}
                         className="btn-secondary text-[11px] py-1 px-2.5 flex items-center gap-1 mx-auto"
                       >
-                        <Eye size={13} /> Output & QC
+                        <Eye size={12} /> Manage
                       </button>
                     </td>
                   </tr>
@@ -400,13 +407,13 @@ export default function FabricProcessingPage() {
         </div>
       </div>
 
-      {/* CREATE FPO MODAL */}
+      {/* CREATE WORK ORDER MODAL */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden border border-slate-100 max-h-[90vh] flex flex-col">
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-slate-100 max-h-[90vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
               <div className="flex items-center gap-2">
-                <span className="p-1.5 rounded-lg bg-purple-100 text-purple-700">
+                <span className="p-1.5 bg-purple-100 text-purple-700 rounded-lg">
                   <RefreshCw size={18} />
                 </span>
                 <h3 className="text-base font-bold text-slate-900">New Fabric Process Order</h3>
@@ -429,7 +436,7 @@ export default function FabricProcessingPage() {
               }}
               className="p-6 space-y-4 overflow-y-auto flex-1 text-xs"
             >
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
                   <label className="label">I/O No (Internal Order) *</label>
                   <input
@@ -438,6 +445,16 @@ export default function FabricProcessingPage() {
                     value={newOrder.io_no}
                     onChange={(e) => setNewOrder({ ...newOrder, io_no: e.target.value })}
                     placeholder="IO-2026-001"
+                    className="input text-xs font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="label">Customer PO No</label>
+                  <input
+                    type="text"
+                    value={newOrder.customer_po_no}
+                    onChange={(e) => setNewOrder({ ...newOrder, customer_po_no: e.target.value })}
+                    placeholder="PO-2026-A12"
                     className="input text-xs font-semibold"
                   />
                 </div>
@@ -661,12 +678,25 @@ export default function FabricProcessingPage() {
                   </Badge>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  I/O No: <span className="font-semibold text-slate-800">{activeOrder.io_no}</span> | Style: <span className="font-medium text-slate-800">{activeOrder.style_code || '-'}</span> | Target: <span className="font-medium text-slate-800">{activeOrder.target_dia || '-'}, {activeOrder.target_gsm || '-'} GSM</span>
+                  I/O No: <span className="font-semibold text-slate-800">{activeOrder.io_no}</span>
+                  {activeOrder.customer_po_no && (
+                    <> | Customer PO: <span className="font-semibold text-purple-700">{activeOrder.customer_po_no}</span></>
+                  )}
+                  {' '}| Style: <span className="font-medium text-slate-800">{activeOrder.style_code || '-'}</span> | Target: <span className="font-medium text-slate-800">{activeOrder.target_dia || '-'}, {activeOrder.target_gsm || '-'} GSM</span>
                 </p>
               </div>
-              <button onClick={() => setActiveFpoId(null)} className="text-slate-400 hover:text-slate-600">
-                <X size={20} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPrintVoucher(true)}
+                  className="btn-secondary text-xs flex items-center gap-1.5 py-1 px-3 border border-slate-300 hover:bg-slate-100 shadow-sm"
+                >
+                  <Printer size={14} /> Print Voucher
+                </button>
+                <button onClick={() => setActiveFpoId(null)} className="text-slate-400 hover:text-slate-600">
+                  <X size={20} />
+                </button>
+              </div>
             </div>
 
             {/* Production Summary Cards */}
@@ -889,6 +919,168 @@ export default function FabricProcessingPage() {
                     )}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PRINTABLE WORK ORDER VOUCHER MODAL */}
+      {showPrintVoucher && activeOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-slate-200 my-auto flex flex-col max-h-[96vh]">
+            <div className="px-6 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50 no-print">
+              <span className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                <Printer size={16} className="text-purple-600" /> Print Work Order Voucher
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="btn-primary text-xs py-1.5 px-4 flex items-center gap-1.5"
+                >
+                  <Printer size={14} /> Print Now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPrintVoucher(false)}
+                  className="btn-secondary text-xs py-1.5 px-3"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            {/* Printable Document Sheet */}
+            <div className="p-8 overflow-y-auto print-container text-slate-900 bg-white font-sans text-xs">
+              {/* Company & Document Title */}
+              <div className="border-b-2 border-slate-800 pb-4 mb-4 text-center">
+                <h1 className="text-xl font-black uppercase tracking-wider text-slate-900">GARMENT MANUFACTURING ERP</h1>
+                <p className="text-xs text-slate-500 font-medium">Textile Processing Division — Work Order & Route Card</p>
+                <div className="inline-block mt-2 px-4 py-1 rounded bg-purple-100 text-purple-900 font-bold text-sm tracking-wide">
+                  {activeOrder.sub_process} WORK ORDER
+                </div>
+              </div>
+
+              {/* Order Meta Grid */}
+              <div className="grid grid-cols-2 gap-4 border border-slate-300 rounded-lg p-3.5 mb-4 bg-slate-50/50">
+                <div className="space-y-1.5">
+                  <div><span className="text-slate-500 font-medium">FPO Order No:</span> <span className="font-bold text-slate-900 font-mono text-sm">{activeOrder.fpo_no}</span></div>
+                  <div><span className="text-slate-500 font-medium">Order Date:</span> <span className="font-semibold text-slate-800">{fmtDate(activeOrder.fpo_date)}</span></div>
+                  <div><span className="text-slate-500 font-medium">Sub-Process:</span> <span className="font-bold text-purple-700">{activeOrder.sub_process}</span></div>
+                  <div><span className="text-slate-500 font-medium">Processing Vendor/Mill:</span> <span className="font-semibold text-slate-800">{activeOrder.vendor_name || 'In-House Mill'}</span></div>
+                </div>
+                <div className="space-y-1.5 border-l border-slate-200 pl-4">
+                  <div><span className="text-slate-500 font-medium">Internal Order (I/O No):</span> <span className="font-bold text-sky-800 font-mono">{activeOrder.io_no}</span></div>
+                  <div><span className="text-slate-500 font-medium">Customer PO No:</span> <span className="font-bold text-purple-800 font-mono">{activeOrder.customer_po_no || 'N/A'}</span></div>
+                  <div><span className="text-slate-500 font-medium">Style:</span> <span className="font-semibold text-slate-800">{activeOrder.style_code ? `${activeOrder.style_code} - ${activeOrder.style_name || ''}` : '-'}</span></div>
+                  <div><span className="text-slate-500 font-medium">Fabric:</span> <span className="font-semibold text-slate-800">{activeOrder.fabric_name || '-'}</span></div>
+                </div>
+              </div>
+
+              {/* Technical Specifications */}
+              <div className="border border-slate-300 rounded-lg p-3.5 mb-4">
+                <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 mb-2 border-b border-slate-200 pb-1">
+                  Technical Specifications
+                </h4>
+                <div className="grid grid-cols-4 gap-3 text-center">
+                  <div className="p-2 bg-slate-50 rounded border border-slate-200">
+                    <span className="text-[10px] text-slate-500 block uppercase font-medium">Target GSM</span>
+                    <span className="text-sm font-bold text-purple-700">{activeOrder.target_gsm || '-'} GSM</span>
+                  </div>
+                  <div className="p-2 bg-slate-50 rounded border border-slate-200">
+                    <span className="text-[10px] text-slate-500 block uppercase font-medium">Target Dia / Width</span>
+                    <span className="text-sm font-bold text-slate-800">{activeOrder.target_dia || '-'}</span>
+                  </div>
+                  <div className="p-2 bg-slate-50 rounded border border-slate-200">
+                    <span className="text-[10px] text-slate-500 block uppercase font-medium">Color Name</span>
+                    <span className="text-sm font-bold text-slate-800">{activeOrder.color_name || '-'}</span>
+                  </div>
+                  <div className="p-2 bg-slate-50 rounded border border-slate-200">
+                    <span className="text-[10px] text-slate-500 block uppercase font-medium">Shade Code</span>
+                    <span className="text-sm font-bold text-slate-800">{activeOrder.shade_code || '-'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Mass Balance Reconciliation */}
+              <div className="grid grid-cols-3 gap-3 mb-4 text-center">
+                <div className="p-2.5 border border-sky-200 bg-sky-50 rounded-lg">
+                  <span className="text-[10px] uppercase font-bold text-sky-700 block">Total Input Fabric</span>
+                  <span className="text-base font-black text-sky-900">{fmtDecimal(activeOrder.summary?.total_input_weight_kg)} kg</span>
+                  <span className="text-[10px] text-sky-600 block">({activeOrder.summary?.total_input_rolls} input rolls)</span>
+                </div>
+                <div className="p-2.5 border border-emerald-200 bg-emerald-50 rounded-lg">
+                  <span className="text-[10px] uppercase font-bold text-emerald-700 block">Total Output Fabric</span>
+                  <span className="text-base font-black text-emerald-900">{fmtDecimal(activeOrder.summary?.total_output_weight_kg)} kg</span>
+                  <span className="text-[10px] text-emerald-600 block">({activeOrder.summary?.total_output_rolls} finished rolls)</span>
+                </div>
+                <div className="p-2.5 border border-amber-200 bg-amber-50 rounded-lg">
+                  <span className="text-[10px] uppercase font-bold text-amber-700 block">Process Loss</span>
+                  <span className="text-base font-black text-amber-900">{fmtDecimal(activeOrder.summary?.process_loss_kg)} kg</span>
+                  <span className="text-[10px] text-amber-600 block">({fmtDecimal(activeOrder.summary?.process_loss_pct)}% loss)</span>
+                </div>
+              </div>
+
+              {/* Output Processed Rolls Table */}
+              <div className="mb-6">
+                <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 mb-2">
+                  Output Rolls & Inspection Gate
+                </h4>
+                <table className="w-full border-collapse border border-slate-300 text-[11px]">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-700">
+                      <th className="border border-slate-300 py-1.5 px-2 text-left">Roll No</th>
+                      <th className="border border-slate-300 py-1.5 px-2 text-left">Lot No</th>
+                      <th className="border border-slate-300 py-1.5 px-2 text-center">Dia / GSM</th>
+                      <th className="border border-slate-300 py-1.5 px-2 text-right">Meters</th>
+                      <th className="border border-slate-300 py-1.5 px-2 text-right">Weight (kg)</th>
+                      <th className="border border-slate-300 py-1.5 px-2 text-center">Shrinkage %</th>
+                      <th className="border border-slate-300 py-1.5 px-2 text-center">QC Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {!activeOrder.output_rolls || activeOrder.output_rolls.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="border border-slate-300 py-3 text-center text-slate-400 italic">
+                          No processed output rolls recorded yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      activeOrder.output_rolls.map((ro: any, idx: number) => (
+                        <tr key={ro.id || idx}>
+                          <td className="border border-slate-300 py-1 px-2 font-mono font-semibold">{ro.roll_no}</td>
+                          <td className="border border-slate-300 py-1 px-2">{ro.lot_no}</td>
+                          <td className="border border-slate-300 py-1 px-2 text-center">{ro.dia || '-'} / {ro.gsm || '-'} GSM</td>
+                          <td className="border border-slate-300 py-1 px-2 text-right">{fmtDecimal(ro.meters)} m</td>
+                          <td className="border border-slate-300 py-1 px-2 text-right font-semibold">{fmtDecimal(ro.weight_kg)} kg</td>
+                          <td className="border border-slate-300 py-1 px-2 text-center font-mono">{ro.shrinkage_length_pct}% / {ro.shrinkage_width_pct}%</td>
+                          <td className="border border-slate-300 py-1 px-2 text-center font-semibold text-emerald-700">{ro.qc_status}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Signatures */}
+              <div className="grid grid-cols-4 gap-4 pt-8 mt-6 border-t border-slate-300 text-center text-[10px]">
+                <div>
+                  <div className="border-b border-slate-400 h-8 mb-1"></div>
+                  <span className="font-semibold text-slate-700">Prepared By</span>
+                </div>
+                <div>
+                  <div className="border-b border-slate-400 h-8 mb-1"></div>
+                  <span className="font-semibold text-slate-700">Processing Master</span>
+                </div>
+                <div>
+                  <div className="border-b border-slate-400 h-8 mb-1"></div>
+                  <span className="font-semibold text-slate-700">QC Inspector</span>
+                </div>
+                <div>
+                  <div className="border-b border-slate-400 h-8 mb-1"></div>
+                  <span className="font-semibold text-slate-700">Authorized Signatory</span>
+                </div>
               </div>
             </div>
           </div>

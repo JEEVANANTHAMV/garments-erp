@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Activity, Plus, Search, Eye, Trash2,
-  AlertTriangle, RefreshCw, X, Layers, Box, FileText, Check
+  AlertTriangle, RefreshCw, X, Layers, Box, FileText, Check, Printer
 } from 'lucide-react';
 import { http } from '../../lib/api';
 import { fmtDate, fmtDecimal, today } from '../../lib/format';
@@ -19,6 +19,7 @@ export default function KnittingPage() {
 
   // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showPrintVoucher, setShowPrintVoucher] = useState(false);
   const [activeKwoId, setActiveKwoId] = useState<number | null>(null);
   const [manageTab, setManageTab] = useState<'issues' | 'rolls'>('issues');
 
@@ -64,6 +65,7 @@ export default function KnittingPage() {
     kwo_no: '',
     kwo_date: today(),
     io_no: 'IO-2026-001',
+    customer_po_no: '',
     style_id: '',
     sub_process: 'KNITTING',
     vendor_id: '',
@@ -351,7 +353,12 @@ export default function KnittingPage() {
                   <tr key={o.id} className="hover:bg-slate-50/70 transition">
                     <td className="py-3 px-4 font-semibold text-teal-700">{o.kwo_no}</td>
                     <td className="py-3 px-4 text-slate-500">{fmtDate(o.kwo_date)}</td>
-                    <td className="py-3 px-4 font-medium text-slate-900">{o.io_no}</td>
+                    <td className="py-3 px-4 font-medium text-slate-900">
+                      <div>{o.io_no}</div>
+                      {o.customer_po_no && (
+                        <div className="text-[10px] text-teal-600 font-normal">PO: {o.customer_po_no}</div>
+                      )}
+                    </td>
                     <td className="py-3 px-4">
                       {o.style_code ? (
                         <div>
@@ -431,7 +438,7 @@ export default function KnittingPage() {
               }}
               className="p-6 space-y-4 overflow-y-auto flex-1 text-xs"
             >
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
                   <label className="label">I/O No (Internal Order) *</label>
                   <input
@@ -440,6 +447,16 @@ export default function KnittingPage() {
                     value={newOrder.io_no}
                     onChange={(e) => setNewOrder({ ...newOrder, io_no: e.target.value })}
                     placeholder="e.g. IO-2026-001"
+                    className="input text-xs font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="label">Customer PO No</label>
+                  <input
+                    type="text"
+                    value={newOrder.customer_po_no}
+                    onChange={(e) => setNewOrder({ ...newOrder, customer_po_no: e.target.value })}
+                    placeholder="e.g. PO-2026-A12"
                     className="input text-xs font-semibold"
                   />
                 </div>
@@ -630,12 +647,25 @@ export default function KnittingPage() {
                   </Badge>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  I/O No: <span className="font-semibold text-slate-800">{activeOrder.io_no}</span> | Style: <span className="font-medium text-slate-800">{activeOrder.style_code || '-'}</span> | Target: <span className="font-medium text-slate-800">{activeOrder.fabric_name} ({activeOrder.dia || '-'}, {activeOrder.gsm || '-'} GSM)</span>
+                  I/O No: <span className="font-semibold text-slate-800">{activeOrder.io_no}</span>
+                  {activeOrder.customer_po_no && (
+                    <> | Customer PO: <span className="font-semibold text-teal-700">{activeOrder.customer_po_no}</span></>
+                  )}
+                  {' '}| Style: <span className="font-medium text-slate-800">{activeOrder.style_code || '-'}</span> | Target: <span className="font-medium text-slate-800">{activeOrder.fabric_name} ({activeOrder.dia || '-'}, {activeOrder.gsm || '-'} GSM)</span>
                 </p>
               </div>
-              <button onClick={() => setActiveKwoId(null)} className="text-slate-400 hover:text-slate-600">
-                <X size={20} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPrintVoucher(true)}
+                  className="btn-secondary text-xs flex items-center gap-1.5 py-1 px-3 border border-slate-300 hover:bg-slate-100 shadow-sm"
+                >
+                  <Printer size={14} /> Print Work Order
+                </button>
+                <button onClick={() => setActiveKwoId(null)} className="text-slate-400 hover:text-slate-600">
+                  <X size={20} />
+                </button>
+              </div>
             </div>
 
             {/* Production Summary Cards */}
@@ -1004,6 +1034,208 @@ export default function KnittingPage() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PRINTABLE KNITTING WORK ORDER VOUCHER MODAL */}
+      {showPrintVoucher && activeOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-slate-200 my-auto flex flex-col max-h-[96vh]">
+            <div className="px-6 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50 no-print">
+              <span className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                <Printer size={16} className="text-teal-600" /> Print Knitting Work Order
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="btn-primary text-xs py-1.5 px-4 flex items-center gap-1.5"
+                >
+                  <Printer size={14} /> Print Now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPrintVoucher(false)}
+                  className="btn-secondary text-xs py-1.5 px-3"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            {/* Printable Document Sheet */}
+            <div className="p-8 overflow-y-auto print-container text-slate-900 bg-white font-sans text-xs">
+              {/* Company & Document Title */}
+              <div className="border-b-2 border-slate-800 pb-4 mb-4 text-center">
+                <h1 className="text-xl font-black uppercase tracking-wider text-slate-900">GARMENT MANUFACTURING ERP</h1>
+                <p className="text-xs text-slate-500 font-medium">Knitting Division — Work Order & Yarn Issuance Card</p>
+                <div className="inline-block mt-2 px-4 py-1 rounded bg-teal-100 text-teal-900 font-bold text-sm tracking-wide">
+                  {activeOrder.sub_process} WORK ORDER
+                </div>
+              </div>
+
+              {/* Order Meta Grid */}
+              <div className="grid grid-cols-2 gap-4 border border-slate-300 rounded-lg p-3.5 mb-4 bg-slate-50/50">
+                <div className="space-y-1.5">
+                  <div><span className="text-slate-500 font-medium">KWO Order No:</span> <span className="font-bold text-slate-900 font-mono text-sm">{activeOrder.kwo_no}</span></div>
+                  <div><span className="text-slate-500 font-medium">Order Date:</span> <span className="font-semibold text-slate-800">{fmtDate(activeOrder.kwo_date)}</span></div>
+                  <div><span className="text-slate-500 font-medium">Sub-Process:</span> <span className="font-bold text-teal-700">{activeOrder.sub_process}</span></div>
+                  <div><span className="text-slate-500 font-medium">Knitting Vendor:</span> <span className="font-semibold text-slate-800">{activeOrder.vendor_name || 'In-House Unit'}</span></div>
+                </div>
+                <div className="space-y-1.5 border-l border-slate-200 pl-4">
+                  <div><span className="text-slate-500 font-medium">Internal Order (I/O No):</span> <span className="font-bold text-sky-800 font-mono">{activeOrder.io_no}</span></div>
+                  <div><span className="text-slate-500 font-medium">Customer PO No:</span> <span className="font-bold text-teal-800 font-mono">{activeOrder.customer_po_no || 'N/A'}</span></div>
+                  <div><span className="text-slate-500 font-medium">Style:</span> <span className="font-semibold text-slate-800">{activeOrder.style_code ? `${activeOrder.style_code} - ${activeOrder.style_name || ''}` : '-'}</span></div>
+                  <div><span className="text-slate-500 font-medium">Fabric:</span> <span className="font-semibold text-slate-800">{activeOrder.fabric_name || '-'}</span></div>
+                </div>
+              </div>
+
+              {/* Technical Specifications */}
+              <div className="border border-slate-300 rounded-lg p-3.5 mb-4">
+                <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 mb-2 border-b border-slate-200 pb-1">
+                  Technical Specifications & Yarn Plan
+                </h4>
+                <div className="grid grid-cols-4 gap-3 text-center">
+                  <div className="p-2 bg-slate-50 rounded border border-slate-200">
+                    <span className="text-[10px] text-slate-500 block uppercase font-medium">Fabric GSM</span>
+                    <span className="text-sm font-bold text-teal-700">{activeOrder.gsm || '-'} GSM</span>
+                  </div>
+                  <div className="p-2 bg-slate-50 rounded border border-slate-200">
+                    <span className="text-[10px] text-slate-500 block uppercase font-medium">Dia / Width</span>
+                    <span className="text-sm font-bold text-slate-800">{activeOrder.dia || '-'}</span>
+                  </div>
+                  <div className="p-2 bg-slate-50 rounded border border-slate-200">
+                    <span className="text-[10px] text-slate-500 block uppercase font-medium">Gauge / Loop</span>
+                    <span className="text-sm font-bold text-slate-800">{activeOrder.gauge || '-'} / {activeOrder.loop_length || '-'}</span>
+                  </div>
+                  <div className="p-2 bg-slate-50 rounded border border-slate-200">
+                    <span className="text-[10px] text-slate-500 block uppercase font-medium">Yarn Lot No</span>
+                    <span className="text-sm font-bold text-slate-800 font-mono">{activeOrder.yarn_lot_no || '-'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Planned vs Actual Quantities */}
+              <div className="grid grid-cols-4 gap-3 mb-4 text-center">
+                <div className="p-2.5 border border-slate-200 bg-slate-50 rounded-lg">
+                  <span className="text-[10px] uppercase font-bold text-slate-600 block">Planned Fabric</span>
+                  <span className="text-sm font-black text-slate-900">{fmtDecimal(activeOrder.planned_fabric_kg)} kg</span>
+                </div>
+                <div className="p-2.5 border border-indigo-200 bg-indigo-50 rounded-lg">
+                  <span className="text-[10px] uppercase font-bold text-indigo-700 block">Total Yarn Issued</span>
+                  <span className="text-sm font-black text-indigo-900">{fmtDecimal(activeOrder.summary?.total_yarn_issued_kg)} kg</span>
+                </div>
+                <div className="p-2.5 border border-emerald-200 bg-emerald-50 rounded-lg">
+                  <span className="text-[10px] uppercase font-bold text-emerald-700 block">Total Produced</span>
+                  <span className="text-sm font-black text-emerald-900">{fmtDecimal(activeOrder.summary?.total_rolls_produced_kg)} kg</span>
+                  <span className="text-[10px] text-emerald-600 block">({activeOrder.summary?.total_rolls_count} rolls)</span>
+                </div>
+                <div className="p-2.5 border border-amber-200 bg-amber-50 rounded-lg">
+                  <span className="text-[10px] uppercase font-bold text-amber-700 block">Knitting Loss</span>
+                  <span className="text-sm font-black text-amber-900">{fmtDecimal(activeOrder.summary?.knitting_loss_kg)} kg</span>
+                  <span className="text-[10px] text-amber-600 block">({fmtDecimal(activeOrder.summary?.knitting_loss_pct)}%)</span>
+                </div>
+              </div>
+
+              {/* Yarn Issued Lines Table */}
+              <div className="mb-4">
+                <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 mb-1.5">
+                  Yarn Issuance Details
+                </h4>
+                <table className="w-full border-collapse border border-slate-300 text-[11px]">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-700">
+                      <th className="border border-slate-300 py-1 px-2 text-left">Issue No</th>
+                      <th className="border border-slate-300 py-1 px-2 text-left">Date</th>
+                      <th className="border border-slate-300 py-1 px-2 text-left">Yarn</th>
+                      <th className="border border-slate-300 py-1 px-2 text-left">Lot No</th>
+                      <th className="border border-slate-300 py-1 px-2 text-right">Bags/Cones</th>
+                      <th className="border border-slate-300 py-1 px-2 text-right">Issued Wt (kg)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {!activeOrder.yarn_issues || activeOrder.yarn_issues.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="border border-slate-300 py-2 text-center text-slate-400 italic">
+                          No yarn issued yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      activeOrder.yarn_issues.map((yi: any, idx: number) => (
+                        <tr key={yi.id || idx}>
+                          <td className="border border-slate-300 py-1 px-2 font-mono">{yi.issue_no}</td>
+                          <td className="border border-slate-300 py-1 px-2">{fmtDate(yi.issue_date)}</td>
+                          <td className="border border-slate-300 py-1 px-2">{yi.yarn_name}</td>
+                          <td className="border border-slate-300 py-1 px-2">{yi.yarn_lot_no || '-'}</td>
+                          <td className="border border-slate-300 py-1 px-2 text-right">{yi.bags_cones}</td>
+                          <td className="border border-slate-300 py-1 px-2 text-right font-semibold">{fmtDecimal(yi.issued_weight_kg)} kg</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Grey Rolls Produced Table */}
+              <div className="mb-6">
+                <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 mb-1.5">
+                  Grey Fabric Rolls Produced
+                </h4>
+                <table className="w-full border-collapse border border-slate-300 text-[11px]">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-700">
+                      <th className="border border-slate-300 py-1 px-2 text-left">Roll No</th>
+                      <th className="border border-slate-300 py-1 px-2 text-left">Lot No</th>
+                      <th className="border border-slate-300 py-1 px-2 text-center">Dia / GSM</th>
+                      <th className="border border-slate-300 py-1 px-2 text-right">Meters</th>
+                      <th className="border border-slate-300 py-1 px-2 text-right">Weight (kg)</th>
+                      <th className="border border-slate-300 py-1 px-2 text-center">QC Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {!activeOrder.roll_outputs || activeOrder.roll_outputs.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="border border-slate-300 py-2 text-center text-slate-400 italic">
+                          No produced rolls recorded yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      activeOrder.roll_outputs.map((ro: any, idx: number) => (
+                        <tr key={ro.id || idx}>
+                          <td className="border border-slate-300 py-1 px-2 font-mono font-semibold">{ro.roll_no}</td>
+                          <td className="border border-slate-300 py-1 px-2">{ro.lot_no}</td>
+                          <td className="border border-slate-300 py-1 px-2 text-center">{ro.dia || '-'} / {ro.gsm || '-'} GSM</td>
+                          <td className="border border-slate-300 py-1 px-2 text-right">{fmtDecimal(ro.meters)} m</td>
+                          <td className="border border-slate-300 py-1 px-2 text-right font-semibold">{fmtDecimal(ro.weight_kg)} kg</td>
+                          <td className="border border-slate-300 py-1 px-2 text-center font-semibold text-emerald-700">{ro.qc_status}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Signatures */}
+              <div className="grid grid-cols-4 gap-4 pt-8 mt-6 border-t border-slate-300 text-center text-[10px]">
+                <div>
+                  <div className="border-b border-slate-400 h-8 mb-1"></div>
+                  <span className="font-semibold text-slate-700">Prepared By</span>
+                </div>
+                <div>
+                  <div className="border-b border-slate-400 h-8 mb-1"></div>
+                  <span className="font-semibold text-slate-700">Knitting Master</span>
+                </div>
+                <div>
+                  <div className="border-b border-slate-400 h-8 mb-1"></div>
+                  <span className="font-semibold text-slate-700">QC Inspector</span>
+                </div>
+                <div>
+                  <div className="border-b border-slate-400 h-8 mb-1"></div>
+                  <span className="font-semibold text-slate-700">Authorized Signatory</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>

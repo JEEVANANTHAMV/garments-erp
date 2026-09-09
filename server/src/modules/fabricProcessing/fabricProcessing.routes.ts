@@ -14,6 +14,7 @@ const fpoSchema = z.object({
   fpo_no: s.nullableStr(50),
   fpo_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   io_no: s.strReq(60),
+  customer_po_no: s.nullableStr(60),
   style_id: s.id(),
   fabric_id: s.id(),
   sub_process: z.enum([
@@ -174,12 +175,12 @@ fabricProcessingRouter.post('/fabric-processing/orders', requirePermission('PROD
     const resOrder = await txExecute(
       tx,
       `INSERT INTO trx_fabric_process_order
-         (company_id, fpo_no, fpo_date, io_no, style_id, fabric_id, sub_process, vendor_id,
+         (company_id, fpo_no, fpo_date, io_no, customer_po_no, style_id, fabric_id, sub_process, vendor_id,
           shade_code, color_name, target_dia, target_gsm, total_input_rolls, input_weight_kg,
           status, remarks, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        cid, fpoNo, body.fpo_date, body.io_no, body.style_id, body.fabric_id, body.sub_process,
+        cid, fpoNo, body.fpo_date, body.io_no, body.customer_po_no, body.style_id, body.fabric_id, body.sub_process,
         body.vendor_id, body.shade_code, body.color_name, body.target_dia, body.target_gsm,
         body.input_rolls.length, totalInputWeight, body.status, body.remarks, uid
       ]
@@ -223,6 +224,7 @@ fabricProcessingRouter.put('/fabric-processing/orders/:id', requirePermission('P
     `UPDATE trx_fabric_process_order
         SET fpo_date = COALESCE(?, fpo_date),
             io_no = COALESCE(?, io_no),
+            customer_po_no = COALESCE(?, customer_po_no),
             style_id = COALESCE(?, style_id),
             fabric_id = COALESCE(?, fabric_id),
             sub_process = COALESCE(?, sub_process),
@@ -235,7 +237,7 @@ fabricProcessingRouter.put('/fabric-processing/orders/:id', requirePermission('P
             remarks = COALESCE(?, remarks)
       WHERE id = ? AND company_id = ?`,
     [
-      body.fpo_date, body.io_no, body.style_id, body.fabric_id, body.sub_process, body.vendor_id,
+      body.fpo_date, body.io_no, body.customer_po_no, body.style_id, body.fabric_id, body.sub_process, body.vendor_id,
       body.shade_code, body.color_name, body.target_dia, body.target_gsm, body.status, body.remarks,
       req.params.id, cid
     ]
