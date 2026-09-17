@@ -37,6 +37,7 @@ import { traceabilityRouter } from './modules/production/traceability.routes.js'
 import { knittingRouter } from './modules/knitting/knitting.routes.js';
 import { fabricProcessingRouter } from './modules/fabricProcessing/fabricProcessing.routes.js';
 import { trimProcurementRouter } from './modules/procurement/trimProcurement.routes.js';
+import { tnaRouter } from './modules/tna/tna.routes.js';
 
 export function createApp() {
   const app = express();
@@ -98,6 +99,7 @@ export function createApp() {
   api.use('/', knittingRouter);               // /knitting/orders, /knitting/yarn-issues, /knitting/rolls, etc.
   api.use('/', fabricProcessingRouter);       // /fabric-processing/orders, /fabric-processing/rolls, etc.
   api.use('/', trimProcurementRouter);        // /trim-pos, /trim-grns, /trim-stock
+  api.use('/tna', tnaRouter);                 // /tna, /tna/:id, /tna/dashboard, /tna/templates, etc.
 
   // Metadata-driven resources.
   const registry = [...masterResources, ...transactionResources];

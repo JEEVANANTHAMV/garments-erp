@@ -26,6 +26,12 @@ import SalesOrdersPage from './pages/sales/SalesOrders';
 import SalesOrderDetail from './pages/sales/SalesOrderDetail';
 import ProductionCostDetailPage from './pages/production/ProductionCostDetail';
 
+/* Time & Action */
+import TnaListPage from './pages/tna/TnaListPage';
+import TnaDetailPage from './pages/tna/TnaDetailPage';
+import TnaDashboardPage from './pages/tna/TnaDashboardPage';
+import TnaTemplatesPage from './pages/tna/TnaTemplatesPage';
+
 /* Gate & Security */
 import { GateInwardsPage, GateOutwardsPage } from './pages/gate';
 
@@ -264,6 +270,7 @@ export default function App() {
                   <Route path="costs" element={<ProductionCostsPage />} />
                   <Route path="costs/new" element={<ProductionCostDetailPage />} />
                   <Route path="costs/:id" element={<ProductionCostDetailPage />} />
+                  <Route path="costing/:id" element={<ProductionCostDetailPage />} />
 
                   {/* CAD Auto-Consumption */}
                   <Route path="cad-requirements" element={<CadRequirementsPage />} />
@@ -274,6 +281,15 @@ export default function App() {
                   <Route path="cutting-plans" element={<CuttingPlansPage />} />
                   <Route path="cutting-plans/new" element={<CuttingPlanDetailPage />} />
                   <Route path="cutting-plans/:id" element={<CuttingPlanDetailPage />} />
+                </Route>
+
+                {/* Time & Action (T&A) */}
+                <Route path="tna">
+                  <Route index element={<TnaListPage />} />
+                  <Route path="dashboard" element={<TnaDashboardPage />} />
+                  <Route path="templates" element={<TnaTemplatesPage />} />
+                  <Route path="new" element={<TnaDetailPage />} />
+                  <Route path=":id" element={<TnaDetailPage />} />
                 </Route>
 
                 {/* Quality */}

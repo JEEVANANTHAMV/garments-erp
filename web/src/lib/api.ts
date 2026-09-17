@@ -103,8 +103,9 @@ export interface ListResponse<T> { data: T[]; pagination: Pagination; }
 export interface ItemResponse<T> { data: T; }
 
 export const http = {
-  get:  async <T>(url: string, params?: unknown) => (await api.get<T>(url, { params })).data,
-  post: async <T>(url: string, body?: unknown)   => (await api.post<T>(url, body)).data,
-  put:  async <T>(url: string, body?: unknown)   => (await api.put<T>(url, body)).data,
-  del:  async <T>(url: string)                   => (await api.delete<T>(url)).data,
+  get:   async <T>(url: string, params?: unknown) => (await api.get<T>(url, { params })).data,
+  post:  async <T>(url: string, body?: unknown)   => (await api.post<T>(url, body)).data,
+  put:   async <T>(url: string, body?: unknown)   => (await api.put<T>(url, body)).data,
+  patch: async <T>(url: string, body?: unknown)   => (await api.patch<T>(url, body)).data,
+  del:   async <T>(url: string)                   => (await api.delete<T>(url)).data,
 };

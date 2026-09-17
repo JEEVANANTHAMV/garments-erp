@@ -5,7 +5,7 @@ import {
   Factory, Scissors, ClipboardCheck, PackageCheck, Ship, Receipt, Landmark,
   BarChart3, Shield, Settings, Warehouse, GitBranch, CalendarClock, FileCheck2,
   History, Wallet, TrendingUp, Container, Coins, SlidersHorizontal, Search,
-  Activity, RefreshCw,
+  Activity, RefreshCw, ShieldAlert,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -56,6 +56,14 @@ export const NAV: NavSection[] = [
       { label: 'Pre-Costing (V2)',   to: '/sales/pre-costings', icon: Layers, perms: ['COSTING.VIEW'] },
       { label: 'Quotations',   to: '/sales/quotations', icon: FileSpreadsheet, perms: ['QUOTATION.VIEW'] },
       { label: 'Sales Orders', to: '/sales/orders', icon: ShoppingCart, perms: ['SALES_ORDER.VIEW'] },
+    ],
+  },
+  {
+    label: 'Time & Action (T&A)',
+    items: [
+      { label: 'T&A Order Tracking', to: '/tna', icon: CalendarClock, perms: ['SALES_ORDER.VIEW', 'PRODUCTION.VIEW'] },
+      { label: 'T&A Risk Dashboard', to: '/tna/dashboard', icon: ShieldAlert, perms: ['SALES_ORDER.VIEW', 'PRODUCTION.VIEW'] },
+      { label: 'T&A Templates',      to: '/tna/templates', icon: Layers, perms: ['SALES_ORDER.VIEW', 'PRODUCTION.VIEW'] },
     ],
   },
   {

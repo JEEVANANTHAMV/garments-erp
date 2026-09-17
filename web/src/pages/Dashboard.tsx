@@ -261,10 +261,13 @@ export default function Dashboard() {
 
         <div className="space-y-4">
           <div className="card">
-            <div className="flex items-center gap-2 border-b border-surface-border px-4 py-3">
-              <Clock size={15} className="text-amber-500" />
-              <h3 className="text-[14px] font-semibold text-slate-800">T&amp;A alerts</h3>
-              {tna?.length ? <Badge tone="amber">{tna.length}</Badge> : null}
+            <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
+              <div className="flex items-center gap-2">
+                <Clock size={15} className="text-amber-500" />
+                <h3 className="text-[14px] font-semibold text-slate-800">T&amp;A alerts</h3>
+                {tna?.length ? <Badge tone="amber">{tna.length}</Badge> : null}
+              </div>
+              <Link to="/tna" className="text-xs font-semibold text-brand-600 hover:text-brand-700">View All →</Link>
             </div>
             <div className="max-h-[210px] overflow-y-auto">
               {tna?.length ? tna.slice(0, 8).map((m) => (
