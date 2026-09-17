@@ -753,7 +753,7 @@ export default function TrimPurchaseOrderDetailPage() {
                     <tr className="bg-slate-100 text-slate-700">
                       <th className="border border-slate-300 py-1.5 px-2 text-left">#</th>
                       <th className="border border-slate-300 py-1.5 px-2 text-left">Trim Item</th>
-                      <th className="border border-slate-300 py-1.5 px-2 text-left">Job / SO</th>
+                      <th className="border border-slate-300 py-1.5 px-2 text-left">I/O (Internal Order) / Job</th>
                       <th className="border border-slate-300 py-1.5 px-2 text-left">Specification</th>
                       <th className="border border-slate-300 py-1.5 px-2 text-center">Color / Size</th>
                       <th className="border border-slate-300 py-1.5 px-2 text-right">Order Qty</th>

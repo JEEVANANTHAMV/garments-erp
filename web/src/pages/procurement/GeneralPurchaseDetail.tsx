@@ -775,7 +775,7 @@ export function GeneralPurchaseDetailPage() {
                     label="Allocation Type *"
                     options={[
                       { value: 'GENERAL_STOCK', label: '📦 General Stock (Warehouse)' },
-                      { value: 'BUYER_ORDER', label: '🏷️ Buyer Order (SO / Style)' },
+                      { value: 'BUYER_ORDER', label: '🏷️ Buyer Order (I/O / Style)' },
                       { value: 'PRODUCTION_ORDER', label: '⚙️ Production Order / WO' },
                       { value: 'SAMPLE', label: '🧪 Sample No / Style' },
                       { value: 'JOB_WORK', label: '🧵 Job Work Order' },
@@ -793,11 +793,11 @@ export function GeneralPurchaseDetailPage() {
                   {line.allocation_type === 'BUYER_ORDER' && (
                     <div className="grid grid-cols-2 gap-2">
                       <Select
-                        label="Sales Order (SO) *"
+                        label="I/O (Internal Order) / SO *"
                         options={toOptions(salesOrders.data || [])}
                         value={line.so_id || ''}
                         onChange={(e) => handleUpdateLine(line._key, 'so_id', e.target.value)}
-                        placeholder="Select SO"
+                        placeholder="Select I/O / SO"
                       />
                       <Select
                         label="Style"
