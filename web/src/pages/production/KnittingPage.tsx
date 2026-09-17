@@ -154,7 +154,7 @@ export default function KnittingPage() {
   const createMutation = useMutation({
     mutationFn: async (payload: any) => http.post('/knitting/orders', payload),
     onSuccess: () => {
-      toast('Knitting Work Order created successfully');
+      toast('Yarn Processing Order (Knitting) created successfully');
       setShowCreateModal(false);
       qc.invalidateQueries({ queryKey: ['knitting-orders'] });
     },
@@ -346,7 +346,7 @@ export default function KnittingPage() {
                 </tr>
               ) : filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-8 text-center text-slate-400">No knitting work orders found</td>
+                  <td colSpan={11} className="py-8 text-center text-slate-400">No yarn processing orders found</td>
                 </tr>
               ) : (
                 filteredOrders.map((o) => (
@@ -417,7 +417,7 @@ export default function KnittingPage() {
                 <span className="p-1.5 rounded-lg bg-teal-100 text-teal-700">
                   <Activity size={18} />
                 </span>
-                <h3 className="text-base font-bold text-slate-900">New Knitting Work Order</h3>
+                <h3 className="text-base font-bold text-slate-900">New Yarn Processing Order (Knitting)</h3>
               </div>
               <button onClick={() => setShowCreateModal(false)} className="text-slate-400 hover:text-slate-600">
                 <X size={18} />
@@ -1045,7 +1045,7 @@ export default function KnittingPage() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-slate-200 my-auto flex flex-col max-h-[96vh]">
             <div className="px-6 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50 no-print">
               <span className="font-bold text-sm text-slate-800 flex items-center gap-2">
-                <Printer size={16} className="text-teal-600" /> Print Knitting Work Order
+                <Printer size={16} className="text-teal-600" /> Print Yarn Processing Order (Knitting)
               </span>
               <div className="flex items-center gap-2">
                 <button
@@ -1070,9 +1070,9 @@ export default function KnittingPage() {
               {/* Company & Document Title */}
               <div className="border-b-2 border-slate-800 pb-4 mb-4 text-center">
                 <h1 className="text-xl font-black uppercase tracking-wider text-slate-900">GARMENT MANUFACTURING ERP</h1>
-                <p className="text-xs text-slate-500 font-medium">Knitting Division — Work Order & Yarn Issuance Card</p>
+                <p className="text-xs text-slate-500 font-medium">Yarn Processing Division — Work Order &amp; Yarn Issuance Card</p>
                 <div className="inline-block mt-2 px-4 py-1 rounded bg-teal-100 text-teal-900 font-bold text-sm tracking-wide">
-                  {activeOrder.sub_process} WORK ORDER
+                  {activeOrder.sub_process || 'YARN PROCESSING'} WORK ORDER
                 </div>
               </div>
 

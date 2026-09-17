@@ -722,7 +722,7 @@ export default function TrimGRNDetailPage() {
             <thead className="bg-slate-50 text-slate-600 uppercase font-semibold border-b border-slate-200">
               <tr>
                 <th className="py-2.5 px-3 text-left min-w-[140px]">Trim Item *</th>
-                <th className="py-2.5 px-2 text-left min-w-[130px]">Job / Sales Order</th>
+                <th className="py-2.5 px-2 text-left min-w-[140px]">I/O (Internal Order) / Job</th>
                 <th className="py-2.5 px-2 text-left w-24">Spec</th>
                 <th className="py-2.5 px-2 text-right w-16">Rec Qty</th>
                 <th className="py-2.5 px-2 text-right w-16">Acc Qty</th>

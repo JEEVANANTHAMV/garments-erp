@@ -746,7 +746,7 @@ export default function YarnPurchaseOrderDetailPage() {
             <thead>
               <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                 <th className="py-2.5 px-3">Yarn Master Item</th>
-                <th className="py-2.5 px-2">Job / Sales Order</th>
+                <th className="py-2.5 px-2 min-w-[140px]">I/O (Internal Order) / Job</th>
                 <th className="py-2.5 px-2">Type</th>
                 <th className="py-2.5 px-2">Count</th>
                 <th className="py-2.5 px-2">HSN</th>

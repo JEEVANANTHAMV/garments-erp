@@ -197,6 +197,9 @@ export default function App() {
                 <Route path="procurement">
                   <Route path="mrp" element={<MrpPage />} />
                   <Route path="purchase-orders" element={<PurchaseOrdersPage />} />
+                  <Route path="general-orders" element={<GeneralPurchasesPage />} />
+                  <Route path="general-orders/new" element={<GeneralPurchaseDetailPage />} />
+                  <Route path="general-orders/:id" element={<GeneralPurchaseDetailPage />} />
                   <Route path="general-purchases" element={<GeneralPurchasesPage />} />
                   <Route path="general-purchases/new" element={<GeneralPurchaseDetailPage />} />
                   <Route path="general-purchases/:id" element={<GeneralPurchaseDetailPage />} />

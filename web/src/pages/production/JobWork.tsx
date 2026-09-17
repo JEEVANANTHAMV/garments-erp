@@ -15,7 +15,7 @@ export function JobWorkChallansPage() {
       columns={[
         {
           key: 'challan_no',
-          header: 'Challan no',
+          header: 'DC / Challan no',
           sortable: true,
           render: (r: any) => (
             <span className="font-mono text-[12px] font-medium text-brand-700">{r.challan_no}</span>
@@ -85,7 +85,7 @@ export function JobWorkReceiptsPage() {
           ),
         },
         { key: 'receipt_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.receipt_date) },
-        { key: 'challan_no', header: 'Challan no' },
+        { key: 'challan_no', header: 'DC / Challan no' },
         { key: 'vendor_name', header: 'Vendor' },
         { key: 'issued_qty', header: 'Issued', align: 'right', render: (r: any) => fmtNumber(r.issued_qty) },
         {

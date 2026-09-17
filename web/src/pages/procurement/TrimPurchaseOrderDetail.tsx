@@ -497,7 +497,7 @@ export default function TrimPurchaseOrderDetailPage() {
             <thead className="bg-slate-50 text-slate-600 uppercase font-semibold border-b border-slate-200">
               <tr>
                 <th className="py-2.5 px-3 text-left min-w-[150px]">Trim Item *</th>
-                <th className="py-2.5 px-2 text-left min-w-[140px]">Job / Sales Order</th>
+                <th className="py-2.5 px-2 text-left min-w-[140px]">I/O (Internal Order) / Job</th>
                 <th className="py-2.5 px-2 text-left w-32">Specification</th>
                 <th className="py-2.5 px-2 text-left w-20">Color</th>
                 <th className="py-2.5 px-2 text-left w-16">Size</th>

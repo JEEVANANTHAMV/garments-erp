@@ -636,7 +636,7 @@ export default function YarnGRNDetailPage() {
             <thead>
               <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                 <th className="py-2.5 px-3 min-w-[140px]">Yarn Item</th>
-                <th className="py-2.5 px-2 min-w-[130px]">Job / Sales Order</th>
+                <th className="py-2.5 px-2 min-w-[140px]">I/O (Internal Order) / Job</th>
                 <th className="py-2.5 px-2 w-24">Type</th>
                 <th className="py-2.5 px-2 w-24">Lot / Batch</th>
                 <th className="py-2.5 px-2 text-right w-20">PO (KG)</th>

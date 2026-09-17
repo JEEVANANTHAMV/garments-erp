@@ -703,7 +703,7 @@ export default function FabricPurchaseOrderDetailPage() {
             <thead className="bg-slate-100/70 border-b border-slate-200 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
               <tr>
                 <th className="py-2.5 px-3 min-w-[150px]">Fabric Name</th>
-                <th className="py-2.5 px-2 min-w-[130px]">Job / Sales Order</th>
+                <th className="py-2.5 px-2 min-w-[140px]">I/O (Internal Order) / Job</th>
                 <th className="py-2.5 px-2 w-24">Type</th>
                 <th className="py-2.5 px-2 w-16">Dia</th>
                 <th className="py-2.5 px-2 w-16">GSM</th>

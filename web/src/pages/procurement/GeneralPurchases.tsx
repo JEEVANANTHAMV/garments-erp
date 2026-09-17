@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Plus, Zap } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Plus, Zap, ShoppingCart, Receipt } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { useList, useListState } from '../../hooks/useResource';
 import { useLookup, toOptions } from '../../hooks/useLookup';
@@ -10,6 +10,8 @@ import { fmtDecimal, fmtDate, humanize } from '../../lib/format';
 
 export function GeneralPurchasesPage() {
   const nav = useNavigate();
+  const location = useLocation();
+  const isPoMode = location.pathname.includes('general-orders');
   const { can } = useAuth();
   const suppliers = useLookup('suppliers');
 
@@ -29,7 +31,7 @@ export function GeneralPurchasesPage() {
     q: debounced || undefined,
     supplier_id: supplierFilter || undefined,
     purchase_type: typeFilter || undefined,
-    approval_state: statusFilter || undefined,
+    approval_state: statusFilter || (isPoMode ? undefined : undefined),
   });
 
   const getPurchaseTypeTone = (type: string) => {
@@ -52,17 +54,51 @@ export function GeneralPurchasesPage() {
   return (
     <>
       <PageHeader
-        title="General Purchases"
-        subtitle="Stock, Order-Specific, Emergency, Sample & Maintenance procurement with line allocation and direct issue"
+        title={isPoMode ? "General Purchase Orders (General PO)" : "General Goods Receipt (General GRN & Inward)"}
+        subtitle={
+          isPoMode
+            ? "Consumables, packaging materials, maintenance spares & office procurement orders with Inter-State IGST"
+            : "Inward Gate Entry pass linkage, QC verification, direct job allocation, and stock ledger posting"
+        }
         actions={
-          can('PURCHASE.CREATE') && (
-            <button
-              className="btn-primary flex items-center gap-1.5"
-              onClick={() => nav('/procurement/general-purchases/new')}
-            >
-              <Plus size={15} /> New General Purchase
-            </button>
-          )
+          <div className="flex items-center gap-2">
+            {/* Mode Switcher Pills */}
+            <div className="flex items-center rounded-lg bg-slate-100 p-1 border border-slate-200 text-xs">
+              <button
+                type="button"
+                onClick={() => nav('/procurement/general-orders')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-medium transition ${
+                  isPoMode
+                    ? 'bg-white text-brand-700 shadow-xs font-semibold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <ShoppingCart size={13} />
+                <span>General POs</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => nav('/procurement/general-purchases')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-medium transition ${
+                  !isPoMode
+                    ? 'bg-white text-emerald-700 shadow-xs font-semibold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Receipt size={13} />
+                <span>General GRN</span>
+              </button>
+            </div>
+
+            {can('PURCHASE.CREATE') && (
+              <button
+                className="btn-primary flex items-center gap-1.5"
+                onClick={() => nav(isPoMode ? '/procurement/general-orders/new' : '/procurement/general-purchases/new')}
+              >
+                <Plus size={15} /> {isPoMode ? 'New General PO' : 'New General GRN'}
+              </button>
+            )}
+          </div>
         }
       />
 
@@ -134,12 +170,12 @@ export function GeneralPurchasesPage() {
         columns={[
           {
             key: 'purchase_no',
-            header: 'GP No',
+            header: isPoMode ? 'PO No' : 'GRN No',
             sortable: true,
             render: (r: any) => (
               <button
                 type="button"
-                onClick={() => nav(`/procurement/general-purchases/${r.id}`)}
+                onClick={() => nav(isPoMode ? `/procurement/general-orders/${r.id}` : `/procurement/general-purchases/${r.id}`)}
                 className="font-mono text-[12px] font-bold text-brand-700 hover:underline text-left flex items-center gap-1.5"
               >
                 {r.purchase_no}
@@ -175,7 +211,7 @@ export function GeneralPurchasesPage() {
           },
           {
             key: 'supplier_inv_no',
-            header: 'Supplier Bill',
+            header: 'Supplier Bill / DC',
             render: (r: any) => (
               r.supplier_inv_no ? (
                 <div className="text-xs">
@@ -223,7 +259,7 @@ export function GeneralPurchasesPage() {
               <button
                 type="button"
                 className="btn-secondary py-1 px-2.5 text-xs font-medium"
-                onClick={() => nav(`/procurement/general-purchases/${r.id}`)}
+                onClick={() => nav(isPoMode ? `/procurement/general-orders/${r.id}` : `/procurement/general-purchases/${r.id}`)}
               >
                 View
               </button>

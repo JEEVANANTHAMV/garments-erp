@@ -274,9 +274,15 @@ export default function SalesOrderDetail() {
           <Input label="SO number" hint={isNew ? 'Blank to auto-generate' : undefined}
             value={head.so_no ?? ''} onChange={(e) => setH('so_no', e.target.value)}
             disabled={!editable} error={errors.so_no} />
-          <Input label="IO number (Internal Order)" placeholder="e.g. IO-2601"
-            value={head.io_no ?? ''} onChange={(e) => setH('io_no', e.target.value)}
-            disabled={!editable} error={errors.io_no} />
+          <Input
+            label="IO number (Internal Order)"
+            placeholder="e.g. IO-2601"
+            hint="Internal Order: Master factory production & procurement booking reference"
+            value={head.io_no ?? ''}
+            onChange={(e) => setH('io_no', e.target.value)}
+            disabled={!editable}
+            error={errors.io_no}
+          />
           <Select
             label="Order Type"
             options={[

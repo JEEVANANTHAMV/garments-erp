@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, ArrowLeft, Save, Trash2, CheckCircle2, Zap,
-  ShoppingCart, Sparkles, Copy
+  ShoppingCart, Sparkles, Copy, Printer
 } from 'lucide-react';
 import { http, ApiError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -51,12 +51,15 @@ export function GeneralPurchaseDetailPage() {
   const { id } = useParams<{ id: string }>();
   const isNew = !id || id === 'new';
   const nav = useNavigate();
+  const location = useLocation();
+  const isPoMode = location.pathname.includes('general-orders');
   const qc = useQueryClient();
   const toast = useToast();
   const { can } = useAuth();
   const editable = can(isNew ? 'PURCHASE.CREATE' : 'PURCHASE.UPDATE');
 
   const [saving, setSaving] = useState(false);
+  const [showPrintVoucher, setShowPrintVoucher] = useState(false);
 
   // Lookups
   const suppliers = useLookup('suppliers');
@@ -411,7 +414,7 @@ export function GeneralPurchaseDetailPage() {
         const created = await http.post<any>('/api/resources/general-purchases', payload);
         toast(`General Purchase ${created.data?.purchase_no || 'record'} created successfully`, 'success');
         void qc.invalidateQueries({ queryKey: ['general-purchases'] });
-        nav(`/procurement/general-purchases/${created.data?.id}`);
+        nav(isPoMode ? `/procurement/general-orders/${created.data?.id}` : `/procurement/general-purchases/${created.data?.id}`);
       } else {
         await http.put(`/api/resources/general-purchases/${id}`, payload);
         toast('General Purchase updated successfully', 'success');
@@ -433,15 +436,17 @@ export function GeneralPurchaseDetailPage() {
           <button
             type="button"
             className="btn-secondary p-2"
-            onClick={() => nav('/procurement/general-purchases')}
-            title="Back to General Purchases"
+            onClick={() => nav(isPoMode ? '/procurement/general-orders' : '/procurement/general-purchases')}
+            title={isPoMode ? "Back to General POs" : "Back to General GRN"}
           >
             <ArrowLeft size={16} />
           </button>
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold text-slate-900">
-                {isNew ? 'New General Purchase' : `General Purchase: ${head.purchase_no || 'Document'}`}
+                {isPoMode
+                  ? (isNew ? 'New General Purchase Order (PO)' : `General PO: ${head.purchase_no || 'Document'}`)
+                  : (isNew ? 'New General Goods Receipt (GRN)' : `General GRN: ${head.purchase_no || 'Document'}`)}
               </h1>
               {!isNew && <StatusBadge value={head.approval_state} />}
               {head.purchase_type === 'EMERGENCY' && (
@@ -451,12 +456,23 @@ export function GeneralPurchaseDetailPage() {
               )}
             </div>
             <p className="text-xs text-slate-500">
-              One-stop controlled purchase: Stock, Buyer Orders, Production Jobs, Maintenance &amp; Direct Emergency Issues
+              {isPoMode
+                ? 'Issue procurement orders for consumables, maintenance spares & office items with Inter-State IGST'
+                : 'One-stop controlled inward receipt: Stock, Buyer Orders, Production Jobs, Maintenance & Direct Emergency Issues'}
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
+          {!isNew && (
+            <button
+              type="button"
+              onClick={() => setShowPrintVoucher(true)}
+              className="btn-secondary text-xs flex items-center gap-1.5 shadow-sm border border-slate-300 hover:bg-slate-50"
+            >
+              <Printer size={15} /> Print {isPoMode ? 'PO Voucher' : 'GRN Voucher'}
+            </button>
+          )}
           <button
             type="button"
             className="btn-secondary"
@@ -964,6 +980,146 @@ export function GeneralPurchaseDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* PRINTABLE GENERAL PO / GRN VOUCHER MODAL */}
+      {showPrintVoucher && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-slate-200 my-auto flex flex-col max-h-[96vh]">
+            <div className="px-6 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50 no-print">
+              <span className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                <Printer size={16} className="text-brand-600" /> Print {isPoMode ? 'General Purchase Order' : 'General GRN Voucher'}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="btn-primary text-xs py-1.5 px-4 flex items-center gap-1.5"
+                >
+                  <Printer size={14} /> Print Now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPrintVoucher(false)}
+                  className="btn-secondary text-xs py-1.5 px-3"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            {/* Printable Document Sheet */}
+            <div className="p-8 overflow-y-auto print-container text-slate-900 bg-white font-sans text-xs">
+              <div className="border-b-2 border-slate-800 pb-4 mb-4 text-center">
+                <h1 className="text-xl font-black uppercase tracking-wider text-slate-900">GARMENT MANUFACTURING ERP</h1>
+                <p className="text-xs text-slate-500 font-medium">General Procurement &amp; Inventory Management</p>
+                <div className="inline-block mt-2 px-4 py-1 rounded bg-brand-100 text-brand-900 font-bold text-sm tracking-wide">
+                  {isPoMode ? 'GENERAL PURCHASE ORDER (PO)' : 'GENERAL GOODS RECEIPT NOTE (GRN)'}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 border border-slate-300 rounded-lg p-3.5 mb-4 bg-slate-50/50">
+                <div className="space-y-1.5">
+                  <div><span className="text-slate-500 font-medium">Document No:</span> <span className="font-bold text-slate-900 font-mono text-sm">{head.purchase_no}</span></div>
+                  <div><span className="text-slate-500 font-medium">Date:</span> <span className="font-semibold text-slate-800">{head.purchase_date}</span></div>
+                  <div><span className="text-slate-500 font-medium">Purchase Type:</span> <span className="font-semibold text-slate-800">{head.purchase_type}</span></div>
+                  <div><span className="text-slate-500 font-medium">Payment Terms:</span> <span className="font-semibold text-slate-800">{head.payment_terms || '-'}</span></div>
+                </div>
+                <div className="space-y-1.5 border-l border-slate-200 pl-4">
+                  <div><span className="text-slate-500 font-medium">Supplier / Vendor:</span> <span className="font-bold text-slate-900">{String((suppliers.data as any[])?.find((s: any) => String(s.id) === String(head.supplier_id))?.label || (suppliers.data as any[])?.find((s: any) => String(s.id) === String(head.supplier_id))?.party_name || '-')}</span></div>
+                  <div><span className="text-slate-500 font-medium">Supplier Bill / Invoice:</span> <span className="font-mono font-semibold text-slate-800">{head.supplier_inv_no || '-'}</span></div>
+                  <div><span className="text-slate-500 font-medium">Taxation:</span> <span className="font-bold text-brand-700">{head.is_interstate ? 'Inter-State (IGST)' : 'Intra-State (CGST + SGST)'}</span></div>
+                  <div><span className="text-slate-500 font-medium">Status:</span> <span className="font-bold text-emerald-700">{head.approval_state}</span></div>
+                </div>
+              </div>
+
+              {/* Items Table */}
+              <div className="mb-6">
+                <table className="w-full border-collapse border border-slate-300 text-[11px]">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-700">
+                      <th className="border border-slate-300 py-1.5 px-2 text-left">#</th>
+                      <th className="border border-slate-300 py-1.5 px-2 text-left">Description</th>
+                      <th className="border border-slate-300 py-1.5 px-2 text-left">Allocation / Job</th>
+                      <th className="border border-slate-300 py-1.5 px-2 text-right">Qty</th>
+                      <th className="border border-slate-300 py-1.5 px-2 text-right">Rate (₹)</th>
+                      <th className="border border-slate-300 py-1.5 px-2 text-right">Taxable (₹)</th>
+                      <th className="border border-slate-300 py-1.5 px-2 text-right">{head.is_interstate ? 'IGST (%)' : 'GST (%)'}</th>
+                      <th className="border border-slate-300 py-1.5 px-2 text-right">Total (₹)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lines.map((l: any, idx: number) => {
+                      const soObj = salesOrders.data?.find((so: any) => String(so.id) === String(l.so_id));
+                      const raw = (Number(l.qty) || 0) * (Number(l.rate) || 0);
+                      const disc = (raw * (Number(l.discount_pct) || 0)) / 100;
+                      const taxable = raw - disc;
+                      return (
+                        <tr key={l._key || idx}>
+                          <td className="border border-slate-300 py-1 px-2 text-center text-slate-500">{idx + 1}</td>
+                          <td className="border border-slate-300 py-1 px-2 font-semibold text-slate-900">{l.item_description || 'Item'}</td>
+                          <td className="border border-slate-300 py-1 px-2 text-slate-600">{soObj?.so_no || l.allocation_type || 'General'}</td>
+                          <td className="border border-slate-300 py-1 px-2 text-right font-bold">{fmtDecimal(l.qty)}</td>
+                          <td className="border border-slate-300 py-1 px-2 text-right">₹{fmtDecimal(l.rate, 2)}</td>
+                          <td className="border border-slate-300 py-1 px-2 text-right">₹{fmtDecimal(taxable, 2)}</td>
+                          <td className="border border-slate-300 py-1 px-2 text-right">{head.is_interstate ? (l.igst_rate || l.gst_rate || 18) : (l.gst_rate || 18)}%</td>
+                          <td className="border border-slate-300 py-1 px-2 text-right font-bold">₹{fmtDecimal(l.amount, 2)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-slate-50">
+                      <td colSpan={7} className="border border-slate-300 py-1 px-2 text-right font-semibold text-slate-600">Subtotal (Taxable):</td>
+                      <td className="border border-slate-300 py-1 px-2 text-right font-bold">₹{fmtDecimal(totals.subtotal, 2)}</td>
+                    </tr>
+                    {head.is_interstate ? (
+                      <tr className="bg-slate-50">
+                        <td colSpan={7} className="border border-slate-300 py-1 px-2 text-right font-semibold text-purple-700">IGST Amount:</td>
+                        <td className="border border-slate-300 py-1 px-2 text-right font-bold text-purple-800">₹{fmtDecimal(totals.igstAmount, 2)}</td>
+                      </tr>
+                    ) : (
+                      <>
+                        <tr className="bg-slate-50">
+                          <td colSpan={7} className="border border-slate-300 py-1 px-2 text-right font-semibold text-slate-600">CGST Amount:</td>
+                          <td className="border border-slate-300 py-1 px-2 text-right font-bold">₹{fmtDecimal(totals.cgstAmount, 2)}</td>
+                        </tr>
+                        <tr className="bg-slate-50">
+                          <td colSpan={7} className="border border-slate-300 py-1 px-2 text-right font-semibold text-slate-600">SGST Amount:</td>
+                          <td className="border border-slate-300 py-1 px-2 text-right font-bold">₹{fmtDecimal(totals.sgstAmount, 2)}</td>
+                        </tr>
+                      </>
+                    )}
+                    <tr className="bg-slate-100 font-bold">
+                      <td colSpan={7} className="border border-slate-300 py-1.5 px-2 text-right text-slate-900">Grand Total:</td>
+                      <td className="border border-slate-300 py-1.5 px-2 text-right font-black text-brand-800 text-sm">₹{fmtDecimal(totals.grandTotal, 2)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              {/* Signatures */}
+              <div className="grid grid-cols-4 gap-4 pt-8 mt-6 border-t border-slate-300 text-center text-[10px]">
+                <div>
+                  <div className="border-b border-slate-400 h-8 mb-1"></div>
+                  <span className="font-semibold text-slate-700">Prepared By</span>
+                </div>
+                <div>
+                  <div className="border-b border-slate-400 h-8 mb-1"></div>
+                  <span className="font-semibold text-slate-700">Store In-Charge</span>
+                </div>
+                <div>
+                  <div className="border-b border-slate-400 h-8 mb-1"></div>
+                  <span className="font-semibold text-slate-700">Accounts</span>
+                </div>
+                <div>
+                  <div className="border-b border-slate-400 h-8 mb-1"></div>
+                  <span className="font-semibold text-slate-700">Authorized Signatory</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
