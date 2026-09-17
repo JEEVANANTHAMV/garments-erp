@@ -187,7 +187,6 @@ tnaRouter.post('/', requirePermission('PRODUCTION.CREATE'), ah(async (req, res) 
   const b = req.body;
 
   if (!b.sales_order_id) throw BadRequest('Sales Order is mandatory.');
-  if (!b.shipment_date) throw BadRequest('Shipment Date is mandatory.');
 
   const so = await queryOne<any>(`
     SELECT so.*, b.id AS buyer_party_id, st.id AS order_style_id
@@ -205,6 +204,8 @@ tnaRouter.post('/', requirePermission('PRODUCTION.CREATE'), ah(async (req, res) 
   const orderQty = b.order_qty || so.order_qty || 0;
   const orderDate = b.order_date || (so.so_date ? new Date(so.so_date).toISOString().slice(0, 10) : null);
   const shipmentDate = b.shipment_date || (so.ship_date ? new Date(so.ship_date).toISOString().slice(0, 10) : null);
+
+  if (!shipmentDate) throw BadRequest('Shipment Date is mandatory (provide in payload or configure on Sales Order).');
 
   // Spec §26: Duplicate active T&A for the same order/IO must be prevented
   const existingActive = await queryOne<any>(`
