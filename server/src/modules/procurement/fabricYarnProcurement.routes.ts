@@ -141,13 +141,72 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
       finalGrnNo = await nextDocNumber(tx, companyId, 'GRN');
     }
 
-    // 1. Create GRN Header
+    // 1. Calculate totals across lines
+    const lines = Array.isArray(body.lines) ? body.lines : [];
+    let totTaxable = 0;
+    let totCgst = 0;
+    let totSgst = 0;
+    let totIgst = 0;
+    const isInterstate = Boolean(body.is_interstate);
+
+    const calculatedLines = lines.map((line: any) => {
+      const recQty = Number(line.received_qty) || 0;
+      const accQty = Number(line.accepted_qty !== undefined ? line.accepted_qty : recQty);
+      const rejQty = Number(line.rejected_qty) || 0;
+      const holdQty = Number(line.hold_qty) || 0;
+      const poQty = Number(line.po_qty) || recQty;
+      const balanceQty = Math.max(0, poQty - accQty);
+      const rate = Number(line.rate) || 0;
+      const taxable = Number(line.taxable_amount !== undefined ? line.taxable_amount : (accQty * rate));
+      const gstRate = Number(line.gst_rate !== undefined ? line.gst_rate : 5);
+
+      let cgst = 0;
+      let sgst = 0;
+      let igst = 0;
+      if (isInterstate) {
+        igst = Number(((taxable * gstRate) / 100).toFixed(4));
+      } else {
+        cgst = Number(((taxable * (gstRate / 2)) / 100).toFixed(4));
+        sgst = Number(((taxable * (gstRate / 2)) / 100).toFixed(4));
+      }
+      const taxAmt = cgst + sgst + igst;
+      const lineTotal = taxable + taxAmt;
+
+      totTaxable += taxable;
+      totCgst += cgst;
+      totSgst += sgst;
+      totIgst += igst;
+
+      return {
+        ...line,
+        recQty,
+        accQty,
+        rejQty,
+        holdQty,
+        balanceQty,
+        rate,
+        taxable,
+        gstRate,
+        cgst,
+        sgst,
+        igst,
+        taxAmt,
+        lineTotal,
+      };
+    });
+
+    const totTax = totCgst + totSgst + totIgst;
+    const netAmount = totTaxable + totTax;
+
+    // 2. Create GRN Header
     const grnRes = await txQueryOne<{ insertId: number }>(tx, `
       INSERT INTO trx_grn (
         company_id, grn_no, internal_ir_no, grn_date, po_id, style_id,
         supplier_id, warehouse_id, supplier_dc_no, supplier_inv_no,
-        vehicle_no, gate_inward_id, qc_status, remarks, created_by
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        vehicle_no, gate_inward_id, qc_status, is_interstate,
+        taxable_amount, tax_amount, cgst_amount, sgst_amount, igst_amount, net_amount,
+        remarks, created_by
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `, [
       companyId,
       finalGrnNo,
@@ -162,6 +221,13 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
       body.vehicle_no || null,
       body.gate_inward_id ? Number(body.gate_inward_id) : null,
       body.qc_status || 'ACCEPTED',
+      isInterstate ? 1 : 0,
+      totTaxable,
+      totTax,
+      totCgst,
+      totSgst,
+      totIgst,
+      netAmount,
       body.remarks || null,
       userId,
     ]);
@@ -176,35 +242,37 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
       `, [Number(body.gate_inward_id), companyId]);
     }
 
-    // 2. Insert GRN Lines
-    const lines = Array.isArray(body.lines) ? body.lines : [];
-    for (const line of lines) {
-      const recQty = Number(line.received_qty) || 0;
-      const accQty = Number(line.accepted_qty !== undefined ? line.accepted_qty : recQty);
-      const rejQty = Number(line.rejected_qty) || 0;
-      const holdQty = Number(line.hold_qty) || 0;
-      const poQty = Number(line.po_qty) || recQty;
-      const balanceQty = Math.max(0, poQty - accQty);
-
+    // 3. Insert GRN Lines
+    for (const line of calculatedLines) {
       const lineRes = await txQueryOne<{ insertId: number }>(tx, `
         INSERT INTO trx_grn_line (
-          grn_id, po_line_id, material_type, fabric_id,
+          grn_id, po_line_id, so_id, style_id, material_type, fabric_id,
           received_qty, received_weight, no_of_rolls,
           accepted_qty, rejected_qty, hold_qty, balance_qty,
+          rate, taxable_amount, gst_rate, cgst_amount, sgst_amount, igst_amount, total_amount,
           lot_no, qc_status, uom_id
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `, [
         newGrnId,
         line.po_line_id ? Number(line.po_line_id) : null,
+        line.so_id ? Number(line.so_id) : (body.so_id ? Number(body.so_id) : null),
+        line.style_id ? Number(line.style_id) : (body.style_id ? Number(body.style_id) : null),
         'FABRIC',
         Number(line.fabric_id),
-        recQty,
-        Number(line.received_weight || recQty * 0.25),
+        line.recQty,
+        Number(line.received_weight || line.recQty * 0.25),
         Number(line.no_of_rolls || 1),
-        accQty,
-        rejQty,
-        holdQty,
-        balanceQty,
+        line.accQty,
+        line.rejQty,
+        line.holdQty,
+        line.balanceQty,
+        line.rate,
+        line.taxable,
+        line.gstRate,
+        line.cgst,
+        line.sgst,
+        line.igst,
+        line.lineTotal,
         line.lot_no || 'LOT-DEFAULT',
         line.qc_status || body.qc_status || 'ACCEPTED',
         line.uom_id || 9,
@@ -249,11 +317,11 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
           UPDATE trx_purchase_order_line
              SET received_qty = COALESCE(received_qty, 0) + ?
            WHERE id = ?
-        `, [accQty, line.po_line_id]);
+        `, [line.accQty, line.po_line_id]);
       }
 
       // 5. Post to Stock Ledger if Accepted
-      if (accQty > 0 && body.qc_status !== 'REJECTED') {
+      if (line.accQty > 0 && body.qc_status !== 'REJECTED') {
         await txExecute(tx, `
           INSERT INTO trx_stock_ledger (
             company_id, warehouse_id, material_type, fabric_id,
@@ -267,7 +335,7 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
           'GRN',
           'GRN',
           newGrnId,
-          accQty,
+          line.accQty,
           0,
           line.uom_id || 9,
           Number(line.rate || 0),
@@ -567,12 +635,71 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
       finalGrnNo = await nextDocNumber(tx, companyId, 'GRN');
     }
 
+    // 1. Calculate totals across lines
+    const lines = Array.isArray(body.lines) ? body.lines : [];
+    let totTaxable = 0;
+    let totCgst = 0;
+    let totSgst = 0;
+    let totIgst = 0;
+    const isInterstate = Boolean(body.is_interstate);
+
+    const calculatedLines = lines.map((line: any) => {
+      const recKg = Number(line.received_qty) || 0;
+      const accKg = Number(line.accepted_qty !== undefined ? line.accepted_qty : recKg);
+      const rejKg = Number(line.rejected_qty) || 0;
+      const holdKg = Number(line.hold_qty) || 0;
+      const poKg = Number(line.po_qty) || recKg;
+      const balanceKg = Math.max(0, poKg - accKg);
+      const rate = Number(line.rate) || 0;
+      const taxable = Number(line.taxable_amount !== undefined ? line.taxable_amount : (accKg * rate));
+      const gstRate = Number(line.gst_rate !== undefined ? line.gst_rate : 5);
+
+      let cgst = 0;
+      let sgst = 0;
+      let igst = 0;
+      if (isInterstate) {
+        igst = Number(((taxable * gstRate) / 100).toFixed(4));
+      } else {
+        cgst = Number(((taxable * (gstRate / 2)) / 100).toFixed(4));
+        sgst = Number(((taxable * (gstRate / 2)) / 100).toFixed(4));
+      }
+      const taxAmt = cgst + sgst + igst;
+      const lineTotal = taxable + taxAmt;
+
+      totTaxable += taxable;
+      totCgst += cgst;
+      totSgst += sgst;
+      totIgst += igst;
+
+      return {
+        ...line,
+        recKg,
+        accKg,
+        rejKg,
+        holdKg,
+        balanceKg,
+        rate,
+        taxable,
+        gstRate,
+        cgst,
+        sgst,
+        igst,
+        taxAmt,
+        lineTotal,
+      };
+    });
+
+    const totTax = totCgst + totSgst + totIgst;
+    const netAmount = totTaxable + totTax;
+
     const grnRes = await txQueryOne<{ insertId: number }>(tx, `
       INSERT INTO trx_grn (
         company_id, grn_no, internal_ir_no, grn_date, po_id, style_id,
         supplier_id, warehouse_id, supplier_dc_no, supplier_inv_no,
-        vehicle_no, gate_inward_id, qc_status, remarks, created_by
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        vehicle_no, gate_inward_id, qc_status, is_interstate,
+        taxable_amount, tax_amount, cgst_amount, sgst_amount, igst_amount, net_amount,
+        remarks, created_by
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `, [
       companyId,
       finalGrnNo,
@@ -587,6 +714,13 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
       body.vehicle_no || null,
       body.gate_inward_id ? Number(body.gate_inward_id) : null,
       body.qc_status || 'ACCEPTED',
+      isInterstate ? 1 : 0,
+      totTaxable,
+      totTax,
+      totCgst,
+      totSgst,
+      totIgst,
+      netAmount,
       body.remarks || null,
       userId,
     ]);
@@ -601,34 +735,36 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
       `, [Number(body.gate_inward_id), companyId]);
     }
 
-    const lines = Array.isArray(body.lines) ? body.lines : [];
-    for (const line of lines) {
-      const recKg = Number(line.received_qty) || 0;
-      const accKg = Number(line.accepted_qty !== undefined ? line.accepted_qty : recKg);
-      const rejKg = Number(line.rejected_qty) || 0;
-      const holdKg = Number(line.hold_qty) || 0;
-      const poKg = Number(line.po_qty) || recKg;
-      const balanceKg = Math.max(0, poKg - accKg);
-
+    for (const line of calculatedLines) {
       await txExecute(tx, `
         INSERT INTO trx_grn_line (
-          grn_id, po_line_id, material_type, yarn_id,
+          grn_id, po_line_id, so_id, style_id, material_type, yarn_id,
           received_qty, received_weight, no_of_rolls,
           accepted_qty, rejected_qty, hold_qty, balance_qty,
+          rate, taxable_amount, gst_rate, cgst_amount, sgst_amount, igst_amount, total_amount,
           lot_no, qc_status, uom_id
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `, [
         newGrnId,
         line.po_line_id ? Number(line.po_line_id) : null,
+        line.so_id ? Number(line.so_id) : (body.so_id ? Number(body.so_id) : null),
+        line.style_id ? Number(line.style_id) : (body.style_id ? Number(body.style_id) : null),
         'YARN',
         Number(line.yarn_id),
-        recKg,
-        recKg,
+        line.recKg,
+        line.recKg,
         Number(line.packs || line.no_of_rolls || 1),
-        accKg,
-        rejKg,
-        holdKg,
-        balanceKg,
+        line.accKg,
+        line.rejKg,
+        line.holdKg,
+        line.balanceKg,
+        line.rate,
+        line.taxable,
+        line.gstRate,
+        line.cgst,
+        line.sgst,
+        line.igst,
+        line.lineTotal,
         line.lot_no || 'LOT-YARN-DEFAULT',
         line.qc_status || body.qc_status || 'ACCEPTED',
         5, // KG
@@ -639,10 +775,10 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
           UPDATE trx_purchase_order_line
              SET received_qty = COALESCE(received_qty, 0) + ?
            WHERE id = ?
-        `, [accKg, line.po_line_id]);
+        `, [line.accKg, line.po_line_id]);
       }
 
-      if (accKg > 0 && body.qc_status !== 'REJECTED') {
+      if (line.accKg > 0 && body.qc_status !== 'REJECTED') {
         await txExecute(tx, `
           INSERT INTO trx_stock_ledger (
             company_id, warehouse_id, material_type, yarn_id,
@@ -656,7 +792,7 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
           'GRN',
           'GRN',
           newGrnId,
-          accKg,
+          line.accKg,
           0,
           5, // KG
           Number(line.rate || 0),

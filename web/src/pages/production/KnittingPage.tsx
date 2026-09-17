@@ -215,7 +215,7 @@ export default function KnittingPage() {
               <Activity size={22} />
             </span>
             <div>
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight">Knitting Work Orders</h1>
+              <h1 className="text-xl font-bold text-slate-900 tracking-tight">Yarn Processing (Knitting & Preparatory)</h1>
               <p className="text-xs text-slate-500">
                 Yarn issue, grey fabric knitting, winding, twisting & roll QC output tracking
               </p>

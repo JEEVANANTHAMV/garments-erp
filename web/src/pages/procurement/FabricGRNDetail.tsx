@@ -30,6 +30,8 @@ interface GrnLineItem {
   _key: string;
   id?: number;
   po_line_id?: number;
+  so_id?: string | number;
+  style_id?: string | number;
   fabric_id: string | number;
   fabric_name?: string;
   fabric_type: string;
@@ -44,6 +46,9 @@ interface GrnLineItem {
   hold_qty: number;
   balance_qty: number;
   rate: number;
+  gst_rate: number;
+  taxable_amount: number;
+  total_amount: number;
   qc_status: string;
   uom_id: number;
   rolls: PhysicalRoll[];
@@ -65,6 +70,9 @@ const emptyLine = (): GrnLineItem => ({
   hold_qty: 0,
   balance_qty: 0,
   rate: 65.0,
+  gst_rate: 5.0,
+  taxable_amount: 65000,
+  total_amount: 68250,
   qc_status: 'ACCEPTED',
   uom_id: 9,
   rolls: [
@@ -86,6 +94,7 @@ export default function FabricGRNDetailPage() {
   const warehouses = useLookup('warehouses');
   const fabrics = useLookup('fabrics');
   const styles = useLookup('styles');
+  const salesOrders = useLookup('sales-orders');
   const gateInwards = useLookup('gate-inwards');
 
   // Load PO options for linking
@@ -122,6 +131,7 @@ export default function FabricGRNDetailPage() {
     supplier_inv_no: '',
     vehicle_no: '',
     qc_status: 'ACCEPTED',
+    is_interstate: false,
     remarks: '',
   });
 
@@ -153,6 +163,7 @@ export default function FabricGRNDetailPage() {
         supplier_inv_no: existingData.supplier_inv_no || '',
         vehicle_no: existingData.vehicle_no || '',
         qc_status: existingData.qc_status || 'ACCEPTED',
+        is_interstate: !!existingData.is_interstate,
         remarks: existingData.remarks || '',
       });
 
@@ -162,10 +173,17 @@ export default function FabricGRNDetailPage() {
           const matchingRolls = (existingData.rolls || []).filter(
             (r: any) => r.grn_line_id === l.id || r.fabric_id === l.fabric_id
           );
+          const acc = Number(l.accepted_qty || l.received_qty || 0);
+          const rate = Number(l.rate || 0);
+          const gstRate = Number(l.gst_rate || 5);
+          const taxable = Number(l.taxable_amount || acc * rate);
+          const totalAmt = Number(l.total_amount || (taxable * (1 + gstRate / 100)));
           return {
             _key: `fgl_${l.id}`,
             id: l.id,
             po_line_id: l.po_line_id,
+            so_id: l.so_id || '',
+            style_id: l.style_id || '',
             fabric_id: l.fabric_id,
             fabric_name: l.fabric_name,
             fabric_type: l.fabric_type || 'Knitted',
@@ -175,11 +193,14 @@ export default function FabricGRNDetailPage() {
             received_qty: Number(l.received_qty || 0),
             received_weight: Number(l.received_weight || 0),
             no_of_rolls: Number(l.no_of_rolls || matchingRolls.length || 1),
-            accepted_qty: Number(l.accepted_qty || l.received_qty || 0),
+            accepted_qty: acc,
             rejected_qty: Number(l.rejected_qty || 0),
             hold_qty: Number(l.hold_qty || 0),
             balance_qty: Number(l.balance_qty || 0),
-            rate: Number(l.rate || 0),
+            rate,
+            gst_rate: gstRate,
+            taxable_amount: taxable,
+            total_amount: totalAmt,
             qc_status: l.qc_status || 'ACCEPTED',
             uom_id: l.uom_id || 9,
             rolls: matchingRolls.map((r: any) => ({
@@ -234,6 +255,7 @@ export default function FabricGRNDetailPage() {
           supplier_id: po.supplier_id ? String(po.supplier_id) : prev.supplier_id,
           internal_ir_no: po.internal_ir_no || prev.internal_ir_no,
           style_id: po.style_id ? String(po.style_id) : prev.style_id,
+          is_interstate: !!po.is_interstate,
         }));
 
         if (po.lines?.length) {
@@ -247,6 +269,10 @@ export default function FabricGRNDetailPage() {
               const rollsCount = Number(pl.no_of_rolls) || 5;
               const mPerRoll = qty / (rollsCount || 1);
               const wPerRoll = weight / (rollsCount || 1);
+              const rate = Number(pl.rate) || 65.0;
+              const gstRate = Number(pl.gst_rate) || 5.0;
+              const taxable = qty * rate;
+              const totalAmt = taxable * (1 + gstRate / 100);
 
               const generatedRolls: PhysicalRoll[] = [];
               for (let i = 1; i <= rollsCount; i++) {
@@ -266,6 +292,8 @@ export default function FabricGRNDetailPage() {
               return {
                 _key: `fgl_${++lineSeq}`,
                 po_line_id: pl.id,
+                so_id: pl.so_id || po.so_id || '',
+                style_id: pl.style_id || po.style_id || '',
                 fabric_id: pl.fabric_id,
                 fabric_name: pl.fabric_name,
                 fabric_type: pl.fabric_type || 'Knitted',
@@ -279,7 +307,10 @@ export default function FabricGRNDetailPage() {
                 rejected_qty: 0,
                 hold_qty: 0,
                 balance_qty: 0,
-                rate: Number(pl.rate) || 0,
+                rate,
+                gst_rate: gstRate,
+                taxable_amount: taxable,
+                total_amount: totalAmt,
                 qc_status: 'ACCEPTED',
                 uom_id: pl.uom_id || 9,
                 rolls: generatedRolls,
@@ -287,7 +318,6 @@ export default function FabricGRNDetailPage() {
             });
             setLines(mappedLines);
             setSelectedLineIdx(0);
-            toast(`Loaded ${mappedLines.length} fabric items from ${po.po_no}`, 'info');
           }
         }
       }
@@ -325,7 +355,28 @@ export default function FabricGRNDetailPage() {
         .reduce((s, r) => s + (Number(r.meters) || 0), 0);
       curLine.balance_qty = Math.max(0, curLine.po_qty - curLine.accepted_qty);
 
+      const taxable = Math.round(curLine.accepted_qty * (Number(curLine.rate) || 0) * 100) / 100;
+      const taxAmt = Math.round((taxable * ((Number(curLine.gst_rate) || 5.0) / 100)) * 100) / 100;
+      curLine.taxable_amount = taxable;
+      curLine.total_amount = taxable + taxAmt;
+
       copy[selectedLineIdx] = curLine;
+      return copy;
+    });
+  };
+
+  const updateLineField = (idx: number, field: keyof GrnLineItem, val: any) => {
+    setLines((prev) => {
+      const copy = [...prev];
+      const cur = { ...copy[idx], [field]: val };
+      const acc = Number(cur.accepted_qty) || Number(cur.received_qty) || 0;
+      const rate = Number(cur.rate) || 0;
+      const gstRate = Number(cur.gst_rate) || 5.0;
+      const taxable = Math.round(acc * rate * 100) / 100;
+      const taxAmt = Math.round((taxable * (gstRate / 100)) * 100) / 100;
+      cur.taxable_amount = taxable;
+      cur.total_amount = taxable + taxAmt;
+      copy[idx] = cur;
       return copy;
     });
   };
@@ -390,6 +441,10 @@ export default function FabricGRNDetailPage() {
       curLine.received_weight = genRollCount * genWeightPerRoll;
       curLine.accepted_qty = curLine.received_qty;
       curLine.balance_qty = Math.max(0, curLine.po_qty - curLine.accepted_qty);
+      const taxable = Math.round(curLine.accepted_qty * (Number(curLine.rate) || 0) * 100) / 100;
+      const taxAmt = Math.round((taxable * ((Number(curLine.gst_rate) || 5.0) / 100)) * 100) / 100;
+      curLine.taxable_amount = taxable;
+      curLine.total_amount = taxable + taxAmt;
       copy[selectedLineIdx] = curLine;
       return copy;
     });
@@ -404,8 +459,32 @@ export default function FabricGRNDetailPage() {
     const totalWeight = lines.reduce((s, l) => s + (Number(l.received_weight) || 0), 0);
     const totalRolls = lines.reduce((s, l) => s + (l.rolls?.length || 0), 0);
     const acceptedMeters = lines.reduce((s, l) => s + (Number(l.accepted_qty) || 0), 0);
-    return { totalMeters, totalWeight, totalRolls, acceptedMeters };
-  }, [lines]);
+    const totalTaxable = lines.reduce((s, l) => s + (Number(l.taxable_amount) || 0), 0);
+    let totalCgst = 0;
+    let totalSgst = 0;
+    let totalIgst = 0;
+    lines.forEach((l) => {
+      const tax = ((Number(l.taxable_amount) || 0) * (Number(l.gst_rate) || 5.0)) / 100;
+      if (header.is_interstate) {
+        totalIgst += tax;
+      } else {
+        totalCgst += tax / 2;
+        totalSgst += tax / 2;
+      }
+    });
+    const netAmount = totalTaxable + totalCgst + totalSgst + totalIgst;
+    return {
+      totalMeters,
+      totalWeight,
+      totalRolls,
+      acceptedMeters,
+      totalTaxable,
+      totalCgst,
+      totalSgst,
+      totalIgst,
+      netAmount,
+    };
+  }, [lines, header.is_interstate]);
 
   // Save GRN
   const handleSave = async () => {
@@ -424,6 +503,8 @@ export default function FabricGRNDetailPage() {
         ...header,
         lines: lines.map((l) => ({
           po_line_id: l.po_line_id,
+          so_id: l.so_id ? Number(l.so_id) : undefined,
+          style_id: l.style_id ? Number(l.style_id) : undefined,
           fabric_id: l.fabric_id,
           received_qty: l.received_qty,
           received_weight: l.received_weight,
@@ -436,6 +517,9 @@ export default function FabricGRNDetailPage() {
           qc_status: l.qc_status,
           uom_id: l.uom_id,
           rate: l.rate,
+          gst_rate: l.gst_rate,
+          taxable_amount: l.taxable_amount,
+          total_amount: l.total_amount,
           rolls: l.rolls.map((r) => ({
             roll_no: r.roll_no,
             lot_no: r.lot_no,
@@ -520,7 +604,7 @@ export default function FabricGRNDetailPage() {
       </div>
 
       {/* Summary KPI Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-200">
           <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">Total Received</div>
           <div className="text-xl font-bold text-emerald-900 mt-0.5">{fmtDecimal(summary.totalMeters)} m</div>
@@ -537,13 +621,35 @@ export default function FabricGRNDetailPage() {
           <div className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider">Accepted Yardage</div>
           <div className="text-xl font-bold text-slate-800 mt-0.5">{fmtDecimal(summary.acceptedMeters)} m</div>
         </div>
+        <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200">
+          <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Taxable Value</div>
+          <div className="text-xl font-bold text-amber-900 mt-0.5">₹{fmtDecimal(summary.totalTaxable)}</div>
+        </div>
+        <div className="p-3 bg-purple-50/60 rounded-xl border border-purple-200">
+          <div className="text-[11px] font-semibold text-purple-700 uppercase tracking-wider">
+            {header.is_interstate ? 'Net Incl. IGST' : 'Net Incl. GST'}
+          </div>
+          <div className="text-xl font-bold text-purple-900 mt-0.5">₹{fmtDecimal(summary.netAmount)}</div>
+        </div>
       </div>
 
       {/* Header Fields Card */}
       <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm space-y-4">
-        <div className="text-xs font-semibold text-slate-900 uppercase tracking-wider flex items-center gap-1.5 pb-2 border-b border-slate-100">
-          <Layers size={14} className="text-emerald-600" />
-          <span>Receipt Header & Reference Information</span>
+        <div className="text-xs font-semibold text-slate-900 uppercase tracking-wider flex items-center justify-between pb-2 border-b border-slate-100">
+          <div className="flex items-center gap-1.5">
+            <Layers size={14} className="text-emerald-600" />
+            <span>Receipt Header & Reference Information</span>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer font-normal text-xs text-slate-700 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200">
+            <input
+              type="checkbox"
+              checked={header.is_interstate}
+              onChange={(e) => setHeader((p) => ({ ...p, is_interstate: e.target.checked }))}
+              disabled={!isNew}
+              className="h-3.5 w-3.5 rounded text-emerald-600 focus:ring-emerald-500"
+            />
+            <span className="font-semibold text-slate-800">Inter-state Purchase (IGST)</span>
+          </label>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
@@ -629,7 +735,7 @@ export default function FabricGRNDetailPage() {
           />
 
           <Select
-            label="Style No"
+            label="Default Style No"
             value={header.style_id}
             onChange={(e) => setHeader((p) => ({ ...p, style_id: e.target.value }))}
             options={toOptions(styles.data)}
@@ -698,7 +804,7 @@ export default function FabricGRNDetailPage() {
               <span>Fabric Line Items ({lines.length})</span>
             </h2>
             <p className="text-[11px] text-slate-400">
-              Click a row to inspect or modify its physical roll breakdown below
+              Multiple jobs supported: assign each line item to a Sales Order or Stock, with live tax and amount details
             </p>
           </div>
           {isNew && (
@@ -720,6 +826,7 @@ export default function FabricGRNDetailPage() {
             <thead>
               <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                 <th className="py-2.5 px-3">Fabric Name</th>
+                <th className="py-2.5 px-2">Job / Sales Order</th>
                 <th className="py-2.5 px-2">Type</th>
                 <th className="py-2.5 px-2">Shade / Lot</th>
                 <th className="py-2.5 px-2 text-right">PO Qty</th>
@@ -727,9 +834,10 @@ export default function FabricGRNDetailPage() {
                 <th className="py-2.5 px-2 text-right">Gross Wt (KG)</th>
                 <th className="py-2.5 px-2 text-center">Rolls</th>
                 <th className="py-2.5 px-2 text-right">Accepted</th>
-                <th className="py-2.5 px-2 text-right">Rejected</th>
-                <th className="py-2.5 px-2 text-right">Hold</th>
-                <th className="py-2.5 px-2 text-right">PO Balance</th>
+                <th className="py-2.5 px-2 text-right">Rate (₹)</th>
+                <th className="py-2.5 px-2 text-right">Taxable (₹)</th>
+                <th className="py-2.5 px-2 text-center">GST %</th>
+                <th className="py-2.5 px-2 text-right">Total (₹)</th>
                 <th className="py-2.5 px-2 text-center">QC</th>
                 {isNew && <th className="py-2.5 px-2 text-center">Action</th>}
               </tr>
@@ -755,7 +863,7 @@ export default function FabricGRNDetailPage() {
                             return copy;
                           });
                         }}
-                        className="w-48 text-xs rounded border border-slate-300 py-1 px-1.5"
+                        className="w-44 text-xs rounded border border-slate-300 py-1 px-1.5 bg-white"
                       >
                         <option value="">Select Fabric</option>
                         {toOptions(fabrics.data).map((o) => (
@@ -766,6 +874,26 @@ export default function FabricGRNDetailPage() {
                       </select>
                     ) : (
                       <div className="font-semibold text-slate-900">{l.fabric_name || 'Fabric Item'}</div>
+                    )}
+                  </td>
+                  <td className="py-2.5 px-2" onClick={(e) => e.stopPropagation()}>
+                    {isNew ? (
+                      <select
+                        value={l.so_id || ''}
+                        onChange={(e) => updateLineField(idx, 'so_id', e.target.value)}
+                        className="w-32 text-xs rounded border border-slate-300 py-1 px-1 bg-white"
+                      >
+                        <option value="">Stock / General</option>
+                        {toOptions(salesOrders.data).map((so) => (
+                          <option key={so.value} value={so.value}>
+                            {so.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="text-slate-700 font-medium">
+                        {l.so_id ? `SO #${l.so_id}` : 'Stock / General'}
+                      </span>
                     )}
                   </td>
                   <td className="py-2.5 px-2 text-slate-600">{l.fabric_type}</td>
@@ -785,9 +913,38 @@ export default function FabricGRNDetailPage() {
                     {l.rolls?.length || l.no_of_rolls}
                   </td>
                   <td className="py-2.5 px-2 text-right text-emerald-600">{fmtDecimal(l.accepted_qty)}</td>
-                  <td className="py-2.5 px-2 text-right text-red-600">{fmtDecimal(l.rejected_qty)}</td>
-                  <td className="py-2.5 px-2 text-right text-amber-600">{fmtDecimal(l.hold_qty)}</td>
-                  <td className="py-2.5 px-2 text-right text-slate-500">{fmtDecimal(l.balance_qty)}</td>
+                  <td className="py-2.5 px-2 text-right" onClick={(e) => e.stopPropagation()}>
+                    {isNew ? (
+                      <input
+                        type="number"
+                        value={l.rate}
+                        onChange={(e) => updateLineField(idx, 'rate', Number(e.target.value))}
+                        className="w-16 text-right text-xs rounded border border-slate-300 py-1 px-1 bg-white"
+                        step="0.01"
+                      />
+                    ) : (
+                      <span>₹{fmtDecimal(l.rate)}</span>
+                    )}
+                  </td>
+                  <td className="py-2.5 px-2 text-right font-medium text-slate-800">
+                    ₹{fmtDecimal(l.taxable_amount)}
+                  </td>
+                  <td className="py-2.5 px-2 text-center" onClick={(e) => e.stopPropagation()}>
+                    {isNew ? (
+                      <input
+                        type="number"
+                        value={l.gst_rate}
+                        onChange={(e) => updateLineField(idx, 'gst_rate', Number(e.target.value))}
+                        className="w-12 text-center text-xs rounded border border-slate-300 py-1 px-1 bg-white"
+                        step="0.1"
+                      />
+                    ) : (
+                      <span>{l.gst_rate}%</span>
+                    )}
+                  </td>
+                  <td className="py-2.5 px-2 text-right font-bold text-emerald-700">
+                    ₹{fmtDecimal(l.total_amount)}
+                  </td>
                   <td className="py-2.5 px-2 text-center">
                     <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-emerald-100 text-emerald-800">
                       {l.qc_status}

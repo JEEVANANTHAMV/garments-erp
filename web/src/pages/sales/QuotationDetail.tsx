@@ -27,7 +27,6 @@ const QUOTATION_TYPES = [
 
 const MATERIAL_PROCESSES: Record<string, string[]> = {
   FABRIC: [
-    'Knitting',
     'Fabric Dyeing',
     'Washing',
     'Printing',
@@ -37,6 +36,7 @@ const MATERIAL_PROCESSES: Record<string, string[]> = {
     'Brushing / Peaching',
   ],
   YARN: [
+    'Knitting',
     'Yarn Dyeing',
     'Twisting',
     'Doubling',

@@ -16,6 +16,8 @@ export const trimProcurementRouter = Router();
 
 const trimPoLineSchema = z.object({
   id: s.id(),
+  so_id: s.id(),
+  style_id: s.id(),
   trim_id: s.idReq(),
   specification: s.nullableStr(255),
   color_name: s.nullableStr(80),
@@ -25,6 +27,8 @@ const trimPoLineSchema = z.object({
   rate: z.coerce.number().min(0).default(0),
   amount: z.coerce.number().min(0).default(0),
   gst_rate: z.coerce.number().min(0).default(0),
+  igst_rate: z.coerce.number().min(0).default(0),
+  igst_amount: z.coerce.number().min(0).default(0),
   tax_amount: z.coerce.number().min(0).default(0),
   net_amount: z.coerce.number().min(0).default(0),
 });
@@ -37,8 +41,12 @@ const trimPoSchema = z.object({
   supplier_id: s.idReq(),
   delivery_date: s.nullableStr(10),
   payment_terms: s.nullableStr(150),
+  is_interstate: z.coerce.number().default(0),
   total_amount: z.coerce.number().min(0).default(0),
   tax_amount: z.coerce.number().min(0).default(0),
+  cgst_amount: z.coerce.number().min(0).default(0),
+  sgst_amount: z.coerce.number().min(0).default(0),
+  igst_amount: z.coerce.number().min(0).default(0),
   grand_total: z.coerce.number().min(0).default(0),
   status: z.enum(['DRAFT', 'APPROVED', 'PARTIAL', 'CLOSED', 'CANCELLED']).default('APPROVED'),
   remarks: s.text(),
@@ -48,6 +56,8 @@ const trimPoSchema = z.object({
 const trimGrnLineSchema = z.object({
   id: s.id(),
   po_line_id: s.id(),
+  so_id: s.id(),
+  style_id: s.id(),
   trim_id: s.idReq(),
   specification: s.nullableStr(255),
   color_name: s.nullableStr(80),
@@ -58,6 +68,11 @@ const trimGrnLineSchema = z.object({
   accepted_qty: z.coerce.number().min(0),
   rejected_qty: z.coerce.number().min(0).default(0),
   hold_qty: z.coerce.number().min(0).default(0),
+  rate: z.coerce.number().min(0).default(0),
+  taxable_amount: z.coerce.number().min(0).default(0),
+  gst_rate: z.coerce.number().min(0).default(0),
+  tax_amount: z.coerce.number().min(0).default(0),
+  total_amount: z.coerce.number().min(0).default(0),
   supplier_lot_no: s.nullableStr(80),
   internal_lot_no: s.strReq(80),
   bin_location: s.nullableStr(50),
@@ -69,6 +84,7 @@ const trimGrnSchema = z.object({
   grn_no: s.nullableStr(50),
   grn_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   po_id: s.id(),
+  gate_inward_id: s.id(),
   io_no: s.strReq(60),
   style_id: s.id(),
   supplier_id: s.idReq(),
@@ -76,6 +92,11 @@ const trimGrnSchema = z.object({
   supplier_inv_no: s.nullableStr(80),
   supplier_dc_no: s.nullableStr(80),
   vehicle_no: s.nullableStr(40),
+  is_interstate: z.coerce.number().default(0),
+  taxable_amount: z.coerce.number().min(0).default(0),
+  tax_amount: z.coerce.number().min(0).default(0),
+  igst_amount: z.coerce.number().min(0).default(0),
+  net_amount: z.coerce.number().min(0).default(0),
   status: z.enum(['DRAFT', 'POSTED', 'CANCELLED']).default('POSTED'),
   remarks: s.text(),
   lines: z.array(trimGrnLineSchema).min(1),
@@ -174,12 +195,13 @@ trimProcurementRouter.post('/trim-pos', requirePermission('PROCUREMENT.CREATE'),
       tx,
       `INSERT INTO trx_trim_po
          (company_id, po_no, po_date, io_no, style_id, supplier_id, delivery_date,
-          payment_terms, total_amount, tax_amount, grand_total, status, remarks, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          payment_terms, is_interstate, total_amount, tax_amount, cgst_amount, sgst_amount, igst_amount, grand_total, status, remarks, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         cid, poNo, body.po_date, body.io_no, body.style_id, body.supplier_id, body.delivery_date,
-        body.payment_terms, body.total_amount, body.tax_amount, body.grand_total, body.status,
-        body.remarks, uid
+        body.payment_terms, body.is_interstate || 0, body.total_amount, body.tax_amount,
+        body.cgst_amount || 0, body.sgst_amount || 0, body.igst_amount || 0,
+        body.grand_total, body.status, body.remarks, uid
       ]
     );
 
@@ -189,12 +211,14 @@ trimProcurementRouter.post('/trim-pos', requirePermission('PROCUREMENT.CREATE'),
       await txExecute(
         tx,
         `INSERT INTO trx_trim_po_line
-           (po_id, trim_id, specification, color_name, trim_size, order_qty, uom_id,
-            rate, amount, gst_rate, tax_amount, net_amount)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (po_id, so_id, style_id, trim_id, specification, color_name, trim_size, order_qty, uom_id,
+            rate, amount, gst_rate, igst_rate, igst_amount, tax_amount, net_amount)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          poId, line.trim_id, line.specification, line.color_name, line.trim_size, line.order_qty,
-          line.uom_id, line.rate, line.amount, line.gst_rate, line.tax_amount, line.net_amount
+          poId, line.so_id || null, line.style_id || body.style_id || null, line.trim_id,
+          line.specification, line.color_name, line.trim_size, line.order_qty,
+          line.uom_id, line.rate, line.amount, line.gst_rate, line.igst_rate || 0,
+          line.igst_amount || 0, line.tax_amount, line.net_amount
         ]
       );
     }
@@ -222,12 +246,14 @@ trimProcurementRouter.put('/trim-pos/:id', requirePermission('PROCUREMENT.UPDATE
       tx,
       `UPDATE trx_trim_po
           SET po_date = ?, io_no = ?, style_id = ?, supplier_id = ?, delivery_date = ?,
-              payment_terms = ?, total_amount = ?, tax_amount = ?, grand_total = ?,
+              payment_terms = ?, is_interstate = ?, total_amount = ?, tax_amount = ?,
+              cgst_amount = ?, sgst_amount = ?, igst_amount = ?, grand_total = ?,
               status = ?, remarks = ?
         WHERE id = ? AND company_id = ?`,
       [
         body.po_date, body.io_no, body.style_id, body.supplier_id, body.delivery_date,
-        body.payment_terms, body.total_amount, body.tax_amount, body.grand_total,
+        body.payment_terms, body.is_interstate || 0, body.total_amount, body.tax_amount,
+        body.cgst_amount || 0, body.sgst_amount || 0, body.igst_amount || 0, body.grand_total,
         body.status, body.remarks, req.params.id, cid
       ]
     );
@@ -238,13 +264,14 @@ trimProcurementRouter.put('/trim-pos/:id', requirePermission('PROCUREMENT.UPDATE
       await txExecute(
         tx,
         `INSERT INTO trx_trim_po_line
-           (po_id, trim_id, specification, color_name, trim_size, order_qty, uom_id,
-            rate, amount, gst_rate, tax_amount, net_amount)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (po_id, so_id, style_id, trim_id, specification, color_name, trim_size, order_qty, uom_id,
+            rate, amount, gst_rate, igst_rate, igst_amount, tax_amount, net_amount)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          req.params.id, line.trim_id, line.specification, line.color_name, line.trim_size,
-          line.order_qty, line.uom_id, line.rate, line.amount, line.gst_rate, line.tax_amount,
-          line.net_amount
+          req.params.id, line.so_id || null, line.style_id || body.style_id || null,
+          line.trim_id, line.specification, line.color_name, line.trim_size,
+          line.order_qty, line.uom_id, line.rate, line.amount, line.gst_rate,
+          line.igst_rate || 0, line.igst_amount || 0, line.tax_amount, line.net_amount
         ]
       );
     }
@@ -360,34 +387,74 @@ trimProcurementRouter.post('/trim-grns', requirePermission('PROCUREMENT.CREATE')
   const result = await transaction(async (tx) => {
     const grnNo = body.grn_no || await nextDocNumber(tx, cid, 'TGRN');
 
+    // Calculate totals across lines
+    let totTaxable = 0;
+    let totTax = 0;
+    let totIgst = 0;
+    const isInterstate = Boolean(body.is_interstate);
+
+    const calculatedLines = body.lines.map((line: any) => {
+      const rate = Number(line.rate) || 0;
+      const taxable = Number(line.taxable_amount !== undefined ? line.taxable_amount : (line.accepted_qty * rate));
+      const gstRate = Number(line.gst_rate !== undefined ? line.gst_rate : 5);
+      const tax = Number(((taxable * gstRate) / 100).toFixed(4));
+      const total = taxable + tax;
+
+      totTaxable += taxable;
+      totTax += tax;
+      if (isInterstate) totIgst += tax;
+
+      return {
+        ...line,
+        rate,
+        taxable,
+        gstRate,
+        tax,
+        total,
+      };
+    });
+
+    const netAmount = totTaxable + totTax;
+
     const resGrn = await txExecute(
       tx,
       `INSERT INTO trx_trim_grn
-         (company_id, grn_no, grn_date, po_id, io_no, style_id, supplier_id, warehouse_id,
-          supplier_inv_no, supplier_dc_no, vehicle_no, status, remarks, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (company_id, grn_no, grn_date, po_id, gate_inward_id, io_no, style_id, supplier_id, warehouse_id,
+          supplier_inv_no, supplier_dc_no, vehicle_no, is_interstate, taxable_amount, tax_amount, igst_amount, net_amount, status, remarks, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        cid, grnNo, body.grn_date, body.po_id, body.io_no, body.style_id, body.supplier_id,
+        cid, grnNo, body.grn_date, body.po_id, body.gate_inward_id || null, body.io_no, body.style_id, body.supplier_id,
         body.warehouse_id, body.supplier_inv_no, body.supplier_dc_no, body.vehicle_no,
+        isInterstate ? 1 : 0, totTaxable, totTax, totIgst, netAmount,
         body.status, body.remarks, uid
       ]
     );
 
     const grnId = resGrn.insertId;
 
-    for (const line of body.lines) {
+    if (body.gate_inward_id) {
+      await txExecute(tx, `
+        UPDATE trx_gate_inward
+           SET status = 'GRN_COMPLETED'
+         WHERE id = ? AND company_id = ?
+      `, [Number(body.gate_inward_id), cid]);
+    }
+
+    for (const line of calculatedLines) {
       await txExecute(
         tx,
         `INSERT INTO trx_trim_grn_line
-           (grn_id, po_line_id, trim_id, specification, color_name, trim_size, uom_id,
-            po_qty, received_qty, accepted_qty, rejected_qty, hold_qty, supplier_lot_no,
-            internal_lot_no, bin_location, qc_status, rejection_reason)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (grn_id, po_line_id, so_id, style_id, trim_id, specification, color_name, trim_size, uom_id,
+            po_qty, received_qty, accepted_qty, rejected_qty, hold_qty,
+            rate, taxable_amount, gst_rate, tax_amount, total_amount,
+            supplier_lot_no, internal_lot_no, bin_location, qc_status, rejection_reason)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          grnId, line.po_line_id || null, line.trim_id, line.specification, line.color_name,
-          line.trim_size, line.uom_id, line.po_qty, line.received_qty, line.accepted_qty,
-          line.rejected_qty, line.hold_qty, line.supplier_lot_no, line.internal_lot_no,
-          line.bin_location, line.qc_status, line.rejection_reason
+          grnId, line.po_line_id || null, line.so_id || null, line.style_id || body.style_id || null,
+          line.trim_id, line.specification, line.color_name, line.trim_size, line.uom_id,
+          line.po_qty, line.received_qty, line.accepted_qty, line.rejected_qty, line.hold_qty,
+          line.rate, line.taxable, line.gstRate, line.tax, line.total,
+          line.supplier_lot_no, line.internal_lot_no, line.bin_location, line.qc_status, line.rejection_reason
         ]
       );
 

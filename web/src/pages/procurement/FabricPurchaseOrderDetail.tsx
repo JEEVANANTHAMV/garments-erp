@@ -14,6 +14,8 @@ import { fmtDecimal, today } from '../../lib/format';
 interface FabricLine {
   id?: number;
   _key: string;
+  so_id?: string | number;
+  style_id?: string | number;
   fabric_id: string | number;
   fabric_name?: string;
   fabric_type: string;
@@ -26,6 +28,7 @@ interface FabricLine {
   print_color: string;
   finish: string;
   mill_id: string;
+  hsn_code: string;
   uom_id: number;
   qty: number;
   weight_kg: number;
@@ -35,7 +38,14 @@ interface FabricLine {
   discount_amount: number;
   freight_amount: number;
   other_charges: number;
+  taxable_amount: number;
   gst_rate: number;
+  cgst_rate: number;
+  cgst_amount: number;
+  sgst_rate: number;
+  sgst_amount: number;
+  igst_rate: number;
+  igst_amount: number;
   net_amount: number;
 }
 
@@ -53,6 +63,7 @@ const emptyFabricLine = (): FabricLine => ({
   print_color: '',
   finish: 'Compact',
   mill_id: '',
+  hsn_code: '5208',
   uom_id: 9, // MTR
   qty: 1000,
   weight_kg: 250,
@@ -62,7 +73,14 @@ const emptyFabricLine = (): FabricLine => ({
   discount_amount: 0,
   freight_amount: 0,
   other_charges: 0,
+  taxable_amount: 65000,
   gst_rate: 5.0,
+  cgst_rate: 2.5,
+  cgst_amount: 1625,
+  sgst_rate: 2.5,
+  sgst_amount: 1625,
+  igst_rate: 0,
+  igst_amount: 0,
   net_amount: 68250,
 });
 
@@ -79,6 +97,7 @@ export default function FabricPurchaseOrderDetailPage() {
   // Lookups
   const suppliers = useLookup('suppliers');
   const styles = useLookup('styles');
+  const salesOrders = useLookup('sales-orders');
   const fabrics = useLookup('fabrics');
   const parties = useLookup('parties');
 
@@ -100,6 +119,7 @@ export default function FabricPurchaseOrderDetailPage() {
     billing_address: COMPANY_DEFAULT_ADDRESS,
     shipping_address: '',
     shipping_to_party_id: '',
+    is_interstate: false,
     freight_charges: 0,
     other_charges: 0,
     round_off: 0,
@@ -136,6 +156,7 @@ export default function FabricPurchaseOrderDetailPage() {
         billing_address: d.billing_address || COMPANY_DEFAULT_ADDRESS,
         shipping_address: d.shipping_address || '',
         shipping_to_party_id: d.shipping_to_party_id ? String(d.shipping_to_party_id) : '',
+        is_interstate: !!d.is_interstate,
         freight_charges: Number(d.freight_charges) || 0,
         other_charges: Number(d.other_charges) || 0,
         round_off: Number(d.round_off) || 0,
@@ -146,7 +167,10 @@ export default function FabricPurchaseOrderDetailPage() {
           d.lines.map((l: any) => ({
             id: l.id,
             _key: `fl_${++fseq}`,
+            so_id: l.so_id || '',
+            style_id: l.style_id || '',
             fabric_id: l.fabric_id || '',
+            fabric_name: l.fabric_name,
             fabric_type: l.fabric_type || 'Knitted',
             dia: l.dia || '30"',
             gsm: l.gsm || '180',
@@ -157,6 +181,7 @@ export default function FabricPurchaseOrderDetailPage() {
             print_color: l.print_color || '',
             finish: l.finish || 'Compact',
             mill_id: String(l.mill_id || ''),
+            hsn_code: l.hsn_code || '5208',
             uom_id: l.uom_id || 9,
             qty: Number(l.qty) || 0,
             weight_kg: Number(l.weight_kg) || 0,
@@ -166,13 +191,52 @@ export default function FabricPurchaseOrderDetailPage() {
             discount_amount: Number(l.discount_amount) || 0,
             freight_amount: Number(l.freight_amount) || 0,
             other_charges: Number(l.other_charges) || 0,
+            taxable_amount: Number(l.taxable_amount) || Number(l.amount) || 0,
             gst_rate: Number(l.gst_rate) || 5.0,
+            cgst_rate: Number(l.cgst_rate) || 0,
+            cgst_amount: Number(l.cgst_amount) || 0,
+            sgst_rate: Number(l.sgst_rate) || 0,
+            sgst_amount: Number(l.sgst_amount) || 0,
+            igst_rate: Number(l.igst_rate) || 0,
+            igst_amount: Number(l.igst_amount) || 0,
             net_amount: Number(l.net_amount) || Number(l.amount) || 0,
           }))
         );
       }
     }
   }, [poQuery.data]);
+
+  // Handle Interstate Toggle and recalculate taxes
+  const handleToggleInterstate = (isInter: boolean) => {
+    setHead((h) => ({ ...h, is_interstate: isInter }));
+    setLines((curr) =>
+      curr.map((l) => {
+        const taxable = l.taxable_amount || l.amount || 0;
+        const gstRate = Number(l.gst_rate) || 5.0;
+        let cgst_rate = 0, cgst_amount = 0, sgst_rate = 0, sgst_amount = 0, igst_rate = 0, igst_amount = 0;
+        if (isInter) {
+          igst_rate = gstRate;
+          igst_amount = Math.round((taxable * (gstRate / 100)) * 100) / 100;
+        } else {
+          cgst_rate = gstRate / 2;
+          cgst_amount = Math.round((taxable * (gstRate / 200)) * 100) / 100;
+          sgst_rate = gstRate / 2;
+          sgst_amount = Math.round((taxable * (gstRate / 200)) * 100) / 100;
+        }
+        const totalTax = cgst_amount + sgst_amount + igst_amount;
+        return {
+          ...l,
+          cgst_rate,
+          cgst_amount,
+          sgst_rate,
+          sgst_amount,
+          igst_rate,
+          igst_amount,
+          net_amount: Math.round((taxable + totalTax) * 100) / 100,
+        };
+      })
+    );
+  };
 
   // Calculations
   const updateLine = (idx: number, patch: Partial<FabricLine>) => {
@@ -181,14 +245,32 @@ export default function FabricPurchaseOrderDetailPage() {
       const cur = { ...next[idx], ...patch };
       const qty = Number(cur.qty) || 0;
       const rate = Number(cur.rate) || 0;
-      const basicAmt = qty * rate;
+      const basicAmt = Math.round(qty * rate * 100) / 100;
       const disc = Number(cur.discount_amount) || 0;
       const freight = Number(cur.freight_amount) || 0;
       const other = Number(cur.other_charges) || 0;
       const taxable = Math.max(0, basicAmt - disc + freight + other);
-      const tax = (taxable * (Number(cur.gst_rate) || 5.0)) / 100.0;
       cur.amount = basicAmt;
-      cur.net_amount = taxable + tax;
+      cur.taxable_amount = taxable;
+
+      const gstRate = Number(cur.gst_rate) || 5.0;
+      if (head.is_interstate) {
+        cur.igst_rate = gstRate;
+        cur.igst_amount = Math.round((taxable * (gstRate / 100)) * 100) / 100;
+        cur.cgst_rate = 0;
+        cur.cgst_amount = 0;
+        cur.sgst_rate = 0;
+        cur.sgst_amount = 0;
+      } else {
+        cur.cgst_rate = gstRate / 2;
+        cur.cgst_amount = Math.round((taxable * (gstRate / 200)) * 100) / 100;
+        cur.sgst_rate = gstRate / 2;
+        cur.sgst_amount = Math.round((taxable * (gstRate / 200)) * 100) / 100;
+        cur.igst_rate = 0;
+        cur.igst_amount = 0;
+      }
+      const totalTax = cur.cgst_amount + cur.sgst_amount + cur.igst_amount;
+      cur.net_amount = Math.round((taxable + totalTax) * 100) / 100;
       next[idx] = cur;
       return next;
     });
@@ -199,12 +281,32 @@ export default function FabricPurchaseOrderDetailPage() {
     const totalWeight = lines.reduce((s, l) => s + (Number(l.weight_kg) || 0), 0);
     const totalRolls = lines.reduce((s, l) => s + (Number(l.no_of_rolls) || 0), 0);
     const basicAmount = lines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
+    const taxableAmount = lines.reduce((s, l) => s + (Number(l.taxable_amount) || 0), 0);
+    const totalCgst = lines.reduce((s, l) => s + (Number(l.cgst_amount) || 0), 0);
+    const totalSgst = lines.reduce((s, l) => s + (Number(l.sgst_amount) || 0), 0);
+    const totalIgst = lines.reduce((s, l) => s + (Number(l.igst_amount) || 0), 0);
+    const totalTax = totalCgst + totalSgst + totalIgst;
     const itemsNet = lines.reduce((s, l) => s + (Number(l.net_amount) || 0), 0);
     const freight = Number(head.freight_charges) || 0;
     const other = Number(head.other_charges) || 0;
     const roundOff = Number(head.round_off) || 0;
     const grandTotal = Math.round((itemsNet + freight + other + roundOff) * 100) / 100;
-    return { totalQty, totalWeight, totalRolls, basicAmount, itemsNet, freight, other, roundOff, grandTotal };
+    return {
+      totalQty,
+      totalWeight,
+      totalRolls,
+      basicAmount,
+      taxableAmount,
+      totalCgst,
+      totalSgst,
+      totalIgst,
+      totalTax,
+      itemsNet,
+      freight,
+      other,
+      roundOff,
+      grandTotal,
+    };
   }, [lines, head.freight_charges, head.other_charges, head.round_off]);
 
   const handleShipToPartyChange = (partyIdStr: string) => {
@@ -254,9 +356,17 @@ export default function FabricPurchaseOrderDetailPage() {
         currency_id: 1,
         delivery_date: head.delivery_date || undefined,
         payment_terms: head.payment_terms,
+        is_interstate: head.is_interstate ? 1 : 0,
+        taxable_amount: totals.taxableAmount,
+        cgst_amount: totals.totalCgst,
+        sgst_amount: totals.totalSgst,
+        igst_amount: totals.totalIgst,
         total_amount: totals.basicAmount,
-        tax_amount: totals.grandTotal - totals.basicAmount,
+        tax_amount: totals.totalTax,
         grand_total: totals.grandTotal,
+        freight_charges: totals.freight,
+        other_charges: totals.other,
+        round_off: totals.roundOff,
         approval_state: stateOverride || head.approval_state,
         remarks: head.remarks,
         billing_address: head.billing_address || null,
@@ -264,6 +374,9 @@ export default function FabricPurchaseOrderDetailPage() {
         shipping_to_party_id: head.shipping_to_party_id ? Number(head.shipping_to_party_id) : null,
         lines: lines.map((l) => ({
           fabric_id: Number(l.fabric_id),
+          so_id: l.so_id ? Number(l.so_id) : undefined,
+          style_id: l.style_id ? Number(l.style_id) : undefined,
+          hsn_code: l.hsn_code || '5208',
           material_type: 'FABRIC',
           description: `${l.composition} ${l.fabric_type} ${l.gsm} GSM`,
           fabric_type: l.fabric_type,
@@ -284,7 +397,14 @@ export default function FabricPurchaseOrderDetailPage() {
           discount_amount: Number(l.discount_amount),
           freight_amount: Number(l.freight_amount),
           other_charges: Number(l.other_charges),
+          taxable_amount: Number(l.taxable_amount),
           gst_rate: Number(l.gst_rate),
+          cgst_rate: Number(l.cgst_rate),
+          cgst_amount: Number(l.cgst_amount),
+          sgst_rate: Number(l.sgst_rate),
+          sgst_amount: Number(l.sgst_amount),
+          igst_rate: Number(l.igst_rate),
+          igst_amount: Number(l.igst_amount),
           net_amount: Number(l.net_amount),
         })),
       };
@@ -410,7 +530,18 @@ export default function FabricPurchaseOrderDetailPage() {
 
       {/* Main Header Fields */}
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-        <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">Order Parameters</h2>
+        <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
+          <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Order Parameters</h2>
+          <label className="flex items-center gap-2 cursor-pointer font-normal text-xs text-slate-700 bg-sky-50 px-2.5 py-1 rounded-md border border-sky-200">
+            <input
+              type="checkbox"
+              checked={head.is_interstate}
+              onChange={(e) => handleToggleInterstate(e.target.checked)}
+              className="h-3.5 w-3.5 rounded text-sky-600 focus:ring-sky-500"
+            />
+            <span className="font-semibold text-slate-800">Inter-state PO (IGST Calculation)</span>
+          </label>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
           <Input
             label="Internal / IR No."
@@ -503,7 +634,7 @@ export default function FabricPurchaseOrderDetailPage() {
             className="input w-full font-mono text-xs leading-relaxed resize-y"
             value={head.billing_address}
             onChange={(e) => setHead({ ...head, billing_address: e.target.value })}
-            placeholder="Enter company billing address with GSTIN..."
+            placeholder="Company billing address with GSTIN..."
           />
         </div>
 
@@ -515,7 +646,7 @@ export default function FabricPurchaseOrderDetailPage() {
                 <span className="p-1 rounded bg-emerald-100 text-emerald-700">
                   <Truck size={13} />
                 </span>
-                <span>Shipping Address (Delivery Destination Unit / Mill)</span>
+                <span>Shipping Address (Delivery Location)</span>
               </div>
               <button
                 type="button"
@@ -528,8 +659,8 @@ export default function FabricPurchaseOrderDetailPage() {
             </div>
             <div className="mb-2">
               <Select
-                label="Destination Mill / Party (Knitting, Dyeing, Garment Unit)"
-                placeholder="Select unit to auto-populate shipping address..."
+                label="Destination Unit / Warehouse"
+                placeholder="Select unit to auto-fill address..."
                 options={toOptions(parties.data)}
                 value={head.shipping_to_party_id}
                 onChange={(e) => handleShipToPartyChange(e.target.value)}
@@ -541,21 +672,22 @@ export default function FabricPurchaseOrderDetailPage() {
             className="input w-full font-mono text-xs leading-relaxed resize-y"
             value={head.shipping_address}
             onChange={(e) => setHead({ ...head, shipping_address: e.target.value })}
-            placeholder="Enter destination delivery address (Knitting mill, processing unit, or factory warehouse)..."
+            placeholder="Delivery address (Dyeing mill, garment unit, or warehouse)..."
           />
         </div>
       </div>
 
-      {/* Multi-Item Fabric Grid */}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
-        <div className="flex items-center justify-between p-3.5 bg-slate-50 border-b border-slate-200">
-          <div className="flex items-center gap-2">
-            <span className="p-1 rounded bg-sky-100 text-sky-700">
-              <Layers size={14} />
-            </span>
-            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-              Fabric Specifications & Quantity Grid ({lines.length})
+      {/* Fabric Lines Table */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
+        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+          <div>
+            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+              <Layers size={14} className="text-emerald-600" />
+              <span>Fabric Line Items ({lines.length})</span>
             </h3>
+            <p className="text-[11px] text-slate-400">
+              Multiple jobs supported: assign each line item to a Sales Order or Stock, with live tax and amount details
+            </p>
           </div>
           <button
             type="button"
@@ -570,20 +702,29 @@ export default function FabricPurchaseOrderDetailPage() {
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-100/70 border-b border-slate-200 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
               <tr>
-                <th className="py-2.5 px-3 min-w-[160px]">Fabric Name</th>
-                <th className="py-2.5 px-2 w-28">Type</th>
-                <th className="py-2.5 px-2 w-20">Dia</th>
-                <th className="py-2.5 px-2 w-20">GSM</th>
-                <th className="py-2.5 px-2 min-w-[120px]">Composition</th>
-                <th className="py-2.5 px-2 w-28">Colour / Shade</th>
-                <th className="py-2.5 px-2 w-24">Finish</th>
-                <th className="py-2.5 px-2 w-20 text-center">UOM</th>
-                <th className="py-2.5 px-2 w-24 text-right">Quantity</th>
-                <th className="py-2.5 px-2 w-24 text-right">Weight (KG)</th>
-                <th className="py-2.5 px-2 w-20 text-right">Rolls</th>
-                <th className="py-2.5 px-2 w-24 text-right">Rate (₹)</th>
-                <th className="py-2.5 px-2 w-28 text-right">Net Amount (₹)</th>
-                <th className="py-2.5 px-2 w-10 text-center"></th>
+                <th className="py-2.5 px-3 min-w-[150px]">Fabric Name</th>
+                <th className="py-2.5 px-2 min-w-[130px]">Job / Sales Order</th>
+                <th className="py-2.5 px-2 w-24">Type</th>
+                <th className="py-2.5 px-2 w-16">Dia</th>
+                <th className="py-2.5 px-2 w-16">GSM</th>
+                <th className="py-2.5 px-2 w-20">HSN</th>
+                <th className="py-2.5 px-2 w-24">Shade</th>
+                <th className="py-2.5 px-2 w-20 text-right">Qty</th>
+                <th className="py-2.5 px-2 w-20 text-right">Rate (₹)</th>
+                <th className="py-2.5 px-2 w-24 text-right">Taxable (₹)</th>
+                {head.is_interstate ? (
+                  <>
+                    <th className="py-2.5 px-2 w-16 text-center">IGST %</th>
+                    <th className="py-2.5 px-2 w-20 text-right">IGST (₹)</th>
+                  </>
+                ) : (
+                  <>
+                    <th className="py-2.5 px-2 w-16 text-center">GST %</th>
+                    <th className="py-2.5 px-2 w-20 text-right">CGST+SGST (₹)</th>
+                  </>
+                )}
+                <th className="py-2.5 px-2 w-24 text-right">Net (₹)</th>
+                <th className="py-2.5 px-2 w-8 text-center"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -602,7 +743,7 @@ export default function FabricPurchaseOrderDetailPage() {
                           fabric_type: String(fab?.fabric_type || l.fabric_type),
                         });
                       }}
-                      className="input py-1 text-xs w-full"
+                      className="input py-1 text-xs w-full bg-white"
                     >
                       <option value="">— Select Fabric —</option>
                       {toOptions(fabrics.data).map((o) => (
@@ -612,9 +753,21 @@ export default function FabricPurchaseOrderDetailPage() {
                   </td>
                   <td className="py-2 px-2">
                     <select
+                      value={l.so_id || ''}
+                      onChange={(e) => updateLine(idx, { so_id: e.target.value })}
+                      className="input py-1 text-xs w-full bg-white"
+                    >
+                      <option value="">Stock / General</option>
+                      {toOptions(salesOrders.data).map((so) => (
+                        <option key={so.value} value={so.value}>{so.label}</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="py-2 px-2">
+                    <select
                       value={l.fabric_type}
                       onChange={(e) => updateLine(idx, { fabric_type: e.target.value })}
-                      className="input py-1 text-xs w-full"
+                      className="input py-1 text-xs w-full bg-white"
                     >
                       <option value="Knitted">Knitted</option>
                       <option value="Woven">Woven</option>
@@ -642,49 +795,20 @@ export default function FabricPurchaseOrderDetailPage() {
                   <td className="py-2 px-2">
                     <input
                       type="text"
-                      value={l.composition}
-                      onChange={(e) => updateLine(idx, { composition: e.target.value })}
-                      className="input py-1 text-xs w-full"
-                      placeholder="100% Cotton"
+                      value={l.hsn_code}
+                      onChange={(e) => updateLine(idx, { hsn_code: e.target.value })}
+                      placeholder="5208"
+                      className="input py-1 text-xs w-full font-mono"
                     />
-                  </td>
-                  <td className="py-2 px-2">
-                    <div className="flex gap-1">
-                      <input
-                        type="text"
-                        value={l.color_name}
-                        onChange={(e) => updateLine(idx, { color_name: e.target.value })}
-                        placeholder="Navy"
-                        className="input py-1 text-xs w-1/2"
-                      />
-                      <input
-                        type="text"
-                        value={l.shade_code}
-                        onChange={(e) => updateLine(idx, { shade_code: e.target.value })}
-                        placeholder="NVY-01"
-                        className="input py-1 text-xs w-1/2 font-mono text-[11px]"
-                      />
-                    </div>
                   </td>
                   <td className="py-2 px-2">
                     <input
                       type="text"
-                      value={l.finish}
-                      onChange={(e) => updateLine(idx, { finish: e.target.value })}
-                      placeholder="Compact"
-                      className="input py-1 text-xs w-full"
+                      value={l.shade_code}
+                      onChange={(e) => updateLine(idx, { shade_code: e.target.value })}
+                      placeholder="NVY-01"
+                      className="input py-1 text-xs w-full font-mono text-[11px]"
                     />
-                  </td>
-                  <td className="py-2 px-2 text-center">
-                    <select
-                      value={l.uom_id}
-                      onChange={(e) => updateLine(idx, { uom_id: Number(e.target.value) })}
-                      className="input py-1 text-xs w-full text-center"
-                    >
-                      <option value={9}>MTR</option>
-                      <option value={5}>KG</option>
-                      <option value={15}>ROLL</option>
-                    </select>
                   </td>
                   <td className="py-2 px-2">
                     <input
@@ -699,30 +823,47 @@ export default function FabricPurchaseOrderDetailPage() {
                     <input
                       type="number"
                       step="0.01"
-                      value={l.weight_kg}
-                      onChange={(e) => updateLine(idx, { weight_kg: Number(e.target.value) })}
-                      className="input py-1 text-xs w-full text-right font-mono"
-                    />
-                  </td>
-                  <td className="py-2 px-2">
-                    <input
-                      type="number"
-                      value={l.no_of_rolls}
-                      onChange={(e) => updateLine(idx, { no_of_rolls: Number(e.target.value) })}
-                      className="input py-1 text-xs w-full text-right font-mono"
-                    />
-                  </td>
-                  <td className="py-2 px-2">
-                    <input
-                      type="number"
-                      step="0.01"
                       value={l.rate}
                       onChange={(e) => updateLine(idx, { rate: Number(e.target.value) })}
                       className="input py-1 text-xs w-full text-right font-mono font-bold text-brand-700"
                     />
                   </td>
+                  <td className="py-2 px-2 text-right font-mono font-medium text-slate-800">
+                    ₹{fmtDecimal(l.taxable_amount || l.amount)}
+                  </td>
+                  {head.is_interstate ? (
+                    <>
+                      <td className="py-2 px-2 text-center">
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={l.gst_rate}
+                          onChange={(e) => updateLine(idx, { gst_rate: Number(e.target.value) })}
+                          className="input py-1 text-xs w-full text-center bg-purple-50/50 text-purple-700 font-semibold"
+                        />
+                      </td>
+                      <td className="py-2 px-2 text-right font-mono font-semibold text-purple-700">
+                        ₹{fmtDecimal(l.igst_amount)}
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="py-2 px-2 text-center">
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={l.gst_rate}
+                          onChange={(e) => updateLine(idx, { gst_rate: Number(e.target.value) })}
+                          className="input py-1 text-xs w-full text-center"
+                        />
+                      </td>
+                      <td className="py-2 px-2 text-right font-mono font-medium text-slate-700">
+                        ₹{fmtDecimal((l.cgst_amount || 0) + (l.sgst_amount || 0))}
+                      </td>
+                    </>
+                  )}
                   <td className="py-2 px-2 text-right font-mono font-bold text-slate-900">
-                    ₹{fmtDecimal(l.net_amount, 2)}
+                    ₹{fmtDecimal(l.net_amount)}
                   </td>
                   <td className="py-2 px-2 text-center">
                     <button
@@ -739,13 +880,18 @@ export default function FabricPurchaseOrderDetailPage() {
             </tbody>
             <tfoot className="bg-slate-50/80 border-t border-slate-200 font-bold text-slate-800">
               <tr>
-                <td colSpan={8} className="py-3 px-3 text-right text-slate-600">Total Purchase Totals:</td>
+                <td colSpan={7} className="py-3 px-3 text-right text-slate-600">Total Purchase Totals:</td>
                 <td className="py-3 px-2 text-right font-mono">{fmtDecimal(totals.totalQty, 2)}</td>
-                <td className="py-3 px-2 text-right font-mono">{fmtDecimal(totals.totalWeight, 2)} KG</td>
-                <td className="py-3 px-2 text-right font-mono">{totals.totalRolls}</td>
-                <td className="py-3 px-2 text-right font-mono text-xs text-slate-500">Items Subtotal:</td>
+                <td className="py-3 px-2 text-right font-mono text-xs text-slate-500">Taxable:</td>
+                <td className="py-3 px-2 text-right font-mono">₹{fmtDecimal(totals.taxableAmount, 2)}</td>
+                <td className="py-3 px-2 text-center text-xs text-slate-500">
+                  {head.is_interstate ? 'IGST' : 'CGST+SGST'}:
+                </td>
+                <td className="py-3 px-2 text-right font-mono text-purple-700">
+                  ₹{fmtDecimal(head.is_interstate ? totals.totalIgst : (totals.totalCgst + totals.totalSgst), 2)}
+                </td>
                 <td className="py-3 px-2 text-right font-mono text-base font-black text-slate-900">
-                  ₹{fmtDecimal(totals.itemsNet, 2)}
+                  ₹{fmtDecimal(totals.grandTotal, 2)}
                 </td>
                 <td></td>
               </tr>

@@ -7,10 +7,10 @@ export function JobWorkChallansPage() {
   return (
     <CrudPage
       path="jobwork-challans"
-      title="Job Work Challans"
+      title="Job Work & Delivery Challans (DC)"
       permission="PRODUCTION"
-      singular="Challan"
-      subtitle="Outward delivery challans issued to job-work vendors"
+      singular="Delivery Challan (DC)"
+      subtitle="Outward delivery challans (DC) issued to job-work vendors and processing units"
       defaultSort={{ key: 'challan_date', dir: 'desc' }}
       columns={[
         {

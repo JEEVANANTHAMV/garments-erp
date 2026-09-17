@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowLeft, Save, Plus, Trash2, PackageCheck
+  ArrowLeft, Save, Plus, Trash2, PackageCheck, Layers, Disc
 } from 'lucide-react';
 import { http } from '../../lib/api';
 import { fmtDecimal, today } from '../../lib/format';
@@ -13,6 +13,8 @@ interface GrnLine {
   _key: string;
   id?: number;
   po_line_id?: number;
+  so_id?: string | number;
+  style_id?: string | number;
   trim_id: string | number;
   trim_name?: string;
   specification: string;
@@ -24,6 +26,11 @@ interface GrnLine {
   accepted_qty: number;
   rejected_qty: number;
   hold_qty: number;
+  rate: number;
+  taxable_amount: number;
+  gst_rate: number;
+  tax_amount: number;
+  total_amount: number;
   supplier_lot_no: string;
   internal_lot_no: string;
   bin_location: string;
@@ -34,6 +41,8 @@ interface GrnLine {
 let glseq = 0;
 const emptyGrnLine = (): GrnLine => ({
   _key: `tgl_${++glseq}`,
+  so_id: '',
+  style_id: '',
   trim_id: '',
   specification: '4 Hole, 15L',
   color_name: 'Navy',
@@ -44,6 +53,11 @@ const emptyGrnLine = (): GrnLine => ({
   accepted_qty: 4950,
   rejected_qty: 50,
   hold_qty: 0,
+  rate: 0.85,
+  taxable_amount: 4207.5,
+  gst_rate: 18,
+  tax_amount: 757.35,
+  total_amount: 4964.85,
   supplier_lot_no: 'SLOT-001',
   internal_lot_no: `TLOT-${Date.now().toString().slice(-6)}`,
   bin_location: 'BIN-T01',
@@ -81,6 +95,16 @@ export default function TrimGRNDetailPage() {
     queryFn: async () => (await http.get<{ data: any[] }>('/lookups/trims')).data || [],
   });
 
+  const { data: salesOrders = [] } = useQuery({
+    queryKey: ['lookups', 'sales-orders'],
+    queryFn: async () => (await http.get<{ data: any[] }>('/lookups/sales-orders')).data || [],
+  });
+
+  const { data: gateInwards = [] } = useQuery({
+    queryKey: ['lookups', 'gate-inwards'],
+    queryFn: async () => (await http.get<{ data: any[] }>('/lookups/gate-inwards')).data || [],
+  });
+
   // Available POs
   const { data: availablePos = [] } = useQuery({
     queryKey: ['trim-pos'],
@@ -94,6 +118,7 @@ export default function TrimGRNDetailPage() {
     grn_no: '',
     grn_date: today(),
     po_id: '',
+    gate_inward_id: '',
     io_no: 'IO-2026-001',
     style_id: '',
     supplier_id: '',
@@ -101,6 +126,7 @@ export default function TrimGRNDetailPage() {
     supplier_inv_no: 'INV-2026-889',
     supplier_dc_no: 'DC-4421',
     vehicle_no: 'TN-39-AB-1234',
+    is_interstate: false,
     status: 'POSTED',
     remarks: '',
   });
@@ -124,6 +150,7 @@ export default function TrimGRNDetailPage() {
         grn_no: existingGrn.grn_no,
         grn_date: existingGrn.grn_date?.split('T')[0] || today(),
         po_id: String(existingGrn.po_id || ''),
+        gate_inward_id: String(existingGrn.gate_inward_id || ''),
         io_no: existingGrn.io_no,
         style_id: String(existingGrn.style_id || ''),
         supplier_id: String(existingGrn.supplier_id || ''),
@@ -131,37 +158,71 @@ export default function TrimGRNDetailPage() {
         supplier_inv_no: existingGrn.supplier_inv_no || '',
         supplier_dc_no: existingGrn.supplier_dc_no || '',
         vehicle_no: existingGrn.vehicle_no || '',
+        is_interstate: Boolean(existingGrn.is_interstate),
         status: existingGrn.status || 'POSTED',
         remarks: existingGrn.remarks || '',
       });
 
       if (existingGrn.lines?.length) {
         setLines(
-          existingGrn.lines.map((l: any) => ({
-            _key: `tgl_${++glseq}`,
-            id: l.id,
-            po_line_id: l.po_line_id,
-            trim_id: l.trim_id,
-            trim_name: l.trim_name,
-            specification: l.specification || '',
-            color_name: l.color_name || '',
-            trim_size: l.trim_size || '',
-            uom_id: l.uom_id,
-            po_qty: Number(l.po_qty),
-            received_qty: Number(l.received_qty),
-            accepted_qty: Number(l.accepted_qty),
-            rejected_qty: Number(l.rejected_qty),
-            hold_qty: Number(l.hold_qty),
-            supplier_lot_no: l.supplier_lot_no || '',
-            internal_lot_no: l.internal_lot_no,
-            bin_location: l.bin_location || '',
-            qc_status: l.qc_status || 'ACCEPTED',
-            rejection_reason: l.rejection_reason || '',
-          }))
+          existingGrn.lines.map((l: any) => {
+            const acc = Number(l.accepted_qty);
+            const rate = Number(l.rate || 0.85);
+            const gstRate = Number(l.gst_rate !== undefined ? l.gst_rate : 18);
+            const taxable = Number(l.taxable_amount !== undefined ? l.taxable_amount : Math.round(acc * rate * 100) / 100);
+            const taxAmt = Number(l.tax_amount !== undefined ? l.tax_amount : Math.round(((taxable * gstRate) / 100) * 100) / 100);
+            const totalAmt = Number(l.total_amount !== undefined ? l.total_amount : (taxable + taxAmt));
+
+            return {
+              _key: `tgl_${++glseq}`,
+              id: l.id,
+              po_line_id: l.po_line_id,
+              so_id: l.so_id ? String(l.so_id) : '',
+              style_id: l.style_id ? String(l.style_id) : '',
+              trim_id: l.trim_id,
+              trim_name: l.trim_name,
+              specification: l.specification || '',
+              color_name: l.color_name || '',
+              trim_size: l.trim_size || '',
+              uom_id: l.uom_id,
+              po_qty: Number(l.po_qty),
+              received_qty: Number(l.received_qty),
+              accepted_qty: acc,
+              rejected_qty: Number(l.rejected_qty),
+              hold_qty: Number(l.hold_qty),
+              rate,
+              taxable_amount: taxable,
+              gst_rate: gstRate,
+              tax_amount: taxAmt,
+              total_amount: totalAmt,
+              supplier_lot_no: l.supplier_lot_no || '',
+              internal_lot_no: l.internal_lot_no,
+              bin_location: l.bin_location || '',
+              qc_status: l.qc_status || 'ACCEPTED',
+              rejection_reason: l.rejection_reason || '',
+            };
+          })
         );
       }
     }
   }, [existingGrn]);
+
+  // Handle Gate Entry selection: auto-fill supplier, DC, invoice, vehicle, warehouse
+  const handleGateInwardSelect = (ginId: string) => {
+    setHead((prev) => {
+      const next = { ...prev, gate_inward_id: ginId };
+      if (!ginId) return next;
+      const found = gateInwards.find((g: any) => String(g.id) === ginId);
+      if (found) {
+        if (found.party_id) next.supplier_id = String(found.party_id);
+        if (found.supplier_dc_no) next.supplier_dc_no = found.supplier_dc_no;
+        if (found.supplier_inv_no) next.supplier_inv_no = found.supplier_inv_no;
+        if (found.vehicle_no) next.vehicle_no = found.vehicle_no;
+        if (found.warehouse_id) next.warehouse_id = String(found.warehouse_id);
+      }
+      return next;
+    });
+  };
 
   // Handle PO selection: pull lines and auto-fill
   const handlePoSelect = async (poId: string) => {
@@ -177,15 +238,24 @@ export default function TrimGRNDetailPage() {
           io_no: po.io_no || prev.io_no,
           style_id: String(po.style_id || prev.style_id),
           supplier_id: String(po.supplier_id || prev.supplier_id),
+          is_interstate: Boolean(po.is_interstate),
         }));
 
         if (po.lines?.length) {
           setLines(
             po.lines.map((l: any, i: number) => {
               const pending = Math.max(0, Number(l.order_qty) - Number(l.received_qty || 0));
+              const rate = Number(l.rate || 0.85);
+              const gstRate = Number(l.gst_rate !== undefined ? l.gst_rate : 18);
+              const taxable = Math.round(pending * rate * 100) / 100;
+              const tax = Math.round(((taxable * gstRate) / 100) * 100) / 100;
+              const total = taxable + tax;
+
               return {
                 _key: `tgl_${++glseq}`,
                 po_line_id: l.id,
+                so_id: l.so_id ? String(l.so_id) : (po.so_id ? String(po.so_id) : ''),
+                style_id: l.style_id ? String(l.style_id) : (po.style_id ? String(po.style_id) : ''),
                 trim_id: l.trim_id,
                 trim_name: l.trim_name,
                 specification: l.specification || '',
@@ -197,6 +267,11 @@ export default function TrimGRNDetailPage() {
                 accepted_qty: pending,
                 rejected_qty: 0,
                 hold_qty: 0,
+                rate,
+                taxable_amount: taxable,
+                gst_rate: gstRate,
+                tax_amount: tax,
+                total_amount: total,
                 supplier_lot_no: '',
                 internal_lot_no: `TLOT-${Date.now().toString().slice(-5)}${i + 1}`,
                 bin_location: 'BIN-T01',
@@ -222,6 +297,15 @@ export default function TrimGRNDetailPage() {
         cur.accepted_qty = Math.max(0, Number(cur.received_qty) - (Number(cur.rejected_qty) + Number(cur.hold_qty)));
       }
 
+      const acc = Number(cur.accepted_qty) || 0;
+      const rate = Number(cur.rate) || 0;
+      const gstRate = Number(cur.gst_rate !== undefined ? cur.gst_rate : 18);
+      const taxable = Math.round(acc * rate * 100) / 100;
+      const tax = Math.round(((taxable * gstRate) / 100) * 100) / 100;
+      cur.taxable_amount = taxable;
+      cur.tax_amount = tax;
+      cur.total_amount = taxable + tax;
+
       copy[idx] = cur;
       return copy;
     });
@@ -239,8 +323,27 @@ export default function TrimGRNDetailPage() {
     const totalAccepted = lines.reduce((s, l) => s + (Number(l.accepted_qty) || 0), 0);
     const totalRejected = lines.reduce((s, l) => s + (Number(l.rejected_qty) || 0), 0);
     const totalHold = lines.reduce((s, l) => s + (Number(l.hold_qty) || 0), 0);
-    return { totalReceived, totalAccepted, totalRejected, totalHold };
-  }, [lines]);
+    const taxableAmount = lines.reduce((s, l) => s + (Number(l.taxable_amount) || 0), 0);
+
+    let cgstAmount = 0;
+    let sgstAmount = 0;
+    let igstAmount = 0;
+
+    lines.forEach((l) => {
+      const tax = Number(l.tax_amount) || 0;
+      if (head.is_interstate) {
+        igstAmount += tax;
+      } else {
+        cgstAmount += Math.round((tax / 2) * 100) / 100;
+        sgstAmount += Math.round((tax / 2) * 100) / 100;
+      }
+    });
+
+    const taxAmount = cgstAmount + sgstAmount + igstAmount;
+    const grandTotal = taxableAmount + taxAmount;
+
+    return { totalReceived, totalAccepted, totalRejected, totalHold, taxableAmount, cgstAmount, sgstAmount, igstAmount, taxAmount, grandTotal };
+  }, [lines, head.is_interstate]);
 
   const handleSave = async () => {
     if (!head.io_no) {
@@ -273,11 +376,19 @@ export default function TrimGRNDetailPage() {
       const payload = {
         ...head,
         po_id: head.po_id ? Number(head.po_id) : null,
+        gate_inward_id: head.gate_inward_id ? Number(head.gate_inward_id) : null,
         style_id: head.style_id ? Number(head.style_id) : null,
         supplier_id: Number(head.supplier_id),
         warehouse_id: Number(head.warehouse_id),
+        is_interstate: head.is_interstate ? 1 : 0,
+        taxable_amount: totals.taxableAmount,
+        tax_amount: totals.taxAmount,
+        igst_amount: totals.igstAmount,
+        net_amount: totals.grandTotal,
         lines: lines.map((l) => ({
           po_line_id: l.po_line_id || null,
+          so_id: l.so_id ? Number(l.so_id) : undefined,
+          style_id: l.style_id ? Number(l.style_id) : undefined,
           trim_id: Number(l.trim_id),
           specification: l.specification,
           color_name: l.color_name,
@@ -288,6 +399,11 @@ export default function TrimGRNDetailPage() {
           accepted_qty: Number(l.accepted_qty),
           rejected_qty: Number(l.rejected_qty || 0),
           hold_qty: Number(l.hold_qty || 0),
+          rate: Number(l.rate),
+          taxable_amount: Number(l.taxable_amount),
+          gst_rate: Number(l.gst_rate),
+          tax_amount: Number(l.tax_amount),
+          total_amount: Number(l.total_amount),
           supplier_lot_no: l.supplier_lot_no,
           internal_lot_no: l.internal_lot_no,
           bin_location: l.bin_location,
@@ -330,7 +446,7 @@ export default function TrimGRNDetailPage() {
               {!isNew && <Badge variant="success">{head.status}</Badge>}
             </div>
             <p className="text-xs text-slate-500">
-              Goods receipt note with QC inspection, lot tracking & unrestricted inventory posting
+              Goods receipt note with QC inspection, amount details, gate inward linkage & inventory posting
             </p>
           </div>
         </div>
@@ -349,14 +465,62 @@ export default function TrimGRNDetailPage() {
         )}
       </div>
 
+      {/* KPI Cards Strip (6 cards: Rec, Acc, Rej, Taxable, Tax, Grand Total) */}
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
+        <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+          <div className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider">Total Received</div>
+          <div className="text-lg font-bold text-slate-900 mt-0.5 font-mono">{fmtDecimal(totals.totalReceived)}</div>
+        </div>
+        <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-200">
+          <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">Accepted Net</div>
+          <div className="text-lg font-bold text-emerald-900 mt-0.5 font-mono">{fmtDecimal(totals.totalAccepted)}</div>
+        </div>
+        <div className="p-3 bg-rose-50/70 rounded-xl border border-rose-200">
+          <div className="text-[11px] font-semibold text-rose-700 uppercase tracking-wider">Rejected / Hold</div>
+          <div className="text-lg font-bold text-rose-900 mt-0.5 font-mono">{fmtDecimal(totals.totalRejected + totals.totalHold)}</div>
+        </div>
+        <div className="p-3 bg-sky-50/70 rounded-xl border border-sky-200">
+          <div className="text-[11px] font-semibold text-sky-700 uppercase tracking-wider">Taxable Value</div>
+          <div className="text-lg font-bold text-sky-900 mt-0.5 font-mono">₹{fmtDecimal(totals.taxableAmount, 2)}</div>
+        </div>
+        <div className="p-3 bg-purple-50/70 rounded-xl border border-purple-200">
+          <div className="text-[11px] font-semibold text-purple-700 uppercase tracking-wider">
+            {head.is_interstate ? 'IGST Amount' : 'CGST + SGST'}
+          </div>
+          <div className="text-lg font-bold text-purple-900 mt-0.5 font-mono">₹{fmtDecimal(totals.taxAmount, 2)}</div>
+        </div>
+        <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-200">
+          <div className="text-[11px] font-semibold text-indigo-700 uppercase tracking-wider">Grand Total</div>
+          <div className="text-lg font-bold text-indigo-950 mt-0.5 font-mono">₹{fmtDecimal(totals.grandTotal, 2)}</div>
+        </div>
+      </div>
+
       {/* Header Form */}
       <div className="card p-5 space-y-4">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 border-b border-slate-100 pb-2">
-          Receipt Details & Order Reference
-        </h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-2 gap-2">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+            <Disc size={14} className="text-indigo-600" />
+            <span>Receipt Details & Gate Linkage</span>
+          </h3>
+
+          {/* Inter-State IGST Toggle */}
+          <label className="flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-1 rounded-lg text-xs transition">
+            <input
+              type="checkbox"
+              checked={head.is_interstate}
+              disabled={!isNew}
+              onChange={(e) => setHead({ ...head, is_interstate: e.target.checked })}
+              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+            />
+            <span className="font-semibold text-slate-700">Inter-State Supply (IGST Applicable)</span>
+            <span className="text-[10px] text-slate-400 font-normal">
+              {head.is_interstate ? 'Single IGST rate applied' : 'Split CGST + SGST applied'}
+            </span>
+          </label>
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-          {isNew && (
+          {isNew ? (
             <div>
               <label className="label">Link with Trim PO (Optional)</label>
               <select
@@ -372,7 +536,42 @@ export default function TrimGRNDetailPage() {
                 ))}
               </select>
             </div>
+          ) : (
+            <div>
+              <label className="label">GRN No</label>
+              <input type="text" value={head.grn_no} disabled className="input text-xs font-mono font-bold" />
+            </div>
           )}
+
+          {/* Gate Entry Mapping */}
+          {isNew ? (
+            <div>
+              <label className="label font-semibold text-indigo-900">Map Gate Entry (Auto-fills details)</label>
+              <select
+                value={head.gate_inward_id}
+                onChange={(e) => handleGateInwardSelect(e.target.value)}
+                className="input text-xs font-medium border-indigo-300 bg-indigo-50/40"
+              >
+                <option value="">-- Select Inward Gate Pass --</option>
+                {gateInwards.map((g: any) => (
+                  <option key={g.id} value={g.id}>
+                    {g.code || g.label} {g.vehicle_no ? `(${g.vehicle_no})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div>
+              <label className="label">Gate Entry</label>
+              <input
+                type="text"
+                value={(existingGrn as any)?.gate_entry_no || (head.gate_inward_id ? `GIN #${head.gate_inward_id}` : 'None')}
+                disabled
+                className="input text-xs"
+              />
+            </div>
+          )}
+
           <div>
             <label className="label">I/O No (Internal Order) *</label>
             <input
@@ -385,7 +584,7 @@ export default function TrimGRNDetailPage() {
             />
           </div>
           <div>
-            <label className="label">Style Reference</label>
+            <label className="label">Style Reference (Default)</label>
             <select
               disabled={!isNew}
               value={head.style_id}
@@ -400,6 +599,9 @@ export default function TrimGRNDetailPage() {
               ))}
             </select>
           </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
           <div>
             <label className="label">Supplier / Vendor *</label>
             <select
@@ -415,9 +617,6 @@ export default function TrimGRNDetailPage() {
               ))}
             </select>
           </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
           <div>
             <label className="label">GRN Date *</label>
             <input
@@ -448,47 +647,50 @@ export default function TrimGRNDetailPage() {
             </select>
           </div>
           <div>
-            <label className="label">Supplier Invoice No</label>
+            <label className="label">Vehicle No</label>
+            <input
+              type="text"
+              disabled={!isNew}
+              value={head.vehicle_no}
+              onChange={(e) => setHead({ ...head, vehicle_no: e.target.value })}
+              placeholder="TN-39-AB-1234"
+              className="input text-xs"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs">
+          <div>
+            <label className="label">Supplier Inv / Bill No</label>
             <input
               type="text"
               disabled={!isNew}
               value={head.supplier_inv_no}
               onChange={(e) => setHead({ ...head, supplier_inv_no: e.target.value })}
               className="input text-xs"
-              placeholder="INV-001"
             />
           </div>
           <div>
-            <label className="label">Supplier DC / Challan No</label>
+            <label className="label">Supplier DC No</label>
             <input
               type="text"
               disabled={!isNew}
               value={head.supplier_dc_no}
               onChange={(e) => setHead({ ...head, supplier_dc_no: e.target.value })}
               className="input text-xs"
-              placeholder="DC-001"
             />
           </div>
-        </div>
-      </div>
-
-      {/* QC Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-        <div className="card p-3 bg-indigo-50/50 border border-indigo-100">
-          <span className="text-slate-500 block text-[11px]">Total Received Qty</span>
-          <span className="text-lg font-bold text-indigo-900">{fmtDecimal(totals.totalReceived)}</span>
-        </div>
-        <div className="card p-3 bg-emerald-50/50 border border-emerald-100">
-          <span className="text-slate-500 block text-[11px]">QC Accepted (Unrestricted Stock)</span>
-          <span className="text-lg font-bold text-emerald-700">+{fmtDecimal(totals.totalAccepted)}</span>
-        </div>
-        <div className="card p-3 bg-red-50/50 border border-red-100">
-          <span className="text-slate-500 block text-[11px]">QC Rejected Qty</span>
-          <span className="text-lg font-bold text-red-700">{fmtDecimal(totals.totalRejected)}</span>
-        </div>
-        <div className="card p-3 bg-amber-50/50 border border-amber-100">
-          <span className="text-slate-500 block text-[11px]">QC Hold / Quarantine</span>
-          <span className="text-lg font-bold text-amber-700">{fmtDecimal(totals.totalHold)}</span>
+          <div>
+            <label className="label">Remarks</label>
+            <input
+              type="text"
+              disabled={!isNew}
+              value={head.remarks}
+              onChange={(e) => setHead({ ...head, remarks: e.target.value })}
+              placeholder="e.g. Received intact, QC passed"
+              className="input text-xs"
+            />
+          </div>
         </div>
       </div>
 
@@ -496,8 +698,13 @@ export default function TrimGRNDetailPage() {
       <div className="card overflow-hidden">
         <div className="px-5 py-3.5 bg-slate-50/70 border-b border-slate-200 flex items-center justify-between">
           <div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">Received Items & QC Split</h3>
-            <p className="text-[11px] text-slate-500">Only Accepted Qty enters unrestricted inventory stock</p>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+              <Layers size={14} className="text-indigo-600" />
+              <span>Inspection, Amount Details & Job Allocation ({lines.length})</span>
+            </h3>
+            <p className="text-[11px] text-slate-500">
+              Multiple jobs supported: assign each line item to a Sales Order or Stock, with live tax and amount details
+            </p>
           </div>
           {isNew && (
             <button
@@ -514,17 +721,21 @@ export default function TrimGRNDetailPage() {
           <table className="table w-full text-xs">
             <thead className="bg-slate-50 text-slate-600 uppercase font-semibold border-b border-slate-200">
               <tr>
-                <th className="py-2.5 px-3 text-left w-44">Trim Item *</th>
-                <th className="py-2.5 px-3 text-left w-32">Internal Lot No *</th>
-                <th className="py-2.5 px-3 text-right w-20">PO Qty</th>
-                <th className="py-2.5 px-3 text-right w-24">Received *</th>
-                <th className="py-2.5 px-3 text-right w-24">Accepted *</th>
-                <th className="py-2.5 px-3 text-right w-20">Rejected</th>
-                <th className="py-2.5 px-3 text-right w-20">Hold</th>
-                <th className="py-2.5 px-3 text-left w-24">Bin</th>
-                <th className="py-2.5 px-3 text-center w-24">QC Status</th>
-                <th className="py-2.5 px-3 text-left w-36">Remarks / Reason</th>
-                {isNew && <th className="py-2.5 px-3 text-center w-12">Action</th>}
+                <th className="py-2.5 px-3 text-left min-w-[140px]">Trim Item *</th>
+                <th className="py-2.5 px-2 text-left min-w-[130px]">Job / Sales Order</th>
+                <th className="py-2.5 px-2 text-left w-24">Spec</th>
+                <th className="py-2.5 px-2 text-right w-16">Rec Qty</th>
+                <th className="py-2.5 px-2 text-right w-16">Acc Qty</th>
+                <th className="py-2.5 px-2 text-right w-14">Rej</th>
+                <th className="py-2.5 px-2 text-right w-14">Hold</th>
+                <th className="py-2.5 px-2 text-right w-16">Rate (₹)</th>
+                <th className="py-2.5 px-2 text-right w-20">Taxable (₹)</th>
+                <th className="py-2.5 px-2 text-center w-14">{head.is_interstate ? 'IGST %' : 'GST %'}</th>
+                <th className="py-2.5 px-2 text-right w-16">Tax (₹)</th>
+                <th className="py-2.5 px-2 text-right w-20">Total (₹)</th>
+                <th className="py-2.5 px-2 text-left w-24">Internal Lot</th>
+                <th className="py-2.5 px-2 text-center w-20">QC</th>
+                {isNew && <th className="py-2.5 px-2 text-center w-8"></th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -534,93 +745,197 @@ export default function TrimGRNDetailPage() {
                     {isNew ? (
                       <select
                         value={line.trim_id}
-                        onChange={(e) => updateLine(idx, { trim_id: e.target.value })}
+                        onChange={(e) => {
+                          const sel = trims.find((t: any) => String(t.id) === e.target.value);
+                          updateLine(idx, {
+                            trim_id: e.target.value,
+                            specification: sel?.specification || line.specification,
+                          });
+                        }}
                         className="input text-xs py-1"
                       >
                         <option value="">-- Select Trim --</option>
                         {trims.map((t: any) => (
-                          <option key={t.id} value={t.id}>{t.trim_name} ({t.trim_type})</option>
+                          <option key={t.id} value={t.id}>
+                            {t.trim_name} ({t.trim_type || t.trim_code})
+                          </option>
                         ))}
                       </select>
                     ) : (
-                      <span className="font-semibold text-slate-900">{line.trim_name}</span>
+                      <span className="font-semibold text-slate-900">{line.trim_name || 'Trim Item'}</span>
                     )}
                   </td>
-                  <td className="py-2 px-3">
-                    <input
-                      type="text"
-                      disabled={!isNew}
-                      value={line.internal_lot_no}
-                      onChange={(e) => updateLine(idx, { internal_lot_no: e.target.value })}
-                      className="input text-xs py-1 font-mono font-semibold text-indigo-700"
-                    />
+
+                  {/* Job / Sales Order Selection */}
+                  <td className="py-2 px-2">
+                    {isNew ? (
+                      <select
+                        value={line.so_id || ''}
+                        onChange={(e) => updateLine(idx, { so_id: e.target.value })}
+                        className="input text-xs py-1 bg-white"
+                      >
+                        <option value="">Stock / General</option>
+                        {salesOrders.map((so: any) => (
+                          <option key={so.id} value={so.id}>
+                            {so.so_no} {so.style_name ? `(${so.style_name})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="font-medium text-slate-700">
+                        {line.so_id ? `SO #${line.so_id}` : 'Stock / General'}
+                      </span>
+                    )}
                   </td>
-                  <td className="py-2 px-3 text-right font-medium text-slate-500">
-                    {fmtDecimal(line.po_qty)}
+
+                  <td className="py-2 px-2">
+                    {isNew ? (
+                      <input
+                        type="text"
+                        value={line.specification}
+                        onChange={(e) => updateLine(idx, { specification: e.target.value })}
+                        className="input text-xs py-1"
+                      />
+                    ) : (
+                      <span className="text-slate-600">{line.specification}</span>
+                    )}
                   </td>
-                  <td className="py-2 px-3">
-                    <input
-                      type="number"
-                      disabled={!isNew}
-                      value={line.received_qty}
-                      onChange={(e) => updateLine(idx, { received_qty: Number(e.target.value) })}
-                      className="input text-xs py-1 text-right font-bold text-slate-900"
-                    />
+
+                  <td className="py-2 px-2 text-right">
+                    {isNew ? (
+                      <input
+                        type="number"
+                        value={line.received_qty}
+                        onChange={(e) => updateLine(idx, { received_qty: Number(e.target.value) })}
+                        className="input text-xs py-1 text-right font-mono font-bold text-slate-800"
+                      />
+                    ) : (
+                      <span className="font-mono">{fmtDecimal(line.received_qty)}</span>
+                    )}
                   </td>
-                  <td className="py-2 px-3">
-                    <input
-                      type="number"
-                      disabled={!isNew}
-                      value={line.accepted_qty}
-                      onChange={(e) => updateLine(idx, { accepted_qty: Number(e.target.value) })}
-                      className="input text-xs py-1 text-right font-bold text-emerald-700"
-                    />
+
+                  <td className="py-2 px-2 text-right">
+                    {isNew ? (
+                      <input
+                        type="number"
+                        value={line.accepted_qty}
+                        onChange={(e) => updateLine(idx, { accepted_qty: Number(e.target.value) })}
+                        className="input text-xs py-1 text-right font-mono font-bold text-emerald-700"
+                      />
+                    ) : (
+                      <span className="font-mono text-emerald-700 font-bold">{fmtDecimal(line.accepted_qty)}</span>
+                    )}
                   </td>
-                  <td className="py-2 px-3">
-                    <input
-                      type="number"
-                      disabled={!isNew}
-                      value={line.rejected_qty}
-                      onChange={(e) => updateLine(idx, { rejected_qty: Number(e.target.value) })}
-                      className="input text-xs py-1 text-right font-medium text-red-600"
-                    />
+
+                  <td className="py-2 px-2 text-right">
+                    {isNew ? (
+                      <input
+                        type="number"
+                        value={line.rejected_qty}
+                        onChange={(e) => updateLine(idx, { rejected_qty: Number(e.target.value) })}
+                        className="input text-xs py-1 text-right font-mono text-rose-600"
+                      />
+                    ) : (
+                      <span className="font-mono text-rose-600">{fmtDecimal(line.rejected_qty)}</span>
+                    )}
                   </td>
-                  <td className="py-2 px-3">
-                    <input
-                      type="number"
-                      disabled={!isNew}
-                      value={line.hold_qty}
-                      onChange={(e) => updateLine(idx, { hold_qty: Number(e.target.value) })}
-                      className="input text-xs py-1 text-right font-medium text-amber-600"
-                    />
+
+                  <td className="py-2 px-2 text-right">
+                    {isNew ? (
+                      <input
+                        type="number"
+                        value={line.hold_qty}
+                        onChange={(e) => updateLine(idx, { hold_qty: Number(e.target.value) })}
+                        className="input text-xs py-1 text-right font-mono text-amber-600"
+                      />
+                    ) : (
+                      <span className="font-mono text-amber-600">{fmtDecimal(line.hold_qty)}</span>
+                    )}
                   </td>
-                  <td className="py-2 px-3">
-                    <input
-                      type="text"
-                      disabled={!isNew}
-                      value={line.bin_location}
-                      onChange={(e) => updateLine(idx, { bin_location: e.target.value })}
-                      placeholder="BIN-A1"
-                      className="input text-xs py-1 font-mono"
-                    />
+
+                  {/* Rate */}
+                  <td className="py-2 px-2 text-right">
+                    {isNew ? (
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={line.rate}
+                        onChange={(e) => updateLine(idx, { rate: Number(e.target.value) })}
+                        className="input text-xs py-1 text-right font-mono"
+                      />
+                    ) : (
+                      <span className="font-mono">₹{fmtDecimal(line.rate, 2)}</span>
+                    )}
                   </td>
-                  <td className="py-2 px-3 text-center">
-                    <Badge variant={line.qc_status === 'ACCEPTED' ? 'success' : line.qc_status === 'HOLD' ? 'warning' : 'danger'}>
-                      {line.qc_status}
-                    </Badge>
+
+                  {/* Taxable Amount */}
+                  <td className="py-2 px-2 text-right font-mono font-medium text-slate-900">
+                    ₹{fmtDecimal(line.taxable_amount, 2)}
                   </td>
-                  <td className="py-2 px-3">
-                    <input
-                      type="text"
-                      disabled={!isNew}
-                      value={line.rejection_reason}
-                      onChange={(e) => updateLine(idx, { rejection_reason: e.target.value })}
-                      placeholder="Defects or remarks"
-                      className="input text-xs py-1"
-                    />
+
+                  {/* GST % */}
+                  <td className="py-2 px-2">
+                    {isNew ? (
+                      <select
+                        value={line.gst_rate}
+                        onChange={(e) => updateLine(idx, { gst_rate: Number(e.target.value) })}
+                        className="input text-xs py-1 text-center font-mono"
+                      >
+                        <option value={0}>0%</option>
+                        <option value={5}>5%</option>
+                        <option value={12}>12%</option>
+                        <option value={18}>18%</option>
+                        <option value={28}>28%</option>
+                      </select>
+                    ) : (
+                      <span className="font-mono text-center block">{line.gst_rate}%</span>
+                    )}
                   </td>
+
+                  {/* Tax Amount */}
+                  <td className="py-2 px-2 text-right font-mono text-purple-700">
+                    ₹{fmtDecimal(line.tax_amount, 2)}
+                  </td>
+
+                  {/* Total Amount */}
+                  <td className="py-2 px-2 text-right font-mono font-bold text-slate-900">
+                    ₹{fmtDecimal(line.total_amount, 2)}
+                  </td>
+
+                  <td className="py-2 px-2">
+                    {isNew ? (
+                      <input
+                        type="text"
+                        value={line.internal_lot_no}
+                        onChange={(e) => updateLine(idx, { internal_lot_no: e.target.value })}
+                        className="input text-xs py-1 font-mono"
+                      />
+                    ) : (
+                      <span className="font-mono text-slate-700">{line.internal_lot_no}</span>
+                    )}
+                  </td>
+
+                  <td className="py-2 px-2 text-center">
+                    {isNew ? (
+                      <select
+                        value={line.qc_status}
+                        onChange={(e) => updateLine(idx, { qc_status: e.target.value as any })}
+                        className="input text-xs py-1 font-bold"
+                      >
+                        <option value="ACCEPTED">ACCEPTED</option>
+                        <option value="PARTIAL">PARTIAL</option>
+                        <option value="REJECTED">REJECTED</option>
+                        <option value="HOLD">HOLD</option>
+                      </select>
+                    ) : (
+                      <Badge variant={line.qc_status === 'ACCEPTED' ? 'success' : 'warning'}>
+                        {line.qc_status}
+                      </Badge>
+                    )}
+                  </td>
+
                   {isNew && (
-                    <td className="py-2 px-3 text-center">
+                    <td className="py-2 px-2 text-center">
                       <button
                         type="button"
                         onClick={() => removeLine(idx)}
@@ -634,7 +949,52 @@ export default function TrimGRNDetailPage() {
                 </tr>
               ))}
             </tbody>
+            <tfoot className="bg-slate-50/80 border-t border-slate-200 font-bold text-slate-800">
+              <tr>
+                <td colSpan={3} className="py-3 px-3 text-right text-slate-600">Totals:</td>
+                <td className="py-3 px-2 text-right font-mono text-slate-800">{fmtDecimal(totals.totalReceived)}</td>
+                <td className="py-3 px-2 text-right font-mono text-emerald-800">{fmtDecimal(totals.totalAccepted)}</td>
+                <td className="py-3 px-2 text-right font-mono text-rose-700">{fmtDecimal(totals.totalRejected)}</td>
+                <td className="py-3 px-2 text-right font-mono text-amber-700">{fmtDecimal(totals.totalHold)}</td>
+                <td className="py-3 px-2 text-right text-slate-500 text-xs">Taxable Total:</td>
+                <td className="py-3 px-2 text-right font-mono">₹{fmtDecimal(totals.taxableAmount, 2)}</td>
+                <td className="py-3 px-2 text-center text-xs text-slate-500">
+                  {head.is_interstate ? 'IGST:' : 'CGST+SGST:'}
+                </td>
+                <td className="py-3 px-2 text-right font-mono text-purple-700">₹{fmtDecimal(totals.taxAmount, 2)}</td>
+                <td className="py-3 px-2 text-right font-mono text-sm font-black text-slate-900">
+                  ₹{fmtDecimal(totals.grandTotal, 2)}
+                </td>
+                <td colSpan={isNew ? 3 : 2}></td>
+              </tr>
+            </tfoot>
           </table>
+        </div>
+
+        {/* Footer Financial Breakdown */}
+        <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row justify-end items-end gap-6 text-xs">
+          <div className="space-y-1 text-right font-mono">
+            <div className="text-slate-600">
+              Taxable Amount: <span className="font-semibold text-slate-900">₹{fmtDecimal(totals.taxableAmount, 2)}</span>
+            </div>
+            {head.is_interstate ? (
+              <div className="text-purple-700">
+                Integrated GST (IGST): <span className="font-bold">₹{fmtDecimal(totals.igstAmount, 2)}</span>
+              </div>
+            ) : (
+              <>
+                <div className="text-slate-600">
+                  Central GST (CGST): <span className="font-semibold">₹{fmtDecimal(totals.cgstAmount, 2)}</span>
+                </div>
+                <div className="text-slate-600">
+                  State GST (SGST): <span className="font-semibold">₹{fmtDecimal(totals.sgstAmount, 2)}</span>
+                </div>
+              </>
+            )}
+            <div className="text-sm font-black text-indigo-900 border-t border-slate-200 pt-1">
+              Net Payable Grand Total: <span>₹{fmtDecimal(totals.grandTotal, 2)}</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -14,6 +14,8 @@ import { fmtDecimal, today } from '../../lib/format';
 interface YarnLine {
   id?: number;
   _key: string;
+  so_id?: string | number;
+  style_id?: string | number;
   yarn_id: string | number;
   yarn_name?: string;
   yarn_type: 'Grey Yarn' | 'Dyed Yarn';
@@ -23,6 +25,7 @@ interface YarnLine {
   composition: string;
   shade_code: string;
   dyeing_mill_id: string;
+  hsn_code: string;
   packs: number;
   pack_weight_kg: number;
   qty: number; // Total KG
@@ -32,7 +35,14 @@ interface YarnLine {
   discount_amount: number;
   freight_amount: number;
   other_charges: number;
+  taxable_amount: number;
   gst_rate: number;
+  cgst_rate: number;
+  cgst_amount: number;
+  sgst_rate: number;
+  sgst_amount: number;
+  igst_rate: number;
+  igst_amount: number;
   net_amount: number;
 }
 
@@ -47,6 +57,7 @@ const emptyYarnLine = (): YarnLine => ({
   composition: '100% Cotton',
   shade_code: '',
   dyeing_mill_id: '',
+  hsn_code: '5205',
   packs: 50,
   pack_weight_kg: 45.36,
   qty: 2268,
@@ -56,7 +67,14 @@ const emptyYarnLine = (): YarnLine => ({
   discount_amount: 0,
   freight_amount: 0,
   other_charges: 0,
+  taxable_amount: 498960,
   gst_rate: 5.0,
+  cgst_rate: 2.5,
+  cgst_amount: 12474,
+  sgst_rate: 2.5,
+  sgst_amount: 12474,
+  igst_rate: 0,
+  igst_amount: 0,
   net_amount: 523908,
 });
 
@@ -70,6 +88,7 @@ export default function YarnPurchaseOrderDetailPage() {
   const suppliers = useLookup('suppliers');
   const yarns = useLookup('yarns');
   const styles = useLookup('styles');
+  const salesOrders = useLookup('sales-orders');
   const parties = useLookup('parties');
 
   const COMPANY_DEFAULT_ADDRESS = "CK Exports\n123 Textile Park, Dharapuram Road\nTirupur - 641604, Tamil Nadu\nGSTIN: 33AAAAA0000A1Z5";
@@ -92,6 +111,7 @@ export default function YarnPurchaseOrderDetailPage() {
     billing_address: COMPANY_DEFAULT_ADDRESS,
     shipping_address: '',
     shipping_to_party_id: '',
+    is_interstate: false,
     freight_charges: 0,
     other_charges: 0,
     tcs_applicable: false,
@@ -138,6 +158,7 @@ export default function YarnPurchaseOrderDetailPage() {
         billing_address: existingPo.billing_address || COMPANY_DEFAULT_ADDRESS,
         shipping_address: existingPo.shipping_address || '',
         shipping_to_party_id: existingPo.shipping_to_party_id ? String(existingPo.shipping_to_party_id) : '',
+        is_interstate: !!existingPo.is_interstate,
         freight_charges: Number(existingPo.freight_charges) || 0,
         other_charges: Number(existingPo.other_charges) || 0,
         tcs_applicable: !!existingPo.tcs_applicable,
@@ -150,6 +171,8 @@ export default function YarnPurchaseOrderDetailPage() {
         const mappedLines: YarnLine[] = existingPo.lines.map((l: any) => ({
           id: l.id,
           _key: `yl_${l.id}`,
+          so_id: l.so_id || '',
+          style_id: l.style_id || '',
           yarn_id: l.yarn_id || '',
           yarn_name: l.yarn_name,
           yarn_type: (l.yarn_type as any) || 'Grey Yarn',
@@ -159,6 +182,7 @@ export default function YarnPurchaseOrderDetailPage() {
           composition: l.composition || '100% Cotton',
           shade_code: l.shade_code || '',
           dyeing_mill_id: l.dyeing_mill_id ? String(l.dyeing_mill_id) : '',
+          hsn_code: l.hsn_code || '5205',
           packs: Number(l.packs) || 0,
           pack_weight_kg: Number(l.pack_weight_kg) || 0,
           qty: Number(l.qty) || 0,
@@ -168,13 +192,52 @@ export default function YarnPurchaseOrderDetailPage() {
           discount_amount: Number(l.discount_amount) || 0,
           freight_amount: Number(l.freight_amount) || 0,
           other_charges: Number(l.other_charges) || 0,
+          taxable_amount: Number(l.taxable_amount) || Number(l.amount) || 0,
           gst_rate: Number(l.gst_rate) || 5.0,
+          cgst_rate: Number(l.cgst_rate) || 0,
+          cgst_amount: Number(l.cgst_amount) || 0,
+          sgst_rate: Number(l.sgst_rate) || 0,
+          sgst_amount: Number(l.sgst_amount) || 0,
+          igst_rate: Number(l.igst_rate) || 0,
+          igst_amount: Number(l.igst_amount) || 0,
           net_amount: Number(l.net_amount) || Number(l.amount) || 0,
         }));
         setLines(mappedLines);
       }
     }
   }, [existingPo, isNew]);
+
+  // Handle Interstate Toggle and recalculate tax distribution across lines
+  const handleToggleInterstate = (isInter: boolean) => {
+    setHeader((h) => ({ ...h, is_interstate: isInter }));
+    setLines((curr) =>
+      curr.map((l) => {
+        const taxable = l.taxable_amount || l.amount || 0;
+        const gstRate = Number(l.gst_rate) || 5.0;
+        let cgst_rate = 0, cgst_amount = 0, sgst_rate = 0, sgst_amount = 0, igst_rate = 0, igst_amount = 0;
+        if (isInter) {
+          igst_rate = gstRate;
+          igst_amount = Math.round((taxable * (gstRate / 100)) * 100) / 100;
+        } else {
+          cgst_rate = gstRate / 2;
+          cgst_amount = Math.round((taxable * (gstRate / 200)) * 100) / 100;
+          sgst_rate = gstRate / 2;
+          sgst_amount = Math.round((taxable * (gstRate / 200)) * 100) / 100;
+        }
+        const totalTax = cgst_amount + sgst_amount + igst_amount;
+        return {
+          ...l,
+          cgst_rate,
+          cgst_amount,
+          sgst_rate,
+          sgst_amount,
+          igst_rate,
+          igst_amount,
+          net_amount: Math.round((taxable + totalTax) * 100) / 100,
+        };
+      })
+    );
+  };
 
   // Recalculate line amounts
   const updateLine = (idx: number, updates: Partial<YarnLine>) => {
@@ -190,9 +253,27 @@ export default function YarnPurchaseOrderDetailPage() {
       // Financials
       const baseAmt = (Number(cur.qty) || 0) * (Number(cur.rate) || 0);
       cur.amount = Math.round(baseAmt * 100) / 100;
-      const taxable = cur.amount - (Number(cur.discount_amount) || 0) + (Number(cur.freight_amount) || 0) + (Number(cur.other_charges) || 0);
-      const taxAmt = Math.round((taxable * (Number(cur.gst_rate) || 0) / 100) * 100) / 100;
-      cur.net_amount = Math.round((taxable + taxAmt) * 100) / 100;
+      const taxable = Math.max(0, cur.amount - (Number(cur.discount_amount) || 0) + (Number(cur.freight_amount) || 0) + (Number(cur.other_charges) || 0));
+      cur.taxable_amount = taxable;
+
+      const gstRate = Number(cur.gst_rate) || 5.0;
+      if (header.is_interstate) {
+        cur.igst_rate = gstRate;
+        cur.igst_amount = Math.round((taxable * (gstRate / 100)) * 100) / 100;
+        cur.cgst_rate = 0;
+        cur.cgst_amount = 0;
+        cur.sgst_rate = 0;
+        cur.sgst_amount = 0;
+      } else {
+        cur.cgst_rate = gstRate / 2;
+        cur.cgst_amount = Math.round((taxable * (gstRate / 200)) * 100) / 100;
+        cur.sgst_rate = gstRate / 2;
+        cur.sgst_amount = Math.round((taxable * (gstRate / 200)) * 100) / 100;
+        cur.igst_rate = 0;
+        cur.igst_amount = 0;
+      }
+      const totalTax = cur.cgst_amount + cur.sgst_amount + cur.igst_amount;
+      cur.net_amount = Math.round((taxable + totalTax) * 100) / 100;
 
       copy[idx] = cur;
       return copy;
@@ -214,7 +295,10 @@ export default function YarnPurchaseOrderDetailPage() {
     let dyedKg = 0;
     let totalPacks = 0;
     let gross = 0;
-    let tax = 0;
+    let taxableAmount = 0;
+    let totalCgst = 0;
+    let totalSgst = 0;
+    let totalIgst = 0;
     let net = 0;
 
     for (const l of lines) {
@@ -229,8 +313,10 @@ export default function YarnPurchaseOrderDetailPage() {
         totalPacks += Number(l.packs) || 0;
       }
       gross += Number(l.amount) || 0;
-      const taxable = (Number(l.amount) || 0) - (Number(l.discount_amount) || 0) + (Number(l.freight_amount) || 0) + (Number(l.other_charges) || 0);
-      tax += (taxable * (Number(l.gst_rate) || 0)) / 100;
+      taxableAmount += Number(l.taxable_amount) || 0;
+      totalCgst += Number(l.cgst_amount) || 0;
+      totalSgst += Number(l.sgst_amount) || 0;
+      totalIgst += Number(l.igst_amount) || 0;
       net += Number(l.net_amount) || 0;
     }
 
@@ -241,7 +327,23 @@ export default function YarnPurchaseOrderDetailPage() {
     const roundOff = Number(header.round_off) || 0;
     const grandTotal = Math.round((baseBeforeTcs + tcsAmt + roundOff) * 100) / 100;
 
-    return { totalKg, greyKg, dyedKg, totalPacks, gross, tax, net, freight, other, tcsAmt, roundOff, grandTotal };
+    return {
+      totalKg,
+      greyKg,
+      dyedKg,
+      totalPacks,
+      gross,
+      taxableAmount,
+      totalCgst,
+      totalSgst,
+      totalIgst,
+      net,
+      freight,
+      other,
+      tcsAmt,
+      roundOff,
+      grandTotal,
+    };
   }, [lines, header.freight_charges, header.other_charges, header.tcs_applicable, header.tcs_rate, header.round_off]);
 
   const handleShipToPartyChange = (partyIdStr: string) => {
@@ -320,12 +422,23 @@ export default function YarnPurchaseOrderDetailPage() {
         shipping_to_party_id: header.shipping_to_party_id ? Number(header.shipping_to_party_id) : null,
         currency_id: 1,
         exchange_rate: 1.0,
+        is_interstate: header.is_interstate ? 1 : 0,
+        taxable_amount: totals.taxableAmount,
+        cgst_amount: totals.totalCgst,
+        sgst_amount: totals.totalSgst,
+        igst_amount: totals.totalIgst,
         total_amount: totals.gross,
-        tax_amount: totals.tax,
-        grand_total: totals.net,
+        tax_amount: totals.totalCgst + totals.totalSgst + totals.totalIgst,
+        grand_total: totals.grandTotal,
+        freight_charges: totals.freight,
+        other_charges: totals.other,
+        round_off: totals.roundOff,
         lines: lines.map((l) => ({
           material_type: 'YARN',
           yarn_id: Number(l.yarn_id) || null,
+          so_id: l.so_id ? Number(l.so_id) : null,
+          style_id: l.style_id ? Number(l.style_id) : null,
+          hsn_code: l.hsn_code || '5205',
           description: l.yarn_name || `${l.yarn_type} ${l.yarn_count_str}`,
           yarn_type: l.yarn_type,
           purchase_basis: l.purchase_basis,
@@ -343,7 +456,14 @@ export default function YarnPurchaseOrderDetailPage() {
           discount_amount: l.discount_amount,
           freight_amount: l.freight_amount,
           other_charges: l.other_charges,
+          taxable_amount: l.taxable_amount,
           gst_rate: l.gst_rate,
+          cgst_rate: l.cgst_rate,
+          cgst_amount: l.cgst_amount,
+          sgst_rate: l.sgst_rate,
+          sgst_amount: l.sgst_amount,
+          igst_rate: l.igst_rate,
+          igst_amount: l.igst_amount,
           net_amount: l.net_amount,
         })),
       };
@@ -435,9 +555,20 @@ export default function YarnPurchaseOrderDetailPage() {
 
       {/* Header Fields Card */}
       <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm space-y-4">
-        <div className="text-xs font-semibold text-slate-900 uppercase tracking-wider flex items-center gap-1.5 pb-2 border-b border-slate-100">
-          <Disc size={14} className="text-amber-600" />
-          <span>Purchase Order Details</span>
+        <div className="text-xs font-semibold text-slate-900 uppercase tracking-wider flex items-center justify-between pb-2 border-b border-slate-100">
+          <div className="flex items-center gap-1.5">
+            <Disc size={14} className="text-amber-600" />
+            <span>Purchase Order Details</span>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer font-normal text-xs text-slate-700 bg-amber-50/60 px-2.5 py-1 rounded-md border border-amber-200">
+            <input
+              type="checkbox"
+              checked={header.is_interstate}
+              onChange={(e) => handleToggleInterstate(e.target.checked)}
+              className="h-3.5 w-3.5 rounded text-amber-600 focus:ring-amber-500"
+            />
+            <span className="font-semibold text-slate-800">Inter-state PO (IGST Calculation)</span>
+          </label>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
@@ -615,17 +746,26 @@ export default function YarnPurchaseOrderDetailPage() {
             <thead>
               <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                 <th className="py-2.5 px-3">Yarn Master Item</th>
+                <th className="py-2.5 px-2">Job / Sales Order</th>
                 <th className="py-2.5 px-2">Type</th>
                 <th className="py-2.5 px-2">Count</th>
-                <th className="py-2.5 px-2">Category</th>
-                <th className="py-2.5 px-2">Composition</th>
-                <th className="py-2.5 px-2">Dyed Specs</th>
+                <th className="py-2.5 px-2">HSN</th>
                 <th className="py-2.5 px-2">Basis</th>
                 <th className="py-2.5 px-2 text-center">Packs × Wt</th>
                 <th className="py-2.5 px-2 text-right">Total KG</th>
                 <th className="py-2.5 px-2 text-right">Rate/KG (₹)</th>
-                <th className="py-2.5 px-2 text-right">Amount (₹)</th>
-                <th className="py-2.5 px-2 text-center">GST %</th>
+                <th className="py-2.5 px-2 text-right">Taxable (₹)</th>
+                {header.is_interstate ? (
+                  <>
+                    <th className="py-2.5 px-2 text-center">IGST %</th>
+                    <th className="py-2.5 px-2 text-right">IGST (₹)</th>
+                  </>
+                ) : (
+                  <>
+                    <th className="py-2.5 px-2 text-center">GST %</th>
+                    <th className="py-2.5 px-2 text-right">CGST+SGST (₹)</th>
+                  </>
+                )}
                 <th className="py-2.5 px-2 text-right">Net (₹)</th>
                 <th className="py-2.5 px-2 text-center">Del</th>
               </tr>
@@ -651,12 +791,28 @@ export default function YarnPurchaseOrderDetailPage() {
                             composition: String(opt?.composition || l.composition),
                           });
                         }}
-                        className="w-full text-xs rounded border border-slate-300 py-1 px-1.5 focus:border-amber-500"
+                        className="w-full text-xs rounded border border-slate-300 py-1 px-1.5 focus:border-amber-500 bg-white"
                       >
                         <option value="">Select Yarn</option>
                         {toOptions(yarns.data).map((o) => (
                           <option key={o.value} value={o.value}>
                             {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+
+                    {/* Job / Sales Order Allocation */}
+                    <td className="py-2.5 px-2 min-w-[130px]">
+                      <select
+                        value={l.so_id || ''}
+                        onChange={(e) => updateLine(idx, { so_id: e.target.value })}
+                        className="w-full text-xs rounded border border-slate-300 py-1 px-1 bg-white"
+                      >
+                        <option value="">Stock / General</option>
+                        {toOptions(salesOrders.data).map((so) => (
+                          <option key={so.value} value={so.value}>
+                            {so.label}
                           </option>
                         ))}
                       </select>
@@ -686,65 +842,20 @@ export default function YarnPurchaseOrderDetailPage() {
                         type="text"
                         value={l.yarn_count_str}
                         onChange={(e) => updateLine(idx, { yarn_count_str: e.target.value })}
-                        className="w-16 text-xs font-mono font-medium border border-slate-300 rounded px-1.5 py-1"
+                        className="w-14 text-xs font-mono font-medium border border-slate-300 rounded px-1.5 py-1"
                         placeholder="30s"
                       />
                     </td>
 
-                    {/* Category */}
-                    <td className="py-2.5 px-2">
-                      <select
-                        value={l.yarn_category}
-                        onChange={(e) => updateLine(idx, { yarn_category: e.target.value })}
-                        className="w-20 text-xs rounded border border-slate-300 py-1 px-1"
-                      >
-                        <option value="Combed">Combed</option>
-                        <option value="Carded">Carded</option>
-                        <option value="Compact">Compact</option>
-                        <option value="OE">OE</option>
-                        <option value="Slub">Slub</option>
-                        <option value="Melange">Melange</option>
-                      </select>
-                    </td>
-
-                    {/* Composition */}
+                    {/* HSN Code */}
                     <td className="py-2.5 px-2">
                       <input
                         type="text"
-                        value={l.composition}
-                        onChange={(e) => updateLine(idx, { composition: e.target.value })}
-                        className="w-24 text-xs border border-slate-300 rounded px-1.5 py-1"
-                        placeholder="100% Cotton"
+                        value={l.hsn_code}
+                        onChange={(e) => updateLine(idx, { hsn_code: e.target.value })}
+                        className="w-14 text-xs font-mono border border-slate-300 rounded px-1 py-1"
+                        placeholder="5205"
                       />
-                    </td>
-
-                    {/* Conditional Dyed Specs */}
-                    <td className="py-2.5 px-2">
-                      {isDyed ? (
-                        <div className="space-y-1">
-                          <input
-                            type="text"
-                            value={l.shade_code}
-                            onChange={(e) => updateLine(idx, { shade_code: e.target.value })}
-                            placeholder="Shade/Colour"
-                            className="w-24 text-[11px] border border-purple-300 rounded px-1.5 py-0.5 bg-purple-50/50"
-                          />
-                          <select
-                            value={l.dyeing_mill_id}
-                            onChange={(e) => updateLine(idx, { dyeing_mill_id: e.target.value })}
-                            className="w-24 text-[10px] border border-slate-300 rounded px-1 py-0.5"
-                          >
-                            <option value="">Dyeing Mill</option>
-                            {toOptions(suppliers.data).map((s) => (
-                              <option key={s.value} value={s.value}>
-                                {s.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      ) : (
-                        <span className="text-[11px] text-slate-400 italic">N/A (Grey)</span>
-                      )}
                     </td>
 
                     {/* Purchase Basis: DIRECT_KG vs PACK_BAG */}
@@ -754,7 +865,7 @@ export default function YarnPurchaseOrderDetailPage() {
                         onChange={(e) =>
                           updateLine(idx, { purchase_basis: e.target.value as any })
                         }
-                        className="text-xs rounded border border-slate-300 py-1 px-1 font-medium text-slate-700"
+                        className="text-xs rounded border border-slate-300 py-1 px-1 font-medium text-slate-700 bg-white"
                       >
                         <option value="DIRECT_KG">Direct KG</option>
                         <option value="PACK_BAG">Pack / Bag</option>
@@ -814,30 +925,57 @@ export default function YarnPurchaseOrderDetailPage() {
                         onChange={(e) =>
                           updateLine(idx, { rate: parseFloat(e.target.value) || 0 })
                         }
-                        className="w-20 text-xs text-right font-medium border border-slate-300 rounded px-1.5 py-1"
+                        className="w-16 text-xs text-right font-medium border border-slate-300 rounded px-1.5 py-1"
                       />
                     </td>
 
-                    {/* Amount */}
-                    <td className="py-2.5 px-2 text-right font-semibold text-slate-900">
-                      ₹{fmtDecimal(l.amount)}
+                    {/* Taxable Amount */}
+                    <td className="py-2.5 px-2 text-right font-medium text-slate-800">
+                      ₹{fmtDecimal(l.taxable_amount || l.amount)}
                     </td>
 
-                    {/* GST % */}
-                    <td className="py-2.5 px-2 text-center">
-                      <select
-                        value={l.gst_rate}
-                        onChange={(e) =>
-                          updateLine(idx, { gst_rate: parseFloat(e.target.value) || 0 })
-                        }
-                        className="text-xs rounded border border-slate-300 py-1 px-1 text-center"
-                      >
-                        <option value="5">5%</option>
-                        <option value="12">12%</option>
-                        <option value="18">18%</option>
-                        <option value="0">0%</option>
-                      </select>
-                    </td>
+                    {/* GST / IGST Fields */}
+                    {header.is_interstate ? (
+                      <>
+                        <td className="py-2.5 px-2 text-center">
+                          <select
+                            value={l.gst_rate}
+                            onChange={(e) =>
+                              updateLine(idx, { gst_rate: parseFloat(e.target.value) || 0 })
+                            }
+                            className="text-xs rounded border border-purple-300 py-1 px-1 text-center bg-purple-50/40 font-semibold text-purple-800"
+                          >
+                            <option value="5">5%</option>
+                            <option value="12">12%</option>
+                            <option value="18">18%</option>
+                            <option value="0">0%</option>
+                          </select>
+                        </td>
+                        <td className="py-2.5 px-2 text-right font-semibold text-purple-700">
+                          ₹{fmtDecimal(l.igst_amount)}
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="py-2.5 px-2 text-center">
+                          <select
+                            value={l.gst_rate}
+                            onChange={(e) =>
+                              updateLine(idx, { gst_rate: parseFloat(e.target.value) || 0 })
+                            }
+                            className="text-xs rounded border border-slate-300 py-1 px-1 text-center bg-white"
+                          >
+                            <option value="5">5%</option>
+                            <option value="12">12%</option>
+                            <option value="18">18%</option>
+                            <option value="0">0%</option>
+                          </select>
+                        </td>
+                        <td className="py-2.5 px-2 text-right font-medium text-slate-700">
+                          ₹{fmtDecimal((l.cgst_amount || 0) + (l.sgst_amount || 0))}
+                        </td>
+                      </>
+                    )}
 
                     {/* Net Amount */}
                     <td className="py-2.5 px-2 text-right font-bold text-slate-900">
@@ -862,7 +1000,7 @@ export default function YarnPurchaseOrderDetailPage() {
 
         {/* Footer Financial Cockpit */}
         <div className="pt-4 border-t border-slate-200 bg-slate-50/70 p-4 rounded-xl space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 text-xs pb-3 border-b border-slate-200">
+          <div className="grid grid-cols-2 sm:grid-cols-6 gap-4 text-xs pb-3 border-b border-slate-200">
             <div>
               <span className="text-slate-500 block">Total Yarn Weight</span>
               <span className="font-bold text-amber-700 text-sm">{fmtDecimal(totals.totalKg)} KG</span>
@@ -874,16 +1012,26 @@ export default function YarnPurchaseOrderDetailPage() {
               </span>
             </div>
             <div>
-              <span className="text-slate-500 block">Total Bags / Packs</span>
+              <span className="text-slate-500 block">Total Bags</span>
               <span className="font-bold text-slate-800 text-sm">{totals.totalPacks} Bags</span>
             </div>
             <div>
-              <span className="text-slate-500 block">GST Taxes</span>
-              <span className="font-bold text-slate-800 text-sm">₹{fmtDecimal(totals.tax)}</span>
+              <span className="text-slate-500 block">Taxable Amount</span>
+              <span className="font-bold text-slate-800 text-sm">₹{fmtDecimal(totals.taxableAmount)}</span>
+            </div>
+            <div>
+              <span className="text-slate-500 block">
+                {header.is_interstate ? 'IGST (Inter-state)' : 'CGST + SGST'}
+              </span>
+              <span className="font-bold text-purple-700 text-sm">
+                {header.is_interstate
+                  ? `₹${fmtDecimal(totals.totalIgst)}`
+                  : `₹${fmtDecimal(totals.totalCgst + totals.totalSgst)}`}
+              </span>
             </div>
             <div className="text-right sm:text-left">
-              <span className="text-slate-500 block">Items Subtotal</span>
-              <span className="font-bold text-slate-900 text-sm">₹{fmtDecimal(totals.net)}</span>
+              <span className="text-slate-500 block">Net PO Value</span>
+              <span className="font-bold text-emerald-700 text-sm">₹{fmtDecimal(totals.grandTotal)}</span>
             </div>
           </div>
 

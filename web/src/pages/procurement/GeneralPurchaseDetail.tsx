@@ -66,6 +66,7 @@ export function GeneralPurchaseDetailPage() {
   const salesOrders = useLookup('sales-orders');
   const styles = useLookup('styles');
   const departments = useLookup('departments');
+  const gateInwards = useLookup('gate-inwards');
 
   // Header State
   const [head, setHead] = useState<Record<string, any>>({
@@ -79,6 +80,8 @@ export function GeneralPurchaseDetailPage() {
     exchange_rate: 1,
     payment_terms: '30 Days Net',
     reference_po_id: '',
+    gate_inward_id: '',
+    is_interstate: false,
     remarks: '',
     approval_state: 'DRAFT',
     status_id: '',
@@ -129,6 +132,8 @@ export function GeneralPurchaseDetailPage() {
         exchange_rate: p.exchange_rate || 1,
         payment_terms: p.payment_terms || '',
         reference_po_id: p.reference_po_id || '',
+        gate_inward_id: p.gate_inward_id ? String(p.gate_inward_id) : '',
+        is_interstate: Boolean(p.is_interstate),
         remarks: p.remarks || '',
         approval_state: p.approval_state || 'DRAFT',
         status_id: p.status_id || '',
@@ -282,6 +287,9 @@ export function GeneralPurchaseDetailPage() {
   const totals = useMemo(() => {
     let subtotal = 0;
     let totalDiscount = 0;
+    let cgstAmount = 0;
+    let sgstAmount = 0;
+    let igstAmount = 0;
     let totalTax = 0;
     let grandTotal = 0;
 
@@ -290,14 +298,22 @@ export function GeneralPurchaseDetailPage() {
       const r = Number(l.rate) || 0;
       const raw = q * r;
       const disc = (raw * (Number(l.discount_pct) || 0)) / 100;
+      const tax = l.tax_amount || 0;
       subtotal += raw;
       totalDiscount += disc;
-      totalTax += l.tax_amount || 0;
+      totalTax += tax;
       grandTotal += l.amount || 0;
+
+      if (head.is_interstate) {
+        igstAmount += tax;
+      } else {
+        cgstAmount += Math.round((tax / 2) * 100) / 100;
+        sgstAmount += Math.round((tax / 2) * 100) / 100;
+      }
     }
 
-    return { subtotal, totalDiscount, totalTax, grandTotal };
-  }, [lines]);
+    return { subtotal, totalDiscount, totalTax, cgstAmount, sgstAmount, igstAmount, grandTotal };
+  }, [lines, head.is_interstate]);
 
   // Save General Purchase
   const handleSave = async (submitState: 'DRAFT' | 'APPROVED' | 'POSTED' = 'DRAFT') => {
@@ -347,9 +363,14 @@ export function GeneralPurchaseDetailPage() {
         exchange_rate: Number(head.exchange_rate) || 1,
         payment_terms: head.payment_terms || null,
         reference_po_id: head.reference_po_id ? Number(head.reference_po_id) : null,
+        gate_inward_id: head.gate_inward_id ? Number(head.gate_inward_id) : null,
+        is_interstate: head.is_interstate ? 1 : 0,
         subtotal: totals.subtotal,
         discount_amount: totals.totalDiscount,
         tax_amount: totals.totalTax,
+        cgst_amount: totals.cgstAmount,
+        sgst_amount: totals.sgstAmount,
+        igst_amount: totals.igstAmount,
         grand_total: totals.grandTotal,
         approval_state: submitState,
         status_id: head.status_id ? Number(head.status_id) : null,
@@ -456,10 +477,44 @@ export function GeneralPurchaseDetailPage() {
       </div>
 
       {/* Header Form Card */}
-      <div className="rounded-xl border border-surface-border bg-white p-5 shadow-xs">
-        <div className="mb-4 flex items-center gap-2 border-b border-surface-border pb-2 text-sm font-semibold text-slate-800">
-          <ShoppingCart size={16} className="text-brand-600" />
-          General Purchase Details
+      <div className="rounded-xl border border-surface-border bg-white p-5 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-surface-border pb-2 gap-2">
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+            <ShoppingCart size={16} className="text-brand-600" />
+            General Purchase Details &amp; Gate Entry Linkage
+          </div>
+
+          {/* Inter-State IGST Toggle */}
+          <label className="flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg text-xs transition">
+            <input
+              type="checkbox"
+              checked={head.is_interstate}
+              onChange={(e) => {
+                const isInter = e.target.checked;
+                setHead({ ...head, is_interstate: isInter });
+                // Recalculate all lines with updated IGST vs GST
+                setLines((cur) => cur.map((l) => {
+                  const rawTotal = (Number(l.qty) || 0) * (Number(l.rate) || 0);
+                  const discountAmount = (rawTotal * (Number(l.discount_pct) || 0)) / 100;
+                  const taxableAmount = Math.max(0, rawTotal - discountAmount);
+                  const effectiveRate = Number(l.gst_rate) || Number(l.igst_rate) || 18;
+                  const taxAmt = (taxableAmount * effectiveRate) / 100;
+                  return {
+                    ...l,
+                    igst_rate: isInter ? effectiveRate : 0,
+                    gst_rate: isInter ? 0 : effectiveRate,
+                    tax_amount: taxAmt,
+                    amount: taxableAmount + taxAmt,
+                  };
+                }));
+              }}
+              className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+            />
+            <span className="font-semibold text-slate-700">Inter-State Supply (IGST Applicable)</span>
+            <span className="text-[10px] text-slate-400 font-normal">
+              {head.is_interstate ? 'Single IGST tax rate' : 'Split CGST + SGST'}
+            </span>
+          </label>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -501,6 +556,23 @@ export function GeneralPurchaseDetailPage() {
             value={head.purchase_type}
             onChange={(e) => setHead({ ...head, purchase_type: e.target.value })}
             required
+          />
+
+          <Select
+            label="Map Gate Inward Entry"
+            placeholder="-- Direct / Select Gate Pass --"
+            options={toOptions(gateInwards.data || [])}
+            value={head.gate_inward_id}
+            onChange={(e) => {
+              const gid = e.target.value;
+              const found = (gateInwards.data || []).find((g: any) => String(g.id) === gid);
+              setHead((h) => ({
+                ...h,
+                gate_inward_id: gid,
+                supplier_id: found?.party_id ? String(found.party_id) : h.supplier_id,
+                supplier_inv_no: found?.supplier_inv_no || h.supplier_inv_no,
+              }));
+            }}
           />
 
           <Input
@@ -870,10 +942,17 @@ export function GeneralPurchaseDetailPage() {
           </div>
 
           <div className="flex items-center gap-6">
-            <div className="text-right text-xs text-slate-500">
+            <div className="text-right text-xs text-slate-500 space-y-0.5 font-mono">
               <div>Subtotal: ₹{fmtDecimal(totals.subtotal, 2)}</div>
               {totals.totalDiscount > 0 && <div>Discount: -₹{fmtDecimal(totals.totalDiscount, 2)}</div>}
-              <div>Tax (GST): +₹{fmtDecimal(totals.totalTax, 2)}</div>
+              {head.is_interstate ? (
+                <div className="text-purple-700 font-semibold">IGST: +₹{fmtDecimal(totals.igstAmount, 2)}</div>
+              ) : (
+                <>
+                  <div>CGST: +₹{fmtDecimal(totals.cgstAmount, 2)}</div>
+                  <div>SGST: +₹{fmtDecimal(totals.sgstAmount, 2)}</div>
+                </>
+              )}
             </div>
 
             <div className="border-l border-slate-300 pl-6 text-right">
