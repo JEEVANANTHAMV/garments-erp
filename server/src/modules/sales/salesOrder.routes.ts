@@ -178,34 +178,9 @@ salesOrderRouter.get('/', requirePermission('SALES_ORDER.VIEW'), ah(async (req, 
     total: total?.total ?? 0, totalPages: Math.ceil((total?.total ?? 0) / q.pageSize) } });
 }));
 
-// ------------------------------------------------------------- GET ONE
-salesOrderRouter.get('/:id', requirePermission('SALES_ORDER.VIEW'), ah(async (req, res) => {
-  const id = Number(req.params.id);
-  const so = await queryOne(
-    `SELECT t.*, b.party_name AS buyer_name, b.party_code AS buyer_code,
-            ag.party_name AS agent_name, mer.party_name AS merchandiser_name, mer.party_code AS merchandiser_code,
-            cur.code AS currency_code, cs.label AS status_label, dc.name AS destination_name
-       FROM trx_sales_order t
-       LEFT JOIN mst_party b   ON b.id  = t.buyer_id
-       LEFT JOIN mst_party ag  ON ag.id = t.agent_id
-       LEFT JOIN mst_party mer ON mer.id = t.merchandiser_id
-       LEFT JOIN cfg_currency cur ON cur.id = t.currency_id
-       LEFT JOIN cfg_status cs ON cs.id = t.status_id
-       LEFT JOIN cfg_country dc ON dc.id = t.destination_country
-      WHERE t.id = ? AND t.company_id = ?`, [id, req.user!.companyId]);
-  if (!so) throw NotFound('Sales order not found');
-
-  const [lines, prodOrders, invoices] = await Promise.all([
-    loadLines(id),
-    query(`SELECT id, po_prod_no, style_id, order_qty, produced_qty, approval_state
-             FROM trx_production_order WHERE so_id = ? ORDER BY id`, [id]),
-    query(`SELECT id, invoice_no, invoice_date, total_value FROM trx_commercial_invoice
-            WHERE so_id = ? ORDER BY id`, [id]),
-  ]);
-  res.json({ data: { ...so, lines, production_orders: prodOrders, invoices } });
-}));
-
 // -------------------------------------------------------------- NEXT I/O NUMBER
+// Must stay above '/:id' — Express matches in declaration order, and a literal
+// path declared after a parameterised one is never reached.
 salesOrderRouter.get('/next-io-number', requirePermission('SALES_ORDER.CREATE'), ah(async (req, res) => {
   const companyId = req.user!.companyId;
   const buyerId = req.query.buyer_id ? Number(req.query.buyer_id) : null;
@@ -238,6 +213,33 @@ salesOrderRouter.get('/next-io-number', requirePermission('SALES_ORDER.CREATE'),
   const ioNo = `${prefix}-IO-${currentYear}-${seq}`;
 
   res.json({ data: { io_no: ioNo, prefix } });
+}));
+
+// ------------------------------------------------------------- GET ONE
+salesOrderRouter.get('/:id', requirePermission('SALES_ORDER.VIEW'), ah(async (req, res) => {
+  const id = Number(req.params.id);
+  const so = await queryOne(
+    `SELECT t.*, b.party_name AS buyer_name, b.party_code AS buyer_code,
+            ag.party_name AS agent_name, mer.party_name AS merchandiser_name, mer.party_code AS merchandiser_code,
+            cur.code AS currency_code, cs.label AS status_label, dc.name AS destination_name
+       FROM trx_sales_order t
+       LEFT JOIN mst_party b   ON b.id  = t.buyer_id
+       LEFT JOIN mst_party ag  ON ag.id = t.agent_id
+       LEFT JOIN mst_party mer ON mer.id = t.merchandiser_id
+       LEFT JOIN cfg_currency cur ON cur.id = t.currency_id
+       LEFT JOIN cfg_status cs ON cs.id = t.status_id
+       LEFT JOIN cfg_country dc ON dc.id = t.destination_country
+      WHERE t.id = ? AND t.company_id = ?`, [id, req.user!.companyId]);
+  if (!so) throw NotFound('Sales order not found');
+
+  const [lines, prodOrders, invoices] = await Promise.all([
+    loadLines(id),
+    query(`SELECT id, po_prod_no, style_id, order_qty, produced_qty, approval_state
+             FROM trx_production_order WHERE so_id = ? ORDER BY id`, [id]),
+    query(`SELECT id, invoice_no, invoice_date, total_value FROM trx_commercial_invoice
+            WHERE so_id = ? ORDER BY id`, [id]),
+  ]);
+  res.json({ data: { ...so, lines, production_orders: prodOrders, invoices } });
 }));
 
 async function resolveIoNumber(tx: Tx, companyId: number, buyerId: number, requestedIoNo?: string | null): Promise<string> {
