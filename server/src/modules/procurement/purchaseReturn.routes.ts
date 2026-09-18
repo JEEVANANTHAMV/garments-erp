@@ -46,8 +46,21 @@ purchaseReturnRouter.get('/purchase-returns/grn/:grnId/returnable-items', requir
                JOIN trx_purchase_return pr ON pr.id = prl.return_id
               WHERE prl.grn_line_id = gl.id AND pr.status != 'CANCELLED'
            ), 0) AS previous_returned_qty,
-           COALESCE(gl.issued_qty, 0) AS issued_qty
+           -- Issued/consumed comes from the stock ledger, not the GRN line:
+           -- trx_grn_line has no issued_qty column. RETURN movements are
+           -- excluded because they are already counted as previous_returned_qty.
+           COALESCE((
+             SELECT SUM(sl.qty_out)
+               FROM trx_stock_ledger sl
+              WHERE sl.company_id = g.company_id
+                AND sl.material_type = gl.material_type
+                AND sl.txn_type <> 'RETURN'
+                AND ((gl.yarn_id   IS NOT NULL AND sl.yarn_id   = gl.yarn_id)
+                  OR (gl.fabric_id IS NOT NULL AND sl.fabric_id = gl.fabric_id)
+                  OR (gl.trim_id   IS NOT NULL AND sl.trim_id   = gl.trim_id))
+           ), 0) AS issued_qty
       FROM trx_grn_line gl
+      JOIN trx_grn g ON g.id = gl.grn_id
       LEFT JOIN mst_yarn y ON y.id = gl.yarn_id
       LEFT JOIN mst_fabric f ON f.id = gl.fabric_id
       LEFT JOIN cfg_uom u ON u.id = gl.uom_id
