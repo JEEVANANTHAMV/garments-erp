@@ -2204,7 +2204,10 @@ async function seedDemo(ctx: {
     ['JW_RECEIPT', 'trx_jobwork_receipt'],
     ['JW_IN', 'trx_jobwork_in'],
     ['JW_INVOICE', 'trx_jobwork_invoice'],
+    // purchaseReturn.routes.ts asks nextDocNumber for 'PURCHASE_RETURN'; the
+    // legacy 'PURCHASE_RET' series is kept in sync too so either name advances.
     ['PURCHASE_RET', 'trx_purchase_return'],
+    ['PURCHASE_RETURN', 'trx_purchase_return'],
     ['SUPP_BILL', 'trx_supplier_bill'],
     ['STOCK_TRF', 'trx_stock_transfer'],
     ['FG_RECEIPT', 'trx_fg_receipt'],
