@@ -218,7 +218,7 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
     const grandTotal = Number((baseBeforeTcs + tcsAmount + roundOff).toFixed(4));
 
     // 2. Create GRN Header
-    const grnRes = await txQueryOne<{ insertId: number }>(tx, `
+    const grnRes = await txExecute(tx, `
       INSERT INTO trx_grn (
         company_id, grn_no, internal_ir_no, grn_date, po_id, style_id,
         supplier_id, warehouse_id, supplier_dc_no, supplier_inv_no,
@@ -273,7 +273,7 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
 
     // 3. Insert GRN Lines
     for (const line of calculatedLines) {
-      const lineRes = await txQueryOne<{ insertId: number }>(tx, `
+      const lineRes = await txExecute(tx, `
         INSERT INTO trx_grn_line (
           grn_id, po_line_id, so_id, style_id, material_type, fabric_id,
           fabric_category, pantone_spec, color_name, shade_code,
@@ -569,9 +569,10 @@ fabricYarnProcurementRouter.post('/yarn-purchase-orders/convert-from-quotation',
   if (!quote) throw NotFound('Quotation not found');
 
   const quoteLines = await query<any>(`
-    SELECT ql.*, y.yarn_name, y.yarn_type AS master_yarn_type, y.composition
+    SELECT ql.*, y.yarn_name, y.yarn_type AS master_yarn_type, comp.description AS composition
       FROM trx_quotation_line ql
       LEFT JOIN mst_yarn y ON y.id = ql.yarn_id
+      LEFT JOIN mst_composition comp ON comp.id = y.composition_id
      WHERE ql.quotation_id = ?
   `, [quotation_id]);
 
@@ -738,7 +739,7 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
       : 0;
     const grandTotal = Number((baseBeforeTcs + tcsAmount + roundOff).toFixed(4));
 
-    const grnRes = await txQueryOne<{ insertId: number }>(tx, `
+    const grnRes = await txExecute(tx, `
       INSERT INTO trx_grn (
         company_id, grn_no, internal_ir_no, grn_date, po_id, style_id,
         supplier_id, warehouse_id, supplier_dc_no, supplier_inv_no,
@@ -800,7 +801,7 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
           accepted_qty, rejected_qty, hold_qty, balance_qty,
           rate, taxable_amount, gst_rate, cgst_amount, sgst_amount, igst_amount, total_amount,
           lot_no, qc_status, uom_id
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `, [
         newGrnId,
         line.po_line_id ? Number(line.po_line_id) : null,
@@ -919,9 +920,10 @@ fabricYarnProcurementRouter.get('/yarn-grns/:id', requirePermission('GRN.VIEW'),
   if (!grn) throw NotFound('Yarn GRN not found');
 
   const lines = await query<any>(`
-    SELECT gl.*, y.yarn_name, y.yarn_code, y.yarn_type AS yarn_base_type, COALESCE(gl.yarn_type, 'Grey Yarn') AS yarn_type, u.code AS uom_code
+    SELECT gl.*, y.yarn_name, y.yarn_code, comp.description AS composition, y.yarn_type AS yarn_base_type, COALESCE(gl.yarn_type, 'Grey Yarn') AS yarn_type, u.code AS uom_code
       FROM trx_grn_line gl
       LEFT JOIN mst_yarn y ON y.id = gl.yarn_id
+      LEFT JOIN mst_composition comp ON comp.id = y.composition_id
       LEFT JOIN cfg_uom u ON u.id = gl.uom_id
      WHERE gl.grn_id = ?
   `, [id]);
