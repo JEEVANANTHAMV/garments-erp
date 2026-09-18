@@ -871,8 +871,10 @@ export default function FabricGRNDetailPage() {
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
-                <th className="py-2.5 px-3">Fabric Name</th>
-                <th className="py-2.5 px-2 min-w-[140px]">I/O (Internal Order) / Job</th>
+                <th className="py-2.5 px-2 w-8 text-center">#</th>
+                <th className="py-2.5 px-2 min-w-[130px]">I/O Num</th>
+                <th className="py-2.5 px-2 min-w-[110px]">Style</th>
+                <th className="py-2.5 px-3 min-w-[140px]">Fabric Name</th>
                 <th className="py-2.5 px-2">Type</th>
                 <th className="py-2.5 px-2">Shade / Lot</th>
                 <th className="py-2.5 px-2 text-right">PO Qty</th>
@@ -897,6 +899,54 @@ export default function FabricGRNDetailPage() {
                     selectedLineIdx === idx ? 'bg-emerald-50/70 font-medium' : 'hover:bg-slate-50/70'
                   }`}
                 >
+                  {/* # S.No */}
+                  <td className="py-2.5 px-2 text-center text-slate-400 font-mono text-[11px]">{idx + 1}</td>
+
+                  {/* I/O Num */}
+                  <td className="py-2.5 px-2" onClick={(e) => e.stopPropagation()}>
+                    {isNew ? (
+                      <select
+                        value={l.so_id || ''}
+                        onChange={(e) => updateLineField(idx, 'so_id', e.target.value)}
+                        className="w-32 text-xs rounded border border-slate-300 py-1 px-1 bg-white"
+                      >
+                        <option value="">Stock / General</option>
+                        {toOptions(salesOrders.data).map((so) => (
+                          <option key={so.value} value={so.value}>
+                            {so.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="text-slate-700 font-medium">
+                        {l.so_id ? `SO #${l.so_id}` : 'Stock / General'}
+                      </span>
+                    )}
+                  </td>
+
+                  {/* Style */}
+                  <td className="py-2.5 px-2" onClick={(e) => e.stopPropagation()}>
+                    {isNew ? (
+                      <select
+                        value={l.style_id || ''}
+                        onChange={(e) => updateLineField(idx, 'style_id', e.target.value)}
+                        className="w-28 text-xs rounded border border-slate-300 py-1 px-1 bg-white"
+                      >
+                        <option value="">—</option>
+                        {toOptions(styles.data).map((st) => (
+                          <option key={st.value} value={st.value}>
+                            {st.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="text-slate-700 font-medium">
+                        {l.style_id ? `Style #${l.style_id}` : '—'}
+                      </span>
+                    )}
+                  </td>
+
+                  {/* Fabric Name */}
                   <td className="py-2.5 px-3">
                     {isNew ? (
                       <select
@@ -920,26 +970,6 @@ export default function FabricGRNDetailPage() {
                       </select>
                     ) : (
                       <div className="font-semibold text-slate-900">{l.fabric_name || 'Fabric Item'}</div>
-                    )}
-                  </td>
-                  <td className="py-2.5 px-2" onClick={(e) => e.stopPropagation()}>
-                    {isNew ? (
-                      <select
-                        value={l.so_id || ''}
-                        onChange={(e) => updateLineField(idx, 'so_id', e.target.value)}
-                        className="w-32 text-xs rounded border border-slate-300 py-1 px-1 bg-white"
-                      >
-                        <option value="">Stock / General</option>
-                        {toOptions(salesOrders.data).map((so) => (
-                          <option key={so.value} value={so.value}>
-                            {so.label}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="text-slate-700 font-medium">
-                        {l.so_id ? `SO #${l.so_id}` : 'Stock / General'}
-                      </span>
                     )}
                   </td>
                   <td className="py-2.5 px-2 text-slate-600">

@@ -24,6 +24,7 @@ interface YarnLine {
   yarn_category: string;
   composition: string;
   shade_code: string;
+  color_name?: string;
   dyeing_mill_id: string;
   hsn_code: string;
   packs: number;
@@ -750,6 +751,7 @@ export default function YarnPurchaseOrderDetailPage() {
                 <th className="py-2.5 px-2 min-w-[110px]">Style</th>
                 <th className="py-2.5 px-2 min-w-[150px]">Yarn</th>
                 <th className="py-2.5 px-2 w-24">Grey / Dyed</th>
+                <th className="py-2.5 px-2 w-24">Color / Shade</th>
                 <th className="py-2.5 px-2 w-16">Count</th>
                 <th className="py-2.5 px-2 w-28">Composition</th>
                 <th className="py-2.5 px-2 w-16">HSN</th>
@@ -856,6 +858,26 @@ export default function YarnPurchaseOrderDetailPage() {
                         <option value="Grey Yarn">Grey Yarn</option>
                         <option value="Dyed Yarn">Dyed Yarn</option>
                       </select>
+                    </td>
+
+                    {/* Color / Shade */}
+                    <td className="py-2.5 px-2">
+                      {isDyed ? (
+                        <input
+                          type="text"
+                          value={l.shade_code || l.color_name || ''}
+                          onChange={(e) =>
+                            updateLine(idx, {
+                              shade_code: e.target.value,
+                              color_name: e.target.value,
+                            })
+                          }
+                          className="w-24 text-xs border border-purple-300 bg-purple-50/40 rounded px-1.5 py-1"
+                          placeholder="Shade / Color"
+                        />
+                      ) : (
+                        <span className="text-slate-400 text-[11px] block text-center">—</span>
+                      )}
                     </td>
 
                     {/* Count */}

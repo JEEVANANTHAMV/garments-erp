@@ -654,8 +654,10 @@ export default function YarnGRNDetailPage() {
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                <th className="py-2.5 px-2 w-8 text-center">#</th>
+                <th className="py-2.5 px-2 min-w-[130px]">I/O Num</th>
+                <th className="py-2.5 px-2 min-w-[110px]">Style</th>
                 <th className="py-2.5 px-3 min-w-[140px]">Yarn Item</th>
-                <th className="py-2.5 px-2 min-w-[140px]">I/O (Internal Order) / Job</th>
                 <th className="py-2.5 px-2 w-24">Type</th>
                 <th className="py-2.5 px-2 w-24">Lot / Batch</th>
                 <th className="py-2.5 px-2 text-right w-20">PO (KG)</th>
@@ -678,6 +680,50 @@ export default function YarnGRNDetailPage() {
                 const lineTax = Math.round(((l.taxable_amount || 0) * ((Number(l.gst_rate) || 5) / 100)) * 100) / 100;
                 return (
                   <tr key={l._key || idx} className="hover:bg-slate-50/70 transition">
+                    {/* # S.No */}
+                    <td className="py-2.5 px-2 text-center text-slate-400 font-mono text-[11px]">{idx + 1}</td>
+
+                    {/* I/O Num (Internal Order / Job) */}
+                    <td className="py-2.5 px-2">
+                      {isNew ? (
+                        <select
+                          value={l.so_id || ''}
+                          onChange={(e) => updateLine(idx, { so_id: e.target.value })}
+                          className="w-full text-xs rounded border border-slate-300 py-1 px-1 bg-white"
+                        >
+                          <option value="">Stock / General</option>
+                          {toOptions(salesOrders.data).map((so) => (
+                            <option key={so.value} value={so.value}>{so.label}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="font-medium text-slate-700">
+                          {l.so_id ? `SO #${l.so_id}` : 'Stock / General'}
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Style */}
+                    <td className="py-2.5 px-2">
+                      {isNew ? (
+                        <select
+                          value={l.style_id || ''}
+                          onChange={(e) => updateLine(idx, { style_id: e.target.value })}
+                          className="w-full text-xs rounded border border-slate-300 py-1 px-1 bg-white"
+                        >
+                          <option value="">—</option>
+                          {toOptions(styles.data).map((st) => (
+                            <option key={st.value} value={st.value}>{st.label}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="font-medium text-slate-700">
+                          {l.style_id ? `Style #${l.style_id}` : '—'}
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Yarn Item */}
                     <td className="py-2.5 px-3">
                       {isNew ? (
                         <select
@@ -697,26 +743,7 @@ export default function YarnGRNDetailPage() {
                       )}
                     </td>
 
-                    {/* Job / Sales Order Line Selection */}
-                    <td className="py-2.5 px-2">
-                      {isNew ? (
-                        <select
-                          value={l.so_id || ''}
-                          onChange={(e) => updateLine(idx, { so_id: e.target.value })}
-                          className="w-full text-xs rounded border border-slate-300 py-1 px-1.5 bg-white"
-                        >
-                          <option value="">Stock / General</option>
-                          {toOptions(salesOrders.data).map((so) => (
-                            <option key={so.value} value={so.value}>{so.label}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="font-medium text-slate-700">
-                          {l.so_id ? `SO #${l.so_id}` : 'Stock / General'}
-                        </span>
-                      )}
-                    </td>
-
+                    {/* Yarn Type */}
                     <td className="py-2.5 px-2 text-slate-600">{l.yarn_type}</td>
                     <td className="py-2.5 px-2">
                       {isNew ? (
@@ -877,7 +904,7 @@ export default function YarnGRNDetailPage() {
             </tbody>
             <tfoot className="bg-slate-50/80 border-t border-slate-200 font-bold text-slate-800">
               <tr>
-                <td colSpan={5} className="py-3 px-3 text-right text-slate-600">Totals:</td>
+                <td colSpan={7} className="py-3 px-3 text-right text-slate-600">Totals:</td>
                 <td className="py-3 px-2 text-right font-mono text-amber-800">{fmtDecimal(totals.totalKg, 2)}</td>
                 <td className="py-3 px-2 text-center font-mono">{totals.totalPacks}</td>
                 <td className="py-3 px-2 text-right font-mono text-emerald-800">{fmtDecimal(totals.acceptedKg, 2)}</td>
