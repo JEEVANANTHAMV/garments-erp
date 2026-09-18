@@ -418,6 +418,32 @@ purchaseReturnRouter.post('/purchase-returns/:id/post-stock', requirePermission(
            WHERE roll_no = ? AND company_id = ?
         `, [l.roll_no, companyId]);
       }
+
+      // 3. Reverse stock: a purchase return moves material OUT of the warehouse.
+      // The original GRN ledger rows are never touched — the reversal is a new
+      // RETURN row with qty_out, so the audit trail stays intact.
+      const returnQty = Number(l.return_qty || 0);
+      if (returnQty > 0) {
+        await txExecute(tx, `
+          INSERT INTO trx_stock_ledger (
+            company_id, warehouse_id, material_type, yarn_id, fabric_id, trim_id, color_id,
+            txn_type, ref_type, ref_id, qty_in, qty_out, uom_id, rate, created_by
+          ) VALUES (?,?,?,?,?,?,?,'RETURN','PURCHASE_RETURN',?,0,?,?,?,?)
+        `, [
+          companyId,
+          Number(pr.warehouse_id),
+          l.material_type,
+          l.yarn_id ? Number(l.yarn_id) : null,
+          l.fabric_id ? Number(l.fabric_id) : null,
+          l.trim_id ? Number(l.trim_id) : null,
+          l.color_id ? Number(l.color_id) : null,
+          id,
+          returnQty,
+          Number(l.uom_id),
+          Number(l.rate || 0),
+          userId,
+        ]);
+      }
     }
   });
 
