@@ -947,7 +947,7 @@ export const transactionResources: ResourceConfig[] = [
     defaultSort: 't.bill_date DESC', hasIsActive: false, softDelete: false,
     filters: ['bill_type', 'supplier_id', 'po_id', 'grn_id', 'match_status', 'status'],
     autoNumber: { column: 'bill_no', docType: 'SUPPLIER_BILL' },
-    selectExtra: 'sup.party_name AS supplier_name, po.po_no, grn.grn_no, cur.code AS currency_code, kno.order_no AS knitting_order_no, fpo.order_no AS fabric_process_order_no',
+    selectExtra: 'sup.party_name AS supplier_name, po.po_no, grn.grn_no, cur.code AS currency_code, kno.kwo_no AS knitting_order_no, fpo.fpo_no AS fabric_process_order_no',
     joins: `LEFT JOIN mst_party sup ON sup.id = t.supplier_id
             LEFT JOIN trx_purchase_order po ON po.id = t.po_id
             LEFT JOIN trx_grn grn ON grn.id = t.grn_id
