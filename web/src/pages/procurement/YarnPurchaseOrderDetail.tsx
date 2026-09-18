@@ -744,13 +744,16 @@ export default function YarnPurchaseOrderDetailPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
-                <th className="py-2.5 px-3">Yarn Master Item</th>
-                <th className="py-2.5 px-2 min-w-[140px]">I/O (Internal Order) / Job</th>
-                <th className="py-2.5 px-2">Type</th>
-                <th className="py-2.5 px-2">Count</th>
-                <th className="py-2.5 px-2">HSN</th>
-                <th className="py-2.5 px-2">Basis</th>
+              <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 text-[11px] uppercase tracking-wider">
+                <th className="py-2.5 px-2 w-8 text-center">#</th>
+                <th className="py-2.5 px-2 min-w-[130px]">I/O Num</th>
+                <th className="py-2.5 px-2 min-w-[110px]">Style</th>
+                <th className="py-2.5 px-2 min-w-[150px]">Yarn</th>
+                <th className="py-2.5 px-2 w-24">Grey / Dyed</th>
+                <th className="py-2.5 px-2 w-16">Count</th>
+                <th className="py-2.5 px-2 w-28">Composition</th>
+                <th className="py-2.5 px-2 w-16">HSN</th>
+                <th className="py-2.5 px-2 w-20">Basis</th>
                 <th className="py-2.5 px-2 text-center">Packs × Wt</th>
                 <th className="py-2.5 px-2 text-right">Total KG</th>
                 <th className="py-2.5 px-2 text-right">Rate/KG (₹)</th>
@@ -767,7 +770,7 @@ export default function YarnPurchaseOrderDetailPage() {
                   </>
                 )}
                 <th className="py-2.5 px-2 text-right">Net (₹)</th>
-                <th className="py-2.5 px-2 text-center">Del</th>
+                <th className="py-2.5 px-2 w-8 text-center"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -777,8 +780,43 @@ export default function YarnPurchaseOrderDetailPage() {
 
                 return (
                   <tr key={l._key || idx} className="hover:bg-slate-50/70 transition">
-                    {/* Master Yarn Selection */}
-                    <td className="py-2.5 px-3 min-w-[140px]">
+                    {/* # S NO */}
+                    <td className="py-2.5 px-2 text-center text-slate-400 font-mono text-[11px]">{idx + 1}</td>
+
+                    {/* I/O Num (Sales Order / Job) */}
+                    <td className="py-2.5 px-2 min-w-[130px]">
+                      <select
+                        value={l.so_id || ''}
+                        onChange={(e) => updateLine(idx, { so_id: e.target.value })}
+                        className="w-full text-xs rounded border border-slate-300 py-1 px-1 bg-white"
+                      >
+                        <option value="">Stock / General</option>
+                        {toOptions(salesOrders.data).map((so) => (
+                          <option key={so.value} value={so.value}>
+                            {so.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+
+                    {/* Style */}
+                    <td className="py-2.5 px-2">
+                      <select
+                        value={l.style_id || ''}
+                        onChange={(e) => updateLine(idx, { style_id: e.target.value })}
+                        className="w-full text-xs rounded border border-slate-300 py-1 px-1 bg-white"
+                      >
+                        <option value="">—</option>
+                        {toOptions(styles.data).map((st) => (
+                          <option key={st.value} value={st.value}>
+                            {st.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+
+                    {/* Yarn Master Selection */}
+                    <td className="py-2.5 px-2 min-w-[140px]">
                       <select
                         value={l.yarn_id}
                         onChange={(e) => {
@@ -802,30 +840,14 @@ export default function YarnPurchaseOrderDetailPage() {
                       </select>
                     </td>
 
-                    {/* Job / Sales Order Allocation */}
-                    <td className="py-2.5 px-2 min-w-[130px]">
-                      <select
-                        value={l.so_id || ''}
-                        onChange={(e) => updateLine(idx, { so_id: e.target.value })}
-                        className="w-full text-xs rounded border border-slate-300 py-1 px-1 bg-white"
-                      >
-                        <option value="">Stock / General</option>
-                        {toOptions(salesOrders.data).map((so) => (
-                          <option key={so.value} value={so.value}>
-                            {so.label}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-
-                    {/* Yarn Type: Grey Yarn vs Dyed Yarn */}
+                    {/* Grey / Dyed Yarn Type */}
                     <td className="py-2.5 px-2">
                       <select
                         value={l.yarn_type}
                         onChange={(e) =>
                           updateLine(idx, { yarn_type: e.target.value as 'Grey Yarn' | 'Dyed Yarn' })
                         }
-                        className={`text-xs rounded border py-1 px-1.5 font-semibold ${
+                        className={`text-xs rounded border py-1 px-1.5 font-semibold w-full ${
                           isDyed
                             ? 'bg-purple-50 text-purple-700 border-purple-300'
                             : 'bg-amber-50 text-amber-800 border-amber-300'
@@ -844,6 +866,17 @@ export default function YarnPurchaseOrderDetailPage() {
                         onChange={(e) => updateLine(idx, { yarn_count_str: e.target.value })}
                         className="w-14 text-xs font-mono font-medium border border-slate-300 rounded px-1.5 py-1"
                         placeholder="30s"
+                      />
+                    </td>
+
+                    {/* Composition */}
+                    <td className="py-2.5 px-2">
+                      <input
+                        type="text"
+                        value={l.composition}
+                        onChange={(e) => updateLine(idx, { composition: e.target.value })}
+                        className="w-full text-xs border border-slate-300 rounded px-1.5 py-1"
+                        placeholder="100% Cotton"
                       />
                     </td>
 
@@ -1036,7 +1069,7 @@ export default function YarnPurchaseOrderDetailPage() {
           </div>
 
           {/* Footer Financial Adjustments & TCS */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 items-end">
             <div>
               <label className="label text-[11px] font-bold text-slate-700">Freight / Transport Charges (₹)</label>
               <input
@@ -1056,6 +1089,18 @@ export default function YarnPurchaseOrderDetailPage() {
                 step="10"
                 value={header.other_charges}
                 onChange={(e) => setHeader((h) => ({ ...h, other_charges: parseFloat(e.target.value) || 0 }))}
+                className="input py-1.5 text-xs text-right font-mono"
+                placeholder="0.00"
+              />
+            </div>
+
+            <div>
+              <label className="label text-[11px] font-bold text-slate-700">Round Off (₹)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={header.round_off}
+                onChange={(e) => setHeader((h) => ({ ...h, round_off: parseFloat(e.target.value) || 0 }))}
                 className="input py-1.5 text-xs text-right font-mono"
                 placeholder="0.00"
               />

@@ -140,6 +140,12 @@ export default function FabricGRNDetailPage() {
     vehicle_no: '',
     qc_status: 'ACCEPTED',
     is_interstate: false,
+    freight_charges: 0,
+    other_charges: 0,
+    round_off: 0,
+    tcs_applicable: false,
+    tcs_section: '206C(1H)',
+    tcs_rate: 0.1,
     remarks: '',
   });
 
@@ -172,6 +178,12 @@ export default function FabricGRNDetailPage() {
         vehicle_no: existingData.vehicle_no || '',
         qc_status: existingData.qc_status || 'ACCEPTED',
         is_interstate: !!existingData.is_interstate,
+        freight_charges: Number(existingData.freight_charges || 0),
+        other_charges: Number(existingData.other_charges || 0),
+        round_off: Number(existingData.round_off || 0),
+        tcs_applicable: !!existingData.tcs_applicable,
+        tcs_section: existingData.tcs_section || '206C(1H)',
+        tcs_rate: Number(existingData.tcs_rate) || 0.1,
         remarks: existingData.remarks || '',
       });
 
@@ -489,6 +501,14 @@ export default function FabricGRNDetailPage() {
       }
     });
     const netAmount = totalTaxable + totalCgst + totalSgst + totalIgst;
+    const freight = Number(header.freight_charges) || 0;
+    const other = Number(header.other_charges) || 0;
+    const baseBeforeTcs = netAmount + freight + other;
+    const tcsAmt = header.tcs_applicable
+      ? Math.round(((baseBeforeTcs * (Number(header.tcs_rate) || 0)) / 100) * 100) / 100
+      : 0;
+    const roundOff = Number(header.round_off) || 0;
+    const grandTotal = Math.round((baseBeforeTcs + tcsAmt + roundOff) * 100) / 100;
     return {
       totalMeters,
       totalWeight,
@@ -499,8 +519,10 @@ export default function FabricGRNDetailPage() {
       totalSgst,
       totalIgst,
       netAmount,
+      tcsAmt,
+      grandTotal,
     };
-  }, [lines, header.is_interstate]);
+  }, [lines, header.is_interstate, header.freight_charges, header.other_charges, header.round_off, header.tcs_applicable, header.tcs_rate]);
 
   // Save GRN
   const handleSave = async () => {
@@ -517,6 +539,14 @@ export default function FabricGRNDetailPage() {
     try {
       const payload = {
         ...header,
+        freight_charges: Number(header.freight_charges) || 0,
+        other_charges: Number(header.other_charges) || 0,
+        round_off: Number(header.round_off) || 0,
+        tcs_applicable: header.tcs_applicable ? 1 : 0,
+        tcs_section: header.tcs_applicable ? header.tcs_section : null,
+        tcs_rate: header.tcs_applicable ? Number(header.tcs_rate) : 0,
+        tcs_amount: summary.tcsAmt,
+        grand_total: summary.grandTotal,
         lines: lines.map((l) => ({
           po_line_id: l.po_line_id,
           so_id: l.so_id ? Number(l.so_id) : undefined,
@@ -1220,6 +1250,98 @@ export default function FabricGRNDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Footer Financial Adjustments & TCS */}
+      <div className="mt-4 border-t border-slate-200 bg-slate-50/70 p-4 rounded-xl">
+        <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 items-end">
+          <div>
+            <label className="block text-[11px] font-bold text-slate-700 mb-1">Freight / Transport Charges (₹)</label>
+            <input
+              type="number"
+              step="10"
+              disabled={!isNew}
+              value={header.freight_charges}
+              onChange={(e) => setHeader((h) => ({ ...h, freight_charges: parseFloat(e.target.value) || 0 }))}
+              className="w-full text-xs font-mono rounded-lg border border-slate-300 py-1.5 px-2 text-right bg-white disabled:bg-slate-100"
+              placeholder="0.00"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-700 mb-1">Other / Unloading Charges (₹)</label>
+            <input
+              type="number"
+              step="10"
+              disabled={!isNew}
+              value={header.other_charges}
+              onChange={(e) => setHeader((h) => ({ ...h, other_charges: parseFloat(e.target.value) || 0 }))}
+              className="w-full text-xs font-mono rounded-lg border border-slate-300 py-1.5 px-2 text-right bg-white disabled:bg-slate-100"
+              placeholder="0.00"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-700 mb-1">Round Off (₹)</label>
+            <input
+              type="number"
+              step="0.01"
+              disabled={!isNew}
+              value={header.round_off}
+              onChange={(e) => setHeader((h) => ({ ...h, round_off: parseFloat(e.target.value) || 0 }))}
+              className="w-full text-xs font-mono rounded-lg border border-slate-300 py-1.5 px-2 text-right bg-white disabled:bg-slate-100"
+              placeholder="0.00"
+            />
+          </div>
+
+          <div className="p-2.5 rounded-lg border border-amber-200 bg-amber-50/60 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-1.5 text-[11px] font-bold text-amber-900 cursor-pointer">
+                <input
+                  type="checkbox"
+                  disabled={!isNew}
+                  checked={header.tcs_applicable}
+                  onChange={(e) => setHeader((h) => ({ ...h, tcs_applicable: e.target.checked }))}
+                  className="rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+                />
+                <span>TCS Applicable</span>
+              </label>
+              {header.tcs_applicable && (
+                <span className="text-[11px] font-bold font-mono text-amber-800">
+                  + ₹{fmtDecimal(summary.tcsAmt)}
+                </span>
+              )}
+            </div>
+            {header.tcs_applicable && (
+              <div className="flex items-center gap-1.5 text-[11px]">
+                <select
+                  disabled={!isNew}
+                  value={header.tcs_section}
+                  onChange={(e) => setHeader((h) => ({ ...h, tcs_section: e.target.value }))}
+                  className="text-[10px] rounded border border-slate-300 py-0.5 px-1 w-24 disabled:bg-slate-100"
+                >
+                  <option value="206C(1H)">206C(1H)</option>
+                  <option value="206C(1)">206C(1)</option>
+                </select>
+                <input
+                  type="number"
+                  step="0.01"
+                  disabled={!isNew}
+                  value={header.tcs_rate}
+                  onChange={(e) => setHeader((h) => ({ ...h, tcs_rate: parseFloat(e.target.value) || 0 }))}
+                  className="text-[10px] font-mono rounded border border-slate-300 py-0.5 px-1 text-right w-16 disabled:bg-slate-100"
+                  placeholder="0.10"
+                />
+                <span className="text-slate-500">%</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col items-end justify-center bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
+            <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider block">Net Payable Amount</span>
+            <span className="text-xl font-black text-amber-900 font-mono">₹{fmtDecimal(summary.grandTotal, 2)}</span>
+          </div>
+        </div>
+      </div>
 
       {/* Auto-Generate Rolls Modal */}
       {genModalOpen && (

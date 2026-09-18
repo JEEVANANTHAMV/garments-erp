@@ -129,6 +129,9 @@ export default function FabricPurchaseOrderDetailPage() {
     freight_charges: 0,
     other_charges: 0,
     round_off: 0,
+    tcs_applicable: false,
+    tcs_section: '206C(1H)',
+    tcs_rate: 0.1,
   });
 
   const [lines, setLines] = useState<FabricLine[]>([emptyFabricLine()]);
@@ -166,6 +169,9 @@ export default function FabricPurchaseOrderDetailPage() {
         freight_charges: Number(d.freight_charges) || 0,
         other_charges: Number(d.other_charges) || 0,
         round_off: Number(d.round_off) || 0,
+        tcs_applicable: !!d.tcs_applicable,
+        tcs_section: d.tcs_section || '206C(1H)',
+        tcs_rate: Number(d.tcs_rate) || 0.1,
       });
 
       if (Array.isArray(d.lines) && d.lines.length > 0) {
@@ -299,7 +305,11 @@ export default function FabricPurchaseOrderDetailPage() {
     const freight = Number(head.freight_charges) || 0;
     const other = Number(head.other_charges) || 0;
     const roundOff = Number(head.round_off) || 0;
-    const grandTotal = Math.round((itemsNet + freight + other + roundOff) * 100) / 100;
+    const baseBeforeTcs = itemsNet + freight + other;
+    const tcsAmt = head.tcs_applicable
+      ? Math.round(((baseBeforeTcs * (Number(head.tcs_rate) || 0)) / 100) * 100) / 100
+      : 0;
+    const grandTotal = Math.round((baseBeforeTcs + tcsAmt + roundOff) * 100) / 100;
     // Grey / Dyed split
     let greyQty = 0, dyedQty = 0;
     for (const l of lines) {
@@ -324,8 +334,9 @@ export default function FabricPurchaseOrderDetailPage() {
       grandTotal,
       greyQty,
       dyedQty,
+      tcsAmt,
     };
-  }, [lines, head.freight_charges, head.other_charges, head.round_off]);
+  }, [lines, head.freight_charges, head.other_charges, head.round_off, head.tcs_applicable, head.tcs_rate]);
 
   const handleShipToPartyChange = (partyIdStr: string) => {
     if (!partyIdStr) {
@@ -385,6 +396,10 @@ export default function FabricPurchaseOrderDetailPage() {
         freight_charges: totals.freight,
         other_charges: totals.other,
         round_off: totals.roundOff,
+        tcs_applicable: head.tcs_applicable ? 1 : 0,
+        tcs_section: head.tcs_applicable ? head.tcs_section : null,
+        tcs_rate: head.tcs_applicable ? Number(head.tcs_rate) : 0,
+        tcs_amount: totals.tcsAmt,
         approval_state: stateOverride || head.approval_state,
         remarks: head.remarks,
         billing_address: head.billing_address || null,
@@ -1006,9 +1021,9 @@ export default function FabricPurchaseOrderDetailPage() {
           </table>
         </div>
 
-        {/* Footer Financial Adjustments */}
+        {/* Footer Financial Adjustments & TCS */}
         <div className="mt-4 border-t border-slate-200 bg-slate-50/70 p-4 rounded-xl">
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 items-end">
             <div>
               <label className="label text-[11px] font-bold text-slate-700">Freight / Transport Charges (₹)</label>
               <input
@@ -1043,6 +1058,46 @@ export default function FabricPurchaseOrderDetailPage() {
                 className="input py-1.5 text-xs text-right font-mono"
                 placeholder="0.00"
               />
+            </div>
+
+            <div className="p-2.5 rounded-lg border border-amber-200 bg-amber-50/60 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-1.5 text-[11px] font-bold text-amber-900 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={head.tcs_applicable}
+                    onChange={(e) => setHead((h) => ({ ...h, tcs_applicable: e.target.checked }))}
+                    className="rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+                  />
+                  <span>TCS Applicable</span>
+                </label>
+                {head.tcs_applicable && (
+                  <span className="text-[11px] font-bold font-mono text-amber-800">
+                    + ₹{fmtDecimal(totals.tcsAmt)}
+                  </span>
+                )}
+              </div>
+              {head.tcs_applicable && (
+                <div className="flex items-center gap-1.5 text-[11px]">
+                  <select
+                    value={head.tcs_section}
+                    onChange={(e) => setHead((h) => ({ ...h, tcs_section: e.target.value }))}
+                    className="input py-0.5 px-1.5 text-[10px] w-24"
+                  >
+                    <option value="206C(1H)">206C(1H)</option>
+                    <option value="206C(1)">206C(1)</option>
+                  </select>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={head.tcs_rate}
+                    onChange={(e) => setHead((h) => ({ ...h, tcs_rate: parseFloat(e.target.value) || 0 }))}
+                    className="input py-0.5 px-1.5 text-[10px] text-right font-mono w-16"
+                    placeholder="0.10"
+                  />
+                  <span className="text-slate-500">%</span>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col items-end justify-center bg-white p-3 rounded-lg border border-slate-200 shadow-sm">

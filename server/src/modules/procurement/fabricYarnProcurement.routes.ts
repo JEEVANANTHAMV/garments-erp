@@ -198,6 +198,18 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
     const totTax = totCgst + totSgst + totIgst;
     const netAmount = totTaxable + totTax;
 
+    const freightCharges = Number(body.freight_charges) || 0;
+    const otherCharges = Number(body.other_charges) || 0;
+    const roundOff = Number(body.round_off) || 0;
+    const tcsApplicable = Boolean(body.tcs_applicable);
+    const tcsSection = tcsApplicable ? (body.tcs_section || '206C(1H)') : null;
+    const tcsRate = tcsApplicable ? (Number(body.tcs_rate) || 0) : 0;
+    const baseBeforeTcs = netAmount + freightCharges + otherCharges;
+    const tcsAmount = tcsApplicable
+      ? Number(((baseBeforeTcs * tcsRate) / 100).toFixed(4))
+      : 0;
+    const grandTotal = Number((baseBeforeTcs + tcsAmount + roundOff).toFixed(4));
+
     // 2. Create GRN Header
     const grnRes = await txQueryOne<{ insertId: number }>(tx, `
       INSERT INTO trx_grn (
@@ -205,8 +217,10 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
         supplier_id, warehouse_id, supplier_dc_no, supplier_inv_no,
         vehicle_no, gate_inward_id, qc_status, is_interstate,
         taxable_amount, tax_amount, cgst_amount, sgst_amount, igst_amount, net_amount,
+        freight_charges, other_charges, round_off,
+        tcs_applicable, tcs_section, tcs_rate, tcs_amount, grand_total,
         remarks, created_by
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `, [
       companyId,
       finalGrnNo,
@@ -228,6 +242,14 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
       totSgst,
       totIgst,
       netAmount,
+      freightCharges,
+      otherCharges,
+      roundOff,
+      tcsApplicable ? 1 : 0,
+      tcsSection,
+      tcsRate,
+      tcsAmount,
+      grandTotal,
       body.remarks || null,
       userId,
     ]);
@@ -692,14 +714,28 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
     const totTax = totCgst + totSgst + totIgst;
     const netAmount = totTaxable + totTax;
 
+    const freightCharges = Number(body.freight_charges) || 0;
+    const otherCharges = Number(body.other_charges) || 0;
+    const roundOff = Number(body.round_off) || 0;
+    const tcsApplicable = Boolean(body.tcs_applicable);
+    const tcsSection = tcsApplicable ? (body.tcs_section || '206C(1H)') : null;
+    const tcsRate = tcsApplicable ? (Number(body.tcs_rate) || 0) : 0;
+    const baseBeforeTcs = netAmount + freightCharges + otherCharges;
+    const tcsAmount = tcsApplicable
+      ? Number(((baseBeforeTcs * tcsRate) / 100).toFixed(4))
+      : 0;
+    const grandTotal = Number((baseBeforeTcs + tcsAmount + roundOff).toFixed(4));
+
     const grnRes = await txQueryOne<{ insertId: number }>(tx, `
       INSERT INTO trx_grn (
         company_id, grn_no, internal_ir_no, grn_date, po_id, style_id,
         supplier_id, warehouse_id, supplier_dc_no, supplier_inv_no,
         vehicle_no, gate_inward_id, qc_status, is_interstate,
         taxable_amount, tax_amount, cgst_amount, sgst_amount, igst_amount, net_amount,
+        freight_charges, other_charges, round_off,
+        tcs_applicable, tcs_section, tcs_rate, tcs_amount, grand_total,
         remarks, created_by
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `, [
       companyId,
       finalGrnNo,
@@ -721,6 +757,14 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
       totSgst,
       totIgst,
       netAmount,
+      freightCharges,
+      otherCharges,
+      roundOff,
+      tcsApplicable ? 1 : 0,
+      tcsSection,
+      tcsRate,
+      tcsAmount,
+      grandTotal,
       body.remarks || null,
       userId,
     ]);
