@@ -425,9 +425,11 @@ purchaseReturnRouter.post('/purchase-returns/:id/post-stock', requirePermission(
 
     for (const l of lines) {
       if (l.roll_no) {
+        // trx_fabric_roll tracks availability in stock_status (there is no
+        // `status` column). CLOSED takes the roll out of available stock.
         await txExecute(tx, `
           UPDATE trx_fabric_roll
-             SET status = 'RETURNED'
+             SET stock_status = 'CLOSED'
            WHERE roll_no = ? AND company_id = ?
         `, [l.roll_no, companyId]);
       }

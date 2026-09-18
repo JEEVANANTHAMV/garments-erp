@@ -33,9 +33,10 @@ fabricYarnProcurementRouter.post('/fabric-purchase-orders/convert-from-quotation
   if (!quote) throw NotFound('Quotation not found');
 
   const quoteLines = await query<any>(`
-    SELECT ql.*, fb.fabric_name, fb.fabric_type AS master_fabric_type, fb.construction
+    SELECT ql.*, fb.fabric_name, fb.fabric_type AS master_fabric_type, comp.description AS construction
       FROM trx_quotation_line ql
       LEFT JOIN mst_fabric fb ON fb.id = ql.fabric_id
+      LEFT JOIN mst_composition comp ON comp.id = fb.composition_id
      WHERE ql.quotation_id = ?
   `, [quotation_id]);
 
@@ -439,9 +440,10 @@ fabricYarnProcurementRouter.get('/fabric-grns/:id', requirePermission('GRN.VIEW'
   if (!grn) throw NotFound('Fabric GRN not found');
 
   const lines = await query<any>(`
-    SELECT gl.*, fb.fabric_name, fb.fabric_code, fb.construction, u.code AS uom_code
+    SELECT gl.*, fb.fabric_name, fb.fabric_code, comp.description AS construction, u.code AS uom_code
       FROM trx_grn_line gl
       LEFT JOIN mst_fabric fb ON fb.id = gl.fabric_id
+      LEFT JOIN mst_composition comp ON comp.id = fb.composition_id
       LEFT JOIN cfg_uom u ON u.id = gl.uom_id
      WHERE gl.grn_id = ?
   `, [id]);
