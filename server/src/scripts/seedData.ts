@@ -198,6 +198,14 @@ export function buildPermissions(): [string, string, string][] {
     ['COSTING.APPROVE','Approve Costings','COSTING'],
     ['PRODUCTION.APPROVE','Approve Production Orders','PRODUCTION'],
     ['INVENTORY.ADJUST','Adjust Stock','INVENTORY'],
+    // Purchase Return permission matrix (spec section 29). Create/Edit/Delete
+    // reuse PURCHASE.*; these cover the actions that need their own role split.
+    ['PURCHASE_RETURN.SUBMIT','Submit Purchase Returns','PURCHASE'],
+    ['PURCHASE_RETURN.APPROVE','Approve Purchase Returns','PURCHASE'],
+    ['PURCHASE_RETURN.POST_STOCK','Post Purchase Return Stock','PURCHASE'],
+    ['PURCHASE_RETURN.RETURN_DC','Generate Return DC','PURCHASE'],
+    ['PURCHASE_RETURN.CREDIT_NOTE','Raise Return Credit Note','PURCHASE'],
+    ['PURCHASE_RETURN.CANCEL','Cancel Purchase Returns','PURCHASE'],
   ];
   out.push(...extras);
   return out;
@@ -252,6 +260,8 @@ export const ROLES: {
     permissions: [
       'DASHBOARD.VIEW','QC.*','PRODUCTION.VIEW','STYLE.VIEW','SALES_ORDER.VIEW',
       'PACKING.VIEW','REPORT.VIEW',
+      // §29: QC may approve quality-rejection based returns.
+      'PURCHASE_RETURN.APPROVE',
     ],
   },
   {
@@ -260,6 +270,8 @@ export const ROLES: {
     permissions: [
       'DASHBOARD.VIEW','INVENTORY.*','ISSUE.*','GRN.*','WAREHOUSE.VIEW','MATERIAL.VIEW',
       'PURCHASE.VIEW','PRODUCTION.VIEW','PARTY.VIEW','REPORT.VIEW',
+      // §29: Store posts return stock and raises the Return DC.
+      'PURCHASE_RETURN.POST_STOCK','PURCHASE_RETURN.RETURN_DC',
     ],
   },
   {
@@ -268,6 +280,9 @@ export const ROLES: {
     permissions: [
       'DASHBOARD.VIEW','MRP.*','PURCHASE.*','GRN.VIEW','GRN.CREATE','PARTY.VIEW','PARTY.CREATE',
       'PARTY.UPDATE','MATERIAL.*','INVENTORY.VIEW','SALES_ORDER.VIEW','BOM.VIEW','REPORT.VIEW',
+      // §29: Purchase submits returns and raises the Return DC, but cannot
+      // approve, post stock or issue the credit note.
+      'PURCHASE_RETURN.SUBMIT','PURCHASE_RETURN.RETURN_DC',
     ],
   },
   {

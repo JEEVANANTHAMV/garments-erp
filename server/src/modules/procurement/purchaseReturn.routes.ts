@@ -1,11 +1,37 @@
 import { Router } from 'express';
-import { query, queryOne, transaction, txQuery, txQueryOne, txExecute } from '../../config/db.js';
+import { query, queryOne, transaction, txQuery, txExecute, type Tx } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
 import { NotFound, BadRequest } from '../../core/errors.js';
 import { requirePermission } from '../../middleware/auth.js';
 import { nextDocNumber } from '../../core/numbering.js';
 
 export const purchaseReturnRouter = Router();
+
+/**
+ * Append a row to the purchase return audit trail (spec §28).
+ *
+ * Takes the surrounding transaction so the audit row commits or rolls back with
+ * the state change it describes — an audit entry for a change that never landed
+ * would be worse than none.
+ */
+async function writeReturnAudit(
+  tx: Tx,
+  companyId: number,
+  returnId: number,
+  action: string,
+  oldStatus: string | null,
+  newStatus: string | null,
+  userId: number | null,
+  ip: string | null,
+  remarks: string | null,
+): Promise<void> {
+  await txExecute(tx, `
+    INSERT INTO trx_purchase_return_audit (
+      company_id, purchase_return_id, action, old_status, new_status,
+      user_id, ip_address, remarks
+    ) VALUES (?,?,?,?,?,?,?,?)
+  `, [companyId, returnId, action, oldStatus, newStatus, userId, ip, remarks]);
+}
 
 // ---------------------------------------------------------------------------
 // 1. GET /api/purchase-returns/reasons — Reason Master
@@ -329,6 +355,9 @@ purchaseReturnRouter.post('/purchase-returns', requirePermission('PURCHASE.CREAT
       }
     }
 
+    await writeReturnAudit(tx, companyId, newReturnId, 'CREATED', null, 'DRAFT',
+      userId, req.ip ?? null, `Return created with ${lines.length} line(s)`);
+
     return newReturnId;
   });
 
@@ -362,7 +391,16 @@ purchaseReturnRouter.post('/purchase-returns/:id/status', requirePermission('PUR
   `;
   params.push(id, companyId);
 
-  await query(sql, params);
+  const prev = await queryOne<any>(
+    `SELECT status FROM trx_purchase_return WHERE id = ? AND company_id = ?`, [id, companyId]);
+  if (!prev) throw NotFound('Purchase Return not found');
+
+  await transaction(async (tx) => {
+    await txExecute(tx, sql, params);
+    await writeReturnAudit(tx, companyId, id, status, prev.status, status,
+      userId, req.ip ?? null, req.body.remarks ?? null);
+  });
+
   res.json({ success: true, message: `Status updated to ${status}` });
 }));
 
@@ -383,13 +421,19 @@ purchaseReturnRouter.post('/purchase-returns/:id/return-dc', requirePermission('
   const dcNo = current.return_dc_no || `RDC-${current.return_no || id}`;
   const dcDate = current.return_dc_date || new Date().toISOString().slice(0, 10);
 
-  await query(`
-    UPDATE trx_purchase_return
-       SET return_dc_no = ?, return_dc_date = ?,
-           transporter_name = ?, vehicle_no = ?, driver_name = ?, eway_bill_no = ?,
-           status = CASE WHEN status = 'APPROVED' THEN 'RETURN_DC_CREATED' ELSE status END
-     WHERE id = ? AND company_id = ?
-  `, [dcNo, dcDate, transporter_name || null, vehicle_no || null, driver_name || null, eway_bill_no || null, id, companyId]);
+  await transaction(async (tx) => {
+    await txExecute(tx, `
+      UPDATE trx_purchase_return
+         SET return_dc_no = ?, return_dc_date = ?,
+             transporter_name = ?, vehicle_no = ?, driver_name = ?, eway_bill_no = ?,
+             status = CASE WHEN status = 'APPROVED' THEN 'RETURN_DC_CREATED' ELSE status END
+       WHERE id = ? AND company_id = ?
+    `, [dcNo, dcDate, transporter_name || null, vehicle_no || null, driver_name || null, eway_bill_no || null, id, companyId]);
+
+    await writeReturnAudit(tx, companyId, id, 'RETURN_DC_CREATED', current.status,
+      current.status === 'APPROVED' ? 'RETURN_DC_CREATED' : current.status,
+      req.user!.id, req.ip ?? null, `Return DC ${dcNo}`);
+  });
 
   res.json({ success: true, data: { return_dc_no: dcNo, return_dc_date: dcDate } });
 }));
@@ -460,7 +504,230 @@ purchaseReturnRouter.post('/purchase-returns/:id/post-stock', requirePermission(
         ]);
       }
     }
+
+    await writeReturnAudit(tx, companyId, id, 'STOCK_POSTED', pr.status, 'STOCK_POSTED',
+      userId, req.ip ?? null, `Stock reversed for ${lines.length} line(s)`);
   });
 
   res.json({ success: true, message: 'Inventory stock successfully reversed for Purchase Return' });
+}));
+
+// ---------------------------------------------------------------------------
+// 9. GET /api/purchase-returns/:id/audit — Audit trail (spec §28)
+// ---------------------------------------------------------------------------
+purchaseReturnRouter.get('/purchase-returns/:id/audit', requirePermission('PURCHASE.VIEW'), ah(async (req, res) => {
+  const rows = await query<any>(`
+    SELECT a.*, u.full_name AS user_name
+      FROM trx_purchase_return_audit a
+      LEFT JOIN mst_user u ON u.id = a.user_id
+     WHERE a.purchase_return_id = ? AND a.company_id = ?
+     ORDER BY a.action_date DESC, a.id DESC
+  `, [Number(req.params.id), req.user!.companyId]);
+  res.json({ data: rows });
+}));
+
+// ---------------------------------------------------------------------------
+// 10. POST /api/purchase-returns/:id/credit-note — Raise Credit Note (spec §27)
+// ---------------------------------------------------------------------------
+purchaseReturnRouter.post('/purchase-returns/:id/credit-note', requirePermission('PURCHASE_RETURN.CREDIT_NOTE'), ah(async (req, res) => {
+  const id = Number(req.params.id);
+  const companyId = req.user!.companyId;
+  const userId = req.user!.id;
+
+  const pr = await queryOne<any>(
+    `SELECT * FROM trx_purchase_return WHERE id = ? AND company_id = ?`, [id, companyId]);
+  if (!pr) throw NotFound('Purchase Return not found');
+  if (pr.credit_note_id) throw BadRequest('A credit note has already been raised for this return');
+  if (!pr.stock_posted) throw BadRequest('Post the return stock before raising a credit note');
+
+  // Tax split comes from the return lines so the note always agrees with them.
+  const tot = await queryOne<any>(`
+    SELECT COALESCE(SUM(taxable_amount),0) AS taxable,
+           COALESCE(SUM(cgst_amount),0)    AS cgst,
+           COALESCE(SUM(sgst_amount),0)    AS sgst,
+           COALESCE(SUM(igst_amount),0)    AS igst,
+           COALESCE(SUM(total_amount),0)   AS total
+      FROM trx_purchase_return_line WHERE return_id = ?
+  `, [id]);
+
+  const result = await transaction(async (tx) => {
+    const cnNo = await nextDocNumber(tx, companyId, 'PURCHASE_CREDIT_NOTE');
+    const ins = await txExecute(tx, `
+      INSERT INTO trx_purchase_credit_note (
+        company_id, credit_note_no, credit_note_date, purchase_return_id, supplier_id,
+        supplier_invoice_no, taxable_amount, cgst_amount, sgst_amount, igst_amount,
+        total_amount, status, remarks, created_by
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,'ISSUED',?,?)
+    `, [
+      companyId, cnNo, req.body.credit_note_date || new Date().toISOString().slice(0, 10),
+      id, pr.supplier_id, req.body.supplier_invoice_no || null,
+      tot.taxable, tot.cgst, tot.sgst, tot.igst, tot.total,
+      req.body.remarks || `Credit note against ${pr.return_no}`, userId,
+    ]);
+
+    const cnId = ins.insertId;
+    await txExecute(tx, `
+      UPDATE trx_purchase_return
+         SET credit_note_id = ?, credit_note_ref = ?, credit_note_date = ?,
+             credit_note_amount = ?, status = 'CLOSED'
+       WHERE id = ?
+    `, [cnId, cnNo, req.body.credit_note_date || new Date().toISOString().slice(0, 10), tot.total, id]);
+
+    await writeReturnAudit(tx, companyId, id, 'CREDIT_NOTE_CREATED', pr.status, 'CLOSED', userId,
+      req.ip ?? null, `Credit note ${cnNo} for ${tot.total}`);
+
+    return { id: cnId, credit_note_no: cnNo, total_amount: tot.total };
+  });
+
+  res.json({ success: true, data: result });
+}));
+
+// ---------------------------------------------------------------------------
+// 11. GET /api/purchase-returns/reports/:report — Reports (spec §30)
+// ---------------------------------------------------------------------------
+purchaseReturnRouter.get('/purchase-returns/reports/:report', requirePermission('REPORT.VIEW'), ah(async (req, res) => {
+  const companyId = req.user!.companyId;
+  const { from, to } = req.query;
+
+  const range: string[] = [];
+  const rp: any[] = [companyId];
+  if (from) { range.push('pr.return_date >= ?'); rp.push(from); }
+  if (to)   { range.push('pr.return_date <= ?'); rp.push(to); }
+  const dateWhere = range.length ? ` AND ${range.join(' AND ')}` : '';
+
+  // Each report is a named SELECT over the same return/line join.
+  const REPORTS: Record<string, string> = {
+    // §30.1 Purchase Return Register
+    register: `
+      SELECT pr.id, pr.return_no, pr.return_date, pr.return_type, pr.material_category,
+             pr.status, pr.total_qty, pr.total_amount, pr.return_dc_no, pr.credit_note_ref,
+             sup.party_name AS supplier_name, grn.grn_no
+        FROM trx_purchase_return pr
+        LEFT JOIN mst_party sup ON sup.id = pr.supplier_id
+        LEFT JOIN trx_grn grn ON grn.id = pr.source_grn_id OR grn.id = pr.grn_id
+       WHERE pr.company_id = ?${dateWhere}
+       ORDER BY pr.return_date DESC, pr.id DESC`,
+    // §30.2 Supplier-wise
+    supplier: `
+      SELECT sup.id AS supplier_id, sup.party_name AS supplier_name,
+             COUNT(DISTINCT pr.id) AS return_count,
+             SUM(pr.total_qty) AS total_qty, SUM(pr.total_amount) AS total_amount
+        FROM trx_purchase_return pr
+        JOIN mst_party sup ON sup.id = pr.supplier_id
+       WHERE pr.company_id = ?${dateWhere}
+       GROUP BY sup.id, sup.party_name
+       ORDER BY total_amount DESC`,
+    // §30.3 Material category-wise
+    category: `
+      SELECT pr.material_category,
+             COUNT(DISTINCT pr.id) AS return_count,
+             SUM(pr.total_qty) AS total_qty, SUM(pr.total_amount) AS total_amount
+        FROM trx_purchase_return pr
+       WHERE pr.company_id = ?${dateWhere}
+       GROUP BY pr.material_category
+       ORDER BY total_amount DESC`,
+    // §30.4 Job-wise
+    job: `
+      SELECT COALESCE(a.job_no, prl.job_no) AS job_no,
+             COUNT(DISTINCT pr.id) AS return_count,
+             SUM(COALESCE(a.allocated_qty, prl.return_qty)) AS total_qty
+        FROM trx_purchase_return pr
+        JOIN trx_purchase_return_line prl ON prl.return_id = pr.id
+        LEFT JOIN trx_purchase_return_allocation a ON a.return_line_id = prl.id
+       WHERE pr.company_id = ?${dateWhere}
+         AND COALESCE(a.job_no, prl.job_no) IS NOT NULL
+       GROUP BY COALESCE(a.job_no, prl.job_no)
+       ORDER BY total_qty DESC`,
+    // §30.5 Style-wise
+    style: `
+      SELECT COALESCE(a.style_no, prl.style_no) AS style_no,
+             COUNT(DISTINCT pr.id) AS return_count,
+             SUM(COALESCE(a.allocated_qty, prl.return_qty)) AS total_qty
+        FROM trx_purchase_return pr
+        JOIN trx_purchase_return_line prl ON prl.return_id = pr.id
+        LEFT JOIN trx_purchase_return_allocation a ON a.return_line_id = prl.id
+       WHERE pr.company_id = ?${dateWhere}
+         AND COALESCE(a.style_no, prl.style_no) IS NOT NULL
+       GROUP BY COALESCE(a.style_no, prl.style_no)
+       ORDER BY total_qty DESC`,
+    // §30.6 Fabric roll return
+    'fabric-roll': `
+      SELECT pr.return_no, pr.return_date, prl.roll_no, prl.lot_no, prl.dye_lot_no,
+             prl.gsm, prl.dia, prl.return_qty, f.fabric_name, sup.party_name AS supplier_name
+        FROM trx_purchase_return pr
+        JOIN trx_purchase_return_line prl ON prl.return_id = pr.id
+        LEFT JOIN mst_fabric f ON f.id = prl.fabric_id
+        LEFT JOIN mst_party sup ON sup.id = pr.supplier_id
+       WHERE pr.company_id = ? AND prl.roll_no IS NOT NULL${dateWhere}
+       ORDER BY pr.return_date DESC`,
+    // §30.7 QC rejection returns
+    'qc-rejection': `
+      SELECT pr.return_no, pr.return_date, pr.return_reason, pr.total_qty, pr.total_amount,
+             sup.party_name AS supplier_name, pr.material_category, pr.status
+        FROM trx_purchase_return pr
+        LEFT JOIN mst_party sup ON sup.id = pr.supplier_id
+       WHERE pr.company_id = ?
+         AND (pr.return_type = 'QC_REJECTION'
+              OR pr.return_reason IN ('QUALITY_REJECTION','FAILED_INSPECTION'))${dateWhere}
+       ORDER BY pr.return_date DESC`,
+  };
+
+  const reportKey = String(req.params.report);
+  const sql = REPORTS[reportKey];
+  if (!sql) throw BadRequest(`Unknown report: ${reportKey}. Valid: ${Object.keys(REPORTS).join(', ')}`);
+
+  res.json({ data: await query<any>(sql, rp), report: reportKey });
+}));
+
+// ---------------------------------------------------------------------------
+// 12. GET /api/purchase-returns/grn/:grnId/qc-rejections — QC integration (spec §15)
+//
+// For QUALITY_REJECTION / FAILED_INSPECTION returns the screen loads the
+// quantity QC already rejected or held on the GRN and offers it as the
+// suggested return quantity, capped at what is still returnable.
+// ---------------------------------------------------------------------------
+purchaseReturnRouter.get('/purchase-returns/grn/:grnId/qc-rejections', requirePermission('PURCHASE.VIEW'), ah(async (req, res) => {
+  const grnId = Number(req.params.grnId);
+  const companyId = req.user!.companyId;
+
+  const grn = await queryOne<any>(
+    `SELECT id, grn_no, grn_date, supplier_id, warehouse_id, qc_status
+       FROM trx_grn WHERE id = ? AND company_id = ?`, [grnId, companyId]);
+  if (!grn) throw NotFound('GRN not found');
+
+  const lines = await query<any>(`
+    SELECT gl.id AS grn_line_id, gl.material_type, gl.yarn_id, gl.fabric_id, gl.trim_id,
+           gl.uom_id, gl.rate, gl.gst_rate, gl.lot_no, gl.qc_status,
+           gl.received_qty, gl.accepted_qty,
+           COALESCE(gl.rejected_qty, 0) AS rejected_qty,
+           COALESCE(gl.hold_qty, 0)     AS hold_qty,
+           y.yarn_name, f.fabric_name, u.code AS uom_code,
+           COALESCE((
+             SELECT SUM(prl.return_qty)
+               FROM trx_purchase_return_line prl
+               JOIN trx_purchase_return pr ON pr.id = prl.return_id
+              WHERE prl.grn_line_id = gl.id AND pr.status <> 'CANCELLED'
+           ), 0) AS previous_returned_qty
+      FROM trx_grn_line gl
+      LEFT JOIN mst_yarn y ON y.id = gl.yarn_id
+      LEFT JOIN mst_fabric f ON f.id = gl.fabric_id
+      LEFT JOIN cfg_uom u ON u.id = gl.uom_id
+     WHERE gl.grn_id = ?
+  `, [grnId]);
+
+  const rejected = lines
+    .map((l: any) => {
+      const qcRejected = Number(l.rejected_qty) + Number(l.hold_qty);
+      const stillReturnable = Math.max(0, Number(l.accepted_qty ?? l.received_qty ?? 0) - Number(l.previous_returned_qty));
+      return {
+        ...l,
+        qc_rejected_qty: qcRejected,
+        // Never suggest more than is actually still returnable.
+        suggested_return_qty: Math.min(qcRejected, stillReturnable),
+        item_name: l.yarn_name || l.fabric_name || `Item #${l.grn_line_id}`,
+      };
+    })
+    .filter((l: any) => l.qc_rejected_qty > 0);
+
+  res.json({ data: { grn, lines: rejected, qc_reference: grn.qc_status ?? null } });
 }));
