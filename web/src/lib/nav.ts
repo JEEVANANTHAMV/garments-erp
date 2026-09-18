@@ -89,7 +89,7 @@ export const NAV: NavSection[] = [
       { label: 'Purchase Orders (All)', to: '/procurement/purchase-orders', icon: ShoppingCart, perms: ['PURCHASE.VIEW'] },
       { label: 'Goods Receipt (All)', to: '/procurement/grns', icon: PackageCheck, perms: ['GRN.VIEW'] },
       { label: 'Purchase Returns',    to: '/procurement/returns', icon: Truck, perms: ['PURCHASE.VIEW'] },
-      { label: 'Supplier Bills',      to: '/procurement/supplier-bills', icon: Receipt, perms: ['PURCHASE.VIEW'] },
+      { label: 'Bills Inward',        to: '/procurement/supplier-bills', icon: Receipt, perms: ['PURCHASE.VIEW'] },
     ],
   },
   {

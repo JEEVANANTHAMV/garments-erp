@@ -686,6 +686,7 @@ function IssueModal({ open, onClose, onDone }: { open: boolean; onClose: () => v
 }
 
 export { PurchaseReturnsPage } from './PurchaseReturn';
+export { PurchaseReturnDetailPage } from './PurchaseReturnDetail';
 export { SupplierBillsPage } from './SupplierBill';
 export { GeneralPurchasesPage } from './GeneralPurchases';
 export { GeneralPurchaseDetailPage } from './GeneralPurchaseDetail';

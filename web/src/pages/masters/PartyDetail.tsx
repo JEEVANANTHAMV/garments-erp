@@ -104,6 +104,7 @@ export function PartyDetailPage() {
 
   const [form, setForm] = useState<any>({
     party_code: '',
+    io_prefix: '',
     party_name: '',
     legal_name: '',
     short_name: '',
@@ -823,6 +824,37 @@ export function PartyDetailPage() {
                   onChange={(e) => handleField('short_name', e.target.value)}
                   placeholder="Short name or brand identifier"
                 />
+              </div>
+              <div className="sm:col-span-2 bg-brand-50/50 p-3 rounded-lg border border-brand-100">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="label font-medium text-brand-900 mb-0">Internal Order (I/O) Prefix</label>
+                  {!form.io_prefix && (form.party_code || form.legal_name || form.party_name) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const candidate = (form.party_code || form.short_name || form.legal_name || form.party_name || '')
+                          .replace(/[^a-zA-Z0-9]/g, '')
+                          .slice(0, 4)
+                          .toUpperCase();
+                        handleField('io_prefix', candidate);
+                      }}
+                      className="text-[11px] text-brand-700 hover:text-brand-900 bg-brand-100 hover:bg-brand-200 px-2 py-0.5 rounded font-medium border border-brand-300 transition-colors"
+                    >
+                      ⚡ Auto-Suggest from Code / Name
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                  <input
+                    className="input font-mono font-semibold text-brand-700 uppercase tracking-wide bg-white"
+                    value={form.io_prefix || ''}
+                    onChange={(e) => handleField('io_prefix', e.target.value.toUpperCase())}
+                    placeholder="e.g. ZARA, HM, or BYR"
+                  />
+                  <div className="sm:col-span-2 text-[12px] text-slate-500">
+                    Prefix used when auto-generating Sales Internal Orders (e.g. <span className="font-mono font-bold text-brand-700">{form.io_prefix || 'PREFIX'}-IO-2026-001</span>).
+                  </div>
+                </div>
               </div>
             </div>
 

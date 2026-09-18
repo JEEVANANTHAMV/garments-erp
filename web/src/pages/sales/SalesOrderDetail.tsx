@@ -131,8 +131,28 @@ export default function SalesOrderDetail() {
   const setLine = (key: string, patch: Partial<Line>) =>
     setLines((s) => s.map((l) => (l._key === key ? { ...l, ...patch } : l)));
 
+  const handleGenerateIo = async (bId?: number | null) => {
+    const targetBuyerId = bId ?? head.buyer_id;
+    if (!targetBuyerId) {
+      toast('Please select a Buyer first', 'error');
+      return;
+    }
+    try {
+      const res = await http.get<{ data: { io_no: string; prefix: string } }>(`/sales-orders/next-io-number?buyer_id=${targetBuyerId}`);
+      if (res.data?.io_no) {
+        setH('io_no', res.data.io_no);
+        toast(`Generated I/O Number: ${res.data.io_no}`, 'success');
+      }
+    } catch {
+      toast('Could not auto-generate I/O number', 'error');
+    }
+  };
+
   const handleBuyerChange = (bId: string) => {
     setH('buyer_id', bId);
+    if (bId && (!head.io_no || isNew)) {
+      void handleGenerateIo(Number(bId));
+    }
     const buyer = buyers.data?.find((b: any) => b.id === Number(bId));
     if (buyer?.currency_id && (!head.currency_id || isNew)) {
       setH('currency_id', buyer.currency_id);
@@ -274,15 +294,33 @@ export default function SalesOrderDetail() {
           <Input label="SO number" hint={isNew ? 'Blank to auto-generate' : undefined}
             value={head.so_no ?? ''} onChange={(e) => setH('so_no', e.target.value)}
             disabled={!editable} error={errors.so_no} />
-          <Input
-            label="IO number (Internal Order)"
-            placeholder="e.g. IO-2601"
-            hint="Internal Order: Master factory production & procurement booking reference"
-            value={head.io_no ?? ''}
-            onChange={(e) => setH('io_no', e.target.value)}
-            disabled={!editable}
-            error={errors.io_no}
-          />
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[12px] font-medium text-slate-700">IO number (Internal Order)</label>
+              {editable && (
+                <button
+                  type="button"
+                  onClick={() => void handleGenerateIo()}
+                  className="text-[11px] font-semibold text-brand-600 hover:text-brand-800 bg-brand-50 hover:bg-brand-100 px-1.5 py-0.5 rounded border border-brand-200 transition-colors"
+                  title="Auto-generate based on Buyer code / prefix"
+                >
+                  ⚡ Auto-Gen
+                </button>
+              )}
+            </div>
+            <input
+              className="input font-mono font-semibold text-brand-700 w-full"
+              placeholder="e.g. ZAR-IO-2026-001"
+              value={head.io_no ?? ''}
+              onChange={(e) => setH('io_no', e.target.value)}
+              disabled={!editable}
+            />
+            {errors.io_no ? (
+              <p className="text-[12px] text-red-600 mt-1">{errors.io_no}</p>
+            ) : (
+              <p className="text-[11px] text-slate-400 mt-1">Master factory production &amp; procurement reference</p>
+            )}
+          </div>
           <Select
             label="Order Type"
             options={[

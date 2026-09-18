@@ -205,6 +205,71 @@ salesOrderRouter.get('/:id', requirePermission('SALES_ORDER.VIEW'), ah(async (re
   res.json({ data: { ...so, lines, production_orders: prodOrders, invoices } });
 }));
 
+// -------------------------------------------------------------- NEXT I/O NUMBER
+salesOrderRouter.get('/next-io-number', requirePermission('SALES_ORDER.CREATE'), ah(async (req, res) => {
+  const companyId = req.user!.companyId;
+  const buyerId = req.query.buyer_id ? Number(req.query.buyer_id) : null;
+  const currentYear = new Date().getFullYear();
+
+  let prefix = 'IO';
+  if (buyerId) {
+    const buyer = await queryOne<any>(
+      `SELECT party_code, legal_name, io_prefix FROM mst_party WHERE id = ? AND company_id = ?`,
+      [buyerId, companyId]
+    );
+    if (buyer) {
+      if (buyer.io_prefix && buyer.io_prefix.trim()) {
+        prefix = buyer.io_prefix.trim().toUpperCase();
+      } else if (buyer.party_code && buyer.party_code.trim()) {
+        prefix = buyer.party_code.trim().toUpperCase();
+      } else if (buyer.legal_name && buyer.legal_name.trim()) {
+        prefix = buyer.legal_name.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase();
+      }
+    }
+  }
+
+  const latest = await queryOne<{ cnt: number }>(`
+    SELECT COUNT(*) as cnt FROM trx_sales_order
+     WHERE company_id = ? AND io_no LIKE ?
+  `, [companyId, `${prefix}-%`]);
+
+  const count = (latest?.cnt ?? 0) + 1;
+  const seq = String(count).padStart(3, '0');
+  const ioNo = `${prefix}-IO-${currentYear}-${seq}`;
+
+  res.json({ data: { io_no: ioNo, prefix } });
+}));
+
+async function resolveIoNumber(tx: Tx, companyId: number, buyerId: number, requestedIoNo?: string | null): Promise<string> {
+  if (requestedIoNo && requestedIoNo.trim()) return requestedIoNo.trim();
+  const currentYear = new Date().getFullYear();
+  let prefix = 'IO';
+  if (buyerId) {
+    const buyer = await txQueryOne<any>(tx,
+      `SELECT party_code, legal_name, io_prefix FROM mst_party WHERE id = ? AND company_id = ?`,
+      [buyerId, companyId]
+    );
+    if (buyer) {
+      if (buyer.io_prefix && buyer.io_prefix.trim()) {
+        prefix = buyer.io_prefix.trim().toUpperCase();
+      } else if (buyer.party_code && buyer.party_code.trim()) {
+        prefix = buyer.party_code.trim().toUpperCase();
+      } else if (buyer.legal_name && buyer.legal_name.trim()) {
+        prefix = buyer.legal_name.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase();
+      }
+    }
+  }
+
+  const latest = await txQueryOne<{ cnt: number }>(tx, `
+    SELECT COUNT(*) as cnt FROM trx_sales_order
+     WHERE company_id = ? AND io_no LIKE ?
+  `, [companyId, `${prefix}-%`]);
+
+  const count = (latest?.cnt ?? 0) + 1;
+  const seq = String(count).padStart(3, '0');
+  return `${prefix}-IO-${currentYear}-${seq}`;
+}
+
 // -------------------------------------------------------------- CREATE
 salesOrderRouter.post('/', requirePermission('SALES_ORDER.CREATE'), ah(async (req, res) => {
   const body = soSchema.parse(req.body);
@@ -214,6 +279,7 @@ salesOrderRouter.post('/', requirePermission('SALES_ORDER.CREATE'), ah(async (re
     const soNo = body.so_no || await nextDocNumber(tx, req.user!.companyId, 'SALES_ORDER',
       { branchId: body.branch_id ?? null });
     const { lines, ...h } = body;
+    const ioNo = await resolveIoNumber(tx, req.user!.companyId, h.buyer_id, h.io_no);
 
     const r = await txExecute(tx,
       `INSERT INTO trx_sales_order
@@ -224,7 +290,7 @@ salesOrderRouter.post('/', requirePermission('SALES_ORDER.CREATE'), ah(async (re
          ship_date, delivery_date, status_id,
          approval_state, remarks, created_by)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'DRAFT',?,?)`,
-      [req.user!.companyId, h.branch_id ?? null, soNo, h.io_no ?? null, h.order_type ?? 'EXPORT', h.so_date ?? null, h.buyer_id,
+      [req.user!.companyId, h.branch_id ?? null, soNo, ioNo, h.order_type ?? 'EXPORT', h.so_date ?? null, h.buyer_id,
        h.agent_id ?? null, h.merchandiser_id ?? null, h.quotation_id ?? null, h.buyer_po_no ?? null, h.buyer_po_date ?? null,
        h.season ?? null, h.currency_id, h.exchange_rate ?? 1, h.incoterm ?? 'FOB',
        h.port_of_loading ?? null, h.destination_country ?? null, h.destination_port ?? null,

@@ -98,7 +98,7 @@ export const masterResources: ResourceConfig[] = [
       ]},
     ],
     fields: [
-      f('party_code', s.strReq(30)), f('party_name', s.strReq(200)),
+      f('party_code', s.strReq(30)), f('io_prefix', s.nullableStr(30)), f('party_name', s.strReq(200)),
       f('legal_name', s.nullableStr(200)), f('short_name', s.nullableStr(80)),
       f('is_customer', s.bool()), f('is_buyer', s.bool()), f('is_supplier', s.bool()),
       f('is_vendor', s.bool()), f('is_agent', s.bool()),

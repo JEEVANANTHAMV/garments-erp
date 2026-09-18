@@ -940,47 +940,20 @@ export const transactionResources: ResourceConfig[] = [
     ],
   },
 
-  // ------------------------------------------------ Purchase Return & Supplier Bill
-  {
-    path: 'purchase-returns', table: 'trx_purchase_return', permission: 'PURCHASE', label: 'Purchase Return',
-    searchable: ['return_no'], sortable: ['return_no', 'return_date'],
-    defaultSort: 't.return_date DESC', hasIsActive: false, softDelete: false, hasAuditCols: false,
-    filters: ['grn_id', 'supplier_id', 'return_reason', 'status'],
-    autoNumber: { column: 'return_no', docType: 'PURCHASE_RETURN' },
-    selectExtra: 'grn.grn_no, sup.party_name AS supplier_name, w.warehouse_name',
-    joins: `LEFT JOIN trx_grn grn ON grn.id = t.grn_id
-            LEFT JOIN mst_party sup ON sup.id = t.supplier_id
-            LEFT JOIN mst_warehouse w ON w.id = t.warehouse_id`,
-    children: [
-      { key: 'lines', table: 'trx_purchase_return_line', fk: 'return_id', fields: [
-        f('grn_line_id', s.id()),
-        f('material_type', s.enumReq(['YARN','FABRIC','TRIM'])),
-        f('yarn_id', s.id()), f('fabric_id', s.id()), f('trim_id', s.id()), f('color_id', s.id()),
-        f('return_qty', s.decReq()), f('uom_id', s.idReq()),
-        f('rate', s.dec()), f('amount', s.dec()), f('reason', s.nullableStr(255)),
-      ]},
-    ],
-    fields: [
-      f('return_no', s.nullableStr(40)), f('return_date', s.date()),
-      f('grn_id', s.idReq()), f('supplier_id', s.idReq()), f('warehouse_id', s.idReq()),
-      f('gate_outward_id', s.id()),
-      f('return_reason', s.enum(['QUALITY_REJECT','EXCESS','WRONG_MATERIAL','DAMAGED','OTHER'])),
-      f('total_qty', s.dec()), f('total_amount', s.dec()), f('debit_note_id', s.id()),
-      f('status', s.enum(['DRAFT','APPROVED','DISPATCHED','ACKNOWLEDGED','CLOSED'])),
-      f('remarks', s.nullableStr(500)),
-    ],
-  },
+  // ------------------------------------------------ Supplier Bill (Bills Inward)
   {
     path: 'supplier-bills', table: 'trx_supplier_bill', permission: 'PURCHASE', label: 'Supplier Bill',
     searchable: ['bill_no', 'supplier_inv_no'], sortable: ['bill_no', 'bill_date'],
     defaultSort: 't.bill_date DESC', hasIsActive: false, softDelete: false,
-    filters: ['supplier_id', 'po_id', 'grn_id', 'match_status', 'status'],
+    filters: ['bill_type', 'supplier_id', 'po_id', 'grn_id', 'match_status', 'status'],
     autoNumber: { column: 'bill_no', docType: 'SUPPLIER_BILL' },
-    selectExtra: 'sup.party_name AS supplier_name, po.po_no, grn.grn_no, cur.code AS currency_code',
+    selectExtra: 'sup.party_name AS supplier_name, po.po_no, grn.grn_no, cur.code AS currency_code, kno.order_no AS knitting_order_no, fpo.order_no AS fabric_process_order_no',
     joins: `LEFT JOIN mst_party sup ON sup.id = t.supplier_id
             LEFT JOIN trx_purchase_order po ON po.id = t.po_id
             LEFT JOIN trx_grn grn ON grn.id = t.grn_id
-            LEFT JOIN cfg_currency cur ON cur.id = t.currency_id`,
+            LEFT JOIN cfg_currency cur ON cur.id = t.currency_id
+            LEFT JOIN trx_knitting_order kno ON kno.id = t.knitting_order_id
+            LEFT JOIN trx_fabric_process_order fpo ON fpo.id = t.fabric_process_order_id`,
     children: [
       { key: 'lines', table: 'trx_supplier_bill_line', fk: 'bill_id', fields: [
         f('po_line_id', s.id()), f('grn_line_id', s.id()),
@@ -993,9 +966,13 @@ export const transactionResources: ResourceConfig[] = [
       ]},
     ],
     fields: [
-      f('bill_no', s.nullableStr(40)), f('bill_date', s.date()),
+      f('bill_no', s.nullableStr(40)),
+      f('bill_type', s.enum(['YARN_PURCHASE','YARN_PROCESS','FABRIC_PURCHASE','FABRIC_PROCESS','TRIMS_PURCHASE','TRIMS_PROCESS','GENERAL'])),
+      f('bill_date', s.date()),
       f('supplier_id', s.idReq()), f('supplier_inv_no', s.nullableStr(60)), f('supplier_inv_date', s.date()),
-      f('po_id', s.id()), f('grn_id', s.id()), f('gate_inward_id', s.id()),
+      f('po_id', s.id()), f('grn_id', s.id()),
+      f('knitting_order_id', s.id()), f('fabric_process_order_id', s.id()), f('jobwork_order_id', s.id()),
+      f('gate_inward_id', s.id()),
       f('currency_id', s.idReq()), f('subtotal', s.dec()), f('gst_amount', s.dec()),
       f('tds_amount', s.dec()), f('total_amount', s.dec()),
       f('po_matched', s.bool()), f('grn_matched', s.bool()), f('gate_matched', s.bool()),

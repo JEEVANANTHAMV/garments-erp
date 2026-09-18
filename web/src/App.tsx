@@ -38,7 +38,7 @@ import { GateInwardsPage, GateOutwardsPage } from './pages/gate';
 /* Procurement */
 import {
   MrpPage, PurchaseOrdersPage, GrnPage, MaterialIssuePage,
-  PurchaseReturnsPage, SupplierBillsPage,
+  PurchaseReturnsPage, PurchaseReturnDetailPage, SupplierBillsPage,
   GeneralPurchasesPage, GeneralPurchaseDetailPage,
 } from './pages/procurement';
 
@@ -205,6 +205,8 @@ export default function App() {
                   <Route path="general-purchases/:id" element={<GeneralPurchaseDetailPage />} />
                   <Route path="grns" element={<GrnPage />} />
                   <Route path="returns" element={<PurchaseReturnsPage />} />
+                  <Route path="returns/new" element={<PurchaseReturnDetailPage />} />
+                  <Route path="returns/:id" element={<PurchaseReturnDetailPage />} />
                   <Route path="supplier-bills" element={<SupplierBillsPage />} />
 
                   {/* Fabric Procurement */}
