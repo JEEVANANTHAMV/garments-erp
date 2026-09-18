@@ -105,7 +105,7 @@ purchaseReturnRouter.get('/purchase-returns', requirePermission('PURCHASE.VIEW')
            (SELECT COUNT(*) FROM trx_purchase_return_line WHERE return_id = pr.id) AS item_count
       FROM trx_purchase_return pr
       LEFT JOIN mst_party sup ON sup.id = pr.supplier_id
-      LEFT JOIN trx_purchase_order po ON po.id = pr.source_po_id OR po.id = pr.po_id
+      LEFT JOIN trx_purchase_order po ON po.id = pr.source_po_id
       LEFT JOIN trx_grn grn ON grn.id = pr.source_grn_id OR grn.id = pr.grn_id
       LEFT JOIN mst_warehouse w ON w.id = pr.warehouse_id
      WHERE ${where.join(' AND ')}
@@ -128,7 +128,7 @@ purchaseReturnRouter.get('/purchase-returns/:id', requirePermission('PURCHASE.VI
            w.warehouse_name
       FROM trx_purchase_return pr
       LEFT JOIN mst_party sup ON sup.id = pr.supplier_id
-      LEFT JOIN trx_purchase_order po ON po.id = pr.source_po_id OR po.id = pr.po_id
+      LEFT JOIN trx_purchase_order po ON po.id = pr.source_po_id
       LEFT JOIN trx_grn grn ON grn.id = pr.source_grn_id OR grn.id = pr.grn_id
       LEFT JOIN mst_warehouse w ON w.id = pr.warehouse_id
      WHERE pr.id = ? AND pr.company_id = ?
