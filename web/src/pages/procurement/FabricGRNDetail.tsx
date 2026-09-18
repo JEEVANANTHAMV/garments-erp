@@ -34,8 +34,12 @@ interface GrnLineItem {
   style_id?: string | number;
   fabric_id: string | number;
   fabric_name?: string;
+  fabric_category: 'Grey Fabric' | 'Dyed Fabric';
   fabric_type: string;
+  color_name: string;
+  yarn_count_str: string;
   shade_code: string;
+  pantone_spec: string;
   lot_no: string;
   po_qty: number;
   received_qty: number; // in meters
@@ -58,8 +62,12 @@ let lineSeq = 0;
 const emptyLine = (): GrnLineItem => ({
   _key: `fgl_${++lineSeq}`,
   fabric_id: '',
+  fabric_category: 'Grey Fabric',
   fabric_type: 'Knitted',
-  shade_code: 'NVY-01',
+  color_name: '',
+  yarn_count_str: '',
+  shade_code: '',
+  pantone_spec: '',
   lot_no: 'LOT-2026-01',
   po_qty: 1000,
   received_qty: 1000,
@@ -187,7 +195,11 @@ export default function FabricGRNDetailPage() {
             fabric_id: l.fabric_id,
             fabric_name: l.fabric_name,
             fabric_type: l.fabric_type || 'Knitted',
-            shade_code: l.shade_code || 'NVY-01',
+            fabric_category: l.fabric_category || 'Grey Fabric',
+            color_name: l.color_name || '',
+            yarn_count_str: l.yarn_count_str || '',
+            shade_code: l.shade_code || '',
+            pantone_spec: l.pantone_spec || '',
             lot_no: l.lot_no || 'LOT-1',
             po_qty: Number(l.received_qty) + Number(l.balance_qty || 0),
             received_qty: Number(l.received_qty || 0),
@@ -297,7 +309,11 @@ export default function FabricGRNDetailPage() {
                 fabric_id: pl.fabric_id,
                 fabric_name: pl.fabric_name,
                 fabric_type: pl.fabric_type || 'Knitted',
-                shade_code: pl.shade_code || 'NVY-01',
+                fabric_category: pl.fabric_category || 'Grey Fabric',
+                color_name: pl.color_name || '',
+                yarn_count_str: pl.yarn_count_str || '',
+                shade_code: pl.shade_code || '',
+                pantone_spec: pl.pantone_spec || '',
                 lot_no: 'LOT-01',
                 po_qty: qty,
                 received_qty: qty,
@@ -896,11 +912,19 @@ export default function FabricGRNDetailPage() {
                       </span>
                     )}
                   </td>
-                  <td className="py-2.5 px-2 text-slate-600">{l.fabric_type}</td>
+                  <td className="py-2.5 px-2 text-slate-600">
+                    <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded ${l.fabric_category === 'Dyed Fabric' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-800'}`}>
+                      {l.fabric_category === 'Dyed Fabric' ? 'Dyed' : 'Grey'}
+                    </span>
+                    {' '}{l.fabric_type}
+                  </td>
                   <td className="py-2.5 px-2">
                     <span className="font-mono text-[11px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">
-                      {l.shade_code} / {l.lot_no}
+                      {l.color_name && <>{l.color_name} / </>}{l.shade_code || '—'} / {l.lot_no}
                     </span>
+                    {l.fabric_category === 'Dyed Fabric' && l.pantone_spec && (
+                      <span className="ml-1 text-[10px] text-purple-600 font-mono">[{l.pantone_spec}]</span>
+                    )}
                   </td>
                   <td className="py-2.5 px-2 text-right">{fmtDecimal(l.po_qty)}</td>
                   <td className="py-2.5 px-2 text-right font-semibold text-emerald-700">

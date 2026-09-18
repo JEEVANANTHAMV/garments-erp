@@ -18,12 +18,15 @@ interface FabricLine {
   style_id?: string | number;
   fabric_id: string | number;
   fabric_name?: string;
+  fabric_category: 'Grey Fabric' | 'Dyed Fabric';
   fabric_type: string;
   dia: string;
   gsm: string;
   composition: string;
   color_name: string;
+  yarn_count_str: string;
   shade_code: string;
+  pantone_spec: string;
   print_flag: boolean;
   print_color: string;
   finish: string;
@@ -53,12 +56,15 @@ let fseq = 0;
 const emptyFabricLine = (): FabricLine => ({
   _key: `fl_${++fseq}`,
   fabric_id: '',
+  fabric_category: 'Grey Fabric',
   fabric_type: 'Knitted',
   dia: '30"',
   gsm: '180',
   composition: '100% Cotton',
-  color_name: 'Navy',
-  shade_code: 'NVY-01',
+  color_name: '',
+  yarn_count_str: '',
+  shade_code: '',
+  pantone_spec: '',
   print_flag: false,
   print_color: '',
   finish: 'Compact',
@@ -171,15 +177,18 @@ export default function FabricPurchaseOrderDetailPage() {
             style_id: l.style_id || '',
             fabric_id: l.fabric_id || '',
             fabric_name: l.fabric_name,
+            fabric_category: l.fabric_category || 'Grey Fabric',
             fabric_type: l.fabric_type || 'Knitted',
-            dia: l.dia || '30"',
-            gsm: l.gsm || '180',
-            composition: l.composition || '100% Cotton',
-            color_name: l.color_id || 'Navy',
-            shade_code: l.shade_code || 'NVY-01',
+            dia: l.dia || '',
+            gsm: l.gsm || '',
+            composition: l.composition || '',
+            color_name: l.color_name || l.color_id || '',
+            yarn_count_str: l.yarn_count_str || '',
+            shade_code: l.shade_code || '',
+            pantone_spec: l.pantone_spec || '',
             print_flag: !!l.print_flag,
             print_color: l.print_color || '',
-            finish: l.finish || 'Compact',
+            finish: l.finish || '',
             mill_id: String(l.mill_id || ''),
             hsn_code: l.hsn_code || '5208',
             uom_id: l.uom_id || 9,
@@ -291,6 +300,13 @@ export default function FabricPurchaseOrderDetailPage() {
     const other = Number(head.other_charges) || 0;
     const roundOff = Number(head.round_off) || 0;
     const grandTotal = Math.round((itemsNet + freight + other + roundOff) * 100) / 100;
+    // Grey / Dyed split
+    let greyQty = 0, dyedQty = 0;
+    for (const l of lines) {
+      const q = Number(l.qty) || 0;
+      if (l.fabric_category === 'Dyed Fabric') dyedQty += q;
+      else greyQty += q;
+    }
     return {
       totalQty,
       totalWeight,
@@ -306,6 +322,8 @@ export default function FabricPurchaseOrderDetailPage() {
       other,
       roundOff,
       grandTotal,
+      greyQty,
+      dyedQty,
     };
   }, [lines, head.freight_charges, head.other_charges, head.round_off]);
 
@@ -372,41 +390,48 @@ export default function FabricPurchaseOrderDetailPage() {
         billing_address: head.billing_address || null,
         shipping_address: head.shipping_address || null,
         shipping_to_party_id: head.shipping_to_party_id ? Number(head.shipping_to_party_id) : null,
-        lines: lines.map((l) => ({
-          fabric_id: Number(l.fabric_id),
-          so_id: l.so_id ? Number(l.so_id) : undefined,
-          style_id: l.style_id ? Number(l.style_id) : undefined,
-          hsn_code: l.hsn_code || '5208',
-          material_type: 'FABRIC',
-          description: `${l.composition} ${l.fabric_type} ${l.gsm} GSM`,
-          fabric_type: l.fabric_type,
-          dia: l.dia,
-          gsm: l.gsm,
-          composition: l.composition,
-          shade_code: l.shade_code,
-          print_flag: l.print_flag,
-          print_color: l.print_color,
-          finish: l.finish,
-          mill_id: l.mill_id ? Number(l.mill_id) : undefined,
-          uom_id: l.uom_id,
-          qty: Number(l.qty),
-          weight_kg: Number(l.weight_kg),
-          no_of_rolls: Number(l.no_of_rolls),
-          rate: Number(l.rate),
-          amount: Number(l.amount),
-          discount_amount: Number(l.discount_amount),
-          freight_amount: Number(l.freight_amount),
-          other_charges: Number(l.other_charges),
-          taxable_amount: Number(l.taxable_amount),
-          gst_rate: Number(l.gst_rate),
-          cgst_rate: Number(l.cgst_rate),
-          cgst_amount: Number(l.cgst_amount),
-          sgst_rate: Number(l.sgst_rate),
-          sgst_amount: Number(l.sgst_amount),
-          igst_rate: Number(l.igst_rate),
-          igst_amount: Number(l.igst_amount),
-          net_amount: Number(l.net_amount),
-        })),
+        lines: lines.map((l) => {
+          const isDyed = l.fabric_category === 'Dyed Fabric';
+          return {
+            fabric_id: Number(l.fabric_id),
+            so_id: l.so_id ? Number(l.so_id) : undefined,
+            style_id: l.style_id ? Number(l.style_id) : undefined,
+            hsn_code: l.hsn_code || '5208',
+            material_type: 'FABRIC',
+            description: `${l.fabric_category} — ${l.composition} ${l.fabric_type} ${l.gsm} GSM`,
+            fabric_category: l.fabric_category,
+            fabric_type: l.fabric_type,
+            color_name: l.color_name || null,
+            dia: l.dia,
+            gsm: l.gsm,
+            composition: l.composition,
+            yarn_count_str: l.yarn_count_str || null,
+            shade_code: l.shade_code || null,
+            pantone_spec: isDyed ? (l.pantone_spec || null) : null,
+            print_flag: l.print_flag,
+            print_color: l.print_color,
+            finish: l.finish,
+            mill_id: l.mill_id ? Number(l.mill_id) : undefined,
+            uom_id: l.uom_id,
+            qty: Number(l.qty),
+            weight_kg: Number(l.weight_kg),
+            no_of_rolls: Number(l.no_of_rolls),
+            rate: Number(l.rate),
+            amount: Number(l.amount),
+            discount_amount: Number(l.discount_amount),
+            freight_amount: Number(l.freight_amount),
+            other_charges: Number(l.other_charges),
+            taxable_amount: Number(l.taxable_amount),
+            gst_rate: Number(l.gst_rate),
+            cgst_rate: Number(l.cgst_rate),
+            cgst_amount: Number(l.cgst_amount),
+            sgst_rate: Number(l.sgst_rate),
+            sgst_amount: Number(l.sgst_amount),
+            igst_rate: Number(l.igst_rate),
+            igst_amount: Number(l.igst_amount),
+            net_amount: Number(l.net_amount),
+          };
+        }),
       };
 
       let saved: any;
@@ -479,9 +504,9 @@ export default function FabricPurchaseOrderDetailPage() {
               </h1>
               <StatusBadge value={head.approval_state} />
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Knitted / Woven fabric purchase specifications, roll targets, and rates
-            </p>
+             <p className="text-xs text-slate-500 mt-0.5">
+              Grey / Dyed fabric purchase — Knitted / Woven specifications, roll targets, and rates
+             </p>
           </div>
         </div>
 
@@ -702,16 +727,20 @@ export default function FabricPurchaseOrderDetailPage() {
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-100/70 border-b border-slate-200 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
               <tr>
-                <th className="py-2.5 px-3 min-w-[150px]">Fabric Name</th>
-                <th className="py-2.5 px-2 min-w-[140px]">I/O (Internal Order) / Job</th>
-                <th className="py-2.5 px-2 w-24">Type</th>
-                <th className="py-2.5 px-2 w-16">Dia</th>
+                <th className="py-2.5 px-2 w-8 text-center">#</th>
+                <th className="py-2.5 px-2 min-w-[130px]">I/O Num</th>
+                <th className="py-2.5 px-2 min-w-[110px]">Style</th>
+                <th className="py-2.5 px-2 min-w-[150px]">Fabric</th>
+                <th className="py-2.5 px-2 w-24">Grey / Dyed</th>
+                <th className="py-2.5 px-2 w-20">Color</th>
+                <th className="py-2.5 px-2 w-24">Pantone / Spec</th>
+                <th className="py-2.5 px-2 w-28">Composition</th>
+                <th className="py-2.5 px-2 w-16">Counts</th>
                 <th className="py-2.5 px-2 w-16">GSM</th>
-                <th className="py-2.5 px-2 w-20">HSN</th>
-                <th className="py-2.5 px-2 w-24">Shade</th>
+                <th className="py-2.5 px-2 w-16">Dia</th>
                 <th className="py-2.5 px-2 w-20 text-right">Qty</th>
+                <th className="py-2.5 px-2 w-16">UOM</th>
                 <th className="py-2.5 px-2 w-20 text-right">Rate (₹)</th>
-                <th className="py-2.5 px-2 w-24 text-right">Taxable (₹)</th>
                 {head.is_interstate ? (
                   <>
                     <th className="py-2.5 px-2 w-16 text-center">IGST %</th>
@@ -723,14 +752,45 @@ export default function FabricPurchaseOrderDetailPage() {
                     <th className="py-2.5 px-2 w-20 text-right">CGST+SGST (₹)</th>
                   </>
                 )}
-                <th className="py-2.5 px-2 w-24 text-right">Net (₹)</th>
+                <th className="py-2.5 px-2 w-24 text-right">Amount (₹)</th>
                 <th className="py-2.5 px-2 w-8 text-center"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {lines.map((l, idx) => (
+              {lines.map((l, idx) => {
+                const isDyed = l.fabric_category === 'Dyed Fabric';
+                return (
                 <tr key={l._key} className="hover:bg-slate-50/50">
-                  <td className="py-2 px-3">
+                  {/* # S NO */}
+                  <td className="py-2 px-2 text-center text-slate-400 font-mono text-[11px]">{idx + 1}</td>
+                  {/* I/O Num (Sales Order / Job) */}
+                  <td className="py-2 px-2">
+                    <select
+                      value={l.so_id || ''}
+                      onChange={(e) => updateLine(idx, { so_id: e.target.value })}
+                      className="input py-1 text-xs w-full bg-white"
+                    >
+                      <option value="">Stock / General</option>
+                      {toOptions(salesOrders.data).map((so) => (
+                        <option key={so.value} value={so.value}>{so.label}</option>
+                      ))}
+                    </select>
+                  </td>
+                  {/* Style */}
+                  <td className="py-2 px-2">
+                    <select
+                      value={l.style_id || ''}
+                      onChange={(e) => updateLine(idx, { style_id: e.target.value })}
+                      className="input py-1 text-xs w-full bg-white"
+                    >
+                      <option value="">—</option>
+                      {toOptions(styles.data).map((st) => (
+                        <option key={st.value} value={st.value}>{st.label}</option>
+                      ))}
+                    </select>
+                  </td>
+                  {/* Fabric */}
+                  <td className="py-2 px-2">
                     <select
                       value={l.fabric_id}
                       onChange={(e) => {
@@ -751,29 +811,76 @@ export default function FabricPurchaseOrderDetailPage() {
                       ))}
                     </select>
                   </td>
+                  {/* Grey / Dyed Fabric Category */}
                   <td className="py-2 px-2">
                     <select
-                      value={l.so_id || ''}
-                      onChange={(e) => updateLine(idx, { so_id: e.target.value })}
-                      className="input py-1 text-xs w-full bg-white"
+                      value={l.fabric_category}
+                      onChange={(e) => updateLine(idx, { fabric_category: e.target.value as 'Grey Fabric' | 'Dyed Fabric' })}
+                      className={`text-xs rounded border py-1 px-1.5 font-semibold w-full ${
+                        isDyed
+                          ? 'bg-purple-50 text-purple-700 border-purple-300'
+                          : 'bg-amber-50 text-amber-800 border-amber-300'
+                      }`}
                     >
-                      <option value="">Stock / General</option>
-                      {toOptions(salesOrders.data).map((so) => (
-                        <option key={so.value} value={so.value}>{so.label}</option>
-                      ))}
+                      <option value="Grey Fabric">Grey Fabric</option>
+                      <option value="Dyed Fabric">Dyed Fabric</option>
                     </select>
                   </td>
+                  {/* Color */}
                   <td className="py-2 px-2">
-                    <select
-                      value={l.fabric_type}
-                      onChange={(e) => updateLine(idx, { fabric_type: e.target.value })}
-                      className="input py-1 text-xs w-full bg-white"
-                    >
-                      <option value="Knitted">Knitted</option>
-                      <option value="Woven">Woven</option>
-                      <option value="Non-Woven">Non-Woven</option>
-                    </select>
+                    <input
+                      type="text"
+                      value={l.color_name}
+                      onChange={(e) => updateLine(idx, { color_name: e.target.value })}
+                      placeholder="Navy"
+                      className="input py-1 text-xs w-full"
+                    />
                   </td>
+                  {/* Pantone / Spec — only for Dyed Fabric */}
+                  <td className="py-2 px-2">
+                    {isDyed ? (
+                      <input
+                        type="text"
+                        value={l.pantone_spec}
+                        onChange={(e) => updateLine(idx, { pantone_spec: e.target.value })}
+                        placeholder="19-4052 TCX"
+                        className="input py-1 text-xs w-full font-mono text-purple-700 bg-purple-50/30"
+                      />
+                    ) : (
+                      <span className="text-slate-300 text-[11px] block text-center">—</span>
+                    )}
+                  </td>
+                  {/* Composition */}
+                  <td className="py-2 px-2">
+                    <input
+                      type="text"
+                      value={l.composition}
+                      onChange={(e) => updateLine(idx, { composition: e.target.value })}
+                      placeholder="100% Cotton"
+                      className="input py-1 text-xs w-full"
+                    />
+                  </td>
+                  {/* Counts (yarn count used in the fabric) */}
+                  <td className="py-2 px-2">
+                    <input
+                      type="text"
+                      value={l.yarn_count_str}
+                      onChange={(e) => updateLine(idx, { yarn_count_str: e.target.value })}
+                      placeholder="30s"
+                      className="input py-1 text-xs w-full font-mono"
+                    />
+                  </td>
+                  {/* GSM */}
+                  <td className="py-2 px-2">
+                    <input
+                      type="text"
+                      value={l.gsm}
+                      onChange={(e) => updateLine(idx, { gsm: e.target.value })}
+                      placeholder="180"
+                      className="input py-1 text-xs w-full"
+                    />
+                  </td>
+                  {/* DIA */}
                   <td className="py-2 px-2">
                     <input
                       type="text"
@@ -783,33 +890,7 @@ export default function FabricPurchaseOrderDetailPage() {
                       className="input py-1 text-xs w-full"
                     />
                   </td>
-                  <td className="py-2 px-2">
-                    <input
-                      type="number"
-                      value={l.gsm}
-                      onChange={(e) => updateLine(idx, { gsm: e.target.value })}
-                      placeholder="180"
-                      className="input py-1 text-xs w-full"
-                    />
-                  </td>
-                  <td className="py-2 px-2">
-                    <input
-                      type="text"
-                      value={l.hsn_code}
-                      onChange={(e) => updateLine(idx, { hsn_code: e.target.value })}
-                      placeholder="5208"
-                      className="input py-1 text-xs w-full font-mono"
-                    />
-                  </td>
-                  <td className="py-2 px-2">
-                    <input
-                      type="text"
-                      value={l.shade_code}
-                      onChange={(e) => updateLine(idx, { shade_code: e.target.value })}
-                      placeholder="NVY-01"
-                      className="input py-1 text-xs w-full font-mono text-[11px]"
-                    />
-                  </td>
+                  {/* Qty */}
                   <td className="py-2 px-2">
                     <input
                       type="number"
@@ -819,6 +900,19 @@ export default function FabricPurchaseOrderDetailPage() {
                       className="input py-1 text-xs w-full text-right font-mono font-bold"
                     />
                   </td>
+                  {/* UOM */}
+                  <td className="py-2 px-2">
+                    <select
+                      value={l.uom_id}
+                      onChange={(e) => updateLine(idx, { uom_id: Number(e.target.value) })}
+                      className="input py-1 text-xs w-full bg-white"
+                    >
+                      <option value={5}>KG</option>
+                      <option value={9}>MTR</option>
+                      <option value={1}>PCS</option>
+                    </select>
+                  </td>
+                  {/* Rate */}
                   <td className="py-2 px-2">
                     <input
                       type="number"
@@ -828,9 +922,7 @@ export default function FabricPurchaseOrderDetailPage() {
                       className="input py-1 text-xs w-full text-right font-mono font-bold text-brand-700"
                     />
                   </td>
-                  <td className="py-2 px-2 text-right font-mono font-medium text-slate-800">
-                    ₹{fmtDecimal(l.taxable_amount || l.amount)}
-                  </td>
+                  {/* GST / IGST */}
                   {head.is_interstate ? (
                     <>
                       <td className="py-2 px-2 text-center">
@@ -862,9 +954,11 @@ export default function FabricPurchaseOrderDetailPage() {
                       </td>
                     </>
                   )}
+                  {/* Amount */}
                   <td className="py-2 px-2 text-right font-mono font-bold text-slate-900">
                     ₹{fmtDecimal(l.net_amount)}
                   </td>
+                  {/* Delete */}
                   <td className="py-2 px-2 text-center">
                     <button
                       type="button"
@@ -876,20 +970,33 @@ export default function FabricPurchaseOrderDetailPage() {
                     </button>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
             <tfoot className="bg-slate-50/80 border-t border-slate-200 font-bold text-slate-800">
               <tr>
-                <td colSpan={7} className="py-3 px-3 text-right text-slate-600">Total Purchase Totals:</td>
+                <td colSpan={12} className="py-3 px-3 text-right text-slate-600">
+                  <span className="mr-4">Grey: <span className="font-mono text-amber-700">{fmtDecimal(totals.greyQty)}</span></span>
+                  <span className="mr-4">Dyed: <span className="font-mono text-purple-700">{fmtDecimal(totals.dyedQty)}</span></span>
+                  Total Qty:
+                </td>
                 <td className="py-3 px-2 text-right font-mono">{fmtDecimal(totals.totalQty, 2)}</td>
                 <td className="py-3 px-2 text-right font-mono text-xs text-slate-500">Taxable:</td>
-                <td className="py-3 px-2 text-right font-mono">₹{fmtDecimal(totals.taxableAmount, 2)}</td>
-                <td className="py-3 px-2 text-center text-xs text-slate-500">
-                  {head.is_interstate ? 'IGST' : 'CGST+SGST'}:
-                </td>
-                <td className="py-3 px-2 text-right font-mono text-purple-700">
-                  ₹{fmtDecimal(head.is_interstate ? totals.totalIgst : (totals.totalCgst + totals.totalSgst), 2)}
-                </td>
+                {head.is_interstate ? (
+                  <>
+                    <td className="py-3 px-2 text-center text-xs text-slate-500">IGST:</td>
+                    <td className="py-3 px-2 text-right font-mono text-purple-700">
+                      ₹{fmtDecimal(totals.totalIgst, 2)}
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td className="py-3 px-2 text-center text-xs text-slate-500">CGST+SGST:</td>
+                    <td className="py-3 px-2 text-right font-mono text-purple-700">
+                      ₹{fmtDecimal(totals.totalCgst + totals.totalSgst, 2)}
+                    </td>
+                  </>
+                )}
                 <td className="py-3 px-2 text-right font-mono text-base font-black text-slate-900">
                   ₹{fmtDecimal(totals.grandTotal, 2)}
                 </td>

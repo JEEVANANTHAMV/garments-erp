@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Building2, MapPin, Users, Landmark, ShoppingBag,
   Save, ArrowLeft, Plus, Trash2, ShieldCheck, FileText,
@@ -84,6 +84,7 @@ const TCS_SECTIONS = [
 
 export function PartyDetailPage() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const isNew = !id || id === 'new';
   const nav = useNavigate();
   const toast = useToast();
@@ -99,13 +100,15 @@ export function PartyDetailPage() {
   const itemQuery = useItem<any>('parties', isNew ? 0 : Number(id));
   const saveMutation = useSave<any>('parties', 'Business Partner');
 
+  const isParamMerchandiser = isNew && searchParams.get('role') === 'merchandiser';
+
   const [form, setForm] = useState<any>({
     party_code: '',
     party_name: '',
     legal_name: '',
     short_name: '',
-    is_buyer: 1,
-    is_customer: 1,
+    is_buyer: isParamMerchandiser ? 0 : 1,
+    is_customer: isParamMerchandiser ? 0 : 1,
     is_supplier: 0,
     is_vendor: 0,
     is_agent: 0,
@@ -127,8 +130,8 @@ export function PartyDetailPage() {
     tcs_applicable: 0,
     tcs_section: '',
     tcs_rate: 0,
-    payment_terms: 'LC 60 DAYS',
-    default_incoterm: 'FOB',
+    payment_terms: isParamMerchandiser ? '' : 'LC 60 DAYS',
+    default_incoterm: isParamMerchandiser ? '' : 'FOB',
     default_pol: 'Tuticorin (INTUT)',
     default_pod: '',
     default_aql: '2.5',
@@ -141,7 +144,7 @@ export function PartyDetailPage() {
     packing_instructions: '',
     special_instructions: '',
     credit_limit: 0,
-    credit_days: 45,
+    credit_days: isParamMerchandiser ? 0 : 45,
     email: '',
     phone: '',
     website: '',
@@ -172,7 +175,7 @@ export function PartyDetailPage() {
     agent_remarks: '',
 
     // Merchandiser-specific
-    is_merchandiser: 0,
+    is_merchandiser: isParamMerchandiser ? 1 : 0,
     merchandiser_type: 'PRODUCTION',
     merchandiser_division: 'Knitted Apparel',
     merchandiser_brands: '',
@@ -208,6 +211,8 @@ export function PartyDetailPage() {
      same commercial relationship (who we sell to).
   ----------------------------------------------------------------*/
   const isBuyerRole = !!form.is_buyer || !!form.is_customer;
+  const isMerchandiserOnly =
+    !!form.is_merchandiser && !isBuyerRole && !form.is_supplier && !form.is_vendor && !form.is_agent;
   const hasAnyRole =
     isBuyerRole || !!form.is_supplier || !!form.is_vendor || !!form.is_agent || !!form.is_merchandiser;
 
@@ -215,14 +220,18 @@ export function PartyDetailPage() {
   // so the form never sits on a tab that no longer exists.
   useEffect(() => {
     const stillValid =
+      tab === 'general' ||
+      tab === 'address' ||
+      tab === 'contacts' ||
+      (tab === 'statutory'    && !isMerchandiserOnly) ||
+      (tab === 'bank'         && !isMerchandiserOnly) ||
       (tab === 'buyer'        && isBuyerRole) ||
       (tab === 'supplier'     && !!form.is_supplier) ||
       (tab === 'jobwork'      && !!form.is_vendor) ||
       (tab === 'agent'        && !!form.is_agent) ||
-      (tab === 'merchandiser' && !!form.is_merchandiser) ||
-      !['buyer', 'supplier', 'jobwork', 'agent', 'merchandiser'].includes(tab);
+      (tab === 'merchandiser' && !!form.is_merchandiser);
     if (!stillValid) setTab('general');
-  }, [tab, isBuyerRole, form.is_supplier, form.is_vendor, form.is_agent, form.is_merchandiser]);
+  }, [tab, isBuyerRole, isMerchandiserOnly, form.is_supplier, form.is_vendor, form.is_agent, form.is_merchandiser]);
 
   const [gstInput, setGstInput] = useState('');
   const [isGstLoading, setIsGstLoading] = useState(false);
@@ -411,8 +420,13 @@ export function PartyDetailPage() {
         is_draft: isDraft ? 1 : 0,
         tds_rate: form.tds_applicable ? (Number(form.tds_rate) || 0) : 0,
         tcs_rate: form.tcs_applicable ? (Number(form.tcs_rate) || 0) : 0,
-        credit_limit: Number(form.credit_limit) || 0,
-        credit_days: Number(form.credit_days) || 0,
+        payment_terms: isMerchandiserOnly ? null : (form.payment_terms || null),
+        credit_limit: isMerchandiserOnly ? 0 : (Number(form.credit_limit) || 0),
+        credit_days: isMerchandiserOnly ? 0 : (Number(form.credit_days) || 0),
+        default_incoterm: isMerchandiserOnly ? null : (form.default_incoterm || null),
+        default_pol: isMerchandiserOnly ? null : (form.default_pol || null),
+        default_pod: isMerchandiserOnly ? null : (form.default_pod || null),
+        default_aql: isMerchandiserOnly ? null : (form.default_aql || null),
         country_id: form.country_id ? Number(form.country_id) : null,
         currency_id: form.currency_id ? Number(form.currency_id) : null,
         // Role-specific numerics — only meaningful for the roles that own them.
@@ -582,12 +596,13 @@ export function PartyDetailPage() {
 
   // Role-driven tabs: a role-specific tab appears only while that role is
   // ticked on the General tab, and several can be shown at once.
+  // Statutory and Bank accounts are hidden for merchandiser-only partners.
   const TABS = [
     { key: 'general', label: 'General', icon: Building2 },
     { key: 'address', label: 'Address', count: form.addresses.length, icon: MapPin },
     { key: 'contacts', label: 'Contacts', count: form.contacts.length, icon: Users },
-    { key: 'statutory', label: 'Statutory', icon: ShieldCheck },
-    { key: 'bank', label: 'Bank', count: form.banks.length, icon: Landmark },
+    ...(!isMerchandiserOnly ? [{ key: 'statutory', label: 'Statutory', icon: ShieldCheck }] : []),
+    ...(!isMerchandiserOnly ? [{ key: 'bank', label: 'Bank', count: form.banks.length, icon: Landmark }] : []),
     ...(isBuyerRole  ? [{ key: 'buyer',    label: 'Buyer Details',    icon: ShoppingBag }] : []),
     ...(form.is_supplier ? [{ key: 'supplier', label: 'Supplier Details', icon: Truck }] : []),
     ...(form.is_vendor   ? [{ key: 'jobwork',  label: 'Job Work Details', icon: Factory }] : []),
@@ -828,7 +843,23 @@ export function PartyDetailPage() {
                       type="checkbox"
                       className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
                       checked={!!form[r.key]}
-                      onChange={(e) => handleField(r.key, e.target.checked ? 1 : 0)}
+                      onChange={(e) => {
+                        const checked = e.target.checked ? 1 : 0;
+                        setForm((prev: any) => {
+                          const next = { ...prev, [r.key]: checked };
+                          // If user specifically selects Merchandiser on new partner, clear buyer defaults
+                          if (r.key === 'is_merchandiser' && checked) {
+                            if (isNew && prev.is_buyer && prev.is_customer && !prev.is_supplier && !prev.is_vendor && !prev.is_agent) {
+                              next.is_buyer = 0;
+                              next.is_customer = 0;
+                              next.payment_terms = '';
+                              next.credit_days = 0;
+                              next.credit_limit = 0;
+                            }
+                          }
+                          return next;
+                        });
+                      }}
                     />
                     <span>{r.label}</span>
                   </label>
@@ -962,14 +993,23 @@ export function PartyDetailPage() {
                     <span className="font-semibold text-slate-700">{form.is_active ? 'Active' : 'Inactive'}</span>
                   </label>
                 </div>
-                <div className="flex items-center justify-between border-t border-slate-100 pt-2">
-                  <span className="text-slate-500">Credit Days</span>
-                  <span className="font-bold text-slate-800">{form.credit_days || 0} Days</span>
-                </div>
-                <div className="flex items-center justify-between border-t border-slate-100 pt-2">
-                  <span className="text-slate-500">Default Terms</span>
-                  <span className="font-semibold text-brand-700">{form.payment_terms || '—'}</span>
-                </div>
+                {!isMerchandiserOnly ? (
+                  <>
+                    <div className="flex items-center justify-between border-t border-slate-100 pt-2">
+                      <span className="text-slate-500">Credit Days</span>
+                      <span className="font-bold text-slate-800">{form.credit_days || 0} Days</span>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-slate-100 pt-2">
+                      <span className="text-slate-500">Default Terms</span>
+                      <span className="font-semibold text-brand-700">{form.payment_terms || '—'}</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center justify-between border-t border-slate-100 pt-2">
+                    <span className="text-slate-500">Merchandiser Type</span>
+                    <span className="font-semibold text-sky-700">{form.merchandiser_type || 'PRODUCTION'}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between border-t border-slate-100 pt-2">
                   <span className="text-slate-500">Total Addresses</span>
                   <span className="font-bold text-slate-800">{form.addresses.length}</span>
@@ -978,10 +1018,12 @@ export function PartyDetailPage() {
                   <span className="text-slate-500">Contact Persons</span>
                   <span className="font-bold text-slate-800">{form.contacts.length}</span>
                 </div>
-                <div className="flex items-center justify-between border-t border-slate-100 pt-2">
-                  <span className="text-slate-500">Bank Accounts</span>
-                  <span className="font-bold text-slate-800">{form.banks.length}</span>
-                </div>
+                {!isMerchandiserOnly && (
+                  <div className="flex items-center justify-between border-t border-slate-100 pt-2">
+                    <span className="text-slate-500">Bank Accounts</span>
+                    <span className="font-bold text-slate-800">{form.banks.length}</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>

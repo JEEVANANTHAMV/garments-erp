@@ -32,8 +32,20 @@ export function PartiesPage() {
           {r.is_merchandiser ? <Badge tone="sky">Merchandiser</Badge> : null}
         </div>) },
       { key: 'country_name', header: 'Country' },
-      { key: 'payment_terms', header: 'Payment terms' },
-      { key: 'credit_days', header: 'Credit days', align: 'right' },
+      { key: 'payment_terms', header: 'Payment terms', render: (r: any) => {
+        const isMerchandiserOnly = r.is_merchandiser && !r.is_buyer && !r.is_supplier && !r.is_vendor && !r.is_agent;
+        if (isMerchandiserOnly || !r.payment_terms) {
+          return <span className="text-slate-400 text-xs">—</span>;
+        }
+        return <span className="text-slate-700 font-medium">{r.payment_terms}</span>;
+      }},
+      { key: 'credit_days', header: 'Credit days', align: 'right', render: (r: any) => {
+        const isMerchandiserOnly = r.is_merchandiser && !r.is_buyer && !r.is_supplier && !r.is_vendor && !r.is_agent;
+        if (isMerchandiserOnly || !r.credit_days) {
+          return <span className="text-slate-400 text-xs">—</span>;
+        }
+        return <span className="text-slate-700">{r.credit_days} d</span>;
+      }},
       { key: 'status', header: 'Status', render: (r: any) => (
         r.is_draft ? <Badge tone="amber">Draft</Badge> :
         r.is_active ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Inactive</Badge>
