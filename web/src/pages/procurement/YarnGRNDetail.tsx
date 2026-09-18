@@ -19,6 +19,8 @@ interface YarnGrnLine {
   yarn_id: string | number;
   yarn_name?: string;
   yarn_type: string;
+  shade_code?: string;
+  color_name?: string;
   composition?: string;
   lot_no: string;
   po_qty: number;
@@ -42,6 +44,8 @@ const emptyYarnGrnLine = (): YarnGrnLine => ({
   style_id: '',
   yarn_id: '',
   yarn_type: 'Grey Yarn',
+  shade_code: '',
+  color_name: '',
   lot_no: 'LOT-Y-001',
   po_qty: 2268,
   received_qty: 2268,
@@ -162,6 +166,8 @@ export default function YarnGRNDetailPage() {
             yarn_id: l.yarn_id,
             yarn_name: l.yarn_name,
             yarn_type: l.yarn_type || 'Grey Yarn',
+            shade_code: l.shade_code || '',
+            color_name: l.color_name || '',
             composition: l.composition,
             lot_no: l.lot_no || 'LOT-1',
             po_qty: Number(l.received_qty) + Number(l.balance_qty || 0),
@@ -240,6 +246,8 @@ export default function YarnGRNDetailPage() {
                 yarn_id: pl.yarn_id,
                 yarn_name: pl.yarn_name,
                 yarn_type: pl.yarn_type || 'Grey Yarn',
+                shade_code: pl.shade_code || '',
+                color_name: pl.color_name || '',
                 composition: pl.composition,
                 lot_no: 'LOT-Y-01',
                 po_qty: qty,
@@ -357,6 +365,9 @@ export default function YarnGRNDetailPage() {
           so_id: l.so_id ? Number(l.so_id) : undefined,
           style_id: l.style_id ? Number(l.style_id) : undefined,
           yarn_id: l.yarn_id,
+          yarn_type: l.yarn_type || 'Grey Yarn',
+          shade_code: l.shade_code || null,
+          color_name: l.color_name || null,
           received_qty: l.received_qty,
           packs: l.packs,
           accepted_qty: l.accepted_qty,
@@ -659,6 +670,7 @@ export default function YarnGRNDetailPage() {
                 <th className="py-2.5 px-2 min-w-[110px]">Style</th>
                 <th className="py-2.5 px-3 min-w-[140px]">Yarn Item</th>
                 <th className="py-2.5 px-2 w-24">Type</th>
+                <th className="py-2.5 px-2 w-24">Color / Shade</th>
                 <th className="py-2.5 px-2 w-24">Lot / Batch</th>
                 <th className="py-2.5 px-2 text-right w-20">PO (KG)</th>
                 <th className="py-2.5 px-2 text-right w-24">Weighed (KG) *</th>
@@ -744,7 +756,49 @@ export default function YarnGRNDetailPage() {
                     </td>
 
                     {/* Yarn Type */}
-                    <td className="py-2.5 px-2 text-slate-600">{l.yarn_type}</td>
+                    <td className="py-2.5 px-2 text-slate-600">
+                      {isNew ? (
+                        <select
+                          value={l.yarn_type}
+                          onChange={(e) => updateLine(idx, { yarn_type: e.target.value })}
+                          className={`text-xs rounded border py-0.5 px-1 font-semibold ${
+                            l.yarn_type === 'Dyed Yarn'
+                              ? 'bg-purple-50 text-purple-700 border-purple-300'
+                              : 'bg-amber-50 text-amber-800 border-amber-300'
+                          }`}
+                        >
+                          <option value="Grey Yarn">Grey Yarn</option>
+                          <option value="Dyed Yarn">Dyed Yarn</option>
+                        </select>
+                      ) : (
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                          l.yarn_type === 'Dyed Yarn'
+                            ? 'bg-purple-100 text-purple-700'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {l.yarn_type}
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Color / Shade */}
+                    <td className="py-2.5 px-2">
+                      {isNew ? (
+                        l.yarn_type === 'Dyed Yarn' ? (
+                          <input
+                            type="text"
+                            value={l.shade_code || l.color_name || ''}
+                            onChange={(e) => updateLine(idx, { shade_code: e.target.value, color_name: e.target.value })}
+                            className="w-20 text-xs font-mono border border-purple-300 bg-purple-50/40 rounded px-1 py-1"
+                            placeholder="Shade"
+                          />
+                        ) : (
+                          <span className="text-slate-400 text-xs block text-center">—</span>
+                        )
+                      ) : (
+                        <span className="font-mono text-slate-700 text-xs">{l.shade_code || l.color_name || '—'}</span>
+                      )}
+                    </td>
                     <td className="py-2.5 px-2">
                       {isNew ? (
                         <input
@@ -904,7 +958,7 @@ export default function YarnGRNDetailPage() {
             </tbody>
             <tfoot className="bg-slate-50/80 border-t border-slate-200 font-bold text-slate-800">
               <tr>
-                <td colSpan={7} className="py-3 px-3 text-right text-slate-600">Totals:</td>
+                <td colSpan={8} className="py-3 px-3 text-right text-slate-600">Totals:</td>
                 <td className="py-3 px-2 text-right font-mono text-amber-800">{fmtDecimal(totals.totalKg, 2)}</td>
                 <td className="py-3 px-2 text-center font-mono">{totals.totalPacks}</td>
                 <td className="py-3 px-2 text-right font-mono text-emerald-800">{fmtDecimal(totals.acceptedKg, 2)}</td>

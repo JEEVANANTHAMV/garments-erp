@@ -82,23 +82,30 @@ fabricYarnProcurementRouter.post('/fabric-purchase-orders/convert-from-quotation
     const newPoId = poRes!.insertId;
 
     for (const ql of quoteLines) {
+      const isDyed = ql.fabric_category === 'Dyed Fabric' || Boolean(ql.color_name || ql.shade_code);
+      const category = ql.fabric_category || (isDyed ? 'Dyed Fabric' : 'Grey Fabric');
+
       await txExecute(tx, `
         INSERT INTO trx_purchase_order_line (
           po_id, material_type, fabric_id, description,
-          fabric_type, dia, gsm, composition, shade_code,
+          fabric_type, fabric_category, pantone_spec, color_name,
+          dia, gsm, composition, shade_code,
           print_flag, print_color, finish,
           qty, uom_id, rate, amount, gst_rate, received_qty
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `, [
         newPoId,
         'FABRIC',
         ql.fabric_id,
         ql.description || ql.fabric_name || 'Fabric Purchase Item',
-        ql.master_fabric_type || 'Knitted',
+        ql.fabric_type || ql.master_fabric_type || 'Knitted',
+        category,
+        ql.pantone_spec || null,
+        ql.color_name || null,
         ql.dia || '30"',
         ql.gsm || '180',
-        ql.construction || '100% Cotton',
-        ql.yarn_count || 'NVY-01',
+        ql.composition || ql.construction || '100% Cotton',
+        ql.shade_code || (isDyed ? (ql.color_name || 'NVY-01') : null),
         0,
         null,
         'Compact',
@@ -269,11 +276,12 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
       const lineRes = await txQueryOne<{ insertId: number }>(tx, `
         INSERT INTO trx_grn_line (
           grn_id, po_line_id, so_id, style_id, material_type, fabric_id,
+          fabric_category, pantone_spec, color_name, shade_code,
           received_qty, received_weight, no_of_rolls,
           accepted_qty, rejected_qty, hold_qty, balance_qty,
           rate, taxable_amount, gst_rate, cgst_amount, sgst_amount, igst_amount, total_amount,
           lot_no, qc_status, uom_id
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `, [
         newGrnId,
         line.po_line_id ? Number(line.po_line_id) : null,
@@ -281,6 +289,10 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
         line.style_id ? Number(line.style_id) : (body.style_id ? Number(body.style_id) : null),
         'FABRIC',
         Number(line.fabric_id),
+        line.fabric_category || 'Grey Fabric',
+        line.pantone_spec || null,
+        line.color_name || null,
+        line.shade_code || null,
         line.recQty,
         Number(line.received_weight || line.recQty * 0.25),
         Number(line.no_of_rolls || 1),
@@ -783,11 +795,12 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
       await txExecute(tx, `
         INSERT INTO trx_grn_line (
           grn_id, po_line_id, so_id, style_id, material_type, yarn_id,
+          yarn_type, shade_code, color_name,
           received_qty, received_weight, no_of_rolls,
           accepted_qty, rejected_qty, hold_qty, balance_qty,
           rate, taxable_amount, gst_rate, cgst_amount, sgst_amount, igst_amount, total_amount,
           lot_no, qc_status, uom_id
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `, [
         newGrnId,
         line.po_line_id ? Number(line.po_line_id) : null,
@@ -795,6 +808,9 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
         line.style_id ? Number(line.style_id) : (body.style_id ? Number(body.style_id) : null),
         'YARN',
         Number(line.yarn_id),
+        line.yarn_type || 'Grey Yarn',
+        line.shade_code || null,
+        line.color_name || null,
         line.recKg,
         line.recKg,
         Number(line.packs || line.no_of_rolls || 1),
@@ -903,7 +919,7 @@ fabricYarnProcurementRouter.get('/yarn-grns/:id', requirePermission('GRN.VIEW'),
   if (!grn) throw NotFound('Yarn GRN not found');
 
   const lines = await query<any>(`
-    SELECT gl.*, y.yarn_name, y.yarn_code, y.yarn_type, y.composition, u.code AS uom_code
+    SELECT gl.*, y.yarn_name, y.yarn_code, y.yarn_type AS yarn_base_type, COALESCE(gl.yarn_type, 'Grey Yarn') AS yarn_type, u.code AS uom_code
       FROM trx_grn_line gl
       LEFT JOIN mst_yarn y ON y.id = gl.yarn_id
       LEFT JOIN cfg_uom u ON u.id = gl.uom_id
