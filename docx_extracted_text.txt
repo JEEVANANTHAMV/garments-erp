@@ -1,0 +1,797 @@
+GARMENT MANUFACTURING ERP
+COMPLETE BILL OF MATERIALS (BOM)
+Developer Specification Document
+Yarn • Fabric • Trims • Accessories • Packing • General Materials
+Colour-wise • Size-wise • Consumption • Wastage • Requirement • Purchase • Traceability
+Document Control
+Value
+Document Type
+Functional + Technical Developer Specification
+Primary Purpose
+Define a common BOM engine for garment manufacturing
+BOM Categories
+Yarn, Fabric, Trims, Accessories, Packing, General Materials
+Core Dimensions
+Company, Buyer, PO, Style, Colour, Size, Season, Version
+Architecture Target
+Laravel 13 + React 19 + SQL Server 2019
+Status
+Developer Ready Specification
+1. Objective
+The ERP shall maintain a complete, version-controlled BOM for every garment Style and calculate material requirements based on Buyer PO, Style, Colour, Size and order quantity. The same BOM engine shall support Yarn, Fabric, Trims, Accessories, Packing and General Materials without duplicating core logic.
+Support style-level, colour-level, size-level and colour-size-level material definitions.
+Support different consumption bases such as per piece, per dozen, per carton, per set and fixed quantity.
+Calculate base requirement, additional quantity, wastage and final requirement automatically.
+Separate BOM requirement from purchase requirement, stock, issue, actual consumption, return and wastage.
+Maintain BOM revisions so historical transactions are never changed by later master edits.
+Provide full traceability from Buyer PO → Style → BOM → Material Requirement → Purchase → GRN → Stock → Issue → Actual Consumption.
+2. Scope
+BOM Category
+Typical Materials
+Special Handling
+Yarn
+Combed yarn, carded yarn, blended yarn
+Count, composition, colour, process loss
+Fabric
+Grey, dyed, printed, compacted, finished fabric
+GSM, width, composition, colour, size consumption
+Trims
+Thread, button, zipper, elastic, labels
+Size/colour applicability, piece/metre consumption
+Accessories
+Hangtag, polybag, sticker, tissue, hanger
+Piece/carton/packing basis
+Packing
+Carton, tape, belt, carton sticker
+Packaging ratio, assortment, carton capacity
+General Materials
+Production/packing support materials
+Fixed or controlled consumption
+3. Overall BOM Hierarchy
+Recommended logical hierarchy:
+Garment Style → Garment BOM → Yarn / Fabric / Trims / Accessories / Packing / General Materials
+For material transformation, a multi-level relationship may be used:
+Yarn → Knitting → Grey Fabric → Dyeing/Printing/Washing/Compacting → Finished Fabric → Cutting/Sewing → Finished Garment
+4. BOM Design Principle
+Use one common BOM header/detail engine with bom_type rather than creating six unrelated BOM modules.
+Use process-specific fields only where required (e.g., Fabric GSM/Width, Yarn Count, Packing Ratio).
+Do not overwrite approved BOMs. Create a new revision.
+Freeze the BOM revision, consumption and conversion values used when a requirement or transaction is posted.
+Master changes must not change historical purchase, issue or consumption transactions.
+5. BOM Header
+Field
+Type
+Required
+Notes
+id
+BIGINT
+Yes
+Primary key
+company_id
+BIGINT
+Yes
+Multi-company
+branch_id
+BIGINT
+Yes
+Branch
+buyer_id
+BIGINT
+Yes
+Buyer master
+buyer_po_id
+BIGINT
+Optional
+PO-specific BOM if applicable
+style_id
+BIGINT
+Yes
+Style master
+season_id
+BIGINT
+Optional
+Season
+bom_no
+VARCHAR
+Yes
+Unique BOM number
+bom_type
+ENUM/VARCHAR
+Yes
+GARMENT / YARN / FABRIC / etc.
+version_no
+INT
+Yes
+Revision number
+effective_from
+DATE
+Yes
+Validity start
+effective_to
+DATE
+Optional
+Validity end
+status
+VARCHAR
+Yes
+DRAFT/SUBMITTED/APPROVED/ACTIVE/SUPERSEDED/CANCELLED
+remarks
+NVARCHAR
+Optional
+Notes
+created_by / approved_by
+BIGINT
+Yes/Optional
+Audit users
+created_at / updated_at
+DATETIME2
+Yes
+Audit timestamps
+6. BOM Detail
+Field
+Purpose
+bom_id
+Parent BOM
+material_id
+Material master reference
+material_category
+YARN/FABRIC/TRIMS/ACCESSORY/PACKING/GENERAL
+material_sub_category
+Detailed grouping
+colour_applicability
+ALL/COLOUR_WISE/COLOUR_SIZE_WISE
+size_applicability
+ALL/SIZE_WISE/COLOUR_SIZE_WISE
+colour_id
+Applicable colour
+size_id
+Applicable size
+consumption_basis
+PER_PIECE/PER_DOZEN/PER_CARTON/PER_SET/PER_ORDER/etc.
+consumption_qty
+Planned consumption
+consumption_uom
+Consumption UOM
+additional_qty
+Fixed additional quantity
+wastage_percent
+Planned wastage/loss
+packaging_ratio
+For carton/pack-based materials
+conversion_factor
+Purchase-to-stock conversion
+rounding_rule
+NONE/CEILING/ROUND/FLOOR
+supplier_id
+Preferred supplier, optional
+sequence_no
+Display/order
+remarks
+Notes
+7. Colour-wise Design
+The BOM shall support different material definitions for each garment colour. Example: Black garment may use black thread and black fabric, while White uses white thread and white fabric.
+Material
+Black
+White
+Navy
+Applicability
+Main Fabric
+Black
+White
+Navy
+COLOUR_SIZE_WISE
+Sewing Thread
+Black
+White
+Navy
+COLOUR_WISE
+Main Label
+Same
+Same
+Same
+ALL
+Size Label
+Same
+Same
+Same
+SIZE_WISE
+Colour Sticker
+Black
+White
+Navy
+COLOUR_WISE
+8. Size-wise Design
+The BOM shall support size-dependent consumption. Fabric, buttons, elastic, labels and other materials may have different quantities by size.
+Size
+Fabric Consumption
+Button Qty
+Example
+XS
+0.72 KG
+2 PCS
+Smallest consumption
+S
+0.76 KG
+3 PCS
+Size-specific
+M
+0.80 KG
+3 PCS
+Size-specific
+L
+0.84 KG
+3 PCS
+Size-specific
+XL
+0.89 KG
+4 PCS
+Size-specific
+XXL
+0.95 KG
+4 PCS
+Largest consumption
+9. Colour + Size Matrix
+Colour
+XS
+S
+M
+L
+XL
+XXL
+Total
+Black
+50
+100
+200
+200
+100
+50
+700
+White
+50
+100
+250
+200
+100
+50
+750
+Navy
+25
+75
+150
+150
+75
+25
+500
+TOTAL
+125
+275
+600
+550
+275
+125
+1950
+The matrix shall be the primary source for calculating colour-size material requirements where order quantity is size/colour dependent.
+10. Consumption Basis
+Basis
+Formula / Meaning
+Example
+PER_PIECE
+Order Qty × consumption
+Label = 1 PCS / garment
+PER_DOZEN
+Order Qty / 12 × consumption
+Thread per dozen
+PER_CARTON
+Number of cartons × consumption
+Carton sticker = 2 / carton
+PER_SET
+Number of sets × consumption
+Set packing
+PER_PACK
+Number of packs × consumption
+Poly pack
+PER_ORDER
+One fixed requirement per order
+Sample/document material
+PER_STYLE
+One fixed requirement per style
+Style-specific accessory
+PER_COLOUR
+One fixed requirement per colour
+Colour swatch
+PER_SIZE
+One fixed requirement per size
+Size set
+FIXED_QTY
+Fixed quantity independent of order qty
+Special material
+11. Requirement Calculation
+Core calculation:
+Base Qty = Applicable Order Qty × Consumption
+Wastage Qty = Base Qty × Wastage %
+Final Requirement = Base Qty + Additional Qty + Wastage Qty
+Example: Order Qty 1,000 PCS × Fabric consumption 0.82 KG = 820 KG. At 5% wastage, wastage = 41 KG. Final requirement = 861 KG.
+12. Yarn BOM
+Field
+Example
+Yarn Code
+YRN-001
+Yarn Type
+Combed
+Count
+30s
+Composition
+100% Cotton
+Colour
+Black
+Consumption
+0.95 KG
+Process Loss %
+3%
+Additional Qty
+10 KG
+Final Requirement
+Auto calculated
+Yarn BOM may feed fabric production BOMs. If fabric is produced internally, the system should calculate yarn requirement based on fabric production quantity and process loss.
+13. Fabric BOM
+Field
+Example
+Fabric Code
+FAB-001
+Fabric Type
+Single Jersey
+Composition
+100% Cotton
+GSM
+180
+Width
+72 inch
+Knitting Type
+Circular
+Process
+Dyeing + Compacting
+Colour
+Black
+Size applicability
+Colour + Size
+Consumption
+0.82 KG/PCS
+Wastage
+5%
+Optional transformation chain: Yarn → Knitting → Grey Fabric → Dyeing/Printing/Washing/Compacting → Finished Fabric.
+14. Fabric Process BOM
+Input
+Process
+Output
+Loss/Conversion
+Yarn
+Knitting
+Grey Fabric
+Process loss %
+Grey Fabric
+Dyeing
+Dyed Fabric
+Process loss %
+Dyed Fabric
+Compacting
+Finished Fabric
+Width/GSM + loss
+Fabric
+Printing
+Printed Fabric
+Process loss
+Each process transaction must retain input lot/batch, output lot/batch, quantity, UOM, process, loss and responsible location.
+15. Trims BOM
+Trim
+Basis
+Consumption
+Colour/Size
+Sewing Thread
+PER_PIECE
+120 M
+Colour-wise
+Main Label
+PER_PIECE
+1 PCS
+ALL
+Size Label
+PER_PIECE
+1 PCS
+Size-wise
+Care Label
+PER_PIECE
+1 PCS
+ALL
+Button
+PER_PIECE
+3 PCS
+Colour + Size
+Zipper
+PER_PIECE
+1 PCS
+Size/Style dependent
+Elastic
+PER_PIECE
+0.8 M
+Size-wise
+16. Accessories BOM
+Support hangtag, price sticker, barcode sticker, polybag, tissue, hanger, security tag and other accessories.
+Allow style-wise, colour-wise, size-wise and packing-wise applicability.
+Barcode/QR/price information should be linked to buyer/style/colour/size when required.
+Polybag may be per piece; carton sticker may be per carton; therefore consumption basis is mandatory.
+17. Packing BOM & Packaging Ratio
+Parameter
+Example
+Carton Capacity
+20 PCS
+Assortment
+S=5, M=5, L=5, XL=5
+Carton Sticker
+2 PCS / carton
+Tape
+1 roll / configured cartons
+Rounding
+CEILING
+Order Qty
+1,091 PCS
+Cartons
+CEILING(1091/20) = 55
+Packed Capacity
+1,100 PCS
+Assortment validation: Sum of size quantities in an assortment must equal carton capacity unless the carton is explicitly configured as a mixed/partial carton.
+18. UOM & Conversion
+Purchase UOM
+Stock UOM
+Conversion
+Example
+Carton
+PCS
+1 Carton = 500 PCS
+1,250 PCS = 2.5 cartons
+Dozen
+PCS
+1 Dozen = 12 PCS
+120 PCS = 10 Dozen
+Box
+PCS
+Configured per material
+Material-specific
+KG
+GRAM
+1 KG = 1000 GRAM
+2.5 KG = 2500 G
+Meter
+CM
+1 M = 100 CM
+25 M = 2500 CM
+Conversion factor must be positive.
+Historical transactions must retain the conversion factor used at posting time.
+If purchase requires whole cartons/boxes, apply CEILING after conversion.
+Do not overwrite stock quantity with purchase quantity.
+19. Separate Quantity Buckets
+Quantity
+Meaning
+Order Qty
+Buyer/style order quantity
+BOM Base Qty
+Quantity before additional/wastage
+Additional Qty
+User-approved fixed addition
+BOM Wastage Qty
+Planned BOM wastage
+Required Qty
+Final BOM requirement
+Purchase Qty
+Quantity to purchase after stock/open PO
+GRN Qty
+Quantity actually received
+Stock Qty
+Quantity available in store
+Issue Qty
+Quantity issued to production/packing
+Actual Used Qty
+Quantity actually consumed
+Return Qty
+Material returned to store
+Wastage Qty
+Actual production/packing wastage
+Variance Qty
+Difference between plan and actual
+20. Material Requirement Flow
+Select Buyer PO.
+Load Style and colour-size order matrix.
+Load Active/Approved BOM revision.
+Calculate material requirement.
+Display colour-wise and size-wise requirement.
+Check available stock and reserved stock.
+Check open purchase orders.
+Calculate net purchase requirement.
+Create Material Request / Purchase Requirement.
+Link purchase and GRN transactions back to requirement.
+21. Net Purchase Requirement
+Net Purchase Requirement = Gross Requirement − Available Stock − Reserved Stock − Open PO Quantity.
+Example: Requirement 861 KG; Available stock 300 KG; Open PO 200 KG; Net purchase requirement = 361 KG.
+22. BOM Screen Design
+Main screen:
+BOM No | Version | Buyer | Buyer PO | Style | Season | Order Qty | Status
+Tabs: General | Colour & Size | Yarn | Fabric | Trims | Accessories | Packing | General Materials | Packaging Ratio | Calculation | Approval | Audit
+Material grid columns: Material Code | Description | Category | Colour | Size | UOM | Basis | Consumption | Additional | Wastage % | Required Qty | Purchase Qty | Supplier | Remarks.
+23. Developer Component Structure
+React Component
+Responsibility
+GarmentBOMPage
+Main BOM module
+BOMHeaderForm
+Buyer/PO/Style/version/status
+ColourSizeMatrix
+Colour-size order matrix
+BOMMaterialGrid
+Material rows and consumption
+YarnBOMTab
+Yarn-specific data
+FabricBOMTab
+Fabric-specific data
+TrimsBOMTab
+Trims
+AccessoriesBOMTab
+Accessories
+PackingBOMTab
+Packing and ratios
+PackagingRatioTab
+Carton/pack rules
+BOMCalculationPanel
+Live calculation
+BOMApprovalTab
+Submit/approve/revise
+BOMAuditTab
+Change history
+24. Backend Architecture
+Controller: thin request/response layer.
+Form Requests: validation and authorization checks.
+BOMService: create/update/revision logic.
+BOMCalculationService: all requirement calculations.
+UOMConversionService: unit conversion and rounding.
+MaterialRequirementService: gross/net requirement.
+BOMApprovalService: workflow and status transitions.
+AuditService: before/after values and reason.
+Use database transactions for save, approve, revision and posting operations.
+25. Recommended Database Tables
+Table
+Purpose
+mst_boms
+BOM header/version
+mst_bom_details
+Material lines
+mst_bom_colours
+BOM colour mapping
+mst_bom_sizes
+BOM size mapping
+mst_materials
+Material master
+mst_material_categories
+Material grouping
+mst_uoms
+UOM master
+mst_uom_conversions
+Conversion rules
+mst_packaging_ratios
+Packing ratio/assortment
+trn_material_requirements
+Requirement header
+trn_material_requirement_details
+Requirement lines
+trn_material_issues
+Issue transactions
+trn_material_consumptions
+Actual consumption
+trn_material_returns
+Returns
+trn_material_wastage
+Wastage
+trn_bom_revisions
+Revision history
+audit_logs
+Field-level audit trail
+26. API Specification
+Method
+Endpoint
+Purpose
+GET
+/api/boms
+List BOMs
+POST
+/api/boms
+Create BOM
+GET
+/api/boms/{id}
+View BOM
+PUT
+/api/boms/{id}
+Edit draft BOM
+DELETE
+/api/boms/{id}
+Deactivate/delete where permitted
+POST
+/api/boms/{id}/submit
+Submit
+POST
+/api/boms/{id}/approve
+Approve
+POST
+/api/boms/{id}/activate
+Activate
+POST
+/api/boms/{id}/revision
+Create revision
+POST
+/api/boms/{id}/calculate
+Calculate
+GET
+/api/boms/{id}/audit
+Audit history
+GET
+/api/material-requirements
+List requirements
+POST
+/api/material-requirements
+Create requirement
+POST
+/api/material-requirements/{id}/calculate
+Recalculate
+POST
+/api/material-requirements/{id}/confirm
+Confirm requirement
+POST
+/api/material-requirements/{id}/cancel
+Cancel
+27. Validation Rules
+Buyer, Style and BOM Type are mandatory.
+Buyer PO must belong to the selected Buyer.
+Style must belong to the selected order/PO where PO control is enabled.
+Consumption must be greater than zero for consumption-based lines.
+Additional Qty cannot be negative.
+Wastage % must be within the configured maximum.
+Packaging ratio and conversion factor must be greater than zero.
+Colour and Size must be valid master values.
+A material cannot be duplicated for the same BOM + colour + size + applicability unless explicitly allowed.
+Approved/Active BOM cannot be directly edited; create a revision.
+Posted material transactions cannot be deleted.
+Issue cannot exceed available stock unless an authorised over-issue policy exists.
+Return cannot exceed outstanding issued quantity.
+Actual used + return + wastage must follow configured reconciliation rules.
+Closed/cancelled documents cannot be modified.
+28. BOM Workflow
+DRAFT → SUBMITTED → APPROVED → ACTIVE → SUPERSEDED
+Alternative terminal states: CANCELLED / CLOSED.
+Only authorised users can approve.
+Only Active BOMs can be used for normal material requirement generation.
+When a revision is approved, the previous active revision becomes SUPERSEDED.
+Approval must store user, timestamp and reason/comment.
+29. Permissions
+Permission
+Purpose
+bom.view
+View BOM
+bom.create
+Create
+bom.edit
+Edit draft
+bom.submit
+Submit
+bom.approve
+Approve
+bom.revise
+Create revision
+bom.deactivate
+Deactivate
+material_requirement.view
+View requirements
+material_requirement.create
+Create/calculate
+material_requirement.confirm
+Confirm
+material_issue.create
+Create issue
+material_issue.post
+Post issue
+material_consumption.post
+Post actual consumption
+material_return.create
+Create return
+material_wastage.create
+Record wastage
+bom.report
+View reports
+bom.audit
+View audit trail
+30. Audit Trail
+Field
+Example
+Document Type
+BOM
+Document ID
+BOM-000125
+Field
+Consumption Qty
+Old Value
+0.82
+New Value
+0.80
+Changed By
+User ID
+Changed At
+Timestamp
+Reason
+Buyer approved revised consumption
+31. Reports
+BOM Master Report
+BOM Revision Report
+Style-wise BOM
+Buyer PO-wise BOM
+Colour-wise Material Requirement
+Size-wise Material Requirement
+Colour + Size Matrix
+Yarn Requirement
+Fabric Requirement
+Trims Requirement
+Accessories Requirement
+Packing Requirement
+Purchase Shortage Report
+Stock vs Requirement
+Planned vs Actual Consumption
+Wastage Report
+Material Variance Report
+BOM Audit Report
+32. Dashboard KPIs
+Active BOMs
+Pending BOM Approval
+Open Material Requirements
+Material Shortage
+Purchase Pending
+GRN Pending
+Material Issue Pending
+Production/Packing Consumption Pending
+High Wastage
+High Variance
+Superseded BOMs
+Requirements by Buyer / Style / Colour
+33. Multi-Company / Multi-Store
+All transactional and master records that require segregation should carry company_id and branch_id. Stock-related records should additionally carry store_id, location_id and optionally rack/bin.
+Hierarchy: Company → Branch → Store → Location → Rack/Bin
+34. Security & Data Integrity
+Use Laravel authorization policies for BOM actions.
+Validate company/branch ownership on every foreign key.
+Prevent cross-company Buyer/Style/Material selection.
+Use database transactions for multi-table posting.
+Use soft delete/deactivation for master data where audit retention is required.
+Never hard-delete posted transactional documents.
+Maintain created_by, updated_by, approved_by and timestamps.
+35. Acceptance Criteria
+Developer can create a BOM for a Style.
+BOM can contain Yarn, Fabric, Trims, Accessories, Packing and General Materials.
+Material applicability can be ALL, COLOUR_WISE, SIZE_WISE or COLOUR_SIZE_WISE.
+Colour-size matrix calculates material quantities correctly.
+Consumption basis works correctly.
+Additional and wastage calculations are correct.
+Packaging ratio and carton rounding work correctly.
+UOM conversions work correctly.
+Material requirement is generated from an approved BOM.
+Stock and open PO are deducted to calculate net purchase requirement.
+BOM revision preserves historical values.
+Approval workflow and permissions work.
+Audit trail records changes.
+Reports can filter by Buyer, PO, Style, Colour, Size and BOM category.
+No posted transaction can be silently changed or deleted.
+36. End-to-End Reference Flow
+Buyer PO → Style → Colour/Size Order Matrix → Active BOM Revision → Yarn/Fabric/Trims/Accessories/Packing/General Material Calculation → Gross Requirement → Stock Check → Open PO Check → Net Purchase Requirement → Purchase PO → GRN → Stock → Material Issue → Production/Packing → Actual Consumption → Return/Wastage → Variance → Costing/Reports
+37. Developer Implementation Notes
+Use decimal/numeric types for quantities; avoid floating point calculations.
+Suggested SQL Server quantity precision: DECIMAL(18,6), percentage DECIMAL(9,4).
+Store the calculated values as transaction snapshots for audit and performance.
+Use server-side calculation as the final authority; React live calculation is only for UI preview.
+Use optimistic locking or version checks to prevent concurrent BOM edits.
+Approved BOM revision should be immutable.
+All calculation services must be unit tested with colour-size, rounding, UOM and packaging scenarios.
+Excel import/export should validate master codes before committing records.
+Print/PDF output should show BOM revision, calculation basis, approval details and date.

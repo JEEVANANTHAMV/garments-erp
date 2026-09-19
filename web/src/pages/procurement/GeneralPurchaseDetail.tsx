@@ -3,7 +3,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, ArrowLeft, Save, Trash2, CheckCircle2, Zap,
-  ShoppingCart, Sparkles, Copy, Printer
+  ShoppingCart, Sparkles, Copy, Printer, Globe
 } from 'lucide-react';
 import { http, ApiError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -71,16 +71,27 @@ export function GeneralPurchaseDetailPage() {
   const departments = useLookup('departments');
   const gateInwards = useLookup('gate-inwards');
 
+  // Available General POs for linking in GRN mode
+  const { data: generalPos = [] } = useQuery({
+    queryKey: ['general-pos-for-grn'],
+    queryFn: async () => {
+      const res = await http.get<any>('/api/resources/general-purchases?limit=50');
+      return (res.data || []).filter((p: any) => !p.gate_inward_id);
+    },
+    enabled: !isPoMode && isNew,
+  });
+
   // Header State
   const [head, setHead] = useState<Record<string, any>>({
     purchase_no: '',
+    grn_no: '',
     purchase_date: today(),
     supplier_id: '',
     purchase_type: 'GENERAL',
     supplier_inv_no: '',
     supplier_inv_date: today(),
     currency_id: '',
-    exchange_rate: 1,
+    exchange_rate: 1.0,
     payment_terms: '30 Days Net',
     reference_po_id: '',
     gate_inward_id: '',
@@ -89,6 +100,12 @@ export function GeneralPurchaseDetailPage() {
     approval_state: 'DRAFT',
     status_id: '',
   });
+
+  // Selected Currency Info
+  const selectedCurrency = (currencies.data as any[])?.find((c: any) => String(c.id) === String(head.currency_id));
+  const currSymbol = selectedCurrency?.symbol || '₹';
+  const currCode = selectedCurrency?.code || 'INR';
+  const isForeignCurrency = currCode !== 'INR' && Number(head.exchange_rate) > 0 && Number(head.exchange_rate) !== 1.0;
 
   // Lines State
   const [lines, setLines] = useState<GeneralPurchaseLineItem[]>([
@@ -106,7 +123,7 @@ export function GeneralPurchaseDetailPage() {
       amount: 2016,
       stock_type: 'STOCK',
       allocation_type: 'BUYER_ORDER',
-      direct_issue: 1, // Example direct issue
+      direct_issue: 1,
       remarks: 'Urgent sample batch stitching',
     },
   ]);
@@ -126,13 +143,14 @@ export function GeneralPurchaseDetailPage() {
       const p = purchaseQuery.data;
       setHead({
         purchase_no: p.purchase_no || '',
+        grn_no: p.grn_no || '',
         purchase_date: p.purchase_date ? p.purchase_date.slice(0, 10) : today(),
         supplier_id: p.supplier_id || '',
         purchase_type: p.purchase_type || 'GENERAL',
         supplier_inv_no: p.supplier_inv_no || '',
         supplier_inv_date: p.supplier_inv_date ? p.supplier_inv_date.slice(0, 10) : '',
         currency_id: p.currency_id || '',
-        exchange_rate: p.exchange_rate || 1,
+        exchange_rate: p.exchange_rate || 1.0,
         payment_terms: p.payment_terms || '',
         reference_po_id: p.reference_po_id || '',
         gate_inward_id: p.gate_inward_id ? String(p.gate_inward_id) : '',
@@ -186,7 +204,7 @@ export function GeneralPurchaseDetailPage() {
     if (isNew) {
       if (currencies.data?.length && !head.currency_id) {
         const inr = currencies.data.find((c: any) => c.code === 'INR') || currencies.data[0];
-        if (inr) setHead((h) => ({ ...h, currency_id: inr.id }));
+        if (inr) setHead((h) => ({ ...h, currency_id: inr.id, exchange_rate: 1.0 }));
       }
     }
   }, [isNew, currencies.data, head.currency_id]);
@@ -201,6 +219,54 @@ export function GeneralPurchaseDetailPage() {
       }
     }
   }, [uoms.data]);
+
+  // Handle PO selection in GRN mode
+  const handleSelectReferencePo = async (poId: string) => {
+    setHead((h) => ({ ...h, reference_po_id: poId }));
+    if (!poId) return;
+    try {
+      const res = await http.get<any>(`/api/resources/general-purchases/${poId}`);
+      const po = res.data;
+      if (po) {
+        setHead((h) => ({
+          ...h,
+          supplier_id: po.supplier_id ? String(po.supplier_id) : h.supplier_id,
+          currency_id: po.currency_id ? String(po.currency_id) : h.currency_id,
+          exchange_rate: po.exchange_rate || h.exchange_rate,
+          payment_terms: po.payment_terms || h.payment_terms,
+          is_interstate: Boolean(po.is_interstate),
+        }));
+        if (po.lines?.length) {
+          setLines(
+            po.lines.map((l: any) => ({
+              _key: `gpl_${++lineSeq}`,
+              item_description: l.item_description,
+              material_type: l.material_type || 'CONSUMABLE',
+              material_id: l.material_id || '',
+              qty: Number(l.qty) || 0,
+              uom_id: l.uom_id || '',
+              rate: Number(l.rate) || 0,
+              discount_pct: Number(l.discount_pct) || 0,
+              gst_rate: Number(l.gst_rate) || 0,
+              igst_rate: Number(l.igst_rate) || 0,
+              tax_amount: Number(l.tax_amount) || 0,
+              amount: Number(l.amount) || 0,
+              stock_type: l.stock_type || 'STOCK',
+              allocation_type: l.allocation_type || 'GENERAL_STOCK',
+              buyer_id: l.buyer_id || '',
+              so_id: l.so_id || '',
+              prod_order_id: l.prod_order_id || '',
+              style_id: l.style_id || '',
+              direct_issue: l.direct_issue ? 1 : 0,
+              remarks: l.remarks || '',
+            }))
+          );
+        }
+      }
+    } catch {
+      // ignore
+    }
+  };
 
   // Line Calculations helper
   const calculateLineTotals = (
@@ -315,17 +381,19 @@ export function GeneralPurchaseDetailPage() {
       }
     }
 
-    return { subtotal, totalDiscount, totalTax, cgstAmount, sgstAmount, igstAmount, grandTotal };
-  }, [lines, head.is_interstate]);
+    const inrGrandTotal = grandTotal * (Number(head.exchange_rate) || 1.0);
 
-  // Save General Purchase
+    return { subtotal, totalDiscount, totalTax, cgstAmount, sgstAmount, igstAmount, grandTotal, inrGrandTotal };
+  }, [lines, head.is_interstate, head.exchange_rate]);
+
+  // Save General Purchase / GRN
   const handleSave = async (submitState: 'DRAFT' | 'APPROVED' | 'POSTED' = 'DRAFT') => {
     if (!head.supplier_id) {
       toast('Please select a supplier', 'error');
       return;
     }
     if (!head.purchase_date) {
-      toast('Purchase date is required', 'error');
+      toast('Date is required', 'error');
       return;
     }
     if (lines.length === 0) {
@@ -356,17 +424,18 @@ export function GeneralPurchaseDetailPage() {
     setSaving(true);
     try {
       const payload = {
-        purchase_no: head.purchase_no || undefined,
+        purchase_no: isPoMode ? (head.purchase_no || undefined) : undefined,
+        grn_no: !isPoMode ? (head.grn_no || undefined) : undefined,
         purchase_date: head.purchase_date,
         supplier_id: Number(head.supplier_id),
         purchase_type: head.purchase_type,
         supplier_inv_no: head.supplier_inv_no || null,
         supplier_inv_date: head.supplier_inv_date || null,
         currency_id: Number(head.currency_id),
-        exchange_rate: Number(head.exchange_rate) || 1,
+        exchange_rate: Number(head.exchange_rate) || 1.0,
         payment_terms: head.payment_terms || null,
         reference_po_id: head.reference_po_id ? Number(head.reference_po_id) : null,
-        gate_inward_id: head.gate_inward_id ? Number(head.gate_inward_id) : null,
+        gate_inward_id: (!isPoMode && head.gate_inward_id) ? Number(head.gate_inward_id) : null,
         is_interstate: head.is_interstate ? 1 : 0,
         subtotal: totals.subtotal,
         discount_amount: totals.totalDiscount,
@@ -412,17 +481,17 @@ export function GeneralPurchaseDetailPage() {
 
       if (isNew) {
         const created = await http.post<any>('/api/resources/general-purchases', payload);
-        toast(`General Purchase ${created.data?.purchase_no || 'record'} created successfully`, 'success');
+        toast(`${isPoMode ? 'General PO' : 'General GRN'} ${created.data?.purchase_no || created.data?.grn_no || 'record'} created successfully`, 'success');
         void qc.invalidateQueries({ queryKey: ['general-purchases'] });
         nav(isPoMode ? `/procurement/general-orders/${created.data?.id}` : `/procurement/general-purchases/${created.data?.id}`);
       } else {
         await http.put(`/api/resources/general-purchases/${id}`, payload);
-        toast('General Purchase updated successfully', 'success');
+        toast(`${isPoMode ? 'General PO' : 'General GRN'} updated successfully`, 'success');
         void qc.invalidateQueries({ queryKey: ['general-purchase-detail', id] });
         void qc.invalidateQueries({ queryKey: ['general-purchases'] });
       }
     } catch (err: any) {
-      toast(err instanceof ApiError ? err.message : 'Failed to save general purchase', 'error');
+      toast(err instanceof ApiError ? err.message : 'Failed to save record', 'error');
     } finally {
       setSaving(false);
     }
@@ -446,9 +515,14 @@ export function GeneralPurchaseDetailPage() {
               <h1 className="text-xl font-bold text-slate-900">
                 {isPoMode
                   ? (isNew ? 'New General Purchase Order (PO)' : `General PO: ${head.purchase_no || 'Document'}`)
-                  : (isNew ? 'New General Goods Receipt (GRN)' : `General GRN: ${head.purchase_no || 'Document'}`)}
+                  : (isNew ? 'New General Goods Receipt (GRN)' : `General GRN: ${head.grn_no || head.purchase_no || 'Document'}`)}
               </h1>
               {!isNew && <StatusBadge value={head.approval_state} />}
+              {isForeignCurrency && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-800 border border-amber-300">
+                  <Globe size={12} /> IMPORT {isPoMode ? 'PO' : 'GRN'} ({currCode})
+                </span>
+              )}
               {head.purchase_type === 'EMERGENCY' && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-bold text-rose-700">
                   <Zap size={12} className="fill-rose-600" /> EMERGENCY / DIRECT
@@ -457,8 +531,8 @@ export function GeneralPurchaseDetailPage() {
             </div>
             <p className="text-xs text-slate-500">
               {isPoMode
-                ? 'Issue procurement orders for consumables, maintenance spares & office items with Inter-State IGST'
-                : 'One-stop controlled inward receipt: Stock, Buyer Orders, Production Jobs, Maintenance & Direct Emergency Issues'}
+                ? 'Issue procurement orders for consumables, maintenance spares & office items (No gate entry required for PO)'
+                : 'Controlled inward receipt note with gate inward entry mapping, stock increase & costing allocation'}
             </p>
           </div>
         </div>
@@ -487,7 +561,7 @@ export function GeneralPurchaseDetailPage() {
             onClick={() => handleSave('APPROVED')}
             disabled={saving || !editable}
           >
-            {saving ? <Spinner size={15} /> : <CheckCircle2 size={15} />} Approve &amp; Post
+            {saving ? <Spinner size={15} /> : <CheckCircle2 size={15} />} {isPoMode ? 'Approve & Issue PO' : 'Approve & Post GRN'}
           </button>
         </div>
       </div>
@@ -497,7 +571,7 @@ export function GeneralPurchaseDetailPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-surface-border pb-2 gap-2">
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
             <ShoppingCart size={16} className="text-brand-600" />
-            General Purchase Details &amp; Gate Entry Linkage
+            {isPoMode ? 'General PO Details & Currency' : 'General GRN Details, Gate Linkage & Currency'}
           </div>
 
           {/* Inter-State IGST Toggle */}
@@ -533,17 +607,65 @@ export function GeneralPurchaseDetailPage() {
           </label>
         </div>
 
+        {/* Form Fields: In PO mode, NO Gate Entry. In GRN mode, Gate Entry is shown. */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Input
-            label="Purchase No"
-            value={head.purchase_no}
-            onChange={(e) => setHead({ ...head, purchase_no: e.target.value })}
-            placeholder="Auto-generated (e.g. GP-000125)"
+            label={isPoMode ? "General PO No" : "General GRN No"}
+            value={isPoMode ? head.purchase_no : (head.grn_no || (isNew ? '' : head.purchase_no))}
+            onChange={(e) => setHead({ ...head, [isPoMode ? 'purchase_no' : 'grn_no']: e.target.value })}
+            placeholder="Auto-generated on Save"
             disabled={!isNew}
           />
 
+          {/* In GRN mode: Allow linking to previous General PO */}
+          {!isPoMode && (
+            isNew ? (
+              <div>
+                <label className="text-xs font-semibold text-slate-700 mb-1.5 block">Link to General PO (Optional)</label>
+                <select
+                  value={head.reference_po_id}
+                  onChange={(e) => handleSelectReferencePo(e.target.value)}
+                  className="input text-xs font-semibold text-brand-700"
+                >
+                  <option value="">-- Direct Receipt or Select PO --</option>
+                  {generalPos.map((p: any) => (
+                    <option key={p.id} value={p.id}>
+                      {p.purchase_no} - {p.supplier_name} ({p.purchase_type})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <Input
+                label="Linked PO Ref"
+                value={head.reference_po_id ? `PO #${head.reference_po_id}` : 'Direct Receipt'}
+                disabled
+              />
+            )
+          )}
+
+          {/* Gate Entry Mapping: ONLY IN GRN MODE (Clip 2 requirement) */}
+          {!isPoMode && (
+            <Select
+              label="Map Gate Inward Entry *"
+              placeholder="-- Select Inward Gate Pass --"
+              options={toOptions(gateInwards.data || [])}
+              value={head.gate_inward_id}
+              onChange={(e) => {
+                const gid = e.target.value;
+                const found = (gateInwards.data || []).find((g: any) => String(g.id) === gid);
+                setHead((h) => ({
+                  ...h,
+                  gate_inward_id: gid,
+                  supplier_id: found?.party_id ? String(found.party_id) : h.supplier_id,
+                  supplier_inv_no: found?.supplier_inv_no || h.supplier_inv_no,
+                }));
+              }}
+            />
+          )}
+
           <Input
-            label="Purchase Date *"
+            label={isPoMode ? "PO Date *" : "GRN Date *"}
             type="date"
             value={head.purchase_date}
             onChange={(e) => setHead({ ...head, purchase_date: e.target.value })}
@@ -575,41 +697,42 @@ export function GeneralPurchaseDetailPage() {
           />
 
           <Select
-            label="Map Gate Inward Entry"
-            placeholder="-- Direct / Select Gate Pass --"
-            options={toOptions(gateInwards.data || [])}
-            value={head.gate_inward_id}
+            label="Currency *"
+            options={toOptions(currencies.data || [])}
+            value={head.currency_id}
             onChange={(e) => {
-              const gid = e.target.value;
-              const found = (gateInwards.data || []).find((g: any) => String(g.id) === gid);
-              setHead((h) => ({
-                ...h,
-                gate_inward_id: gid,
-                supplier_id: found?.party_id ? String(found.party_id) : h.supplier_id,
-                supplier_inv_no: found?.supplier_inv_no || h.supplier_inv_no,
-              }));
+              const cid = e.target.value;
+              const cur = (currencies.data as any[])?.find((c: any) => String(c.id) === cid);
+              setHead({
+                ...head,
+                currency_id: cid,
+                exchange_rate: cur?.code === 'INR' ? 1.0 : (head.exchange_rate && head.exchange_rate !== 1.0 ? head.exchange_rate : (cur?.code === 'USD' ? 84.50 : cur?.code === 'EUR' ? 91.20 : 1.0)),
+              });
             }}
           />
 
           <Input
-            label="Supplier Bill / Invoice No"
-            value={head.supplier_inv_no}
-            onChange={(e) => setHead({ ...head, supplier_inv_no: e.target.value })}
-            placeholder="e.g. INV-2026-458"
+            label="Exchange Rate (to INR)"
+            type="number"
+            step="0.0001"
+            value={head.exchange_rate}
+            disabled={!isForeignCurrency}
+            onChange={(e) => setHead({ ...head, exchange_rate: Number(e.target.value) })}
+            placeholder="1.0000"
           />
 
           <Input
-            label="Supplier Bill Date"
+            label={isPoMode ? "Quotation / Ref No" : "Supplier Bill / Invoice No"}
+            value={head.supplier_inv_no}
+            onChange={(e) => setHead({ ...head, supplier_inv_no: e.target.value })}
+            placeholder={isPoMode ? "e.g. QUOT-2026-08" : "e.g. INV-2026-458"}
+          />
+
+          <Input
+            label={isPoMode ? "Quotation Date" : "Supplier Bill Date"}
             type="date"
             value={head.supplier_inv_date}
             onChange={(e) => setHead({ ...head, supplier_inv_date: e.target.value })}
-          />
-
-          <Select
-            label="Currency"
-            options={toOptions(currencies.data || [])}
-            value={head.currency_id}
-            onChange={(e) => setHead({ ...head, currency_id: e.target.value })}
           />
 
           <Input
@@ -644,7 +767,7 @@ export function GeneralPurchaseDetailPage() {
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-surface-border pb-3">
           <div>
             <h2 className="text-sm font-semibold text-slate-800">
-              Purchase Line Items &amp; Allocation
+              Purchase Line Items &amp; Allocation ({lines.length})
             </h2>
             <p className="text-xs text-slate-500">
               Multi-purpose invoice: each line can be allocated to General Stock, Buyer Order, Production Order, Sample, or Maintenance.
@@ -660,7 +783,7 @@ export function GeneralPurchaseDetailPage() {
           </button>
         </div>
 
-        {/* Lines Table / Cards */}
+        {/* Lines Cards */}
         <div className="space-y-4">
           {lines.map((line, idx) => (
             <div
@@ -720,7 +843,7 @@ export function GeneralPurchaseDetailPage() {
 
                 <div className="md:col-span-1">
                   <Input
-                    label="Rate (₹)"
+                    label={`Rate (${currSymbol}) *`}
                     type="number"
                     min="0"
                     step="0.01"
@@ -744,7 +867,7 @@ export function GeneralPurchaseDetailPage() {
                 <div className="md:col-span-1">
                   <div className="text-xs font-semibold text-slate-500 mb-1.5">Line Total</div>
                   <div className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-right font-mono font-bold text-slate-900 text-xs">
-                    ₹{fmtDecimal(line.amount, 2)}
+                    {currSymbol}{fmtDecimal(line.amount, 2)}
                   </div>
                 </div>
 
@@ -959,23 +1082,31 @@ export function GeneralPurchaseDetailPage() {
 
           <div className="flex items-center gap-6">
             <div className="text-right text-xs text-slate-500 space-y-0.5 font-mono">
-              <div>Subtotal: ₹{fmtDecimal(totals.subtotal, 2)}</div>
-              {totals.totalDiscount > 0 && <div>Discount: -₹{fmtDecimal(totals.totalDiscount, 2)}</div>}
+              <div>Subtotal: {currSymbol}{fmtDecimal(totals.subtotal, 2)}</div>
+              {totals.totalDiscount > 0 && <div>Discount: -{currSymbol}{fmtDecimal(totals.totalDiscount, 2)}</div>}
               {head.is_interstate ? (
-                <div className="text-purple-700 font-semibold">IGST: +₹{fmtDecimal(totals.igstAmount, 2)}</div>
+                <div className="text-purple-700 font-semibold">IGST: +{currSymbol}{fmtDecimal(totals.igstAmount, 2)}</div>
               ) : (
                 <>
-                  <div>CGST: +₹{fmtDecimal(totals.cgstAmount, 2)}</div>
-                  <div>SGST: +₹{fmtDecimal(totals.sgstAmount, 2)}</div>
+                  <div>CGST: +{currSymbol}{fmtDecimal(totals.cgstAmount, 2)}</div>
+                  <div>SGST: +{currSymbol}{fmtDecimal(totals.sgstAmount, 2)}</div>
                 </>
               )}
             </div>
 
             <div className="border-l border-slate-300 pl-6 text-right">
-              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Grand Total</div>
-              <div className="text-2xl font-black text-brand-700 font-mono">
-                ₹{fmtDecimal(totals.grandTotal, 2)}
+              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                Grand Total ({currCode})
               </div>
+              <div className="text-2xl font-black text-brand-700 font-mono">
+                {currSymbol}{fmtDecimal(totals.grandTotal, 2)}
+              </div>
+              {isForeignCurrency && (
+                <div className="text-xs font-bold text-amber-900 mt-1">
+                  INR Converted: ₹{fmtDecimal(totals.inrGrandTotal, 2)}
+                  <span className="text-[10px] text-slate-500 font-normal ml-1">(@ ₹{head.exchange_rate}/{currCode})</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1019,7 +1150,7 @@ export function GeneralPurchaseDetailPage() {
 
               <div className="grid grid-cols-2 gap-4 border border-slate-300 rounded-lg p-3.5 mb-4 bg-slate-50/50">
                 <div className="space-y-1.5">
-                  <div><span className="text-slate-500 font-medium">Document No:</span> <span className="font-bold text-slate-900 font-mono text-sm">{head.purchase_no}</span></div>
+                  <div><span className="text-slate-500 font-medium">{isPoMode ? 'PO No:' : 'GRN No:'}</span> <span className="font-bold text-slate-900 font-mono text-sm">{isPoMode ? head.purchase_no : (head.grn_no || head.purchase_no)}</span></div>
                   <div><span className="text-slate-500 font-medium">Date:</span> <span className="font-semibold text-slate-800">{head.purchase_date}</span></div>
                   <div><span className="text-slate-500 font-medium">Purchase Type:</span> <span className="font-semibold text-slate-800">{head.purchase_type}</span></div>
                   <div><span className="text-slate-500 font-medium">Payment Terms:</span> <span className="font-semibold text-slate-800">{head.payment_terms || '-'}</span></div>
@@ -1027,7 +1158,7 @@ export function GeneralPurchaseDetailPage() {
                 <div className="space-y-1.5 border-l border-slate-200 pl-4">
                   <div><span className="text-slate-500 font-medium">Supplier / Vendor:</span> <span className="font-bold text-slate-900">{String((suppliers.data as any[])?.find((s: any) => String(s.id) === String(head.supplier_id))?.label || (suppliers.data as any[])?.find((s: any) => String(s.id) === String(head.supplier_id))?.party_name || '-')}</span></div>
                   <div><span className="text-slate-500 font-medium">Supplier Bill / Invoice:</span> <span className="font-mono font-semibold text-slate-800">{head.supplier_inv_no || '-'}</span></div>
-                  <div><span className="text-slate-500 font-medium">Taxation:</span> <span className="font-bold text-brand-700">{head.is_interstate ? 'Inter-State (IGST)' : 'Intra-State (CGST + SGST)'}</span></div>
+                  <div><span className="text-slate-500 font-medium">Currency:</span> <span className="font-bold text-brand-700">{currCode} ({currSymbol}) {isForeignCurrency ? `@ ₹${head.exchange_rate}` : ''}</span></div>
                   <div><span className="text-slate-500 font-medium">Status:</span> <span className="font-bold text-emerald-700">{head.approval_state}</span></div>
                 </div>
               </div>
@@ -1041,10 +1172,10 @@ export function GeneralPurchaseDetailPage() {
                       <th className="border border-slate-300 py-1.5 px-2 text-left">Description</th>
                       <th className="border border-slate-300 py-1.5 px-2 text-left">Allocation / Job</th>
                       <th className="border border-slate-300 py-1.5 px-2 text-right">Qty</th>
-                      <th className="border border-slate-300 py-1.5 px-2 text-right">Rate (₹)</th>
-                      <th className="border border-slate-300 py-1.5 px-2 text-right">Taxable (₹)</th>
+                      <th className="border border-slate-300 py-1.5 px-2 text-right">Rate ({currSymbol})</th>
+                      <th className="border border-slate-300 py-1.5 px-2 text-right">Taxable ({currSymbol})</th>
                       <th className="border border-slate-300 py-1.5 px-2 text-right">{head.is_interstate ? 'IGST (%)' : 'GST (%)'}</th>
-                      <th className="border border-slate-300 py-1.5 px-2 text-right">Total (₹)</th>
+                      <th className="border border-slate-300 py-1.5 px-2 text-right">Total ({currSymbol})</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1059,10 +1190,10 @@ export function GeneralPurchaseDetailPage() {
                           <td className="border border-slate-300 py-1 px-2 font-semibold text-slate-900">{l.item_description || 'Item'}</td>
                           <td className="border border-slate-300 py-1 px-2 text-slate-600">{soObj?.so_no || l.allocation_type || 'General'}</td>
                           <td className="border border-slate-300 py-1 px-2 text-right font-bold">{fmtDecimal(l.qty)}</td>
-                          <td className="border border-slate-300 py-1 px-2 text-right">₹{fmtDecimal(l.rate, 2)}</td>
-                          <td className="border border-slate-300 py-1 px-2 text-right">₹{fmtDecimal(taxable, 2)}</td>
+                          <td className="border border-slate-300 py-1 px-2 text-right">{currSymbol}{fmtDecimal(l.rate, 2)}</td>
+                          <td className="border border-slate-300 py-1 px-2 text-right">{currSymbol}{fmtDecimal(taxable, 2)}</td>
                           <td className="border border-slate-300 py-1 px-2 text-right">{head.is_interstate ? (l.igst_rate || l.gst_rate || 18) : (l.gst_rate || 18)}%</td>
-                          <td className="border border-slate-300 py-1 px-2 text-right font-bold">₹{fmtDecimal(l.amount, 2)}</td>
+                          <td className="border border-slate-300 py-1 px-2 text-right font-bold">{currSymbol}{fmtDecimal(l.amount, 2)}</td>
                         </tr>
                       );
                     })}
@@ -1070,29 +1201,35 @@ export function GeneralPurchaseDetailPage() {
                   <tfoot>
                     <tr className="bg-slate-50">
                       <td colSpan={7} className="border border-slate-300 py-1 px-2 text-right font-semibold text-slate-600">Subtotal (Taxable):</td>
-                      <td className="border border-slate-300 py-1 px-2 text-right font-bold">₹{fmtDecimal(totals.subtotal, 2)}</td>
+                      <td className="border border-slate-300 py-1 px-2 text-right font-bold">{currSymbol}{fmtDecimal(totals.subtotal, 2)}</td>
                     </tr>
                     {head.is_interstate ? (
                       <tr className="bg-slate-50">
                         <td colSpan={7} className="border border-slate-300 py-1 px-2 text-right font-semibold text-purple-700">IGST Amount:</td>
-                        <td className="border border-slate-300 py-1 px-2 text-right font-bold text-purple-800">₹{fmtDecimal(totals.igstAmount, 2)}</td>
+                        <td className="border border-slate-300 py-1 px-2 text-right font-bold text-purple-800">{currSymbol}{fmtDecimal(totals.igstAmount, 2)}</td>
                       </tr>
                     ) : (
                       <>
                         <tr className="bg-slate-50">
                           <td colSpan={7} className="border border-slate-300 py-1 px-2 text-right font-semibold text-slate-600">CGST Amount:</td>
-                          <td className="border border-slate-300 py-1 px-2 text-right font-bold">₹{fmtDecimal(totals.cgstAmount, 2)}</td>
+                          <td className="border border-slate-300 py-1 px-2 text-right font-bold">{currSymbol}{fmtDecimal(totals.cgstAmount, 2)}</td>
                         </tr>
                         <tr className="bg-slate-50">
                           <td colSpan={7} className="border border-slate-300 py-1 px-2 text-right font-semibold text-slate-600">SGST Amount:</td>
-                          <td className="border border-slate-300 py-1 px-2 text-right font-bold">₹{fmtDecimal(totals.sgstAmount, 2)}</td>
+                          <td className="border border-slate-300 py-1 px-2 text-right font-bold">{currSymbol}{fmtDecimal(totals.sgstAmount, 2)}</td>
                         </tr>
                       </>
                     )}
                     <tr className="bg-slate-100 font-bold">
-                      <td colSpan={7} className="border border-slate-300 py-1.5 px-2 text-right text-slate-900">Grand Total:</td>
-                      <td className="border border-slate-300 py-1.5 px-2 text-right font-black text-brand-800 text-sm">₹{fmtDecimal(totals.grandTotal, 2)}</td>
+                      <td colSpan={7} className="border border-slate-300 py-1.5 px-2 text-right text-slate-900">Grand Total ({currCode}):</td>
+                      <td className="border border-slate-300 py-1.5 px-2 text-right font-black text-brand-800 text-sm">{currSymbol}{fmtDecimal(totals.grandTotal, 2)}</td>
                     </tr>
+                    {isForeignCurrency && (
+                      <tr className="bg-amber-50/60 font-bold">
+                        <td colSpan={7} className="border border-slate-300 py-1.5 px-2 text-right text-amber-900">Converted INR Equivalent (@ ₹{head.exchange_rate}):</td>
+                        <td className="border border-slate-300 py-1.5 px-2 text-right font-black text-amber-950 text-sm">₹{fmtDecimal(totals.inrGrandTotal, 2)}</td>
+                      </tr>
+                    )}
                   </tfoot>
                 </table>
               </div>

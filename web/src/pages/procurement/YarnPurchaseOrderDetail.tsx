@@ -3,7 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Save, Plus, Trash2, Disc,
-  PackageCheck, FileSpreadsheet, Building2, Truck, RotateCcw
+  PackageCheck, FileSpreadsheet, Building2, Truck, RotateCcw,
+  Globe, Sparkles
 } from 'lucide-react';
 import { http, ApiError } from '../../lib/api';
 import { useLookup, toOptions } from '../../hooks/useLookup';
@@ -91,12 +92,14 @@ export default function YarnPurchaseOrderDetailPage() {
   const styles = useLookup('styles');
   const salesOrders = useLookup('sales-orders');
   const parties = useLookup('parties');
+  const currencies = useLookup('currencies');
 
   const COMPANY_DEFAULT_ADDRESS = "CK Exports\n123 Textile Park, Dharapuram Road\nTirupur - 641604, Tamil Nadu\nGSTIN: 33AAAAA0000A1Z5";
 
   const [saving, setSaving] = useState(false);
   const [quoteModalOpen, setQuoteModalOpen] = useState(false);
   const [selectedQuoteId, setSelectedQuoteId] = useState<string>('');
+  const [filterBomOnly, setFilterBomOnly] = useState(false);
 
   // PO Header State
   const [header, setHeader] = useState({
@@ -106,6 +109,8 @@ export default function YarnPurchaseOrderDetailPage() {
     internal_ir_no: 'IR-2026-0001',
     supplier_id: '',
     style_id: '',
+    currency_id: '1',
+    exchange_rate: 1.0,
     payment_terms: '30 Days Credit',
     remarks: '',
     approval_state: 'APPROVED',
@@ -122,6 +127,74 @@ export default function YarnPurchaseOrderDetailPage() {
   });
 
   const [lines, setLines] = useState<YarnLine[]>([emptyYarnLine()]);
+
+  // Selected Currency Info
+  const selectedCurrency = (currencies.data as any[])?.find((c: any) => String(c.id) === String(header.currency_id));
+  const currSymbol = selectedCurrency?.symbol || '₹';
+  const currCode = selectedCurrency?.code || 'INR';
+  const isForeignCurrency = currCode !== 'INR' && Number(header.exchange_rate) > 0 && Number(header.exchange_rate) !== 1.0;
+
+  // BOM Integration Query when Style is selected (Clip 4)
+  const { data: bomData } = useQuery({
+    queryKey: ['bom-for-job-yarn', header.style_id],
+    queryFn: async () => {
+      if (!header.style_id) return null;
+      const res = await http.get<{ data: any }>(`/api/boms/for-job?style_id=${header.style_id}`);
+      return res.data;
+    },
+    enabled: Boolean(header.style_id),
+  });
+
+  const bomYarns = bomData?.yarns || [];
+
+  const handleLoadFromBOM = () => {
+    if (!bomYarns.length) {
+      toast('No yarn items found in active BOM for this style', 'warning');
+      return;
+    }
+    const newLines: YarnLine[] = bomYarns.map((by: any) => {
+      const reqKg = Number(by.total_required_qty || by.consumption_per_pc || 100);
+      const rate = Number(by.rate || 220);
+      const taxable = Math.round(reqKg * rate * 100) / 100;
+      const gstRate = 5.0;
+      const tax = Math.round((taxable * (gstRate / 100)) * 100) / 100;
+      return {
+        _key: `yl_${++yseq}`,
+        so_id: '',
+        style_id: header.style_id,
+        yarn_id: by.yarn_id ? String(by.yarn_id) : '',
+        yarn_name: by.yarn_name || by.item_name || '',
+        yarn_type: (by.yarn_type || 'Grey Yarn') as any,
+        purchase_basis: 'DIRECT_KG',
+        yarn_count_str: by.yarn_count_str || '30s',
+        yarn_category: by.yarn_category || 'Combed',
+        composition: by.composition || '100% Cotton',
+        shade_code: by.shade_code || '',
+        dyeing_mill_id: '',
+        hsn_code: '5205',
+        packs: 0,
+        pack_weight_kg: 0,
+        qty: reqKg,
+        uom_id: 5,
+        rate,
+        amount: taxable,
+        discount_amount: 0,
+        freight_amount: 0,
+        other_charges: 0,
+        taxable_amount: taxable,
+        gst_rate: gstRate,
+        cgst_rate: header.is_interstate ? 0 : 2.5,
+        cgst_amount: header.is_interstate ? 0 : tax / 2,
+        sgst_rate: header.is_interstate ? 0 : 2.5,
+        sgst_amount: header.is_interstate ? 0 : tax / 2,
+        igst_rate: header.is_interstate ? gstRate : 0,
+        igst_amount: header.is_interstate ? tax : 0,
+        net_amount: taxable + tax,
+      };
+    });
+    setLines(newLines);
+    toast(`Loaded ${newLines.length} yarn items from BOM!`, 'success');
+  };
 
   // Load existing PO
   const { data: existingPo, isLoading } = useQuery({
@@ -153,6 +226,8 @@ export default function YarnPurchaseOrderDetailPage() {
         internal_ir_no: existingPo.internal_ir_no || '',
         supplier_id: existingPo.supplier_id ? String(existingPo.supplier_id) : '',
         style_id: existingPo.style_id ? String(existingPo.style_id) : '',
+        currency_id: String(existingPo.currency_id || '1'),
+        exchange_rate: Number(existingPo.exchange_rate || 1.0),
         payment_terms: existingPo.payment_terms || '',
         remarks: existingPo.remarks || '',
         approval_state: existingPo.approval_state || 'APPROVED',
@@ -421,8 +496,8 @@ export default function YarnPurchaseOrderDetailPage() {
         billing_address: header.billing_address || null,
         shipping_address: header.shipping_address || null,
         shipping_to_party_id: header.shipping_to_party_id ? Number(header.shipping_to_party_id) : null,
-        currency_id: 1,
-        exchange_rate: 1.0,
+        currency_id: Number(header.currency_id || 1),
+        exchange_rate: Number(header.exchange_rate || 1.0),
         is_interstate: header.is_interstate ? 1 : 0,
         taxable_amount: totals.taxableAmount,
         cgst_amount: totals.totalCgst,
@@ -516,6 +591,11 @@ export default function YarnPurchaseOrderDetailPage() {
                 {isNew ? 'New Yarn Purchase Order' : `Yarn PO: ${header.po_no}`}
               </h1>
               {!isNew && <StatusBadge value={header.approval_state} />}
+              {isForeignCurrency && (
+                <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
+                  <Globe size={11} /> IMPORT PO ({currCode})
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
               Unified procurement for Grey & Dyed yarn, Direct KG & Bag/Pack weights
@@ -627,6 +707,31 @@ export default function YarnPurchaseOrderDetailPage() {
           />
 
           <Select
+            label="Currency *"
+            options={toOptions(currencies.data)}
+            value={header.currency_id}
+            onChange={(e) => {
+              const cid = e.target.value;
+              const cur = (currencies.data as any[])?.find((c: any) => String(c.id) === cid);
+              setHeader((h) => ({
+                ...h,
+                currency_id: cid,
+                exchange_rate: cur?.code === 'INR' ? 1.0 : (h.exchange_rate && h.exchange_rate !== 1.0 ? h.exchange_rate : (cur?.code === 'USD' ? 84.50 : cur?.code === 'EUR' ? 91.20 : 1.0)),
+              }));
+            }}
+          />
+
+          <Input
+            label="Exchange Rate (to INR)"
+            type="number"
+            step="0.0001"
+            value={header.exchange_rate}
+            disabled={!isForeignCurrency}
+            onChange={(e) => setHeader((p) => ({ ...p, exchange_rate: Number(e.target.value) }))}
+            placeholder="1.0000"
+          />
+
+          <Select
             label="Approval State"
             value={header.approval_state}
             onChange={(e) => setHeader((p) => ({ ...p, approval_state: e.target.value }))}
@@ -648,6 +753,56 @@ export default function YarnPurchaseOrderDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* BOM Linkage & Auto-Fill Banner (Clip 4) */}
+      {header.style_id && (
+        <div className="rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50/80 via-white to-amber-50/50 p-4 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <span className="p-2 rounded-lg bg-amber-100 text-amber-700 mt-0.5">
+                <Sparkles size={16} />
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs font-bold text-amber-950 uppercase tracking-wide">
+                    Bill of Materials (BOM) Yarn Integration
+                  </h4>
+                  {bomData?.bom && (
+                    <span className="bg-amber-100 text-amber-800 text-[10.5px] font-bold px-2 py-0.5 rounded border border-amber-300">
+                      BOM: {bomData.bom.bom_no} · v{bomData.bom.version}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-600 mt-0.5">
+                  {bomYarns.length > 0
+                    ? `Found ${bomYarns.length} planned yarn specification(s) in BOM for this Style/Job.`
+                    : 'No yarn items explicitly defined in BOM for this style.'}
+                </p>
+              </div>
+            </div>
+            {bomYarns.length > 0 && (
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={filterBomOnly}
+                    onChange={(e) => setFilterBomOnly(e.target.checked)}
+                    className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                  />
+                  <span>Show BOM Items Only</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={handleLoadFromBOM}
+                  className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1 bg-amber-600 hover:bg-amber-700 border-amber-600 shadow-xs text-white"
+                >
+                  <Sparkles size={13} /> Load Yarn from BOM
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Billing and Shipping Addresses */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -835,9 +990,12 @@ export default function YarnPurchaseOrderDetailPage() {
                         className="w-full text-xs rounded border border-slate-300 py-1 px-1.5 focus:border-amber-500 bg-white"
                       >
                         <option value="">Select Yarn</option>
-                        {toOptions(yarns.data).map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
+                        {((filterBomOnly && bomYarns.length > 0)
+                          ? (yarns.data || []).filter((y: any) => bomYarns.some((by: any) => Number(by.yarn_id) === Number(y.id)))
+                          : (yarns.data || [])
+                        ).map((o: any) => (
+                          <option key={o.id} value={o.id}>
+                            {o.yarn_name || o.yarn_code || o.label}
                           </option>
                         ))}
                       </select>
@@ -1170,8 +1328,13 @@ export default function YarnPurchaseOrderDetailPage() {
             </div>
 
             <div className="flex flex-col items-end justify-center bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
-              <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider block">Net Payable Amount</span>
-              <span className="text-xl font-black text-brand-900 font-mono">₹{fmtDecimal(totals.grandTotal)}</span>
+              <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider block">Net Payable Amount ({currCode})</span>
+              <span className="text-xl font-black text-brand-900 font-mono">{currSymbol}{fmtDecimal(totals.grandTotal)}</span>
+              {isForeignCurrency && (
+                <span className="text-xs font-bold text-amber-900 mt-0.5">
+                  INR Converted: ₹{fmtDecimal(totals.grandTotal * Number(header.exchange_rate), 2)}
+                </span>
+              )}
             </div>
           </div>
         </div>

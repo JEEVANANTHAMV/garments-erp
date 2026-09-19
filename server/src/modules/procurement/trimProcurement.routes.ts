@@ -39,6 +39,8 @@ const trimPoSchema = z.object({
   io_no: s.strReq(60),
   style_id: s.id(),
   supplier_id: s.idReq(),
+  currency_id: s.id().default(1),
+  exchange_rate: z.coerce.number().positive().default(1.0000),
   delivery_date: s.nullableStr(10),
   payment_terms: s.nullableStr(150),
   is_interstate: z.coerce.number().default(0),
@@ -88,6 +90,8 @@ const trimGrnSchema = z.object({
   io_no: s.strReq(60),
   style_id: s.id(),
   supplier_id: s.idReq(),
+  currency_id: s.id().default(1),
+  exchange_rate: z.coerce.number().positive().default(1.0000),
   warehouse_id: s.idReq(),
   supplier_inv_no: s.nullableStr(80),
   supplier_dc_no: s.nullableStr(80),
@@ -133,12 +137,14 @@ trimProcurementRouter.get('/trim-pos', requirePermission('PROCUREMENT.VIEW'), ah
 
   const rows = await query(
     `SELECT tpo.*,
+            cur.code AS currency_code, cur.symbol AS currency_symbol,
             st.style_code, st.style_name,
             p.party_name AS supplier_name,
             COUNT(tpol.id) AS total_items,
             COALESCE(SUM(tpol.order_qty), 0) AS total_order_qty,
             COALESCE(SUM(tpol.received_qty), 0) AS total_received_qty
        FROM trx_trim_po tpo
+       LEFT JOIN cfg_currency cur ON cur.id = tpo.currency_id
        LEFT JOIN mst_style st ON st.id = tpo.style_id
        LEFT JOIN mst_party p ON p.id = tpo.supplier_id
        LEFT JOIN trx_trim_po_line tpol ON tpol.po_id = tpo.id
@@ -156,9 +162,11 @@ trimProcurementRouter.get('/trim-pos/:id', requirePermission('PROCUREMENT.VIEW')
   const cid = req.user!.companyId;
   const po = await queryOne(
     `SELECT tpo.*,
+            cur.code AS currency_code, cur.symbol AS currency_symbol,
             st.style_code, st.style_name,
             p.party_name AS supplier_name
        FROM trx_trim_po tpo
+       LEFT JOIN cfg_currency cur ON cur.id = tpo.currency_id
        LEFT JOIN mst_style st ON st.id = tpo.style_id
        LEFT JOIN mst_party p ON p.id = tpo.supplier_id
       WHERE tpo.id = ? AND tpo.company_id = ?`,
@@ -194,11 +202,11 @@ trimProcurementRouter.post('/trim-pos', requirePermission('PROCUREMENT.CREATE'),
     const resPo = await txExecute(
       tx,
       `INSERT INTO trx_trim_po
-         (company_id, po_no, po_date, io_no, style_id, supplier_id, delivery_date,
+         (company_id, po_no, po_date, io_no, style_id, supplier_id, currency_id, exchange_rate, delivery_date,
           payment_terms, is_interstate, total_amount, tax_amount, cgst_amount, sgst_amount, igst_amount, grand_total, status, remarks, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        cid, poNo, body.po_date, body.io_no, body.style_id, body.supplier_id, body.delivery_date,
+        cid, poNo, body.po_date, body.io_no, body.style_id, body.supplier_id, body.currency_id || 1, body.exchange_rate || 1.0, body.delivery_date,
         body.payment_terms, body.is_interstate || 0, body.total_amount, body.tax_amount,
         body.cgst_amount || 0, body.sgst_amount || 0, body.igst_amount || 0,
         body.grand_total, body.status, body.remarks, uid
@@ -245,13 +253,13 @@ trimProcurementRouter.put('/trim-pos/:id', requirePermission('PROCUREMENT.UPDATE
     await txExecute(
       tx,
       `UPDATE trx_trim_po
-          SET po_date = ?, io_no = ?, style_id = ?, supplier_id = ?, delivery_date = ?,
+          SET po_date = ?, io_no = ?, style_id = ?, supplier_id = ?, currency_id = ?, exchange_rate = ?, delivery_date = ?,
               payment_terms = ?, is_interstate = ?, total_amount = ?, tax_amount = ?,
               cgst_amount = ?, sgst_amount = ?, igst_amount = ?, grand_total = ?,
               status = ?, remarks = ?
         WHERE id = ? AND company_id = ?`,
       [
-        body.po_date, body.io_no, body.style_id, body.supplier_id, body.delivery_date,
+        body.po_date, body.io_no, body.style_id, body.supplier_id, body.currency_id || 1, body.exchange_rate || 1.0, body.delivery_date,
         body.payment_terms, body.is_interstate || 0, body.total_amount, body.tax_amount,
         body.cgst_amount || 0, body.sgst_amount || 0, body.igst_amount || 0, body.grand_total,
         body.status, body.remarks, req.params.id, cid
@@ -312,6 +320,7 @@ trimProcurementRouter.get('/trim-grns', requirePermission('PROCUREMENT.VIEW'), a
 
   const rows = await query(
     `SELECT tg.*,
+            cur.code AS currency_code, cur.symbol AS currency_symbol,
             st.style_code, st.style_name,
             p.party_name AS supplier_name,
             w.warehouse_name,
@@ -321,6 +330,7 @@ trimProcurementRouter.get('/trim-grns', requirePermission('PROCUREMENT.VIEW'), a
             COALESCE(SUM(tgl.accepted_qty), 0) AS total_accepted_qty,
             COALESCE(SUM(tgl.rejected_qty), 0) AS total_rejected_qty
        FROM trx_trim_grn tg
+       LEFT JOIN cfg_currency cur ON cur.id = tg.currency_id
        LEFT JOIN mst_style st ON st.id = tg.style_id
        LEFT JOIN mst_party p ON p.id = tg.supplier_id
        LEFT JOIN mst_warehouse w ON w.id = tg.warehouse_id
@@ -340,11 +350,13 @@ trimProcurementRouter.get('/trim-grns/:id', requirePermission('PROCUREMENT.VIEW'
   const cid = req.user!.companyId;
   const grn = await queryOne(
     `SELECT tg.*,
+            cur.code AS currency_code, cur.symbol AS currency_symbol,
             st.style_code, st.style_name,
             p.party_name AS supplier_name,
             w.warehouse_name,
             tpo.po_no
        FROM trx_trim_grn tg
+       LEFT JOIN cfg_currency cur ON cur.id = tg.currency_id
        LEFT JOIN mst_style st ON st.id = tg.style_id
        LEFT JOIN mst_party p ON p.id = tg.supplier_id
        LEFT JOIN mst_warehouse w ON w.id = tg.warehouse_id
@@ -419,11 +431,12 @@ trimProcurementRouter.post('/trim-grns', requirePermission('PROCUREMENT.CREATE')
     const resGrn = await txExecute(
       tx,
       `INSERT INTO trx_trim_grn
-         (company_id, grn_no, grn_date, po_id, gate_inward_id, io_no, style_id, supplier_id, warehouse_id,
+         (company_id, grn_no, grn_date, po_id, gate_inward_id, io_no, style_id, supplier_id, currency_id, exchange_rate, warehouse_id,
           supplier_inv_no, supplier_dc_no, vehicle_no, is_interstate, taxable_amount, tax_amount, igst_amount, net_amount, status, remarks, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         cid, grnNo, body.grn_date, body.po_id, body.gate_inward_id || null, body.io_no, body.style_id, body.supplier_id,
+        body.currency_id || 1, body.exchange_rate || 1.0,
         body.warehouse_id, body.supplier_inv_no, body.supplier_dc_no, body.vehicle_no,
         isInterstate ? 1 : 0, totTaxable, totTax, totIgst, netAmount,
         body.status, body.remarks, uid

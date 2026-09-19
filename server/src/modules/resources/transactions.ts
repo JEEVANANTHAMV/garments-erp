@@ -161,7 +161,7 @@ export const transactionResources: ResourceConfig[] = [
     defaultSort: 't.po_date', hasIsActive: false,
     filters: ['supplier_id', 'po_type', 'status_id', 'approval_state', 'so_id', 'branch_id'],
     autoNumber: { column: 'po_no', docType: 'PURCHASE_ORDER' },
-    selectExtra: 'sup.party_name AS supplier_name, cur.code AS currency_code, cs.label AS status_label, so.so_no, st.style_code, ship_to.party_name AS shipping_to_party_name',
+    selectExtra: 'sup.party_name AS supplier_name, cur.code AS currency_code, cur.symbol AS currency_symbol, cs.label AS status_label, so.so_no, st.style_code, ship_to.party_name AS shipping_to_party_name',
     joins: `LEFT JOIN mst_party sup ON sup.id = t.supplier_id
             LEFT JOIN cfg_currency cur ON cur.id = t.currency_id
             LEFT JOIN cfg_status cs ON cs.id = t.status_id
@@ -217,10 +217,11 @@ export const transactionResources: ResourceConfig[] = [
     defaultSort: 't.purchase_date', hasIsActive: false,
     filters: ['supplier_id', 'purchase_type', 'status_id', 'approval_state', 'branch_id'],
     autoNumber: { column: 'purchase_no', docType: 'GENERAL_PURCHASE' },
-    selectExtra: 'sup.party_name AS supplier_name, cur.code AS currency_code, cs.label AS status_label, (SELECT COUNT(*) FROM trx_general_purchase_line gpl WHERE gpl.purchase_id = t.id) AS item_count',
+    selectExtra: 'sup.party_name AS supplier_name, cur.code AS currency_code, cur.symbol AS currency_symbol, cs.label AS status_label, gin.inward_no AS gate_entry_no, (SELECT COUNT(*) FROM trx_general_purchase_line gpl WHERE gpl.purchase_id = t.id) AS item_count',
     joins: `LEFT JOIN mst_party sup ON sup.id = t.supplier_id
             LEFT JOIN cfg_currency cur ON cur.id = t.currency_id
-            LEFT JOIN cfg_status cs ON cs.id = t.status_id`,
+            LEFT JOIN cfg_status cs ON cs.id = t.status_id
+            LEFT JOIN trx_gate_inward gin ON gin.id = t.gate_inward_id`,
     children: [
       { key: 'lines', table: 'trx_general_purchase_line', fk: 'purchase_id', fields: [
         f('item_description', s.strReq(255)),
@@ -240,7 +241,7 @@ export const transactionResources: ResourceConfig[] = [
       ]},
     ],
     fields: [
-      f('branch_id', s.id()), f('purchase_no', s.nullableStr(40)), f('purchase_date', s.date()),
+      f('branch_id', s.id()), f('purchase_no', s.nullableStr(40)), f('grn_no', s.nullableStr(40)), f('purchase_date', s.date()),
       f('supplier_id', s.idReq()),
       f('purchase_type', s.enum(['GENERAL','STOCK','ORDER_SPECIFIC','EMERGENCY','MAINTENANCE','SAMPLE'])),
       f('supplier_inv_no', s.nullableStr(60)), f('supplier_inv_date', s.date()),

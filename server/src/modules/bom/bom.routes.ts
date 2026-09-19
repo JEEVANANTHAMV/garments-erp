@@ -89,6 +89,113 @@ bomRouter.get('/', requirePermission('BOM.VIEW'), ah(async (req, res) => {
     total: total?.total ?? 0, totalPages: Math.ceil((total?.total ?? 0) / q.pageSize) } });
 }));
 
+/**
+ * GET /for-job — Find Active BOM and materials for a Job / Sales Order / Style
+ * Used by Yarn, Fabric, Trim, and General POs to load and filter only planned BOM materials.
+ */
+bomRouter.get('/for-job', requirePermission('BOM.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const soId = req.query.so_id ? Number(req.query.so_id) : undefined;
+  let styleId = req.query.style_id ? Number(req.query.style_id) : undefined;
+  const ioNo = req.query.io_no ? String(req.query.io_no).trim() : undefined;
+
+  let orderQty = 1000;
+  let soRecord: any = null;
+
+  if (soId) {
+    soRecord = await queryOne<any>(`
+      SELECT so.*, st.id AS style_id, st.style_code, st.style_name
+        FROM trx_sales_order so
+        LEFT JOIN mst_style st ON st.id = so.style_id
+       WHERE so.id = ? AND so.company_id = ?
+    `, [soId, cid]);
+    if (soRecord) {
+      if (!styleId && soRecord.style_id) styleId = Number(soRecord.style_id);
+      orderQty = Number(soRecord.total_qty || soRecord.order_qty || 1000);
+    }
+  } else if (ioNo) {
+    soRecord = await queryOne<any>(`
+      SELECT so.*, st.id AS style_id, st.style_code, st.style_name
+        FROM trx_sales_order so
+        LEFT JOIN mst_style st ON st.id = so.style_id
+       WHERE (so.so_no = ? OR so.buyer_po_no = ?) AND so.company_id = ?
+       LIMIT 1
+    `, [ioNo, ioNo, cid]);
+    if (soRecord) {
+      if (!styleId && soRecord.style_id) styleId = Number(soRecord.style_id);
+      orderQty = Number(soRecord.total_qty || soRecord.order_qty || 1000);
+    }
+  }
+
+  if (!styleId && !soId) {
+    return res.json({ success: true, data: null, message: 'Please provide so_id, style_id or io_no' });
+  }
+
+  // 1. Order-specific active BOM
+  let bom: any = null;
+  if (soId && styleId) {
+    bom = await queryOne<any>(`
+      SELECT b.*, st.style_code, st.style_name, so.so_no, so.buyer_po_no
+        FROM trx_bom b
+        LEFT JOIN mst_style st ON st.id = b.style_id
+        LEFT JOIN trx_sales_order so ON so.id = b.so_id
+       WHERE b.company_id = ? AND b.is_active = 1 AND b.so_id = ? AND b.style_id = ?
+       ORDER BY b.version DESC, b.id DESC LIMIT 1
+    `, [cid, soId, styleId]);
+  }
+
+  // 2. Fallback to Style Master active BOM
+  if (!bom && styleId) {
+    bom = await queryOne<any>(`
+      SELECT b.*, st.style_code, st.style_name, so.so_no, so.buyer_po_no
+        FROM trx_bom b
+        LEFT JOIN mst_style st ON st.id = b.style_id
+        LEFT JOIN trx_sales_order so ON so.id = b.so_id
+       WHERE b.company_id = ? AND b.is_active = 1 AND b.style_id = ? AND (b.so_id IS NULL OR b.so_id = ?)
+       ORDER BY b.version DESC, b.id DESC LIMIT 1
+    `, [cid, styleId, soId || 0]);
+  }
+
+  if (!bom) {
+    return res.json({
+      success: true,
+      data: null,
+      message: 'No active BOM found for this Job / Style',
+    });
+  }
+
+  const lines = await query<any>(LINE_SELECT, [bom.id]);
+
+  const items = lines.map((l) => {
+    const cons = Number(l.consumption) || 0;
+    const waste = Number(l.wastage_pct) || 0;
+    const reqPerGmt = cons * (1 + waste / 100);
+    const orderReqQty = Number((reqPerGmt * orderQty).toFixed(4));
+    return {
+      ...l,
+      consumption: cons,
+      wastage_pct: waste,
+      order_qty: orderQty,
+      order_required_qty: orderReqQty,
+      std_rate: Number(l.std_rate) || 0,
+      estimated_amount: Number((orderReqQty * (Number(l.std_rate) || 0)).toFixed(2)),
+    };
+  });
+
+  res.json({
+    success: true,
+    data: {
+      bom,
+      order_qty: orderQty,
+      so: soRecord,
+      lines: items,
+      yarns: items.filter((i) => i.material_type === 'YARN'),
+      fabrics: items.filter((i) => i.material_type === 'FABRIC'),
+      trims: items.filter((i) => i.material_type === 'TRIM'),
+    },
+  });
+}));
+
 bomRouter.get('/:id', requirePermission('BOM.VIEW'), ah(async (req, res) => {
   const id = Number(req.params.id);
   const bom = await queryOne(
@@ -199,3 +306,115 @@ bomRouter.get('/:id/explode', requirePermission('BOM.VIEW'), ah(async (req, res)
     },
   });
 }));
+
+/** GET /latest-cad/:styleId — Check for approved CAD Auto-Consumption for style */
+bomRouter.get('/latest-cad/:styleId', requirePermission('BOM.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const styleId = Number(req.params.styleId);
+
+  const cadReq = await queryOne<any>(`
+    SELECT cmr.id AS cmr_id, cmr.total_fabric_kg, cmr.total_yarn_kg, cmr.created_at AS approved_at,
+           cr.id AS cad_req_id, cr.req_no, cr.order_qty, cr.marker_efficiency, cr.cad_version
+      FROM trx_cad_material_requirement cmr
+      JOIN trx_cad_requirement cr ON cr.id = cmr.cad_req_id
+     WHERE cmr.company_id = ? AND cmr.style_id = ? AND cmr.status = 'APPROVED'
+     ORDER BY cmr.id DESC LIMIT 1
+  `, [cid, styleId]);
+
+  if (!cadReq) {
+    return res.json({ success: true, data: null });
+  }
+
+  const orderQty = Number(cadReq.order_qty) || 1000;
+  const totalFabric = Number(cadReq.total_fabric_kg) || 0;
+  const totalYarn = Number(cadReq.total_yarn_kg) || 0;
+
+  res.json({
+    success: true,
+    data: {
+      ...cadReq,
+      fabric_consumption_per_pc: totalFabric > 0 ? Number((totalFabric / orderQty).toFixed(5)) : 0.82,
+      yarn_consumption_per_pc: totalYarn > 0 ? Number((totalYarn / orderQty).toFixed(5)) : 0.86,
+    },
+  });
+}));
+
+/** POST /:id/sync-cad — Sync CAD auto-consumption into BOM Yarn & Fabric lines */
+bomRouter.post('/:id/sync-cad', requirePermission('BOM.UPDATE'), ah(async (req, res) => {
+  const id = Number(req.params.id);
+  const cid = req.user!.companyId;
+
+  const bom = await queryOne<any>(`
+    SELECT b.* FROM trx_bom b WHERE b.id = ? AND b.company_id = ?
+  `, [id, cid]);
+  if (!bom) throw NotFound('BOM not found');
+
+  // Look for approved CAD material requirement
+  const cadReq = await queryOne<any>(`
+    SELECT cmr.*, cr.req_no, cr.order_qty, cr.marker_efficiency, cr.data_json
+      FROM trx_cad_material_requirement cmr
+      JOIN trx_cad_requirement cr ON cr.id = cmr.cad_req_id
+     WHERE cmr.company_id = ? AND cmr.style_id = ?
+     ORDER BY cmr.id DESC LIMIT 1
+  `, [cid, bom.style_id]);
+
+  if (!cadReq) {
+    throw BadRequest('No approved CAD Auto-Consumption found for this Style. Please create & approve a CAD requirement first.');
+  }
+
+  const orderQty = Number(cadReq.order_qty) || 1000;
+  const totalFabricKg = Number(cadReq.total_fabric_kg) || 0;
+  const totalYarnKg = Number(cadReq.total_yarn_kg) || 0;
+
+  const fabricConsPerGmt = totalFabricKg > 0 ? Number((totalFabricKg / orderQty).toFixed(5)) : 0.82;
+  const yarnConsPerGmt = totalYarnKg > 0 ? Number((totalYarnKg / orderQty).toFixed(5)) : Number((fabricConsPerGmt * 1.05).toFixed(5));
+
+  const defaultFabric = await queryOne<any>(`SELECT id, base_uom FROM mst_fabric WHERE company_id = ? AND is_active = 1 LIMIT 1`, [cid]);
+  const defaultYarn = await queryOne<any>(`SELECT id, base_uom FROM mst_yarn WHERE company_id = ? AND is_active = 1 LIMIT 1`, [cid]);
+  const kgUom = await queryOne<any>(`SELECT id FROM cfg_uom WHERE (code = 'KG' OR code = 'KGS') AND (company_id = ? OR company_id IS NULL) LIMIT 1`, [cid]);
+  const uomId = kgUom?.id || defaultFabric?.base_uom || defaultYarn?.base_uom || 1;
+
+  await transaction(async (tx) => {
+    const existingFabric = await txQueryOne<any>(tx, `
+      SELECT id FROM trx_bom_line WHERE bom_id = ? AND material_type = 'FABRIC' LIMIT 1
+    `, [id]);
+
+    if (existingFabric) {
+      await txExecute(tx, `
+        UPDATE trx_bom_line
+           SET consumption = ?, wastage_pct = 5.0, remarks = CONCAT('CAD Auto-Synced: ', ?)
+         WHERE id = ?
+      `, [fabricConsPerGmt, cadReq.req_no || 'CAD V01', existingFabric.id]);
+    } else if (defaultFabric) {
+      await txExecute(tx, `
+        INSERT INTO trx_bom_line (bom_id, material_type, fabric_id, consumption, uom_id, wastage_pct, remarks)
+        VALUES (?, 'FABRIC', ?, ?, ?, 5.0, ?)
+      `, [id, defaultFabric.id, fabricConsPerGmt, uomId, `CAD Auto-Synced (${cadReq.req_no || 'CAD'})`]);
+    }
+
+    const existingYarn = await txQueryOne<any>(tx, `
+      SELECT id FROM trx_bom_line WHERE bom_id = ? AND material_type = 'YARN' LIMIT 1
+    `, [id]);
+
+    if (existingYarn) {
+      await txExecute(tx, `
+        UPDATE trx_bom_line
+           SET consumption = ?, wastage_pct = 3.0, remarks = CONCAT('CAD Auto-Synced: ', ?)
+         WHERE id = ?
+      `, [yarnConsPerGmt, cadReq.req_no || 'CAD V01', existingYarn.id]);
+    } else if (defaultYarn) {
+      await txExecute(tx, `
+        INSERT INTO trx_bom_line (bom_id, material_type, yarn_id, consumption, uom_id, wastage_pct, remarks)
+        VALUES (?, 'YARN', ?, ?, ?, 3.0, ?)
+      `, [id, defaultYarn.id, yarnConsPerGmt, uomId, `CAD Auto-Synced (${cadReq.req_no || 'CAD'})`]);
+    }
+  });
+
+  const updatedLines = await query(LINE_SELECT, [id]);
+  res.json({
+    success: true,
+    message: `Successfully synced CAD auto-consumption from ${cadReq.req_no || 'CAD'} (Fabric: ${fabricConsPerGmt} KG/pc, Yarn: ${yarnConsPerGmt} KG/pc)`,
+    data: { ...bom, lines: updatedLines },
+  });
+}));
+

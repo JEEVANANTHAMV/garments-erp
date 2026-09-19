@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, ArrowLeft, Save, Trash2, Layers, FileText } from 'lucide-react';
+import { Plus, ArrowLeft, Save, Trash2, Layers, FileText, Zap, Sparkles } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { http, ApiError } from '../../lib/api';
 import { useList, useListState } from '../../hooks/useResource';
@@ -18,14 +18,29 @@ const MATERIALS = ['YARN', 'FABRIC', 'TRIM'] as const;
 interface BomLine {
   _key: string;
   material_type: 'YARN' | 'FABRIC' | 'TRIM';
-  yarn_id: number | ''; fabric_id: number | ''; trim_id: number | '';
-  color_id: number | ''; consumption: number | ''; uom_id: number | '';
-  wastage_pct: number | ''; remarks: string;
+  yarn_id: number | '';
+  fabric_id: number | '';
+  trim_id: number | '';
+  color_id: number | '';
+  size_id: number | '';
+  consumption: number | '';
+  uom_id: number | '';
+  wastage_pct: number | '';
+  remarks: string;
 }
 let seq = 0;
-const emptyLine = (): BomLine => ({
-  _key: `b${++seq}`, material_type: 'FABRIC', yarn_id: '', fabric_id: '', trim_id: '',
-  color_id: '', consumption: '', uom_id: '', wastage_pct: 0, remarks: '',
+const emptyLine = (type: 'YARN' | 'FABRIC' | 'TRIM' = 'TRIM'): BomLine => ({
+  _key: `b${++seq}`,
+  material_type: type,
+  yarn_id: '',
+  fabric_id: '',
+  trim_id: '',
+  color_id: '',
+  size_id: '',
+  consumption: '',
+  uom_id: '',
+  wastage_pct: 0,
+  remarks: '',
 });
 
 export function BomsPage() {
@@ -37,7 +52,7 @@ export function BomsPage() {
 
   return (
     <>
-      <PageHeader title="Bill of Materials" subtitle="Per-garment material consumption by style"
+      <PageHeader title="Bill of Materials (BOM)" subtitle="Per-garment CAD auto-consumption & tech pack trim requirements by style"
         actions={can('BOM.CREATE') && (
           <button className="btn-primary" onClick={() => nav('/masters/boms/new')}>
             <Plus size={15} /> New BOM
@@ -78,7 +93,7 @@ export function BomsPage() {
         onRowClick={(r) => nav(`/masters/boms/${r.id}`)}
         pagination={list.data?.pagination} onPage={setPage}
         emptyTitle="No BOMs yet"
-        emptyMessage="A BOM drives MRP, costing and material issue. Create one per style." />
+        emptyMessage="A BOM drives MRP, costing and material procurement. Create one per style." />
     </>
   );
 }
@@ -92,9 +107,11 @@ export function BomDetailPage() {
   const { can } = useAuth();
 
   const [head, setHead] = useState<Record<string, any>>({ version: 1, effective_date: today(), is_active: 1 });
-  const [lines, setLines] = useState<BomLine[]>([emptyLine()]);
+  const [lines, setLines] = useState<BomLine[]>([emptyLine('FABRIC')]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [syncingCad, setSyncingCad] = useState(false);
+  const [activeTab, setActiveTab] = useState<'ALL' | 'FABRIC' | 'YARN' | 'TRIM'>('ALL');
   const [explodeQty, setExplodeQty] = useState(1000);
 
   const styles = useLookup('styles');
@@ -103,6 +120,7 @@ export function BomDetailPage() {
   const fabrics = useLookup('fabrics');
   const trims = useLookup('trims');
   const colors = useLookup('colors');
+  const sizes = useLookup('sizes');
   const uoms = useLookup('uoms');
   const statuses = useStatuses('BOM');
 
@@ -112,21 +130,102 @@ export function BomDetailPage() {
     enabled: !isNew,
   });
 
+  // Query latest approved CAD requirement for this Style
+  const { data: latestCad, refetch: refetchCad } = useQuery({
+    queryKey: ['bom-latest-cad', head.style_id],
+    queryFn: async () => {
+      if (!head.style_id) return null;
+      const res = await http.get<{ data: any }>(`/boms/latest-cad/${head.style_id}`);
+      return res.data;
+    },
+    enabled: Boolean(head.style_id),
+  });
+
   useEffect(() => {
     if (!detail.data) return;
     const d = detail.data;
     setHead({ ...d, so_id: d.so_id ?? '', effective_date: toDateInput(d.effective_date) });
     setLines((d.lines ?? []).map((l: any) => ({
-      _key: `b${++seq}`, material_type: l.material_type,
-      yarn_id: l.yarn_id ?? '', fabric_id: l.fabric_id ?? '', trim_id: l.trim_id ?? '',
-      color_id: l.color_id ?? '', consumption: Number(l.consumption), uom_id: l.uom_id,
-      wastage_pct: Number(l.wastage_pct ?? 0), remarks: l.remarks ?? '',
+      _key: `b${++seq}`,
+      material_type: l.material_type,
+      yarn_id: l.yarn_id ?? '',
+      fabric_id: l.fabric_id ?? '',
+      trim_id: l.trim_id ?? '',
+      color_id: l.color_id ?? '',
+      size_id: l.size_id ?? '',
+      consumption: Number(l.consumption),
+      uom_id: l.uom_id,
+      wastage_pct: Number(l.wastage_pct ?? 0),
+      remarks: l.remarks ?? '',
     })));
   }, [detail.data]);
 
   const editable = isNew ? can('BOM.CREATE') : can('BOM.UPDATE');
 
-  // Rate lookup so the builder can price the BOM live.
+  // Handle Sync CAD Auto-Consumption (Clip 4 Requirement)
+  const handleSyncCad = async () => {
+    if (!latestCad?.has_approved_cad) {
+      toast('No approved CAD consumption found for this style', 'warning');
+      return;
+    }
+
+    setSyncingCad(true);
+    try {
+      if (!isNew && id) {
+        // Backend auto-sync route
+        await http.post(`/boms/${id}/sync-cad`);
+        toast('CAD Auto-Consumption synced successfully into BOM lines!', 'success');
+        void qc.invalidateQueries({ queryKey: ['boms', 'item', id] });
+        void refetchCad();
+      } else {
+        // In-memory sync for new BOM
+        const cad = latestCad;
+        const fabricCons = Number(cad.fabric_consumption_per_pc) || 0.25;
+        const yarnCons = Number(cad.yarn_req_per_pc) || Number((fabricCons * 1.05).toFixed(4));
+        const kgUom = (uoms.data ?? []).find((u: any) => u.code === 'KG')?.id || 5;
+
+        // Keep non-fabric/yarn lines (Trims) and append/replace fabric & yarn
+        const otherLines = lines.filter((l) => l.material_type !== 'FABRIC' && l.material_type !== 'YARN');
+
+        const newFabricLine: BomLine = {
+          _key: `b${++seq}`,
+          material_type: 'FABRIC',
+          fabric_id: cad.fabric_id || (fabrics.data?.[0]?.id ?? ''),
+          yarn_id: '',
+          trim_id: '',
+          color_id: '',
+          size_id: '',
+          consumption: fabricCons,
+          uom_id: kgUom,
+          wastage_pct: 3.0,
+          remarks: `CAD Auto-Consumption (Marker: ${cad.marker_name || 'Approved'})`,
+        };
+
+        const newYarnLine: BomLine = {
+          _key: `b${++seq}`,
+          material_type: 'YARN',
+          yarn_id: cad.yarn_id || (yarns.data?.[0]?.id ?? ''),
+          fabric_id: '',
+          trim_id: '',
+          color_id: '',
+          size_id: '',
+          consumption: yarnCons,
+          uom_id: kgUom,
+          wastage_pct: 2.0,
+          remarks: `CAD Derived Yarn (Yield: 95%)`,
+        };
+
+        setLines([newFabricLine, newYarnLine, ...otherLines]);
+        toast('CAD Auto-Consumption populated into Fabric & Yarn lines!', 'success');
+      }
+    } catch (err: any) {
+      toast(err?.response?.data?.error?.message || 'Failed to sync CAD consumption', 'error');
+    } finally {
+      setSyncingCad(false);
+    }
+  };
+
+  // Rate lookup so builder can price the BOM live
   const rateOf = (l: BomLine): number => {
     const src = l.material_type === 'YARN' ? yarns.data
               : l.material_type === 'FABRIC' ? fabrics.data : trims.data;
@@ -146,6 +245,18 @@ export function BomDetailPage() {
   const setLine = (key: string, patch: Partial<BomLine>) =>
     setLines((s) => s.map((l) => (l._key === key ? { ...l, ...patch } : l)));
 
+  const filteredLines = useMemo(() => {
+    if (activeTab === 'ALL') return lines;
+    return lines.filter((l) => l.material_type === activeTab);
+  }, [lines, activeTab]);
+
+  const counts = useMemo(() => ({
+    all: lines.length,
+    fabric: lines.filter((l) => l.material_type === 'FABRIC').length,
+    yarn: lines.filter((l) => l.material_type === 'YARN').length,
+    trim: lines.filter((l) => l.material_type === 'TRIM').length,
+  }), [lines]);
+
   const save = async (asDraft = false) => {
     setErrors({}); setSaving(true);
     try {
@@ -164,8 +275,11 @@ export function BomDetailPage() {
           fabric_id: l.material_type === 'FABRIC' ? Number(l.fabric_id) : null,
           trim_id: l.material_type === 'TRIM' ? Number(l.trim_id) : null,
           color_id: l.color_id ? Number(l.color_id) : null,
-          consumption: Number(l.consumption), uom_id: Number(l.uom_id),
-          wastage_pct: Number(l.wastage_pct) || 0, remarks: l.remarks || null,
+          size_id: l.size_id ? Number(l.size_id) : null,
+          consumption: Number(l.consumption),
+          uom_id: Number(l.uom_id),
+          wastage_pct: Number(l.wastage_pct) || 0,
+          remarks: l.remarks || null,
         })),
       };
       if (!asDraft && !body.lines.length) { toast('Add at least one component line', 'error'); setSaving(false); return; }
@@ -208,6 +322,59 @@ export function BomDetailPage() {
           )}
         </>} />
 
+      {/* CAD Auto-Consumption Banner (Clip 4 Requirement) */}
+      {head.style_id && (
+        <div className={`mb-4 rounded-xl border p-4 shadow-xs transition-all ${
+          latestCad?.has_approved_cad
+            ? 'border-emerald-200 bg-gradient-to-r from-emerald-50/90 via-white to-emerald-50/40 text-emerald-950'
+            : 'border-slate-200 bg-slate-50/70 text-slate-700'
+        }`}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <span className={`p-2 rounded-lg mt-0.5 ${
+                latestCad?.has_approved_cad ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+              }`}>
+                <Zap size={17} />
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider">
+                    CAD Auto-Consumption Integration
+                  </h4>
+                  {latestCad?.has_approved_cad ? (
+                    <span className="bg-emerald-100 text-emerald-800 text-[10.5px] font-bold px-2 py-0.5 rounded border border-emerald-300">
+                      Approved Marker: {latestCad.marker_name || 'CAD-MKR'} ({latestCad.efficiency_pct}% Eff)
+                    </span>
+                  ) : (
+                    <span className="bg-slate-200 text-slate-700 text-[10.5px] font-medium px-2 py-0.5 rounded">
+                      No Approved CAD Requirement
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11.5px] mt-0.5 text-slate-600">
+                  {latestCad?.has_approved_cad
+                    ? `Per Garment Fabric: ${fmtDecimal(latestCad.fabric_consumption_per_pc, 4)} kg | Derived Yarn: ${fmtDecimal(latestCad.yarn_req_per_pc, 4)} kg.`
+                    : 'Once CAD marker consumption is approved in CAD module, Yarn and Fabric will automatically link to this BOM.'}
+                </p>
+              </div>
+            </div>
+
+            {latestCad?.has_approved_cad && editable && (
+              <button
+                type="button"
+                onClick={handleSyncCad}
+                disabled={syncingCad}
+                className="btn-primary text-xs py-1.5 px-3.5 flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 border-emerald-600 shadow-sm shrink-0"
+              >
+                {syncingCad ? <Spinner size={13} /> : <Sparkles size={13} />}
+                <span>Sync CAD Auto-Consumption</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* BOM Header Card */}
       <div className="card mb-4 p-4">
         <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2 lg:grid-cols-6">
           <Input label="BOM no" hint={isNew ? 'Blank to auto-generate' : undefined}
@@ -235,27 +402,71 @@ export function BomDetailPage() {
         </div>
       </div>
 
+      {/* Components Section with Tabs & Tech Pack Trim Support */}
       <div className="card mb-4 overflow-hidden">
-        <div className="flex items-center gap-2 border-b border-surface-border px-4 py-3">
-          <Layers size={15} className="text-brand-600" />
-          <h3 className="text-[13.5px] font-semibold text-slate-800">Components</h3>
-          <span className="text-[12px] text-slate-500">· consumption per garment</span>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-surface-border px-4 py-3 gap-2">
+          <div className="flex items-center gap-2">
+            <Layers size={15} className="text-brand-600" />
+            <h3 className="text-[13.5px] font-semibold text-slate-800">Components & Tech Pack Materials</h3>
+            <span className="text-[12px] text-slate-500">· consumption per garment</span>
+          </div>
+
+          {/* Component Tabs */}
+          <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-xs">
+            <button
+              type="button"
+              onClick={() => setActiveTab('ALL')}
+              className={`px-2.5 py-1 rounded-md font-medium transition ${
+                activeTab === 'ALL' ? 'bg-white shadow-xs text-brand-700 font-bold' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              All ({counts.all})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('FABRIC')}
+              className={`px-2.5 py-1 rounded-md font-medium transition ${
+                activeTab === 'FABRIC' ? 'bg-white shadow-xs text-emerald-700 font-bold' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Fabric ({counts.fabric})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('YARN')}
+              className={`px-2.5 py-1 rounded-md font-medium transition ${
+                activeTab === 'YARN' ? 'bg-white shadow-xs text-amber-700 font-bold' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Yarn ({counts.yarn})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('TRIM')}
+              className={`px-2.5 py-1 rounded-md font-medium transition ${
+                activeTab === 'TRIM' ? 'bg-white shadow-xs text-indigo-700 font-bold' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Trims (Tech Pack) ({counts.trim})
+            </button>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full text-xs">
             <thead><tr>
-              <th className="th w-[110px]">Type</th>
-              <th className="th min-w-[220px]">Material</th>
-              <th className="th w-[150px]">Colour</th>
-              <th className="th w-[120px] text-right">Consumption</th>
-              <th className="th w-[110px]">UOM</th>
-              <th className="th w-[100px] text-right">Wastage %</th>
-              <th className="th w-[120px] text-right">Cost/gmt</th>
+              <th className="th w-[100px]">Type</th>
+              <th className="th min-w-[200px]">Material Item</th>
+              <th className="th w-[140px]">Colour Applicability</th>
+              <th className="th w-[130px]">Size Applicability</th>
+              <th className="th w-[110px] text-right">Consumption</th>
+              <th className="th w-[90px]">UOM</th>
+              <th className="th w-[90px] text-right">Wastage %</th>
+              <th className="th w-[110px] text-right">Cost/gmt</th>
               {editable && <th className="th w-10" />}
             </tr></thead>
             <tbody>
-              {lines.map((l) => {
+              {filteredLines.map((l) => {
                 const rate = rateOf(l);
                 const cons = Number(l.consumption) || 0;
                 const lineCost = cons * (1 + (Number(l.wastage_pct) || 0) / 100) * rate;
@@ -265,9 +476,9 @@ export function BomDetailPage() {
                 const matValue = l.material_type === 'YARN' ? l.yarn_id
                                : l.material_type === 'FABRIC' ? l.fabric_id : l.trim_id;
                 return (
-                  <tr key={l._key}>
+                  <tr key={l._key} className="hover:bg-slate-50/50">
                     <td className="td p-1.5">
-                      <select className="input py-1.5 text-[12.5px]" value={l.material_type} disabled={!editable}
+                      <select className="input py-1.5 text-[12px] font-semibold" value={l.material_type} disabled={!editable}
                         onChange={(e) => setLine(l._key, {
                           material_type: e.target.value as BomLine['material_type'],
                           yarn_id: '', fabric_id: '', trim_id: '',
@@ -276,7 +487,7 @@ export function BomDetailPage() {
                       </select>
                     </td>
                     <td className="td p-1.5">
-                      <select className="input py-1.5 text-[12.5px]" value={matValue} disabled={!editable}
+                      <select className="input py-1.5 text-[12px]" value={matValue} disabled={!editable}
                         onChange={(e) => {
                           const val = e.target.value ? Number(e.target.value) : '';
                           const src = l.material_type === 'YARN' ? yarns.data
@@ -289,36 +500,47 @@ export function BomDetailPage() {
                             uom_id: (picked?.base_uom as number) ?? l.uom_id,
                           });
                         }}>
-                        <option value="">— Select —</option>
+                        <option value="">— Select Material —</option>
                         {matOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                       </select>
                     </td>
+                    {/* Colour Applicability */}
                     <td className="td p-1.5">
-                      <select className="input py-1.5 text-[12.5px]" value={l.color_id} disabled={!editable}
+                      <select className="input py-1.5 text-[12px]" value={l.color_id} disabled={!editable}
                         onChange={(e) => setLine(l._key, { color_id: e.target.value ? Number(e.target.value) : '' })}>
-                        <option value="">All colours</option>
+                        <option value="">All Colours (Uniform)</option>
                         {(colors.data ?? []).map((c: any) => <option key={c.id} value={c.id}>{c.label}</option>)}
                       </select>
                     </td>
+                    {/* Size Applicability (Tech Pack requirement) */}
                     <td className="td p-1.5">
-                      <input type="number" step="0.00001" className="input py-1.5 text-right text-[12.5px] tabular-nums"
+                      <select className="input py-1.5 text-[12px]" value={l.size_id} disabled={!editable}
+                        onChange={(e) => setLine(l._key, { size_id: e.target.value ? Number(e.target.value) : '' })}>
+                        <option value="">All Sizes (Uniform)</option>
+                        {(sizes.data ?? []).map((s: any) => <option key={s.id} value={s.id}>{s.label}</option>)}
+                      </select>
+                    </td>
+                    <td className="td p-1.5">
+                      <input type="number" step="0.00001" className="input py-1.5 text-right text-[12px] tabular-nums font-mono font-semibold"
                         value={l.consumption} disabled={!editable}
+                        placeholder="0.00"
                         onChange={(e) => setLine(l._key, { consumption: e.target.value === '' ? '' : Number(e.target.value) })} />
                     </td>
                     <td className="td p-1.5">
-                      <select className="input py-1.5 text-[12.5px]" value={l.uom_id} disabled={!editable}
+                      <select className="input py-1.5 text-[12px]" value={l.uom_id} disabled={!editable}
                         onChange={(e) => setLine(l._key, { uom_id: e.target.value ? Number(e.target.value) : '' })}>
                         <option value="">—</option>
                         {(uoms.data ?? []).map((u: any) => <option key={u.id} value={u.id}>{u.code}</option>)}
                       </select>
                     </td>
                     <td className="td p-1.5">
-                      <input type="number" step="0.001" className="input py-1.5 text-right text-[12.5px] tabular-nums"
+                      <input type="number" step="0.001" className="input py-1.5 text-right text-[12px] tabular-nums"
                         value={l.wastage_pct} disabled={!editable}
+                        placeholder="0"
                         onChange={(e) => setLine(l._key, { wastage_pct: e.target.value === '' ? '' : Number(e.target.value) })} />
                     </td>
-                    <td className="td text-right tabular-nums text-slate-600">
-                      {rate > 0 ? fmtDecimal(lineCost, 4) : <span className="text-slate-300">—</span>}
+                    <td className="td text-right tabular-nums font-mono text-slate-700">
+                      {rate > 0 ? `₹${fmtDecimal(lineCost, 3)}` : <span className="text-slate-300">—</span>}
                     </td>
                     {editable && (
                       <td className="td p-1.5 text-right">
@@ -337,11 +559,24 @@ export function BomDetailPage() {
         </div>
 
         {editable && (
-          <div className="border-t border-surface-border p-2.5">
-            <button className="btn-secondary btn-sm w-full justify-center border-dashed"
-              onClick={() => setLines((s) => [...s, emptyLine()])}>
-              <Plus size={14} /> Add component
-            </button>
+          <div className="border-t border-surface-border p-2.5 flex items-center justify-between bg-slate-50/60">
+            <div className="flex items-center gap-2">
+              <button className="btn-secondary btn-sm"
+                onClick={() => setLines((s) => [...s, emptyLine('TRIM')])}>
+                <Plus size={13} /> Add Trim (Tech Pack)
+              </button>
+              <button className="btn-secondary btn-sm"
+                onClick={() => setLines((s) => [...s, emptyLine('FABRIC')])}>
+                <Plus size={13} /> Add Fabric
+              </button>
+              <button className="btn-secondary btn-sm"
+                onClick={() => setLines((s) => [...s, emptyLine('YARN')])}>
+                <Plus size={13} /> Add Yarn
+              </button>
+            </div>
+            <span className="text-[11px] text-slate-400">
+              CAD feeds Fabric/Yarn; Merchandiser enters Trims per Tech Pack
+            </span>
           </div>
         )}
       </div>
@@ -351,7 +586,7 @@ export function BomDetailPage() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="label">Material cost per garment</p>
-            <p className="text-[24px] font-semibold tabular-nums text-slate-900">{fmtDecimal(costPerGarment, 4)}</p>
+            <p className="text-[24px] font-semibold tabular-nums text-slate-900">₹{fmtDecimal(costPerGarment, 4)}</p>
             <p className="mt-0.5 text-[11.5px] text-slate-500">Based on standard rates, wastage included</p>
           </div>
           <div className="flex items-end gap-3">
@@ -363,7 +598,7 @@ export function BomDetailPage() {
             <div className="text-right">
               <p className="label">Total material cost</p>
               <p className="text-[24px] font-semibold tabular-nums text-brand-700">
-                {fmtDecimal(costPerGarment * explodeQty, 2)}
+                ₹{fmtDecimal(costPerGarment * explodeQty, 2)}
               </p>
             </div>
           </div>

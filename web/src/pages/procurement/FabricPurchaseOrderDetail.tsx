@@ -3,7 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Save, CheckCircle, Plus, Trash2, Layers,
-  PackageCheck, FileSpreadsheet, Building2, Truck, RotateCcw
+  FileSpreadsheet, PackageCheck, Building2, Truck, RotateCcw,
+  Globe, Sparkles
 } from 'lucide-react';
 import { http, ApiError } from '../../lib/api';
 import { useLookup, toOptions } from '../../hooks/useLookup';
@@ -106,6 +107,7 @@ export default function FabricPurchaseOrderDetailPage() {
   const salesOrders = useLookup('sales-orders');
   const fabrics = useLookup('fabrics');
   const parties = useLookup('parties');
+  const currencies = useLookup('currencies');
 
   const COMPANY_DEFAULT_ADDRESS = "CK Exports\n123 Textile Park, Dharapuram Road\nTirupur - 641604, Tamil Nadu\nGSTIN: 33AAAAA0000A1Z5";
 
@@ -117,6 +119,8 @@ export default function FabricPurchaseOrderDetailPage() {
     po_date: today(),
     supplier_id: '',
     style_id: '',
+    currency_id: '1',
+    exchange_rate: 1.0,
     order_type: 'PRODUCTION',
     delivery_date: '',
     payment_terms: '30 Days Net',
@@ -135,6 +139,78 @@ export default function FabricPurchaseOrderDetailPage() {
   });
 
   const [lines, setLines] = useState<FabricLine[]>([emptyFabricLine()]);
+  const [filterBomOnly, setFilterBomOnly] = useState(false);
+
+  // Selected Currency Info
+  const selectedCurrency = (currencies.data as any[])?.find((c: any) => String(c.id) === String(head.currency_id));
+  const currSymbol = selectedCurrency?.symbol || '₹';
+  const currCode = selectedCurrency?.code || 'INR';
+  const isForeignCurrency = currCode !== 'INR' && Number(head.exchange_rate) > 0 && Number(head.exchange_rate) !== 1.0;
+
+  // BOM Integration Query when Style is selected (Clip 4)
+  const { data: bomData } = useQuery({
+    queryKey: ['bom-for-job-fabric', head.style_id],
+    queryFn: async () => {
+      if (!head.style_id) return null;
+      const res = await http.get<{ data: any }>(`/api/boms/for-job?style_id=${head.style_id}`);
+      return res.data;
+    },
+    enabled: Boolean(head.style_id),
+  });
+
+  const bomFabrics = bomData?.fabrics || [];
+
+  const handleLoadFromBOM = () => {
+    if (!bomFabrics.length) {
+      toast('No fabric items found in active BOM for this style', 'warning');
+      return;
+    }
+    const newLines: FabricLine[] = bomFabrics.map((bf: any) => {
+      const reqKg = Number(bf.total_required_qty || bf.consumption_per_pc || 100);
+      const rate = Number(bf.rate || 65);
+      const taxable = Math.round(reqKg * rate * 100) / 100;
+      const gstRate = 5.0;
+      const tax = Math.round((taxable * (gstRate / 100)) * 100) / 100;
+      return {
+        _key: `fl_${++fseq}`,
+        fabric_id: bf.fabric_id ? String(bf.fabric_id) : '',
+        fabric_category: (bf.fabric_category || 'Grey Fabric') as any,
+        fabric_type: bf.fabric_type || 'Knitted',
+        dia: bf.dia || '30"',
+        gsm: bf.gsm ? String(bf.gsm) : '180',
+        composition: bf.composition || '100% Cotton',
+        color_name: bf.color_name || '',
+        yarn_count_str: bf.yarn_count_str || '',
+        shade_code: bf.shade_code || '',
+        pantone_spec: bf.pantone_spec || '',
+        print_flag: false,
+        print_color: '',
+        finish: 'Compact',
+        mill_id: '',
+        hsn_code: '5208',
+        uom_id: 9,
+        qty: reqKg,
+        weight_kg: reqKg,
+        no_of_rolls: Math.ceil(reqKg / 25),
+        rate,
+        amount: taxable,
+        discount_amount: 0,
+        freight_amount: 0,
+        other_charges: 0,
+        taxable_amount: taxable,
+        gst_rate: gstRate,
+        cgst_rate: head.is_interstate ? 0 : 2.5,
+        cgst_amount: head.is_interstate ? 0 : tax / 2,
+        sgst_rate: head.is_interstate ? 0 : 2.5,
+        sgst_amount: head.is_interstate ? 0 : tax / 2,
+        igst_rate: head.is_interstate ? gstRate : 0,
+        igst_amount: head.is_interstate ? tax : 0,
+        net_amount: taxable + tax,
+      };
+    });
+    setLines(newLines);
+    toast(`Loaded ${newLines.length} fabric items from BOM!`, 'success');
+  };
 
   // Load existing PO
   const poQuery = useQuery({
@@ -157,6 +233,8 @@ export default function FabricPurchaseOrderDetailPage() {
         po_date: d.po_date?.slice(0, 10) || today(),
         supplier_id: String(d.supplier_id || ''),
         style_id: String(d.style_id || ''),
+        currency_id: String(d.currency_id || '1'),
+        exchange_rate: Number(d.exchange_rate || 1.0),
         order_type: d.order_type || 'PRODUCTION',
         delivery_date: d.delivery_date?.slice(0, 10) || '',
         payment_terms: d.payment_terms || '',
@@ -382,7 +460,8 @@ export default function FabricPurchaseOrderDetailPage() {
         style_id: head.style_id ? Number(head.style_id) : undefined,
         po_type: 'MATERIAL',
         order_type: head.order_type,
-        currency_id: 1,
+        currency_id: Number(head.currency_id || 1),
+        exchange_rate: Number(head.exchange_rate || 1.0),
         delivery_date: head.delivery_date || undefined,
         payment_terms: head.payment_terms,
         is_interstate: head.is_interstate ? 1 : 0,
@@ -518,6 +597,11 @@ export default function FabricPurchaseOrderDetailPage() {
                 {isNew ? 'New Fabric Purchase Order' : `Fabric PO: ${head.po_no}`}
               </h1>
               <StatusBadge value={head.approval_state} />
+              {isForeignCurrency && (
+                <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
+                  <Globe size={11} /> IMPORT PO ({currCode})
+                </span>
+              )}
             </div>
              <p className="text-xs text-slate-500 mt-0.5">
               Grey / Dyed fabric purchase — Knitted / Woven specifications, roll targets, and rates
@@ -629,6 +713,31 @@ export default function FabricPurchaseOrderDetailPage() {
             value={head.delivery_date}
             onChange={(e) => setHead({ ...head, delivery_date: e.target.value })}
           />
+          <Select
+            label="Currency *"
+            options={toOptions(currencies.data)}
+            value={head.currency_id}
+            onChange={(e) => {
+              const cid = e.target.value;
+              const cur = (currencies.data as any[])?.find((c: any) => String(c.id) === cid);
+              setHead((h) => ({
+                ...h,
+                currency_id: cid,
+                exchange_rate: cur?.code === 'INR' ? 1.0 : (h.exchange_rate && h.exchange_rate !== 1.0 ? h.exchange_rate : (cur?.code === 'USD' ? 84.50 : cur?.code === 'EUR' ? 91.20 : 1.0)),
+              }));
+            }}
+          />
+
+          <Input
+            label="Exchange Rate (to INR)"
+            type="number"
+            step="0.0001"
+            value={head.exchange_rate}
+            disabled={!isForeignCurrency}
+            onChange={(e) => setHead((p) => ({ ...p, exchange_rate: Number(e.target.value) }))}
+            placeholder="1.0000"
+          />
+
           <Input
             label="Payment Terms"
             value={head.payment_terms}
@@ -643,6 +752,56 @@ export default function FabricPurchaseOrderDetailPage() {
           />
         </div>
       </div>
+
+      {/* BOM Linkage & Auto-Fill Banner (Clip 4) */}
+      {head.style_id && (
+        <div className="rounded-xl border border-sky-200 bg-gradient-to-r from-sky-50/80 via-white to-sky-50/50 p-4 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <span className="p-2 rounded-lg bg-sky-100 text-sky-700 mt-0.5">
+                <Sparkles size={16} />
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs font-bold text-sky-950 uppercase tracking-wide">
+                    Bill of Materials (BOM) Fabric Integration
+                  </h4>
+                  {bomData?.bom && (
+                    <span className="bg-sky-100 text-sky-800 text-[10.5px] font-bold px-2 py-0.5 rounded border border-sky-300">
+                      BOM: {bomData.bom.bom_no} · v{bomData.bom.version}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-600 mt-0.5">
+                  {bomFabrics.length > 0
+                    ? `Found ${bomFabrics.length} planned fabric specification(s) in BOM for this Style/Job.`
+                    : 'No fabric items explicitly defined in BOM for this style.'}
+                </p>
+              </div>
+            </div>
+            {bomFabrics.length > 0 && (
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={filterBomOnly}
+                    onChange={(e) => setFilterBomOnly(e.target.checked)}
+                    className="rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                  />
+                  <span>Show BOM Items Only</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={handleLoadFromBOM}
+                  className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1 bg-sky-600 hover:bg-sky-700 border-sky-600 shadow-xs text-white"
+                >
+                  <Sparkles size={13} /> Load Fabric from BOM
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Billing and Shipping Addresses */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -821,8 +980,11 @@ export default function FabricPurchaseOrderDetailPage() {
                       className="input py-1 text-xs w-full bg-white"
                     >
                       <option value="">— Select Fabric —</option>
-                      {toOptions(fabrics.data).map((o) => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
+                      {((filterBomOnly && bomFabrics.length > 0)
+                        ? (fabrics.data || []).filter((f: any) => bomFabrics.some((bf: any) => Number(bf.fabric_id) === Number(f.id)))
+                        : (fabrics.data || [])
+                      ).map((o: any) => (
+                        <option key={o.id} value={o.id}>{o.fabric_name || o.fabric_code || o.label}</option>
                       ))}
                     </select>
                   </td>
@@ -1101,8 +1263,13 @@ export default function FabricPurchaseOrderDetailPage() {
             </div>
 
             <div className="flex flex-col items-end justify-center bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
-              <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider block">Net Payable Amount</span>
-              <span className="text-xl font-black text-brand-900 font-mono">₹{fmtDecimal(totals.grandTotal)}</span>
+              <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider block">Net Payable Amount ({currCode})</span>
+              <span className="text-xl font-black text-brand-900 font-mono">{currSymbol}{fmtDecimal(totals.grandTotal)}</span>
+              {isForeignCurrency && (
+                <span className="text-xs font-bold text-amber-900 mt-0.5">
+                  INR Converted: ₹{fmtDecimal(totals.grandTotal * Number(head.exchange_rate), 2)}
+                </span>
+              )}
             </div>
           </div>
         </div>

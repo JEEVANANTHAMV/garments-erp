@@ -705,6 +705,13 @@ export default function FabricGRNDetailPage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+          <Input
+            label="GRN No"
+            value={isNew ? '(Auto-generated on Save)' : header.grn_no}
+            disabled
+            className="font-mono font-bold text-emerald-800 bg-emerald-50/40"
+          />
+
           {isNew ? (
             <div>
               <label className="block text-[11px] font-medium text-slate-600 mb-1">
@@ -713,7 +720,7 @@ export default function FabricGRNDetailPage() {
               <select
                 value={header.po_id}
                 onChange={(e) => handleSelectPO(e.target.value)}
-                className="w-full text-xs rounded-lg border border-slate-300 py-1.5 px-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                className="w-full text-xs rounded-lg border border-slate-300 py-1.5 px-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-semibold text-emerald-900"
               >
                 <option value="">-- Direct Fabric Receipt --</option>
                 {poList.map((p) => (
@@ -724,7 +731,11 @@ export default function FabricGRNDetailPage() {
               </select>
             </div>
           ) : (
-            <Input label="GRN No" value={header.grn_no} disabled />
+            <Input
+              label="Linked PO Ref"
+              value={header.po_id ? `PO #${header.po_id}` : 'Direct Receipt'}
+              disabled
+            />
           )}
 
           {isNew ? (
