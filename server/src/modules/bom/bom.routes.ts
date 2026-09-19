@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { query, queryOne, transaction, txQueryOne, txExecute } from '../../config/db.js';
+import { query, queryOne, transaction, txQuery, txQueryOne, txExecute } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
 import { NotFound, BadRequest } from '../../core/errors.js';
 import { requirePermission } from '../../middleware/auth.js';
@@ -11,18 +11,23 @@ import { s } from '../resources/schemas.js';
 export const bomRouter = Router();
 
 const lineSchema = z.object({
-  material_type: z.enum(['YARN', 'FABRIC', 'TRIM']),
+  material_type: z.enum(['YARN', 'FABRIC', 'TRIM', 'ACCESSORY', 'PACKING', 'GENERAL']),
   yarn_id: s.id(), fabric_id: s.id(), trim_id: s.id(),
+  item_description: s.nullableStr(255),
   color_id: s.id(), size_id: s.id(),
+  consumption_basis: z.string().default('PER_PIECE'),
+  applicability: z.string().default('ALL'),
   consumption: z.coerce.number().positive('Consumption must be greater than zero'),
+  additional_qty: z.coerce.number().min(0).default(0),
   uom_id: s.idReq(),
   wastage_pct: z.coerce.number().min(0).max(100).default(0),
   remarks: s.nullableStr(255),
 }).refine(
   (l) => (l.material_type === 'YARN' && l.yarn_id) ||
          (l.material_type === 'FABRIC' && l.fabric_id) ||
-         (l.material_type === 'TRIM' && l.trim_id),
-  { message: 'Select a material matching the chosen material type' },
+         (l.material_type === 'TRIM' && l.trim_id) ||
+         (['ACCESSORY', 'PACKING', 'GENERAL'].includes(l.material_type) && (l.trim_id || l.item_description)),
+  { message: 'Select a material matching the chosen material type or provide item description' },
 );
 
 const bomSchema = z.object({
@@ -32,6 +37,7 @@ const bomSchema = z.object({
   version: z.coerce.number().int().min(1).default(1),
   effective_date: s.date(),
   status_id: s.id(),
+  approval_state: z.enum(['DRAFT', 'SUBMITTED', 'APPROVED', 'SUPERSEDED', 'CANCELLED']).default('DRAFT'),
   remarks: s.nullableStr(500),
   is_active: s.bool(),
   lines: z.array(lineSchema).default([]),
@@ -169,16 +175,25 @@ bomRouter.get('/for-job', requirePermission('BOM.VIEW'), ah(async (req, res) => 
   const items = lines.map((l) => {
     const cons = Number(l.consumption) || 0;
     const waste = Number(l.wastage_pct) || 0;
-    const reqPerGmt = cons * (1 + waste / 100);
-    const orderReqQty = Number((reqPerGmt * orderQty).toFixed(4));
+    const addl = Number(l.additional_qty) || 0;
+    const basis = l.consumption_basis || 'PER_PIECE';
+    let baseQty = cons * orderQty;
+    if (basis === 'PER_DOZEN') baseQty = (orderQty / 12) * cons;
+    else if (basis === 'FIXED_QTY') baseQty = cons;
+    const wasteQty = baseQty * (waste / 100);
+    const finalReq = Number((baseQty + addl + wasteQty).toFixed(4));
     return {
       ...l,
       consumption: cons,
+      additional_qty: addl,
       wastage_pct: waste,
       order_qty: orderQty,
-      order_required_qty: orderReqQty,
+      base_qty: Number(baseQty.toFixed(4)),
+      wastage_qty: Number(wasteQty.toFixed(4)),
+      order_required_qty: finalReq,
+      final_requirement: finalReq,
       std_rate: Number(l.std_rate) || 0,
-      estimated_amount: Number((orderReqQty * (Number(l.std_rate) || 0)).toFixed(2)),
+      estimated_amount: Number((finalReq * (Number(l.std_rate) || 0)).toFixed(2)),
     };
   });
 
@@ -192,6 +207,9 @@ bomRouter.get('/for-job', requirePermission('BOM.VIEW'), ah(async (req, res) => 
       yarns: items.filter((i) => i.material_type === 'YARN'),
       fabrics: items.filter((i) => i.material_type === 'FABRIC'),
       trims: items.filter((i) => i.material_type === 'TRIM'),
+      accessories: items.filter((i) => i.material_type === 'ACCESSORY'),
+      packings: items.filter((i) => i.material_type === 'PACKING'),
+      generals: items.filter((i) => i.material_type === 'GENERAL'),
     },
   });
 }));
@@ -214,11 +232,14 @@ async function writeLines(tx: any, bomId: number, lines: z.infer<typeof lineSche
   for (const l of lines) {
     await txExecute(tx,
       `INSERT INTO trx_bom_line
-         (bom_id, material_type, yarn_id, fabric_id, trim_id, color_id, size_id,
-          consumption, uom_id, wastage_pct, remarks)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+         (bom_id, material_type, yarn_id, fabric_id, trim_id, item_description,
+          color_id, size_id, consumption_basis, applicability, consumption, additional_qty,
+          uom_id, wastage_pct, remarks)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [bomId, l.material_type, l.yarn_id ?? null, l.fabric_id ?? null, l.trim_id ?? null,
-       l.color_id ?? null, l.size_id ?? null, l.consumption, l.uom_id, l.wastage_pct ?? 0,
+       l.item_description ?? null, l.color_id ?? null, l.size_id ?? null,
+       l.consumption_basis || 'PER_PIECE', l.applicability || 'ALL',
+       l.consumption, l.additional_qty || 0, l.uom_id, l.wastage_pct ?? 0,
        l.remarks ?? null]);
   }
 }
@@ -229,10 +250,10 @@ bomRouter.post('/', requirePermission('BOM.CREATE'), ah(async (req, res) => {
     const bomNo = body.bom_no || await nextDocNumber(tx, req.user!.companyId, 'BOM');
     const r = await txExecute(tx,
       `INSERT INTO trx_bom (company_id, style_id, so_id, bom_no, version, effective_date,
-                            status_id, remarks, is_active, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+                            status_id, approval_state, remarks, is_active, created_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
       [req.user!.companyId, body.style_id, body.so_id ?? null, bomNo, body.version, body.effective_date ?? null,
-       body.status_id ?? null, body.remarks ?? null, body.is_active ?? 1, req.user!.id]);
+       body.status_id ?? null, body.approval_state || 'DRAFT', body.remarks ?? null, body.is_active ?? 1, req.user!.id]);
     await writeLines(tx, r.insertId, body.lines);
     return txQueryOne(tx, `SELECT * FROM trx_bom WHERE id = ?`, [r.insertId]);
   });
@@ -304,6 +325,155 @@ bomRouter.get('/:id/explode', requirePermission('BOM.VIEW'), ah(async (req, res)
       bom, qty, lines: exploded,
       total_estimated_cost: Number(exploded.reduce((a, l) => a + l.estimated_cost, 0).toFixed(4)),
     },
+  });
+}));
+
+/**
+ * POST or GET /:id/calculate — Full material requirement calculation engine (Section 11, 26 of spec)
+ * Base Qty = Applicable Order Qty * (Consumption / Basis Factor)
+ * Wastage Qty = Base Qty * (Wastage % / 100)
+ * Final Requirement = Base Qty + Additional Qty + Wastage Qty
+ */
+const handleCalculate = ah(async (req, res) => {
+  const id = Number(req.params.id);
+  const qty = Number(req.body?.order_qty || req.query?.qty || 1000);
+  const bom = await queryOne<any>(`SELECT * FROM trx_bom WHERE id = ? AND company_id = ?`,
+    [id, req.user!.companyId]);
+  if (!bom) throw NotFound('BOM not found');
+
+  const lines = await query<any>(LINE_SELECT, [id]);
+  const calculated = lines.map((l) => {
+    const cons = Number(l.consumption) || 0;
+    const wastePct = Number(l.wastage_pct) || 0;
+    const addl = Number(l.additional_qty) || 0;
+    const basis = l.consumption_basis || 'PER_PIECE';
+
+    let divisor = 1;
+    if (basis === 'PER_DOZEN') divisor = 12;
+    else if (basis === 'PER_SET') divisor = 1;
+    else if (basis === 'FIXED_QTY') divisor = qty > 0 ? qty : 1;
+
+    const baseQty = Number(((qty / divisor) * cons).toFixed(4));
+    const wasteQty = Number((baseQty * (wastePct / 100)).toFixed(4));
+    const finalReq = Number((baseQty + addl + wasteQty).toFixed(4));
+    const rate = Number(l.std_rate) || 0;
+    const estCost = Number((finalReq * rate).toFixed(2));
+
+    return {
+      ...l,
+      order_qty: qty,
+      consumption_basis: basis,
+      base_qty: baseQty,
+      additional_qty: addl,
+      wastage_qty: wasteQty,
+      final_requirement: finalReq,
+      estimated_cost: estCost,
+    };
+  });
+
+  res.json({
+    success: true,
+    data: {
+      bom_id: id,
+      bom_no: bom.bom_no,
+      version: bom.version,
+      order_qty: qty,
+      lines: calculated,
+      yarns: calculated.filter((l) => l.material_type === 'YARN'),
+      fabrics: calculated.filter((l) => l.material_type === 'FABRIC'),
+      trims: calculated.filter((l) => l.material_type === 'TRIM'),
+      accessories: calculated.filter((l) => l.material_type === 'ACCESSORY'),
+      packings: calculated.filter((l) => l.material_type === 'PACKING'),
+      generals: calculated.filter((l) => l.material_type === 'GENERAL'),
+      total_estimated_cost: Number(calculated.reduce((acc, l) => acc + l.estimated_cost, 0).toFixed(2)),
+    },
+  });
+});
+
+bomRouter.get('/:id/calculate', requirePermission('BOM.VIEW'), handleCalculate);
+bomRouter.post('/:id/calculate', requirePermission('BOM.VIEW'), handleCalculate);
+
+/** POST /:id/submit — Submit draft BOM for approval */
+bomRouter.post('/:id/submit', requirePermission('BOM.UPDATE'), ah(async (req, res) => {
+  const id = Number(req.params.id);
+  const bom = await queryOne<any>(`SELECT * FROM trx_bom WHERE id = ? AND company_id = ?`,
+    [id, req.user!.companyId]);
+  if (!bom) throw NotFound('BOM not found');
+
+  await query(`UPDATE trx_bom SET approval_state = 'SUBMITTED', updated_by = ? WHERE id = ?`,
+    [req.user!.id, id]);
+  await audit(req, 'trx_bom', id, 'UPDATE', { approval_state: bom.approval_state }, { approval_state: 'SUBMITTED' });
+
+  res.json({ success: true, message: 'BOM submitted for approval', data: { id, approval_state: 'SUBMITTED' } });
+}));
+
+/** POST /:id/approve — Approve BOM and supersede previous versions */
+bomRouter.post('/:id/approve', requirePermission('BOM.APPROVE'), ah(async (req, res) => {
+  const id = Number(req.params.id);
+  const cid = req.user!.companyId;
+  const bom = await queryOne<any>(`SELECT * FROM trx_bom WHERE id = ? AND company_id = ?`,
+    [id, cid]);
+  if (!bom) throw NotFound('BOM not found');
+
+  await transaction(async (tx) => {
+    // Supersede previous approved versions for the same style and SO
+    await txExecute(tx, `
+      UPDATE trx_bom
+         SET approval_state = 'SUPERSEDED'
+       WHERE company_id = ? AND style_id = ? AND id != ?
+         AND (so_id <=> ?) AND approval_state = 'APPROVED'
+    `, [cid, bom.style_id, id, bom.so_id ?? null]);
+
+    // Approve current BOM
+    await txExecute(tx, `
+      UPDATE trx_bom
+         SET approval_state = 'APPROVED', approved_by = ?, approved_at = NOW(), updated_by = ?
+       WHERE id = ?
+    `, [req.user!.id, req.user!.id, id]);
+  });
+
+  await audit(req, 'trx_bom', id, 'UPDATE', { approval_state: bom.approval_state }, { approval_state: 'APPROVED' });
+  res.json({ success: true, message: 'BOM approved successfully', data: { id, approval_state: 'APPROVED' } });
+}));
+
+/** POST /:id/revision — Create revision (v+1) from approved BOM, preserving history */
+bomRouter.post('/:id/revision', requirePermission('BOM.CREATE'), ah(async (req, res) => {
+  const id = Number(req.params.id);
+  const cid = req.user!.companyId;
+  const bom = await queryOne<any>(`SELECT * FROM trx_bom WHERE id = ? AND company_id = ?`,
+    [id, cid]);
+  if (!bom) throw NotFound('BOM not found');
+
+  const newRevision = await transaction(async (tx) => {
+    const nextVer = (Number(bom.version) || 1) + 1;
+    const r = await txExecute(tx, `
+      INSERT INTO trx_bom (company_id, style_id, so_id, bom_no, version, effective_date,
+                            status_id, approval_state, remarks, is_active, created_by)
+      VALUES (?, ?, ?, ?, ?, CURDATE(), ?, 'DRAFT', ?, 1, ?)
+    `, [cid, bom.style_id, bom.so_id ?? null, bom.bom_no, nextVer, bom.status_id ?? null,
+        `Revision v${nextVer} based on v${bom.version}`, req.user!.id]);
+
+    const newId = r.insertId;
+    const lines = await txQuery<any>(tx, `SELECT * FROM trx_bom_line WHERE bom_id = ?`, [id]);
+    for (const l of lines) {
+      await txExecute(tx, `
+        INSERT INTO trx_bom_line (bom_id, material_type, yarn_id, fabric_id, trim_id, item_description,
+                                  color_id, size_id, consumption_basis, applicability, consumption,
+                                  additional_qty, uom_id, wastage_pct, remarks)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [newId, l.material_type, l.yarn_id, l.fabric_id, l.trim_id, l.item_description,
+          l.color_id, l.size_id, l.consumption_basis || 'PER_PIECE', l.applicability || 'ALL',
+          l.consumption, l.additional_qty || 0, l.uom_id, l.wastage_pct || 0, l.remarks]);
+    }
+
+    return txQueryOne(tx, `SELECT * FROM trx_bom WHERE id = ?`, [newId]);
+  });
+
+  await audit(req, 'trx_bom', (newRevision as any).id, 'INSERT', { source_bom_id: id }, newRevision);
+  res.status(201).json({
+    success: true,
+    message: `Created revision v${(newRevision as any).version}`,
+    data: newRevision,
   });
 }));
 

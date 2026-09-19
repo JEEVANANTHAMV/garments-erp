@@ -217,7 +217,7 @@ export const transactionResources: ResourceConfig[] = [
     defaultSort: 't.purchase_date', hasIsActive: false,
     filters: ['supplier_id', 'purchase_type', 'status_id', 'approval_state', 'branch_id'],
     autoNumber: { column: 'purchase_no', docType: 'GENERAL_PURCHASE' },
-    selectExtra: 'sup.party_name AS supplier_name, cur.code AS currency_code, cur.symbol AS currency_symbol, cs.label AS status_label, gin.inward_no AS gate_entry_no, (SELECT COUNT(*) FROM trx_general_purchase_line gpl WHERE gpl.purchase_id = t.id) AS item_count',
+    selectExtra: 'sup.party_name AS supplier_name, cur.code AS currency_code, cur.symbol AS currency_symbol, cs.label AS status_label, gin.entry_no AS gate_entry_no, (SELECT COUNT(*) FROM trx_general_purchase_line gpl WHERE gpl.purchase_id = t.id) AS item_count',
     joins: `LEFT JOIN mst_party sup ON sup.id = t.supplier_id
             LEFT JOIN cfg_currency cur ON cur.id = t.currency_id
             LEFT JOIN cfg_status cs ON cs.id = t.status_id
