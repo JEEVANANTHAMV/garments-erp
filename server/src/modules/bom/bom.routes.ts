@@ -541,7 +541,7 @@ bomRouter.post('/:id/sync-cad', requirePermission('BOM.UPDATE'), ah(async (req, 
 
   const defaultFabric = await queryOne<any>(`SELECT id, base_uom FROM mst_fabric WHERE company_id = ? AND is_active = 1 LIMIT 1`, [cid]);
   const defaultYarn = await queryOne<any>(`SELECT id, base_uom FROM mst_yarn WHERE company_id = ? AND is_active = 1 LIMIT 1`, [cid]);
-  const kgUom = await queryOne<any>(`SELECT id FROM cfg_uom WHERE (code = 'KG' OR code = 'KGS') AND (company_id = ? OR company_id IS NULL) LIMIT 1`, [cid]);
+  const kgUom = await queryOne<any>(`SELECT id FROM cfg_uom WHERE (code = 'KG' OR code = 'KGS') LIMIT 1`);
   const uomId = kgUom?.id || defaultFabric?.base_uom || defaultYarn?.base_uom || 1;
 
   await transaction(async (tx) => {

@@ -894,7 +894,7 @@ cadRouter.post('/cad-requirements/:id/approve', requirePermission('PRODUCTION.AP
       const defYarn = await txQueryOne<any>(tx, `SELECT id, base_uom FROM mst_yarn WHERE company_id = ? AND is_active = 1 LIMIT 1`, [companyId]);
 
       const targetUomCode = isWoven ? 'MTR' : 'KG';
-      const uomRow = await txQueryOne<any>(tx, `SELECT id FROM cfg_uom WHERE (code = ? OR code = 'MTRS' OR code = 'KGS') AND (company_id = ? OR company_id IS NULL) LIMIT 1`, [targetUomCode, companyId]);
+      const uomRow = await txQueryOne<any>(tx, `SELECT id FROM cfg_uom WHERE (code = ? OR code = 'MTRS' OR code = 'KGS') LIMIT 1`, [targetUomCode]);
       const uId = uomRow?.id || defFabric?.base_uom || 1;
 
       const existFab = await txQueryOne<any>(tx, `SELECT id FROM trx_bom_line WHERE bom_id = ? AND material_type = 'FABRIC' LIMIT 1`, [activeBom.id]);
