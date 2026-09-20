@@ -284,7 +284,7 @@ cadRouter.post('/cad-requirements', requirePermission('PRODUCTION.CREATE'), ah(a
         companyId,
       ]);
     } else {
-      const ins = await txQueryOne<{ insertId: number }>(tx, `
+      const ins = await txExecute(tx, `
         INSERT INTO trx_cad_requirement (
           company_id, req_no, req_date, internal_ir_no, style_id, buyer_id,
           order_qty, size_group_id, cad_version, import_source,
@@ -315,7 +315,7 @@ cadRouter.post('/cad-requirements', requirePermission('PRODUCTION.CREATE'), ah(a
         dataJsonStr,
         userId,
       ]);
-      recId = ins!.insertId;
+      recId = ins.insertId;
     }
 
     // Save Markers
