@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import XLSX from 'xlsx';
 import { query, queryOne, transaction, txQuery, txQueryOne, txExecute } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
 import { NotFound, BadRequest } from '../../core/errors.js';
@@ -25,7 +26,8 @@ cadRouter.get('/cad-requirements', requirePermission('PRODUCTION.VIEW'), ah(asyn
            st.style_code, st.style_name,
            b.party_name AS buyer_name,
            sg.group_name AS size_group_name,
-           (SELECT COUNT(*) FROM trx_cad_piece cp WHERE cp.cad_req_id = cr.id) AS piece_count
+           (SELECT COUNT(*) FROM trx_cad_piece cp WHERE cp.cad_req_id = cr.id) AS piece_count,
+           (SELECT COUNT(*) FROM trx_cad_marker cm WHERE cm.cad_req_id = cr.id) AS marker_count
       FROM trx_cad_requirement cr
       LEFT JOIN mst_style st ON st.id = cr.style_id
       LEFT JOIN mst_party b ON b.id = cr.buyer_id
@@ -121,7 +123,7 @@ cadRouter.get('/cad-requirements/style-data/:styleId', requirePermission('PRODUC
 
 /**
  * 3. GET /api/cad-requirements/:id
- * Retrieve a CAD requirement by ID
+ * Retrieve a CAD requirement by ID with markers and fabric program
  */
 cadRouter.get('/cad-requirements/:id', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
   const companyId = req.user!.companyId;
@@ -140,6 +142,39 @@ cadRouter.get('/cad-requirements/:id', requirePermission('PRODUCTION.VIEW'), ah(
   `, [id, companyId]);
 
   if (!reqRow) throw NotFound('CAD Requirement not found');
+
+  // Load Markers
+  const markerRows = await query<any>(`
+    SELECT cm.*
+      FROM trx_cad_marker cm
+     WHERE cm.cad_req_id = ?
+     ORDER BY cm.sort_order ASC, cm.id ASC
+  `, [id]);
+
+  const markers = markerRows.map((m) => {
+    let mJson: any = {};
+    try {
+      if (m.data_json) {
+        mJson = typeof m.data_json === 'string' ? JSON.parse(m.data_json) : m.data_json;
+      }
+    } catch {
+      // ignore
+    }
+    return {
+      ...m,
+      sizes: mJson.sizes || [],
+      ratios: mJson.ratios || [],
+      colorways: mJson.colorways || [],
+    };
+  });
+
+  // Load Fabric Program & Cutting Lay
+  const fabricPrograms = await query<any>(`
+    SELECT fp.*
+      FROM trx_cad_fabric_program fp
+     WHERE fp.cad_req_id = ?
+     ORDER BY fp.sort_order ASC, fp.id ASC
+  `, [id]);
 
   const pieces = await query<any>(`
     SELECT cp.*
@@ -160,10 +195,14 @@ cadRouter.get('/cad-requirements/:id', requirePermission('PRODUCTION.VIEW'), ah(
   res.json({
     data: {
       ...reqRow,
+      markers: markers.length > 0 ? markers : (dataJson.markers || []),
+      fabric_program: fabricPrograms.filter((f) => f.sheet_type === 'FABRIC_PROGRAM'),
+      cutting_lay: fabricPrograms.filter((f) => f.sheet_type === 'CUTTING_LAY'),
       size_breakdown: dataJson.size_breakdown,
       stripes: dataJson.stripes,
       loss_rules: dataJson.loss_rules,
       pieces: (dataJson.pieces && dataJson.pieces.length > 0) ? dataJson.pieces : pieces,
+      summary_metrics: dataJson.summary_metrics || {},
       dataJson,
     },
   });
@@ -171,7 +210,7 @@ cadRouter.get('/cad-requirements/:id', requirePermission('PRODUCTION.VIEW'), ah(
 
 /**
  * 4. POST /api/cad-requirements
- * Create or save draft of CAD Requirement
+ * Create or save draft of CAD Requirement with markers and fabric programs
  */
 cadRouter.post('/cad-requirements', requirePermission('PRODUCTION.CREATE'), ah(async (req, res) => {
   const companyId = req.user!.companyId;
@@ -191,6 +230,10 @@ cadRouter.post('/cad-requirements', requirePermission('PRODUCTION.CREATE'), ah(a
       stripes: body.stripes,
       loss_rules: body.loss_rules,
       pieces: body.pieces,
+      markers: body.markers,
+      fabric_program: body.fabric_program,
+      cutting_lay: body.cutting_lay,
+      summary_metrics: body.summary_metrics,
       total_fabric_kg: body.total_fabric_kg,
     });
 
@@ -206,6 +249,12 @@ cadRouter.post('/cad-requirements', requirePermission('PRODUCTION.CREATE'), ah(a
                cad_version = ?,
                import_source = ?,
                consumption_source = ?,
+               cad_type = ?,
+               uom = ?,
+               rejection_pct = ?,
+               fabric_allowance_pct = ?,
+               special_notes = ?,
+               signoff_json = ?,
                marker_efficiency = ?,
                status = ?,
                remarks = ?,
@@ -221,6 +270,12 @@ cadRouter.post('/cad-requirements', requirePermission('PRODUCTION.CREATE'), ah(a
         body.cad_version || 'V01',
         body.import_source || 'MANUAL',
         body.consumption_source || 'PIECE_AREA',
+        body.cad_type || 'KNIT_SJ',
+        body.uom || 'KG',
+        Number(body.rejection_pct ?? 3.0),
+        Number(body.fabric_allowance_pct ?? 10.0),
+        body.special_notes || null,
+        body.signoff_json ? JSON.stringify(body.signoff_json) : null,
         Number(body.marker_efficiency) || 85.0,
         body.status || 'DRAFT',
         body.remarks || null,
@@ -233,8 +288,9 @@ cadRouter.post('/cad-requirements', requirePermission('PRODUCTION.CREATE'), ah(a
         INSERT INTO trx_cad_requirement (
           company_id, req_no, req_date, internal_ir_no, style_id, buyer_id,
           order_qty, size_group_id, cad_version, import_source,
-          consumption_source, marker_efficiency, status, remarks, data_json, created_by
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          consumption_source, cad_type, uom, rejection_pct, fabric_allowance_pct,
+          special_notes, signoff_json, marker_efficiency, status, remarks, data_json, created_by
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `, [
         companyId,
         finalReqNo,
@@ -247,6 +303,12 @@ cadRouter.post('/cad-requirements', requirePermission('PRODUCTION.CREATE'), ah(a
         body.cad_version || 'V01',
         body.import_source || 'MANUAL',
         body.consumption_source || 'PIECE_AREA',
+        body.cad_type || 'KNIT_SJ',
+        body.uom || 'KG',
+        Number(body.rejection_pct ?? 3.0),
+        Number(body.fabric_allowance_pct ?? 10.0),
+        body.special_notes || null,
+        body.signoff_json ? JSON.stringify(body.signoff_json) : null,
         Number(body.marker_efficiency) || 85.0,
         body.status || 'DRAFT',
         body.remarks || null,
@@ -256,7 +318,89 @@ cadRouter.post('/cad-requirements', requirePermission('PRODUCTION.CREATE'), ah(a
       recId = ins!.insertId;
     }
 
-    // Save Pieces
+    // Save Markers
+    if (Array.isArray(body.markers)) {
+      await txExecute(tx, `DELETE FROM trx_cad_marker WHERE cad_req_id = ?`, [recId]);
+      for (let i = 0; i < body.markers.length; i++) {
+        const m = body.markers[i];
+        const mJsonStr = JSON.stringify({
+          sizes: m.sizes || [],
+          ratios: m.ratios || [],
+          colorways: m.colorways || [],
+        });
+
+        await txExecute(tx, `
+          INSERT INTO trx_cad_marker (
+            cad_req_id, marker_ref, marker_name, length_mm, width_mm,
+            fabric_dia_type, fabric_type, gsm, direction, parts_in_lay,
+            lay_allowance_cm, width_allowance_in, lay_length_cm, table_width_in,
+            fabric_wt_per_lay_g, no_of_pcs_lay, avg_wt_per_pc_g, req_length_per_pc_cm,
+            total_req_qty, uom, sort_order, data_json
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        `, [
+          recId,
+          m.marker_ref || `M${i + 1}`,
+          m.marker_name || `${finalReqNo} ${m.marker_ref || '1A'}`,
+          Number(m.length_mm) || 0,
+          Number(m.width_mm) || 0,
+          m.fabric_dia_type || 'OPEN',
+          m.fabric_type || null,
+          m.gsm ? Number(m.gsm) : null,
+          m.direction || 'ONEWAY',
+          m.parts_in_lay || null,
+          Number(m.lay_allowance_cm ?? 10.0),
+          Number(m.width_allowance_in ?? (m.fabric_dia_type === 'TUBE' ? 1.0 : 2.0)),
+          Number(m.lay_length_cm) || 0,
+          Number(m.table_width_in) || 0,
+          Number(m.fabric_wt_per_lay_g) || 0,
+          Number(m.no_of_pcs_lay) || 1,
+          Number(m.avg_wt_per_pc_g) || 0,
+          Number(m.req_length_per_pc_cm) || 0,
+          Number(m.total_req_qty) || 0,
+          m.uom || body.uom || 'KG',
+          i + 1,
+          mJsonStr,
+        ]);
+      }
+    }
+
+    // Save Fabric Program & Cutting Lay Lines
+    const allPrograms: any[] = [];
+    if (Array.isArray(body.fabric_program)) {
+      body.fabric_program.forEach((p: any) => allPrograms.push({ ...p, sheet_type: 'FABRIC_PROGRAM' }));
+    }
+    if (Array.isArray(body.cutting_lay)) {
+      body.cutting_lay.forEach((p: any) => allPrograms.push({ ...p, sheet_type: 'CUTTING_LAY' }));
+    }
+
+    if (allPrograms.length > 0) {
+      await txExecute(tx, `DELETE FROM trx_cad_fabric_program WHERE cad_req_id = ?`, [recId]);
+      for (let i = 0; i < allPrograms.length; i++) {
+        const fp = allPrograms[i];
+        await txExecute(tx, `
+          INSERT INTO trx_cad_fabric_program (
+            cad_req_id, sheet_type, fabric_type, gsm, dia_spec, color_name,
+            order_qty_pcs, net_qty, buffer_qty, grand_total_qty, uom, remarks, sort_order
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+        `, [
+          recId,
+          fp.sheet_type || 'FABRIC_PROGRAM',
+          fp.fabric_type || 'Main Fabric',
+          fp.gsm ? Number(fp.gsm) : null,
+          fp.dia_spec || null,
+          fp.color_name || 'Solid',
+          Number(fp.order_qty_pcs) || 0,
+          Number(fp.net_qty) || 0,
+          Number(fp.buffer_qty) || 0,
+          Number(fp.grand_total_qty) || 0,
+          fp.uom || body.uom || 'KG',
+          fp.remarks || null,
+          i + 1,
+        ]);
+      }
+    }
+
+    // Preserve Pieces if provided
     if (Array.isArray(body.pieces)) {
       await txExecute(tx, `DELETE FROM trx_cad_piece WHERE cad_req_id = ?`, [recId]);
       for (const p of body.pieces) {
@@ -298,7 +442,7 @@ cadRouter.post('/cad-requirements', requirePermission('PRODUCTION.CREATE'), ah(a
 
 /**
  * 5. POST /api/cad-requirements/:id/calculate
- * Executes the full Auto-Consumption Engine as per spec
+ * Executes calculation across all markers (Knit / Woven formulas) and generates F.PRGM & CUT sheets
  */
 cadRouter.post('/cad-requirements/:id/calculate', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
   const companyId = req.user!.companyId;
@@ -314,192 +458,193 @@ cadRouter.post('/cad-requirements/:id/calculate', requirePermission('PRODUCTION.
 
   if (!cr) throw NotFound('CAD Requirement not found');
 
-  const orderQty = Number(body.order_qty || cr.order_qty || 1000);
-  const efficiency = (Number(body.marker_efficiency || cr.marker_efficiency || 85.0)) / 100.0;
-  const sizes = Array.isArray(body.sizes) ? body.sizes : [];
-  const pieces = Array.isArray(body.pieces) ? body.pieces : [];
-  const multiMaterials = Array.isArray(body.multi_materials) ? body.multi_materials : [];
-  const stripeRules = Array.isArray(body.stripe_rules) ? body.stripe_rules : [];
-  const mixRules = Array.isArray(body.mix_rules) ? body.mix_rules : [];
-  const wastageRules = body.wastage_rules || { fabric: 5.0, foam: 3.0, interlining: 2.0, yarn: 3.0 };
-  const yarnConversion = body.yarn_conversion || { factor: 0.98, process_loss: 3.0 };
+  const cadType = body.cad_type || cr.cad_type || 'KNIT_SJ';
+  const isWoven = cadType === 'WOVEN';
+  const uom = isWoven ? 'MTR' : 'KG';
+  const rejectionPct = Number(body.rejection_pct ?? cr.rejection_pct ?? 3.0);
+  const fabricAllowancePct = Number(body.fabric_allowance_pct ?? cr.fabric_allowance_pct ?? 10.0);
+  const totalAllowancePct = rejectionPct + fabricAllowancePct;
 
-  // 1. Calculate Component-wise Area & Fabric Consumption
-  // Formula: Piece Weight (KG) = Area (m²) * GSM / 1000
-  // If marker efficiency: Consumption KG = Net Weight / Efficiency
-  let totalFabricGrossKg = 0;
-  let totalFoamKg = 0;
-  let totalInterliningKg = 0;
+  const markers = Array.isArray(body.markers) ? body.markers : [];
 
-  const componentBreakdown: Record<string, { area: number; pieces: number; gsm: number; grossKg: number }> = {};
+  // Calculate Marker Details
+  const calculatedMarkers = markers.map((m: any, idx: number) => {
+    const lengthMm = Number(m.length_mm) || 0;
+    const widthMm = Number(m.width_mm) || 0;
+    const diaType = m.fabric_dia_type === 'TUBE' ? 'TUBE' : 'OPEN';
+    const gsm = Number(m.gsm) || 160;
 
-  for (const p of pieces) {
-    const comp = p.component || 'BODY';
-    const area = Number(p.area_sqm) || 0.0;
-    const qty = Number(p.piece_qty) || 1;
-    const gsm = Number(p.gsm) || 180;
+    const layAllowanceCm = Number(m.lay_allowance_cm ?? 10.0);
+    const widthAllowanceIn = Number(m.width_allowance_in ?? (diaType === 'TUBE' ? 1.0 : 2.0));
 
-    if (!componentBreakdown[comp]) {
-      componentBreakdown[comp] = { area: 0, pieces: 0, gsm, grossKg: 0 };
-    }
-    componentBreakdown[comp].area += area * qty;
-    componentBreakdown[comp].pieces += qty;
-  }
+    // Lay Length in cm: (Length mm / 10) + allowance
+    const layLengthCm = Math.round(((lengthMm / 10.0) + layAllowanceCm) * 10) / 10;
 
-  // Calculate requirement for each component based on order qty and sizes
-  const sizeTotal = sizes.reduce((s: number, x: any) => s + (Number(x.qty) || 0), 0);
-  const effectiveQty = sizeTotal > 0 ? sizeTotal : orderQty;
+    // Table Width in inches: (Width mm / 10 / 2.54) + allowance
+    const tableWidthIn = Math.round(((widthMm / 25.4) + widthAllowanceIn) * 100) / 100;
 
-  const materialOutputs: any[] = [];
+    const ratios: number[] = Array.isArray(m.ratios) ? m.ratios.map((r: any) => Number(r) || 0) : [];
+    const sumRatios = ratios.reduce((a, b) => a + b, 0);
 
-  // A. Primary Fabric Calculations per Component
-  for (const [comp, info] of Object.entries(componentBreakdown)) {
-    const netWeightPerPc = (info.area * info.gsm) / 1000.0; // KG per piece
-    const markerWeightPerPc = efficiency > 0 ? netWeightPerPc / efficiency : netWeightPerPc;
-    const compGrossKg = markerWeightPerPc * effectiveQty;
-    info.grossKg = compGrossKg;
+    let fabricWtPerLayG = 0;
+    let noOfPcsLay = 1;
+    let avgWtPerPc = 0;
+    let reqLengthPerPcCm = 0;
 
-    // Check if component has 3-colour stripe rule
-    const compStripes = stripeRules.filter((s: any) => s.component === comp);
-    if (compStripes.length > 0) {
-      for (const st of compStripes) {
-        const ratio = (Number(st.ratio) || 0) / 100.0;
-        const stripeGrossKg = compGrossKg * ratio;
-        const wastagePct = Number(wastageRules.fabric || 5.0);
-        const wastageKg = (stripeGrossKg * wastagePct) / 100.0;
-        const finalKg = stripeGrossKg + wastageKg;
-
-        materialOutputs.push({
-          material_type: 'FABRIC',
-          material_code: st.material_code || `${comp}-STRIPE`,
-          material_name: `${comp} Stripe Fabric (${st.color_name || 'Stripe'})`,
-          component: comp,
-          color_name: st.color_name || 'Striped',
-          shade_code: st.shade_code || '',
-          pattern: st.stripe_code || 'STRIPE',
-          ratio_pct: st.ratio,
-          gross_qty: stripeGrossKg,
-          wastage_pct: wastagePct,
-          wastage_qty: wastageKg,
-          final_qty: finalKg,
-          uom: 'KG',
-        });
-        totalFabricGrossKg += finalKg;
-      }
+    if (!isWoven) {
+      // KNIT MODE (Weight in Grams)
+      const layerMultiplier = diaType === 'TUBE' ? 2 : 1;
+      // Formula: LayLength(cm) * TableWidth(cm) * GSM / 10000 * layers
+      fabricWtPerLayG = Math.round(((layLengthCm * (tableWidthIn * 2.54) * gsm / 10000.0) * layerMultiplier) * 1000) / 1000;
+      noOfPcsLay = Math.max(1, sumRatios * layerMultiplier);
+      const netWtG = fabricWtPerLayG / noOfPcsLay;
+      avgWtPerPc = Math.round((netWtG * (1 + (fabricAllowancePct / 100.0))) * 10000) / 10000;
     } else {
-      // Check multi-fabric mix rule (e.g. 70/30)
-      const compMixes = mixRules.filter((m: any) => m.component === comp);
-      if (compMixes.length > 0) {
-        for (const mx of compMixes) {
-          const pct = (Number(mx.percentage) || 0) / 100.0;
-          const mixGrossKg = compGrossKg * pct;
-          const wastagePct = Number(wastageRules.fabric || 5.0);
-          const wastageKg = (mixGrossKg * wastagePct) / 100.0;
-          const finalKg = mixGrossKg + wastageKg;
-
-          materialOutputs.push({
-            material_type: 'FABRIC',
-            material_code: mx.material_code || `${comp}-${mx.material_name || 'MIX'}`,
-            material_name: `${comp} Fabric (${mx.material_name || 'Mix'})`,
-            component: comp,
-            color_name: mx.color_name || 'Navy',
-            shade_code: mx.shade_code || '',
-            ratio_pct: mx.percentage,
-            gross_qty: mixGrossKg,
-            wastage_pct: wastagePct,
-            wastage_qty: wastageKg,
-            final_qty: finalKg,
-            uom: 'KG',
-          });
-          totalFabricGrossKg += finalKg;
-        }
-      } else {
-        // Standard Solid Fabric
-        const wastagePct = Number(wastageRules.fabric || 5.0);
-        const wastageKg = (compGrossKg * wastagePct) / 100.0;
-        const finalKg = compGrossKg + wastageKg;
-
-        materialOutputs.push({
-          material_type: 'FABRIC',
-          material_code: `FAB-${comp.toUpperCase()}`,
-          material_name: `${comp} Single Jersey Fabric`,
-          component: comp,
-          color_name: 'Navy',
-          shade_code: 'NB-01',
-          ratio_pct: 100,
-          gross_qty: compGrossKg,
-          wastage_pct: wastagePct,
-          wastage_qty: wastageKg,
-          final_qty: finalKg,
-          uom: 'KG',
-        });
-        totalFabricGrossKg += finalKg;
-      }
+      // WOVEN MODE (Length in CMS)
+      noOfPcsLay = Math.max(1, sumRatios);
+      const netLengthCm = layLengthCm / noOfPcsLay;
+      reqLengthPerPcCm = Math.round((netLengthCm * (1 + (fabricAllowancePct / 100.0))) * 10000) / 10000;
     }
-  }
 
-  // B. Additional Construction Materials (Foam, Interlining, Padding)
-  for (const mm of multiMaterials) {
-    const comp = mm.component || 'BODY';
-    const mType = (mm.material_type || 'FOAM').toUpperCase();
-    const consPerPc = Number(mm.consumption_per_pc) || 0.045;
-    const grossQty = consPerPc * effectiveQty;
-    const wastagePct = Number(wastageRules[mType.toLowerCase()] || 3.0);
-    const wastageQty = (grossQty * wastagePct) / 100.0;
-    const finalQty = grossQty + wastageQty;
+    // Colorway Totals
+    const colorways = Array.isArray(m.colorways) ? m.colorways : [];
+    let markerTotalReqQty = 0;
 
-    if (mType === 'FOAM') totalFoamKg += finalQty;
-    if (mType === 'INTERLINING') totalInterliningKg += finalQty;
+    const calculatedColorways = colorways.map((cw: any) => {
+      const qtys: number[] = Array.isArray(cw.quantities) ? cw.quantities.map((q: any) => Number(q) || 0) : [];
+      // Cut pcs with rejection ceiling: CEILING(qty * (1 + rej))
+      const cutQtys = qtys.map((q) => Math.ceil(q * (1 + (rejectionPct / 100.0))));
+      const totalOrderPcs = qtys.reduce((a, b) => a + b, 0);
+      const totalCutPcs = cutQtys.reduce((a, b) => a + b, 0);
 
-    materialOutputs.push({
-      material_type: mType,
-      material_code: mm.material_code || `${mType}-3MM`,
-      material_name: mm.material_name || `${comp} ${mType} Construction`,
-      component: comp,
-      construction: mm.construction || '3 MM',
-      color_name: 'White/Natural',
-      shade_code: '—',
-      ratio_pct: 100,
-      gross_qty: grossQty,
-      wastage_pct: wastagePct,
-      wastage_qty: wastageQty,
-      final_qty: finalQty,
-      uom: mm.uom || 'KG',
+      let requiredQty = 0;
+      if (!isWoven) {
+        // KG = (avgWtG * totalCutPcs) / 1000
+        requiredQty = Math.round(((avgWtPerPc * totalCutPcs) / 1000.0) * 1000) / 1000;
+      } else {
+        // MTRS = (reqLengthCm * totalCutPcs) / 100
+        requiredQty = Math.round(((reqLengthPerPcCm * totalCutPcs) / 100.0) * 1000) / 1000;
+      }
+
+      markerTotalReqQty += requiredQty;
+
+      return {
+        ...cw,
+        quantities: qtys,
+        cut_quantities: cutQtys,
+        total_order_pcs: totalOrderPcs,
+        total_cut_pcs: totalCutPcs,
+        required_qty: requiredQty,
+        uom,
+      };
     });
-  }
 
-  // C. Fabric to Yarn Conversion
-  // Formula: Yarn Req = Fabric Req * Factor * (1 + Process Loss %)
-  const yFactor = Number(yarnConversion.factor || 0.98);
-  const yProcessLoss = (Number(yarnConversion.process_loss || 3.0)) / 100.0;
-  const totalYarnKg = totalFabricGrossKg * yFactor * (1 + yProcessLoss);
-
-  materialOutputs.push({
-    material_type: 'YARN',
-    material_code: 'YARN-30S-COMBED',
-    material_name: '30s Combed Cotton Yarn (Auto Converted from Fabric)',
-    component: 'SPINNING/KNITTING',
-    count: '30s',
-    composition: '100% Cotton',
-    color_name: 'Raw/Grey',
-    shade_code: '—',
-    ratio_pct: 100,
-    gross_qty: totalFabricGrossKg * yFactor,
-    wastage_pct: yarnConversion.process_loss || 3.0,
-    wastage_qty: totalFabricGrossKg * yFactor * yProcessLoss,
-    final_qty: totalYarnKg,
-    uom: 'KG',
+    return {
+      ...m,
+      lay_allowance_cm: layAllowanceCm,
+      width_allowance_in: widthAllowanceIn,
+      lay_length_cm: layLengthCm,
+      table_width_in: tableWidthIn,
+      fabric_wt_per_lay_g: fabricWtPerLayG,
+      no_of_pcs_lay: noOfPcsLay,
+      avg_wt_per_pc_g: avgWtPerPc,
+      req_length_per_pc_cm: reqLengthPerPcCm,
+      total_req_qty: Math.round(markerTotalReqQty * 100) / 100,
+      uom,
+      colorways: calculatedColorways,
+    };
   });
 
+  // Generate Consolidated Fabric Program (F.PRGM) and Cutting Lay Sheet (CUT)
+  const fabricMap: Record<string, any> = {};
+
+  calculatedMarkers.forEach((m: any) => {
+    const fabKey = `${m.fabric_type || 'Main Fabric'}_${m.gsm || 0}_${m.fabric_dia_type || 'OPEN'}`;
+    if (!fabricMap[fabKey]) {
+      fabricMap[fabKey] = {
+        fabric_type: m.fabric_type || 'Main Fabric',
+        gsm: m.gsm || 160,
+        dia_spec: `${m.fabric_dia_type || 'OPEN'}`,
+        colorways: {},
+      };
+    }
+
+    m.colorways.forEach((cw: any) => {
+      const cName = cw.color_name || 'Solid';
+      if (!fabricMap[fabKey].colorways[cName]) {
+        fabricMap[fabKey].colorways[cName] = {
+          order_pcs: 0,
+          cut_pcs: 0,
+          net_qty: 0,
+        };
+      }
+      fabricMap[fabKey].colorways[cName].order_pcs += Number(cw.total_order_pcs) || 0;
+      fabricMap[fabKey].colorways[cName].cut_pcs += Number(cw.total_cut_pcs) || 0;
+      fabricMap[fabKey].colorways[cName].net_qty += Number(cw.required_qty) || 0;
+    });
+  });
+
+  const fabricProgramLines: any[] = [];
+  const cuttingLayLines: any[] = [];
+  let grandTotalFabric = 0;
+  let totalOrderPcs = 0;
+
+  Object.values(fabricMap).forEach((fab: any) => {
+    Object.entries(fab.colorways).forEach(([colorName, data]: [string, any]) => {
+      const netVal = Math.round(data.net_qty * 10) / 10;
+      // Buffer add-on in F.PRGM: rounded up to nearest whole or +5% safety
+      const roundedNet = Math.ceil(netVal);
+      const buffer = Math.max(1, Math.round(roundedNet * 0.02));
+      const grandVal = roundedNet + buffer;
+
+      grandTotalFabric += grandVal;
+      totalOrderPcs += data.order_pcs;
+
+      fabricProgramLines.push({
+        fabric_type: fab.fabric_type,
+        gsm: fab.gsm,
+        dia_spec: fab.dia_spec,
+        color_name: colorName,
+        order_qty_pcs: data.order_pcs,
+        net_qty: netVal,
+        buffer_qty: buffer,
+        grand_total_qty: grandVal,
+        uom,
+      });
+
+      cuttingLayLines.push({
+        fabric_type: fab.fabric_type,
+        gsm: fab.gsm,
+        dia_spec: fab.dia_spec,
+        color_name: colorName,
+        order_qty_pcs: data.cut_pcs,
+        net_qty: netVal,
+        buffer_qty: 0,
+        grand_total_qty: netVal,
+        uom,
+      });
+    });
+  });
+
+  const avgWtPerGarment = totalOrderPcs > 0 ? (grandTotalFabric / totalOrderPcs) : 0;
+  const actWtPerGarment = avgWtPerGarment * (1 - (totalAllowancePct / 100.0));
+
   const calculationResult = {
-    order_qty: effectiveQty,
-    marker_efficiency: efficiency * 100,
-    total_fabric_kg: totalFabricGrossKg,
-    total_yarn_kg: totalYarnKg,
-    total_foam_kg: totalFoamKg,
-    total_interlining_kg: totalInterliningKg,
-    component_breakdown: componentBreakdown,
-    material_outputs: materialOutputs,
+    cad_type: cadType,
+    uom,
+    rejection_pct: rejectionPct,
+    fabric_allowance_pct: fabricAllowancePct,
+    total_allowance_pct: totalAllowancePct,
+    markers: calculatedMarkers,
+    fabric_program: fabricProgramLines,
+    cutting_lay: cuttingLayLines,
+    summary_metrics: {
+      total_order_pcs: totalOrderPcs,
+      grand_total_fabric: Math.round(grandTotalFabric * 100) / 100,
+      avg_garment_consumption: Math.round(avgWtPerGarment * 10000) / 10000,
+      act_garment_consumption: Math.round(actWtPerGarment * 10000) / 10000,
+      uom,
+    },
   };
 
   res.json({
@@ -508,20 +653,205 @@ cadRouter.post('/cad-requirements/:id/calculate', requirePermission('PRODUCTION.
 }));
 
 /**
- * 6. POST /api/cad-requirements/:id/approve
- * Approves requirement and generates Material Requirement records
+ * 6. POST /api/cad-requirements/import-excel
+ * Parses any uploaded CAD Excel sheet (.xls / .xlsx) into structured CAD parameters
+ */
+cadRouter.post('/cad-requirements/import-excel', requirePermission('PRODUCTION.CREATE'), ah(async (req, res) => {
+  const companyId = req.user!.companyId;
+  const { file_data, file_name } = req.body;
+
+  if (!file_data) throw BadRequest('Missing file_data (base64 string required)');
+
+  const buf = Buffer.from(file_data, 'base64');
+  const wb = XLSX.read(buf, { type: 'buffer', cellFormula: true, cellNF: true });
+
+  const summarySheetName = wb.SheetNames.find((s) => s === 'F.PRGM' || s === 'FABRIC');
+  const cutSheetName = wb.SheetNames.find((s) => s === 'CUT');
+  const markerSheetNames = wb.SheetNames.filter((s) => s !== 'F.PRGM' && s !== 'FABRIC' && s !== 'CUT');
+
+  const result: any = {
+    file_name: file_name || 'CAD_Sheet.xls',
+    sheets: wb.SheetNames,
+    header: {},
+    markers: [],
+    special_notes: '',
+  };
+
+  // 1. First Marker header check
+  const firstMarker = markerSheetNames.length > 0 ? wb.Sheets[markerSheetNames[0]] : null;
+  if (firstMarker) {
+    const getV = (c: string) => firstMarker[c]?.v ?? '';
+    result.header.style_code = String(getV('B1')).trim();
+    result.header.buyer_name = String(getV('B3')).trim();
+    result.header.req_date = String(getV('B4')).trim();
+  }
+
+  // 2. Summary Sheet check (F.PRGM or FABRIC)
+  if (summarySheetName) {
+    const s = wb.Sheets[summarySheetName];
+    const getV = (c: string) => s[c]?.v ?? '';
+
+    if (!result.header.style_code) result.header.style_code = String(getV('C4')).trim();
+    if (!result.header.internal_ir_no) result.header.internal_ir_no = String(getV('C5')).trim();
+    if (!result.header.req_date) result.header.req_date = String(getV('N4') || getV('P4')).trim();
+
+    // Rejection & Fabric allowance
+    for (let r = 12; r <= 22; r++) {
+      const lbl = String(getV('A' + r) || '').toUpperCase();
+      if (lbl.includes('REJECTION')) {
+        const val = Number(getV('B' + r));
+        result.header.rejection_pct = val < 1 ? Math.round(val * 100) : val;
+      }
+      if (lbl.includes('FABRIC')) {
+        const val = Number(getV('B' + r));
+        result.header.fabric_allowance_pct = val < 1 ? Math.round(val * 100) : val;
+      }
+      for (const col of ['F', 'G', 'H']) {
+        const noteVal = String(getV(col + r) || '').trim();
+        if (noteVal && (noteVal.includes('NOTE') || noteVal.includes('WASH') || noteVal.includes('GRM') || noteVal.includes('TAPE') || noteVal.includes('CORD') || noteVal.includes('ZIP') || noteVal.includes('COLLAR'))) {
+          result.special_notes += (result.special_notes ? '\n' : '') + noteVal;
+        }
+      }
+    }
+  }
+
+  // Detect CAD Mode (WOVEN vs KNIT)
+  const fnUpper = (file_name || '').toUpperCase();
+  const isWoven = fnUpper.includes('WOVEN') || markerSheetNames.some((sn) => {
+    const ms = wb.Sheets[sn];
+    const fab = String(ms['B36']?.v || ms['D9']?.v || ms['B35']?.v || '').toUpperCase();
+    return fab.includes('WOVEN') || fab.includes('SEER SUCKER') || fab.includes('VOILE');
+  });
+
+  result.header.cad_type = isWoven ? 'WOVEN' : (fnUpper.includes('ACNT') ? 'KNIT_FLEECE' : 'KNIT_SJ');
+  result.header.uom = isWoven ? 'MTR' : 'KG';
+  result.header.rejection_pct = result.header.rejection_pct ?? (isWoven ? 3.0 : 3.0);
+  result.header.fabric_allowance_pct = result.header.fabric_allowance_pct ?? (isWoven ? 0.0 : 10.0);
+
+  // Match Style with DB if exists
+  if (result.header.style_code) {
+    const dbStyle = await queryOne<any>(`
+      SELECT id, style_code, style_name, buyer_id FROM mst_style
+       WHERE (style_code = ? OR style_code LIKE ?) AND company_id = ?
+       LIMIT 1
+    `, [result.header.style_code, `%${result.header.style_code}%`, companyId]);
+
+    if (dbStyle) {
+      result.header.style_id = dbStyle.id;
+      result.header.buyer_id = dbStyle.buyer_id;
+    }
+  }
+
+  // 3. Parse Markers
+  markerSheetNames.forEach((sn, idx) => {
+    const ms = wb.Sheets[sn];
+    const getV = (c: string) => ms[c]?.v ?? '';
+
+    const markerRef = String(getV('B2') || sn).trim();
+    const lengthMm = Number(getV('B5')) || 0;
+    const widthMm = Number(getV('B6')) || 0;
+    const diaType = String(getV('B35') || getV('L4') || 'OPEN').toUpperCase().includes('TUBE') ? 'TUBE' : 'OPEN';
+    const direction = String(getV('B34') || getV('D8') || 'ONEWAY').trim();
+    const fabricType = String(getV('B36') || getV('D9') || getV('B35') || '').trim();
+    const gsm = Number(getV('B37') || getV('K9') || getV('J26')) || (isWoven ? 100 : 160);
+    const partsInLay = String(getV('B38') || getV('D10') || '').trim();
+
+    // Sizes & Ratio
+    const sizes: string[] = [];
+    const ratios: number[] = [];
+    ['D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'].forEach((col) => {
+      const sz = getV(col + '5');
+      const rt = Number(getV(col + '6')) || 0;
+      if (sz && sz !== '.' && sz !== '') {
+        sizes.push(String(sz));
+        ratios.push(rt);
+      }
+    });
+
+    if (sizes.length === 0) {
+      ['B7', 'B8', 'B9', 'B10', 'B11', 'B12', 'B13', 'B14', 'B15'].forEach((c, i) => {
+        const sz = getV(c);
+        const rt = Number(getV('B' + (16 + i))) || 0;
+        if (sz && sz !== '.' && sz !== '') {
+          sizes.push(String(sz));
+          ratios.push(rt);
+        }
+      });
+    }
+
+    // Colorway Order Rows (row 39 onwards)
+    const colorways: any[] = [];
+    for (let r = 39; r <= 120; r += 9) {
+      const colorName = String(getV('A' + r) || '').trim();
+      if (colorName && colorName !== '.' && colorName !== '-' && isNaN(Number(colorName))) {
+        const sizeQtys: number[] = [];
+        for (let sIdx = 0; sIdx < sizes.length; sIdx++) {
+          const q = Number(getV('B' + (r + sIdx))) || 0;
+          sizeQtys.push(q);
+        }
+        const totalPcs = sizeQtys.reduce((a, b) => a + b, 0);
+        if (totalPcs > 0 || colorways.length === 0) {
+          colorways.push({ color_name: colorName, quantities: sizeQtys, total_order_pcs: totalPcs });
+        }
+      }
+    }
+
+    const layLengthCm = Number(getV('J24') || getV('J23')) || (lengthMm / 10 + 10);
+    const tableWidthIn = Number(getV('J25') || getV('J24')) || (widthMm / 25.4 + (diaType === 'TUBE' ? 1 : 2));
+    const fabricWtPerLay = Number(getV('J27')) || 0;
+    const noOfPcsLay = Number(getV('J28') || getV('J25')) || 1;
+    const avgWtPerPc = Number(getV('J29')) || 0;
+    const reqLengthPerPc = Number(getV('J26')) || 0;
+    const totalReqQty = Number(getV('J30') || getV('J27')) || 0;
+
+    result.markers.push({
+      marker_ref: markerRef,
+      marker_name: `${result.header.style_code} ${markerRef}`,
+      length_mm: lengthMm,
+      width_mm: widthMm,
+      fabric_dia_type: diaType,
+      fabric_type: fabricType,
+      gsm: gsm,
+      direction: direction,
+      parts_in_lay: partsInLay,
+      lay_allowance_cm: 10,
+      width_allowance_in: diaType === 'TUBE' ? 1 : 2,
+      lay_length_cm: layLengthCm,
+      table_width_in: tableWidthIn,
+      fabric_wt_per_lay_g: fabricWtPerLay,
+      no_of_pcs_lay: noOfPcsLay,
+      avg_wt_per_pc_g: avgWtPerPc,
+      req_length_per_pc_cm: reqLengthPerPc,
+      total_req_qty: totalReqQty,
+      uom: isWoven ? 'MTR' : 'KG',
+      sizes,
+      ratios,
+      colorways,
+      sort_order: idx + 1,
+    });
+  });
+
+  res.json({ data: result });
+}));
+
+/**
+ * 7. POST /api/cad-requirements/:id/approve
+ * Approves requirement and generates Material Requirement & active BOM lines
  */
 cadRouter.post('/cad-requirements/:id/approve', requirePermission('PRODUCTION.APPROVE'), ah(async (req, res) => {
   const companyId = req.user!.companyId;
   const userId = req.user!.id;
   const id = Number(req.params.id);
-  const { data_json, total_fabric_kg, total_yarn_kg } = req.body;
+  const { data_json, total_fabric_kg, total_fabric_mtrs, total_yarn_kg } = req.body;
 
   const cr = await queryOne<any>(`
     SELECT * FROM trx_cad_requirement WHERE id = ? AND company_id = ?
   `, [id, companyId]);
 
   if (!cr) throw NotFound('CAD Requirement not found');
+
+  const isWoven = cr.cad_type === 'WOVEN' || cr.uom === 'MTR';
+  const finalFabricQty = Number(isWoven ? (total_fabric_mtrs || total_fabric_kg) : (total_fabric_kg || 0));
 
   await transaction(async (tx) => {
     await txExecute(tx, `
@@ -543,7 +873,7 @@ cadRouter.post('/cad-requirements/:id/approve', requirePermission('PRODUCTION.AP
       cr.style_id,
       cr.cad_version || 'V01',
       'APPROVED',
-      Number(total_fabric_kg || 0),
+      finalFabricQty,
       Number(total_yarn_kg || 0),
       JSON.stringify(data_json || {}),
       userId,
@@ -557,28 +887,30 @@ cadRouter.post('/cad-requirements/:id/approve', requirePermission('PRODUCTION.AP
 
     if (activeBom) {
       const orderQty = Number(cr.order_qty) || 1000;
-      const fKg = Number(total_fabric_kg) || 0;
-      const yKg = Number(total_yarn_kg) || 0;
-      const fCons = fKg > 0 ? Number((fKg / orderQty).toFixed(5)) : 0.82;
-      const yCons = yKg > 0 ? Number((yKg / orderQty).toFixed(5)) : Number((fCons * 1.05).toFixed(5));
+      const fCons = finalFabricQty > 0 ? Number((finalFabricQty / orderQty).toFixed(5)) : (isWoven ? 0.65 : 0.82);
+      const yCons = isWoven ? 0 : Number((fCons * 1.05).toFixed(5));
 
       const defFabric = await txQueryOne<any>(tx, `SELECT id, base_uom FROM mst_fabric WHERE company_id = ? AND is_active = 1 LIMIT 1`, [companyId]);
       const defYarn = await txQueryOne<any>(tx, `SELECT id, base_uom FROM mst_yarn WHERE company_id = ? AND is_active = 1 LIMIT 1`, [companyId]);
-      const uomRow = await txQueryOne<any>(tx, `SELECT id FROM cfg_uom WHERE (code = 'KG' OR code = 'KGS') AND (company_id = ? OR company_id IS NULL) LIMIT 1`, [companyId]);
-      const uId = uomRow?.id || defFabric?.base_uom || defYarn?.base_uom || 1;
+
+      const targetUomCode = isWoven ? 'MTR' : 'KG';
+      const uomRow = await txQueryOne<any>(tx, `SELECT id FROM cfg_uom WHERE (code = ? OR code = 'MTRS' OR code = 'KGS') AND (company_id = ? OR company_id IS NULL) LIMIT 1`, [targetUomCode, companyId]);
+      const uId = uomRow?.id || defFabric?.base_uom || 1;
 
       const existFab = await txQueryOne<any>(tx, `SELECT id FROM trx_bom_line WHERE bom_id = ? AND material_type = 'FABRIC' LIMIT 1`, [activeBom.id]);
       if (existFab) {
-        await txExecute(tx, `UPDATE trx_bom_line SET consumption = ?, remarks = CONCAT('CAD Auto-Synced: ', ?) WHERE id = ?`, [fCons, cr.req_no || 'CAD', existFab.id]);
+        await txExecute(tx, `UPDATE trx_bom_line SET consumption = ?, uom_id = ?, remarks = CONCAT('CAD Auto-Synced (${targetUomCode}): ', ?) WHERE id = ?`, [fCons, uId, cr.req_no || 'CAD', existFab.id]);
       } else if (defFabric) {
         await txExecute(tx, `INSERT INTO trx_bom_line (bom_id, material_type, fabric_id, consumption, uom_id, wastage_pct, remarks) VALUES (?, 'FABRIC', ?, ?, ?, 5.0, ?)`, [activeBom.id, defFabric.id, fCons, uId, `CAD Auto-Synced (${cr.req_no || 'CAD'})`]);
       }
 
-      const existYrn = await txQueryOne<any>(tx, `SELECT id FROM trx_bom_line WHERE bom_id = ? AND material_type = 'YARN' LIMIT 1`, [activeBom.id]);
-      if (existYrn) {
-        await txExecute(tx, `UPDATE trx_bom_line SET consumption = ?, remarks = CONCAT('CAD Auto-Synced: ', ?) WHERE id = ?`, [yCons, cr.req_no || 'CAD', existYrn.id]);
-      } else if (defYarn) {
-        await txExecute(tx, `INSERT INTO trx_bom_line (bom_id, material_type, yarn_id, consumption, uom_id, wastage_pct, remarks) VALUES (?, 'YARN', ?, ?, ?, 3.0, ?)`, [activeBom.id, defYarn.id, yCons, uId, `CAD Auto-Synced (${cr.req_no || 'CAD'})`]);
+      if (!isWoven) {
+        const existYrn = await txQueryOne<any>(tx, `SELECT id FROM trx_bom_line WHERE bom_id = ? AND material_type = 'YARN' LIMIT 1`, [activeBom.id]);
+        if (existYrn) {
+          await txExecute(tx, `UPDATE trx_bom_line SET consumption = ?, remarks = CONCAT('CAD Auto-Synced: ', ?) WHERE id = ?`, [yCons, cr.req_no || 'CAD', existYrn.id]);
+        } else if (defYarn) {
+          await txExecute(tx, `INSERT INTO trx_bom_line (bom_id, material_type, yarn_id, consumption, uom_id, wastage_pct, remarks) VALUES (?, 'YARN', ?, ?, ?, 3.0, ?)`, [activeBom.id, defYarn.id, yCons, uId, `CAD Auto-Synced (${cr.req_no || 'CAD'})`]);
+        }
       }
     }
   });

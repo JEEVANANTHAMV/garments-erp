@@ -150,12 +150,12 @@ export default function CadRequirementsPage() {
               <tr className="bg-slate-50/80 text-slate-600 font-semibold border-b border-slate-200">
                 <th className="py-3 px-4">CAD Req No & Date</th>
                 <th className="py-3 px-3">Style Code & Name</th>
+                <th className="py-3 px-3">Type</th>
                 <th className="py-3 px-3">Internal / IR No</th>
                 <th className="py-3 px-3">Buyer</th>
                 <th className="py-3 px-3 text-right">Order Qty</th>
-                <th className="py-3 px-3 text-center">CAD Pieces</th>
-                <th className="py-3 px-3 text-right">Avg Gms / Pc</th>
-                <th className="py-3 px-3 text-right">Total Fabric (KG)</th>
+                <th className="py-3 px-3 text-center">Markers</th>
+                <th className="py-3 px-3 text-right">Total Fabric</th>
                 <th className="py-3 px-3 text-center">Status</th>
                 <th className="py-3 px-4 text-center">Action</th>
               </tr>
@@ -190,6 +190,11 @@ export default function CadRequirementsPage() {
                       <div className="font-semibold text-slate-800">{r.style_code}</div>
                       <div className="text-[11px] text-slate-400">{r.style_name || 'T-Shirt / Polo'}</div>
                     </td>
+                    <td className="py-3 px-3">
+                      <Badge tone={r.cad_type === 'WOVEN' ? 'amber' : r.cad_type === 'KNIT_FLEECE' ? 'purple' : 'indigo'}>
+                        {r.cad_type || 'KNIT_SJ'}
+                      </Badge>
+                    </td>
                     <td className="py-3 px-3 font-mono text-[11px] text-slate-700">
                       {r.internal_ir_no || '—'}
                     </td>
@@ -200,13 +205,10 @@ export default function CadRequirementsPage() {
                       {fmtNumber(r.order_qty)} Pcs
                     </td>
                     <td className="py-3 px-3 text-center font-medium text-sky-700">
-                      {r.piece_count ? `${r.piece_count} pieces` : '6 pieces'}
-                    </td>
-                    <td className="py-3 px-3 text-right font-medium text-slate-700">
-                      {fmtDecimal(r.total_fabric_kg && r.order_qty ? (r.total_fabric_kg * 1000) / r.order_qty : 210)} g
+                      {r.marker_count ? `${r.marker_count} markers` : (r.piece_count ? `${r.piece_count} pieces` : '1 marker')}
                     </td>
                     <td className="py-3 px-3 text-right font-bold text-indigo-700">
-                      {fmtDecimal(r.total_fabric_kg || 1050)} KG
+                      {fmtDecimal(r.total_fabric_kg || 0)} {r.uom || 'KG'}
                     </td>
                     <td className="py-3 px-3 text-center">
                       <Badge

@@ -1,47 +1,72 @@
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   ArrowLeft, Save, Sparkles, CheckCircle2, Plus, Trash2, Cpu,
-  Layers, Scissors, Disc, Grid, Calculator, FileCheck,
-  AlertCircle
+  Layers, Scissors, Disc, FileCheck,
+  UploadCloud, Copy, Printer, FileSpreadsheet
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { http, ApiError } from '../../lib/api';
 import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
 import { Input, Select, Badge } from '../../components/ui';
 import { fmtDecimal, fmtNumber, today } from '../../lib/format';
 
-interface SizeRatio {
-  size: string;
-  qty: number;
+interface ColorwayRow {
+  color_name: string;
+  quantities: number[];
+  cut_quantities?: number[];
+  total_order_pcs?: number;
+  total_cut_pcs?: number;
+  required_qty?: number;
 }
 
-interface CadPiece {
+interface CadMarker {
   _key: string;
   id?: number;
-  piece_name: string;
-  component_type: 'BODY' | 'SLEEVE' | 'COLLAR' | 'CUFF' | 'POCKET' | 'PLACKET' | 'RIB';
-  fabric_id?: number | string;
-  perimeter_cm: number;
-  area_sqm: number;
-  marker_efficiency_pct: number;
+  marker_ref: string;
+  marker_name: string;
+  length_mm: number;
+  width_mm: number;
+  fabric_dia_type: 'OPEN' | 'TUBE';
+  fabric_type: string;
   gsm: number;
-  calculated_weight_grams: number;
-  // Multi-material support
-  secondary_material_type?: string;
-  foam_thickness_mm?: number;
-  interlining_type?: string;
-  material_mix_ratio?: string;
-  has_stripes?: boolean;
+  direction: string;
+  parts_in_lay: string;
+  lay_allowance_cm: number;
+  width_allowance_in: number;
+  lay_length_cm: number;
+  table_width_in: number;
+  fabric_wt_per_lay_g: number;
+  no_of_pcs_lay: number;
+  avg_wt_per_pc_g: number;
+  req_length_per_pc_cm: number;
+  total_req_qty: number;
+  uom: 'KG' | 'MTR';
+  sizes: string[];
+  ratios: number[];
+  colorways: ColorwayRow[];
 }
 
-interface StripeRule {
-  stripe_name: string;
+interface FabricProgramRow {
+  fabric_type: string;
+  gsm: number;
+  dia_spec: string;
   color_name: string;
-  shade_code: string;
-  ratio_pct: number;
-  yarn_count: string;
+  order_qty_pcs: number;
+  net_qty: number;
+  buffer_qty: number;
+  grand_total_qty: number;
+  uom: string;
+}
+
+interface TrimItem {
+  item_name: string;
+  consumption_per_pc: number;
+  uom: string;
+  total_qty: number;
+  remarks: string;
 }
 
 export default function CadRequirementDetailPage() {
@@ -49,145 +74,116 @@ export default function CadRequirementDetailPage() {
   const isNew = !id || id === 'new';
   const nav = useNavigate();
   const toast = useToast();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const styles = useLookup('styles');
 
-  const [activeTab, setActiveTab] = useState<'SIZES' | 'PIECES' | 'MULTI_MAT' | 'STRIPES' | 'ENGINE' | 'OUTPUT'>('SIZES');
+  const [activeTab, setActiveTab] = useState<'MARKERS' | 'F_PRGM' | 'CUT' | 'TRIMS' | 'OUTPUT'>('MARKERS');
+  const [activeMarkerIdx, setActiveMarkerIdx] = useState(0);
   const [saving, setSaving] = useState(false);
   const [calculating, setCalculating] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   // Header State
   const [header, setHeader] = useState({
     req_no: '',
     req_date: today(),
     style_id: '',
+    buyer_id: '',
     internal_ir_no: 'IR-2026-0001',
-    order_qty: 5000,
+    order_qty: 4900,
+    cad_type: 'KNIT_SJ' as 'KNIT_SJ' | 'KNIT_FLEECE' | 'WOVEN' | 'MULTI_PART',
+    uom: 'KG' as 'KG' | 'MTR',
+    rejection_pct: 3.0,
+    fabric_allowance_pct: 10.0,
+    special_notes: '',
     status: 'DRAFT',
     remarks: '',
   });
 
-  // Sizes Breakdown
-  const [sizes, setSizes] = useState<SizeRatio[]>([
-    { size: 'S', qty: 1000 },
-    { size: 'M', qty: 1500 },
-    { size: 'L', qty: 1500 },
-    { size: 'XL', qty: 750 },
-    { size: '2XL', qty: 250 },
-  ]);
-
-  // CAD Pieces
-  const [pieces, setPieces] = useState<CadPiece[]>([
+  // Markers State (initialized with standard Single Jersey setup matching sample 1)
+  const [markers, setMarkers] = useState<CadMarker[]>([
     {
-      _key: 'p1',
-      piece_name: 'Front Body',
-      component_type: 'BODY',
-      perimeter_cm: 230,
-      area_sqm: 0.38,
-      marker_efficiency_pct: 85,
-      gsm: 180,
-      calculated_weight_grams: 80.47,
-      secondary_material_type: 'None',
-      material_mix_ratio: '100% Cotton',
-      has_stripes: true,
+      _key: 'm_1A',
+      marker_ref: '1A',
+      marker_name: 'FS 26227A 1A',
+      length_mm: 3982,
+      width_mm: 1473,
+      fabric_dia_type: 'OPEN',
+      fabric_type: '100% ORGANIC COTTON SINGLE JERSEY',
+      gsm: 160,
+      direction: 'ONEWAY',
+      parts_in_lay: 'BCK, FRT, SLV',
+      lay_allowance_cm: 10,
+      width_allowance_in: 2,
+      lay_length_cm: 408.2,
+      table_width_in: 60.0,
+      fabric_wt_per_lay_g: 995.22,
+      no_of_pcs_lay: 10,
+      avg_wt_per_pc_g: 109.47,
+      req_length_per_pc_cm: 0,
+      total_req_qty: 552.63,
+      uom: 'KG',
+      sizes: ['98', '104', '110'],
+      ratios: [2, 2, 6],
+      colorways: [
+        {
+          color_name: 'SEA SALT / SCARLET SAGE',
+          quantities: [1250, 1300, 2350],
+          cut_quantities: [1288, 1339, 2421],
+          total_order_pcs: 4900,
+          total_cut_pcs: 5048,
+          required_qty: 552.63,
+        },
+      ],
     },
     {
-      _key: 'p2',
-      piece_name: 'Back Body',
-      component_type: 'BODY',
-      perimeter_cm: 228,
-      area_sqm: 0.37,
-      marker_efficiency_pct: 85,
-      gsm: 180,
-      calculated_weight_grams: 78.35,
-      secondary_material_type: 'None',
-      material_mix_ratio: '100% Cotton',
-      has_stripes: true,
-    },
-    {
-      _key: 'p3',
-      piece_name: 'Left Sleeve',
-      component_type: 'SLEEVE',
-      perimeter_cm: 110,
-      area_sqm: 0.12,
-      marker_efficiency_pct: 86,
-      gsm: 180,
-      calculated_weight_grams: 25.12,
-      secondary_material_type: 'None',
-      material_mix_ratio: '100% Cotton',
-      has_stripes: false,
-    },
-    {
-      _key: 'p4',
-      piece_name: 'Right Sleeve',
-      component_type: 'SLEEVE',
-      perimeter_cm: 110,
-      area_sqm: 0.12,
-      marker_efficiency_pct: 86,
-      gsm: 180,
-      calculated_weight_grams: 25.12,
-      secondary_material_type: 'None',
-      material_mix_ratio: '100% Cotton',
-      has_stripes: false,
-    },
-    {
-      _key: 'p5',
-      piece_name: 'Flat Knit Collar',
-      component_type: 'COLLAR',
-      perimeter_cm: 95,
-      area_sqm: 0.045,
-      marker_efficiency_pct: 92,
+      _key: 'm_2A',
+      marker_ref: '2A',
+      marker_name: 'FS 26227A 2A',
+      length_mm: 479,
+      width_mm: 610,
+      fabric_dia_type: 'TUBE',
+      fabric_type: '1*1 LYCRA RIB',
       gsm: 240,
-      calculated_weight_grams: 11.74,
-      secondary_material_type: 'Interlining',
-      interlining_type: 'Fusible Non-Woven 35 GSM',
-      material_mix_ratio: 'Fabric + Interlining',
-      has_stripes: true,
-    },
-    {
-      _key: 'p6',
-      piece_name: 'Sleeve Cuffs (Pair)',
-      component_type: 'CUFF',
-      perimeter_cm: 60,
-      area_sqm: 0.03,
-      marker_efficiency_pct: 90,
-      gsm: 240,
-      calculated_weight_grams: 8.0,
-      secondary_material_type: 'Interlining',
-      interlining_type: 'Fusible Non-Woven 35 GSM',
-      material_mix_ratio: 'Fabric + Interlining',
-      has_stripes: true,
-    },
-    {
-      _key: 'p7',
-      piece_name: 'Front Placket',
-      component_type: 'PLACKET',
-      perimeter_cm: 45,
-      area_sqm: 0.015,
-      marker_efficiency_pct: 90,
-      gsm: 180,
-      calculated_weight_grams: 3.0,
-      secondary_material_type: 'Fusible Tape',
-      interlining_type: 'Fusible Tape 1.25"',
-      material_mix_ratio: 'Fabric + Tape',
-      has_stripes: false,
+      direction: 'ONEWAY',
+      parts_in_lay: 'N/RIB',
+      lay_allowance_cm: 10,
+      width_allowance_in: 1,
+      lay_length_cm: 57.9,
+      table_width_in: 25.0,
+      fabric_wt_per_lay_g: 44.12,
+      no_of_pcs_lay: 15,
+      avg_wt_per_pc_g: 6.59,
+      req_length_per_pc_cm: 0,
+      total_req_qty: 33.28,
+      uom: 'KG',
+      sizes: ['98', '104', '110'],
+      ratios: [3, 4, 8],
+      colorways: [
+        {
+          color_name: 'SCARLET SAGE (19-1559 TCX)',
+          quantities: [1250, 1300, 2350],
+          cut_quantities: [1288, 1339, 2421],
+          total_order_pcs: 4900,
+          total_cut_pcs: 5048,
+          required_qty: 33.28,
+        },
+      ],
     },
   ]);
 
-  // Stripe Definitions (3-colour stripe rule: 42% / 33% / 25%)
-  const [stripes, setStripes] = useState<StripeRule[]>([
-    { stripe_name: 'Stripe 1 (Primary Base)', color_name: 'Navy Blue', shade_code: 'NB-045', ratio_pct: 42, yarn_count: '30s Combed' },
-    { stripe_name: 'Stripe 2 (Secondary)', color_name: 'Bleach White', shade_code: 'WH-001', ratio_pct: 33, yarn_count: '30s Combed' },
-    { stripe_name: 'Stripe 3 (Accent)', color_name: 'Ruby Red', shade_code: 'RD-012', ratio_pct: 25, yarn_count: '30s Combed' },
-  ]);
+  // Consolidated Fabric Program & Cutting Lay
+  const [fabricProgram, setFabricProgram] = useState<FabricProgramRow[]>([]);
+  const [cuttingLay, setCuttingLay] = useState<FabricProgramRow[]>([]);
 
-  // Process Losses %
-  const [lossRules, setLossRules] = useState({
-    knitting_loss_pct: 2.5,
-    dyeing_loss_pct: 3.5,
-    cutting_waste_pct: 4.0,
-    end_bits_pct: 2.0,
-  });
+  // Trims & Special Parts (Draw cords, twill tapes, collars, zip foldings)
+  const [trims, setTrims] = useState<TrimItem[]>([
+    { item_name: 'Flat Knit Collar & Cuff Set', consumption_per_pc: 0.184, uom: 'KG/SET', total_qty: 901.6, remarks: 'Mens: 0.040+0.052+0.092=0.184 GRM' },
+    { item_name: '10mm Twill Tape', consumption_per_pc: 0.60, uom: 'MTRS/PC', total_qty: 2940, remarks: '60 CM per piece' },
+    { item_name: '15mm Tube Draw Cord', consumption_per_pc: 1.10, uom: 'MTRS/PC', total_qty: 5390, remarks: '110 CM per piece (or ~6 KG)' },
+    { item_name: 'Zip Folding', consumption_per_pc: 0.007, uom: 'GRM/PC', total_qty: 34.3, remarks: '100% CTN S/J 160 GSM' },
+  ]);
 
   // Load existing requirement
   const { data: existingData, isLoading: loadingExisting } = useQuery({
@@ -206,156 +202,481 @@ export default function CadRequirementDetailPage() {
         req_no: existingData.req_no || '',
         req_date: existingData.req_date?.slice(0, 10) || today(),
         style_id: existingData.style_id ? String(existingData.style_id) : '',
+        buyer_id: existingData.buyer_id ? String(existingData.buyer_id) : '',
         internal_ir_no: existingData.internal_ir_no || '',
-        order_qty: Number(existingData.order_qty) || 5000,
+        order_qty: Number(existingData.order_qty) || 1000,
+        cad_type: existingData.cad_type || 'KNIT_SJ',
+        uom: existingData.uom || (existingData.cad_type === 'WOVEN' ? 'MTR' : 'KG'),
+        rejection_pct: Number(existingData.rejection_pct ?? 3.0),
+        fabric_allowance_pct: Number(existingData.fabric_allowance_pct ?? 10.0),
+        special_notes: existingData.special_notes || '',
         status: existingData.status || 'DRAFT',
         remarks: existingData.remarks || '',
       });
 
-      if (existingData.size_breakdown) {
-        try {
-          const parsed = typeof existingData.size_breakdown === 'string'
-            ? JSON.parse(existingData.size_breakdown)
-            : existingData.size_breakdown;
-          if (Array.isArray(parsed)) setSizes(parsed);
-        } catch {
-          // ignore
-        }
-      }
-
-      if (existingData.pieces?.length) {
-        setPieces(
-          existingData.pieces.map((p: any) => ({
-            _key: `p_${p.id}`,
-            id: p.id,
-            piece_name: p.piece_name,
-            component_type: p.component_type || 'BODY',
-            fabric_id: p.fabric_id,
-            perimeter_cm: Number(p.perimeter_cm) || 0,
-            area_sqm: Number(p.area_sqm) || 0,
-            marker_efficiency_pct: Number(p.marker_efficiency_pct) || 85,
-            gsm: Number(p.gsm) || 180,
-            calculated_weight_grams: Number(p.calculated_weight_grams) || 0,
-            secondary_material_type: p.secondary_material_type || 'None',
-            foam_thickness_mm: Number(p.foam_thickness_mm) || 0,
-            interlining_type: p.interlining_type || '',
-            material_mix_ratio: p.material_mix_ratio || '',
-            has_stripes: Boolean(p.has_stripes),
+      if (existingData.markers?.length) {
+        setMarkers(
+          existingData.markers.map((m: any, idx: number) => ({
+            _key: `m_${m.id || idx}`,
+            id: m.id,
+            marker_ref: m.marker_ref || `M${idx + 1}`,
+            marker_name: m.marker_name || `Marker ${m.marker_ref || idx + 1}`,
+            length_mm: Number(m.length_mm) || 0,
+            width_mm: Number(m.width_mm) || 0,
+            fabric_dia_type: m.fabric_dia_type || 'OPEN',
+            fabric_type: m.fabric_type || 'Main Fabric',
+            gsm: Number(m.gsm) || 160,
+            direction: m.direction || 'ONEWAY',
+            parts_in_lay: m.parts_in_lay || '',
+            lay_allowance_cm: Number(m.lay_allowance_cm ?? 10.0),
+            width_allowance_in: Number(m.width_allowance_in ?? (m.fabric_dia_type === 'TUBE' ? 1.0 : 2.0)),
+            lay_length_cm: Number(m.lay_length_cm) || 0,
+            table_width_in: Number(m.table_width_in) || 0,
+            fabric_wt_per_lay_g: Number(m.fabric_wt_per_lay_g) || 0,
+            no_of_pcs_lay: Number(m.no_of_pcs_lay) || 1,
+            avg_wt_per_pc_g: Number(m.avg_wt_per_pc_g) || 0,
+            req_length_per_pc_cm: Number(m.req_length_per_pc_cm) || 0,
+            total_req_qty: Number(m.total_req_qty) || 0,
+            uom: m.uom || existingData.uom || 'KG',
+            sizes: Array.isArray(m.sizes) ? m.sizes : ['S', 'M', 'L'],
+            ratios: Array.isArray(m.ratios) ? m.ratios : [1, 2, 1],
+            colorways: Array.isArray(m.colorways) ? m.colorways : [],
           }))
         );
+      }
+
+      if (existingData.fabric_program?.length) {
+        setFabricProgram(existingData.fabric_program);
+      }
+      if (existingData.cutting_lay?.length) {
+        setCuttingLay(existingData.cutting_lay);
       }
     }
   }, [existingData, isNew]);
 
-  // Size total verification
-  const sizeTotal = useMemo(() => sizes.reduce((s, x) => s + (Number(x.qty) || 0), 0), [sizes]);
-  const sizeMismatch = sizeTotal !== Number(header.order_qty);
+  // Active Marker shortcut
+  const activeMarker = markers[activeMarkerIdx] || markers[0];
 
-  // Piece Weight Formula: (Area m² × GSM) / (Efficiency % / 100)
-  const calculatePieceWeight = (area: number, gsm: number, eff: number) => {
-    if (!eff || eff <= 0) return 0;
-    const wt = (area * gsm) / (eff / 100);
-    return Math.round(wt * 100) / 100;
-  };
+  // Mathematical Engine (Pure Reactive Client-side Calculation)
+  const isWoven = header.cad_type === 'WOVEN' || header.uom === 'MTR';
+  const totalAllowancePct = header.rejection_pct + header.fabric_allowance_pct;
 
-  const updatePiece = (idx: number, updates: Partial<CadPiece>) => {
-    setPieces((prev) => {
-      const copy = [...prev];
-      const cur = { ...copy[idx], ...updates };
-      cur.calculated_weight_grams = calculatePieceWeight(
-        Number(cur.area_sqm) || 0,
-        Number(cur.gsm) || 0,
-        Number(cur.marker_efficiency_pct) || 85
-      );
-      copy[idx] = cur;
-      return copy;
-    });
-  };
-
-  // Calculations Engine Summary
-  const engineResults = useMemo(() => {
-    const netGramsPerGarment = pieces.reduce((s, p) => s + (Number(p.calculated_weight_grams) || 0), 0);
-    const kgPerDozen = Math.round(((netGramsPerGarment * 12) / 1000) * 100) / 100;
-
-    // Total Loss % = 1 - ((1 - knit/100) * (1 - dye/100) * (1 - cut/100) * (1 - end/100))
-    const totalLossPct =
-      (lossRules.knitting_loss_pct +
-        lossRules.dyeing_loss_pct +
-        lossRules.cutting_waste_pct +
-        lossRules.end_bits_pct);
-
-    const grossGramsPerGarment = Math.round((netGramsPerGarment * (1 + totalLossPct / 100)) * 100) / 100;
-    const totalOrderQty = Number(header.order_qty) || 0;
-    const totalFabricKg = Math.round(((grossGramsPerGarment * totalOrderQty) / 1000) * 100) / 100;
-
-    // Fabric-to-Yarn Breakdown based on 3-colour stripes
-    // Body & striped pieces weight
-    const stripedFabricKg = Math.round(totalFabricKg * 0.85 * 100) / 100;
-    const solidFabricKg = Math.round((totalFabricKg - stripedFabricKg) * 100) / 100;
-
-    // Yarn conversion with spinning loss (2%)
-    const yarnSpinningLoss = 1.02;
-    const stripeYarns = stripes.map((st) => {
-      const yarnKg = Math.round(((stripedFabricKg * (st.ratio_pct / 100)) * yarnSpinningLoss) * 10) / 10;
-      return {
-        ...st,
-        yarn_kg: yarnKg,
-      };
-    });
-
-    // Interlining requirement (meters)
-    const interliningPieces = pieces.filter((p) => p.secondary_material_type === 'Interlining');
-    const interliningMeters = Math.round((interliningPieces.length * 0.15 * totalOrderQty) * 10) / 10;
-
-    return {
-      netGramsPerGarment,
-      kgPerDozen,
-      totalLossPct,
-      grossGramsPerGarment,
-      totalFabricKg,
-      stripedFabricKg,
-      solidFabricKg,
-      stripeYarns,
-      interliningMeters,
-    };
-  }, [pieces, stripes, lossRules, header.order_qty]);
-
-  // Execute Auto-Consumption Engine
-  const runAutoConsumption = async () => {
+  const runCalculation = () => {
     setCalculating(true);
     try {
-      if (!isNew && id) {
-        await http.post(`/cad-requirements/${id}/calculate`, {
-          loss_rules: lossRules,
-          stripes,
-          sizes,
+      const updatedMarkers = markers.map((m) => {
+        const lengthMm = Number(m.length_mm) || 0;
+        const widthMm = Number(m.width_mm) || 0;
+        const diaType = m.fabric_dia_type === 'TUBE' ? 'TUBE' : 'OPEN';
+        const gsm = Number(m.gsm) || 160;
+
+        const layAllowance = Number(m.lay_allowance_cm ?? 10.0);
+        const widthAllowance = Number(m.width_allowance_in ?? (diaType === 'TUBE' ? 1.0 : 2.0));
+
+        // Lay length in cm: (Length mm / 10) + allowance
+        const layLenCm = Math.round(((lengthMm / 10.0) + layAllowance) * 10) / 10;
+        // Table width in inches: (Width mm / 25.4) + allowance
+        const tblWidthIn = Math.round(((widthMm / 25.4) + widthAllowance) * 100) / 100;
+
+        const sumRatios = m.ratios.reduce((a, b) => a + (Number(b) || 0), 0);
+
+        let fabricWtLay = 0;
+        let pcsLay = 1;
+        let avgWtPc = 0;
+        let reqLenPc = 0;
+
+        if (!isWoven) {
+          const layerMult = diaType === 'TUBE' ? 2 : 1;
+          fabricWtLay = Math.round(((layLenCm * (tblWidthIn * 2.54) * gsm / 10000.0) * layerMult) * 1000) / 1000;
+          pcsLay = Math.max(1, sumRatios * layerMult);
+          const netWt = fabricWtLay / pcsLay;
+          avgWtPc = Math.round((netWt * (1 + (header.fabric_allowance_pct / 100.0))) * 10000) / 10000;
+        } else {
+          pcsLay = Math.max(1, sumRatios);
+          const netLen = layLenCm / pcsLay;
+          reqLenPc = Math.round((netLen * (1 + (header.fabric_allowance_pct / 100.0))) * 10000) / 10000;
+        }
+
+        let markerTotalReq = 0;
+        const updatedColorways = m.colorways.map((cw) => {
+          const qtys = (cw.quantities || []).map((q) => Number(q) || 0);
+          const cutQtys = qtys.map((q) => Math.ceil(q * (1 + (header.rejection_pct / 100.0))));
+          const totOrder = qtys.reduce((a, b) => a + b, 0);
+          const totCut = cutQtys.reduce((a, b) => a + b, 0);
+
+          let reqQty = 0;
+          if (!isWoven) {
+            reqQty = Math.round(((avgWtPc * totCut) / 1000.0) * 1000) / 1000;
+          } else {
+            reqQty = Math.round(((reqLenPc * totCut) / 100.0) * 1000) / 1000;
+          }
+
+          markerTotalReq += reqQty;
+
+          return {
+            ...cw,
+            quantities: qtys,
+            cut_quantities: cutQtys,
+            total_order_pcs: totOrder,
+            total_cut_pcs: totCut,
+            required_qty: reqQty,
+          };
         });
-      }
+
+        return {
+          ...m,
+          lay_length_cm: layLenCm,
+          table_width_in: tblWidthIn,
+          fabric_wt_per_lay_g: fabricWtLay,
+          no_of_pcs_lay: pcsLay,
+          avg_wt_per_pc_g: avgWtPc,
+          req_length_per_pc_cm: reqLenPc,
+          total_req_qty: Math.round(markerTotalReq * 100) / 100,
+          colorways: updatedColorways,
+        };
+      });
+
+      setMarkers(updatedMarkers);
+
+      // Consolidate Fabric Program (F.PRGM) & Cutting Lay (CUT)
+      const fabMap: Record<string, any> = {};
+      updatedMarkers.forEach((m) => {
+        const key = `${m.fabric_type || 'Main Fabric'}_${m.gsm || 0}_${m.fabric_dia_type}`;
+        if (!fabMap[key]) {
+          fabMap[key] = {
+            fabric_type: m.fabric_type || 'Main Fabric',
+            gsm: m.gsm || 160,
+            dia_spec: `${m.fabric_dia_type || 'OPEN'}`,
+            colorways: {},
+          };
+        }
+        m.colorways.forEach((cw) => {
+          const cName = cw.color_name || 'Solid';
+          if (!fabMap[key].colorways[cName]) {
+            fabMap[key].colorways[cName] = { order_pcs: 0, cut_pcs: 0, net_qty: 0 };
+          }
+          fabMap[key].colorways[cName].order_pcs += Number(cw.total_order_pcs) || 0;
+          fabMap[key].colorways[cName].cut_pcs += Number(cw.total_cut_pcs) || 0;
+          fabMap[key].colorways[cName].net_qty += Number(cw.required_qty) || 0;
+        });
+      });
+
+      const fpLines: FabricProgramRow[] = [];
+      const cutLines: FabricProgramRow[] = [];
+
+      Object.values(fabMap).forEach((fab: any) => {
+        Object.entries(fab.colorways).forEach(([cName, d]: [string, any]) => {
+          const net = Math.round(d.net_qty * 10) / 10;
+          const roundedNet = Math.ceil(net);
+          const buffer = Math.max(1, Math.round(roundedNet * 0.02));
+          const grand = roundedNet + buffer;
+
+          fpLines.push({
+            fabric_type: fab.fabric_type,
+            gsm: fab.gsm,
+            dia_spec: fab.dia_spec,
+            color_name: cName,
+            order_qty_pcs: d.order_pcs,
+            net_qty: net,
+            buffer_qty: buffer,
+            grand_total_qty: grand,
+            uom: isWoven ? 'MTR' : 'KG',
+          });
+
+          cutLines.push({
+            fabric_type: fab.fabric_type,
+            gsm: fab.gsm,
+            dia_spec: fab.dia_spec,
+            color_name: cName,
+            order_qty_pcs: d.cut_pcs,
+            net_qty: net,
+            buffer_qty: 0,
+            grand_total_qty: net,
+            uom: isWoven ? 'MTR' : 'KG',
+          });
+        });
+      });
+
+      setFabricProgram(fpLines);
+      setCuttingLay(cutLines);
       setHeader((p) => ({ ...p, status: 'CALCULATED' }));
-      setActiveTab('ENGINE');
-      toast('Auto-consumption calculation completed successfully!', 'success');
+      toast('CAD consumption calculation completed successfully!', 'success');
     } catch {
-      toast('Calculation completed in memory', 'info');
-      setHeader((p) => ({ ...p, status: 'CALCULATED' }));
-      setActiveTab('ENGINE');
+      toast('Calculation failed', 'error');
     } finally {
       setCalculating(false);
     }
   };
 
-  // Approve CAD Requirement
-  const handleApprove = async () => {
+  // Grand KPI Metrics
+  const summaryKpis = useMemo(() => {
+    const totalOrderPcs = markers.reduce(
+      (sum, m) => sum + (m.colorways?.[0]?.total_order_pcs || 0),
+      0
+    ) || header.order_qty;
+
+    const grandFabric = fabricProgram.length > 0
+      ? fabricProgram.reduce((sum, f) => sum + Number(f.grand_total_qty || 0), 0)
+      : markers.reduce((sum, m) => sum + Number(m.total_req_qty || 0), 0);
+
+    const avgGarmentCons = totalOrderPcs > 0 ? (grandFabric / totalOrderPcs) : 0;
+    const actGarmentCons = avgGarmentCons * (1 - (totalAllowancePct / 100.0));
+
+    return {
+      totalOrderPcs,
+      grandFabric: Math.round(grandFabric * 100) / 100,
+      avgGarmentCons: Math.round(avgGarmentCons * 10000) / 10000,
+      actGarmentCons: Math.round(actGarmentCons * 10000) / 10000,
+      uom: isWoven ? 'MTR' : 'KG',
+    };
+  }, [markers, fabricProgram, header.order_qty, totalAllowancePct, isWoven]);
+
+  // Marker Operations
+  const addMarker = () => {
+    const nextRef = `${markers.length + 1}A`;
+    const newM: CadMarker = {
+      _key: `m_${Date.now()}`,
+      marker_ref: nextRef,
+      marker_name: `${header.req_no || 'CAD'} ${nextRef}`,
+      length_mm: 2000,
+      width_mm: 1500,
+      fabric_dia_type: 'OPEN',
+      fabric_type: markers[0]?.fabric_type || 'Single Jersey',
+      gsm: markers[0]?.gsm || 160,
+      direction: 'ONEWAY',
+      parts_in_lay: 'PARTS',
+      lay_allowance_cm: 10,
+      width_allowance_in: 2,
+      lay_length_cm: 210,
+      table_width_in: 61,
+      fabric_wt_per_lay_g: 0,
+      no_of_pcs_lay: 1,
+      avg_wt_per_pc_g: 0,
+      req_length_per_pc_cm: 0,
+      total_req_qty: 0,
+      uom: isWoven ? 'MTR' : 'KG',
+      sizes: markers[0]?.sizes ? [...markers[0].sizes] : ['S', 'M', 'L'],
+      ratios: markers[0]?.ratios ? [...markers[0].ratios] : [1, 1, 1],
+      colorways: markers[0]?.colorways ? JSON.parse(JSON.stringify(markers[0].colorways)) : [
+        { color_name: 'Color 1', quantities: [100, 200, 100] }
+      ],
+    };
+    setMarkers([...markers, newM]);
+    setActiveMarkerIdx(markers.length);
+    toast(`Marker ${nextRef} added`, 'info');
+  };
+
+  const duplicateActiveMarker = () => {
+    if (!activeMarker) return;
+    const nextRef = `${activeMarker.marker_ref}_COPY`;
+    const dup: CadMarker = {
+      ...JSON.parse(JSON.stringify(activeMarker)),
+      _key: `m_${Date.now()}`,
+      marker_ref: nextRef,
+      marker_name: `${activeMarker.marker_name} (Copy)`,
+    };
+    delete dup.id;
+    setMarkers([...markers, dup]);
+    setActiveMarkerIdx(markers.length);
+    toast(`Marker duplicated as ${nextRef}`, 'info');
+  };
+
+  const removeActiveMarker = () => {
+    if (markers.length <= 1) {
+      toast('At least one marker is required', 'warning');
+      return;
+    }
+    const copy = markers.filter((_, i) => i !== activeMarkerIdx);
+    setMarkers(copy);
+    setActiveMarkerIdx(Math.max(0, activeMarkerIdx - 1));
+    toast('Marker removed', 'info');
+  };
+
+  const updateActiveMarker = (updates: Partial<CadMarker>) => {
+    setMarkers((prev) => {
+      const copy = [...prev];
+      copy[activeMarkerIdx] = { ...copy[activeMarkerIdx], ...updates };
+      return copy;
+    });
+  };
+
+  // Excel Direct File Import
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImporting(true);
     try {
-      if (!isNew && id) {
-        await http.post(`/cad-requirements/${id}/approve`, {});
-      }
-      setHeader((p) => ({ ...p, status: 'APPROVED' }));
-      toast('CAD Requirement approved for PPC and Procurement!', 'success');
-      setActiveTab('OUTPUT');
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        const bstr = evt.target?.result;
+        if (!bstr) return;
+
+        const wb = XLSX.read(bstr, { type: 'binary', cellFormula: true, cellNF: true });
+        const summarySheetName = wb.SheetNames.find((s) => s === 'F.PRGM' || s === 'FABRIC');
+        const markerSheetNames = wb.SheetNames.filter((s) => s !== 'F.PRGM' && s !== 'FABRIC' && s !== 'CUT');
+
+        if (markerSheetNames.length === 0) {
+          toast('No marker sheets found in Excel file', 'error');
+          setImporting(false);
+          return;
+        }
+
+        const firstMarker = wb.Sheets[markerSheetNames[0]];
+        const getV = (c: string) => firstMarker[c]?.v ?? '';
+
+        const styleCode = String(getV('B1')).trim();
+        const buyerName = String(getV('B3')).trim();
+        const reqDate = String(getV('B4')).trim() || today();
+
+        let rejPct = 3.0;
+        let fabPct = 10.0;
+        let specialNotes = '';
+
+        if (summarySheetName) {
+          const s = wb.Sheets[summarySheetName];
+          const getSumV = (c: string) => s[c]?.v ?? '';
+          for (let r = 12; r <= 22; r++) {
+            const lbl = String(getSumV('A' + r) || '').toUpperCase();
+            if (lbl.includes('REJECTION')) {
+              const v = Number(getSumV('B' + r));
+              rejPct = v < 1 ? Math.round(v * 100) : v;
+            }
+            if (lbl.includes('FABRIC')) {
+              const v = Number(getSumV('B' + r));
+              fabPct = v < 1 ? Math.round(v * 100) : v;
+            }
+            for (const col of ['F', 'G', 'H']) {
+              const noteVal = String(getSumV(col + r) || '').trim();
+              if (noteVal && (noteVal.includes('NOTE') || noteVal.includes('WASH') || noteVal.includes('GRM') || noteVal.includes('TAPE') || noteVal.includes('CORD') || noteVal.includes('ZIP') || noteVal.includes('COLLAR'))) {
+                specialNotes += (specialNotes ? '\n' : '') + noteVal;
+              }
+            }
+          }
+        }
+
+        const fnUpper = file.name.toUpperCase();
+        const isWovenFile = fnUpper.includes('WOVEN') || markerSheetNames.some((sn) => {
+          const ms = wb.Sheets[sn];
+          const fab = String(ms['B36']?.v || ms['D9']?.v || ms['B35']?.v || '').toUpperCase();
+          return fab.includes('WOVEN') || fab.includes('SEER SUCKER') || fab.includes('VOILE');
+        });
+
+        const parsedMarkers: CadMarker[] = markerSheetNames.map((sn, idx) => {
+          const ms = wb.Sheets[sn];
+          const getMV = (c: string) => ms[c]?.v ?? '';
+
+          const mRef = String(getMV('B2') || sn).trim();
+          const lMm = Number(getMV('B5')) || 0;
+          const wMm = Number(getMV('B6')) || 0;
+          const dia = String(getMV('B35') || getMV('L4') || 'OPEN').toUpperCase().includes('TUBE') ? 'TUBE' : 'OPEN';
+          const dir = String(getMV('B34') || getMV('D8') || 'ONEWAY').trim();
+          const fType = String(getMV('B36') || getMV('D9') || getMV('B35') || 'Main Fabric').trim();
+          const gsmVal = Number(getMV('B37') || getMV('K9') || getMV('J26')) || (isWovenFile ? 100 : 160);
+          const parts = String(getMV('B38') || getMV('D10') || '').trim();
+
+          const sizesList: string[] = [];
+          const ratiosList: number[] = [];
+          ['D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'].forEach((col) => {
+            const sz = getMV(col + '5');
+            const rt = Number(getMV(col + '6')) || 0;
+            if (sz && sz !== '.' && sz !== '') {
+              sizesList.push(String(sz));
+              ratiosList.push(rt);
+            }
+          });
+
+          if (sizesList.length === 0) {
+            ['B7', 'B8', 'B9', 'B10', 'B11', 'B12', 'B13', 'B14', 'B15'].forEach((c, i) => {
+              const sz = getMV(c);
+              const rt = Number(getMV('B' + (16 + i))) || 0;
+              if (sz && sz !== '.' && sz !== '') {
+                sizesList.push(String(sz));
+                ratiosList.push(rt);
+              }
+            });
+          }
+
+          const cws: ColorwayRow[] = [];
+          for (let r = 39; r <= 120; r += 9) {
+            const cName = String(getMV('A' + r) || '').trim();
+            if (cName && cName !== '.' && cName !== '-' && isNaN(Number(cName))) {
+              const qList: number[] = [];
+              for (let sIdx = 0; sIdx < sizesList.length; sIdx++) {
+                const q = Number(getMV('B' + (r + sIdx))) || 0;
+                qList.push(q);
+              }
+              const totalO = qList.reduce((a, b) => a + b, 0);
+              if (totalO > 0 || cws.length === 0) {
+                cws.push({ color_name: cName, quantities: qList, total_order_pcs: totalO });
+              }
+            }
+          }
+
+          const layLen = Number(getMV('J24') || getMV('J23')) || (lMm / 10 + 10);
+          const tblW = Number(getMV('J25') || getMV('J24')) || (wMm / 25.4 + (dia === 'TUBE' ? 1 : 2));
+          const fWtLay = Number(getMV('J27')) || 0;
+          const pcsLay = Number(getMV('J28') || getMV('J25')) || 1;
+          const avgWt = Number(getMV('J29')) || 0;
+          const reqLen = Number(getMV('J26')) || 0;
+          const totReq = Number(getMV('J30') || getMV('J27')) || 0;
+
+          return {
+            _key: `m_imp_${idx}`,
+            marker_ref: mRef,
+            marker_name: `${styleCode} ${mRef}`,
+            length_mm: lMm,
+            width_mm: wMm,
+            fabric_dia_type: dia,
+            fabric_type: fType,
+            gsm: gsmVal,
+            direction: dir,
+            parts_in_lay: parts,
+            lay_allowance_cm: 10,
+            width_allowance_in: dia === 'TUBE' ? 1 : 2,
+            lay_length_cm: layLen,
+            table_width_in: tblW,
+            fabric_wt_per_lay_g: fWtLay,
+            no_of_pcs_lay: pcsLay,
+            avg_wt_per_pc_g: avgWt,
+            req_length_per_pc_cm: reqLen,
+            total_req_qty: totReq,
+            uom: isWovenFile ? 'MTR' : 'KG',
+            sizes: sizesList.length ? sizesList : ['S', 'M', 'L'],
+            ratios: ratiosList.length ? ratiosList : [1, 1, 1],
+            colorways: cws.length ? cws : [{ color_name: 'Solid', quantities: [1000, 1000, 1000] }],
+          };
+        });
+
+        // Auto-match style if found in styles lookup
+        const matchedStyle = styles.data?.find((st: any) =>
+          st.style_code === styleCode || st.label?.includes(styleCode) || st.style_name?.includes(styleCode)
+        );
+
+        // Update Component State
+        setHeader((prev) => ({
+          ...prev,
+          style_id: matchedStyle ? String(matchedStyle.id) : prev.style_id,
+          req_date: reqDate || prev.req_date,
+          cad_type: isWovenFile ? 'WOVEN' : (fnUpper.includes('ACNT') ? 'KNIT_FLEECE' : 'KNIT_SJ'),
+          uom: isWovenFile ? 'MTR' : 'KG',
+          rejection_pct: rejPct,
+          fabric_allowance_pct: fabPct,
+          special_notes: specialNotes,
+          remarks: `Imported from ${file.name}${buyerName ? ` (Buyer: ${buyerName})` : ''}`,
+        }));
+
+        setMarkers(parsedMarkers);
+        setActiveMarkerIdx(0);
+
+        toast(`Imported ${parsedMarkers.length} markers from ${file.name}!`, 'success');
+        setImporting(false);
+      };
+
+      reader.readAsBinaryString(file);
     } catch {
-      setHeader((p) => ({ ...p, status: 'APPROVED' }));
-      toast('Approved for Production & Procurement!', 'success');
-      setActiveTab('OUTPUT');
+      toast('Failed to parse Excel file', 'error');
+      setImporting(false);
     }
   };
 
@@ -370,24 +691,12 @@ export default function CadRequirementDetailPage() {
     try {
       const payload = {
         ...header,
-        size_breakdown: sizes,
-        pieces: pieces.map((p) => ({
-          piece_name: p.piece_name,
-          component_type: p.component_type,
-          perimeter_cm: p.perimeter_cm,
-          area_sqm: p.area_sqm,
-          marker_efficiency_pct: p.marker_efficiency_pct,
-          gsm: p.gsm,
-          calculated_weight_grams: p.calculated_weight_grams,
-          secondary_material_type: p.secondary_material_type,
-          foam_thickness_mm: p.foam_thickness_mm,
-          interlining_type: p.interlining_type,
-          material_mix_ratio: p.material_mix_ratio,
-          has_stripes: p.has_stripes,
-        })),
-        stripes,
-        loss_rules: lossRules,
-        total_fabric_kg: engineResults.totalFabricKg,
+        markers,
+        fabric_program: fabricProgram,
+        cutting_lay: cuttingLay,
+        summary_metrics: summaryKpis,
+        total_fabric_kg: isWoven ? 0 : summaryKpis.grandFabric,
+        total_fabric_mtrs: isWoven ? summaryKpis.grandFabric : 0,
       };
 
       if (isNew) {
@@ -395,6 +704,7 @@ export default function CadRequirementDetailPage() {
         toast(`CAD Requirement ${res.data.req_no} saved!`, 'success');
         nav(`/production/cad-requirements/${res.data.id}`);
       } else {
+        await http.post('/cad-requirements', payload);
         toast('CAD Requirement saved successfully', 'success');
       }
     } catch (err: any) {
@@ -405,14 +715,32 @@ export default function CadRequirementDetailPage() {
     }
   };
 
+  // Approve CAD Requirement
+  const handleApprove = async () => {
+    try {
+      if (!isNew && id) {
+        await http.post(`/cad-requirements/${id}/approve`, {
+          total_fabric_kg: isWoven ? 0 : summaryKpis.grandFabric,
+          total_fabric_mtrs: isWoven ? summaryKpis.grandFabric : 0,
+          total_yarn_kg: isWoven ? 0 : Math.round(summaryKpis.grandFabric * 1.05 * 10) / 10,
+        });
+      }
+      setHeader((p) => ({ ...p, status: 'APPROVED' }));
+      toast('Approved! Auto-synced to Style BOM and Procurement.', 'success');
+      setActiveTab('OUTPUT');
+    } catch (e: any) {
+      toast(e.message || 'Approval failed', 'error');
+    }
+  };
+
   if (!isNew && loadingExisting) {
     return <div className="py-20 text-center text-slate-400">Loading CAD Requirement #{id}...</div>;
   }
 
   return (
-    <div className="space-y-5 pb-20">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-4">
+    <div className="space-y-4 pb-20">
+      {/* Top Header & Action Controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-3">
         <div className="flex items-center gap-3">
           <button
             onClick={() => nav('/production/cad-requirements')}
@@ -427,7 +755,7 @@ export default function CadRequirementDetailPage() {
                 <Cpu size={18} />
               </span>
               <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-                {isNew ? 'New CAD Requirement & Auto-Consumption' : `CAD Requirement: ${header.req_no}`}
+                {isNew ? 'New Garment CAD Requirement' : `CAD Sheet: ${header.req_no || id}`}
               </h1>
               <Badge
                 tone={
@@ -440,16 +768,38 @@ export default function CadRequirementDetailPage() {
               >
                 {header.status}
               </Badge>
+              <Badge tone={isWoven ? 'amber' : 'indigo'}>
+                {isWoven ? 'WOVEN (METERS)' : 'KNIT (KG)'}
+              </Badge>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Marker piece breakdown, foam/interlining multi-materials, 3-colour stripe ratios & yarn conversion
+              Lay & marker sheets (1A, 1B, 2A), table allowances, tubular/open layers, CEILING cut rejection & F.PRGM consolidation
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* File Upload Input */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileUpload}
+            accept=".xls,.xlsx"
+            className="hidden"
+          />
+
           <button
-            onClick={runAutoConsumption}
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 shadow-sm transition disabled:opacity-50"
+            title="Upload and auto-populate from 05 SJ, 25 ESTOVIR, 37 NOTRE, or WOVEN Excel files"
+          >
+            <UploadCloud size={14} className={importing ? 'animate-spin' : ''} />
+            <span>{importing ? 'Parsing Excel...' : 'Import CAD Excel (.xls)'}</span>
+          </button>
+
+          <button
+            onClick={runCalculation}
             disabled={calculating}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 shadow-sm transition disabled:opacity-50"
           >
@@ -463,7 +813,7 @@ export default function CadRequirementDetailPage() {
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition"
             >
               <CheckCircle2 size={14} />
-              <span>Approve for Procurement</span>
+              <span>Approve for BOM & PO</span>
             </button>
           )}
 
@@ -472,20 +822,59 @@ export default function CadRequirementDetailPage() {
             disabled={saving}
             className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition disabled:opacity-50"
           >
-            <Save size={15} />
+            <Save size={14} />
             <span>{saving ? 'Saving...' : 'Save CAD Req'}</span>
           </button>
         </div>
       </div>
 
-      {/* Header Fields Card */}
+      {/* KPI Overview Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <div className="p-3 bg-white rounded-xl border border-slate-200/80 shadow-sm">
+          <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Markers Planned</div>
+          <div className="text-lg font-bold text-slate-900 mt-0.5">{markers.length} Sheets</div>
+          <div className="text-[10px] text-slate-400">Tabs: {markers.map((m) => m.marker_ref).join(', ')}</div>
+        </div>
+
+        <div className="p-3 bg-white rounded-xl border border-slate-200/80 shadow-sm">
+          <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Planned Garment Qty</div>
+          <div className="text-lg font-bold text-indigo-600 mt-0.5">{fmtNumber(summaryKpis.totalOrderPcs)} Pcs</div>
+          <div className="text-[10px] text-slate-400">Rejection: +{header.rejection_pct}% CEIL</div>
+        </div>
+
+        <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-200 shadow-sm">
+          <div className="text-[11px] font-semibold text-indigo-700 uppercase tracking-wider">Total Fabric Need</div>
+          <div className="text-xl font-bold text-indigo-900 mt-0.5">
+            {fmtDecimal(summaryKpis.grandFabric)} {summaryKpis.uom}
+          </div>
+          <div className="text-[10px] text-indigo-600">F.PRGM consolidated</div>
+        </div>
+
+        <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-200 shadow-sm">
+          <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">Average Cons / Pc</div>
+          <div className="text-lg font-bold text-emerald-900 mt-0.5">
+            {fmtDecimal(summaryKpis.avgGarmentCons * (isWoven ? 1 : 1000), 2)} {isWoven ? 'Mtrs' : 'Gms'}
+          </div>
+          <div className="text-[10px] text-emerald-600">With {header.fabric_allowance_pct}% fabric allowance</div>
+        </div>
+
+        <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200 shadow-sm">
+          <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Actual Net Cons / Pc</div>
+          <div className="text-lg font-bold text-amber-900 mt-0.5">
+            {fmtDecimal(summaryKpis.actGarmentCons * (isWoven ? 1 : 1000), 2)} {isWoven ? 'Mtrs' : 'Gms'}
+          </div>
+          <div className="text-[10px] text-amber-600">Pure net lay consumption</div>
+        </div>
+      </div>
+
+      {/* Header Parameters Card */}
       <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
           <Input
             label="CAD Req No"
             value={header.req_no}
             onChange={(e) => setHeader((p) => ({ ...p, req_no: e.target.value }))}
-            placeholder="Auto-generated CAD-XXXXX"
+            placeholder="CAD-XXXXX"
             disabled={!isNew}
           />
 
@@ -505,30 +894,89 @@ export default function CadRequirementDetailPage() {
           />
 
           <Input
-            label="Internal / IR No"
+            label="Job / IR No"
             value={header.internal_ir_no}
             onChange={(e) => setHeader((p) => ({ ...p, internal_ir_no: e.target.value }))}
-            placeholder="e.g. IR-2026-0001"
+            placeholder="e.g. G3 RG 218 AL"
           />
 
+          <div className="space-y-1">
+            <label className="block text-xs font-semibold text-slate-700">Garment Type / Mode</label>
+            <select
+              value={header.cad_type}
+              onChange={(e) => {
+                const val = e.target.value as any;
+                const woven = val === 'WOVEN';
+                setHeader((p) => ({
+                  ...p,
+                  cad_type: val,
+                  uom: woven ? 'MTR' : 'KG',
+                  fabric_allowance_pct: woven ? 0.0 : 10.0,
+                }));
+              }}
+              className="w-full text-xs rounded-lg border border-slate-300 py-1.5 px-2 bg-white font-medium text-slate-800"
+            >
+              <option value="KNIT_SJ">Single Jersey Knits (KG)</option>
+              <option value="KNIT_FLEECE">Fleece / Heavy Knits (KG)</option>
+              <option value="WOVEN">Woven Fabric (MTRS)</option>
+              <option value="MULTI_PART">Multi-Material Hoodies (KG)</option>
+            </select>
+          </div>
+
           <Input
-            label="Order Qty (Pcs) *"
+            label="Order Qty (Pcs)"
             type="number"
             value={header.order_qty}
             onChange={(e) => setHeader((p) => ({ ...p, order_qty: parseInt(e.target.value) || 0 }))}
           />
         </div>
+
+        {/* Allowances & Instructions Bar */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 pt-2 border-t border-slate-100 items-center">
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-semibold text-slate-700 whitespace-nowrap">Rejection %:</label>
+            <input
+              type="number"
+              step="0.5"
+              value={header.rejection_pct}
+              onChange={(e) => setHeader((p) => ({ ...p, rejection_pct: parseFloat(e.target.value) || 0 }))}
+              className="w-20 text-xs font-bold text-amber-700 border border-slate-300 rounded px-2 py-1 text-right"
+            />
+            <span className="text-[11px] text-slate-500">(CEIL per size)</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-semibold text-slate-700 whitespace-nowrap">Fabric Loss %:</label>
+            <input
+              type="number"
+              step="0.5"
+              value={header.fabric_allowance_pct}
+              onChange={(e) => setHeader((p) => ({ ...p, fabric_allowance_pct: parseFloat(e.target.value) || 0 }))}
+              className="w-20 text-xs font-bold text-indigo-700 border border-slate-300 rounded px-2 py-1 text-right"
+            />
+            <span className="text-[11px] text-slate-500">(Total: {totalAllowancePct}%)</span>
+          </div>
+
+          <div className="md:col-span-2">
+            <input
+              type="text"
+              placeholder="Special notes e.g. GREY FORM BIO WASH, 10MM TWILL TAPE - 60 CM..."
+              value={header.special_notes}
+              onChange={(e) => setHeader((p) => ({ ...p, special_notes: e.target.value }))}
+              className="w-full text-xs border border-slate-300 rounded px-2 py-1 font-mono text-slate-700"
+            />
+          </div>
+        </div>
       </div>
 
-      {/* Tabs Switcher Navigation */}
+      {/* Main Navigation Tabs */}
       <div className="flex border-b border-slate-200 space-x-1 overflow-x-auto">
         {[
-          { id: 'SIZES', label: '1. Sizes Breakdown', icon: Grid },
-          { id: 'PIECES', label: '2. CAD Pieces & Mapping', icon: Scissors },
-          { id: 'MULTI_MAT', label: '3. Multi-Materials & Mix', icon: Layers },
-          { id: 'STRIPES', label: '4. 3-Colour Stripe Rules', icon: Disc },
-          { id: 'ENGINE', label: '5. Auto-Consumption Engine', icon: Calculator },
-          { id: 'OUTPUT', label: '6. Material Requirement Hand-off', icon: FileCheck },
+          { id: 'MARKERS', label: `1. Markers Cockpit (${markers.length})`, icon: Scissors },
+          { id: 'F_PRGM', label: '2. Fabric Program (F.PRGM)', icon: FileSpreadsheet },
+          { id: 'CUT', label: '3. Cutting Lay Sheet (CUT)', icon: Layers },
+          { id: 'TRIMS', label: '4. Trims & Accessories', icon: Disc },
+          { id: 'OUTPUT', label: '5. BOM & Sourcing Hand-off', icon: FileCheck },
         ].map((tab) => {
           const Icon = tab.icon;
           const active = activeTab === tab.id;
@@ -536,7 +984,7 @@ export default function CadRequirementDetailPage() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-1.5 py-2.5 px-3.5 text-xs font-semibold border-b-2 transition whitespace-nowrap ${
+              className={`flex items-center gap-1.5 py-2.5 px-4 text-xs font-semibold border-b-2 transition whitespace-nowrap ${
                 active
                   ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50'
                   : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
@@ -549,220 +997,681 @@ export default function CadRequirementDetailPage() {
         })}
       </div>
 
-      {/* TAB 1: SIZES BREAKDOWN */}
-      {activeTab === 'SIZES' && (
+      {/* TAB 1: MARKERS COCKPIT */}
+      {activeTab === 'MARKERS' && activeMarker && (
+        <div className="space-y-4">
+          {/* Marker Tabs Strip */}
+          <div className="flex items-center justify-between bg-slate-100 p-1.5 rounded-xl border border-slate-200">
+            <div className="flex items-center gap-1 overflow-x-auto">
+              {markers.map((m, idx) => (
+                <button
+                  key={m._key || idx}
+                  onClick={() => setActiveMarkerIdx(idx)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                    activeMarkerIdx === idx
+                      ? 'bg-white text-indigo-700 shadow-sm'
+                      : 'text-slate-600 hover:bg-white/60'
+                  }`}
+                >
+                  <span>Sheet {m.marker_ref}</span>
+                  <span className="text-[10px] px-1 py-0.5 rounded bg-slate-100 font-normal">
+                    {fmtDecimal(m.total_req_qty)} {m.uom}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={addMarker}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 text-indigo-700"
+              >
+                <Plus size={13} />
+                <span>Add Marker</span>
+              </button>
+              <button
+                onClick={duplicateActiveMarker}
+                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
+                title="Duplicate active marker"
+              >
+                <Copy size={13} />
+                <span>Clone</span>
+              </button>
+              <button
+                onClick={removeActiveMarker}
+                className="p-1 text-slate-400 hover:text-red-600 rounded"
+                title="Delete marker"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </div>
+
+          {/* Active Marker Details & Lay Geometry */}
+          <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-sm text-slate-900">
+                  Marker [{activeMarker.marker_ref}] Specifications
+                </span>
+                <Badge tone={activeMarker.fabric_dia_type === 'TUBE' ? 'purple' : 'blue'}>
+                  {activeMarker.fabric_dia_type === 'TUBE' ? 'TUBE (2 LAYERS/PLY)' : 'OPEN (1 LAYER/PLY)'}
+                </Badge>
+              </div>
+              <span className="text-xs text-slate-500 font-mono">
+                {activeMarker.parts_in_lay || 'Body / Sleeve'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3 text-xs">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600">Marker Ref</label>
+                <input
+                  type="text"
+                  value={activeMarker.marker_ref}
+                  onChange={(e) => updateActiveMarker({ marker_ref: e.target.value })}
+                  className="w-full font-bold border border-slate-300 rounded px-2 py-1 mt-0.5"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600">CAD Length (mm)</label>
+                <input
+                  type="number"
+                  value={activeMarker.length_mm}
+                  onChange={(e) => updateActiveMarker({ length_mm: parseFloat(e.target.value) || 0 })}
+                  className="w-full font-bold text-indigo-700 border border-slate-300 rounded px-2 py-1 mt-0.5"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600">CAD Width (mm)</label>
+                <input
+                  type="number"
+                  value={activeMarker.width_mm}
+                  onChange={(e) => updateActiveMarker({ width_mm: parseFloat(e.target.value) || 0 })}
+                  className="w-full font-bold text-indigo-700 border border-slate-300 rounded px-2 py-1 mt-0.5"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600">Fabric Dia Form</label>
+                <select
+                  value={activeMarker.fabric_dia_type}
+                  onChange={(e) => updateActiveMarker({ fabric_dia_type: e.target.value as any })}
+                  className="w-full border border-slate-300 rounded px-2 py-1 mt-0.5 font-semibold"
+                >
+                  <option value="OPEN">OPEN (Flat)</option>
+                  <option value="TUBE">TUBE (Circular)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600">GSM</label>
+                <input
+                  type="number"
+                  value={activeMarker.gsm}
+                  onChange={(e) => updateActiveMarker({ gsm: parseInt(e.target.value) || 0 })}
+                  className="w-full border border-slate-300 rounded px-2 py-1 mt-0.5"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600">Direction</label>
+                <select
+                  value={activeMarker.direction}
+                  onChange={(e) => updateActiveMarker({ direction: e.target.value })}
+                  className="w-full border border-slate-300 rounded px-2 py-1 mt-0.5"
+                >
+                  <option value="ONEWAY">ONEWAY</option>
+                  <option value="TWOWAY">TWOWAY</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600">Parts in Lay</label>
+                <input
+                  type="text"
+                  value={activeMarker.parts_in_lay}
+                  onChange={(e) => updateActiveMarker({ parts_in_lay: e.target.value })}
+                  placeholder="BCK, FRT, SLV"
+                  className="w-full border border-slate-300 rounded px-2 py-1 mt-0.5 font-medium"
+                />
+              </div>
+            </div>
+
+            {/* Table Lay Allowances & Formulas */}
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3 text-xs">
+              <div>
+                <span className="text-slate-500 text-[11px]">Lay Length (CMS):</span>
+                <div className="font-bold text-slate-900 mt-0.5">
+                  {fmtDecimal(activeMarker.lay_length_cm, 1)} cm
+                </div>
+                <span className="text-[10px] text-slate-400">Length/10 + {activeMarker.lay_allowance_cm}cm add</span>
+              </div>
+
+              <div>
+                <span className="text-slate-500 text-[11px]">Table Width (INCHES):</span>
+                <div className="font-bold text-slate-900 mt-0.5">
+                  {fmtDecimal(activeMarker.table_width_in, 1)} in
+                </div>
+                <span className="text-[10px] text-slate-400">Width/25.4 + {activeMarker.width_allowance_in}" add</span>
+              </div>
+
+              {!isWoven ? (
+                <>
+                  <div>
+                    <span className="text-slate-500 text-[11px]">Fabric Wt/Lay:</span>
+                    <div className="font-bold text-indigo-700 mt-0.5">
+                      {fmtDecimal(activeMarker.fabric_wt_per_lay_g, 1)} g
+                    </div>
+                    <span className="text-[10px] text-slate-400">
+                      {activeMarker.fabric_dia_type === 'TUBE' ? 'x2 Tubular layers' : 'Single layer'}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-slate-500 text-[11px]">No of Pcs / Lay:</span>
+                    <div className="font-bold text-slate-900 mt-0.5">
+                      {activeMarker.no_of_pcs_lay} pcs
+                    </div>
+                    <span className="text-[10px] text-slate-400">Sum of ratios {activeMarker.fabric_dia_type === 'TUBE' ? 'x2' : ''}</span>
+                  </div>
+
+                  <div>
+                    <span className="text-slate-500 text-[11px]">Average Wt / Pc:</span>
+                    <div className="font-bold text-emerald-700 mt-0.5">
+                      {fmtDecimal(activeMarker.avg_wt_per_pc_g, 2)} g/pc
+                    </div>
+                    <span className="text-[10px] text-slate-400">With {header.fabric_allowance_pct}% fabric loss</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <span className="text-slate-500 text-[11px]">No of Pcs / Lay:</span>
+                    <div className="font-bold text-slate-900 mt-0.5">
+                      {activeMarker.no_of_pcs_lay} pcs
+                    </div>
+                    <span className="text-[10px] text-slate-400">Sum of ratios</span>
+                  </div>
+
+                  <div>
+                    <span className="text-slate-500 text-[11px]">Req Length / Pc:</span>
+                    <div className="font-bold text-emerald-700 mt-0.5">
+                      {fmtDecimal(activeMarker.req_length_per_pc_cm, 2)} cm/pc
+                    </div>
+                    <span className="text-[10px] text-slate-400">Linear consumption</span>
+                  </div>
+                </>
+              )}
+
+              <div className="bg-white p-2 rounded-lg border border-slate-200">
+                <span className="text-slate-500 text-[11px]">Marker Total Req:</span>
+                <div className="text-sm font-bold text-indigo-900 mt-0.5">
+                  {fmtDecimal(activeMarker.total_req_qty)} {activeMarker.uom}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Sizes & Lay Ratio Distribution */}
+          <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                  Sizes & Lay Ratio (Pcs/Lay)
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Defines garment sizes in the marker and how many pieces cut per table ply
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  const newSizes = [...activeMarker.sizes, `S${activeMarker.sizes.length + 1}`];
+                  const newRatios = [...activeMarker.ratios, 1];
+                  const newColorways = activeMarker.colorways.map((cw) => ({
+                    ...cw,
+                    quantities: [...cw.quantities, 0],
+                  }));
+                  updateActiveMarker({ sizes: newSizes, ratios: newRatios, colorways: newColorways });
+                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
+              >
+                <Plus size={13} />
+                <span>Add Size Column</span>
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                    <th className="py-2 px-3 w-40">Parameter</th>
+                    {activeMarker.sizes.map((s, sIdx) => (
+                      <th key={sIdx} className="py-2 px-2 text-center">
+                        <input
+                          type="text"
+                          value={s}
+                          onChange={(e) => {
+                            const copy = [...activeMarker.sizes];
+                            copy[sIdx] = e.target.value;
+                            updateActiveMarker({ sizes: copy });
+                          }}
+                          className="w-20 text-center text-xs font-bold border border-slate-300 rounded px-1.5 py-0.5"
+                        />
+                      </th>
+                    ))}
+                    <th className="py-2 px-2 text-center w-20">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700">
+                  <tr>
+                    <td className="py-2 px-3 font-semibold text-slate-900">Lay Ratio / Pcs</td>
+                    {activeMarker.ratios.map((rt, sIdx) => (
+                      <td key={sIdx} className="py-2 px-2 text-center">
+                        <input
+                          type="number"
+                          value={rt}
+                          onChange={(e) => {
+                            const copy = [...activeMarker.ratios];
+                            copy[sIdx] = parseInt(e.target.value) || 0;
+                            updateActiveMarker({ ratios: copy });
+                          }}
+                          className="w-16 text-center text-xs font-bold text-indigo-700 border border-slate-300 rounded px-1.5 py-0.5"
+                        />
+                      </td>
+                    ))}
+                    <td className="py-2 px-2 text-center font-bold text-slate-900">
+                      {activeMarker.ratios.reduce((a, b) => a + (Number(b) || 0), 0)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Colorways & Order Quantities Spreadsheet Grid */}
+          <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                  Colorways & Order Matrix (with Rejection CEIL)
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Formula: <strong>Cut Pieces = CEILING(Order Qty × (1 + {header.rejection_pct}%), 1)</strong>
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  const newCw: ColorwayRow = {
+                    color_name: `Colorway ${activeMarker.colorways.length + 1}`,
+                    quantities: activeMarker.sizes.map(() => 0),
+                  };
+                  updateActiveMarker({ colorways: [...activeMarker.colorways, newCw] });
+                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
+              >
+                <Plus size={13} />
+                <span>Add Colorway</span>
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                    <th className="py-2 px-3 w-48">Colorway / Shade</th>
+                    <th className="py-2 px-2 text-center w-24">Metric</th>
+                    {activeMarker.sizes.map((s, sIdx) => (
+                      <th key={sIdx} className="py-2 px-2 text-right">
+                        {s}
+                      </th>
+                    ))}
+                    <th className="py-2 px-2 text-right font-bold">Total Pcs</th>
+                    <th className="py-2 px-2 text-right font-bold text-indigo-700">Req ({activeMarker.uom})</th>
+                    <th className="py-2 px-2 text-center w-10">Del</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700">
+                  {activeMarker.colorways.map((cw, cwIdx) => {
+                    const cutQtys = (cw.quantities || []).map((q) =>
+                      Math.ceil(q * (1 + (header.rejection_pct / 100.0)))
+                    );
+                    const totOrder = (cw.quantities || []).reduce((a, b) => a + (Number(b) || 0), 0);
+                    const totCut = cutQtys.reduce((a, b) => a + b, 0);
+
+                    let reqVal = 0;
+                    if (!isWoven) {
+                      reqVal = Math.round(((activeMarker.avg_wt_per_pc_g * totCut) / 1000.0) * 100) / 100;
+                    } else {
+                      reqVal = Math.round(((activeMarker.req_length_per_pc_cm * totCut) / 100.0) * 100) / 100;
+                    }
+
+                    return (
+                      <React.Fragment key={cwIdx}>
+                        {/* Row 1: Raw Order Quantity Input */}
+                        <tr className="hover:bg-slate-50/50">
+                          <td className="py-2 px-3 row-span-2">
+                            <input
+                              type="text"
+                              value={cw.color_name}
+                              onChange={(e) => {
+                                const copy = [...activeMarker.colorways];
+                                copy[cwIdx].color_name = e.target.value;
+                                updateActiveMarker({ colorways: copy });
+                              }}
+                              className="w-44 text-xs font-semibold border border-slate-300 rounded px-2 py-1"
+                            />
+                          </td>
+                          <td className="py-1 px-2 text-center font-medium text-slate-500">Order Qty</td>
+                          {(cw.quantities || []).map((q, sIdx) => (
+                            <td key={sIdx} className="py-1 px-2 text-right">
+                              <input
+                                type="number"
+                                value={q}
+                                onChange={(e) => {
+                                  const copy = [...activeMarker.colorways];
+                                  const qCopy = [...copy[cwIdx].quantities];
+                                  qCopy[sIdx] = parseInt(e.target.value) || 0;
+                                  copy[cwIdx].quantities = qCopy;
+                                  updateActiveMarker({ colorways: copy });
+                                }}
+                                className="w-20 text-xs text-right font-medium border border-slate-300 rounded px-1.5 py-1"
+                              />
+                            </td>
+                          ))}
+                          <td className="py-1 px-2 text-right font-bold text-slate-900">
+                            {fmtNumber(totOrder)}
+                          </td>
+                          <td className="py-1 px-2 text-right font-bold text-indigo-700">
+                            {fmtDecimal(reqVal)} {activeMarker.uom}
+                          </td>
+                          <td className="py-1 px-2 text-center">
+                            <button
+                              onClick={() => {
+                                const copy = activeMarker.colorways.filter((_, i) => i !== cwIdx);
+                                updateActiveMarker({ colorways: copy });
+                              }}
+                              className="p-1 text-slate-400 hover:text-red-600 rounded"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </td>
+                        </tr>
+
+                        {/* Row 2: Computed Cut Pieces with Rejection CEIL */}
+                        <tr className="bg-amber-50/30 text-[11px] text-amber-900">
+                          <td className="py-1 px-2 text-center font-semibold text-amber-800">Cut Pieces (Ceil)</td>
+                          {cutQtys.map((cq, sIdx) => (
+                            <td key={sIdx} className="py-1 px-2 text-right font-mono font-medium">
+                              {cq}
+                            </td>
+                          ))}
+                          <td className="py-1 px-2 text-right font-bold font-mono">
+                            {fmtNumber(totCut)}
+                          </td>
+                          <td className="py-1 px-2 text-right text-[10px] text-amber-700">
+                            +{header.rejection_pct}% buffer
+                          </td>
+                          <td></td>
+                        </tr>
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: FABRIC PROGRAM (F.PRGM) */}
+      {activeTab === 'F_PRGM' && (
         <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div>
-              <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                Size Quantity Distribution
+              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                <FileSpreadsheet size={16} className="text-indigo-600" />
+                <span>Fabric Request & Indent Program (F.PRGM)</span>
               </h2>
-              <p className="text-[11px] text-slate-500">
-                Breakdown of order quantity across garment sizes (XS to 3XL)
+              <p className="text-xs text-slate-500">
+                Official consolidated fabric procurement indent with safety buffers and process allowances
               </p>
             </div>
             <button
-              onClick={() => setSizes((p) => [...p, { size: 'XL', qty: 500 }])}
-              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
+              onClick={() => window.print()}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 shadow-sm"
             >
-              <Plus size={13} />
-              <span>Add Size</span>
+              <Printer size={14} />
+              <span>Print F.PRGM</span>
             </button>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
-                  <th className="py-2.5 px-3">Size Label</th>
-                  <th className="py-2.5 px-3 text-right">Quantity (Pcs)</th>
-                  <th className="py-2.5 px-3 text-right">Ratio / Share %</th>
-                  <th className="py-2.5 px-3 text-center">Action</th>
+                <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                  <th className="py-2.5 px-3">Fabric Type</th>
+                  <th className="py-2.5 px-2">GSM</th>
+                  <th className="py-2.5 px-2">Diameter / Form</th>
+                  <th className="py-2.5 px-3">Colour / Shade</th>
+                  <th className="py-2.5 px-2 text-right">Order Qty</th>
+                  <th className="py-2.5 px-2 text-right">Net Req ({header.uom})</th>
+                  <th className="py-2.5 px-2 text-right">Buffer ({header.uom})</th>
+                  <th className="py-2.5 px-3 text-right text-indigo-700">Grand Total ({header.uom})</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
-                {sizes.map((s, idx) => {
-                  const sharePct = header.order_qty > 0 ? Math.round((s.qty / header.order_qty) * 1000) / 10 : 0;
-                  return (
-                    <tr key={idx}>
-                      <td className="py-2 px-3">
-                        <input
-                          type="text"
-                          value={s.size}
-                          onChange={(e) => {
-                            const copy = [...sizes];
-                            copy[idx].size = e.target.value;
-                            setSizes(copy);
-                          }}
-                          className="w-24 text-xs font-semibold border border-slate-300 rounded px-2 py-1"
-                        />
-                      </td>
-                      <td className="py-2 px-3 text-right">
-                        <input
-                          type="number"
-                          value={s.qty}
-                          onChange={(e) => {
-                            const copy = [...sizes];
-                            copy[idx].qty = parseInt(e.target.value) || 0;
-                            setSizes(copy);
-                          }}
-                          className="w-32 text-xs text-right font-bold text-slate-900 border border-slate-300 rounded px-2 py-1"
-                        />
-                      </td>
-                      <td className="py-2 px-3 text-right font-medium text-indigo-700">
-                        {sharePct}%
-                      </td>
-                      <td className="py-2 px-3 text-center">
-                        <button
-                          onClick={() => setSizes((p) => p.filter((_, i) => i !== idx))}
-                          className="p-1 text-slate-400 hover:text-red-600 rounded"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {fabricProgram.map((fp, idx) => (
+                  <tr key={idx} className="hover:bg-slate-50/70">
+                    <td className="py-2.5 px-3 font-semibold text-slate-900">{fp.fabric_type}</td>
+                    <td className="py-2.5 px-2">{fp.gsm || '—'}</td>
+                    <td className="py-2.5 px-2">
+                      <span className="font-mono text-slate-600 font-medium">{fp.dia_spec}</span>
+                    </td>
+                    <td className="py-2.5 px-3 font-bold text-slate-800">{fp.color_name}</td>
+                    <td className="py-2.5 px-2 text-right">{fmtNumber(fp.order_qty_pcs)} Pcs</td>
+                    <td className="py-2.5 px-2 text-right font-medium">{fmtDecimal(fp.net_qty)}</td>
+                    <td className="py-2.5 px-2 text-right text-amber-700 font-medium">+{fmtDecimal(fp.buffer_qty)}</td>
+                    <td className="py-2.5 px-3 text-right font-bold text-indigo-700 text-sm">
+                      {fmtDecimal(fp.grand_total_qty)} {fp.uom}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
+              <tfoot>
+                <tr className="bg-indigo-50/60 font-bold text-indigo-900 border-t border-indigo-200">
+                  <td colSpan={4} className="py-3 px-3">TOTAL CONSOLIDATED FABRIC INDENT</td>
+                  <td className="py-3 px-2 text-right">{fmtNumber(summaryKpis.totalOrderPcs)} Pcs</td>
+                  <td className="py-3 px-2 text-right">
+                    {fmtDecimal(fabricProgram.reduce((s, x) => s + Number(x.net_qty || 0), 0))}
+                  </td>
+                  <td className="py-3 px-2 text-right text-amber-800">
+                    +{fmtDecimal(fabricProgram.reduce((s, x) => s + Number(x.buffer_qty || 0), 0))}
+                  </td>
+                  <td className="py-3 px-3 text-right text-base text-indigo-900">
+                    {fmtDecimal(summaryKpis.grandFabric)} {summaryKpis.uom}
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
 
-          <div
-            className={`p-3 rounded-lg text-xs flex items-center justify-between ${
-              sizeMismatch ? 'bg-amber-50 text-amber-800 border border-amber-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              {sizeMismatch ? <AlertCircle size={16} /> : <CheckCircle2 size={16} />}
-              <span>
-                Total Size Pieces: <strong>{fmtNumber(sizeTotal)}</strong> / Order Qty:{' '}
-                <strong>{fmtNumber(header.order_qty)}</strong>
-              </span>
+          {/* Signoff / Approval Signature Grid */}
+          <div className="pt-4 border-t border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Prepared By</span>
+              <div className="font-semibold text-xs text-slate-800 mt-2">FAB.PGMR (CAD Dept)</div>
             </div>
-            {sizeMismatch && (
-              <span className="font-semibold text-amber-900">
-                Difference of {Math.abs(sizeTotal - header.order_qty)} pcs
-              </span>
-            )}
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Approved By</span>
+              <div className="font-semibold text-xs text-slate-800 mt-2">M.D / Production Head</div>
+            </div>
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Approved By</span>
+              <div className="font-semibold text-xs text-slate-800 mt-2">MERCH (Merchandiser)</div>
+            </div>
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Received By</span>
+              <div className="font-semibold text-xs text-slate-800 mt-2">FABRIC Sourcing / Mill</div>
+            </div>
           </div>
         </div>
       )}
 
-      {/* TAB 2: CAD PIECES & COMPONENT MAPPING */}
-      {activeTab === 'PIECES' && (
+      {/* TAB 3: CUTTING LAY SHEET (CUT) */}
+      {activeTab === 'CUT' && (
         <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 space-y-4">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div>
-              <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                <Scissors size={15} className="text-indigo-600" />
-                <span>CAD Pattern Pieces ({pieces.length})</span>
+              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                <Layers size={16} className="text-emerald-600" />
+                <span>Cutting Department Lay & Issue Plan (CUT)</span>
               </h2>
-              <p className="text-[11px] text-slate-500">
-                Formula: <strong>Weight (g) = (Area m² × GSM) / (Marker Efficiency % / 100)</strong>
+              <p className="text-xs text-slate-500">
+                Exact net lay cutting schedule and roll allocation without procurement buffers
+              </p>
+            </div>
+            <button
+              onClick={() => window.print()}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 shadow-sm"
+            >
+              <Printer size={14} />
+              <span>Print Cutting Sheet</span>
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                  <th className="py-2.5 px-3">Fabric Type</th>
+                  <th className="py-2.5 px-2">GSM</th>
+                  <th className="py-2.5 px-2">Diameter</th>
+                  <th className="py-2.5 px-3">Colour / Shade</th>
+                  <th className="py-2.5 px-2 text-right">Cutting Lay Qty (Pcs)</th>
+                  <th className="py-2.5 px-3 text-right text-emerald-700">Net Cutting Fabric ({header.uom})</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-700">
+                {cuttingLay.map((cl, idx) => (
+                  <tr key={idx} className="hover:bg-slate-50/70">
+                    <td className="py-2.5 px-3 font-semibold text-slate-900">{cl.fabric_type}</td>
+                    <td className="py-2.5 px-2">{cl.gsm || '—'}</td>
+                    <td className="py-2.5 px-2 font-mono text-slate-600">{cl.dia_spec}</td>
+                    <td className="py-2.5 px-3 font-bold text-slate-800">{cl.color_name}</td>
+                    <td className="py-2.5 px-2 text-right font-medium">{fmtNumber(cl.order_qty_pcs)} Pcs</td>
+                    <td className="py-2.5 px-3 text-right font-bold text-emerald-700 text-sm">
+                      {fmtDecimal(cl.net_qty)} {cl.uom}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-emerald-50/60 font-bold text-emerald-900 border-t border-emerald-200">
+                  <td colSpan={4} className="py-3 px-3">TOTAL CUTTING DEPARTMENT REQUIREMENT</td>
+                  <td className="py-3 px-2 text-right">
+                    {fmtNumber(cuttingLay.reduce((s, x) => s + Number(x.order_qty_pcs || 0), 0))} Pcs
+                  </td>
+                  <td className="py-3 px-3 text-right text-base text-emerald-900">
+                    {fmtDecimal(cuttingLay.reduce((s, x) => s + Number(x.net_qty || 0), 0))} {header.uom}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: TRIMS & ACCESSORIES */}
+      {activeTab === 'TRIMS' && (
+        <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                <Disc size={16} className="text-amber-600" />
+                <span>Trims, Cords, Collars & Accessory Consumption</span>
+              </h2>
+              <p className="text-xs text-slate-500">
+                Specialized trim specifications matching ESTOVIR and NOTRE tech pack requirements
               </p>
             </div>
             <button
               onClick={() =>
-                setPieces((p) => [
+                setTrims((p) => [
                   ...p,
-                  {
-                    _key: `p_${Date.now()}`,
-                    piece_name: 'New Piece',
-                    component_type: 'BODY',
-                    perimeter_cm: 100,
-                    area_sqm: 0.1,
-                    marker_efficiency_pct: 85,
-                    gsm: 180,
-                    calculated_weight_grams: 21.18,
-                  },
+                  { item_name: 'New Trim Item', consumption_per_pc: 0.1, uom: 'MTRS/PC', total_qty: 100, remarks: '' }
                 ])
               }
               className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
             >
               <Plus size={13} />
-              <span>Add Pattern Piece</span>
+              <span>Add Trim Item</span>
             </button>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
-                  <th className="py-2 px-3">Piece Name</th>
-                  <th className="py-2 px-2">Component Type</th>
-                  <th className="py-2 px-2 text-right">Perimeter (cm)</th>
-                  <th className="py-2 px-2 text-right">Area (m²)</th>
-                  <th className="py-2 px-2 text-right">Efficiency %</th>
-                  <th className="py-2 px-2 text-right">GSM</th>
-                  <th className="py-2 px-2 text-right">Piece Weight (Grams)</th>
-                  <th className="py-2 px-2 text-center">Del</th>
+                <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                  <th className="py-2.5 px-3">Item Name & Spec</th>
+                  <th className="py-2.5 px-2 text-right">Consumption / Pc</th>
+                  <th className="py-2.5 px-2">Unit</th>
+                  <th className="py-2.5 px-2 text-right">Total Need</th>
+                  <th className="py-2.5 px-3">Remarks / Formula</th>
+                  <th className="py-2.5 px-2 text-center">Del</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
-                {pieces.map((p, idx) => (
-                  <tr key={p._key || idx} className="hover:bg-slate-50/70">
+                {trims.map((t, idx) => (
+                  <tr key={idx} className="hover:bg-slate-50/70">
                     <td className="py-2 px-3">
                       <input
                         type="text"
-                        value={p.piece_name}
-                        onChange={(e) => updatePiece(idx, { piece_name: e.target.value })}
-                        className="w-36 text-xs font-medium border border-slate-300 rounded px-2 py-1"
-                      />
-                    </td>
-                    <td className="py-2 px-2">
-                      <select
-                        value={p.component_type}
-                        onChange={(e) => updatePiece(idx, { component_type: e.target.value as any })}
-                        className="text-xs rounded border border-slate-300 py-1 px-1.5 font-semibold text-slate-700"
-                      >
-                        <option value="BODY">BODY</option>
-                        <option value="SLEEVE">SLEEVE</option>
-                        <option value="COLLAR">COLLAR</option>
-                        <option value="CUFF">CUFF</option>
-                        <option value="POCKET">POCKET</option>
-                        <option value="PLACKET">PLACKET</option>
-                        <option value="RIB">RIB</option>
-                      </select>
-                    </td>
-                    <td className="py-2 px-2 text-right">
-                      <input
-                        type="number"
-                        value={p.perimeter_cm}
-                        onChange={(e) => updatePiece(idx, { perimeter_cm: parseFloat(e.target.value) || 0 })}
-                        className="w-20 text-xs text-right border border-slate-300 rounded px-1.5 py-1"
+                        value={t.item_name}
+                        onChange={(e) => {
+                          const copy = [...trims];
+                          copy[idx].item_name = e.target.value;
+                          setTrims(copy);
+                        }}
+                        className="w-64 text-xs font-semibold border border-slate-300 rounded px-2 py-1"
                       />
                     </td>
                     <td className="py-2 px-2 text-right">
                       <input
                         type="number"
                         step="0.001"
-                        value={p.area_sqm}
-                        onChange={(e) => updatePiece(idx, { area_sqm: parseFloat(e.target.value) || 0 })}
-                        className="w-20 text-xs text-right font-medium border border-slate-300 rounded px-1.5 py-1"
+                        value={t.consumption_per_pc}
+                        onChange={(e) => {
+                          const copy = [...trims];
+                          const cVal = parseFloat(e.target.value) || 0;
+                          copy[idx].consumption_per_pc = cVal;
+                          copy[idx].total_qty = Math.round(cVal * header.order_qty * 100) / 100;
+                          setTrims(copy);
+                        }}
+                        className="w-24 text-xs text-right font-mono border border-slate-300 rounded px-1.5 py-1"
                       />
                     </td>
-                    <td className="py-2 px-2 text-right">
+                    <td className="py-2 px-2 font-medium text-slate-600">{t.uom}</td>
+                    <td className="py-2 px-2 text-right font-bold text-amber-800 font-mono">
+                      {fmtDecimal(t.total_qty)}
+                    </td>
+                    <td className="py-2 px-3">
                       <input
-                        type="number"
-                        value={p.marker_efficiency_pct}
-                        onChange={(e) => updatePiece(idx, { marker_efficiency_pct: parseFloat(e.target.value) || 0 })}
-                        className="w-16 text-xs text-right border border-slate-300 rounded px-1.5 py-1"
+                        type="text"
+                        value={t.remarks}
+                        onChange={(e) => {
+                          const copy = [...trims];
+                          copy[idx].remarks = e.target.value;
+                          setTrims(copy);
+                        }}
+                        className="w-full text-xs text-slate-600 border border-slate-300 rounded px-2 py-1"
                       />
-                    </td>
-                    <td className="py-2 px-2 text-right">
-                      <input
-                        type="number"
-                        value={p.gsm}
-                        onChange={(e) => updatePiece(idx, { gsm: parseInt(e.target.value) || 0 })}
-                        className="w-16 text-xs text-right border border-slate-300 rounded px-1.5 py-1"
-                      />
-                    </td>
-                    <td className="py-2 px-2 text-right font-bold text-indigo-700">
-                      {fmtDecimal(p.calculated_weight_grams)} g
                     </td>
                     <td className="py-2 px-2 text-center">
                       <button
-                        onClick={() => setPieces((prev) => prev.filter((_, i) => i !== idx))}
+                        onClick={() => setTrims((p) => p.filter((_, i) => i !== idx))}
                         className="p-1 text-slate-400 hover:text-red-600 rounded"
                       >
                         <Trash2 size={13} />
@@ -773,331 +1682,20 @@ export default function CadRequirementDetailPage() {
               </tbody>
             </table>
           </div>
-
-          <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-200 flex justify-between items-center text-xs">
-            <span className="font-medium text-indigo-900">Total Net Weight per Garment:</span>
-            <span className="text-base font-bold text-indigo-800">
-              {fmtDecimal(engineResults.netGramsPerGarment)} grams/pc ({fmtDecimal(engineResults.kgPerDozen)} kg/dozen)
-            </span>
-          </div>
         </div>
       )}
 
-      {/* TAB 3: MULTI-MATERIALS & MIX */}
-      {activeTab === 'MULTI_MAT' && (
-        <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 space-y-4">
-          <div>
-            <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-              <Layers size={15} className="text-purple-600" />
-              <span>Multi-Material Pieces (Fabric + Foam + Interlining/Padding)</span>
-            </h2>
-            <p className="text-[11px] text-slate-500">
-              Define secondary materials attached to individual pieces (collars, cuffs, plackets, chest padding)
-            </p>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
-                  <th className="py-2.5 px-3">Piece Name</th>
-                  <th className="py-2.5 px-2">Secondary Material</th>
-                  <th className="py-2.5 px-2">Foam Thickness</th>
-                  <th className="py-2.5 px-2">Interlining Specification</th>
-                  <th className="py-2.5 px-2">Material Mix Ratio</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-700">
-                {pieces.map((p, idx) => (
-                  <tr key={p._key || idx} className="hover:bg-slate-50/70">
-                    <td className="py-2.5 px-3 font-semibold text-slate-900">{p.piece_name}</td>
-                    <td className="py-2.5 px-2">
-                      <select
-                        value={p.secondary_material_type || 'None'}
-                        onChange={(e) => updatePiece(idx, { secondary_material_type: e.target.value })}
-                        className="text-xs rounded border border-slate-300 py-1 px-1.5"
-                      >
-                        <option value="None">None (Pure Fabric)</option>
-                        <option value="Interlining">Interlining / Padding</option>
-                        <option value="Foam">Foam Laminated</option>
-                        <option value="Fusible Tape">Fusible Tape</option>
-                      </select>
-                    </td>
-                    <td className="py-2.5 px-2">
-                      {p.secondary_material_type === 'Foam' ? (
-                        <select
-                          value={p.foam_thickness_mm || 3}
-                          onChange={(e) => updatePiece(idx, { foam_thickness_mm: parseInt(e.target.value) || 0 })}
-                          className="text-xs rounded border border-slate-300 py-1 px-1.5"
-                        >
-                          <option value="2">2 mm High Density</option>
-                          <option value="3">3 mm Standard Foam</option>
-                          <option value="5">5 mm Heavy Padding</option>
-                        </select>
-                      ) : (
-                        <span className="text-slate-400 text-[11px]">—</span>
-                      )}
-                    </td>
-                    <td className="py-2.5 px-2">
-                      {p.secondary_material_type === 'Interlining' || p.secondary_material_type === 'Fusible Tape' ? (
-                        <input
-                          type="text"
-                          value={p.interlining_type || ''}
-                          onChange={(e) => updatePiece(idx, { interlining_type: e.target.value })}
-                          placeholder="e.g. 35 GSM Non-Woven"
-                          className="w-44 text-xs border border-slate-300 rounded px-2 py-1"
-                        />
-                      ) : (
-                        <span className="text-slate-400 text-[11px]">—</span>
-                      )}
-                    </td>
-                    <td className="py-2.5 px-2">
-                      <input
-                        type="text"
-                        value={p.material_mix_ratio || '100% Cotton'}
-                        onChange={(e) => updatePiece(idx, { material_mix_ratio: e.target.value })}
-                        className="w-36 text-xs border border-slate-300 rounded px-2 py-1"
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 4: 3-COLOUR STRIPE RULES */}
-      {activeTab === 'STRIPES' && (
-        <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 space-y-4">
-          <div>
-            <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-              <Disc size={15} className="text-amber-600" />
-              <span>3-Colour Feeder Stripe Specifications & Ratios</span>
-            </h2>
-            <p className="text-[11px] text-slate-500">
-              Breakdown of feeder stripe colours (e.g. 42% Base, 33% Secondary, 25% Accent) for yarn auto-conversion
-            </p>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
-                  <th className="py-2.5 px-3">Feeder Stripe Role</th>
-                  <th className="py-2.5 px-2">Yarn Colour Name</th>
-                  <th className="py-2.5 px-2">Shade Code</th>
-                  <th className="py-2.5 px-2 text-right">Feeder Ratio %</th>
-                  <th className="py-2.5 px-2">Count / Spec</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-700">
-                {stripes.map((st, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/70">
-                    <td className="py-2.5 px-3 font-semibold text-slate-900">{st.stripe_name}</td>
-                    <td className="py-2.5 px-2">
-                      <input
-                        type="text"
-                        value={st.color_name}
-                        onChange={(e) => {
-                          const copy = [...stripes];
-                          copy[idx].color_name = e.target.value;
-                          setStripes(copy);
-                        }}
-                        className="w-32 text-xs border border-slate-300 rounded px-2 py-1"
-                      />
-                    </td>
-                    <td className="py-2.5 px-2">
-                      <input
-                        type="text"
-                        value={st.shade_code}
-                        onChange={(e) => {
-                          const copy = [...stripes];
-                          copy[idx].shade_code = e.target.value;
-                          setStripes(copy);
-                        }}
-                        className="w-24 text-xs font-mono border border-slate-300 rounded px-2 py-1"
-                      />
-                    </td>
-                    <td className="py-2.5 px-2 text-right">
-                      <input
-                        type="number"
-                        value={st.ratio_pct}
-                        onChange={(e) => {
-                          const copy = [...stripes];
-                          copy[idx].ratio_pct = parseFloat(e.target.value) || 0;
-                          setStripes(copy);
-                        }}
-                        className="w-20 text-xs text-right font-bold text-amber-700 border border-slate-300 rounded px-2 py-1"
-                      />
-                    </td>
-                    <td className="py-2.5 px-2">
-                      <input
-                        type="text"
-                        value={st.yarn_count}
-                        onChange={(e) => {
-                          const copy = [...stripes];
-                          copy[idx].yarn_count = e.target.value;
-                          setStripes(copy);
-                        }}
-                        className="w-32 text-xs border border-slate-300 rounded px-2 py-1"
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200 text-xs text-amber-900 flex justify-between">
-            <span>
-              Cumulative Feeder Ratio: <strong>{stripes.reduce((s, x) => s + (Number(x.ratio_pct) || 0), 0)}%</strong>
-            </span>
-            <span>Applicable to Body and Collar striped components</span>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 5: AUTO-CONSUMPTION ENGINE */}
-      {activeTab === 'ENGINE' && (
-        <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 space-y-4">
-          <div>
-            <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-              <Calculator size={15} className="text-indigo-600" />
-              <span>Process Loss Rates & Auto-Consumption Calculation</span>
-            </h2>
-            <p className="text-[11px] text-slate-500">
-              Applies knitting, dyeing, cutting wastage, and end-bit loss to calculate gross fabric and yarn needs
-            </p>
-          </div>
-
-          {/* Loss Rates Form */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
-            <Input
-              label="Knitting Process Loss %"
-              type="number"
-              value={lossRules.knitting_loss_pct}
-              onChange={(e) =>
-                setLossRules((p) => ({ ...p, knitting_loss_pct: parseFloat(e.target.value) || 0 }))
-              }
-            />
-            <Input
-              label="Dyeing Process Loss %"
-              type="number"
-              value={lossRules.dyeing_loss_pct}
-              onChange={(e) =>
-                setLossRules((p) => ({ ...p, dyeing_loss_pct: parseFloat(e.target.value) || 0 }))
-              }
-            />
-            <Input
-              label="Cutting Table Waste %"
-              type="number"
-              value={lossRules.cutting_waste_pct}
-              onChange={(e) =>
-                setLossRules((p) => ({ ...p, cutting_waste_pct: parseFloat(e.target.value) || 0 }))
-              }
-            />
-            <Input
-              label="End Bits / Rejection %"
-              type="number"
-              value={lossRules.end_bits_pct}
-              onChange={(e) =>
-                setLossRules((p) => ({ ...p, end_bits_pct: parseFloat(e.target.value) || 0 }))
-              }
-            />
-          </div>
-
-          {/* Consolidated Results Strip */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-              <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Net Weight / Garment</div>
-              <div className="text-lg font-bold text-slate-900 mt-0.5">
-                {fmtDecimal(engineResults.netGramsPerGarment)} g/pc
-              </div>
-              <div className="text-[10px] text-slate-400">Pure pattern area</div>
-            </div>
-
-            <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-200">
-              <div className="text-[11px] font-semibold text-indigo-700 uppercase tracking-wider">Gross Consumption</div>
-              <div className="text-lg font-bold text-indigo-900 mt-0.5">
-                {fmtDecimal(engineResults.grossGramsPerGarment)} g/pc
-              </div>
-              <div className="text-[10px] text-indigo-600">Includes {engineResults.totalLossPct}% process loss</div>
-            </div>
-
-            <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-200">
-              <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">Total Fabric Need</div>
-              <div className="text-xl font-bold text-emerald-900 mt-0.5">
-                {fmtDecimal(engineResults.totalFabricKg)} KG
-              </div>
-              <div className="text-[10px] text-emerald-600">For {fmtNumber(header.order_qty)} pcs</div>
-            </div>
-
-            <div className="p-3 bg-purple-50/60 rounded-xl border border-purple-200">
-              <div className="text-[11px] font-semibold text-purple-700 uppercase tracking-wider">Interlining Need</div>
-              <div className="text-lg font-bold text-purple-900 mt-0.5">
-                {fmtDecimal(engineResults.interliningMeters)} Mtrs
-              </div>
-              <div className="text-[10px] text-purple-600">Collars & Cuffs</div>
-            </div>
-          </div>
-
-          {/* Fabric to Yarn Conversion Table */}
-          <div className="space-y-2 pt-2">
-            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-              <Disc size={14} className="text-amber-600" />
-              <span>Fabric-to-Yarn Conversion by Feeder Stripe</span>
-            </h3>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
-                    <th className="py-2.5 px-3">Yarn Description & Count</th>
-                    <th className="py-2.5 px-2">Colour / Shade Code</th>
-                    <th className="py-2.5 px-2 text-right">Feeder Ratio %</th>
-                    <th className="py-2.5 px-2 text-right">Required Yarn (KG)</th>
-                    <th className="py-2.5 px-2 text-right">Estimated Bags (50kg)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-slate-700">
-                  {engineResults.stripeYarns.map((sy, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50/70">
-                      <td className="py-2.5 px-3 font-semibold text-slate-900">
-                        {sy.yarn_count} Combed Cotton ({sy.stripe_name})
-                      </td>
-                      <td className="py-2.5 px-2">
-                        <span className="font-mono text-indigo-700 font-medium">
-                          {sy.color_name} ({sy.shade_code})
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-2 text-right font-medium text-slate-800">{sy.ratio_pct}%</td>
-                      <td className="py-2.5 px-2 text-right font-bold text-amber-700">
-                        {fmtDecimal(sy.yarn_kg)} KG
-                      </td>
-                      <td className="py-2.5 px-2 text-right font-medium text-slate-700">
-                        {Math.ceil(sy.yarn_kg / 50)} Bags
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 6: MATERIAL REQUIREMENT HAND-OFF */}
+      {/* TAB 5: BOM & SOURCING HAND-OFF */}
       {activeTab === 'OUTPUT' && (
         <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div>
-              <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
                 <FileCheck size={16} className="text-emerald-600" />
-                <span>Approved Material Requirement Output (PPC & Procurement Ready)</span>
+                <span>Production Bill of Materials (BOM) & PO Hand-off</span>
               </h2>
-              <p className="text-[11px] text-slate-500">
-                Official Bill of Materials generated from CAD auto-consumption for Purchase Orders
+              <p className="text-xs text-slate-500">
+                Generated per-piece consumption approved and ready for purchase order creation
               </p>
             </div>
 
@@ -1120,47 +1718,53 @@ export default function CadRequirementDetailPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Fabric Section */}
             <div className="p-4 bg-sky-50/50 rounded-xl border border-sky-200 space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="font-bold text-sky-900 text-xs uppercase tracking-wider flex items-center gap-1">
                   <Layers size={14} className="text-sky-700" />
-                  <span>Fabric Commitment</span>
+                  <span>Fabric Commitment & BOM Line</span>
                 </h3>
-                <span className="font-bold text-sky-800 text-sm">{fmtDecimal(engineResults.totalFabricKg)} KG</span>
+                <span className="font-bold text-sky-800 text-sm">
+                  {fmtDecimal(summaryKpis.grandFabric)} {summaryKpis.uom}
+                </span>
               </div>
               <ul className="text-xs space-y-2 text-slate-700">
                 <li className="flex justify-between border-b border-sky-100 pb-1">
-                  <span>3-Colour Feeder Stripe Single Jersey (180 GSM)</span>
-                  <span className="font-semibold text-slate-900">{fmtDecimal(engineResults.stripedFabricKg)} KG</span>
+                  <span>Per-Garment BOM Consumption:</span>
+                  <span className="font-semibold text-slate-900">
+                    {fmtDecimal(summaryKpis.avgGarmentCons, 5)} {summaryKpis.uom}/pc
+                  </span>
                 </li>
                 <li className="flex justify-between border-b border-sky-100 pb-1">
-                  <span>1x1 Rib Collar & Cuff Fabric (240 GSM)</span>
-                  <span className="font-semibold text-slate-900">{fmtDecimal(engineResults.solidFabricKg)} KG</span>
+                  <span>Net Garment Weight:</span>
+                  <span className="font-semibold text-slate-900">
+                    {fmtDecimal(summaryKpis.actGarmentCons, 5)} {summaryKpis.uom}/pc
+                  </span>
                 </li>
               </ul>
             </div>
 
-            {/* Yarn Section */}
             <div className="p-4 bg-amber-50/50 rounded-xl border border-amber-200 space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="font-bold text-amber-900 text-xs uppercase tracking-wider flex items-center gap-1">
                   <Disc size={14} className="text-amber-700" />
-                  <span>Spinning Mill Yarn Indent</span>
+                  <span>Yarn Indent / Spinning Conversion</span>
                 </h3>
                 <span className="font-bold text-amber-800 text-sm">
-                  {fmtDecimal(engineResults.stripeYarns.reduce((s, y) => s + y.yarn_kg, 0))} KG
+                  {!isWoven ? `${fmtDecimal(summaryKpis.grandFabric * 1.05)} KG` : 'Woven (N/A)'}
                 </span>
               </div>
               <ul className="text-xs space-y-2 text-slate-700">
-                {engineResults.stripeYarns.map((sy, i) => (
-                  <li key={i} className="flex justify-between border-b border-amber-100 pb-1">
-                    <span>
-                      {sy.yarn_count} {sy.color_name} ({sy.shade_code})
-                    </span>
-                    <span className="font-semibold text-slate-900">{fmtDecimal(sy.yarn_kg)} KG</span>
-                  </li>
-                ))}
+                <li className="flex justify-between border-b border-amber-100 pb-1">
+                  <span>Estimated 50 KG Bags:</span>
+                  <span className="font-semibold text-slate-900">
+                    {!isWoven ? `${Math.ceil((summaryKpis.grandFabric * 1.05) / 50)} Bags` : '—'}
+                  </span>
+                </li>
+                <li className="flex justify-between border-b border-amber-100 pb-1">
+                  <span>Yarn Spinning / Knitting Allowance:</span>
+                  <span className="font-semibold text-slate-900">+5.0%</span>
+                </li>
               </ul>
             </div>
           </div>
