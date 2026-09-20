@@ -27,7 +27,8 @@ cadRouter.get('/cad-requirements', requirePermission('PRODUCTION.VIEW'), ah(asyn
            b.party_name AS buyer_name,
            sg.group_name AS size_group_name,
            (SELECT COUNT(*) FROM trx_cad_piece cp WHERE cp.cad_req_id = cr.id) AS piece_count,
-           (SELECT COUNT(*) FROM trx_cad_marker cm WHERE cm.cad_req_id = cr.id) AS marker_count
+           (SELECT COUNT(*) FROM trx_cad_marker cm WHERE cm.cad_req_id = cr.id) AS marker_count,
+           (SELECT COALESCE(SUM(total_req_qty), 0) FROM trx_cad_marker cm WHERE cm.cad_req_id = cr.id) AS total_fabric_kg
       FROM trx_cad_requirement cr
       LEFT JOIN mst_style st ON st.id = cr.style_id
       LEFT JOIN mst_party b ON b.id = cr.buyer_id
