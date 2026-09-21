@@ -94,12 +94,14 @@ cadRouter.get('/cad-requirements/style-data/:styleId', requirePermission('PRODUC
   if (bom) {
     bomLines = await query<any>(`
       SELECT bl.*,
-             COALESCE(fb.fabric_name, y.yarn_name, tr.trim_name, bl.item_name) AS material_name,
+             COALESCE(fb.fabric_name, y.yarn_name, tr.trim_name, bl.item_description) AS material_name,
              COALESCE(fb.fabric_code, y.yarn_code, tr.trim_code, '') AS material_code,
-             COALESCE(fb.gsm, 180) AS fabric_gsm,
+             COALESCE(gsm.gsm_value, fb.min_gsm, 180) AS fabric_gsm,
+             COALESCE(fb.dia_inch, NULL) AS fabric_dia,
              u.code AS uom_code
         FROM trx_bom_line bl
         LEFT JOIN mst_fabric fb ON fb.id = bl.fabric_id
+        LEFT JOIN mst_gsm gsm ON gsm.id = fb.gsm_id
         LEFT JOIN mst_yarn y ON y.id = bl.yarn_id
         LEFT JOIN mst_trim tr ON tr.id = bl.trim_id
         LEFT JOIN cfg_uom u ON u.id = bl.uom_id
