@@ -29,6 +29,8 @@ interface PhysicalRoll {
 interface GrnLineItem {
   _key: string;
   id?: number;
+  po_id?: number;
+  po_no?: string;
   po_line_id?: number;
   so_id?: string | number;
   style_id?: string | number;
@@ -124,6 +126,7 @@ export default function FabricGRNDetailPage() {
   const [genMetersPerRoll, setGenMetersPerRoll] = useState(200);
   const [genWeightPerRoll, setGenWeightPerRoll] = useState(50);
   const [genPrefix, setGenPrefix] = useState('R-');
+  const [selectedPoIds, setSelectedPoIds] = useState<string[]>([]);
 
   // Header State
   const [header, setHeader] = useState({
@@ -187,9 +190,22 @@ export default function FabricGRNDetailPage() {
         remarks: existingData.remarks || '',
       });
 
+      let pids: string[] = [];
+      if (Array.isArray(existingData.po_ids)) {
+        pids = existingData.po_ids.map(String).filter(Boolean);
+      } else if (typeof existingData.po_ids === 'string') {
+        try {
+          const parsed = JSON.parse(existingData.po_ids);
+          if (Array.isArray(parsed)) pids = parsed.map(String).filter(Boolean);
+        } catch {}
+      }
+      if (!pids.length && existingData.po_id) {
+        pids = [String(existingData.po_id)];
+      }
+      setSelectedPoIds(pids);
+
       if (existingData.lines?.length) {
         const loadedLines: GrnLineItem[] = existingData.lines.map((l: any) => {
-          // find matching rolls from existingData.rolls
           const matchingRolls = (existingData.rolls || []).filter(
             (r: any) => r.grn_line_id === l.id || r.fabric_id === l.fabric_id
           );
@@ -198,9 +214,12 @@ export default function FabricGRNDetailPage() {
           const gstRate = Number(l.gst_rate || 5);
           const taxable = Number(l.taxable_amount || acc * rate);
           const totalAmt = Number(l.total_amount || (taxable * (1 + gstRate / 100)));
+
           return {
-            _key: `fgl_${l.id}`,
+            _key: `fgl_${++lineSeq}`,
             id: l.id,
+            po_id: l.po_id ? Number(l.po_id) : (existingData.po_id ? Number(existingData.po_id) : undefined),
+            po_no: l.po_no || undefined,
             po_line_id: l.po_line_id,
             so_id: l.so_id || '',
             style_id: l.style_id || '',
@@ -264,22 +283,28 @@ export default function FabricGRNDetailPage() {
     });
   };
 
-  // Handle PO selection: populate supplier, style, lines
-  const handleSelectPO = async (poIdStr: string) => {
-    setHeader((prev) => ({ ...prev, po_id: poIdStr }));
+  // Handle adding a PO: auto-fetch and merge lines
+  const handleAddPO = async (poIdStr: string) => {
     if (!poIdStr) return;
+    if (selectedPoIds.includes(poIdStr)) {
+      toast('This PO is already linked', 'info');
+      return;
+    }
 
     try {
       const res = await http.get<{ data: any }>(`/purchase-orders/${poIdStr}`);
       const po = res.data;
       if (po) {
+        const nextPoIds = [...selectedPoIds, poIdStr];
+        setSelectedPoIds(nextPoIds);
+
         setHeader((prev) => ({
           ...prev,
-          po_id: poIdStr,
-          supplier_id: po.supplier_id ? String(po.supplier_id) : prev.supplier_id,
+          po_id: nextPoIds[0],
+          supplier_id: !prev.supplier_id && po.supplier_id ? String(po.supplier_id) : prev.supplier_id,
           internal_ir_no: po.internal_ir_no || prev.internal_ir_no,
-          style_id: po.style_id ? String(po.style_id) : prev.style_id,
-          is_interstate: !!po.is_interstate,
+          style_id: !prev.style_id && po.style_id ? String(po.style_id) : prev.style_id,
+          is_interstate: prev.is_interstate || !!po.is_interstate,
         }));
 
         if (po.lines?.length) {
@@ -315,6 +340,8 @@ export default function FabricGRNDetailPage() {
 
               return {
                 _key: `fgl_${++lineSeq}`,
+                po_id: Number(poIdStr),
+                po_no: po.po_no,
                 po_line_id: pl.id,
                 so_id: pl.so_id || po.so_id || '',
                 style_id: pl.style_id || po.style_id || '',
@@ -344,14 +371,37 @@ export default function FabricGRNDetailPage() {
                 rolls: generatedRolls,
               };
             });
-            setLines(mappedLines);
+
+            setLines((prev) => {
+              const isPlaceholder = prev.length === 1 && !prev[0].id && !prev[0].po_line_id;
+              return isPlaceholder ? mappedLines : [...prev, ...mappedLines];
+            });
             setSelectedLineIdx(0);
+            toast(`Loaded ${mappedLines.length} fabric lines from ${po.po_no}!`, 'success');
+          } else {
+            toast(`PO ${po.po_no} has no fabric items`, 'info');
           }
         }
       }
     } catch {
       toast('Failed to load PO details', 'error');
     }
+  };
+
+  const handleRemovePO = (poIdStr: string) => {
+    const updated = selectedPoIds.filter((p) => p !== poIdStr);
+    setSelectedPoIds(updated);
+    setHeader((prev) => ({ ...prev, po_id: updated[0] || '' }));
+
+    setLines((prev) => {
+      const remaining = prev.filter((l) => String(l.po_id) !== poIdStr);
+      if (!remaining.length) {
+        return [emptyLine()];
+      }
+      return remaining;
+    });
+    setSelectedLineIdx(0);
+    toast(`Removed PO #${poIdStr}`, 'info');
   };
 
   // Current active line for rolls
@@ -539,6 +589,8 @@ export default function FabricGRNDetailPage() {
     try {
       const payload = {
         ...header,
+        po_id: selectedPoIds.length > 0 ? selectedPoIds[0] : (header.po_id || null),
+        po_ids: selectedPoIds.length > 0 ? selectedPoIds.map(Number).filter(Boolean) : (header.po_id ? [Number(header.po_id)] : []),
         freight_charges: Number(header.freight_charges) || 0,
         other_charges: Number(header.other_charges) || 0,
         round_off: Number(header.round_off) || 0,
@@ -548,6 +600,7 @@ export default function FabricGRNDetailPage() {
         tcs_amount: summary.tcsAmt,
         grand_total: summary.grandTotal,
         lines: lines.map((l) => ({
+          po_id: l.po_id || (selectedPoIds[0] ? Number(selectedPoIds[0]) : undefined),
           po_line_id: l.po_line_id,
           so_id: l.so_id ? Number(l.so_id) : undefined,
           style_id: l.style_id ? Number(l.style_id) : undefined,
@@ -714,28 +767,68 @@ export default function FabricGRNDetailPage() {
 
           {isNew ? (
             <div>
-              <label className="block text-[11px] font-medium text-slate-600 mb-1">
-                Link to Fabric PO (Optional)
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[11px] font-medium text-slate-600">
+                  Link Fabric POs ({selectedPoIds.length} selected)
+                </label>
+                {selectedPoIds.length > 0 && (
+                  <span className="text-[10px] text-emerald-700 font-semibold">Multi-PO active</span>
+                )}
+              </div>
               <select
-                value={header.po_id}
-                onChange={(e) => handleSelectPO(e.target.value)}
+                value=""
+                onChange={(e) => handleAddPO(e.target.value)}
                 className="w-full text-xs rounded-lg border border-slate-300 py-1.5 px-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-semibold text-emerald-900"
               >
-                <option value="">-- Direct Fabric Receipt --</option>
-                {poList.map((p) => (
+                <option value="">+ Add PO to this GRN...</option>
+                {poList.filter((p) => !selectedPoIds.includes(String(p.id))).map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.po_no} ({p.supplier_name || 'Mill'})
                   </option>
                 ))}
               </select>
+
+              {/* Selected PO Badges */}
+              {selectedPoIds.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                  {selectedPoIds.map((pId) => {
+                    const pObj = poList.find((p) => String(p.id) === pId);
+                    const label = pObj?.po_no || `PO #${pId}`;
+                    const lineCnt = lines.filter((l) => String(l.po_id) === pId).length;
+                    return (
+                      <span key={pId} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-300">
+                        <span>📋 {label}</span>
+                        {lineCnt > 0 && <span className="text-[10px] bg-emerald-200 text-emerald-900 px-1 rounded font-mono">{lineCnt} items</span>}
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePO(pId)}
+                          className="text-emerald-500 hover:text-rose-600 font-bold ml-0.5"
+                          title="Remove this PO"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           ) : (
-            <Input
-              label="Linked PO Ref"
-              value={header.po_id ? `PO #${header.po_id}` : 'Direct Receipt'}
-              disabled
-            />
+            <div>
+              <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                Linked Purchase Orders ({selectedPoIds.length || (header.po_id ? 1 : 0)})
+              </label>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(selectedPoIds.length > 0 ? selectedPoIds : (header.po_id ? [header.po_id] : [])).map((pId) => (
+                  <span key={pId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-300">
+                    📋 PO #{pId}
+                  </span>
+                ))}
+                {!selectedPoIds.length && !header.po_id && (
+                  <span className="text-xs text-slate-400">Direct Receipt</span>
+                )}
+              </div>
+            </div>
           )}
 
           {isNew ? (
@@ -889,6 +982,7 @@ export default function FabricGRNDetailPage() {
             <thead>
               <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                 <th className="py-2.5 px-2 w-8 text-center">#</th>
+                <th className="py-2.5 px-2 min-w-[100px]">PO Ref</th>
                 <th className="py-2.5 px-2 min-w-[130px]">I/O Num</th>
                 <th className="py-2.5 px-2 min-w-[110px]">Style</th>
                 <th className="py-2.5 px-3 min-w-[140px]">Fabric Name</th>
@@ -918,6 +1012,17 @@ export default function FabricGRNDetailPage() {
                 >
                   {/* # S.No */}
                   <td className="py-2.5 px-2 text-center text-slate-400 font-mono text-[11px]">{idx + 1}</td>
+
+                  {/* PO Ref */}
+                  <td className="py-2.5 px-2">
+                    {l.po_no || l.po_id ? (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                        {l.po_no || `PO #${l.po_id}`}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 text-[11px]">—</span>
+                    )}
+                  </td>
 
                   {/* I/O Num */}
                   <td className="py-2.5 px-2" onClick={(e) => e.stopPropagation()}>

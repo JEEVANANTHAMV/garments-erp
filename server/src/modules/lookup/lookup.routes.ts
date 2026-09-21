@@ -147,7 +147,80 @@ lookupRouter.get('/style-colors/:styleId', ah(async (req, res) => {
       WHERE sc.style_id = ? ORDER BY c.color_name`, [styleId]) });
 }));
 
-/** Open PO lines for a PO — drives GRN entry. */
+/** Open PO lines for multiple POs or single PO via query parameter ?poIds=1,2,3 */
+lookupRouter.get('/po-lines', ah(async (req, res) => {
+  const poIdsStr = String(req.query.poIds || '');
+  const ids = poIdsStr.split(',').map(Number).filter((n) => n > 0);
+  if (!ids.length) {
+    return res.json({ data: [] });
+  }
+  const placeholders = ids.map(() => '?').join(',');
+  const lines = await query(
+    `SELECT pol.*, y.yarn_name, fb.fabric_name, tr.trim_name, c.color_name, u.code AS uom_code,
+            pol.qty - pol.received_qty AS pending_qty, po.po_no
+       FROM trx_purchase_order_line pol
+       JOIN trx_purchase_order po ON po.id = pol.po_id
+       LEFT JOIN mst_yarn y ON y.id = pol.yarn_id
+       LEFT JOIN mst_fabric fb ON fb.id = pol.fabric_id
+       LEFT JOIN mst_trim tr ON tr.id = pol.trim_id
+       LEFT JOIN mst_color c ON c.id = pol.color_id
+       LEFT JOIN cfg_uom u ON u.id = pol.uom_id
+      WHERE pol.po_id IN (${placeholders}) ORDER BY pol.po_id, pol.id`, ids);
+  res.json({ data: lines });
+}));
+
+/** GRN lines for one or more GRNs (used by Bills Inward to auto-fill items) */
+lookupRouter.get('/grn-lines', ah(async (req, res) => {
+  const grnIdsStr = String(req.query.grnIds || '');
+  const ids = grnIdsStr.split(',').map(Number).filter((n) => n > 0);
+  if (!ids.length) {
+    return res.json({ data: [] });
+  }
+  const placeholders = ids.map(() => '?').join(',');
+  const companyId = req.user!.companyId;
+
+  const standardLines = await query<any>(
+    `SELECT gl.id AS grn_line_id, gl.grn_id, gl.po_id, gl.po_line_id, gl.material_type,
+            gl.received_qty, gl.accepted_qty, gl.rate, gl.taxable_amount, gl.gst_rate, gl.total_amount,
+            gl.lot_no, gl.no_of_rolls, gl.received_weight,
+            gl.color_name, gl.shade_code, gl.pantone_spec,
+            COALESCE(y.yarn_name, fb.fabric_name, tr.trim_name, 'Material') AS description,
+            gl.uom_id, u.code AS uom_code,
+            g.grn_no, g.supplier_id, g.supplier_dc_no, g.supplier_inv_no, g.po_id AS header_po_id,
+            po.po_no
+       FROM trx_grn_line gl
+       JOIN trx_grn g ON g.id = gl.grn_id
+       LEFT JOIN trx_purchase_order po ON po.id = gl.po_id OR po.id = g.po_id
+       LEFT JOIN mst_yarn y ON y.id = gl.yarn_id
+       LEFT JOIN mst_fabric fb ON fb.id = gl.fabric_id
+       LEFT JOIN mst_trim tr ON tr.id = gl.trim_id
+       LEFT JOIN cfg_uom u ON u.id = gl.uom_id
+      WHERE g.company_id = ? AND gl.grn_id IN (${placeholders})
+      ORDER BY gl.grn_id, gl.id`, [companyId, ...ids]
+  );
+
+  const trimLines = await query<any>(
+    `SELECT tgl.id AS grn_line_id, tgl.grn_id, tgl.po_id, tgl.po_line_id, 'TRIM' AS material_type,
+            tgl.received_qty, tgl.accepted_qty, tgl.rate, tgl.taxable_amount, tgl.gst_rate, tgl.total_amount,
+            tgl.internal_lot_no AS lot_no, 0 AS no_of_rolls, 0 AS received_weight,
+            tgl.color_name, '' AS shade_code, '' AS pantone_spec,
+            COALESCE(tr.trim_name, tgl.specification, 'Trim') AS description,
+            tgl.uom_id, u.code AS uom_code,
+            tg.grn_no, tg.supplier_id, tg.supplier_dc_no, tg.supplier_inv_no, tg.po_id AS header_po_id,
+            tpo.po_no
+       FROM trx_trim_grn_line tgl
+       JOIN trx_trim_grn tg ON tg.id = tgl.grn_id
+       LEFT JOIN trx_trim_po tpo ON tpo.id = tgl.po_id OR tpo.id = tg.po_id
+       LEFT JOIN mst_trim tr ON tr.id = tgl.trim_id
+       LEFT JOIN cfg_uom u ON u.id = tgl.uom_id
+      WHERE tg.company_id = ? AND tgl.grn_id IN (${placeholders})
+      ORDER BY tgl.grn_id, tgl.id`, [companyId, ...ids]
+  );
+
+  res.json({ data: [...standardLines, ...trimLines] });
+}));
+
+/** Open PO lines for a single PO — drives GRN entry. */
 lookupRouter.get('/po-lines/:poId', ah(async (req, res) => {
   const poId = z.coerce.number().int().positive().parse(req.params.poId);
   res.json({ data: await query(

@@ -21,6 +21,8 @@ export const BILL_TYPES = [
 
 interface BillLineItem {
   id?: number;
+  grn_id?: number | null;
+  grn_no?: string;
   po_line_id?: number | null;
   grn_line_id?: number | null;
   material_type: 'YARN' | 'FABRIC' | 'TRIM' | 'SERVICE';
@@ -63,6 +65,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [fetchingGrn, setFetchingGrn] = useState(false);
+  const [selectedGrnIds, setSelectedGrnIds] = useState<number[]>([]);
 
   const [billType, setBillType] = useState<string>(
     initialType && initialType !== 'ALL' ? initialType : 'YARN_PURCHASE'
@@ -130,9 +133,24 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
             remarks: b.remarks || '',
           });
           setBillType(b.bill_type || 'YARN_PURCHASE');
+          let gids: number[] = [];
+          if (Array.isArray(b.grn_ids)) {
+            gids = b.grn_ids.map(Number).filter(Boolean);
+          } else if (typeof b.grn_ids === 'string') {
+            try {
+              const parsed = JSON.parse(b.grn_ids);
+              if (Array.isArray(parsed)) gids = parsed.map(Number).filter(Boolean);
+            } catch {}
+          }
+          if (!gids.length && b.grn_id) {
+            gids = [Number(b.grn_id)];
+          }
+          setSelectedGrnIds(gids);
+
           if (Array.isArray(b.lines) && b.lines.length > 0) {
             setLines(b.lines.map((l: any) => ({
               ...l,
+              grn_id: l.grn_id ? Number(l.grn_id) : (gids[0] || null),
               bill_qty: Number(l.bill_qty) || 0,
               rate: Number(l.rate) || 0,
               amount: Number(l.amount) || (Number(l.bill_qty || 0) * Number(l.rate || 0)),
@@ -153,6 +171,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
       // New Bill
       const bType = initialType && initialType !== 'ALL' ? initialType : 'YARN_PURCHASE';
       setBillType(bType);
+      setSelectedGrnIds([]);
       setHeader({
         bill_no: '',
         bill_date: today(),
@@ -212,69 +231,70 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
     ]);
   };
 
-  // Auto-Fetch Lines from selected GRN
-  const handleFetchFromGrn = async () => {
-    if (!header.grn_id) {
-      toast('Please select a GRN first', 'warning');
+  // Auto-Fetch Lines when adding a GRN
+  const handleAddGrn = async (grnIdVal: string | number) => {
+    const grnIdNum = Number(grnIdVal);
+    if (!grnIdNum) return;
+    if (selectedGrnIds.includes(grnIdNum)) {
+      toast('This GRN is already added to the bill', 'info');
       return;
     }
 
+    const nextGrnIds = [...selectedGrnIds, grnIdNum];
+    setSelectedGrnIds(nextGrnIds);
+    setHeader((prev) => ({ ...prev, grn_id: String(nextGrnIds[0]) }));
     setFetchingGrn(true);
+
     try {
-      const isYarn = billType.startsWith('YARN');
-      const isFab = billType.startsWith('FABRIC');
       let fetchedLines: any[] = [];
-      let grnDetails: any = null;
+      try {
+        const res = await http.get<{ data: any[] }>(`/lookup/grn-lines?grnIds=${grnIdNum}`);
+        fetchedLines = res.data || [];
+      } catch {}
 
-      if (isYarn) {
+      if (!fetchedLines.length) {
+        const isYarn = billType.startsWith('YARN');
+        const isFab = billType.startsWith('FABRIC');
         try {
-          const res = await http.get<{ data: any }>(`/yarn-grns/${header.grn_id}`);
-          grnDetails = res.data;
-          fetchedLines = res.data.lines || [];
-        } catch {
-          const res = await http.get<{ data: any }>(`/inventory/grns/${header.grn_id}`);
-          grnDetails = res.data;
-          fetchedLines = res.data.lines || [];
-        }
-      } else if (isFab) {
-        try {
-          const res = await http.get<{ data: any }>(`/fabric-grns/${header.grn_id}`);
-          grnDetails = res.data;
-          fetchedLines = res.data.lines || [];
-        } catch {
-          const res = await http.get<{ data: any }>(`/inventory/grns/${header.grn_id}`);
-          grnDetails = res.data;
-          fetchedLines = res.data.lines || [];
-        }
-      } else {
-        const res = await http.get<{ data: any }>(`/inventory/grns/${header.grn_id}`);
-        grnDetails = res.data;
-        fetchedLines = res.data.lines || [];
-      }
-
-      if (grnDetails) {
-        setHeader((prev) => ({
-          ...prev,
-          supplier_id: grnDetails.supplier_id ? String(grnDetails.supplier_id) : prev.supplier_id,
-          po_id: grnDetails.po_id ? String(grnDetails.po_id) : prev.po_id,
-          supplier_inv_no: grnDetails.supplier_dc_no || grnDetails.dc_no || prev.supplier_inv_no,
-          grn_matched: true,
-          match_status: 'FULLY_MATCHED',
-        }));
+          if (isYarn) {
+            const res = await http.get<{ data: any }>(`/yarn-grns/${grnIdNum}`);
+            fetchedLines = res.data?.lines || [];
+          } else if (isFab) {
+            const res = await http.get<{ data: any }>(`/fabric-grns/${grnIdNum}`);
+            fetchedLines = res.data?.lines || [];
+          } else {
+            const res = await http.get<{ data: any }>(`/inventory/grns/${grnIdNum}`);
+            fetchedLines = res.data?.lines || [];
+          }
+        } catch {}
       }
 
       if (fetchedLines.length > 0) {
+        const first = fetchedLines[0];
+        setHeader((prev) => ({
+          ...prev,
+          supplier_id: !prev.supplier_id && first.supplier_id ? String(first.supplier_id) : prev.supplier_id,
+          po_id: !prev.po_id && (first.header_po_id || first.po_id) ? String(first.header_po_id || first.po_id) : prev.po_id,
+          supplier_inv_no: !prev.supplier_inv_no && (first.supplier_dc_no || first.supplier_inv_no) ? (first.supplier_dc_no || first.supplier_inv_no) : prev.supplier_inv_no,
+          grn_matched: true,
+          match_status: 'FULLY_MATCHED',
+        }));
+
+        const isYarn = billType.startsWith('YARN');
+        const isFab = billType.startsWith('FABRIC');
         const mapped: BillLineItem[] = fetchedLines.map((l: any) => {
-          const qty = Number(l.received_qty) || Number(l.received_weight) || Number(l.qty) || 0;
-          const r = Number(l.rate) || Number(l.unit_price) || 0;
-          const gst = Number(l.gst_rate) || 5;
+          const qty = Number(l.received_qty) || Number(l.received_weight) || Number(l.accepted_qty) || 0;
+          const r = Number(l.rate) || 0;
+          const gst = Number(l.gst_rate) || (billType.startsWith('TRIMS') ? 18 : 5);
           const amt = Math.round(qty * r * 100) / 100;
           return {
-            grn_line_id: l.id,
-            po_line_id: l.po_line_id,
+            grn_id: grnIdNum,
+            grn_no: l.grn_no || `GRN #${grnIdNum}`,
+            grn_line_id: l.grn_line_id || l.id,
+            po_line_id: l.po_line_id || null,
             material_type: isYarn ? 'YARN' : isFab ? 'FABRIC' : (l.material_type || 'TRIM'),
-            description: l.yarn_name || l.yarn_type || l.fabric_name || l.trim_name || l.description || 'Material',
-            lot_no: l.lot_no || l.batch_no || '',
+            description: l.description || l.yarn_name || l.fabric_name || l.trim_name || 'Material',
+            lot_no: l.lot_no || '',
             no_of_bags: l.no_of_rolls || l.bags || undefined,
             no_of_rolls: l.no_of_rolls || l.rolls || undefined,
             dia: l.dia ? `${l.dia}"` : '',
@@ -292,13 +312,91 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
             rate_matched: true,
           };
         });
-        setLines(mapped);
-        toast(`Loaded ${mapped.length} item lines from GRN!`, 'success');
+
+        setLines((prev) => {
+          const isPlaceholder = prev.length === 1 && !prev[0].id && !prev[0].grn_line_id && !prev[0].po_line_id;
+          return isPlaceholder ? mapped : [...prev, ...mapped];
+        });
+
+        toast(`Auto-fetched ${mapped.length} item lines from GRN!`, 'success');
       } else {
-        toast('No line items found in selected GRN', 'info');
+        toast(`Added GRN #${grnIdNum} (no line items found)`, 'info');
       }
     } catch (err: any) {
-      toast(err.message || 'Failed to fetch GRN lines', 'error');
+      toast(err.message || 'Failed to auto-fetch GRN lines', 'error');
+    } finally {
+      setFetchingGrn(false);
+    }
+  };
+
+  const handleRemoveGrn = (grnIdNum: number) => {
+    const updated = selectedGrnIds.filter((id) => id !== grnIdNum);
+    setSelectedGrnIds(updated);
+    setHeader((prev) => ({ ...prev, grn_id: updated.length > 0 ? String(updated[0]) : '' }));
+
+    setLines((prev) => {
+      const remaining = prev.filter((l) => l.grn_id !== grnIdNum);
+      if (remaining.length === 0) {
+        initDefaultLine(billType);
+        return [];
+      }
+      return remaining;
+    });
+    toast(`Removed GRN #${grnIdNum}`, 'info');
+  };
+
+  // Re-fetch all lines from selected GRNs
+  const handleFetchFromGrn = async () => {
+    const idsToFetch = selectedGrnIds.length > 0
+      ? selectedGrnIds
+      : (header.grn_id ? [Number(header.grn_id)] : []);
+    if (!idsToFetch.length) {
+      toast('Please select at least one GRN first', 'warning');
+      return;
+    }
+
+    setFetchingGrn(true);
+    try {
+      const res = await http.get<{ data: any[] }>(`/lookup/grn-lines?grnIds=${idsToFetch.join(',')}`);
+      if (res.data?.length) {
+        const isYarn = billType.startsWith('YARN');
+        const isFab = billType.startsWith('FABRIC');
+        const mapped: BillLineItem[] = res.data.map((l: any) => {
+          const qty = Number(l.received_qty) || Number(l.received_weight) || Number(l.accepted_qty) || 0;
+          const r = Number(l.rate) || 0;
+          const gst = Number(l.gst_rate) || (billType.startsWith('TRIMS') ? 18 : 5);
+          return {
+            grn_id: l.grn_id,
+            grn_no: l.grn_no || `GRN #${l.grn_id}`,
+            grn_line_id: l.grn_line_id || l.id,
+            po_line_id: l.po_line_id || null,
+            material_type: isYarn ? 'YARN' : isFab ? 'FABRIC' : (l.material_type || 'TRIM'),
+            description: l.description || 'Material',
+            lot_no: l.lot_no || '',
+            no_of_bags: l.no_of_rolls || l.bags || undefined,
+            no_of_rolls: l.no_of_rolls || l.rolls || undefined,
+            dia: l.dia ? `${l.dia}"` : '',
+            gsm: Number(l.gsm) || undefined,
+            color_name: l.color_name || '',
+            size_name: l.size_name || '',
+            bill_qty: qty,
+            po_qty: Number(l.po_qty) || qty,
+            grn_qty: qty,
+            uom_id: l.uom_id || (isYarn ? 5 : isFab ? 9 : 1),
+            rate: r,
+            amount: Math.round(qty * r * 100) / 100,
+            gst_rate: gst,
+            qty_matched: true,
+            rate_matched: true,
+          };
+        });
+        setLines(mapped);
+        toast(`Synced ${mapped.length} lines from ${idsToFetch.length} GRNs!`, 'success');
+      } else {
+        toast('No lines returned for selected GRNs', 'info');
+      }
+    } catch (err: any) {
+      toast(err.message || 'Failed to sync GRN lines', 'error');
     } finally {
       setFetchingGrn(false);
     }
@@ -412,7 +510,8 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
         supplier_inv_no: header.supplier_inv_no || undefined,
         supplier_inv_date: header.supplier_inv_date || undefined,
         po_id: header.po_id ? Number(header.po_id) : null,
-        grn_id: header.grn_id ? Number(header.grn_id) : null,
+        grn_id: selectedGrnIds.length > 0 ? selectedGrnIds[0] : (header.grn_id ? Number(header.grn_id) : null),
+        grn_ids: selectedGrnIds.length > 0 ? selectedGrnIds : (header.grn_id ? [Number(header.grn_id)] : null),
         knitting_order_id: header.knitting_order_id ? Number(header.knitting_order_id) : null,
         fabric_process_order_id: header.fabric_process_order_id ? Number(header.fabric_process_order_id) : null,
         currency_id: Number(header.currency_id) || 1,
@@ -434,6 +533,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
         status: header.status,
         remarks: header.remarks || null,
         lines: lines.map((l) => ({
+          grn_id: l.grn_id || (selectedGrnIds.length === 1 ? selectedGrnIds[0] : (header.grn_id ? Number(header.grn_id) : null)),
           po_line_id: l.po_line_id || null,
           grn_line_id: l.grn_line_id || null,
           material_type: l.material_type,
@@ -584,25 +684,38 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 pt-2 border-t border-slate-100 items-end">
               <div className="lg:col-span-2">
-                <Select
-                  label="Link GRN Ref"
-                  value={header.grn_id}
-                  onChange={(e) => setHeader((p) => ({ ...p, grn_id: e.target.value }))}
-                  options={toOptions(grns.data)}
-                  placeholder="Select GRN to auto-fill"
-                />
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  Link GRN (Select to Auto-Fetch)
+                </label>
+                <select
+                  value=""
+                  onChange={(e) => {
+                    if (e.target.value) handleAddGrn(e.target.value);
+                  }}
+                  className="w-full text-xs rounded-lg border border-indigo-300 py-1.5 px-2 bg-indigo-50/30 font-semibold text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                >
+                  <option value="">+ Select GRN (Auto-pulls lines)...</option>
+                  {(grns.data || [])
+                    .filter((g: any) => !selectedGrnIds.includes(Number(g.id)))
+                    .filter((g: any) => !header.supplier_id || String(g.supplier_id) === String(header.supplier_id))
+                    .map((g: any) => (
+                      <option key={g.id} value={g.id}>
+                        {g.label || g.code || `GRN #${g.id}`}
+                      </option>
+                    ))}
+                </select>
               </div>
 
               <div>
                 <button
                   type="button"
                   onClick={handleFetchFromGrn}
-                  disabled={!header.grn_id || fetchingGrn}
+                  disabled={selectedGrnIds.length === 0 || fetchingGrn}
                   className="w-full h-9 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition disabled:opacity-50"
-                  title="Auto-fill lines from selected GRN"
+                  title="Auto-fill or sync lines from selected GRNs"
                 >
                   <Sparkles size={14} className={fetchingGrn ? 'animate-spin' : ''} />
-                  <span>{fetchingGrn ? 'Fetching...' : 'Load from GRN'}</span>
+                  <span>{fetchingGrn ? 'Fetching...' : `Sync Lines ${selectedGrnIds.length > 0 ? `(${selectedGrnIds.length})` : ''}`}</span>
                 </button>
               </div>
 
@@ -635,6 +748,39 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                 />
               </div>
             </div>
+
+            {/* Selected Multi-GRN Badges */}
+            {selectedGrnIds.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-dashed border-indigo-100">
+                <span className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
+                  <Layers size={13} className="text-indigo-600" /> Linked GRNs ({selectedGrnIds.length}):
+                </span>
+                {selectedGrnIds.map((gid) => {
+                  const gItem = (grns.data || []).find((g: any) => Number(g.id) === Number(gid));
+                  const gLabel = gItem?.label || gItem?.code || `GRN #${gid}`;
+                  const count = lines.filter((l) => l.grn_id === gid).length;
+                  return (
+                    <span
+                      key={gid}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-800 border border-indigo-200 shadow-2xs"
+                    >
+                      <span>📦 {gLabel}</span>
+                      <span className="text-[10px] bg-indigo-200 text-indigo-900 px-1.5 py-0.5 rounded-full font-mono">
+                        {count} lines
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveGrn(gid)}
+                        className="text-indigo-400 hover:text-rose-600 font-bold ml-1 transition"
+                        title="Remove this GRN and its items"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
 
             {/* GST Tax Type & Import Configuration Row */}
             <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
@@ -764,6 +910,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                     <th className="py-2.5 px-3 min-w-[180px]">
                       {isYarn ? 'Yarn Count / Desc *' : isFab ? 'Fabric Construction *' : isTrim ? 'Trim Item *' : 'Description *'}
                     </th>
+                    <th className="py-2.5 px-2 w-28">GRN Ref</th>
 
                     {isYarn && <th className="py-2.5 px-2 w-28">Lot / Batch</th>}
                     {isYarn && <th className="py-2.5 px-2 w-24 text-right">No. Bags</th>}
@@ -797,6 +944,16 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                           placeholder={isYarn ? 'e.g. 30s Combed Cotton' : isFab ? 'e.g. Single Jersey 160 GSM' : 'Item name'}
                           className="w-full text-xs font-semibold border border-slate-300 rounded px-2 py-1"
                         />
+                      </td>
+
+                      <td className="py-1.5 px-2">
+                        {l.grn_no || l.grn_id ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            {l.grn_no || `GRN #${l.grn_id}`}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-[11px]">—</span>
+                        )}
                       </td>
 
                       {/* Yarn Specific Columns */}

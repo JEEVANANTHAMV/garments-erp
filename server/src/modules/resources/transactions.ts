@@ -957,7 +957,7 @@ export const transactionResources: ResourceConfig[] = [
             LEFT JOIN trx_fabric_process_order fpo ON fpo.id = t.fabric_process_order_id`,
     children: [
       { key: 'lines', table: 'trx_supplier_bill_line', fk: 'bill_id', fields: [
-        f('po_line_id', s.id()), f('grn_line_id', s.id()),
+        f('grn_id', s.id()), f('po_line_id', s.id()), f('grn_line_id', s.id()),
         f('material_type', s.enumReq(['YARN','FABRIC','TRIM','SERVICE'])),
         f('description', s.nullableStr(255)),
         f('lot_no', s.nullableStr(50)), f('no_of_bags', s.dec()),
@@ -975,7 +975,7 @@ export const transactionResources: ResourceConfig[] = [
       f('bill_type', s.enum(['YARN_PURCHASE','YARN_PROCESS','FABRIC_PURCHASE','FABRIC_PROCESS','TRIMS_PURCHASE','TRIMS_PROCESS','IMPORT_PURCHASE','IMPORT_PROCESS','GENERAL'])),
       f('bill_date', s.date()),
       f('supplier_id', s.idReq()), f('supplier_inv_no', s.nullableStr(60)), f('supplier_inv_date', s.date()),
-      f('po_id', s.id()), f('grn_id', s.id()),
+      f('po_id', s.id()), f('grn_id', s.id()), f('grn_ids', s.json()),
       f('knitting_order_id', s.id()), f('fabric_process_order_id', s.id()), f('jobwork_order_id', s.id()),
       f('gate_inward_id', s.id()),
       f('currency_id', s.idReq()),

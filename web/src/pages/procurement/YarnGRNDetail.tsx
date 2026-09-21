@@ -13,6 +13,8 @@ import { fmtDecimal, today } from '../../lib/format';
 interface YarnGrnLine {
   _key: string;
   id?: number;
+  po_id?: number;
+  po_no?: string;
   po_line_id?: number;
   so_id?: string | number;
   style_id?: string | number;
@@ -85,6 +87,7 @@ export default function YarnGRNDetailPage() {
   });
 
   const [saving, setSaving] = useState(false);
+  const [selectedPoIds, setSelectedPoIds] = useState<string[]>([]);
 
   // Header State
   const [header, setHeader] = useState({
@@ -148,21 +151,31 @@ export default function YarnGRNDetailPage() {
         remarks: existingData.remarks || '',
       });
 
-      if (existingData.lines?.length) {
-        const loadedLines: YarnGrnLine[] = existingData.lines.map((l: any) => {
-          const acc = Number(l.accepted_qty || l.received_qty || 0);
-          const rate = Number(l.rate || 0);
-          const gstRate = Number(l.gst_rate !== undefined ? l.gst_rate : 5.0);
-          const taxable = Number(l.taxable_amount !== undefined ? l.taxable_amount : Math.round(acc * rate * 100) / 100);
-          const taxAmt = Math.round((taxable * (gstRate / 100)) * 100) / 100;
-          const totalAmt = Number(l.total_amount !== undefined ? l.total_amount : (taxable + taxAmt));
+      let pids: string[] = [];
+      if (Array.isArray(existingData.po_ids)) {
+        pids = existingData.po_ids.map(String).filter(Boolean);
+      } else if (typeof existingData.po_ids === 'string') {
+        try {
+          const parsed = JSON.parse(existingData.po_ids);
+          if (Array.isArray(parsed)) pids = parsed.map(String).filter(Boolean);
+        } catch {}
+      }
+      if (!pids.length && existingData.po_id) {
+        pids = [String(existingData.po_id)];
+      }
+      setSelectedPoIds(pids);
 
+      if (existingData.lines?.length) {
+        const loadedLines = existingData.lines.map((l: any) => {
+          const acc = Number(l.accepted_qty ?? l.received_qty ?? 0);
+          const rate = Number(l.rate || 0);
+          const taxable = acc * rate;
+          const gstRate = Number(l.gst_rate || 5);
+          const totalAmt = taxable + (taxable * gstRate) / 100;
           return {
-            _key: `ygl_${l.id}`,
             id: l.id,
-            po_line_id: l.po_line_id,
-            so_id: l.so_id ? String(l.so_id) : '',
-            style_id: l.style_id ? String(l.style_id) : '',
+            po_id: l.po_id ? Number(l.po_id) : undefined,
+            po_no: l.po_no || '',
             yarn_id: l.yarn_id,
             yarn_name: l.yarn_name,
             yarn_type: l.yarn_type || 'Grey Yarn',
@@ -206,22 +219,28 @@ export default function YarnGRNDetailPage() {
     });
   };
 
-  // Handle PO selection
-  const handleSelectPO = async (poIdStr: string) => {
-    setHeader((prev) => ({ ...prev, po_id: poIdStr }));
+  // Handle PO selection: auto-fetch and merge lines
+  const handleAddPO = async (poIdStr: string) => {
     if (!poIdStr) return;
+    if (selectedPoIds.includes(poIdStr)) {
+      toast('This PO is already linked', 'info');
+      return;
+    }
 
     try {
       const res = await http.get<{ data: any }>(`/purchase-orders/${poIdStr}`);
       const po = res.data;
       if (po) {
+        const nextPoIds = [...selectedPoIds, poIdStr];
+        setSelectedPoIds(nextPoIds);
+
         setHeader((prev) => ({
           ...prev,
-          po_id: poIdStr,
-          supplier_id: po.supplier_id ? String(po.supplier_id) : prev.supplier_id,
+          po_id: nextPoIds[0],
+          supplier_id: !prev.supplier_id && po.supplier_id ? String(po.supplier_id) : prev.supplier_id,
           internal_ir_no: po.internal_ir_no || prev.internal_ir_no,
-          style_id: po.style_id ? String(po.style_id) : prev.style_id,
-          is_interstate: !!po.is_interstate,
+          style_id: !prev.style_id && po.style_id ? String(po.style_id) : prev.style_id,
+          is_interstate: prev.is_interstate || !!po.is_interstate,
         }));
 
         if (po.lines?.length) {
@@ -240,6 +259,8 @@ export default function YarnGRNDetailPage() {
 
               return {
                 _key: `ygl_${++yglSeq}`,
+                po_id: Number(poIdStr),
+                po_no: po.po_no,
                 po_line_id: pl.id,
                 so_id: pl.so_id ? String(pl.so_id) : (po.so_id ? String(po.so_id) : ''),
                 style_id: pl.style_id ? String(pl.style_id) : (po.style_id ? String(po.style_id) : ''),
@@ -264,14 +285,35 @@ export default function YarnGRNDetailPage() {
                 qc_status: 'ACCEPTED',
               };
             });
-            setLines(mappedLines);
+
+            setLines((prev) => {
+              const isPlaceholder = prev.length === 1 && !prev[0].id && !prev[0].po_line_id;
+              return isPlaceholder ? mappedLines : [...prev, ...mappedLines];
+            });
             toast(`Loaded ${mappedLines.length} yarn items from ${po.po_no}`, 'info');
+          } else {
+            toast(`PO ${po.po_no} has no yarn items`, 'info');
           }
         }
       }
     } catch {
       toast('Failed to load PO details', 'error');
     }
+  };
+
+  const handleRemovePO = (poIdStr: string) => {
+    const updated = selectedPoIds.filter((p) => p !== poIdStr);
+    setSelectedPoIds(updated);
+    setHeader((prev) => ({ ...prev, po_id: updated[0] || '' }));
+
+    setLines((prev) => {
+      const remaining = prev.filter((l) => String(l.po_id) !== poIdStr);
+      if (!remaining.length) {
+        return [emptyYarnGrnLine()];
+      }
+      return remaining;
+    });
+    toast(`Removed PO #${poIdStr}`, 'info');
   };
 
   // Recalculate line quantities and amounts
@@ -352,6 +394,8 @@ export default function YarnGRNDetailPage() {
     try {
       const payload = {
         ...header,
+        po_id: selectedPoIds.length > 0 ? selectedPoIds[0] : (header.po_id || null),
+        po_ids: selectedPoIds.length > 0 ? selectedPoIds.map(Number).filter(Boolean) : (header.po_id ? [Number(header.po_id)] : []),
         freight_charges: Number(header.freight_charges) || 0,
         other_charges: Number(header.other_charges) || 0,
         round_off: Number(header.round_off) || 0,
@@ -361,6 +405,7 @@ export default function YarnGRNDetailPage() {
         tcs_amount: totals.tcsAmt,
         grand_total: totals.grandTotal,
         lines: lines.map((l) => ({
+          po_id: l.po_id || (selectedPoIds[0] ? Number(selectedPoIds[0]) : undefined),
           po_line_id: l.po_line_id,
           so_id: l.so_id ? Number(l.so_id) : undefined,
           style_id: l.style_id ? Number(l.style_id) : undefined,
@@ -508,28 +553,68 @@ export default function YarnGRNDetailPage() {
 
           {isNew ? (
             <div>
-              <label className="block text-[11px] font-medium text-slate-600 mb-1">
-                Link to Yarn PO (Optional)
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[11px] font-medium text-slate-600">
+                  Link Yarn POs ({selectedPoIds.length} selected)
+                </label>
+                {selectedPoIds.length > 0 && (
+                  <span className="text-[10px] text-amber-700 font-semibold">Multi-PO active</span>
+                )}
+              </div>
               <select
-                value={header.po_id}
-                onChange={(e) => handleSelectPO(e.target.value)}
+                value=""
+                onChange={(e) => handleAddPO(e.target.value)}
                 className="w-full text-xs rounded-lg border border-slate-300 py-1.5 px-2 focus:border-amber-500 font-semibold text-amber-900"
               >
-                <option value="">-- Direct Yarn Receipt --</option>
-                {poList.map((p) => (
+                <option value="">+ Add PO to this GRN...</option>
+                {poList.filter((p) => !selectedPoIds.includes(String(p.id))).map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.po_no} ({p.supplier_name || 'Mill'})
                   </option>
                 ))}
               </select>
+
+              {/* Selected PO Badges */}
+              {selectedPoIds.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                  {selectedPoIds.map((pId) => {
+                    const pObj = poList.find((p) => String(p.id) === pId);
+                    const label = pObj?.po_no || `PO #${pId}`;
+                    const lineCnt = lines.filter((l) => String(l.po_id) === pId).length;
+                    return (
+                      <span key={pId} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-300">
+                        <span>📋 {label}</span>
+                        {lineCnt > 0 && <span className="text-[10px] bg-amber-200 text-amber-900 px-1 rounded font-mono">{lineCnt} items</span>}
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePO(pId)}
+                          className="text-amber-600 hover:text-rose-600 font-bold ml-0.5"
+                          title="Remove this PO"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           ) : (
-            <Input
-              label="Linked PO Ref"
-              value={header.po_id ? `PO #${header.po_id}` : 'Direct Receipt'}
-              disabled
-            />
+            <div>
+              <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                Linked Purchase Orders ({selectedPoIds.length || (header.po_id ? 1 : 0)})
+              </label>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(selectedPoIds.length > 0 ? selectedPoIds : (header.po_id ? [header.po_id] : [])).map((pId) => (
+                  <span key={pId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-300">
+                    📋 PO #{pId}
+                  </span>
+                ))}
+                {!selectedPoIds.length && !header.po_id && (
+                  <span className="text-xs text-slate-400">Direct Receipt</span>
+                )}
+              </div>
+            </div>
           )}
 
           {isNew ? (
@@ -677,6 +762,7 @@ export default function YarnGRNDetailPage() {
             <thead>
               <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                 <th className="py-2.5 px-2 w-8 text-center">#</th>
+                <th className="py-2.5 px-2 min-w-[100px]">PO Ref</th>
                 <th className="py-2.5 px-2 min-w-[130px]">I/O Num</th>
                 <th className="py-2.5 px-2 min-w-[110px]">Style</th>
                 <th className="py-2.5 px-3 min-w-[140px]">Yarn Item</th>
@@ -705,6 +791,17 @@ export default function YarnGRNDetailPage() {
                   <tr key={l._key || idx} className="hover:bg-slate-50/70 transition">
                     {/* # S.No */}
                     <td className="py-2.5 px-2 text-center text-slate-400 font-mono text-[11px]">{idx + 1}</td>
+
+                    {/* PO Ref */}
+                    <td className="py-2.5 px-2">
+                      {l.po_no || l.po_id ? (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                          {l.po_no || `PO #${l.po_id}`}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 text-[11px]">—</span>
+                      )}
+                    </td>
 
                     {/* I/O Num (Internal Order / Job) */}
                     <td className="py-2.5 px-2">

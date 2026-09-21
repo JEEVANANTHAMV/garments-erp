@@ -313,7 +313,7 @@ interface GrnLine {
   _key: string; material_type: 'YARN' | 'FABRIC' | 'TRIM';
   material_id: number | ''; received_qty: number | ''; accepted_qty: number | '';
   rejected_qty: number | ''; uom_id: number | ''; rate: number | '';
-  new_batch_no: string; po_line_id?: number;
+  new_batch_no: string; po_id?: number; po_no?: string; po_line_id?: number;
 }
 let gseq = 0;
 const emptyGrnLine = (): GrnLine => ({
@@ -324,6 +324,7 @@ const emptyGrnLine = (): GrnLine => ({
 function GrnModal({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
   const [head, setHead] = useState<Record<string, any>>({ grn_date: today() });
+  const [selectedPoIds, setSelectedPoIds] = useState<number[]>([]);
   const [lines, setLines] = useState<GrnLine[]>([emptyGrnLine()]);
   const [busy, setBusy] = useState(false);
 
@@ -355,12 +356,63 @@ function GrnModal({ open, onClose, onDone }: { open: boolean; onClose: () => voi
   const setLine = (k: string, patch: Partial<GrnLine>) =>
     setLines((s) => s.map((l) => (l._key === k ? { ...l, ...patch } : l)));
 
+  const handleAddPo = async (poIdStr: string) => {
+    const pId = Number(poIdStr);
+    if (!pId) return;
+    if (selectedPoIds.includes(pId)) return;
+    const next = [...selectedPoIds, pId];
+    setSelectedPoIds(next);
+    setHead((s) => ({ ...s, po_id: next[0] }));
+
+    try {
+      const res = await http.get<{ data: any[] }>(`/lookup/po-lines?poIds=${pId}`);
+      if (res.data?.length) {
+        const mapped: GrnLine[] = res.data.map((l: any) => ({
+          _key: `g${++gseq}`,
+          po_id: pId,
+          po_no: l.po_no,
+          po_line_id: l.id,
+          material_type: l.material_type || 'YARN',
+          material_id: l.yarn_id || l.fabric_id || l.trim_id || '',
+          received_qty: Number(l.pending_qty != null ? l.pending_qty : (l.qty || 0)),
+          accepted_qty: Number(l.pending_qty != null ? l.pending_qty : (l.qty || 0)),
+          rejected_qty: 0,
+          uom_id: l.uom_id || '',
+          rate: Number(l.rate || 0),
+          new_batch_no: '',
+        }));
+
+        setLines((prev) => {
+          const isPlaceholder = prev.length === 1 && !prev[0].material_id && !prev[0].po_line_id;
+          return isPlaceholder ? mapped : [...prev, ...mapped];
+        });
+        toast(`Loaded ${mapped.length} lines from PO #${pId}`);
+      }
+    } catch {
+      toast('Failed to load PO lines', 'error');
+    }
+  };
+
+  const handleRemovePo = (pId: number) => {
+    const next = selectedPoIds.filter((id) => id !== pId);
+    setSelectedPoIds(next);
+    setHead((s) => ({ ...s, po_id: next[0] || null }));
+    setLines((prev) => {
+      const rem = prev.filter((l) => l.po_id !== pId);
+      return rem.length ? rem : [emptyGrnLine()];
+    });
+  };
+
   const submit = async () => {
     setBusy(true);
     try {
       const payload = {
         ...head,
+        po_id: selectedPoIds[0] || head.po_id || null,
+        po_ids: selectedPoIds.length > 0 ? selectedPoIds : (head.po_id ? [Number(head.po_id)] : []),
         lines: lines.filter((l) => l.material_id && l.received_qty).map((l) => ({
+          po_id: l.po_id || selectedPoIds[0] || null,
+          po_line_id: l.po_line_id || null,
           material_type: l.material_type,
           yarn_id: l.material_type === 'YARN' ? Number(l.material_id) : null,
           fabric_id: l.material_type === 'FABRIC' ? Number(l.material_id) : null,
@@ -401,8 +453,48 @@ function GrnModal({ open, onClose, onDone }: { open: boolean; onClose: () => voi
           value={head.supplier_id ?? ''} onChange={(e) => setHead((s) => ({ ...s, supplier_id: e.target.value }))} />
         <Select label="Warehouse" required options={toOptions(warehouses.data)} placeholder="— Select —"
           value={head.warehouse_id ?? ''} onChange={(e) => setHead((s) => ({ ...s, warehouse_id: e.target.value }))} />
-        <Select label="Against PO" options={toOptions(purchaseOrders.data)} placeholder="— None —"
-          value={head.po_id ?? ''} onChange={(e) => setHead((s) => ({ ...s, po_id: e.target.value }))} />
+        <div>
+          <label className="block text-[11px] font-medium text-slate-700 mb-1">
+            Against Purchase Orders ({selectedPoIds.length})
+          </label>
+          <select
+            value=""
+            onChange={(e) => { if (e.target.value) void handleAddPo(e.target.value); }}
+            className="w-full text-xs rounded-lg border border-slate-300 py-1.5 px-2 font-medium"
+          >
+            <option value="">+ Add PO (Auto-pulls open lines)...</option>
+            {(purchaseOrders.data || [])
+              .filter((p: any) => !selectedPoIds.includes(Number(p.id)))
+              .filter((p: any) => !head.supplier_id || String(p.supplier_id) === String(head.supplier_id))
+              .map((p: any) => (
+                <option key={p.id} value={p.id}>
+                  {p.label || p.code || `PO #${p.id}`}
+                </option>
+              ))}
+          </select>
+          {selectedPoIds.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+              {selectedPoIds.map((pId) => {
+                const pObj = (purchaseOrders.data || []).find((p: any) => Number(p.id) === pId);
+                const pLabel = pObj?.label || pObj?.code || `PO #${pId}`;
+                const count = lines.filter((l) => l.po_id === pId).length;
+                return (
+                  <span key={pId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-brand-50 text-brand-700 border border-brand-200">
+                    <span>📋 {pLabel}</span>
+                    {count > 0 && <span className="text-[10px] bg-brand-100 text-brand-900 px-1 rounded">{count}</span>}
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePo(pId)}
+                      className="text-brand-400 hover:text-rose-600 font-bold ml-0.5"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          )}
+        </div>
         <Input label="Supplier DC no" value={head.supplier_dc_no ?? ''}
           onChange={(e) => setHead((s) => ({ ...s, supplier_dc_no: e.target.value }))} />
         <Input label="Supplier invoice no" value={head.supplier_inv_no ?? ''}

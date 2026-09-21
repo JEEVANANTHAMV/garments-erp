@@ -20,6 +20,7 @@ export const s = {
                  .transform((v) => (v === '' ? null : v)).nullish(),
   nullableStr: (max = 255) => z.union([z.string().trim().max(max), z.literal(''), z.null()])
                  .transform((v) => (v === '' ? null : v)).nullish(),
+  json: () => z.any().nullish().transform((v) => (v != null && v !== '' ? (typeof v === 'string' ? v : JSON.stringify(v)) : null)),
 };
 
 /** Shorthand for a writable field. */

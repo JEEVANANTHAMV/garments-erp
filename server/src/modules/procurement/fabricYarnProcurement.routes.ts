@@ -218,23 +218,30 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
       : 0;
     const grandTotal = Number((baseBeforeTcs + tcsAmount + roundOff).toFixed(4));
 
+    const poIds = Array.isArray(body.po_ids)
+      ? body.po_ids.map(Number).filter((n: number) => n > 0)
+      : (body.po_id ? [Number(body.po_id)] : []);
+    const primaryPoId = poIds[0] || (body.po_id ? Number(body.po_id) : null);
+    const poIdsJson = poIds.length > 0 ? JSON.stringify(poIds) : null;
+
     // 2. Create GRN Header
     const grnRes = await txExecute(tx, `
       INSERT INTO trx_grn (
-        company_id, grn_no, internal_ir_no, grn_date, po_id, style_id,
+        company_id, grn_no, internal_ir_no, grn_date, po_id, po_ids, style_id,
         supplier_id, warehouse_id, supplier_dc_no, supplier_inv_no,
         vehicle_no, gate_inward_id, qc_status, is_interstate,
         taxable_amount, tax_amount, cgst_amount, sgst_amount, igst_amount, net_amount,
         freight_charges, other_charges, round_off,
         tcs_applicable, tcs_section, tcs_rate, tcs_amount, grand_total,
         remarks, created_by
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `, [
       companyId,
       finalGrnNo,
       body.internal_ir_no || 'IR-2026-0001',
       body.grn_date || new Date().toISOString().slice(0, 10),
-      body.po_id ? Number(body.po_id) : null,
+      primaryPoId,
+      poIdsJson,
       body.style_id ? Number(body.style_id) : null,
       Number(body.supplier_id),
       Number(body.warehouse_id),
@@ -274,17 +281,19 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
 
     // 3. Insert GRN Lines
     for (const line of calculatedLines) {
+      const linePoId = line.po_id ? Number(line.po_id) : primaryPoId;
       const lineRes = await txExecute(tx, `
         INSERT INTO trx_grn_line (
-          grn_id, po_line_id, so_id, style_id, material_type, fabric_id,
+          grn_id, po_id, po_line_id, so_id, style_id, material_type, fabric_id,
           fabric_category, pantone_spec, color_name, shade_code,
           received_qty, received_weight, no_of_rolls,
           accepted_qty, rejected_qty, hold_qty, balance_qty,
           rate, taxable_amount, gst_rate, cgst_amount, sgst_amount, igst_amount, total_amount,
           lot_no, qc_status, uom_id
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `, [
         newGrnId,
+        linePoId,
         line.po_line_id ? Number(line.po_line_id) : null,
         line.so_id ? Number(line.so_id) : (body.so_id ? Number(body.so_id) : null),
         line.style_id ? Number(line.style_id) : (body.style_id ? Number(body.style_id) : null),
@@ -440,8 +449,9 @@ fabricYarnProcurementRouter.get('/fabric-grns/:id', requirePermission('GRN.VIEW'
   if (!grn) throw NotFound('Fabric GRN not found');
 
   const lines = await query<any>(`
-    SELECT gl.*, fb.fabric_name, fb.fabric_code, comp.description AS construction, u.code AS uom_code
+    SELECT gl.*, po.po_no, fb.fabric_name, fb.fabric_code, comp.description AS construction, u.code AS uom_code
       FROM trx_grn_line gl
+      LEFT JOIN trx_purchase_order po ON po.id = gl.po_id
       LEFT JOIN mst_fabric fb ON fb.id = gl.fabric_id
       LEFT JOIN mst_composition comp ON comp.id = fb.composition_id
       LEFT JOIN cfg_uom u ON u.id = gl.uom_id
@@ -741,22 +751,29 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
       : 0;
     const grandTotal = Number((baseBeforeTcs + tcsAmount + roundOff).toFixed(4));
 
+    const poIds = Array.isArray(body.po_ids)
+      ? body.po_ids.map(Number).filter((n: number) => n > 0)
+      : (body.po_id ? [Number(body.po_id)] : []);
+    const primaryPoId = poIds[0] || (body.po_id ? Number(body.po_id) : null);
+    const poIdsJson = poIds.length > 0 ? JSON.stringify(poIds) : null;
+
     const grnRes = await txExecute(tx, `
       INSERT INTO trx_grn (
-        company_id, grn_no, internal_ir_no, grn_date, po_id, style_id,
+        company_id, grn_no, internal_ir_no, grn_date, po_id, po_ids, style_id,
         supplier_id, warehouse_id, supplier_dc_no, supplier_inv_no,
         vehicle_no, gate_inward_id, qc_status, is_interstate,
         taxable_amount, tax_amount, cgst_amount, sgst_amount, igst_amount, net_amount,
         freight_charges, other_charges, round_off,
         tcs_applicable, tcs_section, tcs_rate, tcs_amount, grand_total,
         remarks, created_by
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `, [
       companyId,
       finalGrnNo,
       body.internal_ir_no || 'IR-2026-0001',
       body.grn_date || new Date().toISOString().slice(0, 10),
-      body.po_id ? Number(body.po_id) : null,
+      primaryPoId,
+      poIdsJson,
       body.style_id ? Number(body.style_id) : null,
       Number(body.supplier_id),
       Number(body.warehouse_id),
@@ -795,17 +812,19 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
     }
 
     for (const line of calculatedLines) {
+      const linePoId = line.po_id ? Number(line.po_id) : primaryPoId;
       await txExecute(tx, `
         INSERT INTO trx_grn_line (
-          grn_id, po_line_id, so_id, style_id, material_type, yarn_id,
+          grn_id, po_id, po_line_id, so_id, style_id, material_type, yarn_id,
           yarn_type, shade_code, color_name,
           received_qty, received_weight, no_of_rolls,
           accepted_qty, rejected_qty, hold_qty, balance_qty,
           rate, taxable_amount, gst_rate, cgst_amount, sgst_amount, igst_amount, total_amount,
           lot_no, qc_status, uom_id
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `, [
         newGrnId,
+        linePoId,
         line.po_line_id ? Number(line.po_line_id) : null,
         line.so_id ? Number(line.so_id) : (body.so_id ? Number(body.so_id) : null),
         line.style_id ? Number(line.style_id) : (body.style_id ? Number(body.style_id) : null),
@@ -922,8 +941,9 @@ fabricYarnProcurementRouter.get('/yarn-grns/:id', requirePermission('GRN.VIEW'),
   if (!grn) throw NotFound('Yarn GRN not found');
 
   const lines = await query<any>(`
-    SELECT gl.*, y.yarn_name, y.yarn_code, comp.description AS composition, y.yarn_type AS yarn_base_type, COALESCE(gl.yarn_type, 'Grey Yarn') AS yarn_type, u.code AS uom_code
+    SELECT gl.*, po.po_no, y.yarn_name, y.yarn_code, comp.description AS composition, y.yarn_type AS yarn_base_type, COALESCE(gl.yarn_type, 'Grey Yarn') AS yarn_type, u.code AS uom_code
       FROM trx_grn_line gl
+      LEFT JOIN trx_purchase_order po ON po.id = gl.po_id
       LEFT JOIN mst_yarn y ON y.id = gl.yarn_id
       LEFT JOIN mst_composition comp ON comp.id = y.composition_id
       LEFT JOIN cfg_uom u ON u.id = gl.uom_id

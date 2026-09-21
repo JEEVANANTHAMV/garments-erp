@@ -12,6 +12,8 @@ import { Badge } from '../../components/ui';
 interface GrnLine {
   _key: string;
   id?: number;
+  po_id?: number;
+  po_no?: string;
   po_line_id?: number;
   so_id?: string | number;
   style_id?: string | number;
@@ -138,6 +140,7 @@ export default function TrimGRNDetailPage() {
     remarks: '',
   });
 
+  const [selectedPoIds, setSelectedPoIds] = useState<string[]>([]);
   const [lines, setLines] = useState<GrnLine[]>([emptyGrnLine()]);
 
   // Selected Currency Info
@@ -178,6 +181,20 @@ export default function TrimGRNDetailPage() {
         remarks: existingGrn.remarks || '',
       });
 
+      let pids: string[] = [];
+      if (Array.isArray(existingGrn.po_ids)) {
+        pids = existingGrn.po_ids.map(String).filter(Boolean);
+      } else if (typeof existingGrn.po_ids === 'string') {
+        try {
+          const parsed = JSON.parse(existingGrn.po_ids);
+          if (Array.isArray(parsed)) pids = parsed.map(String).filter(Boolean);
+        } catch {}
+      }
+      if (!pids.length && existingGrn.po_id) {
+        pids = [String(existingGrn.po_id)];
+      }
+      setSelectedPoIds(pids);
+
       if (existingGrn.lines?.length) {
         setLines(
           existingGrn.lines.map((l: any) => {
@@ -191,6 +208,8 @@ export default function TrimGRNDetailPage() {
             return {
               _key: `tgl_${++glseq}`,
               id: l.id,
+              po_id: l.po_id ? Number(l.po_id) : (existingGrn.po_id ? Number(existingGrn.po_id) : undefined),
+              po_no: l.po_no || undefined,
               po_line_id: l.po_line_id,
               so_id: l.so_id ? String(l.so_id) : '',
               style_id: l.style_id ? String(l.style_id) : '',
@@ -239,69 +258,97 @@ export default function TrimGRNDetailPage() {
     });
   };
 
-  // Handle PO selection: pull lines, currency, and auto-fill
-  const handlePoSelect = async (poId: string) => {
-    setHead((prev) => ({ ...prev, po_id: poId }));
+  // Handle PO selection: auto-fetch and merge lines
+  const handleAddPo = async (poId: string) => {
     if (!poId) return;
+    if (selectedPoIds.includes(poId)) {
+      toast('This PO is already linked', 'info');
+      return;
+    }
 
     try {
       const res = await http.get<{ data: any }>(`/trim-pos/${poId}`);
       const po = res.data;
       if (po) {
+        const nextPoIds = [...selectedPoIds, poId];
+        setSelectedPoIds(nextPoIds);
+
         setHead((prev) => ({
           ...prev,
+          po_id: nextPoIds[0],
           io_no: po.io_no || prev.io_no,
           style_id: String(po.style_id || prev.style_id),
           supplier_id: String(po.supplier_id || prev.supplier_id),
           currency_id: po.currency_id ? String(po.currency_id) : prev.currency_id,
           exchange_rate: po.exchange_rate ? Number(po.exchange_rate) : prev.exchange_rate,
-          is_interstate: Boolean(po.is_interstate),
+          is_interstate: prev.is_interstate || Boolean(po.is_interstate),
         }));
 
         if (po.lines?.length) {
-          setLines(
-            po.lines.map((l: any, i: number) => {
-              const pending = Math.max(0, Number(l.order_qty) - Number(l.received_qty || 0));
-              const rate = Number(l.rate || 0.85);
-              const gstRate = Number(l.gst_rate !== undefined ? l.gst_rate : 18);
-              const taxable = Math.round(pending * rate * 100) / 100;
-              const tax = Math.round(((taxable * gstRate) / 100) * 100) / 100;
-              const total = taxable + tax;
+          const mappedLines: GrnLine[] = po.lines.map((l: any, i: number) => {
+            const pending = Math.max(0, Number(l.order_qty) - Number(l.received_qty || 0));
+            const rate = Number(l.rate || 0.85);
+            const gstRate = Number(l.gst_rate !== undefined ? l.gst_rate : 18);
+            const taxable = Math.round(pending * rate * 100) / 100;
+            const tax = Math.round(((taxable * gstRate) / 100) * 100) / 100;
+            const total = taxable + tax;
 
-              return {
-                _key: `tgl_${++glseq}`,
-                po_line_id: l.id,
-                so_id: l.so_id ? String(l.so_id) : (po.so_id ? String(po.so_id) : ''),
-                style_id: l.style_id ? String(l.style_id) : (po.style_id ? String(po.style_id) : ''),
-                trim_id: l.trim_id,
-                trim_name: l.trim_name,
-                specification: l.specification || '',
-                color_name: l.color_name || '',
-                trim_size: l.trim_size || '',
-                uom_id: l.uom_id,
-                po_qty: Number(l.order_qty),
-                received_qty: pending,
-                accepted_qty: pending,
-                rejected_qty: 0,
-                hold_qty: 0,
-                rate,
-                taxable_amount: taxable,
-                gst_rate: gstRate,
-                tax_amount: tax,
-                total_amount: total,
-                supplier_lot_no: '',
-                internal_lot_no: `TLOT-${Date.now().toString().slice(-5)}${i + 1}`,
-                bin_location: 'BIN-T01',
-                qc_status: 'ACCEPTED',
-                rejection_reason: '',
-              };
-            })
-          );
+            return {
+              _key: `tgl_${++glseq}`,
+              po_id: Number(poId),
+              po_no: po.po_no,
+              po_line_id: l.id,
+              so_id: l.so_id ? String(l.so_id) : (po.so_id ? String(po.so_id) : ''),
+              style_id: l.style_id ? String(l.style_id) : (po.style_id ? String(po.style_id) : ''),
+              trim_id: l.trim_id,
+              trim_name: l.trim_name,
+              specification: l.specification || '',
+              color_name: l.color_name || '',
+              trim_size: l.trim_size || '',
+              uom_id: l.uom_id,
+              po_qty: Number(l.order_qty),
+              received_qty: pending,
+              accepted_qty: pending,
+              rejected_qty: 0,
+              hold_qty: 0,
+              rate,
+              taxable_amount: taxable,
+              gst_rate: gstRate,
+              tax_amount: tax,
+              total_amount: total,
+              supplier_lot_no: '',
+              internal_lot_no: `TLOT-${Date.now().toString().slice(-5)}${i + 1}`,
+              bin_location: 'BIN-T01',
+              qc_status: 'ACCEPTED',
+              rejection_reason: '',
+            };
+          });
+
+          setLines((prev) => {
+            const isPlaceholder = prev.length === 1 && !prev[0].id && !prev[0].po_line_id;
+            return isPlaceholder ? mappedLines : [...prev, ...mappedLines];
+          });
+          toast(`Loaded ${mappedLines.length} trim lines from ${po.po_no}`, 'info');
         }
       }
     } catch {
-      // ignore
+      toast('Failed to load PO details', 'error');
     }
+  };
+
+  const handleRemovePo = (poId: string) => {
+    const updated = selectedPoIds.filter((p) => p !== poId);
+    setSelectedPoIds(updated);
+    setHead((prev) => ({ ...prev, po_id: updated[0] || '' }));
+
+    setLines((prev) => {
+      const remaining = prev.filter((l) => String(l.po_id) !== poId);
+      if (!remaining.length) {
+        return [emptyGrnLine()];
+      }
+      return remaining;
+    });
+    toast(`Removed PO #${poId}`, 'info');
   };
 
   const updateLine = (idx: number, patch: Partial<GrnLine>) => {
@@ -393,7 +440,8 @@ export default function TrimGRNDetailPage() {
     try {
       const payload = {
         ...head,
-        po_id: head.po_id ? Number(head.po_id) : null,
+        po_id: selectedPoIds.length > 0 ? Number(selectedPoIds[0]) : (head.po_id ? Number(head.po_id) : null),
+        po_ids: selectedPoIds.length > 0 ? selectedPoIds.map(Number).filter(Boolean) : (head.po_id ? [Number(head.po_id)] : []),
         gate_inward_id: head.gate_inward_id ? Number(head.gate_inward_id) : null,
         style_id: head.style_id ? Number(head.style_id) : null,
         supplier_id: Number(head.supplier_id),
@@ -406,6 +454,7 @@ export default function TrimGRNDetailPage() {
         igst_amount: totals.igstAmount,
         net_amount: totals.grandTotal,
         lines: lines.map((l) => ({
+          po_id: l.po_id || (selectedPoIds[0] ? Number(selectedPoIds[0]) : undefined),
           po_line_id: l.po_line_id || null,
           so_id: l.so_id ? Number(l.so_id) : undefined,
           style_id: l.style_id ? Number(l.style_id) : undefined,
@@ -566,27 +615,65 @@ export default function TrimGRNDetailPage() {
           </div>
 
           <div>
-            <label className="label">Link with Trim PO {isNew ? '(Optional)' : ''}</label>
             {isNew ? (
-              <select
-                value={head.po_id}
-                onChange={(e) => handlePoSelect(e.target.value)}
-                className="input text-xs font-semibold text-indigo-700"
-              >
-                <option value="">-- Direct Receipt or Select PO --</option>
-                {availablePos.map((p: any) => (
-                  <option key={p.id} value={p.id}>
-                    {p.po_no} ({p.supplier_name}) - {p.io_no}
-                  </option>
-                ))}
-              </select>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="label">Link Trim POs ({selectedPoIds.length} selected)</label>
+                  {selectedPoIds.length > 0 && (
+                    <span className="text-[10px] text-indigo-700 font-semibold">Multi-PO active</span>
+                  )}
+                </div>
+                <select
+                  value=""
+                  onChange={(e) => handleAddPo(e.target.value)}
+                  className="input text-xs font-semibold text-indigo-700"
+                >
+                  <option value="">+ Add Trim PO to this GRN...</option>
+                  {availablePos.filter((p: any) => !selectedPoIds.includes(String(p.id))).map((p: any) => (
+                    <option key={p.id} value={p.id}>
+                      {p.po_no} ({p.supplier_name}) - {p.io_no}
+                    </option>
+                  ))}
+                </select>
+
+                {selectedPoIds.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                    {selectedPoIds.map((pId) => {
+                      const pObj = availablePos.find((p: any) => String(p.id) === pId);
+                      const label = pObj?.po_no || `PO #${pId}`;
+                      const lineCnt = lines.filter((l) => String(l.po_id) === pId).length;
+                      return (
+                        <span key={pId} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-800 border border-indigo-300">
+                          <span>📋 {label}</span>
+                          {lineCnt > 0 && <span className="text-[10px] bg-indigo-200 text-indigo-900 px-1 rounded font-mono">{lineCnt} items</span>}
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePo(pId)}
+                            className="text-indigo-400 hover:text-rose-600 font-bold ml-0.5"
+                            title="Remove this PO"
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             ) : (
-              <input
-                type="text"
-                value={(existingGrn as any)?.po_no || (head.po_id ? `PO #${head.po_id}` : 'Direct Receipt')}
-                disabled
-                className="input text-xs"
-              />
+              <div>
+                <label className="label">Linked Trim POs ({selectedPoIds.length || (head.po_id ? 1 : 0)})</label>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {(selectedPoIds.length > 0 ? selectedPoIds : (head.po_id ? [head.po_id] : [])).map((pId) => (
+                    <span key={pId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-300">
+                      📋 PO #{pId}
+                    </span>
+                  ))}
+                  {!selectedPoIds.length && !head.po_id && (
+                    <span className="text-xs text-slate-400">Direct Receipt</span>
+                  )}
+                </div>
+              </div>
             )}
           </div>
 
@@ -809,6 +896,8 @@ export default function TrimGRNDetailPage() {
               <tr>
                 {/* 1st: S.No */}
                 <th className="py-2.5 px-2 text-center w-10">#</th>
+                {/* PO Ref */}
+                <th className="py-2.5 px-2 text-left min-w-[100px]">PO Ref</th>
                 {/* 2nd: I/O Job No */}
                 <th className="py-2.5 px-2 text-left min-w-[130px]">I/O (Job No)</th>
                 {/* 3rd: Style No */}
@@ -840,6 +929,17 @@ export default function TrimGRNDetailPage() {
                   {/* 1. S.No (#) */}
                   <td className="py-2 px-2 text-center font-mono font-medium text-slate-400">
                     {idx + 1}
+                  </td>
+
+                  {/* PO Ref */}
+                  <td className="py-2 px-2">
+                    {line.po_no || line.po_id ? (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        {line.po_no || `PO #${line.po_id}`}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 text-[11px]">—</span>
+                    )}
                   </td>
 
                   {/* 2. I/O (Job No) */}

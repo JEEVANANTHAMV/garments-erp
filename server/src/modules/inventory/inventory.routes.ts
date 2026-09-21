@@ -34,6 +34,7 @@ async function postLedger(tx: Tx, p: {
 
 // ============================================================== GRN
 const grnLineSchema = z.object({
+  po_id: s.id(),
   po_line_id: s.id(),
   material_type: z.enum(MATERIAL),
   yarn_id: s.id(), fabric_id: s.id(), trim_id: s.id(), color_id: s.id(),
@@ -58,6 +59,7 @@ const grnSchema = z.object({
   grn_no: s.nullableStr(40),
   grn_date: s.date(),
   po_id: s.id(),
+  po_ids: z.array(z.coerce.number().int().positive()).optional(),
   supplier_id: s.idReq(),
   warehouse_id: s.idReq(),
   gate_inward_id: s.id(),
@@ -120,9 +122,10 @@ inventoryRouter.get('/grns/:id', requirePermission('GRN.VIEW'), ah(async (req, r
   if (!grn) throw NotFound('GRN not found');
 
   const lines = await query(
-    `SELECT l.*, y.yarn_name, fb.fabric_name, tr.trim_name, c.color_name,
+    `SELECT l.*, po.po_no, y.yarn_name, fb.fabric_name, tr.trim_name, c.color_name,
             u.code AS uom_code, b.batch_no, b.shade_lot, bn.bin_code
        FROM trx_grn_line l
+       LEFT JOIN trx_purchase_order po ON po.id = l.po_id
        LEFT JOIN mst_yarn y ON y.id = l.yarn_id
        LEFT JOIN mst_fabric fb ON fb.id = l.fabric_id
        LEFT JOIN mst_trim tr ON tr.id = l.trim_id
@@ -143,11 +146,17 @@ inventoryRouter.post('/grns', requirePermission('GRN.CREATE'), ah(async (req, re
 
   const created = await transaction(async (tx) => {
     const grnNo = body.grn_no || await nextDocNumber(tx, req.user!.companyId, 'GRN');
+    const poIds = Array.isArray(body.po_ids)
+      ? body.po_ids.map(Number).filter((n) => n > 0)
+      : (body.po_id ? [Number(body.po_id)] : []);
+    const primaryPoId = poIds[0] ?? (body.po_id ?? null);
+    const poIdsJson = poIds.length > 0 ? JSON.stringify(poIds) : null;
+
     const r = await txExecute(tx,
-      `INSERT INTO trx_grn (company_id, grn_no, grn_date, po_id, supplier_id, warehouse_id,
+      `INSERT INTO trx_grn (company_id, grn_no, grn_date, po_id, po_ids, supplier_id, warehouse_id,
                             gate_inward_id, supplier_dc_no, supplier_inv_no, vehicle_no, status_id, remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [req.user!.companyId, grnNo, body.grn_date ?? null, body.po_id ?? null, body.supplier_id,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [req.user!.companyId, grnNo, body.grn_date ?? null, primaryPoId, poIdsJson, body.supplier_id,
        body.warehouse_id, body.gate_inward_id ?? null, body.supplier_dc_no ?? null, body.supplier_inv_no ?? null,
        body.vehicle_no ?? null, body.status_id ?? null, body.remarks ?? null, req.user!.id]);
     const grnId = r.insertId;
@@ -170,11 +179,12 @@ inventoryRouter.post('/grns', requirePermission('GRN.CREATE'), ah(async (req, re
         batchId = b.insertId;
       }
 
+      const linePoId = l.po_id ?? primaryPoId;
       await txExecute(tx,
-        `INSERT INTO trx_grn_line (grn_id, po_line_id, material_type, yarn_id, fabric_id, trim_id,
+        `INSERT INTO trx_grn_line (grn_id, po_id, po_line_id, material_type, yarn_id, fabric_id, trim_id,
                                    color_id, batch_id, received_qty, accepted_qty, rejected_qty, uom_id, bin_id)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [grnId, l.po_line_id ?? null, l.material_type, l.yarn_id ?? null, l.fabric_id ?? null,
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [grnId, linePoId ?? null, l.po_line_id ?? null, l.material_type, l.yarn_id ?? null, l.fabric_id ?? null,
          l.trim_id ?? null, l.color_id ?? null, batchId, l.received_qty, l.accepted_qty,
          l.rejected_qty ?? 0, l.uom_id, l.bin_id ?? null]);
 
