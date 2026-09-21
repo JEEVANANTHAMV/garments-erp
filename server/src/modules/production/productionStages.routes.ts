@@ -342,6 +342,12 @@ productionStagesRouter.post('/bundles/generate-detailed', requirePermission('PRO
   const sizeCode = size?.size_code || 'SZ';
   const partTag = (body.part_name || 'TOP').toUpperCase();
 
+  let resolvedSkuId = body.sku_id ?? null;
+  if (!resolvedSkuId && body.style_id && body.color_id && body.size_id) {
+    const skuRow = await queryOne<any>(`SELECT id FROM mst_style_sku WHERE style_id = ? AND color_id = ? AND size_id = ? LIMIT 1`, [body.style_id, body.color_id, body.size_id]);
+    if (skuRow?.id) resolvedSkuId = skuRow.id;
+  }
+
   const bundleCount = Math.ceil(body.total_qty / body.bundle_size);
   let remaining = body.total_qty;
 
@@ -360,7 +366,7 @@ productionStagesRouter.post('/bundles/generate-detailed', requirePermission('PRO
           (cutting_id, io_no, style_id, color_id, size_id, part_name, component, sku_id, bundle_no, bundle_seq, total_bundles, qty, barcode, status)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [body.cutting_id, body.io_no, body.style_id, body.color_id, body.size_id,
-         partTag, body.components.join(','), body.sku_id ?? null, bundleNo, i, bundleCount, qty, barcode, 'GENERATED']);
+         partTag, body.components.join(','), resolvedSkuId, bundleNo, i, bundleCount, qty, barcode, 'GENERATED']);
 
       const bundleId = r.insertId;
 

@@ -580,9 +580,9 @@ costingRouter.post('/production-costs/calculate-and-save', requirePermission('PR
       }
     }
 
-    // Insert granular sub-tables from data_json if available
+    // Insert granular sub-tables from data_json or body.tabs if available
     const dj = body.data_json || {};
-    const tabs = dj.tabs || {};
+    const tabs = dj.tabs || body.tabs || {};
 
     // 1. Material (Fabric & Trims)
     if (Array.isArray(tabs.fabric)) {
@@ -606,24 +606,27 @@ costingRouter.post('/production-costs/calculate-and-save', requirePermission('PR
     }
 
     // 2. Process
-    if (Array.isArray(tabs.process)) {
-      for (const p of tabs.process) {
+    const processList = tabs.process || tabs.processes;
+    if (Array.isArray(processList)) {
+      for (const p of processList) {
+        const amt = p.actual_cost ?? p.amount ?? p.cost ?? (Number(p.rate || p.rate_per_piece || 0) * Number(p.pieces || p.output_qty || 0));
         await tx.execute(`
           INSERT INTO trx_production_costing_process (
             cost_id, process_name, part_name, input_qty, output_qty, loss_qty, rate, amount
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `, [costId, p.process_name || 'Process', p.part_name || 'TOP', p.input_qty || 0, p.output_qty || 0, p.loss_qty || 0, p.rate || 0, p.actual_cost || p.amount || 0]);
+        `, [costId, p.process_name || 'Process', p.part_name || 'TOP', p.input_qty || p.pieces || 0, p.output_qty || p.pieces || 0, p.loss_qty || 0, p.rate || p.rate_per_piece || 0, amt]);
       }
     }
 
     // 3. Labour
     if (Array.isArray(tabs.labour)) {
       for (const l of tabs.labour) {
+        const amt = l.amount ?? l.cost ?? (Number(l.piece_rate || 0) * Number(l.pieces_completed || 0));
         await tx.execute(`
           INSERT INTO trx_production_costing_labour (
             cost_id, department_name, part_name, labour_type, piece_rate, pieces_completed, hours, rate_per_hour, amount
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [costId, l.department_name || 'Floor', l.part_name || 'TOP', l.labour_type || 'DIRECT', l.piece_rate || 0, l.pieces_completed || 0, l.hours || 0, l.rate_per_hour || 0, l.amount || 0]);
+        `, [costId, l.department_name || l.operation_name || 'Floor', l.part_name || 'TOP', l.labour_type || 'DIRECT', l.piece_rate || 0, l.pieces_completed || 0, l.hours || 0, l.rate_per_hour || 0, amt]);
       }
     }
 

@@ -200,6 +200,12 @@ cuttingPlanRouter.post('/bundles/generate', requirePermission('PRODUCTION.CREATE
   let remaining = body.total_qty;
   const partTag = (body.part_name || 'TOP').toUpperCase();
 
+  let resolvedSkuId = body.sku_id ?? null;
+  if (!resolvedSkuId && body.style_id && body.color_id && body.size_id) {
+    const skuRow = await queryOne<any>(`SELECT id FROM mst_style_sku WHERE style_id = ? AND color_id = ? AND size_id = ? LIMIT 1`, [body.style_id, body.color_id, body.size_id]);
+    if (skuRow?.id) resolvedSkuId = skuRow.id;
+  }
+
   const bundles = await transaction(async (tx) => {
     const created: any[] = [];
     for (let i = 1; i <= bundleCount; i++) {
@@ -214,7 +220,7 @@ cuttingPlanRouter.post('/bundles/generate', requirePermission('PRODUCTION.CREATE
           (cutting_id, io_no, style_id, color_id, size_id, part_name, component, sku_id, bundle_no, bundle_seq, total_bundles, qty, barcode, status)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [body.cutting_id, body.io_no, body.style_id, body.color_id, body.size_id,
-         partTag, body.component, body.sku_id ?? null, bundleNo, i, bundleCount, qty, barcode, 'GENERATED']);
+         partTag, body.component, resolvedSkuId, bundleNo, i, bundleCount, qty, barcode, 'GENERATED']);
 
       created.push({ id: r.insertId, bundle_no: bundleNo, part_name: partTag, bundle_seq: i, total_bundles: bundleCount, barcode, qty, status: 'GENERATED' });
     }

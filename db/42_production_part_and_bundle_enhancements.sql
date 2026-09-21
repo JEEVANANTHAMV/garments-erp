@@ -15,6 +15,9 @@ SET @col_exist = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SC
 SET @sql = IF(@col_exist = 0, 'ALTER TABLE trx_cutting_bundle ADD COLUMN total_bundles INT UNSIGNED NULL AFTER bundle_seq', 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
+-- Make sku_id NULLable on trx_cutting_bundle if not already
+ALTER TABLE trx_cutting_bundle MODIFY COLUMN sku_id BIGINT UNSIGNED NULL;
+
 -- 2. Extend trx_cutting_plan with part_name
 SET @col_exist = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trx_cutting_plan' AND COLUMN_NAME = 'part_name');
 SET @sql = IF(@col_exist = 0, 'ALTER TABLE trx_cutting_plan ADD COLUMN part_name VARCHAR(50) NULL DEFAULT ''TOP'' AFTER color_id', 'SELECT 1');
