@@ -841,7 +841,7 @@ export default function CadRequirementDetailPage() {
         toast(`CAD Requirement ${res.data.req_no} saved!`, 'success');
         nav(`/production/cad-requirements/${res.data.id}`);
       } else {
-        await http.post('/cad-requirements', payload);
+        await http.put(`/cad-requirements/${id}`, { ...payload, id: Number(id) });
         toast('CAD Requirement saved successfully', 'success');
       }
     } catch (err: any) {
