@@ -210,10 +210,13 @@ cadRouter.get('/cad-requirements/:id', requirePermission('PRODUCTION.VIEW'), ah(
 }));
 
 /**
- * 4. POST /api/cad-requirements
+ * 4. POST/PUT/PATCH /api/cad-requirements
  * Create or save draft of CAD Requirement with markers and fabric programs
  */
-cadRouter.post('/cad-requirements', requirePermission('PRODUCTION.CREATE'), ah(async (req, res) => {
+const saveCadRequirementHandler = ah(async (req, res) => {
+  if (req.params.id && !req.body.id) {
+    req.body.id = Number(req.params.id);
+  }
   const companyId = req.user!.companyId;
   const userId = req.user!.id;
   const body = req.body;
@@ -445,7 +448,11 @@ cadRouter.post('/cad-requirements', requirePermission('PRODUCTION.CREATE'), ah(a
   await audit(req, 'trx_cad_requirement', savedId, body.id ? 'UPDATE' : 'INSERT', null, { req_no: finalReqNo, style_id: body.style_id });
 
   res.json({ data: { id: savedId, req_no: finalReqNo } });
-}));
+});
+
+cadRouter.post('/cad-requirements', requirePermission('PRODUCTION.CREATE'), saveCadRequirementHandler);
+cadRouter.put('/cad-requirements/:id', requirePermission('PRODUCTION.CREATE'), saveCadRequirementHandler);
+cadRouter.patch('/cad-requirements/:id', requirePermission('PRODUCTION.CREATE'), saveCadRequirementHandler);
 
 /**
  * 5. POST /api/cad-requirements/:id/calculate
