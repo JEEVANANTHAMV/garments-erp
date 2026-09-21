@@ -15,3 +15,7 @@ web/.env
 
 # Uploads
 server/uploads/
+
+# Sample Excels
+*.xls
+*.xlsx

@@ -14,6 +14,8 @@ export const BILL_TYPES = [
   { value: 'FABRIC_PROCESS', label: 'Fabric Process Bill (Dyeing)', icon: '🎨', tone: 'pink', material: 'FABRIC' },
   { value: 'TRIMS_PURCHASE', label: 'Trims Purchase Bill', icon: '✂️', tone: 'amber', material: 'TRIM' },
   { value: 'TRIMS_PROCESS', label: 'Trims Process Bill', icon: '🛠️', tone: 'orange', material: 'TRIM' },
+  { value: 'IMPORT_PURCHASE', label: 'Import Purchase Bill', icon: '🚢', tone: 'emerald', material: 'FABRIC' },
+  { value: 'IMPORT_PROCESS', label: 'Import Process / Service', icon: '🌐', tone: 'teal', material: 'SERVICE' },
   { value: 'GENERAL', label: 'General Bill', icon: '📦', tone: 'slate', material: 'SERVICE' },
 ] as const;
 
@@ -77,6 +79,11 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
     knitting_order_id: '',
     fabric_process_order_id: '',
     currency_id: '1',
+    gst_type: 'INTRA_STATE',
+    exchange_rate: 1.0,
+    boe_no: '',
+    boe_date: '',
+    port_code: '',
     tds_pct: 0.1,
     po_matched: false,
     grn_matched: true,
@@ -108,6 +115,11 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
             knitting_order_id: b.knitting_order_id ? String(b.knitting_order_id) : '',
             fabric_process_order_id: b.fabric_process_order_id ? String(b.fabric_process_order_id) : '',
             currency_id: b.currency_id ? String(b.currency_id) : '1',
+            gst_type: b.gst_type || 'INTRA_STATE',
+            exchange_rate: Number(b.exchange_rate) || 1.0,
+            boe_no: b.boe_no || '',
+            boe_date: b.boe_date?.slice(0, 10) || '',
+            port_code: b.port_code || '',
             tds_pct: b.subtotal > 0 && b.tds_amount ? Math.round((b.tds_amount / b.subtotal) * 1000) / 10 : 0.1,
             po_matched: Boolean(b.po_matched),
             grn_matched: Boolean(b.grn_matched),
@@ -152,6 +164,11 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
         knitting_order_id: '',
         fabric_process_order_id: '',
         currency_id: '1',
+        gst_type: 'INTRA_STATE',
+        exchange_rate: 1.0,
+        boe_no: '',
+        boe_date: '',
+        port_code: '',
         tds_pct: 0.1,
         po_matched: false,
         grn_matched: false,
@@ -336,6 +353,12 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
     setLines((prev) => prev.filter((_, i) => i !== idx));
   };
 
+  const selectedCurrency = (currencies.data || []).find((c: any) => String(c.id) === String(header.currency_id));
+  const isForeignCurrency = selectedCurrency && selectedCurrency.code && selectedCurrency.code !== 'INR';
+  const isImport = billType.startsWith('IMPORT') || header.gst_type === 'IMPORT' || isForeignCurrency;
+  const currencySymbol: string = String(isForeignCurrency ? (selectedCurrency?.symbol || selectedCurrency?.code || 'FC') : '₹');
+  const exRate = isImport && Number(header.exchange_rate) > 0 ? Number(header.exchange_rate) : 1.0;
+
   // Dynamic Financial Summary Calculations
   const totals = useMemo(() => {
     const subtotal = Math.round(lines.reduce((acc, l) => acc + (Number(l.amount) || 0), 0) * 100) / 100;
@@ -350,8 +373,23 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
     const totalAmount = Math.round((subtotal + gstAmount - tdsAmount) * 100) / 100;
     const totalQty = lines.reduce((acc, l) => acc + (Number(l.bill_qty) || 0), 0);
 
-    return { subtotal, gstAmount, tdsAmount, totalAmount, totalQty };
-  }, [lines, header.tds_pct]);
+    const baseSubtotal = Math.round(subtotal * exRate * 100) / 100;
+    const baseGstAmount = Math.round(gstAmount * exRate * 100) / 100;
+    const baseTdsAmount = Math.round(tdsAmount * exRate * 100) / 100;
+    const baseTotalAmount = Math.round(totalAmount * exRate * 100) / 100;
+
+    return {
+      subtotal,
+      gstAmount,
+      tdsAmount,
+      totalAmount,
+      totalQty,
+      baseSubtotal,
+      baseGstAmount,
+      baseTdsAmount,
+      baseTotalAmount,
+    };
+  }, [lines, header.tds_pct, exRate]);
 
   // Save handler
   const handleSave = async () => {
@@ -378,10 +416,16 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
         knitting_order_id: header.knitting_order_id ? Number(header.knitting_order_id) : null,
         fabric_process_order_id: header.fabric_process_order_id ? Number(header.fabric_process_order_id) : null,
         currency_id: Number(header.currency_id) || 1,
+        gst_type: header.gst_type,
+        exchange_rate: exRate,
         subtotal: totals.subtotal,
         gst_amount: totals.gstAmount,
         tds_amount: totals.tdsAmount,
         total_amount: totals.totalAmount,
+        base_currency_total: totals.baseTotalAmount,
+        boe_no: header.boe_no || null,
+        boe_date: header.boe_date || null,
+        port_code: header.port_code || null,
         po_matched: header.po_matched,
         grn_matched: header.grn_matched,
         gate_matched: header.gate_matched,
@@ -591,6 +635,105 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                 />
               </div>
             </div>
+
+            {/* GST Tax Type & Import Configuration Row */}
+            <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">GST Tax Nature:</span>
+                <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-50 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setHeader((p) => ({ ...p, gst_type: 'INTRA_STATE' }))}
+                    className={`px-2.5 py-1 rounded-md font-semibold transition ${
+                      header.gst_type === 'INTRA_STATE'
+                        ? 'bg-white text-indigo-700 shadow-xs border border-indigo-200'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Intra-State (CGST + SGST)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHeader((p) => ({ ...p, gst_type: 'INTER_STATE' }))}
+                    className={`px-2.5 py-1 rounded-md font-semibold transition ${
+                      header.gst_type === 'INTER_STATE'
+                        ? 'bg-white text-brand-700 shadow-xs border border-brand-200'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Inter-State (IGST)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHeader((p) => ({ ...p, gst_type: 'IMPORT' }))}
+                    className={`px-2.5 py-1 rounded-md font-semibold transition ${
+                      header.gst_type === 'IMPORT'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Overseas Import (Customs IGST)
+                  </button>
+                </div>
+              </div>
+
+              {isForeignCurrency && (
+                <div className="flex items-center gap-2 bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-1 rounded-lg text-xs font-medium">
+                  <span>🌐 Foreign Currency: <strong>{String(selectedCurrency?.code || '')}</strong> ({String(selectedCurrency?.label || selectedCurrency?.code || '')})</span>
+                </div>
+              )}
+            </div>
+
+            {/* Import & Customs Parameters Card (Visible if Import or Foreign Currency selected) */}
+            {isImport && (
+              <div className="mt-3 p-3 bg-emerald-50/50 border border-emerald-200 rounded-xl space-y-2">
+                <div className="flex items-center justify-between pb-1 border-b border-emerald-200/60">
+                  <h4 className="text-xs font-bold text-emerald-950 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>🚢 Import & Customs Documentation</span>
+                  </h4>
+                  <span className="text-[11px] text-emerald-700 font-medium">
+                    All lines entered in <strong>{selectedCurrency?.code || 'FC'}</strong>, auto-converted to INR for GST & accounts
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-1">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      Exchange Rate (₹ per 1 {selectedCurrency?.code || 'FC'}) *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      value={header.exchange_rate}
+                      onChange={(e) => setHeader((p) => ({ ...p, exchange_rate: parseFloat(e.target.value) || 1.0 }))}
+                      className="w-full text-xs font-bold text-emerald-800 border border-slate-300 rounded px-2 py-1.5 bg-white"
+                      placeholder="e.g. 85.50"
+                    />
+                  </div>
+
+                  <Input
+                    label="Bill of Entry (BOE) No"
+                    value={header.boe_no}
+                    onChange={(e) => setHeader((p) => ({ ...p, boe_no: e.target.value }))}
+                    placeholder="BOE-2026-987654"
+                  />
+
+                  <Input
+                    label="Bill of Entry Date"
+                    type="date"
+                    value={header.boe_date}
+                    onChange={(e) => setHeader((p) => ({ ...p, boe_date: e.target.value }))}
+                  />
+
+                  <Input
+                    label="Port Code / Customs Location"
+                    value={header.port_code}
+                    onChange={(e) => setHeader((p) => ({ ...p, port_code: e.target.value }))}
+                    placeholder="e.g. INMAA1 (Chennai Sea)"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Line Items Table Customized by Bill Category */}
@@ -892,21 +1035,47 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
 
             {/* Financial Calculations Card */}
             <div className="p-4 bg-brand-50/40 rounded-xl border border-brand-200/80 space-y-2 text-xs">
-              <h4 className="text-xs font-bold text-brand-900 uppercase tracking-wider pb-1 border-b border-brand-200/60">
-                Invoice Total Summary
-              </h4>
+              <div className="flex items-center justify-between pb-1 border-b border-brand-200/60">
+                <h4 className="text-xs font-bold text-brand-900 uppercase tracking-wider">
+                  Invoice Financial Summary
+                </h4>
+                <span className="font-semibold text-[11px] text-brand-700">
+                  {header.gst_type === 'INTRA_STATE' ? 'Intra-State (CGST + SGST)' : header.gst_type === 'INTER_STATE' ? 'Inter-State (IGST)' : 'Overseas Import (Customs)'}
+                </span>
+              </div>
 
-              <div className="flex items-center justify-between py-1">
+              <div className="flex items-center justify-between py-0.5">
                 <span className="text-slate-600">Taxable Subtotal:</span>
-                <span className="font-bold text-slate-900 text-sm">₹{fmtDecimal(totals.subtotal, 2)}</span>
+                <span className="font-bold text-slate-900 text-sm">
+                  {currencySymbol}{fmtDecimal(totals.subtotal, 2)}
+                </span>
               </div>
 
-              <div className="flex items-center justify-between py-1 text-slate-700">
-                <span>Calculated GST Amount:</span>
-                <span className="font-bold text-slate-900">₹{fmtDecimal(totals.gstAmount, 2)}</span>
-              </div>
+              {header.gst_type === 'INTRA_STATE' ? (
+                <>
+                  <div className="flex items-center justify-between py-0.5 text-slate-700">
+                    <span className="text-[11.5px] text-slate-500 pl-2">↳ Central GST (CGST 50%):</span>
+                    <span className="font-medium text-slate-800 font-mono">
+                      {currencySymbol}{fmtDecimal(totals.gstAmount / 2, 2)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between py-0.5 text-slate-700">
+                    <span className="text-[11.5px] text-slate-500 pl-2">↳ State GST (SGST 50%):</span>
+                    <span className="font-medium text-slate-800 font-mono">
+                      {currencySymbol}{fmtDecimal(totals.gstAmount / 2, 2)}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center justify-between py-0.5 text-slate-700">
+                  <span>{header.gst_type === 'IMPORT' ? 'Import IGST / Customs Duty:' : 'Integrated GST (IGST):'}</span>
+                  <span className="font-bold text-slate-900 font-mono">
+                    {currencySymbol}{fmtDecimal(totals.gstAmount, 2)}
+                  </span>
+                </div>
+              )}
 
-              <div className="flex items-center justify-between py-1 text-slate-700">
+              <div className="flex items-center justify-between py-0.5 text-slate-700">
                 <div className="flex items-center gap-1.5">
                   <span>TDS Deduction:</span>
                   <input
@@ -914,19 +1083,35 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                     step="0.05"
                     value={header.tds_pct}
                     onChange={(e) => setHeader((p) => ({ ...p, tds_pct: parseFloat(e.target.value) || 0 }))}
-                    className="w-14 text-[11px] text-right border border-slate-300 rounded px-1 py-0.5"
+                    className="w-14 text-[11px] text-right border border-slate-300 rounded px-1 py-0.5 bg-white"
                   />
                   <span className="text-[10px] text-slate-400">%</span>
                 </div>
-                <span className="font-bold text-red-600">- ₹{fmtDecimal(totals.tdsAmount, 2)}</span>
+                <span className="font-bold text-red-600">- {currencySymbol}{fmtDecimal(totals.tdsAmount, 2)}</span>
               </div>
 
               <div className="flex items-center justify-between pt-2 border-t border-brand-200 text-sm">
-                <span className="font-extrabold text-brand-900">Grand Total Payable:</span>
-                <span className="font-extrabold text-brand-900 text-base">
-                  ₹{fmtDecimal(totals.totalAmount, 2)}
+                <span className="font-extrabold text-brand-900">Total Payable ({selectedCurrency?.code || 'INR'}):</span>
+                <span className="font-extrabold text-brand-900 text-base font-mono">
+                  {currencySymbol}{fmtDecimal(totals.totalAmount, 2)}
                 </span>
               </div>
+
+              {/* Converted INR Section for Imports / Foreign Currency */}
+              {(isImport || isForeignCurrency) && (
+                <div className="mt-2 pt-2 border-t border-emerald-300/80 bg-emerald-100/60 -mx-2 -mb-2 p-2 rounded-b-lg space-y-1 text-emerald-950">
+                  <div className="flex items-center justify-between text-[11px] font-bold">
+                    <span>Equivalent Base Value (₹ INR at Rate: {exRate}):</span>
+                    <span>Subtotal: ₹{fmtDecimal(totals.baseSubtotal, 2)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span>Customs / IGST in INR: ₹{fmtDecimal(totals.baseGstAmount, 2)}</span>
+                    <span className="font-extrabold text-xs text-emerald-900">
+                      Total INR: ₹{fmtDecimal(totals.baseTotalAmount, 2)}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -953,6 +1138,8 @@ export function SupplierBillsPage() {
     FABRIC_PROCESS: { label: 'Fabric Process', tone: 'pink' },
     TRIMS_PURCHASE: { label: 'Trims Purchase', tone: 'amber' },
     TRIMS_PROCESS: { label: 'Trims Process', tone: 'orange' },
+    IMPORT_PURCHASE: { label: 'Import Purchase', tone: 'emerald' },
+    IMPORT_PROCESS: { label: 'Import Process', tone: 'teal' },
     GENERAL: { label: 'General Bill', tone: 'slate' },
   };
 

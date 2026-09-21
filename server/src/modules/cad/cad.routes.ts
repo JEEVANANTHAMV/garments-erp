@@ -206,6 +206,9 @@ cadRouter.get('/cad-requirements/:id', requirePermission('PRODUCTION.VIEW'), ah(
       loss_rules: dataJson.loss_rules,
       pieces: (dataJson.pieces && dataJson.pieces.length > 0) ? dataJson.pieces : pieces,
       summary_metrics: dataJson.summary_metrics || {},
+      flat_knit_spec: dataJson.flat_knit_spec || null,
+      special_parts: dataJson.special_parts || [],
+      trims: dataJson.trims || [],
       dataJson,
     },
   });
@@ -240,6 +243,9 @@ const saveCadRequirementHandler = ah(async (req, res) => {
       fabric_program: body.fabric_program,
       cutting_lay: body.cutting_lay,
       summary_metrics: body.summary_metrics,
+      flat_knit_spec: body.flat_knit_spec,
+      special_parts: body.special_parts,
+      trims: body.trims,
       total_fabric_kg: body.total_fabric_kg,
     });
 
