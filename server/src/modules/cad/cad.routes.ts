@@ -190,6 +190,9 @@ cadRouter.get('/cad-requirements/:id', requirePermission('PRODUCTION.VIEW'), ah(
   try {
     if (reqRow.data_json) {
       dataJson = typeof reqRow.data_json === 'string' ? JSON.parse(reqRow.data_json) : reqRow.data_json;
+      while (typeof dataJson === 'string') {
+        dataJson = JSON.parse(dataJson);
+      }
     }
   } catch {
     // ignore
@@ -234,20 +237,26 @@ const saveCadRequirementHandler = ah(async (req, res) => {
       finalReqNo = await nextDocNumber(tx, companyId, 'CAD_REQ');
     }
 
-    const dataJsonStr = JSON.stringify(body.data_json || {
-      size_breakdown: body.size_breakdown,
-      stripes: body.stripes,
-      loss_rules: body.loss_rules,
-      pieces: body.pieces,
-      markers: body.markers,
-      fabric_program: body.fabric_program,
-      cutting_lay: body.cutting_lay,
-      summary_metrics: body.summary_metrics,
-      flat_knit_spec: body.flat_knit_spec,
-      special_parts: body.special_parts,
-      trims: body.trims,
-      total_fabric_kg: body.total_fabric_kg,
-    });
+    let inputDataJson: any = body.data_json;
+    if (typeof inputDataJson === 'string') {
+      try { inputDataJson = JSON.parse(inputDataJson); } catch {}
+    }
+    const combinedDataJson = {
+      ...(inputDataJson && typeof inputDataJson === 'object' ? inputDataJson : {}),
+      size_breakdown: body.size_breakdown ?? inputDataJson?.size_breakdown,
+      stripes: body.stripes ?? inputDataJson?.stripes,
+      loss_rules: body.loss_rules ?? inputDataJson?.loss_rules,
+      pieces: body.pieces ?? inputDataJson?.pieces,
+      markers: body.markers ?? inputDataJson?.markers,
+      fabric_program: body.fabric_program ?? inputDataJson?.fabric_program,
+      cutting_lay: body.cutting_lay ?? inputDataJson?.cutting_lay,
+      summary_metrics: body.summary_metrics ?? inputDataJson?.summary_metrics,
+      flat_knit_spec: body.flat_knit_spec ?? inputDataJson?.flat_knit_spec,
+      special_parts: body.special_parts ?? inputDataJson?.special_parts,
+      trims: body.trims ?? inputDataJson?.trims,
+      total_fabric_kg: body.total_fabric_kg ?? inputDataJson?.total_fabric_kg,
+    };
+    const dataJsonStr = JSON.stringify(combinedDataJson);
 
     if (recId) {
       await txExecute(tx, `
