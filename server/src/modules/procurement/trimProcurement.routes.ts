@@ -445,11 +445,11 @@ trimProcurementRouter.post('/trim-grns', requirePermission('PROCUREMENT.CREATE')
           supplier_inv_no, supplier_dc_no, vehicle_no, is_interstate, taxable_amount, tax_amount, igst_amount, net_amount, status, remarks, created_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        cid, grnNo, body.grn_date, primaryPoId, poIdsJson, body.gate_inward_id || null, body.io_no, body.style_id, body.supplier_id,
+        cid, grnNo, body.grn_date, primaryPoId, poIdsJson, body.gate_inward_id || null, body.io_no, body.style_id || null, body.supplier_id,
         body.currency_id || 1, body.exchange_rate || 1.0,
-        body.warehouse_id, body.supplier_inv_no, body.supplier_dc_no, body.vehicle_no,
+        body.warehouse_id, body.supplier_inv_no || null, body.supplier_dc_no || null, body.vehicle_no || null,
         isInterstate ? 1 : 0, totTaxable, totTax, totIgst, netAmount,
-        body.status, body.remarks, uid
+        body.status || 'POSTED', body.remarks || null, uid
       ]
     );
 
@@ -475,10 +475,10 @@ trimProcurementRouter.post('/trim-grns', requirePermission('PROCUREMENT.CREATE')
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           grnId, linePoId || null, line.po_line_id || null, line.so_id || null, line.style_id || body.style_id || null,
-          line.trim_id, line.specification, line.color_name, line.trim_size, line.uom_id,
-          line.po_qty, line.received_qty, line.accepted_qty, line.rejected_qty, line.hold_qty,
+          line.trim_id, line.specification || null, line.color_name || null, line.trim_size || null, line.uom_id,
+          line.po_qty || 0, line.received_qty, line.accepted_qty, line.rejected_qty || 0, line.hold_qty || 0,
           line.rate, line.taxable, line.gstRate, line.tax, line.total,
-          line.supplier_lot_no, line.internal_lot_no, line.bin_location, line.qc_status, line.rejection_reason
+          line.supplier_lot_no || null, line.internal_lot_no, line.bin_location || null, line.qc_status || 'ACCEPTED', line.rejection_reason || null
         ]
       );
 
