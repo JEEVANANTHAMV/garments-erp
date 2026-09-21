@@ -77,6 +77,7 @@ export function createApp() {
 
   api.use('/admin', adminRouter);
   api.use('/lookups', lookupRouter);
+  api.use('/lookup', lookupRouter);
   api.use('/dashboard', dashboardRouter);
   api.use('/reports', reportsRouter);
 
