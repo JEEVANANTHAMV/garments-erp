@@ -77,7 +77,7 @@ cadRouter.get('/cad-requirements/style-data/:styleId', requirePermission('PRODUC
 
   // Load Sizes
   const sizes = await query<any>(`
-    SELECT s.id, s.size_code, s.size_name, s.sort_order
+    SELECT s.id, s.size_code, s.size_label AS size_name, s.size_label, s.sort_order
       FROM mst_size s
      WHERE s.size_group_id = ?
      ORDER BY s.sort_order ASC
