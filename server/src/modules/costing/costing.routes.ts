@@ -688,7 +688,7 @@ costingRouter.get('/production-costing/:id', requirePermission('PRODUCTION.VIEW'
       LEFT JOIN mst_party b ON b.id = c.buyer_id
       LEFT JOIN trx_sales_order so ON so.id = po.so_id
       LEFT JOIN mst_unit u ON u.id = c.unit_id
-      LEFT JOIN sec_user appr ON appr.id = c.approved_by
+      LEFT JOIN mst_user appr ON appr.id = c.approved_by
      WHERE c.id = ? AND c.company_id = ?
   `, [id, companyId]);
 
