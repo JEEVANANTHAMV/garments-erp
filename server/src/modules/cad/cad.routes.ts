@@ -333,11 +333,12 @@ cadRouter.post('/cad-requirements', requirePermission('PRODUCTION.CREATE'), ah(a
         await txExecute(tx, `
           INSERT INTO trx_cad_marker (
             cad_req_id, marker_ref, marker_name, length_mm, width_mm,
-            fabric_dia_type, fabric_type, gsm, direction, parts_in_lay,
-            lay_allowance_cm, width_allowance_in, lay_length_cm, table_width_in,
-            fabric_wt_per_lay_g, no_of_pcs_lay, avg_wt_per_pc_g, req_length_per_pc_cm,
+            fabric_dia_type, dia_in, fabric_type, gsm, direction, parts_in_lay,
+            lay_allowance_cm, width_allowance_in, rejection_pct, fabric_allowance_pct,
+            lay_length_cm, table_width_in, fabric_wt_per_lay_g, no_of_pcs_lay,
+            act_wt_per_pc_g, avg_wt_per_pc_g, req_length_per_pc_cm,
             total_req_qty, uom, sort_order, data_json
-          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         `, [
           recId,
           m.marker_ref || `M${i + 1}`,
@@ -345,16 +346,20 @@ cadRouter.post('/cad-requirements', requirePermission('PRODUCTION.CREATE'), ah(a
           Number(m.length_mm) || 0,
           Number(m.width_mm) || 0,
           m.fabric_dia_type || 'OPEN',
+          m.dia_in ? Number(m.dia_in) : null,
           m.fabric_type || null,
           m.gsm ? Number(m.gsm) : null,
           m.direction || 'ONEWAY',
           m.parts_in_lay || null,
           Number(m.lay_allowance_cm ?? 10.0),
           Number(m.width_allowance_in ?? (m.fabric_dia_type === 'TUBE' ? 1.0 : 2.0)),
+          Number(m.rejection_pct ?? body.rejection_pct ?? 3.0),
+          Number(m.fabric_allowance_pct ?? body.fabric_allowance_pct ?? (body.uom === 'MTR' ? 0.0 : 10.0)),
           Number(m.lay_length_cm) || 0,
           Number(m.table_width_in) || 0,
           Number(m.fabric_wt_per_lay_g) || 0,
           Number(m.no_of_pcs_lay) || 1,
+          Number(m.act_wt_per_pc_g) || 0,
           Number(m.avg_wt_per_pc_g) || 0,
           Number(m.req_length_per_pc_cm) || 0,
           Number(m.total_req_qty) || 0,
@@ -380,15 +385,16 @@ cadRouter.post('/cad-requirements', requirePermission('PRODUCTION.CREATE'), ah(a
         const fp = allPrograms[i];
         await txExecute(tx, `
           INSERT INTO trx_cad_fabric_program (
-            cad_req_id, sheet_type, fabric_type, gsm, dia_spec, color_name,
+            cad_req_id, sheet_type, fabric_type, gsm, dia_spec, dia_val, color_name,
             order_qty_pcs, net_qty, buffer_qty, grand_total_qty, uom, remarks, sort_order
-          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         `, [
           recId,
           fp.sheet_type || 'FABRIC_PROGRAM',
           fp.fabric_type || 'Main Fabric',
           fp.gsm ? Number(fp.gsm) : null,
           fp.dia_spec || null,
+          fp.dia_val || null,
           fp.color_name || 'Solid',
           Number(fp.order_qty_pcs) || 0,
           Number(fp.net_qty) || 0,
@@ -478,18 +484,26 @@ cadRouter.post('/cad-requirements/:id/calculate', requirePermission('PRODUCTION.
     const layAllowanceCm = Number(m.lay_allowance_cm ?? 10.0);
     const widthAllowanceIn = Number(m.width_allowance_in ?? (diaType === 'TUBE' ? 1.0 : 2.0));
 
+    const markerRejectionPct = Number(m.rejection_pct ?? body.rejection_pct ?? cr.rejection_pct ?? 3.0);
+    const markerFabricAllowancePct = Number(m.fabric_allowance_pct ?? body.fabric_allowance_pct ?? cr.fabric_allowance_pct ?? (isWoven ? 0.0 : 10.0));
+
     // Lay Length in cm: (Length mm / 10) + allowance
     const layLengthCm = Math.round(((lengthMm / 10.0) + layAllowanceCm) * 10) / 10;
 
     // Table Width in inches: (Width mm / 10 / 2.54) + allowance
     const tableWidthIn = Math.round(((widthMm / 25.4) + widthAllowanceIn) * 100) / 100;
+    const diaIn = Number(m.dia_in) || Math.round(tableWidthIn);
+    const diaVal = `${diaIn}"`;
+    const diaSpec = `DIA-${diaIn} (${diaType})`;
 
     const ratios: number[] = Array.isArray(m.ratios) ? m.ratios.map((r: any) => Number(r) || 0) : [];
     const sumRatios = ratios.reduce((a, b) => a + b, 0);
 
     let fabricWtPerLayG = 0;
     let noOfPcsLay = 1;
+    let actWtPerPc = 0;
     let avgWtPerPc = 0;
+    let actLengthPerPcCm = 0;
     let reqLengthPerPcCm = 0;
 
     if (!isWoven) {
@@ -499,12 +513,14 @@ cadRouter.post('/cad-requirements/:id/calculate', requirePermission('PRODUCTION.
       fabricWtPerLayG = Math.round(((layLengthCm * (tableWidthIn * 2.54) * gsm / 10000.0) * layerMultiplier) * 1000) / 1000;
       noOfPcsLay = Math.max(1, sumRatios * layerMultiplier);
       const netWtG = fabricWtPerLayG / noOfPcsLay;
-      avgWtPerPc = Math.round((netWtG * (1 + (fabricAllowancePct / 100.0))) * 10000) / 10000;
+      actWtPerPc = Math.round(netWtG * 10000) / 10000;
+      avgWtPerPc = Math.round((netWtG * (1 + (markerFabricAllowancePct / 100.0))) * 10000) / 10000;
     } else {
       // WOVEN MODE (Length in CMS)
       noOfPcsLay = Math.max(1, sumRatios);
       const netLengthCm = layLengthCm / noOfPcsLay;
-      reqLengthPerPcCm = Math.round((netLengthCm * (1 + (fabricAllowancePct / 100.0))) * 10000) / 10000;
+      actLengthPerPcCm = Math.round(netLengthCm * 10000) / 10000;
+      reqLengthPerPcCm = Math.round((netLengthCm * (1 + (markerFabricAllowancePct / 100.0))) * 10000) / 10000;
     }
 
     // Colorway Totals
@@ -513,8 +529,8 @@ cadRouter.post('/cad-requirements/:id/calculate', requirePermission('PRODUCTION.
 
     const calculatedColorways = colorways.map((cw: any) => {
       const qtys: number[] = Array.isArray(cw.quantities) ? cw.quantities.map((q: any) => Number(q) || 0) : [];
-      // Cut pcs with rejection ceiling: CEILING(qty * (1 + rej))
-      const cutQtys = qtys.map((q) => Math.ceil(q * (1 + (rejectionPct / 100.0))));
+      // Cut pcs with individual marker rejection ceiling: CEILING(qty * (1 + markerRejectionPct))
+      const cutQtys = qtys.map((q) => Math.ceil(q * (1 + (markerRejectionPct / 100.0))));
       const totalOrderPcs = qtys.reduce((a, b) => a + b, 0);
       const totalCutPcs = cutQtys.reduce((a, b) => a + b, 0);
 
@@ -544,11 +560,18 @@ cadRouter.post('/cad-requirements/:id/calculate', requirePermission('PRODUCTION.
       ...m,
       lay_allowance_cm: layAllowanceCm,
       width_allowance_in: widthAllowanceIn,
+      rejection_pct: markerRejectionPct,
+      fabric_allowance_pct: markerFabricAllowancePct,
+      dia_in: diaIn,
+      dia_val: diaVal,
+      dia_spec: diaSpec,
       lay_length_cm: layLengthCm,
       table_width_in: tableWidthIn,
       fabric_wt_per_lay_g: fabricWtPerLayG,
       no_of_pcs_lay: noOfPcsLay,
+      act_wt_per_pc_g: actWtPerPc,
       avg_wt_per_pc_g: avgWtPerPc,
+      act_length_per_pc_cm: actLengthPerPcCm,
       req_length_per_pc_cm: reqLengthPerPcCm,
       total_req_qty: Math.round(markerTotalReqQty * 100) / 100,
       uom,
@@ -560,12 +583,16 @@ cadRouter.post('/cad-requirements/:id/calculate', requirePermission('PRODUCTION.
   const fabricMap: Record<string, any> = {};
 
   calculatedMarkers.forEach((m: any) => {
-    const fabKey = `${m.fabric_type || 'Main Fabric'}_${m.gsm || 0}_${m.fabric_dia_type || 'OPEN'}`;
+    const diaVal = m.dia_val || `${m.dia_in || Math.round(m.table_width_in || 0)}"`;
+    const diaSpec = m.dia_spec || `${diaVal} (${m.fabric_dia_type || 'OPEN'})`;
+    const fabKey = `${m.fabric_type || 'Main Fabric'}_${m.gsm || 0}_${diaVal}_${m.fabric_dia_type || 'OPEN'}`;
     if (!fabricMap[fabKey]) {
       fabricMap[fabKey] = {
         fabric_type: m.fabric_type || 'Main Fabric',
         gsm: m.gsm || 160,
-        dia_spec: `${m.fabric_dia_type || 'OPEN'}`,
+        dia_spec: diaSpec,
+        dia_val: diaVal,
+        dia_type: m.fabric_dia_type || 'OPEN',
         colorways: {},
       };
     }
@@ -592,24 +619,25 @@ cadRouter.post('/cad-requirements/:id/calculate', requirePermission('PRODUCTION.
 
   Object.values(fabricMap).forEach((fab: any) => {
     Object.entries(fab.colorways).forEach(([colorName, data]: [string, any]) => {
-      const netVal = Math.round(data.net_qty * 10) / 10;
-      // Buffer add-on in F.PRGM: rounded up to nearest whole or +5% safety
-      const roundedNet = Math.ceil(netVal);
-      const buffer = Math.max(1, Math.round(roundedNet * 0.02));
-      const grandVal = roundedNet + buffer;
+      const net = Math.round(data.net_qty * 10) / 10;
+      // Safety procurement buffer ~2%
+      const buffer = Math.round(net * 0.02 * 10) / 10;
+      const grand = Math.round(net + buffer);
 
-      grandTotalFabric += grandVal;
+      grandTotalFabric += grand;
       totalOrderPcs += data.order_pcs;
 
       fabricProgramLines.push({
         fabric_type: fab.fabric_type,
         gsm: fab.gsm,
         dia_spec: fab.dia_spec,
+        dia_val: fab.dia_val,
+        dia_type: fab.dia_type,
         color_name: colorName,
         order_qty_pcs: data.order_pcs,
-        net_qty: netVal,
+        net_qty: net,
         buffer_qty: buffer,
-        grand_total_qty: grandVal,
+        grand_total_qty: grand,
         uom,
       });
 
@@ -617,11 +645,13 @@ cadRouter.post('/cad-requirements/:id/calculate', requirePermission('PRODUCTION.
         fabric_type: fab.fabric_type,
         gsm: fab.gsm,
         dia_spec: fab.dia_spec,
+        dia_val: fab.dia_val,
+        dia_type: fab.dia_type,
         color_name: colorName,
         order_qty_pcs: data.cut_pcs,
-        net_qty: netVal,
+        net_qty: net,
         buffer_qty: 0,
-        grand_total_qty: netVal,
+        grand_total_qty: net,
         uom,
       });
     });
@@ -805,22 +835,56 @@ cadRouter.post('/cad-requirements/import-excel', requirePermission('PRODUCTION.C
     const reqLengthPerPc = Number(getV('J26')) || 0;
     const totalReqQty = Number(getV('J30') || getV('J27')) || 0;
 
+    // Marker-specific rejection & fabric allowance from sheet cells
+    let markerRej = result.header.rejection_pct ?? 3.0;
+    let markerFab = result.header.fabric_allowance_pct ?? (isWoven ? 0.0 : 10.0);
+    const rejCell = Number(getV('D25') || getV('D24'));
+    if (rejCell > 0) {
+      markerRej = rejCell < 1 ? Math.round(rejCell * 100) : rejCell;
+    }
+    const fabCell = Number(getV('D26') || getV('D25'));
+    if (fabCell !== 0 && !isNaN(fabCell)) {
+      markerFab = fabCell < 1 ? Math.round(fabCell * 100) : fabCell;
+    }
+
+    // Lay addition from L24/L23 (e.g. '10CM ADD', '3CM ADD')
+    let layAdd = 10.0;
+    const layTxt = String(getV('L24') || getV('L23') || '').toUpperCase();
+    if (layTxt.includes('3CM')) layAdd = 3.0;
+    else if (layTxt.includes('5CM')) layAdd = 5.0;
+    else if (layTxt.includes('10CM')) layAdd = 10.0;
+
+    // Width addition from L25/L24 (e.g. '2"ADDED', '1"ADDED')
+    let widthAdd = diaType === 'TUBE' ? 1.0 : 2.0;
+    const widthTxt = String(getV('L25') || getV('L24') || '').toUpperCase();
+    if (widthTxt.includes('1"')) widthAdd = 1.0;
+    else if (widthTxt.includes('2"')) widthAdd = 2.0;
+
+    const diaIn = Math.round(tableWidthIn);
+    const actWt = noOfPcsLay > 0 ? (fabricWtPerLay / noOfPcsLay) : 0;
+
     result.markers.push({
       marker_ref: markerRef,
       marker_name: `${result.header.style_code} ${markerRef}`,
       length_mm: lengthMm,
       width_mm: widthMm,
       fabric_dia_type: diaType,
+      dia_in: diaIn,
+      dia_val: `${diaIn}"`,
+      dia_spec: `DIA-${diaIn} (${diaType})`,
       fabric_type: fabricType,
       gsm: gsm,
       direction: direction,
       parts_in_lay: partsInLay,
-      lay_allowance_cm: 10,
-      width_allowance_in: diaType === 'TUBE' ? 1 : 2,
+      lay_allowance_cm: layAdd,
+      width_allowance_in: widthAdd,
+      rejection_pct: markerRej,
+      fabric_allowance_pct: markerFab,
       lay_length_cm: layLengthCm,
       table_width_in: tableWidthIn,
       fabric_wt_per_lay_g: fabricWtPerLay,
       no_of_pcs_lay: noOfPcsLay,
+      act_wt_per_pc_g: Math.round(actWt * 10000) / 10000,
       avg_wt_per_pc_g: avgWtPerPc,
       req_length_per_pc_cm: reqLengthPerPc,
       total_req_qty: totalReqQty,

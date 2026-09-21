@@ -30,17 +30,24 @@ interface CadMarker {
   length_mm: number;
   width_mm: number;
   fabric_dia_type: 'OPEN' | 'TUBE';
+  dia_in?: number;
+  dia_val?: string;
+  dia_spec?: string;
   fabric_type: string;
   gsm: number;
   direction: string;
   parts_in_lay: string;
   lay_allowance_cm: number;
   width_allowance_in: number;
+  rejection_pct?: number;
+  fabric_allowance_pct?: number;
   lay_length_cm: number;
   table_width_in: number;
   fabric_wt_per_lay_g: number;
   no_of_pcs_lay: number;
+  act_wt_per_pc_g?: number;
   avg_wt_per_pc_g: number;
+  act_length_per_pc_cm?: number;
   req_length_per_pc_cm: number;
   total_req_qty: number;
   uom: 'KG' | 'MTR';
@@ -53,6 +60,8 @@ interface FabricProgramRow {
   fabric_type: string;
   gsm: number;
   dia_spec: string;
+  dia_val?: string;
+  dia_type?: 'OPEN' | 'TUBE';
   color_name: string;
   order_qty_pcs: number;
   net_qty: number;
@@ -230,11 +239,18 @@ export default function CadRequirementDetailPage() {
             parts_in_lay: m.parts_in_lay || '',
             lay_allowance_cm: Number(m.lay_allowance_cm ?? 10.0),
             width_allowance_in: Number(m.width_allowance_in ?? (m.fabric_dia_type === 'TUBE' ? 1.0 : 2.0)),
+            rejection_pct: m.rejection_pct != null ? Number(m.rejection_pct) : Number(existingData.rejection_pct ?? 3.0),
+            fabric_allowance_pct: m.fabric_allowance_pct != null ? Number(m.fabric_allowance_pct) : Number(existingData.fabric_allowance_pct ?? 10.0),
+            dia_in: m.dia_in != null ? Number(m.dia_in) : (m.table_width_in ? Math.round(Number(m.table_width_in)) : undefined),
+            dia_val: m.dia_val || (m.dia_in ? `${m.dia_in}"` : undefined),
+            dia_spec: m.dia_spec || (m.dia_in ? `${m.dia_in}" ${m.fabric_dia_type || 'OPEN'}` : undefined),
             lay_length_cm: Number(m.lay_length_cm) || 0,
             table_width_in: Number(m.table_width_in) || 0,
             fabric_wt_per_lay_g: Number(m.fabric_wt_per_lay_g) || 0,
             no_of_pcs_lay: Number(m.no_of_pcs_lay) || 1,
+            act_wt_per_pc_g: Number(m.act_wt_per_pc_g) || 0,
             avg_wt_per_pc_g: Number(m.avg_wt_per_pc_g) || 0,
+            act_length_per_pc_cm: Number(m.act_length_per_pc_cm) || 0,
             req_length_per_pc_cm: Number(m.req_length_per_pc_cm) || 0,
             total_req_qty: Number(m.total_req_qty) || 0,
             uom: m.uom || existingData.uom || 'KG',
@@ -272,35 +288,42 @@ export default function CadRequirementDetailPage() {
 
         const layAllowance = Number(m.lay_allowance_cm ?? 10.0);
         const widthAllowance = Number(m.width_allowance_in ?? (diaType === 'TUBE' ? 1.0 : 2.0));
+        const markerRejectionPct = m.rejection_pct != null ? Number(m.rejection_pct) : Number(header.rejection_pct ?? 3.0);
+        const markerFabAllowancePct = m.fabric_allowance_pct != null ? Number(m.fabric_allowance_pct) : Number(header.fabric_allowance_pct ?? 10.0);
 
         // Lay length in cm: (Length mm / 10) + allowance
         const layLenCm = Math.round(((lengthMm / 10.0) + layAllowance) * 10) / 10;
         // Table width in inches: (Width mm / 25.4) + allowance
         const tblWidthIn = Math.round(((widthMm / 25.4) + widthAllowance) * 100) / 100;
+        const diaIn = m.dia_in != null && m.dia_in > 0 ? Number(m.dia_in) : Math.round(tblWidthIn);
+        const diaVal = `${diaIn}"`;
+        const diaSpec = `${diaVal} ${diaType}`;
 
         const sumRatios = m.ratios.reduce((a, b) => a + (Number(b) || 0), 0);
 
         let fabricWtLay = 0;
         let pcsLay = 1;
+        let actWtPc = 0;
         let avgWtPc = 0;
+        let actLenPc = 0;
         let reqLenPc = 0;
 
         if (!isWoven) {
           const layerMult = diaType === 'TUBE' ? 2 : 1;
           fabricWtLay = Math.round(((layLenCm * (tblWidthIn * 2.54) * gsm / 10000.0) * layerMult) * 1000) / 1000;
           pcsLay = Math.max(1, sumRatios * layerMult);
-          const netWt = fabricWtLay / pcsLay;
-          avgWtPc = Math.round((netWt * (1 + (header.fabric_allowance_pct / 100.0))) * 10000) / 10000;
+          actWtPc = Math.round((fabricWtLay / pcsLay) * 10000) / 10000;
+          avgWtPc = Math.round((actWtPc * (1 + (markerFabAllowancePct / 100.0))) * 10000) / 10000;
         } else {
           pcsLay = Math.max(1, sumRatios);
-          const netLen = layLenCm / pcsLay;
-          reqLenPc = Math.round((netLen * (1 + (header.fabric_allowance_pct / 100.0))) * 10000) / 10000;
+          actLenPc = Math.round((layLenCm / pcsLay) * 10000) / 10000;
+          reqLenPc = Math.round((actLenPc * (1 + (markerFabAllowancePct / 100.0))) * 10000) / 10000;
         }
 
         let markerTotalReq = 0;
         const updatedColorways = m.colorways.map((cw) => {
           const qtys = (cw.quantities || []).map((q) => Number(q) || 0);
-          const cutQtys = qtys.map((q) => Math.ceil(q * (1 + (header.rejection_pct / 100.0))));
+          const cutQtys = qtys.map((q) => Math.ceil(q * (1 + (markerRejectionPct / 100.0))));
           const totOrder = qtys.reduce((a, b) => a + b, 0);
           const totCut = cutQtys.reduce((a, b) => a + b, 0);
 
@@ -327,9 +350,16 @@ export default function CadRequirementDetailPage() {
           ...m,
           lay_length_cm: layLenCm,
           table_width_in: tblWidthIn,
+          dia_in: diaIn,
+          dia_val: diaVal,
+          dia_spec: diaSpec,
+          rejection_pct: markerRejectionPct,
+          fabric_allowance_pct: markerFabAllowancePct,
           fabric_wt_per_lay_g: fabricWtLay,
           no_of_pcs_lay: pcsLay,
+          act_wt_per_pc_g: actWtPc,
           avg_wt_per_pc_g: avgWtPc,
+          act_length_per_pc_cm: actLenPc,
           req_length_per_pc_cm: reqLenPc,
           total_req_qty: Math.round(markerTotalReq * 100) / 100,
           colorways: updatedColorways,
@@ -341,12 +371,16 @@ export default function CadRequirementDetailPage() {
       // Consolidate Fabric Program (F.PRGM) & Cutting Lay (CUT)
       const fabMap: Record<string, any> = {};
       updatedMarkers.forEach((m) => {
-        const key = `${m.fabric_type || 'Main Fabric'}_${m.gsm || 0}_${m.fabric_dia_type}`;
+        const diaV = m.dia_val || (m.dia_in ? `${m.dia_in}"` : `${Math.round(m.table_width_in || 0)}"`);
+        const diaT = m.fabric_dia_type === 'TUBE' ? 'TUBE' : 'OPEN';
+        const key = `${m.fabric_type || 'Main Fabric'}_${m.gsm || 0}_${diaV}_${diaT}`;
         if (!fabMap[key]) {
           fabMap[key] = {
             fabric_type: m.fabric_type || 'Main Fabric',
             gsm: m.gsm || 160,
-            dia_spec: `${m.fabric_dia_type || 'OPEN'}`,
+            dia_val: diaV,
+            dia_type: diaT,
+            dia_spec: `${diaV} ${diaT}`,
             colorways: {},
           };
         }
@@ -374,6 +408,8 @@ export default function CadRequirementDetailPage() {
           fpLines.push({
             fabric_type: fab.fabric_type,
             gsm: fab.gsm,
+            dia_val: fab.dia_val,
+            dia_type: fab.dia_type,
             dia_spec: fab.dia_spec,
             color_name: cName,
             order_qty_pcs: d.order_pcs,
@@ -386,6 +422,8 @@ export default function CadRequirementDetailPage() {
           cutLines.push({
             fabric_type: fab.fabric_type,
             gsm: fab.gsm,
+            dia_val: fab.dia_val,
+            dia_type: fab.dia_type,
             dia_spec: fab.dia_spec,
             color_name: cName,
             order_qty_pcs: d.cut_pcs,
@@ -419,8 +457,16 @@ export default function CadRequirementDetailPage() {
       ? fabricProgram.reduce((sum, f) => sum + Number(f.grand_total_qty || 0), 0)
       : markers.reduce((sum, m) => sum + Number(m.total_req_qty || 0), 0);
 
+    const totalActNetFabric = markers.reduce((sum, m) => {
+      const pcs = (m.colorways || []).reduce((cs, cw) => cs + (Number(cw.total_cut_pcs) || Number(cw.total_order_pcs) || 0), 0);
+      const netPerPc = isWoven ? (m.act_length_per_pc_cm || 0) / 100 : (m.act_wt_per_pc_g || 0) / 1000;
+      return sum + (pcs * netPerPc);
+    }, 0);
+
     const avgGarmentCons = totalOrderPcs > 0 ? (grandFabric / totalOrderPcs) : 0;
-    const actGarmentCons = avgGarmentCons * (1 - (totalAllowancePct / 100.0));
+    const actGarmentCons = totalOrderPcs > 0 && totalActNetFabric > 0 
+      ? (totalActNetFabric / totalOrderPcs) 
+      : avgGarmentCons * (1 - (totalAllowancePct / 100.0));
 
     return {
       totalOrderPcs,
@@ -492,10 +538,95 @@ export default function CadRequirementDetailPage() {
     toast('Marker removed', 'info');
   };
 
+  const recomputeSingleMarker = (m: CadMarker) => {
+    const lengthMm = Number(m.length_mm) || 0;
+    const widthMm = Number(m.width_mm) || 0;
+    const diaType = m.fabric_dia_type === 'TUBE' ? 'TUBE' : 'OPEN';
+    const gsm = Number(m.gsm) || 160;
+
+    const layAllowance = Number(m.lay_allowance_cm ?? 10.0);
+    const widthAllowance = Number(m.width_allowance_in ?? (diaType === 'TUBE' ? 1.0 : 2.0));
+    const markerRejectionPct = m.rejection_pct != null ? Number(m.rejection_pct) : Number(header.rejection_pct ?? 3.0);
+    const markerFabAllowancePct = m.fabric_allowance_pct != null ? Number(m.fabric_allowance_pct) : Number(header.fabric_allowance_pct ?? 10.0);
+
+    const layLenCm = Math.round(((lengthMm / 10.0) + layAllowance) * 10) / 10;
+    const tblWidthIn = Math.round(((widthMm / 25.4) + widthAllowance) * 100) / 100;
+    const diaIn = m.dia_in != null && m.dia_in > 0 ? Number(m.dia_in) : Math.round(tblWidthIn);
+    const diaVal = `${diaIn}"`;
+    const diaSpec = `${diaVal} ${diaType}`;
+
+    const sumRatios = (m.ratios || []).reduce((a, b) => a + (Number(b) || 0), 0);
+
+    let fabricWtLay = 0;
+    let pcsLay = 1;
+    let actWtPc = 0;
+    let avgWtPc = 0;
+    let actLenPc = 0;
+    let reqLenPc = 0;
+
+    if (!isWoven) {
+      const layerMult = diaType === 'TUBE' ? 2 : 1;
+      fabricWtLay = Math.round(((layLenCm * (tblWidthIn * 2.54) * gsm / 10000.0) * layerMult) * 1000) / 1000;
+      pcsLay = Math.max(1, sumRatios * layerMult);
+      actWtPc = Math.round((fabricWtLay / pcsLay) * 10000) / 10000;
+      avgWtPc = Math.round((actWtPc * (1 + (markerFabAllowancePct / 100.0))) * 10000) / 10000;
+    } else {
+      pcsLay = Math.max(1, sumRatios);
+      actLenPc = Math.round((layLenCm / pcsLay) * 10000) / 10000;
+      reqLenPc = Math.round((actLenPc * (1 + (markerFabAllowancePct / 100.0))) * 10000) / 10000;
+    }
+
+    let markerTotalReq = 0;
+    const updatedColorways = (m.colorways || []).map((cw) => {
+      const qtys = (cw.quantities || []).map((q) => Number(q) || 0);
+      const cutQtys = qtys.map((q) => Math.ceil(q * (1 + (markerRejectionPct / 100.0))));
+      const totOrder = qtys.reduce((a, b) => a + b, 0);
+      const totCut = cutQtys.reduce((a, b) => a + b, 0);
+
+      let reqQty = 0;
+      if (!isWoven) {
+        reqQty = Math.round(((avgWtPc * totCut) / 1000.0) * 1000) / 1000;
+      } else {
+        reqQty = Math.round(((reqLenPc * totCut) / 100.0) * 1000) / 1000;
+      }
+
+      markerTotalReq += reqQty;
+
+      return {
+        ...cw,
+        quantities: qtys,
+        cut_quantities: cutQtys,
+        total_order_pcs: totOrder,
+        total_cut_pcs: totCut,
+        required_qty: reqQty,
+      };
+    });
+
+    return {
+      ...m,
+      lay_length_cm: layLenCm,
+      table_width_in: tblWidthIn,
+      dia_in: diaIn,
+      dia_val: diaVal,
+      dia_spec: diaSpec,
+      rejection_pct: markerRejectionPct,
+      fabric_allowance_pct: markerFabAllowancePct,
+      fabric_wt_per_lay_g: fabricWtLay,
+      no_of_pcs_lay: pcsLay,
+      act_wt_per_pc_g: actWtPc,
+      avg_wt_per_pc_g: avgWtPc,
+      act_length_per_pc_cm: actLenPc,
+      req_length_per_pc_cm: reqLenPc,
+      total_req_qty: Math.round(markerTotalReq * 100) / 100,
+      colorways: updatedColorways,
+    };
+  };
+
   const updateActiveMarker = (updates: Partial<CadMarker>) => {
     setMarkers((prev) => {
       const copy = [...prev];
-      copy[activeMarkerIdx] = { ...copy[activeMarkerIdx], ...updates };
+      const merged = { ...copy[activeMarkerIdx], ...updates };
+      copy[activeMarkerIdx] = recomputeSingleMarker(merged);
       return copy;
     });
   };
@@ -634,10 +765,16 @@ export default function CadRequirementDetailPage() {
             parts_in_lay: parts,
             lay_allowance_cm: 10,
             width_allowance_in: dia === 'TUBE' ? 1 : 2,
+            rejection_pct: rejPct,
+            fabric_allowance_pct: fabPct,
+            dia_in: Math.round(tblW),
+            dia_val: `${Math.round(tblW)}"`,
+            dia_spec: `${Math.round(tblW)}" ${dia}`,
             lay_length_cm: layLen,
             table_width_in: tblW,
             fabric_wt_per_lay_g: fWtLay,
             no_of_pcs_lay: pcsLay,
+            act_wt_per_pc_g: pcsLay > 0 && fWtLay > 0 ? Math.round((fWtLay / pcsLay) * 10000) / 10000 : 0,
             avg_wt_per_pc_g: avgWt,
             req_length_per_pc_cm: reqLen,
             total_req_qty: totReq,
@@ -1063,7 +1200,7 @@ export default function CadRequirementDetailPage() {
               </span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2.5 text-xs">
               <div>
                 <label className="block text-[11px] font-semibold text-slate-600">Marker Ref</label>
                 <input
@@ -1071,6 +1208,17 @@ export default function CadRequirementDetailPage() {
                   value={activeMarker.marker_ref}
                   onChange={(e) => updateActiveMarker({ marker_ref: e.target.value })}
                   className="w-full font-bold border border-slate-300 rounded px-2 py-1 mt-0.5"
+                />
+              </div>
+
+              <div className="lg:col-span-2">
+                <label className="block text-[11px] font-semibold text-slate-600">Fabric Type / Description</label>
+                <input
+                  type="text"
+                  value={activeMarker.fabric_type}
+                  onChange={(e) => updateActiveMarker({ fabric_type: e.target.value })}
+                  placeholder="e.g. 100% Cotton Single Jersey"
+                  className="w-full font-semibold border border-slate-300 rounded px-2 py-1 mt-0.5"
                 />
               </div>
 
@@ -1095,10 +1243,16 @@ export default function CadRequirementDetailPage() {
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600">Fabric Dia Form</label>
+                <label className="block text-[11px] font-semibold text-slate-600">Dia Form</label>
                 <select
                   value={activeMarker.fabric_dia_type}
-                  onChange={(e) => updateActiveMarker({ fabric_dia_type: e.target.value as any })}
+                  onChange={(e) => {
+                    const diaType = e.target.value as 'OPEN' | 'TUBE';
+                    updateActiveMarker({ 
+                      fabric_dia_type: diaType,
+                      width_allowance_in: diaType === 'TUBE' ? 1.0 : 2.0
+                    });
+                  }}
                   className="w-full border border-slate-300 rounded px-2 py-1 mt-0.5 font-semibold"
                 >
                   <option value="OPEN">OPEN (Flat)</option>
@@ -1107,12 +1261,30 @@ export default function CadRequirementDetailPage() {
               </div>
 
               <div>
+                <label className="block text-[11px] font-semibold text-indigo-700">Fabric Dia (Inches)</label>
+                <input
+                  type="number"
+                  value={activeMarker.dia_in ?? Math.round(activeMarker.table_width_in || 0)}
+                  onChange={(e) => {
+                    const dIn = parseFloat(e.target.value) || 0;
+                    updateActiveMarker({ 
+                      dia_in: dIn,
+                      dia_val: `${dIn}"`,
+                      dia_spec: `${dIn}" ${activeMarker.fabric_dia_type}`
+                    });
+                  }}
+                  className="w-full font-bold text-indigo-800 border border-indigo-300 bg-indigo-50/50 rounded px-2 py-1 mt-0.5"
+                  placeholder='e.g. 60"'
+                />
+              </div>
+
+              <div>
                 <label className="block text-[11px] font-semibold text-slate-600">GSM</label>
                 <input
                   type="number"
                   value={activeMarker.gsm}
                   onChange={(e) => updateActiveMarker({ gsm: parseInt(e.target.value) || 0 })}
-                  className="w-full border border-slate-300 rounded px-2 py-1 mt-0.5"
+                  className="w-full border border-slate-300 rounded px-2 py-1 mt-0.5 font-medium"
                 />
               </div>
 
@@ -1127,42 +1299,118 @@ export default function CadRequirementDetailPage() {
                   <option value="TWOWAY">TWOWAY</option>
                 </select>
               </div>
+            </div>
+
+            {/* Marker-Level Individual Variables (Rejection %, Fabric Loss %, Buffers) */}
+            <div className="p-3 bg-amber-50/30 rounded-xl border border-amber-200/80 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-3 text-xs">
+              <div>
+                <label className="block text-[11px] font-bold text-amber-800">
+                  Marker Rejection %
+                </label>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={activeMarker.rejection_pct ?? header.rejection_pct ?? 3.0}
+                    onChange={(e) => updateActiveMarker({ rejection_pct: parseFloat(e.target.value) || 0 })}
+                    className="w-full font-bold text-amber-900 border border-amber-300 bg-white rounded px-2 py-1"
+                  />
+                  <span className="text-amber-800 font-bold">%</span>
+                </div>
+                <span className="text-[10px] text-amber-700">Per-marker CEIL cut buffer</span>
+              </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600">Parts in Lay</label>
+                <label className="block text-[11px] font-bold text-indigo-800">
+                  Marker Fabric Loss %
+                </label>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={activeMarker.fabric_allowance_pct ?? header.fabric_allowance_pct ?? 10.0}
+                    onChange={(e) => updateActiveMarker({ fabric_allowance_pct: parseFloat(e.target.value) || 0 })}
+                    className="w-full font-bold text-indigo-900 border border-indigo-300 bg-white rounded px-2 py-1"
+                  />
+                  <span className="text-indigo-800 font-bold">%</span>
+                </div>
+                <span className="text-[10px] text-indigo-700">For gross avg consumption</span>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700">
+                  Lay Add (cm)
+                </label>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <input
+                    type="number"
+                    step="1"
+                    value={activeMarker.lay_allowance_cm ?? 10.0}
+                    onChange={(e) => updateActiveMarker({ lay_allowance_cm: parseFloat(e.target.value) || 0 })}
+                    className="w-full font-bold text-slate-800 border border-slate-300 bg-white rounded px-2 py-1"
+                  />
+                  <span className="text-slate-500 font-medium">cm</span>
+                </div>
+                <span className="text-[10px] text-slate-500">End bits allowance</span>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700">
+                  Width Add (in)
+                </label>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={activeMarker.width_allowance_in ?? (activeMarker.fabric_dia_type === 'TUBE' ? 1.0 : 2.0)}
+                    onChange={(e) => updateActiveMarker({ width_allowance_in: parseFloat(e.target.value) || 0 })}
+                    className="w-full font-bold text-slate-800 border border-slate-300 bg-white rounded px-2 py-1"
+                  />
+                  <span className="text-slate-500 font-medium">in</span>
+                </div>
+                <span className="text-[10px] text-slate-500">Selvedge & edge trim</span>
+              </div>
+
+              <div className="col-span-2 sm:col-span-4 md:col-span-1">
+                <label className="block text-[11px] font-semibold text-slate-700">Parts Included</label>
                 <input
                   type="text"
                   value={activeMarker.parts_in_lay}
                   onChange={(e) => updateActiveMarker({ parts_in_lay: e.target.value })}
-                  placeholder="BCK, FRT, SLV"
-                  className="w-full border border-slate-300 rounded px-2 py-1 mt-0.5 font-medium"
+                  placeholder="BCK, FRT, SLV, N/RIB"
+                  className="w-full font-medium border border-slate-300 bg-white rounded px-2 py-1 mt-0.5"
                 />
+                <span className="text-[10px] text-slate-500">Garment components</span>
               </div>
             </div>
 
-            {/* Table Lay Allowances & Formulas */}
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3 text-xs">
+            {/* Computed Lay Geometry & Piece Weights (Net Actual vs Gross Average) */}
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3 text-xs">
               <div>
-                <span className="text-slate-500 text-[11px]">Lay Length (CMS):</span>
-                <div className="font-bold text-slate-900 mt-0.5">
+                <span className="text-slate-500 text-[11px]">Lay Length:</span>
+                <div className="font-bold text-slate-900 mt-0.5 text-sm">
                   {fmtDecimal(activeMarker.lay_length_cm, 1)} cm
                 </div>
-                <span className="text-[10px] text-slate-400">Length/10 + {activeMarker.lay_allowance_cm}cm add</span>
+                <span className="text-[10px] text-slate-400">
+                  {((activeMarker.length_mm || 0) / 10).toFixed(1)} + {activeMarker.lay_allowance_cm}cm
+                </span>
               </div>
 
               <div>
-                <span className="text-slate-500 text-[11px]">Table Width (INCHES):</span>
-                <div className="font-bold text-slate-900 mt-0.5">
-                  {fmtDecimal(activeMarker.table_width_in, 1)} in
+                <span className="text-slate-500 text-[11px]">Table Width / Dia:</span>
+                <div className="font-bold text-indigo-700 mt-0.5 text-sm">
+                  {fmtDecimal(activeMarker.table_width_in, 1)}" ({activeMarker.dia_val || `${Math.round(activeMarker.table_width_in || 0)}"`})
                 </div>
-                <span className="text-[10px] text-slate-400">Width/25.4 + {activeMarker.width_allowance_in}" add</span>
+                <span className="text-[10px] text-slate-400">
+                  {((activeMarker.width_mm || 0) / 25.4).toFixed(1)}" + {activeMarker.width_allowance_in}"
+                </span>
               </div>
 
               {!isWoven ? (
                 <>
                   <div>
-                    <span className="text-slate-500 text-[11px]">Fabric Wt/Lay:</span>
-                    <div className="font-bold text-indigo-700 mt-0.5">
+                    <span className="text-slate-500 text-[11px]">Fabric Wt / Lay:</span>
+                    <div className="font-bold text-indigo-700 mt-0.5 text-sm">
                       {fmtDecimal(activeMarker.fabric_wt_per_lay_g, 1)} g
                     </div>
                     <span className="text-[10px] text-slate-400">
@@ -1172,45 +1420,68 @@ export default function CadRequirementDetailPage() {
 
                   <div>
                     <span className="text-slate-500 text-[11px]">No of Pcs / Lay:</span>
-                    <div className="font-bold text-slate-900 mt-0.5">
+                    <div className="font-bold text-slate-900 mt-0.5 text-sm">
                       {activeMarker.no_of_pcs_lay} pcs
                     </div>
-                    <span className="text-[10px] text-slate-400">Sum of ratios {activeMarker.fabric_dia_type === 'TUBE' ? 'x2' : ''}</span>
+                    <span className="text-[10px] text-slate-400">Ratios {activeMarker.fabric_dia_type === 'TUBE' ? 'x2' : ''}</span>
                   </div>
 
-                  <div>
-                    <span className="text-slate-500 text-[11px]">Average Wt / Pc:</span>
-                    <div className="font-bold text-emerald-700 mt-0.5">
+                  {/* Net Actual Piece Weight */}
+                  <div className="p-2 bg-amber-50 rounded-lg border border-amber-200">
+                    <span className="text-amber-800 text-[10px] font-bold uppercase tracking-wider">Actual Wt / Pc (Net):</span>
+                    <div className="font-extrabold text-amber-900 mt-0.5 text-sm">
+                      {fmtDecimal(activeMarker.act_wt_per_pc_g || (activeMarker.fabric_wt_per_lay_g / (activeMarker.no_of_pcs_lay || 1)), 2)} g/pc
+                    </div>
+                    <span className="text-[9px] text-amber-700">Pure net lay weight</span>
+                  </div>
+
+                  {/* Gross Average Piece Weight */}
+                  <div className="p-2 bg-emerald-50 rounded-lg border border-emerald-200">
+                    <span className="text-emerald-800 text-[10px] font-bold uppercase tracking-wider">Average Wt / Pc (Gross):</span>
+                    <div className="font-extrabold text-emerald-900 mt-0.5 text-sm">
                       {fmtDecimal(activeMarker.avg_wt_per_pc_g, 2)} g/pc
                     </div>
-                    <span className="text-[10px] text-slate-400">With {header.fabric_allowance_pct}% fabric loss</span>
+                    <span className="text-[9px] text-emerald-700">
+                      +{activeMarker.fabric_allowance_pct ?? header.fabric_allowance_pct}% fabric allowance
+                    </span>
                   </div>
                 </>
               ) : (
                 <>
                   <div>
                     <span className="text-slate-500 text-[11px]">No of Pcs / Lay:</span>
-                    <div className="font-bold text-slate-900 mt-0.5">
+                    <div className="font-bold text-slate-900 mt-0.5 text-sm">
                       {activeMarker.no_of_pcs_lay} pcs
                     </div>
                     <span className="text-[10px] text-slate-400">Sum of ratios</span>
                   </div>
 
-                  <div>
-                    <span className="text-slate-500 text-[11px]">Req Length / Pc:</span>
-                    <div className="font-bold text-emerald-700 mt-0.5">
+                  <div className="p-2 bg-amber-50 rounded-lg border border-amber-200">
+                    <span className="text-amber-800 text-[10px] font-bold uppercase tracking-wider">Actual Length / Pc (Net):</span>
+                    <div className="font-extrabold text-amber-900 mt-0.5 text-sm">
+                      {fmtDecimal(activeMarker.act_length_per_pc_cm || (activeMarker.lay_length_cm / (activeMarker.no_of_pcs_lay || 1)), 2)} cm/pc
+                    </div>
+                    <span className="text-[9px] text-amber-700">Pure net lay length</span>
+                  </div>
+
+                  <div className="p-2 bg-emerald-50 rounded-lg border border-emerald-200">
+                    <span className="text-emerald-800 text-[10px] font-bold uppercase tracking-wider">Req Length / Pc (Gross):</span>
+                    <div className="font-extrabold text-emerald-900 mt-0.5 text-sm">
                       {fmtDecimal(activeMarker.req_length_per_pc_cm, 2)} cm/pc
                     </div>
-                    <span className="text-[10px] text-slate-400">Linear consumption</span>
+                    <span className="text-[9px] text-emerald-700">
+                      +{activeMarker.fabric_allowance_pct ?? header.fabric_allowance_pct}% fabric allowance
+                    </span>
                   </div>
                 </>
               )}
 
-              <div className="bg-white p-2 rounded-lg border border-slate-200">
-                <span className="text-slate-500 text-[11px]">Marker Total Req:</span>
-                <div className="text-sm font-bold text-indigo-900 mt-0.5">
+              <div className="p-2 bg-indigo-50 rounded-lg border border-indigo-200">
+                <span className="text-indigo-800 text-[10px] font-bold uppercase tracking-wider">Marker Total Req:</span>
+                <div className="text-base font-extrabold text-indigo-950 mt-0.5">
                   {fmtDecimal(activeMarker.total_req_qty)} {activeMarker.uom}
                 </div>
+                <span className="text-[9px] text-indigo-700">Fabric required</span>
               </div>
             </div>
           </div>
@@ -1412,7 +1683,7 @@ export default function CadRequirementDetailPage() {
                             {fmtNumber(totCut)}
                           </td>
                           <td className="py-1 px-2 text-right text-[10px] text-amber-700">
-                            +{header.rejection_pct}% buffer
+                            +{activeMarker.rejection_pct ?? header.rejection_pct}% buffer
                           </td>
                           <td></td>
                         </tr>
@@ -1436,7 +1707,7 @@ export default function CadRequirementDetailPage() {
                 <span>Fabric Request & Indent Program (F.PRGM)</span>
               </h2>
               <p className="text-xs text-slate-500">
-                Official consolidated fabric procurement indent with safety buffers and process allowances
+                Official consolidated fabric procurement indent with explicit Dia, safety buffers and process allowances
               </p>
             </div>
             <button
@@ -1454,7 +1725,8 @@ export default function CadRequirementDetailPage() {
                 <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
                   <th className="py-2.5 px-3">Fabric Type</th>
                   <th className="py-2.5 px-2">GSM</th>
-                  <th className="py-2.5 px-2">Diameter / Form</th>
+                  <th className="py-2.5 px-2">Dia (Inches)</th>
+                  <th className="py-2.5 px-2">Dia Form</th>
                   <th className="py-2.5 px-3">Colour / Shade</th>
                   <th className="py-2.5 px-2 text-right">Order Qty</th>
                   <th className="py-2.5 px-2 text-right">Net Req ({header.uom})</th>
@@ -1467,8 +1739,13 @@ export default function CadRequirementDetailPage() {
                   <tr key={idx} className="hover:bg-slate-50/70">
                     <td className="py-2.5 px-3 font-semibold text-slate-900">{fp.fabric_type}</td>
                     <td className="py-2.5 px-2">{fp.gsm || '—'}</td>
+                    <td className="py-2.5 px-2 font-bold text-indigo-700">
+                      {fp.dia_val || fp.dia_spec?.split(' ')?.[0] || '—'}
+                    </td>
                     <td className="py-2.5 px-2">
-                      <span className="font-mono text-slate-600 font-medium">{fp.dia_spec}</span>
+                      <Badge tone={fp.dia_type === 'TUBE' || fp.dia_spec?.includes('TUBE') ? 'purple' : 'blue'}>
+                        {fp.dia_type === 'TUBE' || fp.dia_spec?.includes('TUBE') ? 'TUBE' : 'OPEN'}
+                      </Badge>
                     </td>
                     <td className="py-2.5 px-3 font-bold text-slate-800">{fp.color_name}</td>
                     <td className="py-2.5 px-2 text-right">{fmtNumber(fp.order_qty_pcs)} Pcs</td>
@@ -1482,7 +1759,19 @@ export default function CadRequirementDetailPage() {
               </tbody>
               <tfoot>
                 <tr className="bg-indigo-50/60 font-bold text-indigo-900 border-t border-indigo-200">
-                  <td colSpan={4} className="py-3 px-3">TOTAL CONSOLIDATED FABRIC INDENT</td>
+                  <td colSpan={5} className="py-3 px-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <span>TOTAL CONSOLIDATED FABRIC INDENT</span>
+                      <div className="flex items-center gap-3 text-xs font-semibold">
+                        <span className="text-amber-800 bg-amber-100/70 px-2 py-0.5 rounded">
+                          Actual Net Cons: {fmtDecimal(summaryKpis.actGarmentCons * (isWoven ? 1 : 1000), 2)} {isWoven ? 'Mtrs' : 'Gms'}
+                        </span>
+                        <span className="text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded">
+                          Gross Avg Cons: {fmtDecimal(summaryKpis.avgGarmentCons * (isWoven ? 1 : 1000), 2)} {isWoven ? 'Mtrs' : 'Gms'}
+                        </span>
+                      </div>
+                    </div>
+                  </td>
                   <td className="py-3 px-2 text-right">{fmtNumber(summaryKpis.totalOrderPcs)} Pcs</td>
                   <td className="py-3 px-2 text-right">
                     {fmtDecimal(fabricProgram.reduce((s, x) => s + Number(x.net_qty || 0), 0))}

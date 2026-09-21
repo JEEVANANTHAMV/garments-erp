@@ -87,4 +87,26 @@ CREATE TABLE IF NOT EXISTS trx_cad_fabric_program (
   created_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY ix_cfprog_req (cad_req_id),
   CONSTRAINT fk_cfprog__req FOREIGN KEY (cad_req_id) REFERENCES trx_cad_requirement(id) ON DELETE CASCADE
-) ENGINE=InnoDB COMMENT='Consolidated Fabric Request (F.PRGM) and Cutting Lay Sheet (CUT) outputs';
+) ENGINE=InnoDB COMMENT='Consolidated Fabric Request (F.PRGM) & Cutting Lay Sheets (CUT)';
+
+-- 4. ENSURE MARKER-LEVEL VARIABLES & DIA EXIST ON trx_cad_marker
+SET @col_exist = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trx_cad_marker' AND COLUMN_NAME = 'rejection_pct');
+SET @sql = IF(@col_exist = 0, 'ALTER TABLE trx_cad_marker ADD COLUMN rejection_pct DECIMAL(5,2) NOT NULL DEFAULT 3.00 AFTER width_allowance_in', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exist = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trx_cad_marker' AND COLUMN_NAME = 'fabric_allowance_pct');
+SET @sql = IF(@col_exist = 0, 'ALTER TABLE trx_cad_marker ADD COLUMN fabric_allowance_pct DECIMAL(5,2) NOT NULL DEFAULT 10.00 AFTER rejection_pct', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exist = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trx_cad_marker' AND COLUMN_NAME = 'dia_in');
+SET @sql = IF(@col_exist = 0, 'ALTER TABLE trx_cad_marker ADD COLUMN dia_in DECIMAL(6,2) NULL AFTER fabric_dia_type', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exist = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trx_cad_marker' AND COLUMN_NAME = 'act_wt_per_pc_g');
+SET @sql = IF(@col_exist = 0, 'ALTER TABLE trx_cad_marker ADD COLUMN act_wt_per_pc_g DECIMAL(12,4) NOT NULL DEFAULT 0.0000 AFTER no_of_pcs_lay', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- 5. ENSURE dia_val ON trx_cad_fabric_program
+SET @col_exist = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trx_cad_fabric_program' AND COLUMN_NAME = 'dia_val');
+SET @sql = IF(@col_exist = 0, 'ALTER TABLE trx_cad_fabric_program ADD COLUMN dia_val VARCHAR(40) NULL AFTER dia_spec', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
