@@ -348,16 +348,23 @@ productionStagesRouter.post('/bundles/generate-detailed', requirePermission('PRO
     if (skuRow?.id) resolvedSkuId = skuRow.id;
   }
 
+  const [seqRow] = await query<any>(
+    `SELECT COALESCE(MAX(bundle_seq), 0) AS max_seq FROM trx_cutting_bundle WHERE cutting_id = ? AND part_name = ?`,
+    [body.cutting_id, partTag]
+  );
+  const startSeq = Number(seqRow?.max_seq || 0);
+
   const bundleCount = Math.ceil(body.total_qty / body.bundle_size);
   let remaining = body.total_qty;
 
   const bundles = await transaction(async (tx) => {
     const created: any[] = [];
     for (let i = 1; i <= bundleCount; i++) {
+      const currentSeq = startSeq + i;
       const qty = Math.min(body.bundle_size, remaining);
       remaining -= qty;
 
-      const pad = String(i).padStart(2, '0');
+      const pad = String(currentSeq).padStart(2, '0');
       const bundleNo = `${styleCode}-${colorName}-${sizeCode}-${partTag}-B${pad}`;
       const barcode = `${body.io_no}-${partTag}-${bundleNo}`;
 
@@ -366,7 +373,7 @@ productionStagesRouter.post('/bundles/generate-detailed', requirePermission('PRO
           (cutting_id, io_no, style_id, color_id, size_id, part_name, component, sku_id, bundle_no, bundle_seq, total_bundles, qty, barcode, status)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [body.cutting_id, body.io_no, body.style_id, body.color_id, body.size_id,
-         partTag, body.components.join(','), resolvedSkuId, bundleNo, i, bundleCount, qty, barcode, 'GENERATED']);
+         partTag, body.components.join(','), resolvedSkuId, bundleNo, currentSeq, startSeq + bundleCount, qty, barcode, 'GENERATED']);
 
       const bundleId = r.insertId;
 
@@ -377,7 +384,7 @@ productionStagesRouter.post('/bundles/generate-detailed', requirePermission('PRO
           [bundleId, comp, qty]);
       }
 
-      created.push({ id: bundleId, bundle_no: bundleNo, part_name: partTag, bundle_seq: i, total_bundles: bundleCount, barcode, qty, status: 'GENERATED' });
+      created.push({ id: bundleId, bundle_no: bundleNo, part_name: partTag, bundle_seq: currentSeq, total_bundles: startSeq + bundleCount, barcode, qty, status: 'GENERATED' });
     }
     return created;
   });

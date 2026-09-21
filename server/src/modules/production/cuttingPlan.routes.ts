@@ -196,8 +196,6 @@ cuttingPlanRouter.post('/bundles/generate', requirePermission('PRODUCTION.CREATE
       WHERE c.id = ? AND po.company_id = ?`, [body.cutting_id, cid]);
   if (!cutting) throw NotFound('Cutting transaction not found');
 
-  const bundleCount = Math.ceil(body.total_qty / body.bundle_size);
-  let remaining = body.total_qty;
   const partTag = (body.part_name || 'TOP').toUpperCase();
 
   let resolvedSkuId = body.sku_id ?? null;
@@ -206,12 +204,22 @@ cuttingPlanRouter.post('/bundles/generate', requirePermission('PRODUCTION.CREATE
     if (skuRow?.id) resolvedSkuId = skuRow.id;
   }
 
+  const [seqRow] = await query<any>(
+    `SELECT COALESCE(MAX(bundle_seq), 0) AS max_seq FROM trx_cutting_bundle WHERE cutting_id = ? AND part_name = ?`,
+    [body.cutting_id, partTag]
+  );
+  const startSeq = Number(seqRow?.max_seq || 0);
+
+  const bundleCount = Math.ceil(body.total_qty / body.bundle_size);
+  let remaining = body.total_qty;
+
   const bundles = await transaction(async (tx) => {
     const created: any[] = [];
     for (let i = 1; i <= bundleCount; i++) {
+      const currentSeq = startSeq + i;
       const qty = Math.min(body.bundle_size, remaining);
       remaining -= qty;
-      const pad = String(i).padStart(2, '0');
+      const pad = String(currentSeq).padStart(2, '0');
       const bundleNo = `${body.io_no}-${partTag}-B${pad}`;
       const barcode = `${body.io_no}-${partTag}-${bundleNo}`;
 
@@ -220,9 +228,9 @@ cuttingPlanRouter.post('/bundles/generate', requirePermission('PRODUCTION.CREATE
           (cutting_id, io_no, style_id, color_id, size_id, part_name, component, sku_id, bundle_no, bundle_seq, total_bundles, qty, barcode, status)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [body.cutting_id, body.io_no, body.style_id, body.color_id, body.size_id,
-         partTag, body.component, resolvedSkuId, bundleNo, i, bundleCount, qty, barcode, 'GENERATED']);
+         partTag, body.component, resolvedSkuId, bundleNo, currentSeq, startSeq + bundleCount, qty, barcode, 'GENERATED']);
 
-      created.push({ id: r.insertId, bundle_no: bundleNo, part_name: partTag, bundle_seq: i, total_bundles: bundleCount, barcode, qty, status: 'GENERATED' });
+      created.push({ id: r.insertId, bundle_no: bundleNo, part_name: partTag, bundle_seq: currentSeq, total_bundles: startSeq + bundleCount, barcode, qty, status: 'GENERATED' });
     }
     return created;
   });
