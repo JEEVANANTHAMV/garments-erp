@@ -180,7 +180,7 @@ trimProcurementRouter.get('/trim-pos/:id', requirePermission('PROCUREMENT.VIEW')
   const lines = await query(
     `SELECT tpol.*,
             t.trim_name, t.trim_code, t.trim_type,
-            u.uom_code
+            u.code AS uom_code
        FROM trx_trim_po_line tpol
        JOIN mst_trim t ON t.id = tpol.trim_id
        LEFT JOIN cfg_uom u ON u.id = tpol.uom_id
@@ -372,7 +372,7 @@ trimProcurementRouter.get('/trim-grns/:id', requirePermission('PROCUREMENT.VIEW'
   const lines = await query(
     `SELECT tgl.*,
             t.trim_name, t.trim_code, t.trim_type,
-            u.uom_code,
+            u.code AS uom_code,
             tpo.po_no
        FROM trx_trim_grn_line tgl
        JOIN mst_trim t ON t.id = tgl.trim_id
@@ -551,7 +551,7 @@ trimProcurementRouter.get('/trim-stock', requirePermission('INVENTORY.VIEW'), ah
     `SELECT ts.*,
             t.trim_name, t.trim_code, t.trim_type,
             w.warehouse_name,
-            u.uom_code,
+            u.code AS uom_code,
             (ts.stock_qty - ts.allocated_qty) AS available_qty
        FROM trx_trim_stock ts
        JOIN mst_trim t ON t.id = ts.trim_id
