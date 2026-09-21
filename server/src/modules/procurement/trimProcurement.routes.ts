@@ -502,20 +502,21 @@ trimProcurementRouter.post('/trim-grns', requirePermission('PROCUREMENT.CREATE')
              stock_qty = stock_qty + VALUES(stock_qty),
              bin_location = COALESCE(VALUES(bin_location), bin_location)`,
           [
-            cid, body.warehouse_id, line.trim_id, line.color_name, line.trim_size,
-            line.internal_lot_no, line.bin_location, line.accepted_qty, line.uom_id
+            cid, body.warehouse_id, line.trim_id, line.color_name || null, line.trim_size || null,
+            line.internal_lot_no, line.bin_location || null, line.accepted_qty, line.uom_id
           ]
         );
       }
     }
 
-    // Check if PO is fully received
-    if (body.po_id) {
-      const pols = await query('SELECT order_qty, received_qty FROM trx_trim_po_line WHERE po_id = ?', [body.po_id]);
+    // Check if POs are fully received
+    const checkPoIds = poIds.length > 0 ? poIds : (body.po_id ? [body.po_id] : []);
+    for (const pId of checkPoIds) {
+      const pols = await query('SELECT order_qty, received_qty FROM trx_trim_po_line WHERE po_id = ?', [pId]);
       const allReceived = pols.length > 0 && pols.every((p: any) => Number(p.received_qty) >= Number(p.order_qty));
       const anyReceived = pols.some((p: any) => Number(p.received_qty) > 0);
       const newStatus = allReceived ? 'CLOSED' : (anyReceived ? 'PARTIAL' : 'APPROVED');
-      await txExecute(tx, 'UPDATE trx_trim_po SET status = ? WHERE id = ?', [newStatus, body.po_id]);
+      await txExecute(tx, 'UPDATE trx_trim_po SET status = ? WHERE id = ?', [newStatus, pId]);
     }
 
     return { id: grnId, grn_no: grnNo };
