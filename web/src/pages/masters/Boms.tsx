@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, ArrowLeft, Save, Trash2, Layers, FileText, Zap, Sparkles } from 'lucide-react';
+import { Plus, ArrowLeft, Save, Trash2, Layers, FileText, Zap, Sparkles, Grid } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { http, ApiError } from '../../lib/api';
 import { useList, useListState } from '../../hooks/useResource';
@@ -9,9 +9,9 @@ import { useLookup, toOptions, useStatuses, toPlainOptions } from '../../hooks/u
 import { useToast } from '../../hooks/useToast';
 import { DataTable } from '../../components/DataTable';
 import {
-  PageHeader, SearchInput, Input, Select, Spinner, Badge, StatusBadge, LoadingBlock, ErrorState, useDebounced
+  PageHeader, SearchInput, Input, Select, Spinner, Badge, StatusBadge, LoadingBlock, ErrorState, useDebounced, Modal, Button
 } from '../../components/ui';
-import { fmtDate, fmtDecimal, today, toDateInput } from '../../lib/format';
+import { fmtDate, fmtDecimal, today, toDateInput, humanize } from '../../lib/format';
 
 const MATERIALS = ['FABRIC', 'YARN', 'TRIM', 'ACCESSORY', 'PACKING', 'GENERAL'] as const;
 
@@ -50,6 +50,486 @@ const emptyLine = (type: BomLine['material_type'] = 'TRIM'): BomLine => ({
   wastage_pct: 0,
   remarks: '',
 });
+
+interface TrimMatrixModalProps {
+  open: boolean;
+  line: BomLine | null;
+  mode: 'SIZE_WISE' | 'COLOUR_WISE' | 'COLOUR_SIZE_WISE';
+  materialName: string;
+  sizes: any[];
+  colors: any[];
+  onClose: () => void;
+  onApply: (newLines: BomLine[]) => void;
+}
+
+function TrimMatrixModal({
+  open,
+  line,
+  mode: initialMode,
+  materialName,
+  sizes,
+  colors,
+  onClose,
+  onApply,
+}: TrimMatrixModalProps) {
+  const [currentMode, setCurrentMode] = useState<'SIZE_WISE' | 'COLOUR_WISE' | 'COLOUR_SIZE_WISE'>(initialMode);
+  const [defaultCons, setDefaultCons] = useState<number>(Number(line?.consumption) || 1);
+  const [defaultWaste, setDefaultWaste] = useState<number>(Number(line?.wastage_pct) || 2);
+
+  const activeSizes = useMemo(
+    () => (sizes && sizes.length > 0 ? sizes : [
+      { id: 1, label: 'S', code: 'S' },
+      { id: 2, label: 'M', code: 'M' },
+      { id: 3, label: 'L', code: 'L' },
+      { id: 4, label: 'XL', code: 'XL' },
+      { id: 5, label: 'XXL', code: 'XXL' },
+    ]),
+    [sizes]
+  );
+
+  const activeColors = useMemo(
+    () => (colors && colors.length > 0 ? colors : [
+      { id: 1, label: 'Black', code: 'BLK' },
+      { id: 2, label: 'White', code: 'WHT' },
+      { id: 3, label: 'Navy', code: 'NVY' },
+    ]),
+    [colors]
+  );
+
+  const [sizeMap, setSizeMap] = useState<Record<number, { active: boolean; consumption: number; wastage_pct: number; additional_qty: number }>>({});
+  const [colorMap, setColorMap] = useState<Record<number, { active: boolean; consumption: number; wastage_pct: number; additional_qty: number }>>({});
+  const [gridMap, setGridMap] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (!open || !line) return;
+    setCurrentMode(initialMode);
+    const baseCons = Number(line.consumption) || 1;
+    const baseWaste = Number(line.wastage_pct) || 2;
+    setDefaultCons(baseCons);
+    setDefaultWaste(baseWaste);
+
+    const sInit: Record<number, any> = {};
+    activeSizes.forEach((s: any) => {
+      sInit[s.id] = { active: true, consumption: baseCons, wastage_pct: baseWaste, additional_qty: 0 };
+    });
+    setSizeMap(sInit);
+
+    const cInit: Record<number, any> = {};
+    activeColors.forEach((c: any) => {
+      cInit[c.id] = { active: true, consumption: baseCons, wastage_pct: baseWaste, additional_qty: 0 };
+    });
+    setColorMap(cInit);
+
+    const gInit: Record<string, number> = {};
+    activeColors.forEach((c: any) => {
+      activeSizes.forEach((s: any) => {
+        gInit[`${c.id}_${s.id}`] = baseCons;
+      });
+    });
+    setGridMap(gInit);
+  }, [open, line, initialMode, activeSizes, activeColors]);
+
+  const handleFillAll = () => {
+    if (currentMode === 'SIZE_WISE') {
+      setSizeMap((prev) => {
+        const copy = { ...prev };
+        Object.keys(copy).forEach((k) => {
+          copy[Number(k)] = { ...copy[Number(k)], consumption: defaultCons, wastage_pct: defaultWaste };
+        });
+        return copy;
+      });
+    } else if (currentMode === 'COLOUR_WISE') {
+      setColorMap((prev) => {
+        const copy = { ...prev };
+        Object.keys(copy).forEach((k) => {
+          copy[Number(k)] = { ...copy[Number(k)], consumption: defaultCons, wastage_pct: defaultWaste };
+        });
+        return copy;
+      });
+    } else {
+      setGridMap((prev) => {
+        const copy = { ...prev };
+        Object.keys(copy).forEach((k) => {
+          copy[k] = defaultCons;
+        });
+        return copy;
+      });
+    }
+  };
+
+  const handleApply = () => {
+    if (!line) return;
+    const newLines: BomLine[] = [];
+
+    if (currentMode === 'SIZE_WISE') {
+      activeSizes.forEach((s: any) => {
+        const row = sizeMap[s.id];
+        if (row && row.active && row.consumption > 0) {
+          newLines.push({
+            ...line,
+            _key: `b${++seq}`,
+            applicability: 'SIZE_WISE',
+            size_id: s.id,
+            color_id: '',
+            consumption: row.consumption,
+            wastage_pct: row.wastage_pct,
+            additional_qty: row.additional_qty || 0,
+            remarks: `${line.remarks ? `${line.remarks} - ` : ''}Size: ${s.label || s.code}`,
+          });
+        }
+      });
+    } else if (currentMode === 'COLOUR_WISE') {
+      activeColors.forEach((c: any) => {
+        const row = colorMap[c.id];
+        if (row && row.active && row.consumption > 0) {
+          newLines.push({
+            ...line,
+            _key: `b${++seq}`,
+            applicability: 'COLOUR_WISE',
+            color_id: c.id,
+            size_id: '',
+            consumption: row.consumption,
+            wastage_pct: row.wastage_pct,
+            additional_qty: row.additional_qty || 0,
+            remarks: `${line.remarks ? `${line.remarks} - ` : ''}Colour: ${c.label || c.code}`,
+          });
+        }
+      });
+    } else {
+      // COLOUR_SIZE_WISE
+      activeColors.forEach((c: any) => {
+        activeSizes.forEach((s: any) => {
+          const val = gridMap[`${c.id}_${s.id}`];
+          if (val != null && val > 0) {
+            newLines.push({
+              ...line,
+              _key: `b${++seq}`,
+              applicability: 'COLOUR_SIZE_WISE',
+              color_id: c.id,
+              size_id: s.id,
+              consumption: val,
+              wastage_pct: defaultWaste,
+              additional_qty: 0,
+              remarks: `${line.remarks ? `${line.remarks} - ` : ''}${c.label || c.code} / ${s.label || s.code}`,
+            });
+          }
+        });
+      });
+    }
+
+    if (newLines.length === 0) {
+      newLines.push({
+        ...line,
+        applicability: currentMode,
+        consumption: defaultCons,
+      });
+    }
+
+    onApply(newLines);
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`Configure Matrix Breakdown: ${materialName || 'Component'}`}
+      size="xl"
+      footer={
+        <div className="flex items-center justify-between w-full">
+          <div className="text-xs text-slate-500">
+            Mode: <strong>{humanize(currentMode)}</strong> • Applying will expand component into per-size/color BOM lines
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button onClick={handleApply} className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5">
+              <Sparkles size={14} />
+              <span>Apply Matrix to BOM</span>
+            </Button>
+          </div>
+        </div>
+      }
+    >
+      <div className="space-y-4">
+        {/* Mode Selector & Quick Fill Bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+          <div className="flex items-center gap-1">
+            {[
+              { id: 'SIZE_WISE', label: 'Size-wise Breakdown' },
+              { id: 'COLOUR_WISE', label: 'Colour-wise Breakdown' },
+              { id: 'COLOUR_SIZE_WISE', label: 'Colour × Size Matrix' },
+            ].map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setCurrentMode(m.id as any)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  currentMode === m.id
+                    ? 'bg-white text-indigo-700 shadow-sm border border-slate-200'
+                    : 'text-slate-600 hover:bg-white/60'
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Quick-fill controls */}
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-slate-500 font-medium">Quick Fill:</span>
+            <input
+              type="number"
+              step="0.01"
+              value={defaultCons}
+              onChange={(e) => setDefaultCons(parseFloat(e.target.value) || 0)}
+              className="w-16 text-xs text-right border border-slate-300 rounded px-1.5 py-1 bg-white font-mono"
+              placeholder="Cons"
+              title="Default consumption"
+            />
+            <input
+              type="number"
+              step="0.5"
+              value={defaultWaste}
+              onChange={(e) => setDefaultWaste(parseFloat(e.target.value) || 0)}
+              className="w-14 text-xs text-right border border-slate-300 rounded px-1.5 py-1 bg-white font-mono"
+              placeholder="Waste %"
+              title="Wastage %"
+            />
+            <button
+              type="button"
+              onClick={handleFillAll}
+              className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded border border-indigo-200 text-xs"
+            >
+              Fill All
+            </button>
+          </div>
+        </div>
+
+        {/* 1. SIZE-WISE BREAKDOWN */}
+        {currentMode === 'SIZE_WISE' && (
+          <div className="overflow-x-auto border border-slate-200 rounded-xl">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                  <th className="py-2.5 px-3 w-12 text-center">Active</th>
+                  <th className="py-2.5 px-3">Garment Size</th>
+                  <th className="py-2.5 px-3 w-36 text-right">Consumption / Pc *</th>
+                  <th className="py-2.5 px-3 w-28 text-right">Wastage %</th>
+                  <th className="py-2.5 px-3 w-28 text-right">Addl Qty</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {activeSizes.map((s: any) => {
+                  const r = sizeMap[s.id] || { active: true, consumption: defaultCons, wastage_pct: defaultWaste, additional_qty: 0 };
+                  return (
+                    <tr key={s.id} className="hover:bg-slate-50/60">
+                      <td className="py-2 px-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={r.active}
+                          onChange={(e) => setSizeMap((p) => ({ ...p, [s.id]: { ...r, active: e.target.checked } }))}
+                          className="rounded text-indigo-600"
+                        />
+                      </td>
+                      <td className="py-2 px-3 font-semibold text-slate-900">
+                        <span>{s.label || s.code}</span>
+                        {s.code && s.label && s.code !== s.label && (
+                          <span className="text-slate-400 font-normal ml-1">({s.code})</span>
+                        )}
+                      </td>
+                      <td className="py-2 px-3 text-right">
+                        <input
+                          type="number"
+                          step="0.001"
+                          disabled={!r.active}
+                          value={r.consumption}
+                          onChange={(e) =>
+                            setSizeMap((p) => ({
+                              ...p,
+                              [s.id]: { ...r, consumption: parseFloat(e.target.value) || 0 },
+                            }))
+                          }
+                          className="w-28 text-xs text-right font-bold text-indigo-700 border border-slate-300 rounded px-2 py-1"
+                        />
+                      </td>
+                      <td className="py-2 px-3 text-right">
+                        <input
+                          type="number"
+                          step="0.5"
+                          disabled={!r.active}
+                          value={r.wastage_pct}
+                          onChange={(e) =>
+                            setSizeMap((p) => ({
+                              ...p,
+                              [s.id]: { ...r, wastage_pct: parseFloat(e.target.value) || 0 },
+                            }))
+                          }
+                          className="w-20 text-xs text-right border border-slate-300 rounded px-2 py-1"
+                        />
+                      </td>
+                      <td className="py-2 px-3 text-right">
+                        <input
+                          type="number"
+                          step="1"
+                          disabled={!r.active}
+                          value={r.additional_qty}
+                          onChange={(e) =>
+                            setSizeMap((p) => ({
+                              ...p,
+                              [s.id]: { ...r, additional_qty: parseFloat(e.target.value) || 0 },
+                            }))
+                          }
+                          className="w-20 text-xs text-right border border-slate-300 rounded px-2 py-1"
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* 2. COLOUR-WISE BREAKDOWN */}
+        {currentMode === 'COLOUR_WISE' && (
+          <div className="overflow-x-auto border border-slate-200 rounded-xl">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                  <th className="py-2.5 px-3 w-12 text-center">Active</th>
+                  <th className="py-2.5 px-3">Garment Colour</th>
+                  <th className="py-2.5 px-3 w-36 text-right">Consumption / Pc *</th>
+                  <th className="py-2.5 px-3 w-28 text-right">Wastage %</th>
+                  <th className="py-2.5 px-3 w-28 text-right">Addl Qty</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {activeColors.map((c: any) => {
+                  const r = colorMap[c.id] || { active: true, consumption: defaultCons, wastage_pct: defaultWaste, additional_qty: 0 };
+                  return (
+                    <tr key={c.id} className="hover:bg-slate-50/60">
+                      <td className="py-2 px-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={r.active}
+                          onChange={(e) => setColorMap((p) => ({ ...p, [c.id]: { ...r, active: e.target.checked } }))}
+                          className="rounded text-indigo-600"
+                        />
+                      </td>
+                      <td className="py-2 px-3 font-semibold text-slate-900">
+                        <span>{c.label || c.code}</span>
+                      </td>
+                      <td className="py-2 px-3 text-right">
+                        <input
+                          type="number"
+                          step="0.001"
+                          disabled={!r.active}
+                          value={r.consumption}
+                          onChange={(e) =>
+                            setColorMap((p) => ({
+                              ...p,
+                              [c.id]: { ...r, consumption: parseFloat(e.target.value) || 0 },
+                            }))
+                          }
+                          className="w-28 text-xs text-right font-bold text-indigo-700 border border-slate-300 rounded px-2 py-1"
+                        />
+                      </td>
+                      <td className="py-2 px-3 text-right">
+                        <input
+                          type="number"
+                          step="0.5"
+                          disabled={!r.active}
+                          value={r.wastage_pct}
+                          onChange={(e) =>
+                            setColorMap((p) => ({
+                              ...p,
+                              [c.id]: { ...r, wastage_pct: parseFloat(e.target.value) || 0 },
+                            }))
+                          }
+                          className="w-20 text-xs text-right border border-slate-300 rounded px-2 py-1"
+                        />
+                      </td>
+                      <td className="py-2 px-3 text-right">
+                        <input
+                          type="number"
+                          step="1"
+                          disabled={!r.active}
+                          value={r.additional_qty}
+                          onChange={(e) =>
+                            setColorMap((p) => ({
+                              ...p,
+                              [c.id]: { ...r, additional_qty: parseFloat(e.target.value) || 0 },
+                            }))
+                          }
+                          className="w-20 text-xs text-right border border-slate-300 rounded px-2 py-1"
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* 3. COLOUR × SIZE 2D MATRIX */}
+        {currentMode === 'COLOUR_SIZE_WISE' && (
+          <div className="overflow-x-auto border border-slate-200 rounded-xl">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                  <th className="py-2.5 px-3 min-w-[140px]">Colour \ Size</th>
+                  {activeSizes.map((s: any) => (
+                    <th key={s.id} className="py-2.5 px-2 text-center min-w-[90px]">
+                      {s.label || s.code}
+                    </th>
+                  ))}
+                  <th className="py-2.5 px-3 text-right w-24">Row Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {activeColors.map((c: any) => {
+                  const rowSum = activeSizes.reduce(
+                    (acc: number, s: any) => acc + (gridMap[`${c.id}_${s.id}`] || 0),
+                    0
+                  );
+                  return (
+                    <tr key={c.id} className="hover:bg-slate-50/60">
+                      <td className="py-2 px-3 font-semibold text-slate-900 bg-slate-50/30">
+                        {c.label || c.code}
+                      </td>
+                      {activeSizes.map((s: any) => {
+                        const val = gridMap[`${c.id}_${s.id}`] ?? 0;
+                        return (
+                          <td key={s.id} className="py-1.5 px-2 text-center">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={val}
+                              onChange={(e) => {
+                                const num = parseFloat(e.target.value) || 0;
+                                setGridMap((p) => ({ ...p, [`${c.id}_${s.id}`]: num }));
+                              }}
+                              className="w-20 text-center text-xs font-bold text-indigo-700 border border-slate-300 rounded px-1.5 py-1"
+                            />
+                          </td>
+                        );
+                      })}
+                      <td className="py-2 px-3 text-right font-mono font-bold text-slate-700">
+                        {fmtDecimal(rowSum, 2)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
 
 export function BomsPage() {
   const { can } = useAuth();
@@ -121,6 +601,17 @@ export function BomDetailPage() {
   const [syncingCad, setSyncingCad] = useState(false);
   const [activeTab, setActiveTab] = useState<'ALL' | 'FABRIC' | 'YARN' | 'TRIM' | 'ACCESSORY' | 'PACKING' | 'GENERAL'>('ALL');
   const [explodeQty, setExplodeQty] = useState(1000);
+  const [matrixModal, setMatrixModal] = useState<{
+    open: boolean;
+    line: BomLine | null;
+    mode: 'SIZE_WISE' | 'COLOUR_WISE' | 'COLOUR_SIZE_WISE';
+    materialName: string;
+  }>({
+    open: false,
+    line: null,
+    mode: 'SIZE_WISE',
+    materialName: '',
+  });
 
   const styles = useLookup('styles');
   const salesOrders = useLookup('sales-orders');
@@ -616,13 +1107,59 @@ export function BomDetailPage() {
                     </td>
                     {/* Applicability */}
                     <td className="td p-1.5">
-                      <select className="input py-1 text-[11px]" value={l.applicability || 'ALL'} disabled={!editable}
-                        onChange={(e) => setLine(l._key, { applicability: e.target.value })}>
-                        <option value="ALL">All (Uniform)</option>
-                        <option value="COLOUR_WISE">Colour-wise</option>
-                        <option value="SIZE_WISE">Size-wise</option>
-                        <option value="COLOUR_SIZE_WISE">Colour & Size</option>
-                      </select>
+                      <div className="flex items-center gap-1">
+                        <select
+                          className="input py-1 text-[11px]"
+                          value={l.applicability || 'ALL'}
+                          disabled={!editable}
+                          onChange={(e) => {
+                            const newApp = e.target.value;
+                            setLine(l._key, { applicability: newApp });
+                            if (newApp !== 'ALL') {
+                              const src = l.material_type === 'YARN' ? yarns.data
+                                        : l.material_type === 'FABRIC' ? fabrics.data : trims.data;
+                              const mid = l.material_type === 'YARN' ? l.yarn_id
+                                        : l.material_type === 'FABRIC' ? l.fabric_id : l.trim_id;
+                              const itemObj = (src ?? []).find((x: any) => x.id === Number(mid));
+                              const mName = String(itemObj?.label || itemObj?.trim_name || l.item_description || l.material_type || 'Material');
+                              setMatrixModal({
+                                open: true,
+                                line: l,
+                                mode: newApp as any,
+                                materialName: mName,
+                              });
+                            }
+                          }}
+                        >
+                          <option value="ALL">All (Uniform)</option>
+                          <option value="COLOUR_WISE">Colour-wise</option>
+                          <option value="SIZE_WISE">Size-wise</option>
+                          <option value="COLOUR_SIZE_WISE">Colour & Size</option>
+                        </select>
+                        {l.applicability && l.applicability !== 'ALL' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const src = l.material_type === 'YARN' ? yarns.data
+                                        : l.material_type === 'FABRIC' ? fabrics.data : trims.data;
+                              const mid = l.material_type === 'YARN' ? l.yarn_id
+                                        : l.material_type === 'FABRIC' ? l.fabric_id : l.trim_id;
+                              const itemObj = (src ?? []).find((x: any) => x.id === Number(mid));
+                              const mName = String(itemObj?.label || itemObj?.trim_name || l.item_description || l.material_type || 'Material');
+                              setMatrixModal({
+                                open: true,
+                                line: l,
+                                mode: l.applicability as any,
+                                materialName: mName,
+                              });
+                            }}
+                            className="p-1 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition shrink-0"
+                            title="Open Color / Size Matrix Breakdown"
+                          >
+                            <Grid size={12} />
+                          </button>
+                        )}
+                      </div>
                     </td>
                     {/* Colour */}
                     <td className="td p-1.5">
@@ -757,6 +1294,32 @@ export function BomDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Trim / Accessory Matrix Modal */}
+      {matrixModal.open && (
+        <TrimMatrixModal
+          open={matrixModal.open}
+          line={matrixModal.line}
+          mode={matrixModal.mode}
+          materialName={matrixModal.materialName}
+          sizes={sizes.data || []}
+          colors={colors.data || []}
+          onClose={() => setMatrixModal({ open: false, line: null, mode: 'SIZE_WISE', materialName: '' })}
+          onApply={(newLines) => {
+            setLines((prev) => {
+              const idx = prev.findIndex((l) => l._key === matrixModal.line?._key);
+              if (idx !== -1) {
+                const copy = [...prev];
+                copy.splice(idx, 1, ...newLines);
+                return copy;
+              }
+              return [...prev, ...newLines];
+            });
+            setMatrixModal({ open: false, line: null, mode: 'SIZE_WISE', materialName: '' });
+            toast(`Matrix breakdown applied (${newLines.length} component lines generated)!`, 'success');
+          }}
+        />
+      )}
     </>
   );
 }
