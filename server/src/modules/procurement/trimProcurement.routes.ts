@@ -208,10 +208,10 @@ trimProcurementRouter.post('/trim-pos', requirePermission('PROCUREMENT.CREATE'),
           payment_terms, is_interstate, total_amount, tax_amount, cgst_amount, sgst_amount, igst_amount, grand_total, status, remarks, created_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        cid, poNo, body.po_date, body.io_no, body.style_id, body.supplier_id, body.currency_id || 1, body.exchange_rate || 1.0, body.delivery_date,
-        body.payment_terms, body.is_interstate || 0, body.total_amount, body.tax_amount,
+        cid, poNo, body.po_date, body.io_no, body.style_id || null, body.supplier_id, body.currency_id || 1, body.exchange_rate || 1.0, body.delivery_date || null,
+        body.payment_terms || null, body.is_interstate ? 1 : 0, body.total_amount || 0, body.tax_amount || 0,
         body.cgst_amount || 0, body.sgst_amount || 0, body.igst_amount || 0,
-        body.grand_total, body.status, body.remarks, uid
+        body.grand_total || 0, body.status || 'APPROVED', body.remarks || null, uid
       ]
     );
 
@@ -226,7 +226,7 @@ trimProcurementRouter.post('/trim-pos', requirePermission('PROCUREMENT.CREATE'),
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           poId, line.so_id || null, line.style_id || body.style_id || null, line.trim_id,
-          line.specification, line.color_name, line.trim_size, line.order_qty,
+          line.specification || null, line.color_name || null, line.trim_size || null, line.order_qty,
           line.uom_id, line.rate, line.amount, line.gst_rate, line.igst_rate || 0,
           line.igst_amount || 0, line.tax_amount, line.net_amount
         ]
