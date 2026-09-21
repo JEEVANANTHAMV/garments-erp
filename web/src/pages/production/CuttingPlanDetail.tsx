@@ -55,6 +55,11 @@ export function CuttingPlansPage() {
               <div><p className="font-medium">{r.style_code}</p>
                 <p className="text-[11px] text-slate-500">{r.style_name}</p></div>
             ) },
+            { key: 'part_name', header: 'Part', render: (r: any) => {
+              const part = (r.part_name || 'TOP').toUpperCase();
+              const colors: Record<string, string> = { TOP: 'blue', BOTTOM: 'emerald', FOLDING: 'purple', COLLAR: 'amber', FULL_SET: 'indigo' };
+              return <Badge color={colors[part] || 'slate'}>{part}</Badge>;
+            } },
             { key: 'color_name', header: 'Colour' },
             { key: 'order_qty', header: 'Order Qty', align: 'right' as const, render: (r: any) => fmtNumber(r.order_qty) },
             { key: 'planned_cut_qty', header: 'Planned', align: 'right' as const,
@@ -82,7 +87,7 @@ export function CuttingPlanDetailPage() {
 
   const [header, setHeader] = useState<any>({
     plan_no: '', plan_date: today(), io_no: '', so_id: null, prod_order_id: null,
-    style_id: null, color_id: null, order_qty: 0, planned_cut_qty: 0,
+    style_id: null, color_id: null, part_name: 'TOP', order_qty: 0, planned_cut_qty: 0,
     required_date: '', marker_ref: '', marker_eff_pct: '', fabric_id: null,
     fabric_req_kg: '', fabric_req_mtr: '', status: 'DRAFT', remarks: '',
   });
@@ -123,6 +128,7 @@ export function CuttingPlanDetailPage() {
           plan_no: d.plan_no || '', plan_date: d.plan_date?.slice(0, 10) || today(),
           io_no: d.io_no || '', so_id: d.so_id, prod_order_id: d.prod_order_id,
           style_id: d.style_id, color_id: d.color_id,
+          part_name: d.part_name || 'TOP',
           order_qty: d.order_qty || 0, planned_cut_qty: d.planned_cut_qty || 0,
           required_date: d.required_date?.slice(0, 10) || '',
           marker_ref: d.marker_ref || '', marker_eff_pct: d.marker_eff_pct || '',
@@ -241,6 +247,16 @@ export function CuttingPlanDetailPage() {
           <Select label="Style *" value={header.style_id || ''}
             onChange={e => setField('style_id', e.target.value ? Number(e.target.value) : null)} required
             options={[{ value: '', label: '— Select Style —' }, ...styles.map((s: any) => ({ value: s.id, label: s.label || s.code }))]} />
+
+          <Select label="Garment Part *" value={header.part_name || 'TOP'}
+            onChange={e => setField('part_name', e.target.value)}
+            options={[
+              { value: 'TOP', label: 'TOP (Shirt / T-Shirt / Body)' },
+              { value: 'BOTTOM', label: 'BOTTOM (Pants / Shorts / Pyjama)' },
+              { value: 'FOLDING', label: 'FOLDING (Waistband / Fold)' },
+              { value: 'COLLAR', label: 'COLLAR' },
+              { value: 'FULL_SET', label: 'FULL SET' },
+            ]} />
 
           <Select label="Colour" value={header.color_id || ''}
             onChange={e => setField('color_id', e.target.value ? Number(e.target.value) : null)}

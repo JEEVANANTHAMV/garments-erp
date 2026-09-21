@@ -14,12 +14,18 @@ export function CutQcBundlesPage() {
 
   // New Bundle Generator Form
   const [showBundleModal, setShowBundleModal] = useState(false);
+  const [selectedPartFilter, setSelectedPartFilter] = useState<string>('ALL');
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [printBundle, setPrintBundle] = useState<any>(null);
+
   const [bundleForm, setBundleForm] = useState<any>({
     cutting_id: '',
     io_no: '',
     style_id: '',
     color_id: '',
     size_id: '',
+    part_name: 'TOP',
+    custom_part: '',
     total_qty: 600,
     bundle_size: 20,
     components: 'FRONT,BACK,SLEEVE_L,SLEEVE_R,COLLAR,CUFF',
@@ -90,15 +96,20 @@ export function CutQcBundlesPage() {
     setSaving(true);
     try {
       const components = bundleForm.components.split(',').map((s: string) => s.trim()).filter(Boolean);
+      const effectivePart = bundleForm.part_name === 'CUSTOM'
+        ? (bundleForm.custom_part || 'CUSTOM').trim().toUpperCase()
+        : (bundleForm.part_name || 'TOP').toUpperCase();
+
       await api.post('/bundles/generate-detailed', {
         ...bundleForm,
         cutting_id: Number(bundleForm.cutting_id),
         style_id: Number(bundleForm.style_id),
         color_id: Number(bundleForm.color_id),
         size_id: Number(bundleForm.size_id),
+        part_name: effectivePart,
         components,
       });
-      toast('Bundles generated with component barcodes!');
+      toast(`Bundles generated for Part: ${effectivePart}!`);
       setShowBundleModal(false);
       fetchAll();
     } catch (e: any) {
@@ -159,14 +170,24 @@ export function CutQcBundlesPage() {
     }
   };
 
+  const filteredBundles = bundles.filter((b: any) => {
+    if (selectedPartFilter === 'ALL') return true;
+    return (b.part_name || 'TOP').toUpperCase() === selectedPartFilter;
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Cut Piece QC & Bundles</h1>
-          <p className="text-sm text-slate-500">Component QC, barcode bundle generation, and floor stage movement</p>
+          <p className="text-sm text-slate-500">Component QC, garment part barcode generation (TOP / BOTTOM / FOLDING), and floor stage tracking</p>
         </div>
         <div className="flex gap-2">
+          {activeTab === 'bundles' && filteredBundles.length > 0 && (
+            <Button variant="outline" onClick={() => { setPrintBundle(null); setShowPrintModal(true); }}>
+              🖨️ Print Tickets ({filteredBundles.length})
+            </Button>
+          )}
           <Button variant="outline" onClick={() => setShowQcModal(true)}>+ Record Cut QC</Button>
           <Button onClick={() => setShowBundleModal(true)}>+ Generate Bundles</Button>
         </div>
@@ -195,16 +216,57 @@ export function CutQcBundlesPage() {
 
       {activeTab === 'bundles' && (
         <Card>
+          {/* Part Filter Bar */}
+          <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2 text-xs">
+            <div className="flex items-center gap-1.5">
+              <span className="font-semibold text-slate-600 mr-1">Filter by Part:</span>
+              {['ALL', 'TOP', 'BOTTOM', 'FOLDING', 'COLLAR'].map(p => (
+                <button
+                  key={p}
+                  onClick={() => setSelectedPartFilter(p)}
+                  className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
+                    selectedPartFilter === p
+                      ? 'bg-brand-600 text-white shadow-xs'
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  {p === 'ALL' ? `All Parts (${bundles.length})` : p}
+                </button>
+              ))}
+            </div>
+            <div className="text-slate-500 font-mono">
+              Showing {filteredBundles.length} of {bundles.length} bundles
+            </div>
+          </div>
+
           <DataTable
-            data={bundles}
+            data={filteredBundles}
             loading={loading}
             columns={[
-              { key: 'bundle_no', header: 'Bundle No', sortable: true, render: (r: any) => (
+              { key: 'bundle_no', header: 'Bundle No & Sequence', sortable: true, render: (r: any) => (
                 <div>
-                  <span className="font-mono text-xs font-bold text-brand-700">{r.bundle_no}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono text-xs font-bold text-brand-700">{r.bundle_no}</span>
+                    {r.bundle_seq ? (
+                      <span className="rounded bg-slate-100 text-slate-700 px-1.5 py-0.5 text-[10px] font-mono font-bold">
+                        #{r.bundle_seq} / {r.total_bundles || '?'}
+                      </span>
+                    ) : null}
+                  </div>
                   {r.barcode && <p className="font-mono text-[10px] text-slate-400">{r.barcode}</p>}
                 </div>
               ) },
+              { key: 'part_name', header: 'Part', sortable: true, render: (r: any) => {
+                const part = (r.part_name || 'TOP').toUpperCase();
+                const colors: Record<string, string> = {
+                  TOP: 'blue',
+                  BOTTOM: 'emerald',
+                  FOLDING: 'purple',
+                  COLLAR: 'amber',
+                  FULL_SET: 'indigo',
+                };
+                return <Badge color={colors[part] || 'slate'}>{part}</Badge>;
+              } },
               { key: 'io_no', header: 'I/O No', render: (r: any) => <Badge variant="outline" color="indigo">{r.io_no}</Badge> },
               { key: 'style_code', header: 'Style' },
               { key: 'color_name', header: 'Colour' },
@@ -217,8 +279,11 @@ export function CutQcBundlesPage() {
                 };
                 return <Badge color={colors[r.status] || 'slate'}>{r.status}</Badge>;
               } },
-              { key: 'actions', header: 'Move', align: 'right' as const, render: (r: any) => (
-                <div className="flex justify-end gap-1">
+              { key: 'actions', header: 'Actions', align: 'right' as const, render: (r: any) => (
+                <div className="flex justify-end gap-1 items-center">
+                  <Button size="sm" variant="ghost" onClick={() => { setPrintBundle(r); setShowPrintModal(true); }}>
+                    🏷️
+                  </Button>
                   {r.status === 'GENERATED' && (
                     <Button size="sm" variant="outline" onClick={() => handleMoveBundle(r.id, 'CHECKED')}>Verify</Button>
                   )}
@@ -252,14 +317,24 @@ export function CutQcBundlesPage() {
           {scannedBundle && (
             <Card title={`Bundle Information — ${scannedBundle.bundle_no}`}>
               <div className="p-6 space-y-4">
-                <div className="grid grid-cols-3 gap-4 p-4 bg-slate-50 rounded-lg">
+                <div className="grid grid-cols-4 gap-4 p-4 bg-slate-50 rounded-lg">
                   <div>
-                    <span className="text-xs text-slate-500">I/O Number</span>
-                    <p className="font-mono font-bold text-slate-800">{scannedBundle.io_no}</p>
+                    <span className="text-xs text-slate-500">Garment Part</span>
+                    <p className="mt-1">
+                      <Badge color={(scannedBundle.part_name || 'TOP').toUpperCase() === 'BOTTOM' ? 'emerald' : 'blue'} size="lg">
+                        {(scannedBundle.part_name || 'TOP').toUpperCase()}
+                      </Badge>
+                    </p>
                   </div>
                   <div>
-                    <span className="text-xs text-slate-500">Style / Colour / Size</span>
-                    <p className="font-semibold text-slate-800">{scannedBundle.style_code} | {scannedBundle.color_name} | {scannedBundle.size_code}</p>
+                    <span className="text-xs text-slate-500">Bundle Seq</span>
+                    <p className="font-mono font-bold text-slate-800 text-lg">
+                      {scannedBundle.bundle_seq ? `#${scannedBundle.bundle_seq} / ${scannedBundle.total_bundles || '?'}` : scannedBundle.bundle_no}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-500">I/O No & Style</span>
+                    <p className="font-semibold text-slate-800">{scannedBundle.io_no} — {scannedBundle.style_code} ({scannedBundle.color_name} - {scannedBundle.size_code})</p>
                   </div>
                   <div>
                     <span className="text-xs text-slate-500">Quantity</span>
@@ -347,6 +422,40 @@ export function CutQcBundlesPage() {
                 <Input label="I/O No" value={bundleForm.io_no} disabled />
               </div>
 
+              {/* Garment Part Selector */}
+              <div className="grid grid-cols-2 gap-4 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Garment Part *</label>
+                  <select
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    value={bundleForm.part_name || 'TOP'}
+                    onChange={e => setBundleForm({ ...bundleForm, part_name: e.target.value })}
+                  >
+                    <option value="TOP">TOP (Shirt / T-Shirt / Body)</option>
+                    <option value="BOTTOM">BOTTOM (Pants / Pyjama / Shorts)</option>
+                    <option value="FOLDING">FOLDING (Waistband / Fold)</option>
+                    <option value="COLLAR">COLLAR (Collar / Rib)</option>
+                    <option value="FULL_SET">FULL SET (Combined)</option>
+                    <option value="CUSTOM">CUSTOM PART...</option>
+                  </select>
+                </div>
+                {bundleForm.part_name === 'CUSTOM' ? (
+                  <Input
+                    label="Custom Part Name *"
+                    value={bundleForm.custom_part || ''}
+                    onChange={e => setBundleForm({ ...bundleForm, custom_part: e.target.value })}
+                    placeholder="e.g. SLEEVE / POCKET"
+                  />
+                ) : (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">Selected Part Code</label>
+                    <div className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold font-mono text-brand-700">
+                      PART: {bundleForm.part_name || 'TOP'}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <Input label="Total Cutting Qty" type="number" value={bundleForm.total_qty}
                   onChange={e => setBundleForm({ ...bundleForm, total_qty: Number(e.target.value) })} />
@@ -363,14 +472,98 @@ export function CutQcBundlesPage() {
                 <p className="text-[11px] text-slate-400 mt-1">Each bundle will create piece tickets for every listed component.</p>
               </div>
 
-              <div className="p-3 bg-blue-50/70 border border-blue-100 rounded-lg text-xs text-blue-800">
-                Will create <strong>{Math.ceil(bundleForm.total_qty / (bundleForm.bundle_size || 1))}</strong> bundles with barcode format <span className="font-mono">{bundleForm.io_no || 'IO'}-ST-COL-SZ-B001</span>.
+              <div className="p-3 bg-blue-50/70 border border-blue-100 rounded-lg text-xs text-blue-800 flex justify-between items-center">
+                <span>
+                  Will create <strong>{Math.ceil(bundleForm.total_qty / (bundleForm.bundle_size || 1))}</strong> bundles for <strong>Part: {bundleForm.part_name === 'CUSTOM' ? bundleForm.custom_part || 'CUSTOM' : bundleForm.part_name || 'TOP'}</strong>.
+                </span>
+                <span className="font-mono bg-blue-100 px-2 py-0.5 rounded text-[11px] font-bold">
+                  B01 to B{String(Math.ceil(bundleForm.total_qty / (bundleForm.bundle_size || 1))).padStart(2, '0')}
+                </span>
               </div>
             </div>
 
             <div className="flex justify-end gap-2 border-t px-6 py-4 bg-slate-50">
               <Button variant="ghost" onClick={() => setShowBundleModal(false)}>Cancel</Button>
               <Button onClick={handleGenerateBundles} loading={saving}>Generate</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Print Barcode Tickets Modal */}
+      {showPrintModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 overflow-y-auto">
+          <div className="w-full max-w-4xl bg-white rounded-xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b px-6 py-4 bg-slate-50">
+              <div>
+                <h3 className="text-lg font-bold text-slate-800">Print Bundle Barcode Tickets</h3>
+                <p className="text-xs text-slate-500">
+                  {printBundle ? `1 Ticket: ${printBundle.bundle_no}` : `${filteredBundles.length} Tickets for Part: ${selectedPartFilter}`}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button variant="primary" onClick={() => window.print()}>🖨️ Print Labels</Button>
+                <button onClick={() => { setShowPrintModal(false); setPrintBundle(null); }} className="text-slate-400 hover:text-slate-600 font-bold text-lg">✕</button>
+              </div>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-100/50">
+              {(printBundle ? [printBundle] : filteredBundles).map((b: any, idx: number) => {
+                const part = (b.part_name || 'TOP').toUpperCase();
+                const partColor = part === 'BOTTOM' ? 'bg-emerald-600' : part === 'FOLDING' ? 'bg-purple-600' : part === 'COLLAR' ? 'bg-amber-600' : 'bg-blue-600';
+                return (
+                  <div key={b.id || idx} className="bg-white border-2 border-slate-300 rounded-xl p-4 shadow-sm flex flex-col justify-between">
+                    <div>
+                      {/* Top Header: Part Banner & Bundle Seq */}
+                      <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-3">
+                        <span className={`px-3 py-1 rounded-md text-white font-black text-sm tracking-wider uppercase ${partColor}`}>
+                          PART: {part}
+                        </span>
+                        <div className="text-right">
+                          <span className="text-[10px] font-semibold text-slate-400 uppercase">BUNDLE NO</span>
+                          <p className="text-lg font-black font-mono text-slate-900 leading-none">
+                            {b.bundle_seq ? `#${String(b.bundle_seq).padStart(2, '0')} / ${b.total_bundles || '?'}` : b.bundle_no}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Details Grid */}
+                      <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+                        <div>
+                          <span className="text-slate-400 font-medium">I/O Number:</span>
+                          <p className="font-mono font-bold text-slate-800">{b.io_no}</p>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-medium">Style Code:</span>
+                          <p className="font-bold text-slate-800">{b.style_code || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-medium">Colour:</span>
+                          <p className="font-semibold text-slate-800">{b.color_name || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-medium">Size:</span>
+                          <p className="font-bold text-slate-800">{b.size_code || 'N/A'}</p>
+                        </div>
+                      </div>
+
+                      {/* Quantity Highlight */}
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-2 text-center mb-3">
+                        <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Bundle Quantity</span>
+                        <p className="text-2xl font-black text-blue-700">{b.qty} PCS</p>
+                      </div>
+                    </div>
+
+                    {/* Barcode representation */}
+                    <div className="border-t border-slate-200 pt-3 text-center">
+                      <div className="font-mono tracking-widest text-lg font-bold bg-slate-100 py-1.5 px-3 rounded text-slate-800 select-all">
+                        {b.barcode || b.bundle_no}
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-mono mt-1">{b.bundle_no}</p>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

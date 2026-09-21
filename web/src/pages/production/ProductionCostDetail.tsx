@@ -775,6 +775,7 @@ export default function ProductionCostDetailPage() {
                   <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-[11px]">
                     <tr>
                       <th className="py-2.5 px-3">Process</th>
+                      <th className="py-2.5 px-3 text-center">Part</th>
                       <th className="py-2.5 px-3 text-right">Input Qty</th>
                       <th className="py-2.5 px-3 text-right">Output Qty</th>
                       <th className="py-2.5 px-3 text-right">Loss Qty</th>
@@ -783,16 +784,25 @@ export default function ProductionCostDetailPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700">
-                    {(tabsData.process || []).map((p: any, i: number) => (
-                      <tr key={i} className="hover:bg-slate-50">
-                        <td className="py-2.5 px-3 font-semibold text-slate-900">{p.process_name}</td>
-                        <td className="py-2.5 px-3 text-right font-mono">{fmtNumber(p.input_qty)}</td>
-                        <td className="py-2.5 px-3 text-right font-mono text-emerald-700 font-medium">{fmtNumber(p.output_qty)}</td>
-                        <td className="py-2.5 px-3 text-right font-mono text-rose-600">{fmtNumber(p.loss_qty)}</td>
-                        <td className="py-2.5 px-3 text-right font-mono">₹{p.rate.toFixed(2)}</td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">₹{fmtNumber(p.actual_cost)}</td>
-                      </tr>
-                    ))}
+                    {(tabsData.process || []).map((p: any, i: number) => {
+                      const part = (p.part_name || 'TOP').toUpperCase();
+                      const partBadge = part === 'BOTTOM' ? 'bg-emerald-100 text-emerald-800' : part === 'FOLDING' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800';
+                      return (
+                        <tr key={i} className="hover:bg-slate-50">
+                          <td className="py-2.5 px-3 font-semibold text-slate-900">{p.process_name}</td>
+                          <td className="py-2.5 px-3 text-center">
+                            <span className={`rounded px-2 py-0.5 text-[10px] font-black uppercase ${partBadge}`}>
+                              {part}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono">{fmtNumber(p.input_qty)}</td>
+                          <td className="py-2.5 px-3 text-right font-mono text-emerald-700 font-medium">{fmtNumber(p.output_qty)}</td>
+                          <td className="py-2.5 px-3 text-right font-mono text-rose-600">{fmtNumber(p.loss_qty)}</td>
+                          <td className="py-2.5 px-3 text-right font-mono">₹{Number(p.rate || 0).toFixed(2)}</td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">₹{fmtNumber(p.actual_cost)}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -922,40 +932,91 @@ export default function ProductionCostDetailPage() {
           )}
 
           {/* Tab 9: LABOUR */}
-          {activeTab === 'Labour' && (
-            <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
-              <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center text-xs">
-                <span className="font-bold text-slate-700">Departmental Labour Hours & Rates</span>
-                <span className="text-[11px] text-slate-500">Direct & Indirect Factory Labour</span>
+          {activeTab === 'Labour' && (() => {
+            const topLabourCost = (tabsData.labour || []).filter((l: any) => (l.part_name || 'TOP').toUpperCase() === 'TOP').reduce((acc: number, l: any) => acc + Number(l.amount || 0), 0);
+            const bottomLabourCost = (tabsData.labour || []).filter((l: any) => (l.part_name || '').toUpperCase() === 'BOTTOM').reduce((acc: number, l: any) => acc + Number(l.amount || 0), 0);
+            const foldingLabourCost = (tabsData.labour || []).filter((l: any) => ['FOLDING', 'COLLAR', 'OTHER'].includes((l.part_name || '').toUpperCase())).reduce((acc: number, l: any) => acc + Number(l.amount || 0), 0);
+            const totalLabourCost = (tabsData.labour || []).reduce((acc: number, l: any) => acc + Number(l.amount || 0), 0);
+
+            return (
+              <div className="space-y-4">
+                {/* Part-Wise Cost Summary Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl">
+                    <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">TOP Part Labour</span>
+                    <p className="text-lg font-black text-blue-900 mt-0.5">₹{fmtNumber(topLabourCost)}</p>
+                    <span className="text-[10px] text-blue-500 font-medium">Sewing, Assembly & Body</span>
+                  </div>
+                  <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl">
+                    <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">BOTTOM Part Labour</span>
+                    <p className="text-lg font-black text-emerald-900 mt-0.5">₹{fmtNumber(bottomLabourCost)}</p>
+                    <span className="text-[10px] text-emerald-500 font-medium">Trouser, Pyjama & Bottom</span>
+                  </div>
+                  <div className="p-3 bg-purple-50/70 border border-purple-200 rounded-xl">
+                    <span className="text-[10px] font-bold text-purple-600 uppercase tracking-wider">FOLDING / COLLAR</span>
+                    <p className="text-lg font-black text-purple-900 mt-0.5">₹{fmtNumber(foldingLabourCost)}</p>
+                    <span className="text-[10px] text-purple-500 font-medium">Waistband, Fold & Collar</span>
+                  </div>
+                  <div className="p-3 bg-slate-100 border border-slate-300 rounded-xl">
+                    <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">Total Factory Labour</span>
+                    <p className="text-lg font-black text-slate-900 mt-0.5">₹{fmtNumber(totalLabourCost)}</p>
+                    <span className="text-[10px] text-slate-500 font-medium">All Production Parts</span>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
+                  <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center text-xs">
+                    <span className="font-bold text-slate-700">Departmental Labour Hours, Piece Rates & Part Breakdown</span>
+                    <span className="text-[11px] text-slate-500">Direct & Indirect Factory Labour</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-[11px]">
+                        <tr>
+                          <th className="py-2.5 px-3">Department</th>
+                          <th className="py-2.5 px-3 text-center">Part</th>
+                          <th className="py-2.5 px-3 text-center">Type</th>
+                          <th className="py-2.5 px-3 text-right">Pieces</th>
+                          <th className="py-2.5 px-3 text-right">Piece Rate</th>
+                          <th className="py-2.5 px-3 text-right">Hours</th>
+                          <th className="py-2.5 px-3 text-right">Rate / Hr</th>
+                          <th className="py-2.5 px-3 text-right">Actual Cost</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-slate-700">
+                        {(tabsData.labour || []).map((l: any, i: number) => {
+                          const part = (l.part_name || 'TOP').toUpperCase();
+                          const partBadgeColor = part === 'BOTTOM' ? 'bg-emerald-100 text-emerald-800' : part === 'FOLDING' ? 'bg-purple-100 text-purple-800' : part === 'COLLAR' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800';
+                          return (
+                            <tr key={i} className="hover:bg-slate-50">
+                              <td className="py-2.5 px-3 font-semibold text-slate-900">{l.department_name}</td>
+                              <td className="py-2.5 px-3 text-center">
+                                <span className={`rounded px-2 py-0.5 text-[10px] font-black uppercase ${partBadgeColor}`}>
+                                  {part}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 text-center font-mono">
+                                <span className="rounded px-1.5 py-0.5 text-[10px] font-bold bg-slate-100">{l.labour_type}</span>
+                              </td>
+                              <td className="py-2.5 px-3 text-right font-mono text-slate-600">
+                                {l.pieces_completed ? fmtNumber(l.pieces_completed) : '-'}
+                              </td>
+                              <td className="py-2.5 px-3 text-right font-mono font-medium text-slate-800">
+                                {l.piece_rate ? `₹${Number(l.piece_rate).toFixed(2)}` : '-'}
+                              </td>
+                              <td className="py-2.5 px-3 text-right font-mono">{l.hours} hrs</td>
+                              <td className="py-2.5 px-3 text-right font-mono">₹{Number(l.rate_per_hour || 0).toFixed(2)}</td>
+                              <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">₹{fmtNumber(l.amount)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-[11px]">
-                    <tr>
-                      <th className="py-2.5 px-3">Department</th>
-                      <th className="py-2.5 px-3 text-center">Type</th>
-                      <th className="py-2.5 px-3 text-right">Hours</th>
-                      <th className="py-2.5 px-3 text-right">Rate / Hr</th>
-                      <th className="py-2.5 px-3 text-right">Actual Cost</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-700">
-                    {(tabsData.labour || []).map((l: any, i: number) => (
-                      <tr key={i} className="hover:bg-slate-50">
-                        <td className="py-2.5 px-3 font-semibold text-slate-900">{l.department_name}</td>
-                        <td className="py-2.5 px-3 text-center font-mono">
-                          <span className="rounded px-1.5 py-0.5 text-[10px] font-bold bg-slate-100">{l.labour_type}</span>
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono">{l.hours} hrs</td>
-                        <td className="py-2.5 px-3 text-right font-mono">₹{l.rate_per_hour.toFixed(2)}</td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">₹{fmtNumber(l.amount)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Tab 10: MACHINE */}
           {activeTab === 'Machine' && (

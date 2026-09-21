@@ -39,6 +39,7 @@ const cuttingPlanSchema = z.object({
   fabric_req_mtr: s.dec(),
   status: z.enum(['DRAFT','APPROVED','RELEASED','IN_PROGRESS','COMPLETED','CLOSED','CANCELLED']).default('DRAFT'),
   remarks: s.text(),
+  part_name: z.string().trim().max(50).optional().default('TOP'),
   sizes: z.array(sizeLineSchema).default([]),
 });
 
@@ -104,12 +105,12 @@ cuttingPlanRouter.post('/cutting-plans', requirePermission('PRODUCTION.CREATE'),
 
     const r = await txExecute(tx,
       `INSERT INTO trx_cutting_plan
-        (company_id, plan_no, plan_date, io_no, so_id, prod_order_id, style_id, color_id,
+        (company_id, plan_no, plan_date, io_no, so_id, prod_order_id, style_id, color_id, part_name,
          order_qty, planned_cut_qty, required_date, marker_ref, marker_eff_pct,
          fabric_id, fabric_req_kg, fabric_req_mtr, status, remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [cid, planNo, body.plan_date, body.io_no, body.so_id ?? null, body.prod_order_id ?? null,
-       body.style_id, body.color_id ?? null, body.order_qty, body.planned_cut_qty,
+       body.style_id, body.color_id ?? null, body.part_name || 'TOP', body.order_qty, body.planned_cut_qty,
        body.required_date ?? null, body.marker_ref ?? null, body.marker_eff_pct ?? null,
        body.fabric_id ?? null, body.fabric_req_kg ?? null, body.fabric_req_mtr ?? null,
        body.status, body.remarks ?? null, req.user!.id]);
@@ -142,12 +143,12 @@ cuttingPlanRouter.put('/cutting-plans/:id', requirePermission('PRODUCTION.EDIT')
   await transaction(async (tx) => {
     await txExecute(tx,
       `UPDATE trx_cutting_plan SET
-        plan_date = ?, io_no = ?, so_id = ?, prod_order_id = ?, style_id = ?, color_id = ?,
+        plan_date = ?, io_no = ?, so_id = ?, prod_order_id = ?, style_id = ?, color_id = ?, part_name = ?,
         order_qty = ?, planned_cut_qty = ?, required_date = ?, marker_ref = ?, marker_eff_pct = ?,
         fabric_id = ?, fabric_req_kg = ?, fabric_req_mtr = ?, status = ?, remarks = ?, updated_by = ?
        WHERE id = ?`,
       [body.plan_date, body.io_no, body.so_id ?? null, body.prod_order_id ?? null,
-       body.style_id, body.color_id ?? null, body.order_qty, body.planned_cut_qty,
+       body.style_id, body.color_id ?? null, body.part_name || 'TOP', body.order_qty, body.planned_cut_qty,
        body.required_date ?? null, body.marker_ref ?? null, body.marker_eff_pct ?? null,
        body.fabric_id ?? null, body.fabric_req_kg ?? null, body.fabric_req_mtr ?? null,
        body.status, body.remarks ?? null, req.user!.id, id]);
@@ -182,6 +183,7 @@ cuttingPlanRouter.post('/bundles/generate', requirePermission('PRODUCTION.CREATE
     color_id: s.idReq(),
     size_id: s.idReq(),
     sku_id: s.id(),
+    part_name: z.string().trim().max(50).default('TOP'),
     total_qty: z.coerce.number().int().positive(),
     bundle_size: z.coerce.number().int().positive(),
     component: z.string().trim().max(60).default('BODY'),
@@ -196,22 +198,25 @@ cuttingPlanRouter.post('/bundles/generate', requirePermission('PRODUCTION.CREATE
 
   const bundleCount = Math.ceil(body.total_qty / body.bundle_size);
   let remaining = body.total_qty;
+  const partTag = (body.part_name || 'TOP').toUpperCase();
 
   const bundles = await transaction(async (tx) => {
     const created: any[] = [];
     for (let i = 1; i <= bundleCount; i++) {
       const qty = Math.min(body.bundle_size, remaining);
       remaining -= qty;
-      const bundleNo = `${body.io_no}-${String(i).padStart(3, '0')}`;
+      const pad = String(i).padStart(2, '0');
+      const bundleNo = `${body.io_no}-${partTag}-B${pad}`;
+      const barcode = `${body.io_no}-${partTag}-${bundleNo}`;
 
       const r = await txExecute(tx,
         `INSERT INTO trx_cutting_bundle
-          (cutting_id, io_no, style_id, color_id, size_id, component, sku_id, bundle_no, qty, status)
-         VALUES (?,?,?,?,?,?,?,?,?,?)`,
+          (cutting_id, io_no, style_id, color_id, size_id, part_name, component, sku_id, bundle_no, bundle_seq, total_bundles, qty, barcode, status)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [body.cutting_id, body.io_no, body.style_id, body.color_id, body.size_id,
-         body.component, body.sku_id ?? null, bundleNo, qty, 'GENERATED']);
+         partTag, body.component, body.sku_id ?? null, bundleNo, i, bundleCount, qty, barcode, 'GENERATED']);
 
-      created.push({ id: r.insertId, bundle_no: bundleNo, qty, status: 'GENERATED' });
+      created.push({ id: r.insertId, bundle_no: bundleNo, part_name: partTag, bundle_seq: i, total_bundles: bundleCount, barcode, qty, status: 'GENERATED' });
     }
     return created;
   });
@@ -224,6 +229,7 @@ cuttingPlanRouter.get('/bundles', requirePermission('PRODUCTION.VIEW'), ah(async
   const cid = req.user!.companyId;
   const ioNo = req.query.io_no ? String(req.query.io_no) : null;
   const status = req.query.status ? String(req.query.status) : null;
+  const partName = req.query.part_name ? String(req.query.part_name) : null;
 
   let sql = `SELECT cb.*, c.cut_no, st.style_code, col.color_name, sz.size_code
        FROM trx_cutting_bundle cb
@@ -237,6 +243,7 @@ cuttingPlanRouter.get('/bundles', requirePermission('PRODUCTION.VIEW'), ah(async
 
   if (ioNo) { sql += ` AND cb.io_no = ?`; params.push(ioNo); }
   if (status) { sql += ` AND cb.status = ?`; params.push(status); }
+  if (partName) { sql += ` AND cb.part_name = ?`; params.push(partName); }
   sql += ` ORDER BY cb.id DESC`;
 
   const rows = await query(sql, params);

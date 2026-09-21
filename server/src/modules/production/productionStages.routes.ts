@@ -324,6 +324,7 @@ productionStagesRouter.post('/bundles/generate-detailed', requirePermission('PRO
     color_id: s.idReq(),
     size_id: s.idReq(),
     sku_id: s.id(),
+    part_name: z.string().trim().max(50).default('TOP'),
     total_qty: z.coerce.number().int().positive(),
     bundle_size: z.coerce.number().int().positive(),
     components: z.array(z.string()).default(['FRONT', 'BACK', 'SLEEVE_L', 'SLEEVE_R', 'COLLAR', 'CUFF']),
@@ -339,6 +340,7 @@ productionStagesRouter.post('/bundles/generate-detailed', requirePermission('PRO
   const styleCode = style?.style_code || 'ST';
   const colorName = color?.color_name?.slice(0, 3).toUpperCase() || 'COL';
   const sizeCode = size?.size_code || 'SZ';
+  const partTag = (body.part_name || 'TOP').toUpperCase();
 
   const bundleCount = Math.ceil(body.total_qty / body.bundle_size);
   let remaining = body.total_qty;
@@ -349,16 +351,16 @@ productionStagesRouter.post('/bundles/generate-detailed', requirePermission('PRO
       const qty = Math.min(body.bundle_size, remaining);
       remaining -= qty;
 
-      const pad = String(i).padStart(3, '0');
-      const bundleNo = `${styleCode}-${colorName}-${sizeCode}-B${pad}`;
-      const barcode = `${body.io_no}-${bundleNo}`;
+      const pad = String(i).padStart(2, '0');
+      const bundleNo = `${styleCode}-${colorName}-${sizeCode}-${partTag}-B${pad}`;
+      const barcode = `${body.io_no}-${partTag}-${bundleNo}`;
 
       const r = await txExecute(tx,
         `INSERT INTO trx_cutting_bundle
-          (cutting_id, io_no, style_id, color_id, size_id, component, sku_id, bundle_no, qty, barcode, status)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+          (cutting_id, io_no, style_id, color_id, size_id, part_name, component, sku_id, bundle_no, bundle_seq, total_bundles, qty, barcode, status)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [body.cutting_id, body.io_no, body.style_id, body.color_id, body.size_id,
-         body.components.join(','), body.sku_id ?? null, bundleNo, qty, barcode, 'GENERATED']);
+         partTag, body.components.join(','), body.sku_id ?? null, bundleNo, i, bundleCount, qty, barcode, 'GENERATED']);
 
       const bundleId = r.insertId;
 
@@ -369,7 +371,7 @@ productionStagesRouter.post('/bundles/generate-detailed', requirePermission('PRO
           [bundleId, comp, qty]);
       }
 
-      created.push({ id: bundleId, bundle_no: bundleNo, barcode, qty, status: 'GENERATED' });
+      created.push({ id: bundleId, bundle_no: bundleNo, part_name: partTag, bundle_seq: i, total_bundles: bundleCount, barcode, qty, status: 'GENERATED' });
     }
     return created;
   });

@@ -610,9 +610,9 @@ costingRouter.post('/production-costs/calculate-and-save', requirePermission('PR
       for (const p of tabs.process) {
         await tx.execute(`
           INSERT INTO trx_production_costing_process (
-            cost_id, process_name, input_qty, output_qty, loss_qty, rate, amount
-          ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        `, [costId, p.process_name || 'Process', p.input_qty || 0, p.output_qty || 0, p.loss_qty || 0, p.rate || 0, p.actual_cost || 0]);
+            cost_id, process_name, part_name, input_qty, output_qty, loss_qty, rate, amount
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `, [costId, p.process_name || 'Process', p.part_name || 'TOP', p.input_qty || 0, p.output_qty || 0, p.loss_qty || 0, p.rate || 0, p.actual_cost || p.amount || 0]);
       }
     }
 
@@ -621,9 +621,9 @@ costingRouter.post('/production-costs/calculate-and-save', requirePermission('PR
       for (const l of tabs.labour) {
         await tx.execute(`
           INSERT INTO trx_production_costing_labour (
-            cost_id, department_name, labour_type, hours, rate_per_hour, amount
-          ) VALUES (?, ?, ?, ?, ?, ?)
-        `, [costId, l.department_name || 'Floor', l.labour_type || 'DIRECT', l.hours || 0, l.rate_per_hour || 0, l.amount || 0]);
+            cost_id, department_name, part_name, labour_type, piece_rate, pieces_completed, hours, rate_per_hour, amount
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [costId, l.department_name || 'Floor', l.part_name || 'TOP', l.labour_type || 'DIRECT', l.piece_rate || 0, l.pieces_completed || 0, l.hours || 0, l.rate_per_hour || 0, l.amount || 0]);
       }
     }
 
