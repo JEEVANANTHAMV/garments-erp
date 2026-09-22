@@ -60,6 +60,9 @@ import TrimGRNDetailPage from './pages/procurement/TrimGRNDetail';
 
 import KnittingPage from './pages/production/KnittingPage';
 import KnittingProgramPage from './pages/production/KnittingProgramPage';
+import ProcessRoutePage from './pages/production/ProcessRoutePage';
+import YarnProcessPage from './pages/production/YarnProcessPage';
+import CollarKnittingPage from './pages/production/CollarKnittingPage';
 import FabricProcessingPage from './pages/production/FabricProcessingPage';
 
 import CadRequirementsPage from './pages/production/CadRequirements';
@@ -250,6 +253,9 @@ export default function App() {
                   <Route path="traceability" element={<TraceabilitySearchPage />} />
                   <Route path="knitting" element={<KnittingPage />} />
                   <Route path="knitting-programs" element={<KnittingProgramPage />} />
+                  <Route path="process-routes" element={<ProcessRoutePage />} />
+                  <Route path="yarn-processes" element={<YarnProcessPage />} />
+                  <Route path="collar-knitting" element={<CollarKnittingPage />} />
                   <Route path="fabric-processing" element={<FabricProcessingPage />} />
                   <Route path="fabric-issues" element={<FabricIssuePage />} />
                   <Route path="lay-spreading" element={<LaySpreadingPage />} />
