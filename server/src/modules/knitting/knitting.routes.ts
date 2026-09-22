@@ -70,6 +70,36 @@ const kpSchema = z.object({
   stripes: z.array(kpStripeSchema).default([]),
 });
 
+/**
+ * Update schema for PUT. Built field-by-field WITHOUT `.default()` so that an
+ * omitted key stays `undefined` rather than being silently reset to a default
+ * (a `.partial()` of kpSchema would still apply defaults, which would reset
+ * knitting_type to SOLID, required_qty_kg to 0 and wipe the yarn/stripe rows).
+ */
+const kpUpdateSchema = z.object({
+  program_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  so_id: s.id(),
+  io_no: s.nullableStr(60),
+  buyer_po_no: s.nullableStr(60),
+  style_id: s.id(),
+  part_name: z.enum(PARTS).nullable().optional(),
+  fabric_id: s.id(),
+  fabric_type: s.nullableStr(80),
+  knitting_type: z.enum(KNITTING_TYPES).optional(),
+  gsm: s.nullableStr(40),
+  dia: s.nullableStr(40),
+  gauge: s.nullableStr(40),
+  loop_length: s.nullableStr(40),
+  required_qty_kg: z.coerce.number().min(0).optional(),
+  required_date: s.date(),
+  job_work_type: z.enum(['INTERNAL', 'JOB_WORK']).optional(),
+  vendor_id: s.id(),
+  status: z.enum(KP_STATUS).optional(),
+  remarks: s.text(),
+  yarns: z.array(kpYarnSchema).optional(),
+  stripes: z.array(kpStripeSchema).optional(),
+});
+
 const kpIssueSchema = z.object({
   program_id: s.idReq(),
   program_yarn_id: s.id(),
@@ -308,7 +338,7 @@ knittingRouter.post('/knitting/programs', requirePermission('PRODUCTION.CREATE')
 knittingRouter.put('/knitting/programs/:id', requirePermission('PRODUCTION.UPDATE'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = Number(req.params.id);
-  const body = kpSchema.partial().parse(req.body);
+  const body = kpUpdateSchema.parse(req.body);
 
   const existing = await queryOne(
     'SELECT id, program_no, status FROM trx_knitting_program WHERE id = ? AND company_id = ?',
@@ -602,9 +632,9 @@ knittingRouter.post('/knitting/orders', requirePermission('PRODUCTION.CREATE'), 
           dia, gsm, gauge, loop_length, planned_fabric_kg, planned_yarn_kg, yarn_lot_no, status, remarks, created_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        cid, kwoNo, body.kwo_date, body.io_no, body.customer_po_no, body.style_id, body.sub_process, body.vendor_id, body.fabric_id,
-        body.dia, body.gsm, body.gauge, body.loop_length, body.planned_fabric_kg, body.planned_yarn_kg,
-        body.yarn_lot_no, body.status, body.remarks, uid
+        cid, kwoNo, body.kwo_date, body.io_no, body.customer_po_no ?? null, body.style_id ?? null, body.sub_process, body.vendor_id ?? null, body.fabric_id ?? null,
+        body.dia ?? null, body.gsm ?? null, body.gauge ?? null, body.loop_length ?? null, body.planned_fabric_kg ?? 0, body.planned_yarn_kg ?? 0,
+        body.yarn_lot_no ?? null, body.status ?? 'DRAFT', body.remarks ?? null, uid
       ]
     );
 
@@ -643,9 +673,9 @@ knittingRouter.put('/knitting/orders/:id', requirePermission('PRODUCTION.UPDATE'
             remarks = COALESCE(?, remarks)
       WHERE id = ? AND company_id = ?`,
     [
-      body.kwo_date, body.io_no, body.customer_po_no, body.style_id, body.sub_process, body.vendor_id, body.fabric_id,
-      body.dia, body.gsm, body.gauge, body.loop_length, body.planned_fabric_kg, body.planned_yarn_kg,
-      body.yarn_lot_no, body.status, body.remarks, req.params.id, cid
+      body.kwo_date ?? null, body.io_no ?? null, body.customer_po_no ?? null, body.style_id ?? null, body.sub_process ?? null, body.vendor_id ?? null, body.fabric_id ?? null,
+      body.dia ?? null, body.gsm ?? null, body.gauge ?? null, body.loop_length ?? null, body.planned_fabric_kg ?? null, body.planned_yarn_kg ?? null,
+      body.yarn_lot_no ?? null, body.status ?? null, body.remarks ?? null, req.params.id, cid
     ]
   );
 
@@ -670,7 +700,7 @@ knittingRouter.post('/knitting/yarn-issues', requirePermission('PRODUCTION.CREAT
       `INSERT INTO trx_knitting_yarn_issue
          (company_id, kwo_id, issue_no, issue_date, yarn_id, yarn_lot_no, bags_cones, issued_weight_kg, remarks, created_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [cid, body.kwo_id, issueNo, body.issue_date, body.yarn_id, body.yarn_lot_no, body.bags_cones, body.issued_weight_kg, body.remarks, uid]
+      [cid, body.kwo_id, issueNo, body.issue_date, body.yarn_id, body.yarn_lot_no ?? null, body.bags_cones ?? 0, body.issued_weight_kg, body.remarks ?? null, uid]
     );
 
     await txExecute(tx, `UPDATE trx_knitting_order SET status = 'IN_PROGRESS' WHERE id = ? AND status = 'DRAFT'`, [body.kwo_id]);
@@ -710,9 +740,9 @@ knittingRouter.post('/knitting/rolls', requirePermission('PRODUCTION.CREATE'), a
          (company_id, kwo_id, roll_no, lot_no, io_no, style_id, fabric_id, production_date, dia, gsm, meters, weight_kg, qc_status, defect_points, rejection_reason)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        cid, body.kwo_id, body.roll_no, body.lot_no, kwo.io_no, kwo.style_id, kwo.fabric_id,
-        body.production_date, body.dia, body.gsm, body.meters, body.weight_kg, body.qc_status,
-        body.defect_points, body.rejection_reason
+        cid, body.kwo_id, body.roll_no, body.lot_no, kwo.io_no, kwo.style_id ?? null, kwo.fabric_id ?? null,
+        body.production_date, body.dia ?? null, body.gsm ?? null, body.meters ?? 0, body.weight_kg, body.qc_status ?? 'ACCEPTED',
+        body.defect_points ?? 0, body.rejection_reason ?? null
       ]
     );
 
