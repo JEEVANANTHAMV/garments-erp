@@ -175,13 +175,6 @@ async function loadKpDetail(id: number, cid: number) {
     [id]
   );
 
-  // Aggregate issued qty per yarn line
-  const issuedMap: Record<number, number> = {};
-  for (const iss of issues) {
-    const key = Number(iss.program_yarn_id ?? 0);
-    issuedMap[key] = (issuedMap[key] || 0) + Number(iss.issued_qty_kg || 0);
-  }
-
   return { ...prog, yarns, stripes, issues };
 }
 
@@ -351,11 +344,17 @@ knittingRouter.put('/knitting/programs/:id', requirePermission('PRODUCTION.UPDAT
               remarks        = COALESCE(?, remarks)
         WHERE id = ? AND company_id = ?`,
       [
-        body.program_date, body.so_id, body.io_no, body.buyer_po_no, body.style_id,
-        body.part_name, body.fabric_id, body.fabric_type, body.knitting_type,
-        body.gsm, body.dia, body.gauge, body.loop_length,
-        body.required_qty_kg, body.required_date, body.job_work_type, body.vendor_id,
-        body.status, body.remarks, id, cid,
+        // mysql2 prepared statements reject `undefined`; a partial() body leaves
+        // every omitted key undefined, so normalise to null (COALESCE keeps the
+        // existing column value for nulls).
+        body.program_date ?? null, body.so_id ?? null, body.io_no ?? null,
+        body.buyer_po_no ?? null, body.style_id ?? null,
+        body.part_name ?? null, body.fabric_id ?? null, body.fabric_type ?? null,
+        body.knitting_type ?? null,
+        body.gsm ?? null, body.dia ?? null, body.gauge ?? null, body.loop_length ?? null,
+        body.required_qty_kg ?? null, body.required_date ?? null,
+        body.job_work_type ?? null, body.vendor_id ?? null,
+        body.status ?? null, body.remarks ?? null, id, cid,
       ]
     );
 
@@ -565,6 +564,7 @@ knittingRouter.get('/knitting/orders/:id', requirePermission('PRODUCTION.VIEW'),
 
   const totalYarnIssued = yarnIssues.reduce((sum: number, r: any) => sum + Number(r.issued_weight_kg || 0), 0);
   const totalRollsWeight = rollOutputs.reduce((sum: number, r: any) => sum + Number(r.weight_kg || 0), 0);
+  const totalRollsMeters = rollOutputs.reduce((sum: number, r: any) => sum + Number(r.meters || 0), 0);
   const knittingLossKg = Math.max(0, totalYarnIssued - totalRollsWeight);
   const knittingLossPct = totalYarnIssued > 0 ? (knittingLossKg / totalYarnIssued) * 100 : 0;
 
@@ -577,6 +577,7 @@ knittingRouter.get('/knitting/orders/:id', requirePermission('PRODUCTION.VIEW'),
       summary: {
         total_yarn_issued_kg: totalYarnIssued,
         total_rolls_produced_kg: totalRollsWeight,
+        total_rolls_produced_meters: totalRollsMeters,
         total_rolls_count: rollOutputs.length,
         knitting_loss_kg: knittingLossKg,
         knitting_loss_pct: Number(knittingLossPct.toFixed(2)),

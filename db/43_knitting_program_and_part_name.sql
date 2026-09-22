@@ -212,7 +212,19 @@ PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 
 -- ─────────────────────────────────────────────────────────────────
--- 7. Number series for Knitting Programs (KNP)
+-- 7. Number series for Knitting Programs (KNP) and its Yarn Issues (KNP_YI)
+--    company_id is NOT NULL with an FK, so seed one row per company.
 -- ─────────────────────────────────────────────────────────────────
-INSERT IGNORE INTO cfg_number_series (doc_type, prefix, next_number, padding)
-VALUES ('KNP', 'KNP', 1, 5);
+INSERT INTO cfg_number_series (company_id, branch_id, doc_type, fy_id, prefix, next_number, padding)
+SELECT c.id, NULL, 'KNP', NULL, 'KNP-', 1, 5
+FROM mst_company c
+WHERE NOT EXISTS (
+  SELECT 1 FROM cfg_number_series s WHERE s.company_id = c.id AND s.doc_type = 'KNP'
+);
+
+INSERT INTO cfg_number_series (company_id, branch_id, doc_type, fy_id, prefix, next_number, padding)
+SELECT c.id, NULL, 'KNP_YI', NULL, 'KNPYI-', 1, 5
+FROM mst_company c
+WHERE NOT EXISTS (
+  SELECT 1 FROM cfg_number_series s WHERE s.company_id = c.id AND s.doc_type = 'KNP_YI'
+);

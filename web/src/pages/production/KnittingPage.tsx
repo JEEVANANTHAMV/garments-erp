@@ -678,10 +678,19 @@ export default function KnittingPage() {
               </div>
               <div className="p-2.5 bg-white rounded-xl border border-slate-200/60">
                 <span className="text-slate-400 block text-[10px]">Total Fabric Produced</span>
-                <span className="text-sm font-bold text-emerald-700">
-                  {fmtDecimal(activeOrder.summary?.total_rolls_produced_kg)} kg
+                <div className="flex items-baseline gap-1 flex-wrap">
+                  <span className="text-sm font-bold text-emerald-700">
+                    {fmtDecimal(activeOrder.summary?.total_rolls_produced_kg)} kg
+                  </span>
+                  {Number(activeOrder.summary?.total_rolls_produced_meters || 0) > 0 && (
+                    <span className="text-[11px] font-semibold text-teal-600">
+                      / {fmtDecimal(activeOrder.summary?.total_rolls_produced_meters)} m
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10px] text-slate-400 block">
+                  {activeOrder.summary?.total_rolls_count || 0} rolls
                 </span>
-                <span className="text-[10px] text-slate-400 ml-1">({activeOrder.summary?.total_rolls_count} rolls)</span>
               </div>
               <div className="p-2.5 bg-white rounded-xl border border-slate-200/60">
                 <span className="text-slate-400 block text-[10px]">Knitting Loss (Kg)</span>
@@ -1130,6 +1139,11 @@ export default function KnittingPage() {
                 <div className="p-2.5 border border-emerald-200 bg-emerald-50 rounded-lg">
                   <span className="text-[10px] uppercase font-bold text-emerald-700 block">Total Produced</span>
                   <span className="text-sm font-black text-emerald-900">{fmtDecimal(activeOrder.summary?.total_rolls_produced_kg)} kg</span>
+                  {Number(activeOrder.summary?.total_rolls_produced_meters || 0) > 0 && (
+                    <span className="text-xs font-bold text-emerald-700 block">
+                      {fmtDecimal(activeOrder.summary?.total_rolls_produced_meters)} m
+                    </span>
+                  )}
                   <span className="text-[10px] text-emerald-600 block">({activeOrder.summary?.total_rolls_count} rolls)</span>
                 </div>
                 <div className="p-2.5 border border-amber-200 bg-amber-50 rounded-lg">

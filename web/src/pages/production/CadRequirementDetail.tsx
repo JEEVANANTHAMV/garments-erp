@@ -2147,7 +2147,7 @@ export default function CadRequirementDetailPage() {
               <div className="p-3 bg-indigo-600 text-white rounded-lg shadow-sm">
                 <span className="text-[10px] text-indigo-200 font-bold uppercase tracking-wider">Grand Total Material</span>
                 <div className="text-lg font-extrabold font-mono mt-0.5">
-                  {fmtDecimal(summaryKpis.grandTotalMaterial, 2)} <span className="text-xs font-normal text-indigo-200">KG</span>
+                  {fmtDecimal(summaryKpis.grandTotalMaterial, 2)} <span className="text-xs font-normal text-indigo-200">{summaryKpis.uom}</span>
                 </div>
                 <div className="text-[10px] text-indigo-200/90 mt-0.5">Fabric + Collar + Fold</div>
               </div>
