@@ -340,7 +340,18 @@ productionStagesRouter.post('/bundles/generate-detailed', requirePermission('PRO
   const styleCode = style?.style_code || 'ST';
   const colorName = color?.color_name?.slice(0, 3).toUpperCase() || 'COL';
   const sizeCode = size?.size_code || 'SZ';
-  const partTag = (body.part_name || 'TOP').toUpperCase();
+
+  // Part follows the order: Sales Order line first, then the production order,
+  // and only then whatever the caller supplied (Audio 5 carry-forward).
+  const cuttingPart = await queryOne<any>(
+    `SELECT po.part_name AS po_part_name, sol.part_name AS so_part_name
+       FROM trx_cutting c
+       JOIN trx_production_order po ON po.id = c.prod_order_id
+       LEFT JOIN trx_sales_order_line sol ON sol.id = po.so_line_id
+      WHERE c.id = ?`, [body.cutting_id]);
+  const partTag = String(
+    cuttingPart?.so_part_name || cuttingPart?.po_part_name || body.part_name || 'TOP'
+  ).toUpperCase();
 
   let resolvedSkuId = body.sku_id ?? null;
   if (!resolvedSkuId && body.style_id && body.color_id && body.size_id) {

@@ -473,13 +473,18 @@ export const transactionResources: ResourceConfig[] = [
   {
     path: 'packings', table: 'trx_packing', permission: 'PACKING', label: 'Packing',
     searchable: ['pack_no'], sortable: ['pack_no', 'pack_date'], defaultSort: 't.pack_date',
-    hasIsActive: false, softDelete: false, filters: ['so_id', 'prod_order_id', 'status_id', 'pack_method'],
+    hasIsActive: false, softDelete: false, filters: ['so_id', 'prod_order_id', 'status_id', 'pack_method', 'part_name'],
     autoNumber: { column: 'pack_no', docType: 'PACKING' },
-    selectExtra: 'so.so_no, po.po_prod_no',
+    // effective_part_name falls back to the linked SO line / production order so
+    // the garment part is visible on packing even for rows saved before it was
+    // captured (Audio 5). A separate alias avoids shadowing t.part_name.
+    selectExtra: 'so.so_no, po.po_prod_no, COALESCE(t.part_name, sol.part_name, po.part_name) AS effective_part_name',
     joins: `LEFT JOIN trx_sales_order so ON so.id = t.so_id
-            LEFT JOIN trx_production_order po ON po.id = t.prod_order_id`,
+            LEFT JOIN trx_production_order po ON po.id = t.prod_order_id
+            LEFT JOIN trx_sales_order_line sol ON sol.id = t.so_line_id`,
     fields: [
       f('pack_no', s.nullableStr(40)), f('io_no', s.nullableStr(40)), f('style_id', s.id()), f('pack_date', s.date()), f('so_id', s.idReq()),
+      f('so_line_id', s.id()), f('part_name', s.nullableStr(50)),
       f('prod_order_id', s.id()),
       f('pack_method', s.enum(['SOLID_COLOR_SOLID_SIZE','SOLID_COLOR_ASSORTED_SIZE','ASSORTED_COLOR_ASSORTED_SIZE','RATIO_PACK'])),
       f('total_cartons', s.int()), f('total_qty', s.int()),

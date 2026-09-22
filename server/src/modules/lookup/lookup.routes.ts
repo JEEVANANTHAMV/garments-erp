@@ -55,6 +55,18 @@ const LOOKUPS: Record<string, LookupDef> = {
   styles:      { sql: `SELECT id, style_code AS code, style_name AS label, image_url, buyer_id, product_id, size_group_id, fabric_id FROM mst_style WHERE company_id=? AND is_active=1 AND is_deleted=0 ORDER BY style_code`, scoped: true },
 
   'sales-orders': { sql: `SELECT id, so_no AS code, CONCAT(so_no,' — ',COALESCE(buyer_po_no,'')) AS label, buyer_id, currency_id FROM trx_sales_order WHERE company_id=? AND is_deleted=0 ORDER BY so_date DESC LIMIT 500`, scoped: true },
+  // SO lines carry the garment part chosen next to the colour; downstream
+  // screens use this to link a document to its line and prefill the part.
+  'sales-order-lines': { sql: `SELECT sol.id, sol.id AS code,
+      CONCAT(so.so_no, ' / ', COALESCE(st.style_code,''), COALESCE(CONCAT(' ', c.color_name),''),
+             COALESCE(CONCAT(' [', sol.part_name, ']'),'')) AS label,
+      sol.so_id, so.so_no, sol.style_id, sol.color_id, sol.part_name, sol.order_qty
+    FROM trx_sales_order_line sol
+    JOIN trx_sales_order so ON so.id = sol.so_id
+    LEFT JOIN mst_style st ON st.id = sol.style_id
+    LEFT JOIN mst_color c ON c.id = sol.color_id
+   WHERE so.company_id=? AND so.is_deleted=0
+   ORDER BY so.so_date DESC, sol.id LIMIT 500`, scoped: true },
   'production-orders': { sql: `SELECT id, po_prod_no AS code, po_prod_no AS label, so_id, style_id, order_qty FROM trx_production_order WHERE company_id=? ORDER BY id DESC LIMIT 500`, scoped: true },
   'prod-orders': { sql: `SELECT id, po_prod_no AS code, po_prod_no AS label, so_id, style_id, order_qty FROM trx_production_order WHERE company_id=? ORDER BY id DESC LIMIT 500`, scoped: true },
   'purchase-orders': { sql: `SELECT id, po_no AS code, po_no AS label, supplier_id, currency_id FROM trx_purchase_order WHERE company_id=? AND is_deleted=0 ORDER BY id DESC LIMIT 500`, scoped: true },

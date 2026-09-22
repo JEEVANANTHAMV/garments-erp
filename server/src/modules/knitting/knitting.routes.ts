@@ -7,6 +7,7 @@ import { requirePermission } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
+import { txResolvePartName } from '../../core/partName.js';
 
 /* ================================================================
    KNITTING PROGRAM — schemas
@@ -49,6 +50,7 @@ const kpSchema = z.object({
   program_no: s.nullableStr(60),
   program_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   so_id: s.id(),
+  so_line_id: s.id(),
   io_no: s.nullableStr(60),
   buyer_po_no: s.nullableStr(60),
   style_id: s.id(),
@@ -79,6 +81,7 @@ const kpSchema = z.object({
 const kpUpdateSchema = z.object({
   program_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   so_id: s.id(),
+  so_line_id: s.id(),
   io_no: s.nullableStr(60),
   buyer_po_no: s.nullableStr(60),
   style_id: s.id(),
@@ -119,6 +122,7 @@ const kwoSchema = z.object({
   kwo_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   io_no: s.strReq(60),
   customer_po_no: s.nullableStr(60),
+  so_line_id: s.id(),
   style_id: s.id(),
   sub_process: z.enum(['KNITTING', 'WINDING', 'TWISTING', 'YARN_DYEING', 'COLLAR_KNITTING']).default('KNITTING'),
   vendor_id: s.id(),
@@ -280,16 +284,21 @@ knittingRouter.post('/knitting/programs', requirePermission('PRODUCTION.CREATE')
   const result = await transaction(async (tx) => {
     const programNo = body.program_no || await nextDocNumber(tx, cid, 'KNP');
 
+    // The Sales Order line owns the part; it wins over whatever the client sent
+    // so the part cannot drift between stages (Audio 5 carry-forward).
+    const partName = await txResolvePartName(tx, body.so_line_id, body.part_name);
+
     const res2 = await txExecute(
       tx,
       `INSERT INTO trx_knitting_program
-         (company_id, program_no, program_date, so_id, io_no, buyer_po_no, style_id,
+         (company_id, program_no, program_date, so_id, so_line_id, io_no, buyer_po_no, style_id,
           part_name, fabric_id, fabric_type, knitting_type, gsm, dia, gauge, loop_length,
           required_qty_kg, required_date, job_work_type, vendor_id, status, remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
-        cid, programNo, body.program_date, body.so_id ?? null, body.io_no ?? null, body.buyer_po_no ?? null,
-        body.style_id ?? null, body.part_name ?? null, body.fabric_id ?? null, body.fabric_type ?? null,
+        cid, programNo, body.program_date, body.so_id ?? null, body.so_line_id ?? null,
+        body.io_no ?? null, body.buyer_po_no ?? null,
+        body.style_id ?? null, partName, body.fabric_id ?? null, body.fabric_type ?? null,
         body.knitting_type, body.gsm ?? null, body.dia ?? null, body.gauge ?? null, body.loop_length ?? null,
         body.required_qty_kg, body.required_date ?? null, body.job_work_type,
         body.vendor_id ?? null, body.status, body.remarks ?? null, uid,
@@ -354,7 +363,7 @@ knittingRouter.put('/knitting/programs/:id', requirePermission('PRODUCTION.UPDAT
     // Build the UPDATE from only the keys actually present in the request, so
     // an omitted field is left untouched while an explicit null clears it.
     const FIELDS = [
-      'program_date', 'so_id', 'io_no', 'buyer_po_no', 'style_id', 'part_name',
+      'program_date', 'so_id', 'so_line_id', 'io_no', 'buyer_po_no', 'style_id', 'part_name',
       'fabric_id', 'fabric_type', 'knitting_type', 'gsm', 'dia', 'gauge',
       'loop_length', 'required_qty_kg', 'required_date', 'job_work_type',
       'vendor_id', 'status', 'remarks',
@@ -367,6 +376,17 @@ knittingRouter.put('/knitting/programs/:id', requirePermission('PRODUCTION.UPDAT
       if (v === undefined) continue;          // not supplied → leave as-is
       sets.push(`${f} = ?`);
       vals.push(v);                            // explicit null → clears the column
+    }
+
+    // Re-link to a Sales Order line → the part follows that line, overriding
+    // any part_name the client may have sent alongside it.
+    if (body.so_line_id !== undefined) {
+      const linked = await txResolvePartName(tx, body.so_line_id, body.part_name);
+      if (linked) {
+        const i = sets.indexOf('part_name = ?');
+        if (i >= 0) vals[i] = linked;
+        else { sets.push('part_name = ?'); vals.push(linked); }
+      }
     }
 
     if (sets.length) {
@@ -614,16 +634,19 @@ knittingRouter.post('/knitting/orders', requirePermission('PRODUCTION.CREATE'), 
   const result = await transaction(async (tx) => {
     const kwoNo = body.kwo_no || await nextDocNumber(tx, cid, 'KWO');
 
+    // Sales Order line owns the part (Audio 5 carry-forward).
+    const partName = await txResolvePartName(tx, body.so_line_id, body.part_name);
+
     const resOrder = await txExecute(
       tx,
       `INSERT INTO trx_knitting_order
-         (company_id, kwo_no, kwo_date, io_no, customer_po_no, style_id, sub_process, vendor_id, fabric_id,
+         (company_id, kwo_no, kwo_date, io_no, customer_po_no, so_line_id, style_id, sub_process, vendor_id, fabric_id,
           dia, gsm, gauge, loop_length, planned_fabric_kg, planned_yarn_kg, yarn_lot_no, part_name, status, remarks, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        cid, kwoNo, body.kwo_date, body.io_no, body.customer_po_no ?? null, body.style_id ?? null, body.sub_process, body.vendor_id ?? null, body.fabric_id ?? null,
+        cid, kwoNo, body.kwo_date, body.io_no, body.customer_po_no ?? null, body.so_line_id ?? null, body.style_id ?? null, body.sub_process, body.vendor_id ?? null, body.fabric_id ?? null,
         body.dia ?? null, body.gsm ?? null, body.gauge ?? null, body.loop_length ?? null, body.planned_fabric_kg ?? 0, body.planned_yarn_kg ?? 0,
-        body.yarn_lot_no ?? null, body.part_name ?? null, body.status ?? 'DRAFT', body.remarks ?? null, uid
+        body.yarn_lot_no ?? null, partName, body.status ?? 'DRAFT', body.remarks ?? null, uid
       ]
     );
 

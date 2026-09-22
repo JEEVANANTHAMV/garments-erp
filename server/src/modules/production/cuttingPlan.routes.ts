@@ -7,6 +7,7 @@ import { requirePermission } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
+import { txResolvePartName } from '../../core/partName.js';
 
 export const cuttingPlanRouter = Router();
 
@@ -26,6 +27,7 @@ const cuttingPlanSchema = z.object({
   plan_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   io_no: s.strReq(40),
   so_id: s.id(),
+  so_line_id: s.id(),
   prod_order_id: s.id(),
   style_id: s.idReq(),
   color_id: s.id(),
@@ -39,7 +41,7 @@ const cuttingPlanSchema = z.object({
   fabric_req_mtr: s.dec(),
   status: z.enum(['DRAFT','APPROVED','RELEASED','IN_PROGRESS','COMPLETED','CLOSED','CANCELLED']).default('DRAFT'),
   remarks: s.text(),
-  part_name: z.string().trim().max(50).optional().default('TOP'),
+  part_name: z.string().trim().max(50).optional(),
   sizes: z.array(sizeLineSchema).default([]),
 });
 
@@ -103,14 +105,18 @@ cuttingPlanRouter.post('/cutting-plans', requirePermission('PRODUCTION.CREATE'),
   const result = await transaction(async (tx) => {
     const planNo = body.plan_no || await nextDocNumber(tx, cid, 'CUT_PLAN');
 
+    // The Sales Order line owns the part; fall back to TOP only when this plan
+    // is not linked to a line (Audio 5 carry-forward).
+    const partName = await txResolvePartName(tx, body.so_line_id, body.part_name, 'TOP');
+
     const r = await txExecute(tx,
       `INSERT INTO trx_cutting_plan
-        (company_id, plan_no, plan_date, io_no, so_id, prod_order_id, style_id, color_id, part_name,
+        (company_id, plan_no, plan_date, io_no, so_id, so_line_id, prod_order_id, style_id, color_id, part_name,
          order_qty, planned_cut_qty, required_date, marker_ref, marker_eff_pct,
          fabric_id, fabric_req_kg, fabric_req_mtr, status, remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [cid, planNo, body.plan_date, body.io_no, body.so_id ?? null, body.prod_order_id ?? null,
-       body.style_id, body.color_id ?? null, body.part_name || 'TOP', body.order_qty, body.planned_cut_qty,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [cid, planNo, body.plan_date, body.io_no, body.so_id ?? null, body.so_line_id ?? null, body.prod_order_id ?? null,
+       body.style_id, body.color_id ?? null, partName, body.order_qty, body.planned_cut_qty,
        body.required_date ?? null, body.marker_ref ?? null, body.marker_eff_pct ?? null,
        body.fabric_id ?? null, body.fabric_req_kg ?? null, body.fabric_req_mtr ?? null,
        body.status, body.remarks ?? null, req.user!.id]);
@@ -141,14 +147,18 @@ cuttingPlanRouter.put('/cutting-plans/:id', requirePermission('PRODUCTION.EDIT')
   if (!existing) throw NotFound('Cutting plan not found');
 
   await transaction(async (tx) => {
+    // Keep the part aligned with the linked Sales Order line on every save.
+    const partName = await txResolvePartName(
+      tx, body.so_line_id, body.part_name, (existing.part_name as any) || 'TOP');
+
     await txExecute(tx,
       `UPDATE trx_cutting_plan SET
-        plan_date = ?, io_no = ?, so_id = ?, prod_order_id = ?, style_id = ?, color_id = ?, part_name = ?,
+        plan_date = ?, io_no = ?, so_id = ?, so_line_id = ?, prod_order_id = ?, style_id = ?, color_id = ?, part_name = ?,
         order_qty = ?, planned_cut_qty = ?, required_date = ?, marker_ref = ?, marker_eff_pct = ?,
         fabric_id = ?, fabric_req_kg = ?, fabric_req_mtr = ?, status = ?, remarks = ?, updated_by = ?
        WHERE id = ?`,
-      [body.plan_date, body.io_no, body.so_id ?? null, body.prod_order_id ?? null,
-       body.style_id, body.color_id ?? null, body.part_name || 'TOP', body.order_qty, body.planned_cut_qty,
+      [body.plan_date, body.io_no, body.so_id ?? null, body.so_line_id ?? null, body.prod_order_id ?? null,
+       body.style_id, body.color_id ?? null, partName, body.order_qty, body.planned_cut_qty,
        body.required_date ?? null, body.marker_ref ?? null, body.marker_eff_pct ?? null,
        body.fabric_id ?? null, body.fabric_req_kg ?? null, body.fabric_req_mtr ?? null,
        body.status, body.remarks ?? null, req.user!.id, id]);
@@ -191,12 +201,18 @@ cuttingPlanRouter.post('/bundles/generate', requirePermission('PRODUCTION.CREATE
   }).parse(req.body);
 
   const cutting = await queryOne(
-    `SELECT c.* FROM trx_cutting c
+    `SELECT c.*, po.part_name AS po_part_name, sol.part_name AS so_part_name
+       FROM trx_cutting c
        JOIN trx_production_order po ON po.id = c.prod_order_id
+       LEFT JOIN trx_sales_order_line sol ON sol.id = po.so_line_id
       WHERE c.id = ? AND po.company_id = ?`, [body.cutting_id, cid]);
   if (!cutting) throw NotFound('Cutting transaction not found');
 
-  const partTag = (body.part_name || 'TOP').toUpperCase();
+  // Part follows the order: Sales Order line first, then the production order,
+  // and only then whatever the caller supplied (Audio 5 carry-forward).
+  const partTag = String(
+    cutting.so_part_name || cutting.po_part_name || body.part_name || 'TOP'
+  ).toUpperCase();
 
   let resolvedSkuId = body.sku_id ?? null;
   if (!resolvedSkuId && body.style_id && body.color_id && body.size_id) {

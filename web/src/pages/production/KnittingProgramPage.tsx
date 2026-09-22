@@ -75,6 +75,7 @@ const emptyForm = () => ({
   program_no: '',
   program_date: today(),
   so_id: '' as number | '',
+  so_line_id: '' as number | '',
   io_no: '',
   buyer_po_no: '',
   style_id: '' as number | '',
@@ -131,6 +132,10 @@ export default function KnittingProgramPage() {
   const { data: fabrics = [] } = useQ({
     queryKey: ['lookups', 'fabrics'],
     queryFn: async () => (await http.get<{ data: any[] }>('/lookups/fabrics')).data || [],
+  });
+  const { data: soLines = [] } = useQ({
+    queryKey: ['lookups', 'sales-order-lines'],
+    queryFn: async () => (await http.get<{ data: any[] }>('/lookups/sales-order-lines')).data || [],
   });
   const { data: parties = [] } = useQ({
     queryKey: ['lookups', 'parties'],
@@ -191,6 +196,7 @@ export default function KnittingProgramPage() {
       program_no: prog.program_no ?? '',
       program_date: prog.program_date ? prog.program_date.split('T')[0] : today(),
       so_id: prog.so_id ?? '',
+      so_line_id: prog.so_line_id ?? '',
       io_no: prog.io_no ?? '',
       buyer_po_no: prog.buyer_po_no ?? '',
       style_id: prog.style_id ?? '',
@@ -220,6 +226,7 @@ export default function KnittingProgramPage() {
       const payload = {
         ...form,
         so_id: form.so_id === '' ? null : Number(form.so_id),
+        so_line_id: form.so_line_id === '' ? null : Number(form.so_line_id),
         style_id: form.style_id === '' ? null : Number(form.style_id),
         fabric_id: form.fabric_id === '' ? null : Number(form.fabric_id),
         vendor_id: form.vendor_id === '' ? null : Number(form.vendor_id),
@@ -301,6 +308,25 @@ export default function KnittingProgramPage() {
       yarn_id: yarnId === '' ? '' : Number(yarnId),
       count_value: y?.count_value ?? y?.count_master_value ?? '',
     });
+  };
+
+  // The Sales Order line owns the part (the server enforces this too); selecting
+  // a line prefills the SO, style and part so they cannot drift apart.
+  const linkedPart: string | null = (() => {
+    if (form.so_line_id === '') return null;
+    const l = soLines.find((l: any) => l.id === Number(form.so_line_id));
+    return l?.part_name ?? null;
+  })();
+
+  const onSoLineSelect = (value: string) => {
+    const line = soLines.find((l: any) => l.id === Number(value));
+    setForm((s) => ({
+      ...s,
+      so_line_id: value === '' ? '' : Number(value),
+      so_id: line?.so_id ?? s.so_id,
+      style_id: line?.style_id ?? s.style_id,
+      part_name: (line?.part_name as any) ?? s.part_name,
+    }));
   };
 
   const isStripeType = ['STRIPE', 'FEEDER_STRIPE', 'ENGINEERED_STRIPE', 'MULTI_YARN'].includes(form.knitting_type);
@@ -474,13 +500,24 @@ export default function KnittingProgramPage() {
                 onChange={(e) => setF('io_no', e.target.value)} id="kp-io-no" />
               <Input label="Buyer PO No" value={form.buyer_po_no}
                 onChange={(e) => setF('buyer_po_no', e.target.value)} id="kp-buyer-po" />
+              <select className="input" value={form.so_line_id} onChange={(e) => onSoLineSelect(e.target.value)} id="kp-so-line">
+                <option value="">— Sales Order line (optional) —</option>
+                {soLines.map((l: any) => <option key={l.id} value={l.id}>{l.label}</option>)}
+              </select>
               <select className="input" value={form.style_id} onChange={(e) => setF('style_id', e.target.value ? Number(e.target.value) : '')} id="kp-style">
                 <option value="">— Style —</option>
                 {styles.map((s: any) => <option key={s.id} value={s.id}>{s.style_code} — {s.label}</option>)}
               </select>
-              <select className="input" value={form.part_name} onChange={(e) => setF('part_name', e.target.value)} id="kp-part">
-                {PARTS.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
+              <div>
+                <select className="input w-full" value={form.part_name}
+                  onChange={(e) => setF('part_name', e.target.value)}
+                  disabled={linkedPart !== null} id="kp-part">
+                  {PARTS.map((p) => <option key={p} value={p}>{p}</option>)}
+                </select>
+                {linkedPart && (
+                  <p className="mt-1 text-[10px] text-slate-500">Part follows the linked Sales Order line</p>
+                )}
+              </div>
               <select className="input" value={form.knitting_type} onChange={(e) => setF('knitting_type', e.target.value)} id="kp-knitting-type">
                 {KNITTING_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
               </select>
