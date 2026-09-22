@@ -144,6 +144,91 @@ export async function postLedger(tx: Tx, m: {
 }
 
 /* ================================================================
+   Process route sequencing (doc §4)
+================================================================ */
+
+export interface RouteStep {
+  seq_no: number;
+  process_type: string;
+  is_mandatory: number | boolean;
+  default_loss_pct: number;
+}
+
+/**
+ * Validate that a process fits its route.
+ *
+ * The route defines the order, so a process claiming step N must (a) actually
+ * be the process type the route puts at step N, and (b) not skip a mandatory
+ * earlier step that has never been run for the same order.
+ *
+ * Returns the problems found; an empty array means the process is in sequence.
+ */
+export async function validateRouteSequence(opts: {
+  companyId: number;
+  routeId: number;
+  routeSeqNo: number;
+  processType: string;
+  ioNo?: string | null;
+  soLineId?: number | null;
+  /** Exclude this process when looking for earlier steps (used on update). */
+  excludeProcessId?: number | null;
+}): Promise<string[]> {
+  const problems: string[] = [];
+
+  const steps = await query<RouteStep>(
+    `SELECT seq_no, process_type, is_mandatory, default_loss_pct
+       FROM mst_process_route_line
+      WHERE route_id = ? AND is_active = 1
+      ORDER BY seq_no`,
+    [opts.routeId],
+  );
+  if (!steps.length) return ['The selected route has no active steps'];
+
+  const step = steps.find((s) => Number(s.seq_no) === Number(opts.routeSeqNo));
+  if (!step) {
+    return [`Step ${opts.routeSeqNo} does not exist on this route ` +
+            `(it has steps ${steps.map((s) => s.seq_no).join(', ')})`];
+  }
+
+  if (step.process_type !== opts.processType) {
+    problems.push(
+      `Step ${opts.routeSeqNo} of this route is ${step.process_type.replace(/_/g, ' ')}, ` +
+      `but this process is ${opts.processType.replace(/_/g, ' ')}`);
+  }
+
+  // A step is only "earlier" within the same order, which the I/O number or the
+  // sales-order line identifies. Without either there is nothing to compare.
+  if (!opts.ioNo && !opts.soLineId) return problems;
+
+  const earlier = steps.filter(
+    (s) => Number(s.seq_no) < Number(opts.routeSeqNo) && (s.is_mandatory === 1 || s.is_mandatory === true));
+
+  for (const prior of earlier) {
+    // Knitting and collar knitting are separate documents, so a yarn-process
+    // route cannot confirm them here; only the yarn processes are checked.
+    if (!['YARN_DYEING', 'WINDING', 'TWISTING'].includes(prior.process_type)) continue;
+
+    const params: any[] = [opts.companyId, opts.routeId, prior.seq_no, prior.process_type];
+    let sql =
+      `SELECT id, status FROM trx_yarn_process
+        WHERE company_id = ? AND route_id = ? AND route_seq_no = ? AND process_type = ?
+          AND status <> 'CANCELLED'`;
+    if (opts.ioNo) { sql += ' AND io_no = ?'; params.push(opts.ioNo); }
+    else { sql += ' AND so_line_id = ?'; params.push(opts.soLineId); }
+    if (opts.excludeProcessId) { sql += ' AND id <> ?'; params.push(opts.excludeProcessId); }
+
+    const rows = await query<{ id: number; status: string }>(sql + ' LIMIT 1', params);
+    if (!rows.length) {
+      problems.push(
+        `Mandatory step ${prior.seq_no} (${prior.process_type.replace(/_/g, ' ')}) ` +
+        `has not been started for this order`);
+    }
+  }
+
+  return problems;
+}
+
+/* ================================================================
    Reservation
 ================================================================ */
 

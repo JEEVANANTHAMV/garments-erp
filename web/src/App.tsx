@@ -64,6 +64,7 @@ import ProcessRoutePage from './pages/production/ProcessRoutePage';
 import YarnProcessPage from './pages/production/YarnProcessPage';
 import CollarKnittingPage from './pages/production/CollarKnittingPage';
 import ProcessReportsPage from './pages/production/ProcessReportsPage';
+import ProcessExecutionPage from './pages/production/ProcessExecutionPage';
 import FabricProcessingPage from './pages/production/FabricProcessingPage';
 
 import CadRequirementsPage from './pages/production/CadRequirements';
@@ -258,6 +259,7 @@ export default function App() {
                   <Route path="yarn-processes" element={<YarnProcessPage />} />
                   <Route path="collar-knitting" element={<CollarKnittingPage />} />
                   <Route path="process-reports" element={<ProcessReportsPage />} />
+                  <Route path="process-execution" element={<ProcessExecutionPage />} />
                   <Route path="fabric-processing" element={<FabricProcessingPage />} />
                   <Route path="fabric-issues" element={<FabricIssuePage />} />
                   <Route path="lay-spreading" element={<LaySpreadingPage />} />

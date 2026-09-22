@@ -86,7 +86,7 @@ export function CuttingPlanDetailPage() {
   const isNew = !id || id === 'new';
 
   const [header, setHeader] = useState<any>({
-    plan_no: '', plan_date: today(), io_no: '', so_id: null, prod_order_id: null,
+    plan_no: '', plan_date: today(), io_no: '', so_id: null, so_line_id: null, prod_order_id: null,
     style_id: null, color_id: null, part_name: 'TOP', order_qty: 0, planned_cut_qty: 0,
     required_date: '', marker_ref: '', marker_eff_pct: '', fabric_id: null,
     fabric_req_kg: '', fabric_req_mtr: '', status: 'DRAFT', remarks: '',
@@ -96,6 +96,7 @@ export function CuttingPlanDetailPage() {
 
   // Lookups
   const [salesOrders, setSalesOrders] = useState<any[]>([]);
+  const [soLines, setSoLines] = useState<any[]>([]);
   const [prodOrders, setProdOrders] = useState<any[]>([]);
   const [styles, setStyles] = useState<any[]>([]);
   const [colors, setColors] = useState<any[]>([]);
@@ -105,13 +106,15 @@ export function CuttingPlanDetailPage() {
   useEffect(() => {
     Promise.all([
       api.get('/lookups/sales-orders'),
+      api.get('/lookups/sales-order-lines'),
       api.get('/lookups/production-orders'),
       api.get('/lookups/styles'),
       api.get('/lookups/colors'),
       api.get('/lookups/fabrics'),
       api.get('/lookups/sizes'),
-    ]).then(([so, po, st, col, fab, sz]) => {
+    ]).then(([so, sol, po, st, col, fab, sz]) => {
       setSalesOrders(so.data.data || []);
+      setSoLines(sol.data.data || []);
       setProdOrders(po.data.data || []);
       setStyles(st.data.data || []);
       setColors(col.data.data || []);
@@ -126,7 +129,7 @@ export function CuttingPlanDetailPage() {
         const d = r.data.data;
         setHeader({
           plan_no: d.plan_no || '', plan_date: d.plan_date?.slice(0, 10) || today(),
-          io_no: d.io_no || '', so_id: d.so_id, prod_order_id: d.prod_order_id,
+          io_no: d.io_no || '', so_id: d.so_id, so_line_id: d.so_line_id, prod_order_id: d.prod_order_id,
           style_id: d.style_id, color_id: d.color_id,
           part_name: d.part_name || 'TOP',
           order_qty: d.order_qty || 0, planned_cut_qty: d.planned_cut_qty || 0,
@@ -188,10 +191,26 @@ export function CuttingPlanDetailPage() {
     setHeader((prev: any) => ({
       ...prev,
       so_id: soId,
+      so_line_id: header.so_line_id ?? null,
       io_no: so?.po_no || so?.so_no || prev.io_no,
       style_id: so?.style_id || prev.style_id,
       color_id: so?.color_id || prev.color_id,
       order_qty: so?.order_qty || prev.order_qty,
+    }));
+  };
+
+  // The Sales Order line owns the garment part (the server enforces this too),
+  // so picking a line fills the part in rather than leaving it to be retyped.
+  const handleSoLineSelect = (val: string) => {
+    const lineId = val ? Number(val) : null;
+    const line = soLines.find((l: any) => l.id === lineId);
+    setHeader((prev: any) => ({
+      ...prev,
+      so_line_id: lineId,
+      so_id: line?.so_id ?? prev.so_id,
+      style_id: line?.style_id ?? prev.style_id,
+      color_id: line?.color_id ?? prev.color_id,
+      part_name: line?.part_name ?? prev.part_name,
     }));
   };
 
@@ -248,7 +267,14 @@ export function CuttingPlanDetailPage() {
             onChange={e => setField('style_id', e.target.value ? Number(e.target.value) : null)} required
             options={[{ value: '', label: '— Select Style —' }, ...styles.map((s: any) => ({ value: s.id, label: s.label || s.code }))]} />
 
+          <Select label="Sales Order Line" value={header.so_line_id || ''}
+            onChange={e => handleSoLineSelect(e.target.value)}
+            options={[{ value: '', label: '— Not linked —' },
+                      ...soLines.map((l: any) => ({ value: l.id, label: l.label }))]} />
+
           <Select label="Garment Part *" value={header.part_name || 'TOP'}
+            disabled={Boolean(header.so_line_id)}
+            hint={header.so_line_id ? 'Follows the linked Sales Order line' : undefined}
             onChange={e => setField('part_name', e.target.value)}
             options={[
               { value: 'TOP', label: 'TOP (Shirt / T-Shirt / Body)' },

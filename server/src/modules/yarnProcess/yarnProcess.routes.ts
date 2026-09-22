@@ -10,7 +10,7 @@ import { s } from '../resources/schemas.js';
 import { txResolvePartName } from '../../core/partName.js';
 import {
   PROCESS_STATUSES, assertEditable, checkStock, reserveYarn, consumeReservation,
-  postLedger, yarnStockOnHand, yarnReservedQty, UOM_KG,
+  postLedger, yarnStockOnHand, yarnReservedQty, validateRouteSequence, UOM_KG,
 } from '../../core/processEngine.js';
 
 /**
@@ -437,9 +437,47 @@ yarnProcessRouter.post('/yarn-processes/:id/release', requirePermission('PROCESS
   if (p.job_work_type === 'JOB_WORK' && !p.vendor_id) missing.push('vendor (job work)');
   if (missing.length) throw BadRequest(`Cannot release — missing: ${missing.join(', ')}`);
 
+  // When the process claims a place on a route, that sequence is enforced here
+  // rather than at creation, so a planner can still draft steps out of order
+  // (doc §4). ?force=true records the deviation instead of blocking it.
+  if (p.route_id && p.route_seq_no) {
+    const problems = await validateRouteSequence({
+      companyId: cid, routeId: Number(p.route_id), routeSeqNo: Number(p.route_seq_no),
+      processType: p.process_type, ioNo: p.io_no, soLineId: p.so_line_id,
+      excludeProcessId: id,
+    });
+    if (problems.length && String(req.query.force) !== 'true') {
+      throw BadRequest(
+        `Route sequence problem: ${problems.join('; ')}. ` +
+        `Release with ?force=true to proceed anyway.`);
+    }
+    if (problems.length) {
+      await audit(req, 'trx_yarn_process', id, 'UPDATE', p,
+        { route_sequence_override: problems });
+    }
+  }
+
   await query(`UPDATE trx_yarn_process SET status = 'RELEASED' WHERE id = ?`, [id]);
   await audit(req, 'trx_yarn_process', id, 'UPDATE', p, { status: 'RELEASED' });
   res.json({ success: true, data: await loadProcess(id, cid) });
+}));
+
+/** GET /yarn-processes/:id/route-check — preview the sequence result. */
+yarnProcessRouter.get('/yarn-processes/:id/route-check', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = Number(req.params.id);
+  const p = await queryOne<any>(
+    `SELECT * FROM trx_yarn_process WHERE id = ? AND company_id = ?`, [id, cid]);
+  if (!p) throw NotFound('Process not found');
+  if (!p.route_id || !p.route_seq_no) {
+    res.json({ success: true, data: { in_sequence: true, problems: [], note: 'No route assigned' } });
+    return;
+  }
+  const problems = await validateRouteSequence({
+    companyId: cid, routeId: Number(p.route_id), routeSeqNo: Number(p.route_seq_no),
+    processType: p.process_type, ioNo: p.io_no, soLineId: p.so_line_id, excludeProcessId: id,
+  });
+  res.json({ success: true, data: { in_sequence: problems.length === 0, problems } });
 }));
 
 export default yarnProcessRouter;
