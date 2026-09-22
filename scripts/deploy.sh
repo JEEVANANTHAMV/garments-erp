@@ -89,7 +89,7 @@ EOF
 
   # Apply database schema migrations first, then seeds
   echo "🗃️  Applying database migrations & seeds..."
-  (cd server && npm run db:migrate || true)
+  (cd server && npm run db:migrate)
 
   # Apply idempotent seeds (config data, lookups, roles)
   echo "🌱 Applying database seeds and configuration updates..."

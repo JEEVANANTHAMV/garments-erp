@@ -57,7 +57,8 @@ async function main() {
         if (!fresh && (err.message.includes('already exists') || err.message.includes('Duplicate column') || err.message.includes('Duplicate key'))) {
           console.log('already applied (skipped)');
         } else {
-          console.log('warn:', err.message);
+          console.error(`\n[migrate] FAILED on ${file}:`, err.message);
+          throw err;
         }
       }
     }
