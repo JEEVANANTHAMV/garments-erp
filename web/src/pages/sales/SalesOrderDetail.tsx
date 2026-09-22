@@ -20,6 +20,8 @@ interface Line {
   id?: number;
   style_id: number | '';
   color_id: number | '';
+  /** Garment part: TOP / BOTTOM / COLLAR / CUFF / FOLDING */
+  part_name?: string;
   description: string;
   unit_price: number | '';
   excess_pct?: number | '';
@@ -31,8 +33,8 @@ interface Line {
 
 let keySeq = 0;
 const newLine = (): Line => ({
-  _key: `l${++keySeq}`, style_id: '', color_id: '', description: '',
-  unit_price: '', excess_pct: '', plan_cut_qty: 0, ship_date: '', skus: {},
+  _key: `l${++keySeq}`, style_id: '', color_id: '', part_name: undefined,
+  description: '', unit_price: '', excess_pct: '', plan_cut_qty: 0, ship_date: '', skus: {},
 });
 
 export default function SalesOrderDetail() {
@@ -88,6 +90,7 @@ export default function SalesOrderDetail() {
     });
     setLines((d.lines ?? []).map((l: any) => ({
       _key: `l${++keySeq}`, id: l.id, style_id: l.style_id, color_id: l.color_id ?? '',
+      part_name: l.part_name ?? undefined,
       description: l.description ?? '', unit_price: Number(l.unit_price),
       excess_pct: l.excess_pct !== null && l.excess_pct !== undefined ? Number(l.excess_pct) : '',
       plan_cut_qty: Number(l.plan_cut_qty || 0),
@@ -192,6 +195,7 @@ export default function SalesOrderDetail() {
             return {
               style_id: Number(l.style_id),
               color_id: l.color_id === '' ? null : Number(l.color_id),
+              part_name: l.part_name || null,
               description: l.description || null,
               unit_price: Number(l.unit_price) || 0,
               excess_pct: l.excess_pct === '' || l.excess_pct === undefined ? null : Number(l.excess_pct),
@@ -1533,6 +1537,37 @@ function LineCard({
           placeholder={line.style_id ? '— All colours —' : 'Select a style first'}
           value={line.color_id} disabled={!editable || !line.style_id}
           onChange={(e) => onChange({ color_id: e.target.value ? Number(e.target.value) : '', skus: {} })} />
+        {/* Part Name — TOP / BOTTOM / COLLAR / CUFF / FOLDING */}
+        <div>
+          <label className="mb-1 block text-[12px] font-medium text-slate-700">
+            Part
+            {line.part_name && (
+              <span className={`ml-2 inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-bold ${
+                line.part_name === 'TOP'    ? 'bg-sky-100 text-sky-800 border-sky-200' :
+                line.part_name === 'BOTTOM' ? 'bg-violet-100 text-violet-800 border-violet-200' :
+                line.part_name === 'COLLAR' ? 'bg-rose-100 text-rose-800 border-rose-200' :
+                line.part_name === 'CUFF'   ? 'bg-amber-100 text-amber-800 border-amber-200' :
+                line.part_name === 'FOLDING'? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
+                'bg-slate-100 text-slate-700 border-slate-200'
+              }`}>{line.part_name}</span>
+            )}
+          </label>
+          <select
+            className="input w-full"
+            value={line.part_name ?? ''}
+            disabled={!editable}
+            onChange={(e) => onChange({ part_name: e.target.value || undefined })}
+            id={`line-part-${line._key}`}
+          >
+            <option value="">— None —</option>
+            <option value="TOP">TOP</option>
+            <option value="BOTTOM">BOTTOM</option>
+            <option value="COLLAR">COLLAR</option>
+            <option value="CUFF">CUFF</option>
+            <option value="FOLDING">FOLDING</option>
+            <option value="OTHER">OTHER</option>
+          </select>
+        </div>
         <Input label={`Unit price (${currencyCode})`} type="number" step="0.0001" placeholder="0.00" value={line.unit_price}
           disabled={!editable}
           onChange={(e) => onChange({ unit_price: e.target.value === '' ? '' : Number(e.target.value) })} />

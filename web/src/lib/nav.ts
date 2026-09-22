@@ -107,6 +107,7 @@ export const NAV: NavSection[] = [
     items: [
       { label: 'Traceability Search',  to: '/production/traceability', icon: Search, perms: ['PRODUCTION.VIEW'] },
       { label: 'Yarn Processing',      to: '/production/knitting', icon: Activity, perms: ['PRODUCTION.VIEW'] },
+      { label: 'Knitting Programs',    to: '/production/knitting-programs', icon: Layers, perms: ['PRODUCTION.VIEW'] },
       { label: 'Fabric Processing',    to: '/production/fabric-processing', icon: RefreshCw, perms: ['PRODUCTION.VIEW'] },
       { label: 'CAD Auto-Consumption', to: '/production/cad-requirements', icon: Scissors, perms: ['PRODUCTION.VIEW'] },
       { label: 'Cutting Plans',        to: '/production/cutting-plans', icon: Scissors, perms: ['PRODUCTION.VIEW'] },

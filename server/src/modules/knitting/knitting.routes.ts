@@ -8,6 +8,80 @@ import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
 
+/* ================================================================
+   KNITTING PROGRAM — schemas
+================================================================ */
+
+const PARTS = ['TOP', 'BOTTOM', 'COLLAR', 'CUFF', 'FOLDING', 'OTHER'] as const;
+const KNITTING_TYPES = ['SOLID', 'STRIPE', 'FEEDER_STRIPE', 'ENGINEERED_STRIPE', 'MULTI_YARN', 'OTHER'] as const;
+const KP_STATUS = [
+  'DRAFT', 'STOCK_CHECK', 'RESERVED', 'RELEASED',
+  'MATERIAL_ISSUED', 'IN_PROGRESS', 'PRODUCTION_COMPLETED',
+  'OUTPUT_RECEIPT', 'COMPLETED', 'CANCELLED',
+] as const;
+
+const kpYarnSchema = z.object({
+  id: z.coerce.number().int().optional(),
+  seq_no: z.coerce.number().int().min(1).default(1),
+  yarn_id: s.id(),
+  yarn_name_manual: s.nullableStr(150),
+  count_value: s.nullableStr(30),
+  colour: s.nullableStr(80),
+  yarn_po_no: s.nullableStr(80),
+  yarn_lot_no: s.nullableStr(80),
+  planning_ratio_pct: z.coerce.number().min(0).max(100).nullable().optional(),
+  planned_qty_kg: z.coerce.number().min(0).default(0),
+  reserved_qty_kg: z.coerce.number().min(0).default(0),
+  issued_qty_kg: z.coerce.number().min(0).default(0),
+});
+
+const kpStripeSchema = z.object({
+  id: z.coerce.number().int().optional(),
+  seq_no: z.coerce.number().int().min(1).default(1),
+  program_yarn_id: s.id(),
+  yarn_label: s.nullableStr(80),
+  colour: s.nullableStr(80),
+  courses: z.coerce.number().int().min(0).default(0),
+  notes: s.nullableStr(255),
+});
+
+const kpSchema = z.object({
+  program_no: s.nullableStr(60),
+  program_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  so_id: s.id(),
+  io_no: s.nullableStr(60),
+  buyer_po_no: s.nullableStr(60),
+  style_id: s.id(),
+  part_name: z.enum(PARTS).nullable().optional(),
+  fabric_id: s.id(),
+  fabric_type: s.nullableStr(80),
+  knitting_type: z.enum(KNITTING_TYPES).default('SOLID'),
+  gsm: s.nullableStr(40),
+  dia: s.nullableStr(40),
+  gauge: s.nullableStr(40),
+  loop_length: s.nullableStr(40),
+  required_qty_kg: z.coerce.number().min(0).default(0),
+  required_date: s.date(),
+  job_work_type: z.enum(['INTERNAL', 'JOB_WORK']).default('INTERNAL'),
+  vendor_id: s.id(),
+  status: z.enum(KP_STATUS).default('DRAFT'),
+  remarks: s.text(),
+  yarns: z.array(kpYarnSchema).default([]),
+  stripes: z.array(kpStripeSchema).default([]),
+});
+
+const kpIssueSchema = z.object({
+  program_id: s.idReq(),
+  program_yarn_id: s.id(),
+  issue_no: s.nullableStr(60),
+  issue_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  yarn_id: s.id(),
+  yarn_lot_no: s.nullableStr(80),
+  yarn_po_no: s.nullableStr(80),
+  issued_qty_kg: z.coerce.number().positive(),
+  remarks: s.text(),
+});
+
 export const knittingRouter = Router();
 
 const kwoSchema = z.object({
@@ -54,6 +128,356 @@ const rollOutputSchema = z.object({
   defect_points: z.coerce.number().int().min(0).default(0),
   rejection_reason: s.nullableStr(255),
 });
+
+
+/* ================================================================
+   KNITTING PROGRAM — API Routes
+   (Multi-yarn, Stripe Pattern, Yarn Traceability, Yarn Issue)
+================================================================ */
+
+async function loadKpDetail(id: number, cid: number) {
+  const prog = await queryOne(
+    `SELECT kp.*,
+            st.style_code, st.style_name,
+            fab.fabric_name, fab.fabric_code,
+            p.party_name AS vendor_name,
+            so.so_no, so.buyer_po_no AS so_buyer_po_no
+       FROM trx_knitting_program kp
+       LEFT JOIN mst_style st ON st.id = kp.style_id
+       LEFT JOIN mst_fabric fab ON fab.id = kp.fabric_id
+       LEFT JOIN mst_party p ON p.id = kp.vendor_id
+       LEFT JOIN trx_sales_order so ON so.id = kp.so_id
+      WHERE kp.id = ? AND kp.company_id = ?`,
+    [id, cid]
+  );
+  if (!prog) return null;
+
+  const yarns = await query(
+    `SELECT kpy.*, y.yarn_code, y.yarn_name
+       FROM trx_knitting_program_yarns kpy
+       LEFT JOIN mst_yarn y ON y.id = kpy.yarn_id
+      WHERE kpy.program_id = ? ORDER BY kpy.seq_no ASC`,
+    [id]
+  );
+
+  const stripes = await query(
+    `SELECT kps.*
+       FROM trx_knitting_program_stripes kps
+      WHERE kps.program_id = ? ORDER BY kps.seq_no ASC`,
+    [id]
+  );
+
+  const issues = await query(
+    `SELECT kpyi.*, y.yarn_name, y.yarn_code
+       FROM trx_knitting_program_yarn_issues kpyi
+       LEFT JOIN mst_yarn y ON y.id = kpyi.yarn_id
+      WHERE kpyi.program_id = ? ORDER BY kpyi.id ASC`,
+    [id]
+  );
+
+  // Aggregate issued qty per yarn line
+  const issuedMap: Record<number, number> = {};
+  for (const iss of issues) {
+    const key = Number(iss.program_yarn_id ?? 0);
+    issuedMap[key] = (issuedMap[key] || 0) + Number(iss.issued_qty_kg || 0);
+  }
+
+  return { ...prog, yarns, stripes, issues };
+}
+
+/** GET /knitting/programs — List knitting programs */
+knittingRouter.get('/knitting/programs', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const { io_no, style_id, part_name, status, knitting_type, q } = req.query;
+  const page = Math.max(1, Number(req.query.page ?? 1));
+  const pageSize = Math.min(200, Math.max(1, Number(req.query.pageSize ?? 25)));
+
+  let where = 'WHERE kp.company_id = ?';
+  const params: any[] = [cid];
+
+  if (io_no) { where += ' AND kp.io_no LIKE ?'; params.push(`%${io_no}%`); }
+  if (style_id) { where += ' AND kp.style_id = ?'; params.push(style_id); }
+  if (part_name) { where += ' AND kp.part_name = ?'; params.push(part_name); }
+  if (status) { where += ' AND kp.status = ?'; params.push(status); }
+  if (knitting_type) { where += ' AND kp.knitting_type = ?'; params.push(knitting_type); }
+  if (q) {
+    where += ' AND (kp.program_no LIKE ? OR kp.io_no LIKE ? OR kp.buyer_po_no LIKE ?)';
+    params.push(`%${q}%`, `%${q}%`, `%${q}%`);
+  }
+
+  const offset = (page - 1) * pageSize;
+  const [rows, total] = await Promise.all([
+    query(
+      `SELECT kp.*,
+              st.style_code, st.style_name,
+              fab.fabric_name, fab.fabric_code,
+              p.party_name AS vendor_name,
+              COALESCE(SUM(kpy.planned_qty_kg), 0) AS total_planned_yarn_kg,
+              COALESCE(SUM(kpy.issued_qty_kg), 0) AS total_issued_yarn_kg,
+              COUNT(DISTINCT kpy.id) AS yarn_line_count
+         FROM trx_knitting_program kp
+         LEFT JOIN mst_style st ON st.id = kp.style_id
+         LEFT JOIN mst_fabric fab ON fab.id = kp.fabric_id
+         LEFT JOIN mst_party p ON p.id = kp.vendor_id
+         LEFT JOIN trx_knitting_program_yarns kpy ON kpy.program_id = kp.id
+        ${where}
+        GROUP BY kp.id
+        ORDER BY kp.id DESC
+        LIMIT ${pageSize} OFFSET ${offset}`,
+      params
+    ),
+    queryOne<{ total: number }>(
+      `SELECT COUNT(DISTINCT kp.id) AS total FROM trx_knitting_program kp ${where}`,
+      params
+    ),
+  ]);
+
+  res.json({
+    success: true,
+    data: rows,
+    pagination: { page, pageSize, total: total?.total ?? 0, totalPages: Math.ceil((total?.total ?? 0) / pageSize) },
+  });
+}));
+
+/** GET /knitting/programs/:id — Detail */
+knittingRouter.get('/knitting/programs/:id', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const prog = await loadKpDetail(Number(req.params.id), cid);
+  if (!prog) throw NotFound('Knitting program not found');
+  res.json({ success: true, data: prog });
+}));
+
+/** POST /knitting/programs — Create */
+knittingRouter.post('/knitting/programs', requirePermission('PRODUCTION.CREATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const uid = req.user!.id;
+  const body = kpSchema.parse(req.body);
+
+  const result = await transaction(async (tx) => {
+    const programNo = body.program_no || await nextDocNumber(tx, cid, 'KNP');
+
+    const res2 = await txExecute(
+      tx,
+      `INSERT INTO trx_knitting_program
+         (company_id, program_no, program_date, so_id, io_no, buyer_po_no, style_id,
+          part_name, fabric_id, fabric_type, knitting_type, gsm, dia, gauge, loop_length,
+          required_qty_kg, required_date, job_work_type, vendor_id, status, remarks, created_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        cid, programNo, body.program_date, body.so_id ?? null, body.io_no ?? null, body.buyer_po_no ?? null,
+        body.style_id ?? null, body.part_name ?? null, body.fabric_id ?? null, body.fabric_type ?? null,
+        body.knitting_type, body.gsm ?? null, body.dia ?? null, body.gauge ?? null, body.loop_length ?? null,
+        body.required_qty_kg, body.required_date ?? null, body.job_work_type,
+        body.vendor_id ?? null, body.status, body.remarks ?? null, uid,
+      ]
+    );
+    const programId = res2.insertId;
+
+    // Insert yarn lines
+    for (const yarn of body.yarns) {
+      await txExecute(
+        tx,
+        `INSERT INTO trx_knitting_program_yarns
+           (program_id, seq_no, yarn_id, yarn_name_manual, count_value, colour,
+            yarn_po_no, yarn_lot_no, planning_ratio_pct, planned_qty_kg, reserved_qty_kg, issued_qty_kg)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [
+          programId, yarn.seq_no, yarn.yarn_id ?? null, yarn.yarn_name_manual ?? null,
+          yarn.count_value ?? null, yarn.colour ?? null, yarn.yarn_po_no ?? null,
+          yarn.yarn_lot_no ?? null, yarn.planning_ratio_pct ?? null,
+          yarn.planned_qty_kg, yarn.reserved_qty_kg, yarn.issued_qty_kg,
+        ]
+      );
+    }
+
+    // Insert stripe lines
+    for (const stripe of body.stripes) {
+      await txExecute(
+        tx,
+        `INSERT INTO trx_knitting_program_stripes
+           (program_id, seq_no, program_yarn_id, yarn_label, colour, courses, notes)
+         VALUES (?,?,?,?,?,?,?)`,
+        [
+          programId, stripe.seq_no, stripe.program_yarn_id ?? null,
+          stripe.yarn_label ?? null, stripe.colour ?? null, stripe.courses, stripe.notes ?? null,
+        ]
+      );
+    }
+
+    return { id: programId, program_no: programNo };
+  });
+
+  await audit(req, 'trx_knitting_program', result.id, 'INSERT', undefined, result);
+  res.status(201).json({ success: true, data: result });
+}));
+
+/** PUT /knitting/programs/:id — Update */
+knittingRouter.put('/knitting/programs/:id', requirePermission('PRODUCTION.UPDATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = Number(req.params.id);
+  const body = kpSchema.partial().parse(req.body);
+
+  const existing = await queryOne(
+    'SELECT id, program_no, status FROM trx_knitting_program WHERE id = ? AND company_id = ?',
+    [id, cid]
+  );
+  if (!existing) throw NotFound('Knitting program not found');
+  if (['COMPLETED', 'CANCELLED'].includes(existing.status) && body.status !== existing.status) {
+    throw BadRequest('Completed / Cancelled programs cannot be edited directly. Create a revision.');
+  }
+
+  await transaction(async (tx) => {
+    await txExecute(
+      tx,
+      `UPDATE trx_knitting_program
+          SET program_date   = COALESCE(?, program_date),
+              so_id          = COALESCE(?, so_id),
+              io_no          = COALESCE(?, io_no),
+              buyer_po_no    = COALESCE(?, buyer_po_no),
+              style_id       = COALESCE(?, style_id),
+              part_name      = COALESCE(?, part_name),
+              fabric_id      = COALESCE(?, fabric_id),
+              fabric_type    = COALESCE(?, fabric_type),
+              knitting_type  = COALESCE(?, knitting_type),
+              gsm            = COALESCE(?, gsm),
+              dia            = COALESCE(?, dia),
+              gauge          = COALESCE(?, gauge),
+              loop_length    = COALESCE(?, loop_length),
+              required_qty_kg = COALESCE(?, required_qty_kg),
+              required_date  = COALESCE(?, required_date),
+              job_work_type  = COALESCE(?, job_work_type),
+              vendor_id      = COALESCE(?, vendor_id),
+              status         = COALESCE(?, status),
+              remarks        = COALESCE(?, remarks)
+        WHERE id = ? AND company_id = ?`,
+      [
+        body.program_date, body.so_id, body.io_no, body.buyer_po_no, body.style_id,
+        body.part_name, body.fabric_id, body.fabric_type, body.knitting_type,
+        body.gsm, body.dia, body.gauge, body.loop_length,
+        body.required_qty_kg, body.required_date, body.job_work_type, body.vendor_id,
+        body.status, body.remarks, id, cid,
+      ]
+    );
+
+    // Replace yarn lines if provided
+    if (body.yarns !== undefined) {
+      await txExecute(tx, 'DELETE FROM trx_knitting_program_yarns WHERE program_id = ?', [id]);
+      for (const yarn of body.yarns ?? []) {
+        await txExecute(
+          tx,
+          `INSERT INTO trx_knitting_program_yarns
+             (program_id, seq_no, yarn_id, yarn_name_manual, count_value, colour,
+              yarn_po_no, yarn_lot_no, planning_ratio_pct, planned_qty_kg, reserved_qty_kg, issued_qty_kg)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+          [
+            id, yarn.seq_no, yarn.yarn_id ?? null, yarn.yarn_name_manual ?? null,
+            yarn.count_value ?? null, yarn.colour ?? null, yarn.yarn_po_no ?? null,
+            yarn.yarn_lot_no ?? null, yarn.planning_ratio_pct ?? null,
+            yarn.planned_qty_kg, yarn.reserved_qty_kg, yarn.issued_qty_kg,
+          ]
+        );
+      }
+    }
+
+    // Replace stripe lines if provided
+    if (body.stripes !== undefined) {
+      await txExecute(tx, 'DELETE FROM trx_knitting_program_stripes WHERE program_id = ?', [id]);
+      for (const stripe of body.stripes ?? []) {
+        await txExecute(
+          tx,
+          `INSERT INTO trx_knitting_program_stripes
+             (program_id, seq_no, program_yarn_id, yarn_label, colour, courses, notes)
+           VALUES (?,?,?,?,?,?,?)`,
+          [
+            id, stripe.seq_no, stripe.program_yarn_id ?? null,
+            stripe.yarn_label ?? null, stripe.colour ?? null, stripe.courses, stripe.notes ?? null,
+          ]
+        );
+      }
+    }
+  });
+
+  await audit(req, 'trx_knitting_program', id, 'UPDATE', existing, body);
+  const updated = await loadKpDetail(id, cid);
+  res.json({ success: true, data: updated });
+}));
+
+/** DELETE /knitting/programs/:id */
+knittingRouter.delete('/knitting/programs/:id', requirePermission('PRODUCTION.DELETE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = Number(req.params.id);
+  const prog = await queryOne(
+    'SELECT id, status FROM trx_knitting_program WHERE id = ? AND company_id = ?',
+    [id, cid]
+  );
+  if (!prog) throw NotFound('Knitting program not found');
+  if (!['DRAFT', 'CANCELLED'].includes(prog.status)) {
+    throw BadRequest('Only DRAFT or CANCELLED programs can be deleted');
+  }
+  await query('DELETE FROM trx_knitting_program WHERE id = ?', [id]);
+  await audit(req, 'trx_knitting_program', id, 'DELETE', prog);
+  res.json({ success: true, message: 'Knitting program deleted' });
+}));
+
+/** POST /knitting/programs/yarn-issue — Issue yarn against a Knitting Program */
+knittingRouter.post('/knitting/programs/yarn-issue', requirePermission('PRODUCTION.CREATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const uid = req.user!.id;
+  const body = kpIssueSchema.parse(req.body);
+
+  const prog = await queryOne(
+    'SELECT id, status FROM trx_knitting_program WHERE id = ? AND company_id = ?',
+    [body.program_id, cid]
+  );
+  if (!prog) throw NotFound('Knitting program not found');
+  if (['COMPLETED', 'CANCELLED'].includes(prog.status)) {
+    throw BadRequest('Cannot issue yarn to a completed or cancelled program');
+  }
+
+  const result = await transaction(async (tx) => {
+    const issueNo = body.issue_no || await nextDocNumber(tx, cid, 'KNP_YI');
+    const res2 = await txExecute(
+      tx,
+      `INSERT INTO trx_knitting_program_yarn_issues
+         (company_id, program_id, program_yarn_id, issue_no, issue_date,
+          yarn_id, yarn_lot_no, yarn_po_no, issued_qty_kg, remarks, created_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        cid, body.program_id, body.program_yarn_id ?? null, issueNo, body.issue_date,
+        body.yarn_id ?? null, body.yarn_lot_no ?? null, body.yarn_po_no ?? null,
+        body.issued_qty_kg, body.remarks ?? null, uid,
+      ]
+    );
+
+    // Update issued_qty_kg on the yarn line
+    if (body.program_yarn_id) {
+      await txExecute(
+        tx,
+        `UPDATE trx_knitting_program_yarns
+            SET issued_qty_kg = issued_qty_kg + ?
+          WHERE id = ? AND program_id = ?`,
+        [body.issued_qty_kg, body.program_yarn_id, body.program_id]
+      );
+    }
+
+    // Advance status to MATERIAL_ISSUED if still RELEASED
+    await txExecute(
+      tx,
+      `UPDATE trx_knitting_program SET status = 'MATERIAL_ISSUED'
+        WHERE id = ? AND status IN ('RELEASED', 'RESERVED', 'STOCK_CHECK')`,
+      [body.program_id]
+    );
+
+    return { id: res2.insertId, issue_no: issueNo };
+  });
+
+  await audit(req, 'trx_knitting_program_yarn_issues', result.id, 'INSERT', undefined, result);
+  res.status(201).json({ success: true, data: result });
+}));
+
+/* ================================================================
+   LEGACY KNITTING WORK ORDER (KWO) — unchanged routes below
+================================================================ */
 
 /** GET /knitting/orders — List all Knitting Work Orders */
 knittingRouter.get('/knitting/orders', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {

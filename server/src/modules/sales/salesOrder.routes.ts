@@ -22,6 +22,8 @@ const skuLineSchema = z.object({
 const lineSchema = z.object({
   style_id: s.idReq(),
   color_id: s.id(),
+  /** Garment part this line covers: TOP / BOTTOM / COLLAR / CUFF / FOLDING */
+  part_name: z.enum(['TOP', 'BOTTOM', 'COLLAR', 'CUFF', 'FOLDING', 'OTHER']).nullable().optional(),
   description: s.nullableStr(255),
   unit_price: z.coerce.number().min(0),
   excess_pct: s.dec(),
@@ -68,7 +70,7 @@ const LOCKED_STATES = ['APPROVED', 'CLOSED', 'CANCELLED'];
 
 async function loadLines(id: number) {
   const lines = await query<any>(
-    `SELECT l.*, st.style_code, st.style_name, c.color_name, c.color_code
+    `SELECT l.*, st.style_code, st.style_name, c.color_name, c.color_code, l.part_name
        FROM trx_sales_order_line l
        LEFT JOIN mst_style st ON st.id = l.style_id
        LEFT JOIN mst_color c  ON c.id  = l.color_id
@@ -112,9 +114,9 @@ async function writeLines(tx: Tx, soId: number, lines: z.infer<typeof lineSchema
 
     const r = await txExecute(tx,
       `INSERT INTO trx_sales_order_line
-         (so_id, style_id, color_id, description, order_qty, excess_pct, plan_cut_qty, unit_price, amount, ship_date)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      [soId, l.style_id, l.color_id ?? null, l.description ?? null, qty, excessPct, planCutQty, l.unit_price, amount,
+         (so_id, style_id, color_id, part_name, description, order_qty, excess_pct, plan_cut_qty, unit_price, amount, ship_date)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+      [soId, l.style_id, l.color_id ?? null, l.part_name ?? null, l.description ?? null, qty, excessPct, planCutQty, l.unit_price, amount,
        l.ship_date ?? null]);
 
     for (const sk of l.skus) {
