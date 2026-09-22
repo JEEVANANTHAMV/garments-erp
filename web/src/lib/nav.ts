@@ -111,6 +111,7 @@ export const NAV: NavSection[] = [
       { label: 'Process Routes',       to: '/production/process-routes', icon: Workflow, perms: ['PRODUCTION.VIEW'] },
       { label: 'Yarn Processing (D/W/T)', to: '/production/yarn-processes', icon: Beaker, perms: ['PRODUCTION.VIEW'] },
       { label: 'Collar Knitting',      to: '/production/collar-knitting', icon: Shirt, perms: ['PRODUCTION.VIEW'] },
+      { label: 'Process Reports',      to: '/production/process-reports', icon: BarChart3, perms: ['PRODUCTION.VIEW'] },
       { label: 'Fabric Processing',    to: '/production/fabric-processing', icon: RefreshCw, perms: ['PRODUCTION.VIEW'] },
       { label: 'CAD Auto-Consumption', to: '/production/cad-requirements', icon: Scissors, perms: ['PRODUCTION.VIEW'] },
       { label: 'Cutting Plans',        to: '/production/cutting-plans', icon: Scissors, perms: ['PRODUCTION.VIEW'] },

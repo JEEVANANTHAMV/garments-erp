@@ -8,6 +8,7 @@ import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
 import { txResolvePartName } from '../../core/partName.js';
+import { checkStock, reserveYarn, assertEditable } from '../../core/processEngine.js';
 
 /* ================================================================
    KNITTING PROGRAM — schemas
@@ -511,6 +512,130 @@ knittingRouter.post('/knitting/programs/yarn-issue', requirePermission('PRODUCTI
 
   await audit(req, 'trx_knitting_program_yarn_issues', result.id, 'INSERT', undefined, result);
   res.status(201).json({ success: true, data: result });
+}));
+
+/* ================================================================
+   KNITTING PROGRAM — stock check, reservation and release
+   (doc §12, §21). A program has many yarn lines, so each step works
+   across every line rather than a single material.
+================================================================ */
+
+/** POST /knitting/programs/:id/check-stock — required vs available, per yarn line. */
+knittingRouter.post('/knitting/programs/:id/check-stock', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = Number(req.params.id);
+  const prog = await queryOne<any>(
+    'SELECT * FROM trx_knitting_program WHERE id = ? AND company_id = ?', [id, cid]);
+  if (!prog) throw NotFound('Knitting program not found');
+
+  const lines = await query<any>(
+    `SELECT kpy.id, kpy.yarn_id, kpy.planned_qty_kg, kpy.colour, y.yarn_code, y.yarn_name
+       FROM trx_knitting_program_yarns kpy
+       LEFT JOIN mst_yarn y ON y.id = kpy.yarn_id
+      WHERE kpy.program_id = ? ORDER BY kpy.seq_no`, [id]);
+  const withYarn = lines.filter((l) => l.yarn_id);
+  if (!withYarn.length) throw BadRequest('No yarn lines with a yarn selected');
+
+  const stock = await checkStock(
+    cid, withYarn.map((l) => ({ yarn_id: Number(l.yarn_id), required_qty_kg: Number(l.planned_qty_kg) })));
+
+  // Pair each result back to its program line so the UI can show it in place.
+  const data = withYarn.map((l, i) => ({
+    ...stock[i],                       // yarn_id, required/on-hand/available/shortage
+    program_yarn_id: l.id,
+    yarn_code: l.yarn_code, yarn_name: l.yarn_name, colour: l.colour,
+  }));
+
+  if (prog.status === 'DRAFT') {
+    await query(`UPDATE trx_knitting_program SET status = 'STOCK_CHECK' WHERE id = ?`, [id]);
+  }
+  res.json({ success: true, data });
+}));
+
+/** POST /knitting/programs/:id/reserve — reserve each yarn line (no stock movement). */
+knittingRouter.post('/knitting/programs/:id/reserve', requirePermission('PRODUCTION.UPDATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = Number(req.params.id);
+  const prog = await queryOne<any>(
+    'SELECT * FROM trx_knitting_program WHERE id = ? AND company_id = ?', [id, cid]);
+  if (!prog) throw NotFound('Knitting program not found');
+  assertEditable(prog.status, 'knitting program');
+
+  const lines = await query<any>(
+    `SELECT id, yarn_id, planned_qty_kg FROM trx_knitting_program_yarns
+      WHERE program_id = ? AND yarn_id IS NOT NULL ORDER BY seq_no`, [id]);
+  if (!lines.length) throw BadRequest('No yarn lines with a yarn selected');
+
+  // Optional per-line overrides: { reservations: [{ program_yarn_id, reserved_qty_kg }] }
+  const overrides = new Map<number, number>();
+  for (const r of (req.body?.reservations ?? [])) {
+    if (r?.program_yarn_id != null) overrides.set(Number(r.program_yarn_id), Number(r.reserved_qty_kg ?? 0));
+  }
+
+  await transaction(async (tx) => {
+    for (const l of lines) {
+      const qty = overrides.has(Number(l.id))
+        ? overrides.get(Number(l.id))! : Number(l.planned_qty_kg);
+      if (!(qty > 0)) continue;
+      await reserveYarn(tx, {
+        companyId: cid, srcType: 'KNITTING_PROGRAM', srcId: id, srcLineId: Number(l.id),
+        yarnId: Number(l.yarn_id), requiredQtyKg: Number(l.planned_qty_kg),
+        reservedQtyKg: qty, createdBy: req.user!.id,
+      });
+      await txExecute(tx,
+        `UPDATE trx_knitting_program_yarns SET reserved_qty_kg = ? WHERE id = ?`, [qty, l.id]);
+    }
+    await txExecute(tx,
+      `UPDATE trx_knitting_program SET status = 'RESERVED'
+        WHERE id = ? AND status IN ('DRAFT','STOCK_CHECK')`, [id]);
+  });
+
+  await audit(req, 'trx_knitting_program', id, 'UPDATE', prog, { action: 'RESERVE' });
+  res.json({ success: true, data: await loadKpDetail(id, cid) });
+}));
+
+/** POST /knitting/programs/:id/release — mandatory-field gate before release (doc §22). */
+knittingRouter.post('/knitting/programs/:id/release', requirePermission('PRODUCTION.UPDATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = Number(req.params.id);
+  const prog = await queryOne<any>(
+    'SELECT * FROM trx_knitting_program WHERE id = ? AND company_id = ?', [id, cid]);
+  if (!prog) throw NotFound('Knitting program not found');
+  assertEditable(prog.status, 'knitting program');
+
+  const yarns = await query<any>(
+    `SELECT id, yarn_id, planning_ratio_pct FROM trx_knitting_program_yarns WHERE program_id = ?`, [id]);
+  const stripes = await query<any>(
+    `SELECT courses FROM trx_knitting_program_stripes WHERE program_id = ?`, [id]);
+
+  const missing: string[] = [];
+  if (!(Number(prog.required_qty_kg) > 0)) missing.push('required quantity');
+  if (!prog.required_date) missing.push('required date');
+  if (!yarns.length) missing.push('at least one yarn line');
+  if (prog.job_work_type === 'JOB_WORK' && !prog.vendor_id) missing.push('vendor (job work)');
+
+  // Doc §22: pattern rules for striped fabric.
+  const isPatterned = ['STRIPE', 'FEEDER_STRIPE', 'ENGINEERED_STRIPE'].includes(prog.knitting_type);
+  if (isPatterned) {
+    if (!stripes.length) missing.push('stripe pattern');
+    if (yarns.length < 2) missing.push('at least two yarn lines for a stripe pattern');
+    const repeat = stripes.reduce((n, s) => n + Number(s.courses || 0), 0);
+    if (stripes.length && repeat <= 0) missing.push('course repeat length greater than zero');
+  }
+  if (missing.length) throw BadRequest(`Cannot release — missing: ${missing.join(', ')}`);
+
+  // Ratio mode must total 100% when ratios are used at all.
+  const ratios = yarns.filter((y) => y.planning_ratio_pct != null);
+  if (ratios.length) {
+    const total = ratios.reduce((n, y) => n + Number(y.planning_ratio_pct), 0);
+    if (Math.abs(total - 100) > 0.01) {
+      throw BadRequest(`Planning ratios must total 100% (currently ${total.toFixed(2)}%)`);
+    }
+  }
+
+  await query(`UPDATE trx_knitting_program SET status = 'RELEASED' WHERE id = ?`, [id]);
+  await audit(req, 'trx_knitting_program', id, 'UPDATE', prog, { status: 'RELEASED' });
+  res.json({ success: true, data: await loadKpDetail(id, cid) });
 }));
 
 /* ================================================================

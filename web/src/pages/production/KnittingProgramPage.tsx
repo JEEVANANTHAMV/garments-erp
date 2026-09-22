@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Plus, Search, Eye, Trash2, X, Save, Layers,
-  RefreshCw, AlertCircle, FileText,
+  RefreshCw, AlertCircle, FileText, Boxes, ShieldCheck, PackageCheck,
 } from 'lucide-react';
 import { http } from '../../lib/api';
 import { fmtDate, fmtDecimal, today } from '../../lib/format';
@@ -264,6 +264,31 @@ export default function KnittingProgramPage() {
     }
   };
 
+  // Stock check / reserve / release run across every yarn line of the program
+  // (doc §12, §21); the server holds the rules, this only surfaces the result.
+  const [stockRows, setStockRows] = useState<any[] | null>(null);
+
+  const runAction = async (id: number, action: 'check-stock' | 'reserve' | 'release') => {
+    try {
+      const r = await http.post<any>(`/knitting/programs/${id}/${action}`, {});
+      if (action === 'check-stock') {
+        const rows = r.data ?? [];
+        setStockRows(rows);
+        const short = rows.filter((x: any) => Number(x.shortage_kg) > 0);
+        toast(short.length
+          ? `${short.length} yarn line(s) short of stock`
+          : 'Stock is sufficient for every yarn line',
+          short.length ? 'error' : 'success');
+      } else {
+        toast(action === 'reserve' ? 'Yarn reserved' : 'Program released');
+      }
+      void qc.invalidateQueries({ queryKey: ['knitting-programs'] });
+      void qc.invalidateQueries({ queryKey: ['knitting-program'] });
+    } catch (e: any) {
+      toast(e?.message ?? `Could not ${action.replace('-', ' ')}`, 'error');
+    }
+  };
+
   const deleteProg = async (id: number) => {
     if (!confirm('Delete this knitting program?')) return;
     try {
@@ -346,6 +371,62 @@ export default function KnittingProgramPage() {
           </button>
         }
       />
+
+      {/* Stock check result — required vs available per yarn line (doc §12) */}
+      {stockRows && (
+        <div className="card mb-4 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-wider text-slate-600">
+              <Boxes size={14} className="text-sky-600" /> Yarn Stock Check
+            </h3>
+            <button className="rounded p-1 text-slate-400 hover:bg-slate-100"
+              onClick={() => setStockRows(null)} title="Dismiss" id="btn-close-stockcheck">
+              <X size={14} />
+            </button>
+          </div>
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="w-full text-[12px]">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="th text-left">Yarn</th>
+                  <th className="th text-left">Colour</th>
+                  <th className="th text-right">Required KG</th>
+                  <th className="th text-right">On Hand</th>
+                  <th className="th text-right">Reserved elsewhere</th>
+                  <th className="th text-right">Available</th>
+                  <th className="th text-right">Shortage</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stockRows.map((r: any) => (
+                  <tr key={r.program_yarn_id} className="border-t border-slate-100">
+                    <td className="td font-medium">
+                      {r.yarn_code ? `${r.yarn_code} — ${r.yarn_name}` : '—'}
+                    </td>
+                    <td className="td text-slate-600">{r.colour || '—'}</td>
+                    <td className="td text-right tabular-nums">{fmtDecimal(r.required_qty_kg, 3)}</td>
+                    <td className="td text-right tabular-nums">{fmtDecimal(r.on_hand_kg, 3)}</td>
+                    <td className="td text-right tabular-nums text-slate-500">
+                      {fmtDecimal(r.reserved_by_others_kg, 3)}
+                    </td>
+                    <td className="td text-right tabular-nums">{fmtDecimal(r.available_kg, 3)}</td>
+                    <td className="td text-right tabular-nums">
+                      {Number(r.shortage_kg) > 0 ? (
+                        <span className="font-bold text-rose-700">{fmtDecimal(r.shortage_kg, 3)}</span>
+                      ) : (
+                        <span className="font-semibold text-emerald-700">0</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-1.5 text-[10px] text-slate-500">
+            Reserving does not move stock — only a yarn issue does.
+          </p>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="card mb-4 flex flex-wrap items-end gap-3 p-4">
@@ -463,6 +544,36 @@ export default function KnittingProgramPage() {
                         >
                           <FileText size={14} />
                         </button>
+                        {['DRAFT', 'STOCK_CHECK'].includes(p.status) && (
+                          <button
+                            id={`btn-stock-kp-${p.id}`}
+                            className="rounded p-1.5 text-slate-400 hover:bg-sky-50 hover:text-sky-600"
+                            title="Check yarn stock"
+                            onClick={() => void runAction(p.id, 'check-stock')}
+                          >
+                            <Boxes size={14} />
+                          </button>
+                        )}
+                        {['DRAFT', 'STOCK_CHECK'].includes(p.status) && (
+                          <button
+                            id={`btn-reserve-kp-${p.id}`}
+                            className="rounded p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"
+                            title="Reserve yarn"
+                            onClick={() => void runAction(p.id, 'reserve')}
+                          >
+                            <ShieldCheck size={14} />
+                          </button>
+                        )}
+                        {['DRAFT', 'STOCK_CHECK', 'RESERVED'].includes(p.status) && (
+                          <button
+                            id={`btn-release-kp-${p.id}`}
+                            className="rounded p-1.5 text-slate-400 hover:bg-violet-50 hover:text-violet-600"
+                            title="Release program"
+                            onClick={() => void runAction(p.id, 'release')}
+                          >
+                            <PackageCheck size={14} />
+                          </button>
+                        )}
                         <button
                           id={`btn-delete-kp-${p.id}`}
                           className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
