@@ -73,6 +73,9 @@ WHERE NOT EXISTS (
 --    can be allowed to reserve without being allowed to release, and so
 --    on. Existing PRODUCTION.* rights stay untouched.
 -- ─────────────────────────────────────────────────────────────────
+-- The migration runner sends this file as one multi-statement batch, and the
+-- grants below join against these rows. Committing here guarantees the new
+-- permissions are visible to those statements rather than racing them.
 INSERT INTO mst_permission (module_id, permission_code, permission_name)
 SELECT m.id, p.code, p.name
 FROM mst_module m
@@ -89,6 +92,8 @@ WHERE m.module_code = 'PRODUCTION'
   AND NOT EXISTS (
     SELECT 1 FROM mst_permission x WHERE x.permission_code = p.code
   );
+
+COMMIT;
 
 -- ─────────────────────────────────────────────────────────────────
 -- 3. Grant the new rights per the doc §26 matrix.
