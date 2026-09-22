@@ -42,8 +42,9 @@ export default function CadRequirementsPage() {
     const totalReqs = reqs.length;
     const totalPcs = reqs.reduce((s, r) => s + (Number(r.order_qty) || 0), 0);
     const approved = reqs.filter((r) => r.status === 'APPROVED').length;
-    const totalFabricKg = reqs.reduce((s, r) => s + (Number(r.total_fabric_kg) || 0), 0);
-    return { totalReqs, totalPcs, approved, totalFabricKg };
+    const totalFabricKg = reqs.reduce((s, r) => s + (r.uom === 'MTR' || r.cad_type === 'WOVEN' ? 0 : (Number(r.total_fabric_kg) || 0)), 0);
+    const totalFabricMtr = reqs.reduce((s, r) => s + (r.uom === 'MTR' || r.cad_type === 'WOVEN' ? (Number(r.total_fabric_mtrs) || Number(r.total_fabric_kg) || 0) : (Number(r.total_fabric_mtrs) || 0)), 0);
+    return { totalReqs, totalPcs, approved, totalFabricKg, totalFabricMtr };
   }, [reqs]);
 
   return (
@@ -100,8 +101,14 @@ export default function CadRequirementsPage() {
           <div className="text-[11px] text-slate-400 mt-0.5">Handed off to PPC & Sourcing</div>
         </div>
         <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
-          <div className="text-xs font-medium text-slate-500">Calculated Fabric Need</div>
-          <div className="text-2xl font-bold text-sky-600 mt-1">{fmtDecimal(kpis.totalFabricKg)} KG</div>
+          <div className="text-2xl font-bold text-sky-600 mt-1">
+            {fmtDecimal(kpis.totalFabricKg)} KG
+            {kpis.totalFabricMtr > 0 && (
+              <span className="text-sm font-semibold text-teal-600 ml-1.5">
+                / {fmtDecimal(kpis.totalFabricMtr)} MTR
+              </span>
+            )}
+          </div>
           <div className="text-[11px] text-slate-400 mt-0.5">Auto-consumption output</div>
         </div>
       </div>

@@ -522,8 +522,10 @@ export default function CadRequirementDetailPage() {
           };
         });
 
+        const markerUom = isWoven ? 'MTR' : (m.uom || 'KG');
         return {
           ...m,
+          uom: markerUom,
           lay_length_cm: layLenCm,
           table_width_in: tblWidthIn,
           dia_in: diaIn,
@@ -652,7 +654,9 @@ export default function CadRequirementDetailPage() {
       .filter((p) => p.uom === 'MTRS')
       .reduce((sum, p) => sum + (Number(p.total_qty) || 0), 0);
 
-    const grandTotalMaterial = Math.round((grandFabric + collarYarnKg + foldingFabricKg) * 100) / 100;
+    const grandTotalMaterial = isWoven
+      ? Math.round(grandFabric * 100) / 100
+      : Math.round((grandFabric + collarYarnKg + foldingFabricKg) * 100) / 100;
 
     return {
       totalOrderPcs,
@@ -792,8 +796,10 @@ export default function CadRequirementDetailPage() {
       };
     });
 
+    const markerUom = (isWoven || header.cad_type === 'WOVEN' || header.uom === 'MTR') ? 'MTR' : (m.uom || 'KG');
     return {
       ...m,
+      uom: markerUom,
       lay_length_cm: layLenCm,
       table_width_in: tblWidthIn,
       dia_in: diaIn,
@@ -1276,12 +1282,27 @@ export default function CadRequirementDetailPage() {
               onChange={(e) => {
                 const val = e.target.value as any;
                 const woven = val === 'WOVEN';
+                const nextUom = woven ? 'MTR' : 'KG';
                 setHeader((p) => ({
                   ...p,
                   cad_type: val,
-                  uom: woven ? 'MTR' : 'KG',
+                  uom: nextUom,
                   fabric_allowance_pct: woven ? 0.0 : 10.0,
                 }));
+                setMarkers((prev) =>
+                  prev.map((m) =>
+                    recomputeSingleMarker({
+                      ...m,
+                      uom: nextUom,
+                    })
+                  )
+                );
+                setFabricProgram((prev) =>
+                  prev.map((fp) => ({ ...fp, uom: nextUom }))
+                );
+                setCuttingLay((prev) =>
+                  prev.map((cl) => ({ ...cl, uom: nextUom }))
+                );
               }}
               className="w-full text-xs rounded-lg border border-slate-300 py-1.5 px-2 bg-white font-medium text-slate-800"
             >
@@ -1384,7 +1405,7 @@ export default function CadRequirementDetailPage() {
                 >
                   <span>Sheet {m.marker_ref}</span>
                   <span className="text-[10px] px-1 py-0.5 rounded bg-slate-100 font-normal">
-                    {fmtDecimal(m.total_req_qty)} {m.uom}
+                    {fmtDecimal(m.total_req_qty)} {isWoven ? 'MTR' : (m.uom || 'KG')}
                   </span>
                 </button>
               ))}
@@ -1711,7 +1732,7 @@ export default function CadRequirementDetailPage() {
               <div className="p-2 bg-indigo-50 rounded-lg border border-indigo-200">
                 <span className="text-indigo-800 text-[10px] font-bold uppercase tracking-wider">Marker Total Req:</span>
                 <div className="text-base font-extrabold text-indigo-950 mt-0.5">
-                  {fmtDecimal(activeMarker.total_req_qty)} {activeMarker.uom}
+                  {fmtDecimal(activeMarker.total_req_qty)} {isWoven ? 'MTR' : (activeMarker.uom || 'KG')}
                 </div>
                 <span className="text-[9px] text-indigo-700">Fabric required</span>
               </div>
@@ -1832,7 +1853,7 @@ export default function CadRequirementDetailPage() {
                       </th>
                     ))}
                     <th className="py-2 px-2 text-right font-bold">Total Pcs</th>
-                    <th className="py-2 px-2 text-right font-bold text-indigo-700">Req ({activeMarker.uom})</th>
+                    <th className="py-2 px-2 text-right font-bold text-indigo-700">Req ({isWoven ? 'MTR' : (activeMarker.uom || 'KG')})</th>
                     <th className="py-2 px-2 text-center w-10">Del</th>
                   </tr>
                 </thead>
@@ -1888,7 +1909,7 @@ export default function CadRequirementDetailPage() {
                             {fmtNumber(totOrder)}
                           </td>
                           <td className="py-1 px-2 text-right font-bold text-indigo-700">
-                            {fmtDecimal(reqVal)} {activeMarker.uom}
+                            {fmtDecimal(reqVal)} {isWoven ? 'MTR' : (activeMarker.uom || 'KG')}
                           </td>
                           <td className="py-1 px-2 text-center">
                             <button
@@ -2149,7 +2170,7 @@ export default function CadRequirementDetailPage() {
                 <div className="text-lg font-extrabold font-mono mt-0.5">
                   {fmtDecimal(summaryKpis.grandTotalMaterial, 2)} <span className="text-xs font-normal text-indigo-200">{summaryKpis.uom}</span>
                 </div>
-                <div className="text-[10px] text-indigo-200/90 mt-0.5">Fabric + Collar + Fold</div>
+                <div className="text-[10px] text-indigo-200/90 mt-0.5">{isWoven ? 'Total Woven Fabric (MTR)' : 'Fabric + Collar + Fold'}</div>
               </div>
             </div>
 
@@ -2240,7 +2261,7 @@ export default function CadRequirementDetailPage() {
                     {fmtNumber(cuttingLay.reduce((s, x) => s + Number(x.order_qty_pcs || 0), 0))} Pcs
                   </td>
                   <td className="py-3 px-3 text-right text-base text-emerald-900">
-                    {fmtDecimal(cuttingLay.reduce((s, x) => s + Number(x.net_qty || 0), 0))} {header.uom}
+                    {fmtDecimal(cuttingLay.reduce((s, x) => s + Number(x.net_qty || 0), 0))} {summaryKpis.uom}
                   </td>
                 </tr>
               </tfoot>
