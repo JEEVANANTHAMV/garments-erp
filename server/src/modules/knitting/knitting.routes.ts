@@ -130,6 +130,7 @@ const kwoSchema = z.object({
   planned_fabric_kg: z.coerce.number().min(0).default(0),
   planned_yarn_kg: z.coerce.number().min(0).default(0),
   yarn_lot_no: s.nullableStr(80),
+  part_name: z.enum(PARTS).nullable().optional(),
   status: z.enum(['DRAFT', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']).default('DRAFT'),
   remarks: s.text(),
 });
@@ -350,43 +351,31 @@ knittingRouter.put('/knitting/programs/:id', requirePermission('PRODUCTION.UPDAT
   }
 
   await transaction(async (tx) => {
-    await txExecute(
-      tx,
-      `UPDATE trx_knitting_program
-          SET program_date   = COALESCE(?, program_date),
-              so_id          = COALESCE(?, so_id),
-              io_no          = COALESCE(?, io_no),
-              buyer_po_no    = COALESCE(?, buyer_po_no),
-              style_id       = COALESCE(?, style_id),
-              part_name      = COALESCE(?, part_name),
-              fabric_id      = COALESCE(?, fabric_id),
-              fabric_type    = COALESCE(?, fabric_type),
-              knitting_type  = COALESCE(?, knitting_type),
-              gsm            = COALESCE(?, gsm),
-              dia            = COALESCE(?, dia),
-              gauge          = COALESCE(?, gauge),
-              loop_length    = COALESCE(?, loop_length),
-              required_qty_kg = COALESCE(?, required_qty_kg),
-              required_date  = COALESCE(?, required_date),
-              job_work_type  = COALESCE(?, job_work_type),
-              vendor_id      = COALESCE(?, vendor_id),
-              status         = COALESCE(?, status),
-              remarks        = COALESCE(?, remarks)
-        WHERE id = ? AND company_id = ?`,
-      [
-        // mysql2 prepared statements reject `undefined`; a partial() body leaves
-        // every omitted key undefined, so normalise to null (COALESCE keeps the
-        // existing column value for nulls).
-        body.program_date ?? null, body.so_id ?? null, body.io_no ?? null,
-        body.buyer_po_no ?? null, body.style_id ?? null,
-        body.part_name ?? null, body.fabric_id ?? null, body.fabric_type ?? null,
-        body.knitting_type ?? null,
-        body.gsm ?? null, body.dia ?? null, body.gauge ?? null, body.loop_length ?? null,
-        body.required_qty_kg ?? null, body.required_date ?? null,
-        body.job_work_type ?? null, body.vendor_id ?? null,
-        body.status ?? null, body.remarks ?? null, id, cid,
-      ]
-    );
+    // Build the UPDATE from only the keys actually present in the request, so
+    // an omitted field is left untouched while an explicit null clears it.
+    const FIELDS = [
+      'program_date', 'so_id', 'io_no', 'buyer_po_no', 'style_id', 'part_name',
+      'fabric_id', 'fabric_type', 'knitting_type', 'gsm', 'dia', 'gauge',
+      'loop_length', 'required_qty_kg', 'required_date', 'job_work_type',
+      'vendor_id', 'status', 'remarks',
+    ] as const;
+
+    const sets: string[] = [];
+    const vals: any[] = [];
+    for (const f of FIELDS) {
+      const v = (body as Record<string, any>)[f];
+      if (v === undefined) continue;          // not supplied → leave as-is
+      sets.push(`${f} = ?`);
+      vals.push(v);                            // explicit null → clears the column
+    }
+
+    if (sets.length) {
+      await txExecute(
+        tx,
+        `UPDATE trx_knitting_program SET ${sets.join(', ')} WHERE id = ? AND company_id = ?`,
+        [...vals, id, cid]
+      );
+    }
 
     // Replace yarn lines if provided
     if (body.yarns !== undefined) {
@@ -629,12 +618,12 @@ knittingRouter.post('/knitting/orders', requirePermission('PRODUCTION.CREATE'), 
       tx,
       `INSERT INTO trx_knitting_order
          (company_id, kwo_no, kwo_date, io_no, customer_po_no, style_id, sub_process, vendor_id, fabric_id,
-          dia, gsm, gauge, loop_length, planned_fabric_kg, planned_yarn_kg, yarn_lot_no, status, remarks, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          dia, gsm, gauge, loop_length, planned_fabric_kg, planned_yarn_kg, yarn_lot_no, part_name, status, remarks, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         cid, kwoNo, body.kwo_date, body.io_no, body.customer_po_no ?? null, body.style_id ?? null, body.sub_process, body.vendor_id ?? null, body.fabric_id ?? null,
         body.dia ?? null, body.gsm ?? null, body.gauge ?? null, body.loop_length ?? null, body.planned_fabric_kg ?? 0, body.planned_yarn_kg ?? 0,
-        body.yarn_lot_no ?? null, body.status ?? 'DRAFT', body.remarks ?? null, uid
+        body.yarn_lot_no ?? null, body.part_name ?? null, body.status ?? 'DRAFT', body.remarks ?? null, uid
       ]
     );
 
