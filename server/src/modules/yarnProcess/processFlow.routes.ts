@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { query, queryOne, transaction, txQueryOne, txExecute } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
-import { NotFound, BadRequest } from '../../core/errors.js';
+import { NotFound, BadRequest, Forbidden } from '../../core/errors.js';
 import { requirePermission } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
@@ -77,7 +77,7 @@ processFlowRouter.get('/process-issues', requirePermission('PRODUCTION.VIEW'), a
   res.json({ success: true, data: rows });
 }));
 
-processFlowRouter.post('/process-issues', requirePermission('PRODUCTION.CREATE'), ah(async (req, res) => {
+processFlowRouter.post('/process-issues', requirePermission('PROCESS.ISSUE'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const uid = req.user!.id;
   const body = issueSchema.parse(req.body);
@@ -101,6 +101,11 @@ processFlowRouter.post('/process-issues', requirePermission('PRODUCTION.CREATE')
   }
   if (exceeds && !body.override_reason) {
     throw BadRequest('An override reason is required when issuing beyond available stock');
+  }
+  // Doc §22/§26: over-issuing is an authorised act, not merely a flag the
+  // caller can set, so it needs its own right.
+  if (exceeds && !req.user!.isSuperAdmin && !req.user!.permissions.has('PROCESS.OVERRIDE_ISSUE')) {
+    throw Forbidden('You are not authorised to issue beyond available stock');
   }
 
   const result = await transaction(async (tx) => {
@@ -176,7 +181,7 @@ const receiptSchema = z.object({
   cones: z.array(coneSchema).default([]),
 });
 
-processFlowRouter.post('/process-receipts', requirePermission('PRODUCTION.CREATE'), ah(async (req, res) => {
+processFlowRouter.post('/process-receipts', requirePermission('PROCESS.PRODUCTION'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const uid = req.user!.id;
   const body = receiptSchema.parse(req.body);
@@ -258,7 +263,7 @@ processFlowRouter.get('/process-receipts', requirePermission('PRODUCTION.VIEW'),
 }));
 
 /** Post stock for a receipt that has since passed QC. */
-processFlowRouter.post('/process-receipts/:id/post-stock', requirePermission('PRODUCTION.UPDATE'), ah(async (req, res) => {
+processFlowRouter.post('/process-receipts/:id/post-stock', requirePermission('PROCESS.PRODUCTION'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = Number(req.params.id);
   const rc = await queryOne<any>(
@@ -323,7 +328,7 @@ const qcSchema = z.object({
   })).default([]),
 });
 
-processFlowRouter.post('/process-qc', requirePermission('PRODUCTION.CREATE'), ah(async (req, res) => {
+processFlowRouter.post('/process-qc', requirePermission('PROCESS.QC'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const body = qcSchema.parse(req.body);
   await loadSrc(body.src_type, body.src_id, cid);
@@ -388,7 +393,7 @@ processFlowRouter.get('/process-qc', requirePermission('PRODUCTION.VIEW'), ah(as
    COMPLETE (doc §21 / §22 — QC and stock enforced before completion)
 ================================================================ */
 
-processFlowRouter.post('/process-complete', requirePermission('PRODUCTION.UPDATE'), ah(async (req, res) => {
+processFlowRouter.post('/process-complete', requirePermission('PROCESS.COMPLETE'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const { src_type, src_id } = z.object({
     src_type: z.enum(SRC_TYPES), src_id: s.idReq(),

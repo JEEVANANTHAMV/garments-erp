@@ -31,7 +31,7 @@ const productionSchema = z.object({
   })).default([]),
 });
 
-knittingProductionRouter.post('/knitting-productions', requirePermission('PRODUCTION.CREATE'), ah(async (req, res) => {
+knittingProductionRouter.post('/knitting-productions', requirePermission('PROCESS.PRODUCTION'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const body = productionSchema.parse(req.body);
 
@@ -111,7 +111,7 @@ const rollSchema = z.object({
   post_stock: z.coerce.boolean().default(false),
 });
 
-knittingProductionRouter.post('/knitting-rolls', requirePermission('PRODUCTION.CREATE'), ah(async (req, res) => {
+knittingProductionRouter.post('/knitting-rolls', requirePermission('PROCESS.PRODUCTION'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const body = rollSchema.parse(req.body);
 

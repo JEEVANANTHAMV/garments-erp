@@ -391,7 +391,7 @@ yarnProcessRouter.post('/yarn-processes/:id/check-stock', requirePermission('PRO
 }));
 
 /* ---------------- reserve (doc §12) ---------------- */
-yarnProcessRouter.post('/yarn-processes/:id/reserve', requirePermission('PRODUCTION.UPDATE'), ah(async (req, res) => {
+yarnProcessRouter.post('/yarn-processes/:id/reserve', requirePermission('PROCESS.RESERVE'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = Number(req.params.id);
   const p = await queryOne<any>(
@@ -421,7 +421,7 @@ yarnProcessRouter.post('/yarn-processes/:id/reserve', requirePermission('PRODUCT
 }));
 
 /* ---------------- release (doc §21) ---------------- */
-yarnProcessRouter.post('/yarn-processes/:id/release', requirePermission('PRODUCTION.UPDATE'), ah(async (req, res) => {
+yarnProcessRouter.post('/yarn-processes/:id/release', requirePermission('PROCESS.RELEASE'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = Number(req.params.id);
   const p = await queryOne<any>(

@@ -24,6 +24,8 @@ interface ReportDef {
   group: string;
   hint: string;
   filter?: Filter;
+  /** Endpoint when it does not live under /reports/. */
+  path?: string;
 }
 
 const REPORTS: ReportDef[] = [
@@ -53,6 +55,8 @@ const REPORTS: ReportDef[] = [
     hint: 'Per-size pieces planned against produced' },
   { key: 'collar-variance', label: 'Collar KG-to-PCS Consumption Variance', group: 'Collar',
     hint: 'Standard gm/pc against the weight actually achieved' },
+  { key: 'collar-stock', label: 'Collar Stock (PCS)', group: 'Collar', path: '/collar-stock',
+    hint: 'Finished collars in stock, counted in pieces, with the yarn KG behind them' },
   { key: 'process-wastage', label: 'Process Wastage / Rejection', group: 'Process',
     hint: 'Loss and rejection percentage by process type' },
   { key: 'job-work-pending', label: 'Job Work Pending / Return', group: 'Process',
@@ -109,7 +113,7 @@ export default function ProcessReportsPage() {
   const { data: rows = [], isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['process-report', active.key, params],
     queryFn: async () =>
-      (await http.get<{ data: any[] }>(`/reports/${active.key}?${params}`)).data || [],
+      (await http.get<{ data: any[] }>(`${active.path ?? `/reports/${active.key}`}?${params}`)).data || [],
   });
 
   const columns = rows.length ? Object.keys(rows[0]).filter((k) => k !== 'id') : [];

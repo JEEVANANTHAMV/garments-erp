@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, Save, X, Eye, Trash2, Shirt, Factory, ShieldCheck, Boxes, PackageCheck,
+  Warehouse,
 } from 'lucide-react';
 import { http } from '../../lib/api';
 import { fmtDate, fmtDecimal, fmtNumber, today } from '../../lib/format';
@@ -59,6 +60,7 @@ export default function CollarKnittingPage() {
   const [saving, setSaving] = useState(false);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [prodFor, setProdFor] = useState<any | null>(null);
+  const [rcptFor, setRcptFor] = useState<any | null>(null);
 
   const lk = (name: string) => useQuery({
     queryKey: ['lookups', name],
@@ -69,6 +71,7 @@ export default function CollarKnittingPage() {
   const { data: parties = [] } = lk('parties');
   const { data: sizes = [] } = lk('sizes-all');
   const { data: soLines = [] } = lk('sales-order-lines');
+  const { data: warehouses = [] } = lk('warehouses');
 
   const { data: collars = [] } = useQuery({
     queryKey: ['collars'],
@@ -259,6 +262,10 @@ export default function CollarKnittingPage() {
                           onClick={() => setProdFor(r)}>
                           <Factory size={14} />
                         </button>
+                        <button className="btn-icon" title="Receive collars into stock (PCS)"
+                          onClick={() => setRcptFor(r)}>
+                          <Warehouse size={14} />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -438,6 +445,14 @@ export default function CollarKnittingPage() {
           void qc.invalidateQueries({ queryKey: ['collar-program'] });
         }} />
 
+      <ReceiptModal program={rcptFor} sizes={sizes} warehouses={warehouses}
+        onClose={() => setRcptFor(null)}
+        onSaved={() => {
+          setRcptFor(null);
+          void qc.invalidateQueries({ queryKey: ['collar-programs'] });
+          void qc.invalidateQueries({ queryKey: ['collar-program'] });
+        }} />
+
       {/* ── Detail ─────────────────────────────────────── */}
       <Modal open={detailId != null} onClose={() => setDetailId(null)} size="lg"
         title={detail ? `${detail.program_no} — Collar Program` : 'Collar Program'}>
@@ -465,6 +480,11 @@ export default function CollarKnittingPage() {
                   {fmtDecimal(detail.summary?.yarn_variance_kg, 3)}
                 </span>} />
               <Info label="PCS variance" value={fmtNumber(detail.summary?.pcs_variance)} />
+              <Info label="Received PCS" value={fmtNumber(detail.summary?.received_pcs)} />
+              <Info label="In stock PCS"
+                value={<span className="font-bold text-emerald-800">
+                  {fmtNumber(detail.summary?.in_stock_pcs)}
+                </span>} />
             </div>
 
             <Section title={`Size-wise plan (${detail.sizes?.length ?? 0})`}>
@@ -484,6 +504,21 @@ export default function CollarKnittingPage() {
                     fmtNumber(p.produced_pcs), fmtNumber(p.rejected_pcs), fmtNumber(p.good_pcs),
                     fmtDecimal(p.actual_yarn_kg, 3),
                     <span className="font-semibold text-indigo-700">{fmtDecimal(p.actual_wt_gm_pc, 3)}</span>,
+                  ])} />
+              )}
+            </Section>
+
+            <Section title={`Stock receipts (${detail.receipts?.length ?? 0})`}>
+              {(detail.receipts ?? []).length === 0 ? <Muted>No collars received into stock yet</Muted> : (
+                <SimpleTable head={['Receipt', 'Date', 'Size', 'Received', 'Rejected', 'Good PCS', 'Yarn KG ref', 'QC', 'Posted']}
+                  rows={(detail.receipts ?? []).map((r: any) => [
+                    r.receipt_no, fmtDate(r.receipt_date),
+                    r.size_code ?? r.size_master_code ?? '—',
+                    fmtNumber(r.received_pcs), fmtNumber(r.rejected_pcs),
+                    <span className="font-semibold text-emerald-700">{fmtNumber(r.good_pcs)}</span>,
+                    fmtDecimal(r.yarn_kg_ref, 3),
+                    <Badge tone={r.qc_status === 'PASSED' ? 'emerald' : 'amber'}>{r.qc_status}</Badge>,
+                    r.is_stock_posted ? 'Yes' : 'No',
                   ])} />
               )}
             </Section>
@@ -593,6 +628,131 @@ function ProductionModal({ program, sizes, onClose, onSaved }: {
 
         <Textarea label="Remarks" value={f.remarks}
           onChange={(e) => setF((s) => ({ ...s, remarks: e.target.value }))} id="cp-remarks" />
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Collar receipt — puts finished collars into stock as PIECES (doc §16.5).
+ * The yarn KG is captured only as a costing reference alongside them.
+ */
+function ReceiptModal({ program, sizes, warehouses, onClose, onSaved }: {
+  program: any | null; sizes: any[]; warehouses: any[];
+  onClose: () => void; onSaved: () => void;
+}) {
+  const toast = useToast();
+  const [f, setF] = useState({
+    receipt_date: today(), size_id: '' as number | '', size_code: '',
+    received_pcs: '' as number | '', rejected_pcs: '' as number | '',
+    yarn_kg_ref: '' as number | '', warehouse_id: '' as number | '',
+    qc_status: 'PENDING', post_stock: false, remarks: '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  const good = (Number(f.received_pcs) || 0) - (Number(f.rejected_pcs) || 0);
+  const gmPerPc = good > 0 ? ((Number(f.yarn_kg_ref) || 0) * 1000) / good : null;
+
+  const save = async () => {
+    if (!program) return;
+    if (!f.warehouse_id) { toast('Select a warehouse', 'error'); return; }
+    if (f.post_stock && f.qc_status !== 'PASSED') {
+      toast('Collars can only be posted to stock once QC has passed', 'error'); return;
+    }
+    setSaving(true);
+    try {
+      await http.post('/collar-receipts', {
+        program_id: program.id, receipt_date: f.receipt_date,
+        size_id: f.size_id === '' ? null : Number(f.size_id),
+        size_code: f.size_code || null,
+        received_pcs: Number(f.received_pcs) || 0,
+        rejected_pcs: Number(f.rejected_pcs) || 0,
+        yarn_kg_ref: Number(f.yarn_kg_ref) || 0,
+        warehouse_id: Number(f.warehouse_id),
+        qc_status: f.qc_status, post_stock: f.post_stock,
+        remarks: f.remarks || null,
+      });
+      toast(f.post_stock ? `${good} collars posted to stock` : 'Receipt recorded');
+      setF({ receipt_date: today(), size_id: '', size_code: '', received_pcs: '',
+             rejected_pcs: '', yarn_kg_ref: '', warehouse_id: '', qc_status: 'PENDING',
+             post_stock: false, remarks: '' });
+      onSaved();
+    } catch (e: any) {
+      toast(e?.message || 'Could not record the receipt', 'error');
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <Modal open={program != null} onClose={onClose} size="md"
+      title={program ? `Receive Collars — ${program.program_no}` : 'Receive Collars'}
+      footer={
+        <div className="flex justify-end gap-2">
+          <button className="btn-secondary" onClick={onClose}><X size={14} /> Cancel</button>
+          <button className="btn-primary" disabled={saving} onClick={() => void save()} id="btn-save-collar-rcpt">
+            <Save size={14} /> {saving ? 'Saving…' : 'Record Receipt'}
+          </button>
+        </div>
+      }>
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <Input label="Receipt Date" type="date" value={f.receipt_date}
+            onChange={(e) => setF((s) => ({ ...s, receipt_date: e.target.value }))} id="cr-date" />
+          <Select label="Size" value={f.size_id} placeholder="— Any —"
+            onChange={(e) => {
+              const sz = sizes.find((x: any) => x.id === Number(e.target.value));
+              setF((s) => ({ ...s, size_id: e.target.value ? Number(e.target.value) : '',
+                             size_code: sz?.size_code ?? sz?.code ?? '' }));
+            }} id="cr-size">
+            {sizes.map((z: any) => <option key={z.id} value={z.id}>{z.label}</option>)}
+          </Select>
+          <Select label="Warehouse" required value={f.warehouse_id} placeholder="— Select —"
+            onChange={(e) => setF((s) => ({ ...s, warehouse_id: e.target.value ? Number(e.target.value) : '' }))}
+            id="cr-wh">
+            {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.label}</option>)}
+          </Select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <Input label="Received PCS" type="number" value={f.received_pcs}
+            onChange={(e) => setF((s) => ({ ...s, received_pcs: e.target.value === '' ? '' : Number(e.target.value) }))}
+            id="cr-received" />
+          <Input label="Rejected PCS" type="number" value={f.rejected_pcs}
+            onChange={(e) => setF((s) => ({ ...s, rejected_pcs: e.target.value === '' ? '' : Number(e.target.value) }))}
+            id="cr-rejected" />
+          <Input label="Yarn KG (reference)" type="number" step="0.001" value={f.yarn_kg_ref}
+            hint="Costing reference only — stock is counted in pieces"
+            onChange={(e) => setF((s) => ({ ...s, yarn_kg_ref: e.target.value === '' ? '' : Number(e.target.value) }))}
+            id="cr-yarnkg" />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 rounded-lg border border-emerald-200 bg-emerald-50/60 p-3">
+          <Info label="Good PCS into stock"
+            value={<span className="font-bold text-emerald-800">{fmtNumber(good)}</span>} />
+          <Info label="Implied weight"
+            value={gmPerPc != null ? `${fmtDecimal(gmPerPc, 3)} gm/pc` : '—'} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Select label="QC Status" value={f.qc_status}
+            onChange={(e) => setF((s) => ({ ...s, qc_status: e.target.value }))} id="cr-qc">
+            {['PENDING', 'PASSED', 'HOLD', 'REJECTED'].map((q) => <option key={q} value={q}>{q}</option>)}
+          </Select>
+          <div className="flex items-end pb-2">
+            <label className="flex items-center gap-2 text-[12px] text-slate-700">
+              <input type="checkbox" checked={f.post_stock}
+                disabled={f.qc_status !== 'PASSED'}
+                onChange={(e) => setF((s) => ({ ...s, post_stock: e.target.checked }))}
+                id="cr-post" />
+              Post to stock now
+              {f.qc_status !== 'PASSED' && (
+                <span className="text-[10px] text-slate-400">(needs QC passed)</span>
+              )}
+            </label>
+          </div>
+        </div>
+
+        <Textarea label="Remarks" value={f.remarks}
+          onChange={(e) => setF((s) => ({ ...s, remarks: e.target.value }))} id="cr-remarks" />
       </div>
     </Modal>
   );

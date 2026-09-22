@@ -553,7 +553,7 @@ knittingRouter.post('/knitting/programs/:id/check-stock', requirePermission('PRO
 }));
 
 /** POST /knitting/programs/:id/reserve — reserve each yarn line (no stock movement). */
-knittingRouter.post('/knitting/programs/:id/reserve', requirePermission('PRODUCTION.UPDATE'), ah(async (req, res) => {
+knittingRouter.post('/knitting/programs/:id/reserve', requirePermission('PROCESS.RESERVE'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = Number(req.params.id);
   const prog = await queryOne<any>(
@@ -595,7 +595,7 @@ knittingRouter.post('/knitting/programs/:id/reserve', requirePermission('PRODUCT
 }));
 
 /** POST /knitting/programs/:id/release — mandatory-field gate before release (doc §22). */
-knittingRouter.post('/knitting/programs/:id/release', requirePermission('PRODUCTION.UPDATE'), ah(async (req, res) => {
+knittingRouter.post('/knitting/programs/:id/release', requirePermission('PROCESS.RELEASE'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = Number(req.params.id);
   const prog = await queryOne<any>(

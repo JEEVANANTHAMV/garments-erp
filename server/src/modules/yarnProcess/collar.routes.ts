@@ -8,7 +8,9 @@ import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
 import { txResolvePartName } from '../../core/partName.js';
-import { PROCESS_STATUSES, assertEditable, checkStock, reserveYarn } from '../../core/processEngine.js';
+import {
+  PROCESS_STATUSES, assertEditable, checkStock, reserveYarn, postLedger, UOM_PCS,
+} from '../../core/processEngine.js';
 
 /**
  * Collar Knitting (doc §16, §17).
@@ -190,6 +192,12 @@ async function loadProgram(id: number, cid: number) {
        LEFT JOIN mst_yarn y ON y.id = i.yarn_id
       WHERE i.src_type = 'COLLAR_PROGRAM' AND i.src_id = ? ORDER BY i.id`, [id]);
 
+  p.receipts = await query(
+    `SELECT rc.*, sz.size_code AS size_master_code
+       FROM trx_collar_receipt rc
+       LEFT JOIN mst_size sz ON sz.id = rc.size_id
+      WHERE rc.program_id = ? ORDER BY rc.id`, [id]);
+
   // Variance: planned vs actual, in both PCS and KG (doc §17, §28).
   const actualKg = (p.productions as any[]).reduce((n, r) => n + Number(r.actual_yarn_kg || 0), 0);
   const producedPcs = (p.productions as any[]).reduce((n, r) => n + Number(r.produced_pcs || 0), 0);
@@ -204,6 +212,11 @@ async function loadProgram(id: number, cid: number) {
     actual_wt_gm_pc: producedPcs > 0 ? Math.round((actualKg * 1000) / producedPcs * 1000) / 1000 : null,
     yarn_variance_kg: Math.round((actualKg - Number(p.planned_yarn_kg)) * 1000) / 1000,
     pcs_variance: producedPcs - Number(p.expected_pcs),
+    // Stock actually received, in pieces (doc §16.5).
+    received_pcs: (p.receipts as any[]).reduce((n, r) => n + Number(r.good_pcs || 0), 0),
+    in_stock_pcs: (p.receipts as any[])
+      .filter((r) => r.is_stock_posted)
+      .reduce((n, r) => n + Number(r.good_pcs || 0), 0),
   };
   return p;
 }
@@ -372,7 +385,7 @@ collarRouter.post('/collar-programs/:id/check-stock', requirePermission('PRODUCT
   res.json({ success: true, data: rows });
 }));
 
-collarRouter.post('/collar-programs/:id/reserve', requirePermission('PRODUCTION.UPDATE'), ah(async (req, res) => {
+collarRouter.post('/collar-programs/:id/reserve', requirePermission('PROCESS.RESERVE'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = Number(req.params.id);
   const p = await queryOne<any>(
@@ -397,7 +410,7 @@ collarRouter.post('/collar-programs/:id/reserve', requirePermission('PRODUCTION.
   res.json({ success: true, data: await loadProgram(id, cid) });
 }));
 
-collarRouter.post('/collar-programs/:id/release', requirePermission('PRODUCTION.UPDATE'), ah(async (req, res) => {
+collarRouter.post('/collar-programs/:id/release', requirePermission('PROCESS.RELEASE'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = Number(req.params.id);
   const p = await queryOne<any>(
@@ -433,7 +446,7 @@ const productionSchema = z.object({
   remarks: s.text(),
 });
 
-collarRouter.post('/collar-productions', requirePermission('PRODUCTION.CREATE'), ah(async (req, res) => {
+collarRouter.post('/collar-productions', requirePermission('PROCESS.PRODUCTION'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const body = productionSchema.parse(req.body);
 
@@ -487,6 +500,166 @@ collarRouter.get('/collar-productions', requirePermission('PRODUCTION.VIEW'), ah
        LEFT JOIN mst_size sz ON sz.id = pr.size_id
        LEFT JOIN trx_collar_program cp ON cp.id = pr.program_id
        ${where} ORDER BY pr.id DESC LIMIT 500`, params);
+  res.json({ success: true, data: rows });
+}));
+
+/* ================================================================
+   Collar receipt — finished collars into stock (doc §16.5, §17)
+
+   Stock is held in PCS. The yarn KG that produced those pieces is kept
+   alongside as a costing reference only, so nothing ever converts one
+   into the other with a fixed factor.
+================================================================ */
+
+const receiptSchema = z.object({
+  program_id: s.idReq(),
+  production_id: s.id(),
+  receipt_no: s.nullableStr(60),
+  receipt_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  size_id: s.id(),
+  size_code: s.nullableStr(40),
+  received_pcs: z.coerce.number().int().min(0).default(0),
+  rejected_pcs: z.coerce.number().int().min(0).default(0),
+  yarn_kg_ref: z.coerce.number().min(0).default(0),
+  warehouse_id: s.idReq(),
+  qc_status: z.enum(['PENDING', 'PASSED', 'HOLD', 'REJECTED']).default('PENDING'),
+  post_stock: z.coerce.boolean().default(false),
+  remarks: s.text(),
+});
+
+collarRouter.post('/collar-receipts', requirePermission('PROCESS.PRODUCTION'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const body = receiptSchema.parse(req.body);
+
+  const prog = await queryOne<any>(
+    `SELECT * FROM trx_collar_program WHERE id = ? AND company_id = ?`, [body.program_id, cid]);
+  if (!prog) throw NotFound('Collar program not found');
+  assertEditable(prog.status, 'collar program');
+
+  if (body.rejected_pcs > body.received_pcs) {
+    throw BadRequest('Rejected pieces cannot exceed received pieces');
+  }
+  // Doc §21 puts QC before stock, so only passed pieces may be posted.
+  if (body.post_stock && body.qc_status !== 'PASSED') {
+    throw BadRequest('Collars can only be posted to stock once QC status is PASSED');
+  }
+
+  // Never receive more than was actually produced on this program.
+  const produced = await queryOne<{ n: number }>(
+    `SELECT COALESCE(SUM(good_pcs), 0) AS n FROM trx_collar_production WHERE program_id = ?`,
+    [body.program_id]);
+  const alreadyReceived = await queryOne<{ n: number }>(
+    `SELECT COALESCE(SUM(good_pcs), 0) AS n FROM trx_collar_receipt WHERE program_id = ?`,
+    [body.program_id]);
+  const goodPcs = body.received_pcs - body.rejected_pcs;
+  const available = Number(produced?.n ?? 0) - Number(alreadyReceived?.n ?? 0);
+  if (goodPcs > available) {
+    throw BadRequest(
+      `Cannot receive ${goodPcs} pcs — only ${available} pcs of good production remain unreceived ` +
+      `(${produced?.n ?? 0} produced, ${alreadyReceived?.n ?? 0} already received).`);
+  }
+
+  const result = await transaction(async (tx) => {
+    const receiptNo = body.receipt_no || await nextDocNumber(tx, cid, 'COLLAR_RECEIPT');
+
+    const r = await txExecute(tx,
+      `INSERT INTO trx_collar_receipt
+         (company_id, receipt_no, receipt_date, program_id, production_id, size_id, size_code,
+          received_pcs, rejected_pcs, good_pcs, yarn_kg_ref, warehouse_id,
+          qc_status, is_stock_posted, remarks, created_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [cid, receiptNo, body.receipt_date, body.program_id, body.production_id ?? null,
+       body.size_id ?? null, body.size_code ?? null, body.received_pcs, body.rejected_pcs,
+       goodPcs, body.yarn_kg_ref, body.warehouse_id, body.qc_status,
+       body.post_stock ? 1 : 0, body.remarks ?? null, req.user!.id]);
+    const receiptId = r.insertId;
+
+    if (body.post_stock) {
+      // Collar stock is counted in PIECES (doc §16.5), so the ledger entry
+      // carries PCS as its UOM — the yarn KG stays a reference on the receipt.
+      await postLedger(tx, {
+        companyId: cid, warehouseId: body.warehouse_id, materialType: 'WIP',
+        txnType: 'PRODUCTION_IN', refType: 'COLLAR_RECEIPT', refId: receiptId,
+        qtyIn: goodPcs, uomId: UOM_PCS, createdBy: req.user!.id,
+      });
+    }
+
+    await txExecute(tx,
+      `UPDATE trx_collar_program
+          SET received_pcs = received_pcs + ?,
+              status = CASE WHEN ? THEN 'STOCK_POSTED' ELSE 'OUTPUT_RECEIPT' END
+        WHERE id = ? AND status NOT IN ('COMPLETED','CANCELLED')`,
+      [goodPcs, body.post_stock ? 1 : 0, body.program_id]);
+
+    return { id: receiptId, receipt_no: receiptNo, good_pcs: goodPcs };
+  });
+
+  await audit(req, 'trx_collar_receipt', result.id, 'INSERT', undefined, result);
+  res.status(201).json({ success: true, data: result });
+}));
+
+collarRouter.get('/collar-receipts', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const { program_id } = req.query;
+  let where = 'WHERE rc.company_id = ?';
+  const params: any[] = [cid];
+  if (program_id) { where += ' AND rc.program_id = ?'; params.push(program_id); }
+  const rows = await query(
+    `SELECT rc.*, cp.program_no, sz.size_code AS size_master_code, w.warehouse_name
+       FROM trx_collar_receipt rc
+       LEFT JOIN trx_collar_program cp ON cp.id = rc.program_id
+       LEFT JOIN mst_size sz ON sz.id = rc.size_id
+       LEFT JOIN mst_warehouse w ON w.id = rc.warehouse_id
+       ${where} ORDER BY rc.id DESC LIMIT 500`, params);
+  res.json({ success: true, data: rows });
+}));
+
+/** Post a collar receipt to stock once its QC has passed. */
+collarRouter.post('/collar-receipts/:id/post-stock', requirePermission('PROCESS.PRODUCTION'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = Number(req.params.id);
+  const rc = await queryOne<any>(
+    `SELECT * FROM trx_collar_receipt WHERE id = ? AND company_id = ?`, [id, cid]);
+  if (!rc) throw NotFound('Collar receipt not found');
+  if (rc.is_stock_posted) throw BadRequest('Stock has already been posted for this receipt');
+  if (rc.qc_status !== 'PASSED') throw BadRequest('QC must be PASSED before stock can be posted');
+
+  await transaction(async (tx) => {
+    await postLedger(tx, {
+      companyId: cid, warehouseId: rc.warehouse_id, materialType: 'WIP',
+      txnType: 'PRODUCTION_IN', refType: 'COLLAR_RECEIPT', refId: id,
+      qtyIn: Number(rc.good_pcs), uomId: UOM_PCS, createdBy: req.user!.id,
+    });
+    await txExecute(tx, `UPDATE trx_collar_receipt SET is_stock_posted = 1 WHERE id = ?`, [id]);
+    await txExecute(tx,
+      `UPDATE trx_collar_program SET status = 'STOCK_POSTED'
+        WHERE id = ? AND status NOT IN ('COMPLETED','CANCELLED')`, [rc.program_id]);
+  });
+
+  await audit(req, 'trx_collar_receipt', id, 'UPDATE', rc, { is_stock_posted: 1 });
+  res.json({ success: true, message: 'Collar stock posted in PCS' });
+}));
+
+/** Collar stock on hand, in pieces, per program (doc §16.5). */
+collarRouter.get('/collar-stock', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const rows = await query(
+    `SELECT cp.id AS program_id, cp.program_no, cp.collar_type, cp.colour,
+            st.style_code, y.yarn_code,
+            cp.expected_pcs AS planned_pcs,
+            COALESCE(SUM(rc.good_pcs), 0) AS in_stock_pcs,
+            COALESCE(SUM(rc.yarn_kg_ref), 0) AS yarn_kg_reference,
+            CASE WHEN SUM(rc.good_pcs) > 0
+                 THEN ROUND(SUM(rc.yarn_kg_ref) * 1000 / SUM(rc.good_pcs), 3) END AS actual_gm_pc
+       FROM trx_collar_program cp
+       LEFT JOIN trx_collar_receipt rc
+              ON rc.program_id = cp.id AND rc.is_stock_posted = 1
+       LEFT JOIN mst_style st ON st.id = cp.style_id
+       LEFT JOIN mst_yarn y ON y.id = cp.yarn_id
+      WHERE cp.company_id = ?
+      GROUP BY cp.id
+     HAVING in_stock_pcs > 0
+      ORDER BY cp.id DESC`, [cid]);
   res.json({ success: true, data: rows });
 }));
 
