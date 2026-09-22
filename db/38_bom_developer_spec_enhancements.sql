@@ -5,40 +5,37 @@
 ALTER TABLE `trx_bom_line` 
   MODIFY COLUMN `material_type` ENUM('YARN','FABRIC','TRIM','ACCESSORY','PACKING','GENERAL') NOT NULL;
 
--- 2. Add consumption_basis, applicability, additional_qty, item_description idempotently
-DROP PROCEDURE IF EXISTS _patch_migration_38;
-DELIMITER $$
-CREATE PROCEDURE _patch_migration_38()
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trx_bom_line' AND COLUMN_NAME = 'consumption_basis') THEN
-    ALTER TABLE `trx_bom_line` ADD COLUMN `consumption_basis` VARCHAR(30) NOT NULL DEFAULT 'PER_PIECE' AFTER `size_id`;
-  END IF;
+-- 2. Add consumption_basis
+SET @c1 = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trx_bom_line' AND COLUMN_NAME = 'consumption_basis');
+SET @s1 = IF(@c1 = 0, 'ALTER TABLE `trx_bom_line` ADD COLUMN `consumption_basis` VARCHAR(30) NOT NULL DEFAULT \'PER_PIECE\' AFTER `size_id`', 'SELECT 1');
+PREPARE st1 FROM @s1; EXECUTE st1; DEALLOCATE PREPARE st1;
 
-  IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trx_bom_line' AND COLUMN_NAME = 'applicability') THEN
-    ALTER TABLE `trx_bom_line` ADD COLUMN `applicability` VARCHAR(30) NOT NULL DEFAULT 'ALL' AFTER `consumption_basis`;
-  END IF;
+-- 3. Add applicability
+SET @c2 = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trx_bom_line' AND COLUMN_NAME = 'applicability');
+SET @s2 = IF(@c2 = 0, 'ALTER TABLE `trx_bom_line` ADD COLUMN `applicability` VARCHAR(30) NOT NULL DEFAULT \'ALL\' AFTER `consumption_basis`', 'SELECT 1');
+PREPARE st2 FROM @s2; EXECUTE st2; DEALLOCATE PREPARE st2;
 
-  IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trx_bom_line' AND COLUMN_NAME = 'additional_qty') THEN
-    ALTER TABLE `trx_bom_line` ADD COLUMN `additional_qty` DECIMAL(18,5) NOT NULL DEFAULT 0.00000 AFTER `consumption`;
-  END IF;
+-- 4. Add additional_qty
+SET @c3 = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trx_bom_line' AND COLUMN_NAME = 'additional_qty');
+SET @s3 = IF(@c3 = 0, 'ALTER TABLE `trx_bom_line` ADD COLUMN `additional_qty` DECIMAL(18,5) NOT NULL DEFAULT 0.00000 AFTER `consumption`', 'SELECT 1');
+PREPARE st3 FROM @s3; EXECUTE st3; DEALLOCATE PREPARE st3;
 
-  IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trx_bom_line' AND COLUMN_NAME = 'item_description') THEN
-    ALTER TABLE `trx_bom_line` ADD COLUMN `item_description` VARCHAR(255) NULL AFTER `trim_id`;
-  END IF;
+-- 5. Add item_description
+SET @c4 = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trx_bom_line' AND COLUMN_NAME = 'item_description');
+SET @s4 = IF(@c4 = 0, 'ALTER TABLE `trx_bom_line` ADD COLUMN `item_description` VARCHAR(255) NULL AFTER `trim_id`', 'SELECT 1');
+PREPARE st4 FROM @s4; EXECUTE st4; DEALLOCATE PREPARE st4;
 
-  IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trx_bom' AND COLUMN_NAME = 'approval_state') THEN
-    ALTER TABLE `trx_bom` ADD COLUMN `approval_state` ENUM('DRAFT','SUBMITTED','APPROVED','SUPERSEDED','CANCELLED') NOT NULL DEFAULT 'DRAFT' AFTER `status_id`;
-  END IF;
+-- 6. Add approval_state to trx_bom
+SET @c5 = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trx_bom' AND COLUMN_NAME = 'approval_state');
+SET @s5 = IF(@c5 = 0, 'ALTER TABLE `trx_bom` ADD COLUMN `approval_state` ENUM(\'DRAFT\',\'SUBMITTED\',\'APPROVED\',\'SUPERSEDED\',\'CANCELLED\') NOT NULL DEFAULT \'DRAFT\' AFTER `status_id`', 'SELECT 1');
+PREPARE st5 FROM @s5; EXECUTE st5; DEALLOCATE PREPARE st5;
 
-  IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trx_bom' AND COLUMN_NAME = 'approved_by') THEN
-    ALTER TABLE `trx_bom` ADD COLUMN `approved_by` BIGINT UNSIGNED NULL AFTER `created_by`;
-  END IF;
+-- 7. Add approved_by to trx_bom
+SET @c6 = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trx_bom' AND COLUMN_NAME = 'approved_by');
+SET @s6 = IF(@c6 = 0, 'ALTER TABLE `trx_bom` ADD COLUMN `approved_by` BIGINT UNSIGNED NULL AFTER `created_by`', 'SELECT 1');
+PREPARE st6 FROM @s6; EXECUTE st6; DEALLOCATE PREPARE st6;
 
-  IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trx_bom' AND COLUMN_NAME = 'approved_at') THEN
-    ALTER TABLE `trx_bom` ADD COLUMN `approved_at` DATETIME NULL AFTER `approved_by`;
-  END IF;
-END$$
-DELIMITER ;
-
-CALL _patch_migration_38();
-DROP PROCEDURE IF EXISTS _patch_migration_38;
+-- 8. Add approved_at to trx_bom
+SET @c7 = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trx_bom' AND COLUMN_NAME = 'approved_at');
+SET @s7 = IF(@c7 = 0, 'ALTER TABLE `trx_bom` ADD COLUMN `approved_at` DATETIME NULL AFTER `approved_by`', 'SELECT 1');
+PREPARE st7 FROM @s7; EXECUTE st7; DEALLOCATE PREPARE st7;
