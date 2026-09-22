@@ -35,6 +35,12 @@ import { shipmentRouter } from './modules/packing/shipment.routes.js';
 import { productionStagesRouter } from './modules/production/productionStages.routes.js';
 import { traceabilityRouter } from './modules/production/traceability.routes.js';
 import { knittingRouter } from './modules/knitting/knitting.routes.js';
+import { processRouteRouter } from './modules/yarnProcess/processRoute.routes.js';
+import { yarnProcessRouter } from './modules/yarnProcess/yarnProcess.routes.js';
+import { processFlowRouter } from './modules/yarnProcess/processFlow.routes.js';
+import { collarRouter } from './modules/yarnProcess/collar.routes.js';
+import { knittingProductionRouter } from './modules/yarnProcess/knittingProduction.routes.js';
+import { processReportsRouter } from './modules/yarnProcess/processReports.routes.js';
 import { fabricProcessingRouter } from './modules/fabricProcessing/fabricProcessing.routes.js';
 import { trimProcurementRouter } from './modules/procurement/trimProcurement.routes.js';
 import { purchaseReturnRouter } from './modules/procurement/purchaseReturn.routes.js';
@@ -99,6 +105,14 @@ export function createApp() {
   api.use('/', productionStagesRouter);       // /fabric-issues, /lay-plans, /cut-piece-qc, /sewing, /finishing, /final-qc
   api.use('/', traceabilityRouter);           // /production/io/:ioNo/styles, /io/:ioNo/traceability, /traceability/search
   api.use('/', knittingRouter);               // /knitting/orders, /knitting/yarn-issues, /knitting/rolls, etc.
+  // Yarn process module (doc §4-§20): routes, dyeing/winding/twisting, the shared
+  // reserve→issue→receipt→QC engine, collar knitting, and process reporting.
+  api.use('/', processRouteRouter);           // /process-routes
+  api.use('/', yarnProcessRouter);            // /yarn-processes (dyeing / winding / twisting)
+  api.use('/', processFlowRouter);            // /process-issues, /process-receipts, /process-qc
+  api.use('/', collarRouter);                 // /collars, /collar-programs, /collar-productions
+  api.use('/', knittingProductionRouter);     // /knitting-productions, /knitting-rolls
+  api.use('/', processReportsRouter);         // /process-traceability/:yarnId, /reports/*
   api.use('/', fabricProcessingRouter);       // /fabric-processing/orders, /fabric-processing/rolls, etc.
   api.use('/', trimProcurementRouter);        // /trim-pos, /trim-grns, /trim-stock
   api.use('/', purchaseReturnRouter);         // /purchase-returns, /purchase-returns/grn/:id, etc.

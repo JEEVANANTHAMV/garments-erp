@@ -454,7 +454,7 @@ CREATE TABLE IF NOT EXISTS trx_knitting_production_yarn (
   CONSTRAINT fk_kpy2__yarn FOREIGN KEY (yarn_id) REFERENCES mst_yarn(id)
 ) ENGINE=InnoDB COMMENT='Actual yarn consumption per knitting production entry';
 
-CREATE TABLE IF NOT EXISTS trx_fabric_roll (
+CREATE TABLE IF NOT EXISTS trx_knitting_roll (
   id              BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   company_id      BIGINT UNSIGNED NOT NULL,
   program_id      BIGINT UNSIGNED NULL,
@@ -473,14 +473,14 @@ CREATE TABLE IF NOT EXISTS trx_fabric_roll (
   is_stock_posted TINYINT(1) NOT NULL DEFAULT 0,
   created_by      BIGINT UNSIGNED NULL,
   created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_roll (company_id, roll_no),
-  KEY ix_roll_prog (program_id),
-  CONSTRAINT fk_roll__company FOREIGN KEY (company_id) REFERENCES mst_company(id),
-  CONSTRAINT fk_roll__prog FOREIGN KEY (program_id)
+  UNIQUE KEY uq_kroll (company_id, roll_no),
+  KEY ix_kroll_prog (program_id),
+  CONSTRAINT fk_kroll__company FOREIGN KEY (company_id) REFERENCES mst_company(id),
+  CONSTRAINT fk_kroll__prog FOREIGN KEY (program_id)
     REFERENCES trx_knitting_program(id) ON DELETE SET NULL,
-  CONSTRAINT fk_roll__prod FOREIGN KEY (production_id)
+  CONSTRAINT fk_kroll__prod FOREIGN KEY (production_id)
     REFERENCES trx_knitting_production(id) ON DELETE SET NULL
-) ENGINE=InnoDB COMMENT='Fabric roll receipt (doc §15)';
+) ENGINE=InnoDB COMMENT='Knitting output roll receipt (doc §15)';
 
 -- ─────────────────────────────────────────────────────────────────
 -- 6. NUMBER SERIES for the new documents
