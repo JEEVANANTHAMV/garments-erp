@@ -198,9 +198,12 @@ cadRouter.get('/cad-requirements/:id', requirePermission('PRODUCTION.VIEW'), ah(
     // ignore
   }
 
+  const ratioPatti = await loadRatioPattiRefs(companyId, id);
+
   res.json({
     data: {
       ...reqRow,
+      ratio_patti_ref: ratioPatti,
       markers: markers.length > 0 ? markers : (dataJson.markers || []),
       fabric_program: fabricPrograms.filter((f) => f.sheet_type === 'FABRIC_PROGRAM'),
       cutting_lay: fabricPrograms.filter((f) => f.sheet_type === 'CUTTING_LAY'),
@@ -216,6 +219,74 @@ cadRouter.get('/cad-requirements/:id', requirePermission('PRODUCTION.VIEW'), ah(
     },
   });
 }));
+
+/**
+ * Cutting-floor references for the Ratio Patti tab: the latest approved-or-draft
+ * marker version per marker (for size-wise consumption) and the plies actually
+ * planned on lay plans cut against those marker versions. Both tables arrive
+ * with migration 52, so a schema without them simply returns empty lists.
+ */
+async function loadRatioPattiRefs(companyId: number, cadReqId: number) {
+  const out: {
+    marker_versions: { marker_no: string; version: number; size_consumption: Record<string, number> | null;
+      cad_kg_per_pc: number | null; marker_kg_per_ply: number | null; uom: string; approved: boolean }[];
+    lay_summary: { marker_no: string; lays: number; plies: number; expected_pieces: number; actual_cut_qty: number }[];
+  } = { marker_versions: [], lay_summary: [] };
+  try {
+    const mv = await query<any>(`
+      SELECT v.marker_no, v.version, v.size_consumption, v.cad_kg_per_pc, v.marker_kg_per_ply, v.uom, v.approved_at
+        FROM trx_marker_version v
+       WHERE v.company_id = ? AND v.cad_req_id = ?
+         AND v.version = (SELECT MAX(v2.version) FROM trx_marker_version v2
+                           WHERE v2.company_id = v.company_id AND v2.cad_req_id = v.cad_req_id
+                             AND v2.marker_no = v.marker_no)
+    `, [companyId, cadReqId]);
+    out.marker_versions = mv.map((v) => {
+      let sc: any = v.size_consumption;
+      try { if (typeof sc === 'string') sc = JSON.parse(sc); } catch { sc = null; }
+      const cleaned: Record<string, number> = {};
+      if (sc && typeof sc === 'object') {
+        for (const [k, val] of Object.entries(sc)) {
+          const n = Number(val);
+          if (Number.isFinite(n) && n > 0) cleaned[k] = n;
+        }
+      }
+      return {
+        marker_no: String(v.marker_no),
+        version: Number(v.version),
+        size_consumption: Object.keys(cleaned).length ? cleaned : null,
+        cad_kg_per_pc: v.cad_kg_per_pc == null ? null : Number(v.cad_kg_per_pc),
+        marker_kg_per_ply: v.marker_kg_per_ply == null ? null : Number(v.marker_kg_per_ply),
+        uom: v.uom || 'KG',
+        approved: !!v.approved_at,
+      };
+    });
+
+    const lays = await query<any>(`
+      SELECT v.marker_no,
+             COUNT(*)                          AS lays,
+             COALESCE(SUM(lp.ply_count), 0)      AS plies,
+             COALESCE(SUM(lp.expected_pieces), 0) AS expected_pieces,
+             COALESCE(SUM(lp.actual_cut_qty), 0) AS actual_cut_qty
+        FROM trx_lay_plan lp
+        JOIN trx_marker_version v ON v.id = lp.marker_version_id
+       WHERE lp.company_id = ? AND v.company_id = ? AND v.cad_req_id = ?
+         AND lp.status <> 'CANCELLED'
+       GROUP BY v.marker_no
+    `, [companyId, companyId, cadReqId]);
+    out.lay_summary = lays.map((l) => ({
+      marker_no: String(l.marker_no),
+      lays: Number(l.lays) || 0,
+      plies: Number(l.plies) || 0,
+      expected_pieces: Number(l.expected_pieces) || 0,
+      actual_cut_qty: Number(l.actual_cut_qty) || 0,
+    }));
+  } catch (err: any) {
+    // ER_NO_SUCH_TABLE / ER_BAD_FIELD_ERROR on a schema without migration 52.
+    if (!['ER_NO_SUCH_TABLE', 'ER_BAD_FIELD_ERROR'].includes(err?.code)) throw err;
+  }
+  return out;
+}
 
 /**
  * 4. POST/PUT/PATCH /api/cad-requirements

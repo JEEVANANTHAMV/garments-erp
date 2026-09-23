@@ -51,6 +51,17 @@ export interface ResourceConfig {
   autoNumber?: { column: string; docType: string };
   /** Child collections written together with the parent. */
   children?: ChildConfig[];
+  /**
+   * Resource is list/read only through the generic API (writes go through a
+   * dedicated module). The string is the error returned to write attempts.
+   */
+  readOnly?: string;
+  /** Column set to 1 instead of a hard DELETE (posted documents are cancelled, never deleted). */
+  cancelFlag?: string;
+  /** Throw to block a DELETE (e.g. when downstream documents exist). */
+  beforeDelete?: (req: Request, id: number, row: any) => Promise<void>;
+  /** Throw to block an UPDATE. */
+  beforeUpdate?: (req: Request, id: number, row: any) => Promise<void>;
 }
 
 export interface ChildConfig {
@@ -104,6 +115,7 @@ export function buildResourceRouter(cfg: ResourceConfig): Router {
     defaultSort = 't.id',
     children = [],
     autoNumber,
+    readOnly, cancelFlag, beforeDelete, beforeUpdate,
   } = cfg;
 
   const scope = (req: Request) => (companyScoped ? req.user!.companyId : null);
@@ -115,6 +127,7 @@ export function buildResourceRouter(cfg: ResourceConfig): Router {
 
     if (companyScoped) { where.push('t.company_id = ?'); params.push(scope(req)); }
     if (softDelete) where.push('t.is_deleted = 0');
+    if (cancelFlag && !opts.includeInactive) where.push(`t.${cancelFlag} = 0`);
     if (hasIsActive && !opts.includeInactive) where.push('t.is_active = 1');
 
     if (opts.q && searchable.length) {
@@ -206,6 +219,7 @@ export function buildResourceRouter(cfg: ResourceConfig): Router {
 
   // -------------------------------------------------------------- CREATE
   r.post('/', requirePermission(`${permission}.CREATE`), ah(async (req, res) => {
+    if (readOnly) throw BadRequest(readOnly);
     const data = pickWritable(fields, req.body, false);
 
     const created = await transaction(async (tx) => {
@@ -258,8 +272,10 @@ export function buildResourceRouter(cfg: ResourceConfig): Router {
     const scopeSql = companyScoped ? ' AND company_id = ?' : '';
     const scopeParams = companyScoped ? [scope(req)] : [];
 
+    if (readOnly) throw BadRequest(readOnly);
     const before = await queryOne(`SELECT * FROM ${table} WHERE id = ?${scopeSql}`, [id, ...scopeParams]);
     if (!before) throw NotFound(`${label} not found`);
+    if (beforeUpdate) await beforeUpdate(req, id, before);
 
     const data = pickWritable(fields, req.body, true);
     if (hasAuditCols) data.updated_by = req.user!.id;
@@ -306,10 +322,15 @@ export function buildResourceRouter(cfg: ResourceConfig): Router {
     const scopeSql = companyScoped ? ' AND company_id = ?' : '';
     const scopeParams = companyScoped ? [scope(req)] : [];
 
+    if (readOnly) throw BadRequest(readOnly);
     const before = await queryOne(`SELECT * FROM ${table} WHERE id = ?${scopeSql}`, [id, ...scopeParams]);
     if (!before) throw NotFound(`${label} not found`);
+    if (beforeDelete) await beforeDelete(req, id, before);
 
-    if (softDelete) {
+    if (cancelFlag) {
+      // Who cancelled is kept in log_audit below.
+      await execute(`UPDATE ${table} SET ${cancelFlag} = 1 WHERE id = ?${scopeSql}`, [id, ...scopeParams]);
+    } else if (softDelete) {
       await execute(
         `UPDATE ${table} SET is_deleted = 1${hasAuditCols ? ', updated_by = ?' : ''} WHERE id = ?${scopeSql}`,
         hasAuditCols ? [req.user!.id, id, ...scopeParams] : [id, ...scopeParams],

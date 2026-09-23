@@ -95,7 +95,7 @@ const LOOKUPS: Record<string, LookupDef> = {
   'purchase-returns': { sql: `SELECT id, return_no AS code, return_no AS label, supplier_id, grn_id FROM trx_purchase_return WHERE company_id=? ORDER BY id DESC LIMIT 500`, scoped: true },
   'supplier-bills': { sql: `SELECT id, bill_no AS code, bill_no AS label, supplier_id, po_id FROM trx_supplier_bill WHERE company_id=? ORDER BY id DESC LIMIT 500`, scoped: true },
   'stock-transfers': { sql: `SELECT id, transfer_no AS code, transfer_no AS label, from_warehouse, to_warehouse FROM trx_stock_transfer WHERE company_id=? ORDER BY id DESC LIMIT 500`, scoped: true },
-  'fg-receipts': { sql: `SELECT id, fg_receipt_no AS code, fg_receipt_no AS label, prod_order_id, warehouse_id FROM trx_fg_receipt WHERE company_id=? ORDER BY id DESC LIMIT 500`, scoped: true },
+  'fg-receipts': { sql: `SELECT id, COALESCE(receipt_no, fg_receipt_no) AS code, COALESCE(receipt_no, fg_receipt_no) AS label, prod_order_id, warehouse_id FROM trx_fg_receipt WHERE company_id=? ORDER BY id DESC LIMIT 500`, scoped: true },
   'production-costs': { sql: `SELECT id, cost_no AS code, cost_no AS label, prod_order_id, style_id FROM trx_production_cost WHERE company_id=? ORDER BY id DESC LIMIT 500`, scoped: true },
 
   'sewing-lines': { sql: `SELECT id, line_code AS code, line_name AS label, unit_id, capacity_pcs, manpower FROM cfg_sewing_line WHERE company_id=? AND is_active=1 ORDER BY line_code`, scoped: true },

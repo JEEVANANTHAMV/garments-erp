@@ -376,7 +376,7 @@ export function SizeGroupDetailPage() {
   const qGroup = useQuery({
     queryKey: ['size-group-detail', id],
     queryFn: async () => {
-      const res = await http.get<any>(`/api/resources/size-groups/${id}`);
+      const res = await http.get<any>(`/size-groups/${id}`);
       return res.data;
     },
     enabled: !isNew,
@@ -543,10 +543,10 @@ export function SizeGroupDetailPage() {
 
       let groupId = id;
       if (isNew) {
-        const res = await http.post<any>('/api/resources/size-groups', payload);
+        const res = await http.post<any>('/size-groups', payload);
         groupId = res.data?.id;
       } else {
-        await http.put(`/api/resources/size-groups/${id}`, payload);
+        await http.put(`/size-groups/${id}`, payload);
       }
 
       toast('Size Group and ordered scale saved successfully!', 'success');
@@ -567,7 +567,7 @@ export function SizeGroupDetailPage() {
   const handleDelete = async () => {
     if (!window.confirm('Are you sure you want to delete this Size Group and its sizes?')) return;
     try {
-      await http.del(`/api/resources/size-groups/${id}`);
+      await http.del(`/size-groups/${id}`);
       toast('Size Group deleted', 'success');
       qc.invalidateQueries({ queryKey: ['size-groups'] });
       qc.invalidateQueries({ queryKey: ['sizes'] });

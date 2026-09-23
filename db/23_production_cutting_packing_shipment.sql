@@ -2,58 +2,86 @@
 -- 23. PRODUCTION TRACEABILITY, CUTTING PLAN, PACKING LIST & SHIPMENT
 --     Phase 1 of Cutting→Packing→Shipment implementation
 -- =====================================================================
+-- NOTE: every statement below is idempotent (guarded ADD COLUMN, CREATE TABLE
+--       IF NOT EXISTS, INSERT IGNORE). The migrate runner re-applies files
+--       >= 10 on every deploy and skips the REST of a file on the first
+--       "already exists"/"Duplicate column" error, so a single unguarded
+--       statement here used to hide everything after it. trx_fg_receipt /
+--       _line may already exist in the db/11 shape; db/53 aligns them.
 
 -- =============================================================
 -- A. ADD io_no TO ALL PRODUCTION TABLES FOR TRACEABILITY
 -- =============================================================
 
-ALTER TABLE trx_production_order
-  ADD COLUMN io_no VARCHAR(40) AFTER po_prod_no;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_production_order' AND COLUMN_NAME='io_no');
+SET @s = IF(@x=0, 'ALTER TABLE trx_production_order ADD COLUMN io_no VARCHAR(40) AFTER po_prod_no', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
-ALTER TABLE trx_cutting
-  ADD COLUMN io_no VARCHAR(40) AFTER cut_no;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_cutting' AND COLUMN_NAME='io_no');
+SET @s = IF(@x=0, 'ALTER TABLE trx_cutting ADD COLUMN io_no VARCHAR(40) AFTER cut_no', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
-ALTER TABLE trx_cutting_bundle
-  ADD COLUMN io_no VARCHAR(40) AFTER cutting_id,
-  ADD COLUMN style_id BIGINT UNSIGNED AFTER io_no,
-  ADD COLUMN color_id BIGINT UNSIGNED AFTER style_id,
-  ADD COLUMN size_id  INT UNSIGNED AFTER color_id,
-  ADD COLUMN component VARCHAR(60) AFTER size_id;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_cutting_bundle' AND COLUMN_NAME='io_no');
+SET @s = IF(@x=0, 'ALTER TABLE trx_cutting_bundle ADD COLUMN io_no VARCHAR(40) AFTER cutting_id', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_cutting_bundle' AND COLUMN_NAME='style_id');
+SET @s = IF(@x=0, 'ALTER TABLE trx_cutting_bundle ADD COLUMN style_id BIGINT UNSIGNED AFTER io_no', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_cutting_bundle' AND COLUMN_NAME='color_id');
+SET @s = IF(@x=0, 'ALTER TABLE trx_cutting_bundle ADD COLUMN color_id BIGINT UNSIGNED AFTER style_id', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_cutting_bundle' AND COLUMN_NAME='size_id');
+SET @s = IF(@x=0, 'ALTER TABLE trx_cutting_bundle ADD COLUMN size_id INT UNSIGNED AFTER color_id', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_cutting_bundle' AND COLUMN_NAME='component');
+SET @s = IF(@x=0, 'ALTER TABLE trx_cutting_bundle ADD COLUMN component VARCHAR(60) AFTER size_id', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
-ALTER TABLE trx_printing
-  ADD COLUMN io_no VARCHAR(40) AFTER print_no;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_printing' AND COLUMN_NAME='io_no');
+SET @s = IF(@x=0, 'ALTER TABLE trx_printing ADD COLUMN io_no VARCHAR(40) AFTER print_no', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
-ALTER TABLE trx_embroidery
-  ADD COLUMN io_no VARCHAR(40) AFTER emb_no;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_embroidery' AND COLUMN_NAME='io_no');
+SET @s = IF(@x=0, 'ALTER TABLE trx_embroidery ADD COLUMN io_no VARCHAR(40) AFTER emb_no', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
-ALTER TABLE trx_washing
-  ADD COLUMN io_no VARCHAR(40) AFTER wash_no;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_washing' AND COLUMN_NAME='io_no');
+SET @s = IF(@x=0, 'ALTER TABLE trx_washing ADD COLUMN io_no VARCHAR(40) AFTER wash_no', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
-ALTER TABLE trx_stitching
-  ADD COLUMN io_no VARCHAR(40) AFTER stitch_no;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_stitching' AND COLUMN_NAME='io_no');
+SET @s = IF(@x=0, 'ALTER TABLE trx_stitching ADD COLUMN io_no VARCHAR(40) AFTER stitch_no', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
-ALTER TABLE trx_finishing
-  ADD COLUMN io_no VARCHAR(40) AFTER finish_no;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_finishing' AND COLUMN_NAME='io_no');
+SET @s = IF(@x=0, 'ALTER TABLE trx_finishing ADD COLUMN io_no VARCHAR(40) AFTER finish_no', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
-ALTER TABLE trx_process_transaction
-  ADD COLUMN io_no VARCHAR(40) AFTER txn_no;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_process_transaction' AND COLUMN_NAME='io_no');
+SET @s = IF(@x=0, 'ALTER TABLE trx_process_transaction ADD COLUMN io_no VARCHAR(40) AFTER txn_no', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
-ALTER TABLE trx_packing
-  ADD COLUMN io_no    VARCHAR(40) AFTER pack_no,
-  ADD COLUMN style_id BIGINT UNSIGNED AFTER io_no;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_packing' AND COLUMN_NAME='io_no');
+SET @s = IF(@x=0, 'ALTER TABLE trx_packing ADD COLUMN io_no VARCHAR(40) AFTER pack_no', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_packing' AND COLUMN_NAME='style_id');
+SET @s = IF(@x=0, 'ALTER TABLE trx_packing ADD COLUMN style_id BIGINT UNSIGNED AFTER io_no', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
-ALTER TABLE trx_daily_production_plan
-  ADD COLUMN io_no VARCHAR(40) AFTER plan_no;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_daily_production_plan' AND COLUMN_NAME='io_no');
+SET @s = IF(@x=0, 'ALTER TABLE trx_daily_production_plan ADD COLUMN io_no VARCHAR(40) AFTER plan_no', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
-ALTER TABLE trx_daily_output
-  ADD COLUMN io_no VARCHAR(40) AFTER output_no;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_daily_output' AND COLUMN_NAME='io_no');
+SET @s = IF(@x=0, 'ALTER TABLE trx_daily_output ADD COLUMN io_no VARCHAR(40) AFTER output_no', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
 
 -- =============================================================
 -- B. CUTTING PLAN (Master cutting plan per IO/Style/Colour)
 -- =============================================================
 
-CREATE TABLE trx_cutting_plan (
+CREATE TABLE IF NOT EXISTS trx_cutting_plan (
   id              BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   company_id      BIGINT UNSIGNED NOT NULL,
   plan_no         VARCHAR(40) NOT NULL,
@@ -89,7 +117,7 @@ CREATE TABLE trx_cutting_plan (
 ) ENGINE=InnoDB COMMENT='Cutting plan header with I/O + Style traceability';
 
 -- Size-wise breakdown per cutting plan
-CREATE TABLE trx_cutting_plan_size (
+CREATE TABLE IF NOT EXISTS trx_cutting_plan_size (
   id              BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   cutting_plan_id BIGINT UNSIGNED NOT NULL,
   size_id         INT UNSIGNED NOT NULL,
@@ -107,7 +135,7 @@ CREATE TABLE trx_cutting_plan_size (
 -- C. FABRIC ISSUE (Roll-level issue to cutting plan)
 -- =============================================================
 
-CREATE TABLE trx_fabric_issue (
+CREATE TABLE IF NOT EXISTS trx_fabric_issue (
   id              BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   company_id      BIGINT UNSIGNED NOT NULL,
   issue_no        VARCHAR(40) NOT NULL,
@@ -135,7 +163,7 @@ CREATE TABLE trx_fabric_issue (
   CONSTRAINT fk_fiss__wh       FOREIGN KEY (warehouse_id) REFERENCES mst_warehouse(id)
 ) ENGINE=InnoDB COMMENT='Fabric issue to cutting with I/O traceability';
 
-CREATE TABLE trx_fabric_issue_roll (
+CREATE TABLE IF NOT EXISTS trx_fabric_issue_roll (
   id              BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   fabric_issue_id BIGINT UNSIGNED NOT NULL,
   lot_no          VARCHAR(40),
@@ -153,7 +181,7 @@ CREATE TABLE trx_fabric_issue_roll (
 -- D. BUNDLE MOVEMENT (Stage tracking for bundles)
 -- =============================================================
 
-CREATE TABLE trx_bundle_movement (
+CREATE TABLE IF NOT EXISTS trx_bundle_movement (
   id              BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   company_id      BIGINT UNSIGNED NOT NULL,
   bundle_id       BIGINT UNSIGNED NOT NULL,
@@ -172,15 +200,16 @@ CREATE TABLE trx_bundle_movement (
 ) ENGINE=InnoDB COMMENT='Bundle movement tracking between stages';
 
 -- Add status field to cutting_bundle
-ALTER TABLE trx_cutting_bundle
-  ADD COLUMN status ENUM('GENERATED','CHECKED','ISSUED','IN_SEWING','COMPLETED','FINISHING','CLOSED') DEFAULT 'GENERATED';
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_cutting_bundle' AND COLUMN_NAME='status');
+SET @s = IF(@x=0, 'ALTER TABLE trx_cutting_bundle ADD COLUMN status ENUM(\'GENERATED\',\'CHECKED\',\'ISSUED\',\'IN_SEWING\',\'COMPLETED\',\'FINISHING\',\'CLOSED\') DEFAULT \'GENERATED\'', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
 
 -- =============================================================
 -- E. FG STOCK RECEIPT (Finished Goods receipt with I/O traceability)
 -- =============================================================
 
-CREATE TABLE trx_fg_receipt (
+CREATE TABLE IF NOT EXISTS trx_fg_receipt (
   id              BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   company_id      BIGINT UNSIGNED NOT NULL,
   receipt_no      VARCHAR(40) NOT NULL,
@@ -207,7 +236,7 @@ CREATE TABLE trx_fg_receipt (
   CONSTRAINT fk_fgr__wh      FOREIGN KEY (warehouse_id) REFERENCES mst_warehouse(id)
 ) ENGINE=InnoDB COMMENT='Finished goods receipt with I/O traceability';
 
-CREATE TABLE trx_fg_receipt_line (
+CREATE TABLE IF NOT EXISTS trx_fg_receipt_line (
   id              BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   fg_receipt_id   BIGINT UNSIGNED NOT NULL,
   color_id        BIGINT UNSIGNED NOT NULL,
@@ -231,15 +260,30 @@ CREATE TABLE trx_fg_receipt_line (
 -- (io_no and style_id already added in section A above)
 
 -- Enhanced packing list for domestic + export with package selection
-ALTER TABLE trx_packing_list
-  ADD COLUMN io_no          VARCHAR(40) AFTER pl_no,
-  ADD COLUMN so_id          BIGINT UNSIGNED AFTER io_no,
-  ADD COLUMN buyer_id       BIGINT UNSIGNED AFTER so_id,
-  ADD COLUMN consignee_id   BIGINT UNSIGNED AFTER buyer_id,
-  ADD COLUMN shipment_type  ENUM('DOMESTIC','EXPORT') DEFAULT 'DOMESTIC' AFTER consignee_id,
-  ADD COLUMN destination    VARCHAR(120) AFTER shipment_type,
-  ADD COLUMN style_summary  TEXT AFTER destination,
-  ADD COLUMN status         ENUM('DRAFT','CONFIRMED','CLOSED') DEFAULT 'DRAFT' AFTER style_summary;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_packing_list' AND COLUMN_NAME='io_no');
+SET @s = IF(@x=0, 'ALTER TABLE trx_packing_list ADD COLUMN io_no VARCHAR(40) AFTER pl_no', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_packing_list' AND COLUMN_NAME='so_id');
+SET @s = IF(@x=0, 'ALTER TABLE trx_packing_list ADD COLUMN so_id BIGINT UNSIGNED AFTER io_no', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_packing_list' AND COLUMN_NAME='buyer_id');
+SET @s = IF(@x=0, 'ALTER TABLE trx_packing_list ADD COLUMN buyer_id BIGINT UNSIGNED AFTER so_id', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_packing_list' AND COLUMN_NAME='consignee_id');
+SET @s = IF(@x=0, 'ALTER TABLE trx_packing_list ADD COLUMN consignee_id BIGINT UNSIGNED AFTER buyer_id', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_packing_list' AND COLUMN_NAME='shipment_type');
+SET @s = IF(@x=0, 'ALTER TABLE trx_packing_list ADD COLUMN shipment_type ENUM(\'DOMESTIC\',\'EXPORT\') DEFAULT \'DOMESTIC\' AFTER consignee_id', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_packing_list' AND COLUMN_NAME='destination');
+SET @s = IF(@x=0, 'ALTER TABLE trx_packing_list ADD COLUMN destination VARCHAR(120) AFTER shipment_type', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_packing_list' AND COLUMN_NAME='style_summary');
+SET @s = IF(@x=0, 'ALTER TABLE trx_packing_list ADD COLUMN style_summary TEXT AFTER destination', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_packing_list' AND COLUMN_NAME='status');
+SET @s = IF(@x=0, 'ALTER TABLE trx_packing_list ADD COLUMN status ENUM(\'DRAFT\',\'CONFIRMED\',\'CLOSED\') DEFAULT \'DRAFT\' AFTER style_summary', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
 
 -- =============================================================
@@ -247,29 +291,64 @@ ALTER TABLE trx_packing_list
 -- =============================================================
 
 -- Add domestic/export conditional fields to trx_shipment
-ALTER TABLE trx_shipment
-  ADD COLUMN io_no           VARCHAR(40) AFTER shipment_no,
-  ADD COLUMN so_id           BIGINT UNSIGNED AFTER io_no,
-  ADD COLUMN packing_list_id BIGINT UNSIGNED AFTER so_id,
-  ADD COLUMN buyer_id        BIGINT UNSIGNED AFTER packing_list_id,
-  ADD COLUMN consignee_id    BIGINT UNSIGNED AFTER buyer_id,
-  ADD COLUMN notify_party_id BIGINT UNSIGNED AFTER consignee_id,
-  ADD COLUMN shipment_type   ENUM('DOMESTIC','EXPORT') DEFAULT 'DOMESTIC' AFTER notify_party_id,
-  ADD COLUMN mode            ENUM('SEA','AIR','ROAD','COURIER') DEFAULT 'ROAD' AFTER shipment_type,
-  ADD COLUMN incoterm        ENUM('FOB','CIF','CFR','EXW','DDP','DAP','FCA') AFTER mode,
-  ADD COLUMN destination     VARCHAR(120) AFTER incoterm,
-  ADD COLUMN country_id      SMALLINT UNSIGNED AFTER destination,
-  ADD COLUMN freight_terms   VARCHAR(80) AFTER country_id,
-  ADD COLUMN total_packages  INT UNSIGNED DEFAULT 0 AFTER freight_terms,
-  ADD COLUMN total_qty       INT UNSIGNED DEFAULT 0 AFTER total_packages,
-  ADD COLUMN net_weight_kg   DECIMAL(12,3) AFTER total_qty,
-  ADD COLUMN gross_weight_kg DECIMAL(12,3) AFTER net_weight_kg,
-  ADD COLUMN total_cbm       DECIMAL(12,5) AFTER gross_weight_kg,
-  ADD COLUMN remarks         TEXT AFTER total_cbm;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_shipment' AND COLUMN_NAME='io_no');
+SET @s = IF(@x=0, 'ALTER TABLE trx_shipment ADD COLUMN io_no VARCHAR(40) AFTER shipment_no', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_shipment' AND COLUMN_NAME='so_id');
+SET @s = IF(@x=0, 'ALTER TABLE trx_shipment ADD COLUMN so_id BIGINT UNSIGNED AFTER io_no', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_shipment' AND COLUMN_NAME='packing_list_id');
+SET @s = IF(@x=0, 'ALTER TABLE trx_shipment ADD COLUMN packing_list_id BIGINT UNSIGNED AFTER so_id', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_shipment' AND COLUMN_NAME='buyer_id');
+SET @s = IF(@x=0, 'ALTER TABLE trx_shipment ADD COLUMN buyer_id BIGINT UNSIGNED AFTER packing_list_id', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_shipment' AND COLUMN_NAME='consignee_id');
+SET @s = IF(@x=0, 'ALTER TABLE trx_shipment ADD COLUMN consignee_id BIGINT UNSIGNED AFTER buyer_id', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_shipment' AND COLUMN_NAME='notify_party_id');
+SET @s = IF(@x=0, 'ALTER TABLE trx_shipment ADD COLUMN notify_party_id BIGINT UNSIGNED AFTER consignee_id', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_shipment' AND COLUMN_NAME='shipment_type');
+SET @s = IF(@x=0, 'ALTER TABLE trx_shipment ADD COLUMN shipment_type ENUM(\'DOMESTIC\',\'EXPORT\') DEFAULT \'DOMESTIC\' AFTER notify_party_id', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_shipment' AND COLUMN_NAME='mode');
+SET @s = IF(@x=0, 'ALTER TABLE trx_shipment ADD COLUMN mode ENUM(\'SEA\',\'AIR\',\'ROAD\',\'COURIER\') DEFAULT \'ROAD\' AFTER shipment_type', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_shipment' AND COLUMN_NAME='incoterm');
+SET @s = IF(@x=0, 'ALTER TABLE trx_shipment ADD COLUMN incoterm ENUM(\'FOB\',\'CIF\',\'CFR\',\'EXW\',\'DDP\',\'DAP\',\'FCA\') AFTER mode', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_shipment' AND COLUMN_NAME='destination');
+SET @s = IF(@x=0, 'ALTER TABLE trx_shipment ADD COLUMN destination VARCHAR(120) AFTER incoterm', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_shipment' AND COLUMN_NAME='country_id');
+SET @s = IF(@x=0, 'ALTER TABLE trx_shipment ADD COLUMN country_id SMALLINT UNSIGNED AFTER destination', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_shipment' AND COLUMN_NAME='freight_terms');
+SET @s = IF(@x=0, 'ALTER TABLE trx_shipment ADD COLUMN freight_terms VARCHAR(80) AFTER country_id', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_shipment' AND COLUMN_NAME='total_packages');
+SET @s = IF(@x=0, 'ALTER TABLE trx_shipment ADD COLUMN total_packages INT UNSIGNED DEFAULT 0 AFTER freight_terms', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_shipment' AND COLUMN_NAME='total_qty');
+SET @s = IF(@x=0, 'ALTER TABLE trx_shipment ADD COLUMN total_qty INT UNSIGNED DEFAULT 0 AFTER total_packages', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_shipment' AND COLUMN_NAME='net_weight_kg');
+SET @s = IF(@x=0, 'ALTER TABLE trx_shipment ADD COLUMN net_weight_kg DECIMAL(12,3) AFTER total_qty', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_shipment' AND COLUMN_NAME='gross_weight_kg');
+SET @s = IF(@x=0, 'ALTER TABLE trx_shipment ADD COLUMN gross_weight_kg DECIMAL(12,3) AFTER net_weight_kg', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_shipment' AND COLUMN_NAME='total_cbm');
+SET @s = IF(@x=0, 'ALTER TABLE trx_shipment ADD COLUMN total_cbm DECIMAL(12,5) AFTER gross_weight_kg', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_shipment' AND COLUMN_NAME='remarks');
+SET @s = IF(@x=0, 'ALTER TABLE trx_shipment ADD COLUMN remarks TEXT AFTER total_cbm', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
 
 -- Shipment → Package allocation table
-CREATE TABLE trx_shipment_package (
+CREATE TABLE IF NOT EXISTS trx_shipment_package (
   id              BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   shipment_id     BIGINT UNSIGNED NOT NULL,
   carton_id       BIGINT UNSIGNED NOT NULL,
@@ -286,7 +365,7 @@ CREATE TABLE trx_shipment_package (
 ) ENGINE=InnoDB COMMENT='Shipment package/carton allocation';
 
 -- Shipment item summary (auto-derived from packages)
-CREATE TABLE trx_shipment_item_summary (
+CREATE TABLE IF NOT EXISTS trx_shipment_item_summary (
   id              BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   shipment_id     BIGINT UNSIGNED NOT NULL,
   style_id        BIGINT UNSIGNED,
@@ -306,28 +385,55 @@ CREATE TABLE trx_shipment_item_summary (
 -- H. ENHANCED DISPATCH (Transport, LR, E-Way Bill)
 -- =============================================================
 
-ALTER TABLE trx_dispatch
-  ADD COLUMN io_no            VARCHAR(40) AFTER dispatch_no,
-  ADD COLUMN shipment_id      BIGINT UNSIGNED AFTER io_no,
-  ADD COLUMN transporter_id   BIGINT UNSIGNED AFTER shipment_id,
-  ADD COLUMN vehicle_no       VARCHAR(20) AFTER transporter_id,
-  ADD COLUMN driver_name      VARCHAR(80) AFTER vehicle_no,
-  ADD COLUMN lr_no            VARCHAR(40) AFTER driver_name,
-  ADD COLUMN lr_date          DATE AFTER lr_no,
-  ADD COLUMN eway_bill_no     VARCHAR(40) AFTER lr_date,
-  ADD COLUMN dispatch_time    TIME AFTER eway_bill_no,
-  ADD COLUMN delivery_location VARCHAR(120) AFTER dispatch_time,
-  ADD COLUMN pod_ref          VARCHAR(60) AFTER delivery_location,
-  ADD COLUMN delivered_date   DATE AFTER pod_ref,
-  ADD COLUMN receiver_name    VARCHAR(80) AFTER delivered_date,
-  ADD COLUMN remarks          TEXT AFTER receiver_name;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_dispatch' AND COLUMN_NAME='io_no');
+SET @s = IF(@x=0, 'ALTER TABLE trx_dispatch ADD COLUMN io_no VARCHAR(40) AFTER dispatch_no', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_dispatch' AND COLUMN_NAME='shipment_id');
+SET @s = IF(@x=0, 'ALTER TABLE trx_dispatch ADD COLUMN shipment_id BIGINT UNSIGNED AFTER io_no', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_dispatch' AND COLUMN_NAME='transporter_id');
+SET @s = IF(@x=0, 'ALTER TABLE trx_dispatch ADD COLUMN transporter_id BIGINT UNSIGNED AFTER shipment_id', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_dispatch' AND COLUMN_NAME='vehicle_no');
+SET @s = IF(@x=0, 'ALTER TABLE trx_dispatch ADD COLUMN vehicle_no VARCHAR(20) AFTER transporter_id', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_dispatch' AND COLUMN_NAME='driver_name');
+SET @s = IF(@x=0, 'ALTER TABLE trx_dispatch ADD COLUMN driver_name VARCHAR(80) AFTER vehicle_no', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_dispatch' AND COLUMN_NAME='lr_no');
+SET @s = IF(@x=0, 'ALTER TABLE trx_dispatch ADD COLUMN lr_no VARCHAR(40) AFTER driver_name', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_dispatch' AND COLUMN_NAME='lr_date');
+SET @s = IF(@x=0, 'ALTER TABLE trx_dispatch ADD COLUMN lr_date DATE AFTER lr_no', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_dispatch' AND COLUMN_NAME='eway_bill_no');
+SET @s = IF(@x=0, 'ALTER TABLE trx_dispatch ADD COLUMN eway_bill_no VARCHAR(40) AFTER lr_date', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_dispatch' AND COLUMN_NAME='dispatch_time');
+SET @s = IF(@x=0, 'ALTER TABLE trx_dispatch ADD COLUMN dispatch_time TIME AFTER eway_bill_no', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_dispatch' AND COLUMN_NAME='delivery_location');
+SET @s = IF(@x=0, 'ALTER TABLE trx_dispatch ADD COLUMN delivery_location VARCHAR(120) AFTER dispatch_time', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_dispatch' AND COLUMN_NAME='pod_ref');
+SET @s = IF(@x=0, 'ALTER TABLE trx_dispatch ADD COLUMN pod_ref VARCHAR(60) AFTER delivery_location', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_dispatch' AND COLUMN_NAME='delivered_date');
+SET @s = IF(@x=0, 'ALTER TABLE trx_dispatch ADD COLUMN delivered_date DATE AFTER pod_ref', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_dispatch' AND COLUMN_NAME='receiver_name');
+SET @s = IF(@x=0, 'ALTER TABLE trx_dispatch ADD COLUMN receiver_name VARCHAR(80) AFTER delivered_date', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_dispatch' AND COLUMN_NAME='remarks');
+SET @s = IF(@x=0, 'ALTER TABLE trx_dispatch ADD COLUMN remarks TEXT AFTER receiver_name', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
 
 -- =============================================================
 -- I. SHIPMENT DOCUMENT TYPE MASTER
 -- =============================================================
 
-CREATE TABLE cfg_shipment_doc_type (
+CREATE TABLE IF NOT EXISTS cfg_shipment_doc_type (
   id              INT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   company_id      BIGINT UNSIGNED NOT NULL,
   doc_code        VARCHAR(30) NOT NULL,
@@ -342,7 +448,7 @@ CREATE TABLE cfg_shipment_doc_type (
 ) ENGINE=InnoDB COMMENT='Shipment document type master';
 
 -- Shipment documents (actual documents attached)
-CREATE TABLE trx_shipment_document (
+CREATE TABLE IF NOT EXISTS trx_shipment_document (
   id              BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   shipment_id     BIGINT UNSIGNED NOT NULL,
   doc_type_id     INT UNSIGNED NOT NULL,
@@ -361,7 +467,7 @@ CREATE TABLE trx_shipment_document (
 -- J. PACKAGE TYPE MASTER
 -- =============================================================
 
-CREATE TABLE cfg_package_type (
+CREATE TABLE IF NOT EXISTS cfg_package_type (
   id              INT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   company_id      BIGINT UNSIGNED NOT NULL,
   type_code       VARCHAR(20) NOT NULL,
@@ -373,7 +479,7 @@ CREATE TABLE cfg_package_type (
 ) ENGINE=InnoDB COMMENT='Package type master (Carton, Bale, Pallet)';
 
 -- Seed default package types
-INSERT INTO cfg_package_type (company_id, type_code, type_name, prefix)
+INSERT IGNORE INTO cfg_package_type (company_id, type_code, type_name, prefix)
 SELECT id, 'CARTON', 'Carton', 'CTN-' FROM mst_company
 UNION ALL
 SELECT id, 'BALE', 'Bale', 'BAL-' FROM mst_company
@@ -381,7 +487,7 @@ UNION ALL
 SELECT id, 'PALLET', 'Pallet', 'PAL-' FROM mst_company;
 
 -- Seed default shipment document types
-INSERT INTO cfg_shipment_doc_type (company_id, doc_code, doc_name, domestic_allowed, export_allowed, is_mandatory, sort_order)
+INSERT IGNORE INTO cfg_shipment_doc_type (company_id, doc_code, doc_name, domestic_allowed, export_allowed, is_mandatory, sort_order)
 SELECT id, 'TAX_INVOICE', 'Tax Invoice / E-Invoice', 1, 1, 1, 1 FROM mst_company
 UNION ALL
 SELECT id, 'PACKING_LIST', 'Packing List', 1, 1, 1, 2 FROM mst_company

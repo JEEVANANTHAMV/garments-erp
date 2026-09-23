@@ -19,7 +19,7 @@ export function CuttingPlansPage() {
 
   const statusColor = (s: string) => {
     const map: Record<string, string> = {
-      DRAFT: 'slate', APPROVED: 'blue', RELEASED: 'indigo', IN_PROGRESS: 'amber',
+      DRAFT: 'slate', APPROVED: 'blue', RELEASED: 'indigo', IN_PROGRESS: 'amber', PARTIALLY_COMPLETED: 'amber',
       COMPLETED: 'emerald', CLOSED: 'gray', CANCELLED: 'red',
     };
     return map[s] || 'slate';
@@ -80,6 +80,11 @@ export function CuttingPlansPage() {
 /* ============================================================
    CUTTING PLAN DETAIL (CREATE / EDIT)
 ============================================================ */
+const statusColorOf = (s: string) => ({
+  DRAFT: 'slate', APPROVED: 'blue', RELEASED: 'indigo', IN_PROGRESS: 'amber', PARTIALLY_COMPLETED: 'amber',
+  COMPLETED: 'emerald', CLOSED: 'gray', CANCELLED: 'red',
+} as Record<string, string>)[s] || 'slate';
+
 export function CuttingPlanDetailPage() {
   const { id } = useParams();
   const nav = useNavigate();
@@ -90,7 +95,9 @@ export function CuttingPlanDetailPage() {
     style_id: null, color_id: null, part_name: 'TOP', order_qty: 0, planned_cut_qty: 0,
     required_date: '', marker_ref: '', marker_eff_pct: '', fabric_id: null,
     fabric_req_kg: '', fabric_req_mtr: '', status: 'DRAFT', remarks: '',
+    over_cut_pct: 0, over_cut_reason: '', cutting_location: '', status_reason: '',
   });
+  const [loaded, setLoaded] = useState<any>(null);
   const [sizes, setSizes] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -138,7 +145,10 @@ export function CuttingPlanDetailPage() {
           fabric_id: d.fabric_id, fabric_req_kg: d.fabric_req_kg || '',
           fabric_req_mtr: d.fabric_req_mtr || '', status: d.status || 'DRAFT',
           remarks: d.remarks || '',
+          over_cut_pct: Number(d.over_cut_pct) || 0, over_cut_reason: d.over_cut_reason || '',
+          cutting_location: d.cutting_location || '', status_reason: '',
         });
+        setLoaded(d);
         setSizes(d.sizes || []);
       });
     }
@@ -175,15 +185,26 @@ export function CuttingPlanDetailPage() {
       } else {
         await api.put(`/cutting-plans/${id}`, payload);
         toast('Cutting plan updated');
+        api.get(`/cutting-plans/${id}`).then(r => { setLoaded(r.data.data); setField('status', r.data.data.status); });
       }
     } catch (e: any) {
-      toast(e?.response?.data?.error?.message || 'Save failed', 'error');
+      toast(e?.message || e?.response?.data?.error?.message || 'Save failed', 'error');
     } finally {
       setSaving(false);
     }
   };
 
-  const STATUSES = ['DRAFT','APPROVED','RELEASED','IN_PROGRESS','COMPLETED','CLOSED','CANCELLED'];
+  // Server-enforced transitions (doc §5): IN_PROGRESS / PARTIALLY_COMPLETED /
+  // COMPLETED follow lay execution and CLOSED comes from Cutting Reconciliation.
+  const MANUAL: Record<string, string[]> = {
+    DRAFT: ['DRAFT', 'APPROVED', 'RELEASED', 'CANCELLED'],
+    APPROVED: ['APPROVED', 'DRAFT', 'RELEASED', 'CANCELLED'],
+    RELEASED: ['RELEASED', 'APPROVED', 'CANCELLED'],
+  };
+  const savedStatus = loaded?.status || 'DRAFT';
+  const STATUSES = isNew ? ['DRAFT', 'APPROVED', 'RELEASED'] : (MANUAL[savedStatus] || [savedStatus]);
+  const readOnly = !isNew && ['CLOSED', 'CANCELLED'].includes(savedStatus);
+  const sizesLocked = !isNew && !['DRAFT', 'APPROVED'].includes(savedStatus);
 
   const handleSoSelect = (soIdVal: string) => {
     const soId = soIdVal ? Number(soIdVal) : null;
@@ -238,7 +259,7 @@ export function CuttingPlanDetailPage() {
         </div>
         <div className="flex gap-2">
           <Button variant="ghost" onClick={() => nav('/production/cutting-plans')}>← Back</Button>
-          <Button onClick={handleSave} loading={saving}>Save</Button>
+          {!readOnly && <Button onClick={handleSave} loading={saving}>Save</Button>}
         </div>
       </div>
 
@@ -292,16 +313,47 @@ export function CuttingPlanDetailPage() {
             options={STATUSES.map(s => ({ value: s, label: s }))} />
           <Input label="Required Date" type="date" value={header.required_date}
             onChange={e => setField('required_date', e.target.value)} />
+          <Input label="Cutting Location" value={header.cutting_location}
+            onChange={e => setField('cutting_location', e.target.value)} placeholder="e.g. CUT-FLOOR-1" />
+          {header.status === 'CANCELLED' && savedStatus !== 'CANCELLED' && (
+            <Input label="Cancel reason *" value={header.status_reason}
+              onChange={e => setField('status_reason', e.target.value)} />
+          )}
         </div>
+        {readOnly && <p className="px-4 pb-3 text-xs font-semibold text-slate-500">This cut order is {savedStatus} and read-only{savedStatus === 'CLOSED' ? ' — reopen it from Cutting Reconciliation to change it' : ''}.</p>}
       </Card>
+
+      {loaded && !isNew && (
+        <Card title="Cutting progress & consumption">
+          <div className="grid grid-cols-2 gap-4 p-4 md:grid-cols-6 text-sm">
+            <div><p className="text-xs text-slate-500">Status</p><Badge color={statusColorOf(loaded.status)}>{loaded.status}</Badge></div>
+            <div><p className="text-xs text-slate-500">Order qty</p><p className="font-semibold">{fmtNumber(loaded.order_qty)} PCS</p></div>
+            <div><p className="text-xs text-slate-500">Actual cut</p><p className="font-semibold text-emerald-700">{fmtNumber(loaded.actual_cut_qty)} PCS</p></div>
+            <div><p className="text-xs text-slate-500">Balance</p><p className="font-semibold">{fmtNumber(loaded.balance_qty)} PCS</p></div>
+            <div><p className="text-xs text-slate-500">Max without override</p><p className="font-semibold">{loaded.max_cut_qty != null ? `${fmtNumber(loaded.max_cut_qty)} PCS` : '—'}</p></div>
+            <div><p className="text-xs text-slate-500">Unaccounted fabric</p><p className="font-semibold">{fmtNumber(loaded.reconciliation?.unaccounted_kg, 3)} KG</p></div>
+            <div><p className="text-xs text-slate-500">Planned (BOM)</p><p className="font-semibold">{loaded.consumption?.planned?.kg_per_pc ?? '—'} KG/PC</p></div>
+            <div><p className="text-xs text-slate-500">Marker (CAD)</p><p className="font-semibold">{loaded.consumption?.marker?.kg_per_pc ?? '—'} KG/PC</p></div>
+            <div><p className="text-xs text-slate-500">Cutting actual</p><p className="font-semibold">{loaded.consumption?.cutting_actual?.kg_per_pc ?? '—'} KG/PC</p></div>
+            <div><p className="text-xs text-slate-500">Actual − Planned</p><p className="font-semibold">{loaded.consumption?.variances?.actual_vs_planned?.variance_pct != null ? `${loaded.consumption.variances.actual_vs_planned.variance_pct} %` : '—'}</p></div>
+            <div><p className="text-xs text-slate-500">Lays</p><p className="font-semibold">{loaded.lays?.length ?? 0}</p></div>
+            <div><p className="text-xs text-slate-500">Fabric DCs</p><p className="font-semibold">{loaded.fabric_issues?.length ?? 0} · {fmtNumber(loaded.reconciliation?.net_issued_kg, 3)} KG net</p></div>
+          </div>
+        </Card>
+      )}
 
       {/* Quantities & Fabric */}
       <Card title="Quantities & Fabric">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4">
-          <Input label="Order Qty" type="number" value={header.order_qty}
+          <Input label="Order Qty (PCS)" type="number" value={header.order_qty}
             onChange={e => setField('order_qty', Number(e.target.value))} />
-          <Input label="Planned Cut Qty" type="number" value={header.planned_cut_qty}
+          <Input label="Planned Cut Qty (PCS)" type="number" value={header.planned_cut_qty}
             onChange={e => setField('planned_cut_qty', Number(e.target.value))} />
+          <Input label="Authorised over-cut (%)" type="number" value={header.over_cut_pct}
+            onChange={e => setField('over_cut_pct', Number(e.target.value))}
+            hint={`Max ${fmtNumber(Math.floor((Number(header.order_qty) || 0) * (1 + (Number(header.over_cut_pct) || 0) / 100)))} PCS without override`} />
+          <Input label="Over-cut reason (approver only)" value={header.over_cut_reason}
+            onChange={e => setField('over_cut_reason', e.target.value)} />
           <Input label="Marker Ref" value={header.marker_ref}
             onChange={e => setField('marker_ref', e.target.value)} />
           <Input label="Marker Eff %" type="number" value={header.marker_eff_pct}
@@ -328,8 +380,9 @@ export function CuttingPlanDetailPage() {
             <thead>
               <tr className="border-b text-left text-slate-500">
                 <th className="pb-2 pr-3">Size</th>
-                <th className="pb-2 pr-3 text-right">Order Qty</th>
-                <th className="pb-2 pr-3 text-right">Planned Qty</th>
+                <th className="pb-2 pr-3 text-right">Order Qty (PCS)</th>
+                <th className="pb-2 pr-3 text-right">Planned Qty (PCS)</th>
+                <th className="pb-2 pr-3 text-right">Cut (PCS)</th>
                 <th className="pb-2 w-10"></th>
               </tr>
             </thead>
@@ -337,31 +390,33 @@ export function CuttingPlanDetailPage() {
               {sizes.map((sz, idx) => (
                 <tr key={idx} className="border-b border-slate-100">
                   <td className="py-2 pr-3">
-                    <Select value={sz.size_id || ''}
+                    <Select value={sz.size_id || ''} disabled={sizesLocked}
                       onChange={e => updateSize(idx, 'size_id', e.target.value ? Number(e.target.value) : null)}
                       options={[{ value: '', label: '— Size —' }, ...availSizes.map((s: any) => ({ value: s.id, label: s.label || s.code }))]} />
                   </td>
                   <td className="py-2 pr-3">
-                    <Input type="number" value={sz.order_qty}
+                    <Input type="number" value={sz.order_qty} disabled={sizesLocked}
                       onChange={e => updateSize(idx, 'order_qty', Number(e.target.value))}
                       className="text-right" />
                   </td>
                   <td className="py-2 pr-3">
-                    <Input type="number" value={sz.planned_qty}
+                    <Input type="number" value={sz.planned_qty} disabled={sizesLocked}
                       onChange={e => updateSize(idx, 'planned_qty', Number(e.target.value))}
                       className="text-right" />
                   </td>
+                  <td className="py-2 pr-3 text-right font-semibold text-emerald-700">{fmtNumber(sz.actual_qty || 0)}</td>
                   <td className="py-2">
-                    <button onClick={() => removeSize(idx)}
-                      className="text-red-500 hover:text-red-700 text-xs">✕</button>
+                    {!sizesLocked && <button onClick={() => removeSize(idx)}
+                      className="text-red-500 hover:text-red-700 text-xs">✕</button>}
                   </td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr>
-                <td colSpan={4} className="pt-3">
-                  <Button variant="ghost" size="sm" onClick={addSizeLine}>+ Add Size</Button>
+                <td colSpan={5} className="pt-3">
+                  {sizesLocked ? <span className="text-xs text-slate-400">Size breakdown is locked once the cut order is released.</span>
+                    : <Button variant="ghost" size="sm" onClick={addSizeLine}>+ Add Size</Button>}
                 </td>
               </tr>
               {sizes.length > 0 && (
@@ -369,6 +424,7 @@ export function CuttingPlanDetailPage() {
                   <td className="pt-2">Total</td>
                   <td className="pt-2 text-right">{fmtNumber(sizes.reduce((s, l) => s + (l.order_qty || 0), 0))}</td>
                   <td className="pt-2 text-right">{fmtNumber(sizes.reduce((s, l) => s + (l.planned_qty || 0), 0))}</td>
+                  <td className="pt-2 text-right">{fmtNumber(sizes.reduce((s, l) => s + (Number(l.actual_qty) || 0), 0))}</td>
                   <td></td>
                 </tr>
               )}

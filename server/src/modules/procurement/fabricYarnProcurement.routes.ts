@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { query, queryOne, transaction, txQuery, txQueryOne, txExecute } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
 import { NotFound, BadRequest } from '../../core/errors.js';
@@ -469,75 +470,188 @@ fabricYarnProcurementRouter.get('/fabric-grns/:id', requirePermission('GRN.VIEW'
   res.json({ data: { ...grn, lines, rolls } });
 }));
 
+/* ------------------------------------------------------------------------------
+   Shared helpers for the roll / yarn stock lists
+   ------------------------------------------------------------------------------ */
+
+/**
+ * Tables that only exist once later migrations ran. Production schemas can lag
+ * behind local, so optional sources are probed once per process instead of
+ * letting a missing table 500 the whole stock list.
+ */
+const tableExistsCache = new Map<string, boolean>();
+async function tableExists(name: string): Promise<boolean> {
+  const hit = tableExistsCache.get(name);
+  if (hit !== undefined) return hit;
+  const row = await queryOne<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM information_schema.tables
+      WHERE table_schema = DATABASE() AND table_name = ?`, [name]);
+  const ok = Number(row?.n ?? 0) > 0;
+  tableExistsCache.set(name, ok);
+  return ok;
+}
+async function columnExists(table: string, column: string): Promise<boolean> {
+  const key = `${table}.${column}`;
+  const hit = tableExistsCache.get(key);
+  if (hit !== undefined) return hit;
+  const row = await queryOne<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM information_schema.columns
+      WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?`, [table, column]);
+  const ok = Number(row?.n ?? 0) > 0;
+  tableExistsCache.set(key, ok);
+  return ok;
+}
+
+/**
+ * Job (IO) + style traceability joins for anything hanging off a GRN line.
+ * Expects aliases `gl` (trx_grn_line) and `grn` (trx_grn). Resolution order is
+ * most-specific first: GRN line → PO line → line sales order → PO header →
+ * GRN header → PO's sales order → the IO's CAD requirement. A sales order only contributes a style when
+ * it carries exactly one style (otherwise it would be a guess).
+ */
+const TRACE_JOINS = `
+      LEFT JOIN trx_purchase_order_line pol ON pol.id = gl.po_line_id
+      LEFT JOIN trx_purchase_order po
+             ON po.id = COALESCE(gl.po_id, pol.po_id, grn.po_id) AND po.company_id = grn.company_id
+      LEFT JOIN trx_sales_order so_l
+             ON so_l.id = COALESCE(gl.so_id, pol.so_id) AND so_l.company_id = grn.company_id
+      LEFT JOIN trx_sales_order so_h
+             ON so_h.id = po.so_id AND so_h.company_id = grn.company_id
+      LEFT JOIN (SELECT so_id, MIN(style_id) AS style_id
+                   FROM trx_sales_order_line
+                  GROUP BY so_id
+                 HAVING COUNT(DISTINCT style_id) = 1) sol_l ON sol_l.so_id = so_l.id
+      LEFT JOIN (SELECT so_id, MIN(style_id) AS style_id
+                   FROM trx_sales_order_line
+                  GROUP BY so_id
+                 HAVING COUNT(DISTINCT style_id) = 1) sol_h ON sol_h.so_id = so_h.id
+      LEFT JOIN (SELECT company_id, internal_ir_no, MIN(style_id) AS style_id
+                   FROM trx_cad_requirement
+                  WHERE internal_ir_no IS NOT NULL AND internal_ir_no <> '' AND style_id IS NOT NULL
+                  GROUP BY company_id, internal_ir_no
+                 HAVING COUNT(DISTINCT style_id) = 1) cad_io
+             ON cad_io.company_id = grn.company_id
+            AND cad_io.internal_ir_no = COALESCE(NULLIF(grn.internal_ir_no,''), NULLIF(po.internal_ir_no,''))`;
+
+// Last resort: the internal order's CAD requirement, which is where job-wise
+// fabric/yarn buying usually starts (the GRN often carries only the IO no).
+const TRACE_STYLE_ID = `COALESCE(gl.style_id, pol.style_id, sol_l.style_id, po.style_id, grn.style_id, sol_h.style_id, cad_io.style_id)`;
+const TRACE_IO_NO = `COALESCE(NULLIF(so_l.io_no,''), NULLIF(grn.internal_ir_no,''), NULLIF(po.internal_ir_no,''), NULLIF(so_h.io_no,''))`;
+const TRACE_SO_NO = `COALESCE(so_l.so_no, so_h.so_no)`;
+
+const rollListQuery = z.object({
+  fabric_id: z.coerce.number().int().positive().optional(),
+  grn_id: z.coerce.number().int().positive().optional(),
+  warehouse_id: z.coerce.number().int().positive().optional(),
+  style_id: z.coerce.number().int().positive().optional(),
+  io_no: z.string().trim().max(60).optional().transform((v) => v || undefined),
+  lot_no: z.string().trim().max(60).optional().transform((v) => v || undefined),
+  shade: z.string().trim().max(80).optional().transform((v) => v || undefined),
+  qc_status: z.enum(['PENDING', 'ACCEPTED', 'HOLD', 'REJECTED']).optional(),
+  stock_status: z.enum(['AVAILABLE', 'RESERVED', 'ISSUED', 'PARTIAL', 'CLOSED']).optional(),
+  search: z.string().trim().max(100).optional().transform((v) => v || undefined),
+});
+
 /**
  * 3. GET /api/fabric-rolls
- * Search and list physical fabric roll stock
+ * Search and list physical fabric roll stock, with the job (IO) and style the
+ * roll was bought for resolved from the roll's own GRN line.
  */
 fabricYarnProcurementRouter.get('/fabric-rolls', requirePermission('INVENTORY.VIEW'), ah(async (req, res) => {
   const companyId = req.user!.companyId;
-  const { fabric_id, lot_no, shade, qc_status, stock_status, search } = req.query;
+  const q = rollListQuery.parse(req.query);
 
-  let sql = `
-    SELECT fr.*,
-           fb.fabric_name, fb.fabric_code,
-           wh.warehouse_name,
-           grn.grn_no, grn.grn_date, grn.internal_ir_no,
-           po.po_no,
-           st.style_code
-      FROM trx_fabric_roll fr
-      LEFT JOIN mst_fabric fb ON fb.id = fr.fabric_id
-      LEFT JOIN mst_warehouse wh ON wh.id = fr.warehouse_id
-      LEFT JOIN trx_grn grn ON grn.id = fr.grn_id
-      LEFT JOIN trx_purchase_order po ON po.id = grn.po_id
-      LEFT JOIN mst_style st ON st.id = grn.style_id
-     WHERE fr.company_id = ?
-  `;
+  const where: string[] = [];
   const params: any[] = [companyId];
 
-  if (fabric_id) {
-    sql += ` AND fr.fabric_id = ?`;
-    params.push(Number(fabric_id));
-  }
-  if (req.query.grn_id) {
-    sql += ` AND fr.grn_id = ?`;
-    params.push(Number(req.query.grn_id));
-  }
-  if (lot_no) {
-    sql += ` AND fr.lot_no LIKE ?`;
-    params.push(`%${lot_no}%`);
-  }
-  if (shade) {
-    sql += ` AND fr.shade LIKE ?`;
-    params.push(`%${shade}%`);
-  }
-  if (qc_status) {
-    sql += ` AND fr.qc_status = ?`;
-    params.push(String(qc_status));
-  }
-  if (stock_status) {
-    sql += ` AND fr.stock_status = ?`;
-    params.push(String(stock_status));
-  }
-  if (search) {
-    sql += ` AND (fr.roll_no LIKE ? OR fr.lot_no LIKE ? OR fb.fabric_name LIKE ? OR fr.shade LIKE ?)`;
-    const term = `%${search}%`;
-    params.push(term, term, term, term);
+  if (q.fabric_id) { where.push(`t.fabric_id = ?`); params.push(q.fabric_id); }
+  if (q.grn_id) { where.push(`t.grn_id = ?`); params.push(q.grn_id); }
+  if (q.lot_no) { where.push(`t.lot_no LIKE ?`); params.push(`%${q.lot_no}%`); }
+  if (q.shade) { where.push(`t.shade LIKE ?`); params.push(`%${q.shade}%`); }
+  if (q.qc_status) { where.push(`t.qc_status = ?`); params.push(q.qc_status); }
+  if (q.stock_status) { where.push(`t.stock_status = ?`); params.push(q.stock_status); }
+  if (q.warehouse_id) { where.push(`t.warehouse_id = ?`); params.push(q.warehouse_id); }
+  if (q.io_no) { where.push(`t.internal_ir_no = ?`); params.push(q.io_no); }
+  if (q.style_id) { where.push(`t.style_id = ?`); params.push(q.style_id); }
+  if (q.search) {
+    where.push(`(t.roll_no LIKE ? OR t.lot_no LIKE ? OR t.fabric_name LIKE ? OR t.fabric_code LIKE ?
+             OR t.shade LIKE ? OR t.grn_no LIKE ? OR t.po_no LIKE ? OR t.internal_ir_no LIKE ?
+             OR t.style_code LIKE ? OR t.style_name LIKE ? OR t.location_bin LIKE ?)`);
+    const term = `%${q.search}%`;
+    params.push(term, term, term, term, term, term, term, term, term, term, term);
   }
 
-  sql += ` ORDER BY fr.id DESC`;
+  const rows = await query<any>(`
+    SELECT t.* FROM (
+      SELECT fr.*,
+             (COALESCE(fr.weight_kg,0) - COALESCE(fr.issued_kg,0)) AS balance_kg,
+             fb.fabric_name, fb.fabric_code,
+             wh.warehouse_name,
+             grn.grn_no, grn.grn_date,
+             po.po_no,
+             ${TRACE_SO_NO}   AS so_no,
+             ${TRACE_IO_NO}   AS internal_ir_no,
+             ${TRACE_STYLE_ID} AS style_id,
+             st.style_code, st.style_name,
+             sup.party_name AS supplier_name
+        FROM trx_fabric_roll fr
+        JOIN trx_grn grn ON grn.id = fr.grn_id AND grn.company_id = fr.company_id
+        LEFT JOIN trx_grn_line gl ON gl.id = fr.grn_line_id AND gl.grn_id = grn.id
+        ${TRACE_JOINS}
+        LEFT JOIN mst_style st ON st.id = ${TRACE_STYLE_ID} AND st.company_id = grn.company_id
+        LEFT JOIN mst_fabric fb ON fb.id = fr.fabric_id
+        LEFT JOIN mst_warehouse wh ON wh.id = fr.warehouse_id
+        LEFT JOIN mst_party sup ON sup.id = grn.supplier_id
+       WHERE fr.company_id = ?
+    ) t
+    ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+    ORDER BY t.id DESC
+  `, params);
 
-  const rows = await query<any>(sql, params);
-  res.json({ data: rows });
+  const facets = await query<any>(`
+    SELECT DISTINCT ${TRACE_IO_NO} AS io_no, ${TRACE_STYLE_ID} AS style_id, st.style_code, st.style_name
+      FROM trx_fabric_roll fr
+      JOIN trx_grn grn ON grn.id = fr.grn_id AND grn.company_id = fr.company_id
+      LEFT JOIN trx_grn_line gl ON gl.id = fr.grn_line_id AND gl.grn_id = grn.id
+      ${TRACE_JOINS}
+      LEFT JOIN mst_style st ON st.id = ${TRACE_STYLE_ID} AND st.company_id = grn.company_id
+     WHERE fr.company_id = ?
+  `, [companyId]);
+
+  res.json({ data: rows, facets: buildTraceFacets(facets) });
 }));
+
+/** Distinct IO numbers + styles for the stock list filter dropdowns. */
+function buildTraceFacets(facets: any[]) {
+  const ioNos = [...new Set(facets.map((f) => f.io_no).filter(Boolean))].sort();
+  const styleMap = new Map<number, { id: number; style_code: string; style_name: string }>();
+  for (const f of facets) {
+    if (f.style_id && !styleMap.has(Number(f.style_id))) {
+      styleMap.set(Number(f.style_id), { id: Number(f.style_id), style_code: f.style_code, style_name: f.style_name });
+    }
+  }
+  return {
+    io_nos: ioNos,
+    styles: [...styleMap.values()].sort((a, b) => String(a.style_code).localeCompare(String(b.style_code))),
+  };
+}
+
 
 /**
  * 4. POST /api/fabric-rolls/:id/status
  * Update roll stock status (e.g. AVAILABLE, RESERVED, ISSUED, CLOSED)
  */
+const rollStatusSchema = z.object({
+  stock_status: z.enum(['AVAILABLE', 'RESERVED', 'ISSUED', 'PARTIAL', 'CLOSED']).optional(),
+  qc_status: z.enum(['PENDING', 'ACCEPTED', 'HOLD', 'REJECTED']).optional(),
+  location_bin: z.string().trim().max(50).optional(),
+});
+
 fabricYarnProcurementRouter.post('/fabric-rolls/:id/status', requirePermission('INVENTORY.ADJUST'), ah(async (req, res) => {
   const companyId = req.user!.companyId;
   const id = Number(req.params.id);
-  const { stock_status, qc_status, location_bin } = req.body;
+  if (!Number.isInteger(id) || id <= 0) throw BadRequest('Invalid roll id');
+  const body = rollStatusSchema.parse(req.body ?? {});
 
   const roll = await queryOne<any>(`
     SELECT * FROM trx_fabric_roll WHERE id = ? AND company_id = ?
@@ -551,7 +665,11 @@ fabricYarnProcurementRouter.post('/fabric-rolls/:id/status', requirePermission('
            qc_status = COALESCE(?, qc_status),
            location_bin = COALESCE(?, location_bin)
      WHERE id = ? AND company_id = ?
-  `, [stock_status || null, qc_status || null, location_bin || null, id, companyId]);
+  `, [body.stock_status ?? null, body.qc_status ?? null, body.location_bin || null, id, companyId]);
+
+  await audit(req, 'trx_fabric_roll', id, 'UPDATE',
+    { stock_status: roll.stock_status, qc_status: roll.qc_status, location_bin: roll.location_bin },
+    body);
 
   res.json({ data: { success: true, id } });
 }));
@@ -560,131 +678,284 @@ fabricYarnProcurementRouter.post('/fabric-rolls/:id/status', requirePermission('
    PART A-5: YARN STOCK LIST (batch/lot level)
    ============================================================================== */
 
+const yarnStockQuery = z.object({
+  yarn_id: z.coerce.number().int().positive().optional(),
+  grn_id: z.coerce.number().int().positive().optional(),
+  warehouse_id: z.coerce.number().int().positive().optional(),
+  style_id: z.coerce.number().int().positive().optional(),
+  io_no: z.string().trim().max(60).optional().transform((v) => v || undefined),
+  lot_no: z.string().trim().max(60).optional().transform((v) => v || undefined),
+  shade: z.string().trim().max(80).optional().transform((v) => v || undefined),
+  qc_status: z.enum(['PENDING', 'ACCEPTED', 'PARTIAL_ACCEPTED', 'HOLD', 'REJECTED']).optional(),
+  stock_status: z.enum(['AVAILABLE', 'PARTIAL', 'CLOSED', 'PENDING', 'HOLD', 'REJECTED']).optional(),
+  search: z.string().trim().max(100).optional().transform((v) => v || undefined),
+});
+
+/**
+ * Yarn issued out of stock, keyed by yarn + lot. Every issue screen in the
+ * system (knitting work order, knitting program, yarn process) records the lot
+ * it drew from rather than the GRN line, so issues are summed per yarn/lot and
+ * then spread FIFO over that lot's GRN lines in the main query.
+ */
+async function yarnLotIssueSql(companyId: number): Promise<{ sql: string; params: any[] }> {
+  const parts: string[] = [];
+  const params: any[] = [];
+  if (await tableExists('trx_knitting_yarn_issue')) {
+    parts.push(`SELECT yarn_id, yarn_lot_no AS lot_no, issued_weight_kg AS qty
+                  FROM trx_knitting_yarn_issue WHERE company_id = ?`);
+    params.push(companyId);
+  }
+  if (await tableExists('trx_knitting_program_yarn_issues')) {
+    parts.push(`SELECT yarn_id, yarn_lot_no AS lot_no, issued_qty_kg AS qty
+                  FROM trx_knitting_program_yarn_issues WHERE company_id = ?`);
+    params.push(companyId);
+  }
+  if (await tableExists('trx_process_issue')) {
+    parts.push(`SELECT yarn_id, lot_no, issued_qty_kg AS qty
+                  FROM trx_process_issue WHERE company_id = ?`);
+    params.push(companyId);
+  }
+  if (!parts.length) {
+    return { sql: `SELECT NULL AS yarn_id, NULL AS lot_no, 0 AS issued_qty FROM DUAL WHERE 1 = 0`, params };
+  }
+  return {
+    sql: `SELECT x.yarn_id, x.lot_no, SUM(x.qty) AS issued_qty
+            FROM (${parts.join(' UNION ALL ')}) x
+           WHERE x.yarn_id IS NOT NULL AND x.lot_no IS NOT NULL AND x.lot_no <> ''
+           GROUP BY x.yarn_id, x.lot_no`,
+    params,
+  };
+}
+
 /**
  * GET /api/yarn-stock
- * List yarn stock batches (GRN line level) with Internal Order No & Style traceability.
- * Mirrors /fabric-rolls but for yarn — yarn is tracked at batch/lot level, not individual roll.
+ * Yarn stock per GRN lot line with Internal Order No & Style traceability.
+ * Mirrors /fabric-rolls but for yarn — yarn is tracked at batch/lot level, not
+ * individual roll.
+ *
+ * Balance = accepted − purchase returns − yarn issued from that lot. Note that
+ * trx_grn_line.balance_qty is the PO quantity still to be received, NOT stock,
+ * so it is exposed as po_pending_qty and never used as the stock balance.
  */
 fabricYarnProcurementRouter.get('/yarn-stock', requirePermission('INVENTORY.VIEW'), ah(async (req, res) => {
   const companyId = req.user!.companyId;
-  const { yarn_id, lot_no, shade, qc_status, stock_status, search } = req.query;
+  const q = yarnStockQuery.parse(req.query);
 
-  let sql = `
-    SELECT
-      gl.id,
-      gl.grn_id,
-      gl.yarn_id,
-      gl.lot_no,
-      gl.shade_lot                        AS shade,
-      gl.received_qty,
-      gl.accepted_qty,
-      gl.rejected_qty,
-      gl.balance_qty,
-      gl.qc_status,
-      gl.received_weight                  AS weight_kg,
-      gl.bin_id,
-      yn.yarn_name,
-      yn.yarn_code,
-      yn.yarn_type,
-      yn.count_str,
-      wh.warehouse_name,
-      wb.bin_code                         AS location_bin,
-      grn.grn_no,
-      grn.grn_date,
-      grn.internal_ir_no,
-      po.po_no,
-      st.style_code,
-      CASE
-        WHEN gl.balance_qty <= 0          THEN 'CLOSED'
-        WHEN gl.qc_status = 'REJECTED'    THEN 'REJECTED'
-        WHEN gl.qc_status = 'PENDING'     THEN 'PENDING'
-        ELSE 'AVAILABLE'
-      END AS stock_status
-    FROM trx_grn_line gl
-    INNER JOIN trx_grn grn ON grn.id = gl.grn_id
-    LEFT JOIN mst_yarn yn   ON yn.id  = gl.yarn_id
-    LEFT JOIN mst_warehouse wh ON wh.id = grn.warehouse_id
-    LEFT JOIN mst_warehouse_bin wb ON wb.id = gl.bin_id
-    LEFT JOIN trx_purchase_order po ON po.id = grn.po_id
-    LEFT JOIN mst_style st ON st.id = grn.style_id
-    WHERE grn.company_id = ?
-      AND gl.material_type = 'YARN'
-      AND gl.yarn_id IS NOT NULL
-  `;
-  const params: any[] = [companyId];
+  const lotIssue = await yarnLotIssueSql(companyId);
+  const hasReturns = await tableExists('trx_purchase_return_line') && await tableExists('trx_purchase_return');
+  const hasMatIssue = await tableExists('trx_material_issue_line') && await tableExists('trx_material_issue');
 
-  if (yarn_id) {
-    sql += ` AND gl.yarn_id = ?`;
-    params.push(Number(yarn_id));
-  }
-  if (req.query.grn_id) {
-    sql += ` AND gl.grn_id = ?`;
-    params.push(Number(req.query.grn_id));
-  }
-  if (lot_no) {
-    sql += ` AND gl.lot_no LIKE ?`;
-    params.push(`%${lot_no}%`);
-  }
-  if (shade) {
-    sql += ` AND gl.shade_lot LIKE ?`;
-    params.push(`%${shade}%`);
-  }
-  if (qc_status) {
-    sql += ` AND gl.qc_status = ?`;
-    params.push(String(qc_status));
-  }
-  if (search) {
-    sql += ` AND (
-      gl.lot_no LIKE ? OR
-      yn.yarn_name LIKE ? OR
-      yn.yarn_code LIKE ? OR
-      gl.shade_lot LIKE ? OR
-      grn.internal_ir_no LIKE ? OR
-      st.style_code LIKE ? OR
-      grn.grn_no LIKE ?
-    )`;
-    const term = `%${search}%`;
-    params.push(term, term, term, term, term, term, term);
+  // A return only takes yarn out of the store once its stock is posted.
+  const returnPostedCond = hasReturns && await columnExists('trx_purchase_return', 'stock_posted')
+    ? 'AND pr.stock_posted = 1' : '';
+  const returnedSql = hasReturns
+    ? `COALESCE((SELECT SUM(prl.return_qty)
+                   FROM trx_purchase_return_line prl
+                   JOIN trx_purchase_return pr ON pr.id = prl.return_id
+                  WHERE prl.grn_line_id = gl.id AND pr.company_id = grn.company_id
+                    AND pr.status <> 'CANCELLED' ${returnPostedCond}), 0)`
+    : '0';
+  // General material issues reference the batch, not the lot.
+  const matIssueSql = hasMatIssue
+    ? `CASE WHEN gl.batch_id IS NULL THEN 0 ELSE COALESCE((
+         SELECT SUM(mil.issued_qty)
+           FROM trx_material_issue_line mil
+           JOIN trx_material_issue mi ON mi.id = mil.issue_id
+          WHERE mi.company_id = grn.company_id AND mil.material_type = 'YARN'
+            AND mil.yarn_id = gl.yarn_id AND mil.batch_id = gl.batch_id), 0) END`
+    : '0';
+
+  const where: string[] = [];
+  const filterParams: any[] = [];
+  if (q.yarn_id) { where.push(`s.yarn_id = ?`); filterParams.push(q.yarn_id); }
+  if (q.grn_id) { where.push(`s.grn_id = ?`); filterParams.push(q.grn_id); }
+  if (q.warehouse_id) { where.push(`s.warehouse_id = ?`); filterParams.push(q.warehouse_id); }
+  if (q.style_id) { where.push(`s.style_id = ?`); filterParams.push(q.style_id); }
+  if (q.io_no) { where.push(`s.internal_ir_no = ?`); filterParams.push(q.io_no); }
+  if (q.lot_no) { where.push(`s.lot_no LIKE ?`); filterParams.push(`%${q.lot_no}%`); }
+  if (q.shade) { where.push(`(s.shade LIKE ? OR s.color_name LIKE ?)`); filterParams.push(`%${q.shade}%`, `%${q.shade}%`); }
+  if (q.qc_status) { where.push(`s.qc_status = ?`); filterParams.push(q.qc_status); }
+  if (q.stock_status) { where.push(`s.stock_status = ?`); filterParams.push(q.stock_status); }
+  if (q.search) {
+    where.push(`(s.lot_no LIKE ? OR s.yarn_name LIKE ? OR s.yarn_code LIKE ? OR s.shade LIKE ?
+             OR s.color_name LIKE ? OR s.internal_ir_no LIKE ? OR s.style_code LIKE ? OR s.style_name LIKE ?
+             OR s.grn_no LIKE ? OR s.po_no LIKE ? OR s.supplier_name LIKE ? OR s.location_bin LIKE ?)`);
+    const term = `%${q.search}%`;
+    filterParams.push(term, term, term, term, term, term, term, term, term, term, term, term);
   }
 
-  sql += ` ORDER BY gl.id DESC`;
+  const rows = await query<any>(`
+    WITH base AS (
+      SELECT
+        gl.id, gl.grn_id, gl.yarn_id, gl.lot_no, gl.batch_id,
+        gl.shade_code                        AS shade,
+        gl.color_name,
+        gl.yarn_type                         AS grn_yarn_type,
+        gl.received_qty, gl.accepted_qty, gl.rejected_qty, gl.hold_qty,
+        gl.balance_qty                       AS po_pending_qty,
+        gl.qc_status,
+        gl.received_weight                   AS weight_kg,
+        gl.no_of_rolls                       AS packs,
+        gl.bin_id, gl.uom_id,
+        u.code                               AS uom_code,
+        yn.yarn_name, yn.yarn_code,
+        yn.yarn_type,
+        yn.count_value, yn.count_type, yn.ply,
+        CONCAT_WS(' ', CONCAT(yn.count_value, IF(yn.count_type IS NULL, '', CONCAT(' ', yn.count_type))),
+                  IF(yn.ply IS NULL OR yn.ply <= 1, NULL, CONCAT(yn.ply, '-ply'))) AS count_str,
+        grn.warehouse_id, wh.warehouse_name,
+        wb.bin_code                          AS location_bin, wb.rack,
+        grn.grn_no, grn.grn_date,
+        po.po_no,
+        sup.party_name                       AS supplier_name,
+        ${TRACE_SO_NO}                       AS so_no,
+        ${TRACE_IO_NO}                       AS internal_ir_no,
+        ${TRACE_STYLE_ID}                    AS style_id,
+        st.style_code, st.style_name,
+        (gl.accepted_qty - ${returnedSql})   AS net_in_qty,
+        ${returnedSql}                       AS returned_qty,
+        ${matIssueSql}                       AS batch_issued_qty
+      FROM trx_grn_line gl
+      JOIN trx_grn grn ON grn.id = gl.grn_id
+      ${TRACE_JOINS}
+      LEFT JOIN mst_style st ON st.id = ${TRACE_STYLE_ID} AND st.company_id = grn.company_id
+      LEFT JOIN mst_yarn yn ON yn.id = gl.yarn_id
+      LEFT JOIN cfg_uom u ON u.id = gl.uom_id
+      LEFT JOIN mst_warehouse wh ON wh.id = grn.warehouse_id
+      LEFT JOIN mst_warehouse_bin wb ON wb.id = gl.bin_id
+      LEFT JOIN mst_party sup ON sup.id = grn.supplier_id
+      WHERE grn.company_id = ?
+        AND gl.material_type = 'YARN'
+        AND gl.yarn_id IS NOT NULL
+    ),
+    lot_issue AS (${lotIssue.sql}),
+    fifo AS (
+      SELECT b.*,
+             COALESCE(li.issued_qty, 0) AS lot_issued_qty,
+             COALESCE(SUM(GREATEST(b.net_in_qty, 0)) OVER (
+               PARTITION BY b.yarn_id, b.lot_no ORDER BY b.grn_date, b.id
+               ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0) AS lot_in_before
+        FROM base b
+        LEFT JOIN lot_issue li ON li.yarn_id = b.yarn_id AND li.lot_no = b.lot_no
+    ),
+    calc AS (
+      SELECT f.*,
+             (LEAST(GREATEST(f.net_in_qty, 0), GREATEST(f.lot_issued_qty - f.lot_in_before, 0))
+               + f.batch_issued_qty) AS issued_qty
+        FROM fifo f
+    ),
+    s AS (
+      SELECT c.*,
+             GREATEST(c.net_in_qty - c.issued_qty, 0) AS stock_qty,
+             CASE
+               WHEN c.qc_status = 'REJECTED'                         THEN 'REJECTED'
+               WHEN c.qc_status = 'PENDING'                          THEN 'PENDING'
+               WHEN c.qc_status = 'HOLD' AND c.accepted_qty <= 0     THEN 'HOLD'
+               WHEN c.net_in_qty - c.issued_qty <= 0.0005            THEN 'CLOSED'
+               WHEN c.issued_qty > 0                                 THEN 'PARTIAL'
+               ELSE 'AVAILABLE'
+             END AS stock_status
+        FROM calc c
+    )
+    SELECT s.*, s.stock_qty AS balance_qty
+      FROM s
+      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+     ORDER BY s.grn_date DESC, s.id DESC
+  `, [companyId, ...lotIssue.params, ...filterParams]);
 
-  const rows = await query<any>(sql, params);
-  res.json({ data: rows });
+  // Dropdown options come from the whole company's yarn stock so choosing one
+  // filter never makes the other choices disappear.
+  const facets = await query<any>(`
+    SELECT DISTINCT ${TRACE_IO_NO} AS io_no, ${TRACE_STYLE_ID} AS style_id, st.style_code, st.style_name
+      FROM trx_grn_line gl
+      JOIN trx_grn grn ON grn.id = gl.grn_id
+      ${TRACE_JOINS}
+      LEFT JOIN mst_style st ON st.id = ${TRACE_STYLE_ID} AND st.company_id = grn.company_id
+     WHERE grn.company_id = ? AND gl.material_type = 'YARN' AND gl.yarn_id IS NOT NULL
+  `, [companyId]);
+
+  res.json({ data: rows, facets: buildTraceFacets(facets) });
+}));
+
+/**
+ * GET /api/yarn-stock/:id/bins
+ * Bins of the warehouse the yarn lot sits in — feeds the bin assignment modal
+ * without requiring WAREHOUSE master rights.
+ */
+fabricYarnProcurementRouter.get('/yarn-stock/:id/bins', requirePermission('INVENTORY.VIEW'), ah(async (req, res) => {
+  const companyId = req.user!.companyId;
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) throw BadRequest('Invalid yarn stock id');
+
+  const line = await queryOne<any>(`
+    SELECT gl.id, grn.warehouse_id FROM trx_grn_line gl
+      JOIN trx_grn grn ON grn.id = gl.grn_id
+     WHERE gl.id = ? AND grn.company_id = ? AND gl.material_type = 'YARN'
+  `, [id, companyId]);
+  if (!line) throw NotFound('Yarn stock entry not found');
+
+  const bins = await query<any>(`
+    SELECT wb.id, wb.bin_code, wb.rack, wb.warehouse_id, wh.warehouse_name
+      FROM mst_warehouse_bin wb
+      JOIN mst_warehouse wh ON wh.id = wb.warehouse_id
+     WHERE wb.warehouse_id = ? AND wh.company_id = ? AND wb.is_active = 1
+     ORDER BY wb.rack, wb.bin_code
+  `, [line.warehouse_id, companyId]);
+
+  res.json({ data: bins });
+}));
+
+/**
+ * POST /api/yarn-stock/:id/bin
+ * Assign (or clear, with bin_id = null) the bin/rack of a yarn GRN lot line.
+ * The bin must belong to the GRN's own warehouse.
+ */
+const yarnBinSchema = z.object({
+  bin_id: z.coerce.number().int().positive().nullable(),
+});
+
+fabricYarnProcurementRouter.post('/yarn-stock/:id/bin', requirePermission('INVENTORY.ADJUST'), ah(async (req, res) => {
+  const companyId = req.user!.companyId;
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) throw BadRequest('Invalid yarn stock id');
+  const body = yarnBinSchema.parse(req.body ?? {});
+
+  const result = await transaction(async (tx) => {
+    const line = await txQueryOne<any>(tx, `
+      SELECT gl.id, gl.bin_id, grn.warehouse_id, grn.grn_no, gl.lot_no
+        FROM trx_grn_line gl
+        JOIN trx_grn grn ON grn.id = gl.grn_id
+       WHERE gl.id = ? AND grn.company_id = ? AND gl.material_type = 'YARN'
+       FOR UPDATE
+    `, [id, companyId]);
+    if (!line) throw NotFound('Yarn stock entry not found');
+
+    let bin: any = null;
+    if (body.bin_id != null) {
+      bin = await txQueryOne<any>(tx, `
+        SELECT wb.id, wb.bin_code, wb.warehouse_id, wb.is_active
+          FROM mst_warehouse_bin wb
+          JOIN mst_warehouse wh ON wh.id = wb.warehouse_id
+         WHERE wb.id = ? AND wh.company_id = ?
+      `, [body.bin_id, companyId]);
+      if (!bin) throw BadRequest('Bin not found');
+      if (Number(bin.warehouse_id) !== Number(line.warehouse_id)) {
+        throw BadRequest(`Bin ${bin.bin_code} is not in the warehouse of GRN ${line.grn_no}`);
+      }
+      if (!Number(bin.is_active)) throw BadRequest(`Bin ${bin.bin_code} is inactive`);
+    }
+
+    await txExecute(tx, `UPDATE trx_grn_line SET bin_id = ? WHERE id = ?`, [body.bin_id, id]);
+    await audit(req, 'trx_grn_line', id, 'UPDATE', { bin_id: line.bin_id }, { bin_id: body.bin_id }, tx);
+    return { id, bin_id: body.bin_id, location_bin: bin?.bin_code ?? null };
+  });
+
+  res.json({ data: { success: true, ...result } });
 }));
 
 /* ==============================================================================
    PART B: YARN PURCHASE & YARN GRN (GREY / DYED, DIRECT KG / PACK-BAG)
    ============================================================================== */
-
-/**
- * POST /api/yarn-stock/:id/bin
- * Update bin/rack location for a yarn GRN line entry.
- */
-fabricYarnProcurementRouter.post('/yarn-stock/:id/bin', requirePermission('INVENTORY.ADJUST'), ah(async (req, res) => {
-  const companyId = req.user!.companyId;
-  const id = Number(req.params.id);
-  const { location_bin } = req.body;
-
-  // Verify the GRN line belongs to this company
-  const line = await queryOne<any>(`
-    SELECT gl.id FROM trx_grn_line gl
-    INNER JOIN trx_grn grn ON grn.id = gl.grn_id
-    WHERE gl.id = ? AND grn.company_id = ? AND gl.material_type = 'YARN'
-  `, [id, companyId]);
-
-  if (!line) throw NotFound('Yarn stock entry not found');
-
-  // Store bin location on the GRN line (bin_id column may be null, use location_bin text fallback)
-  await query(`
-    UPDATE trx_grn_line gl
-    INNER JOIN trx_grn grn ON grn.id = gl.grn_id
-    SET gl.remarks = COALESCE(?, gl.remarks)
-    WHERE gl.id = ? AND grn.company_id = ?
-  `, [location_bin ? `Bin: ${location_bin}` : null, id, companyId]);
-
-  res.json({ data: { success: true, id, location_bin } });
-}));
 
 /**
  * 5. POST /api/yarn-purchase-orders/convert-from-quotation

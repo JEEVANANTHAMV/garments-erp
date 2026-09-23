@@ -3,12 +3,17 @@ import { Card, Badge, Button, Input, Select, DataTable } from '../../components/
 import { api } from '../../lib/api';
 import { fmtDate, fmtNumber, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
+import { SearchSelect, ScanInput, Qty, MetricTile, ALLOCATED_KG_LABEL, errMsg } from './cuttingUi';
 
 export function CutQcBundlesPage() {
   const [activeTab, setActiveTab] = useState<'bundles' | 'cut_qc' | 'scanner'>('bundles');
   const [bundles, setBundles] = useState<any[]>([]);
   const [cutQcs, setCutQcs] = useState<any[]>([]);
   const [cuttings, setCuttings] = useState<any[]>([]);
+  const [cutOutputs, setCutOutputs] = useState<any[]>([]);
+  const [genMode, setGenMode] = useState<'OUTPUT' | 'LEGACY'>('OUTPUT');
+  const [genOutput, setGenOutput] = useState<any>({ cut_output_id: '', bundle_size: 10, qty: '', part_name: '', components: '' });
+  const [preview, setPreview] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const toast = useToast();
 
@@ -63,17 +68,52 @@ export function CutQcBundlesPage() {
     Promise.all([
       api.get('/bundles'),
       api.get('/cut-piece-qc'),
-      api.get('/resources/cuttings'),
-    ]).then(([b, q, c]) => {
+      api.get('/cuttings', { params: { pageSize: 200 } }).catch(() => ({ data: { data: [] } })),
+      api.get('/cut-outputs', { params: { open: 1 } }),
+    ]).then(([b, q, c, co]) => {
       setBundles(b.data.data || []);
       setCutQcs(q.data.data || []);
       setCuttings(c.data.data || []);
+      setCutOutputs(co.data.data || []);
     }).finally(() => setLoading(false));
   };
 
   useEffect(() => {
     fetchAll();
   }, []);
+
+  // Live allocated-KG preview for the selected cut output (doc §12).
+  useEffect(() => {
+    setPreview(null);
+    if (genMode !== 'OUTPUT' || !genOutput.cut_output_id || !(Number(genOutput.bundle_size) > 0)) return;
+    const t = setTimeout(() => {
+      api.get(`/cut-outputs/${genOutput.cut_output_id}/allocation-preview`, {
+        params: { bundle_size: genOutput.bundle_size, qty: genOutput.qty || undefined },
+      }).then(r => setPreview(r.data.data)).catch(() => setPreview(null));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [genMode, genOutput.cut_output_id, genOutput.bundle_size, genOutput.qty]);
+
+  const handleGenerateFromOutput = async () => {
+    if (!genOutput.cut_output_id) { toast('Select a cut output', 'error'); return; }
+    setSaving(true);
+    try {
+      const r = await api.post(`/cut-outputs/${genOutput.cut_output_id}/bundles`, {
+        bundle_size: Number(genOutput.bundle_size),
+        qty: genOutput.qty ? Number(genOutput.qty) : undefined,
+        part_name: genOutput.part_name || null,
+        components: String(genOutput.components || '').split(',').map((s: string) => s.trim()).filter(Boolean),
+      });
+      toast(`${r.data.data.bundles.length} bundles generated from ${r.data.data.output_no}`);
+      setShowBundleModal(false);
+      setGenOutput({ cut_output_id: '', bundle_size: 10, qty: '', part_name: '', components: '' });
+      fetchAll();
+    } catch (e: any) {
+      toast(errMsg(e, 'Failed to generate bundles'), 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleCuttingSelectForBundle = (cutId: string) => {
     const cut = cuttings.find(c => String(c.id) === cutId);
@@ -113,7 +153,7 @@ export function CutQcBundlesPage() {
       setShowBundleModal(false);
       fetchAll();
     } catch (e: any) {
-      toast(e?.response?.data?.error?.message || 'Failed to generate bundles', 'error');
+      toast(errMsg(e, 'Failed to generate bundles'), 'error');
     } finally {
       setSaving(false);
     }
@@ -135,7 +175,7 @@ export function CutQcBundlesPage() {
       setShowQcModal(false);
       fetchAll();
     } catch (e: any) {
-      toast(e?.response?.data?.error?.message || 'Failed to record QC', 'error');
+      toast(errMsg(e, 'Failed to record QC'), 'error');
     } finally {
       setSaving(false);
     }
@@ -150,7 +190,7 @@ export function CutQcBundlesPage() {
       setScannedBundle(r.data.data);
       toast('Bundle found');
     } catch (e: any) {
-      toast(e?.response?.data?.error?.message || 'Bundle barcode not found', 'error');
+      toast(errMsg(e, 'Bundle barcode not found'), 'error');
       setScannedBundle(null);
     } finally {
       setScanning(false);
@@ -166,7 +206,7 @@ export function CutQcBundlesPage() {
       }
       fetchAll();
     } catch (e: any) {
-      toast(e?.response?.data?.error?.message || 'Move failed', 'error');
+      toast(errMsg(e, 'Move failed'), 'error');
     }
   };
 
@@ -271,7 +311,16 @@ export function CutQcBundlesPage() {
               { key: 'style_code', header: 'Style' },
               { key: 'color_name', header: 'Colour' },
               { key: 'size_code', header: 'Size' },
-              { key: 'qty', header: 'Qty (Pcs)', align: 'right' as const, render: (r: any) => <span className="font-semibold text-blue-700">{fmtNumber(r.qty)}</span> },
+              { key: 'lay_no', header: 'Cut Order / Lay', render: (r: any) => (
+                <div className="text-[11px]"><p className="font-mono">{r.plan_no || r.cut_no || '—'}</p>
+                  <p className="text-slate-400">{r.lay_no || ''}{r.marker_no ? ` · ${r.marker_no} v${r.marker_version}` : ''}</p></div>) },
+              { key: 'qty', header: 'Qty', align: 'right' as const, render: (r: any) => <Qty v={r.qty} uom="PCS" className="font-semibold text-blue-700" /> },
+              { key: 'balance_qty', header: 'Balance', align: 'right' as const, render: (r: any) => <Qty v={r.balance_qty ?? r.qty} uom="PCS" /> },
+              { key: 'allocated_kg', header: 'Allocated KG*', align: 'right' as const, render: (r: any) => (
+                <span title={`${ALLOCATED_KG_LABEL}${r.allocation_source ? ' — ' + r.allocation_source : ''}`}>
+                  <Qty v={r.allocated_kg} uom="KG" dp={3} />
+                  {r.allocation_method && <span className="block text-[9px] text-slate-400">{r.allocation_method === 'LAY_AVERAGE' ? 'lay average' : 'size consumption'}</span>}
+                </span>) },
               { key: 'status', header: 'Stage', render: (r: any) => {
                 const colors: Record<string, string> = {
                   GENERATED: 'slate', CHECKED: 'blue', ISSUED: 'indigo',
@@ -286,12 +335,6 @@ export function CutQcBundlesPage() {
                   </Button>
                   {r.status === 'GENERATED' && (
                     <Button size="sm" variant="outline" onClick={() => handleMoveBundle(r.id, 'CHECKED')}>Verify</Button>
-                  )}
-                  {r.status === 'CHECKED' && (
-                    <Button size="sm" variant="outline" onClick={() => handleMoveBundle(r.id, 'ISSUED')}>Issue</Button>
-                  )}
-                  {r.status === 'ISSUED' && (
-                    <Button size="sm" variant="outline" onClick={() => handleMoveBundle(r.id, 'IN_SEWING')}>To Sewing</Button>
                   )}
                 </div>
               ) },
@@ -360,16 +403,11 @@ export function CutQcBundlesPage() {
                   </div>
 
                   <div className="flex gap-2">
-                    {['CHECKED','ISSUED','IN_SEWING','COMPLETED','FINISHING','CLOSED'].map(stage => (
-                      <Button
-                        key={stage}
-                        size="sm"
-                        variant={scannedBundle.status === stage ? 'primary' : 'outline'}
-                        onClick={() => handleMoveBundle(scannedBundle.id, stage)}
-                      >
-                        → {stage}
-                      </Button>
-                    ))}
+                    {scannedBundle.status === 'GENERATED' ? (
+                      <Button size="sm" variant="outline" onClick={() => handleMoveBundle(scannedBundle.id, 'CHECKED')}>→ CHECKED (verify)</Button>
+                    ) : (
+                      <span className="text-xs text-slate-500">Issue / sewing / finishing / packing moves are posted from the Sewing &amp; Finishing floor and DC screens.</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -401,13 +439,64 @@ export function CutQcBundlesPage() {
 
       {/* Generate Bundles Modal */}
       {showBundleModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="w-full max-w-2xl bg-white rounded-xl shadow-xl overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 overflow-y-auto">
+          <div className="w-full max-w-3xl bg-white rounded-xl shadow-xl my-8">
             <div className="flex items-center justify-between border-b px-6 py-4 bg-slate-50">
-              <h3 className="text-lg font-bold text-slate-800">Generate Cut Bundles</h3>
+              <h3 className="text-lg font-bold text-slate-800">Generate Bundles</h3>
               <button onClick={() => setShowBundleModal(false)} className="text-slate-400 font-bold">✕</button>
             </div>
+            <div className="flex gap-2 border-b px-6 pt-3 text-xs font-semibold">
+              <button className={`pb-2 ${genMode === 'OUTPUT' ? 'border-b-2 border-brand-600 text-brand-700' : 'text-slate-500'}`} onClick={() => setGenMode('OUTPUT')}>From cut output (lay)</button>
+              <button className={`pb-2 ${genMode === 'LEGACY' ? 'border-b-2 border-brand-600 text-brand-700' : 'text-slate-500'}`} onClick={() => setGenMode('LEGACY')}>Legacy cutting entry</button>
+            </div>
 
+            {genMode === 'OUTPUT' ? (() => {
+              const co = cutOutputs.find((c: any) => String(c.id) === String(genOutput.cut_output_id));
+              return (
+                <div className="p-6 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <SearchSelect label="Cut output" required value={genOutput.cut_output_id}
+                      onChange={v => setGenOutput({ ...genOutput, cut_output_id: v, qty: '' })}
+                      placeholder={cutOutputs.length ? 'Select size-wise cut output' : 'No open cut output — execute a lay first'}
+                      options={cutOutputs.map((c: any) => ({
+                        value: c.id, label: `${c.output_no} · ${c.plan_no} · ${c.lay_no} · Size ${c.size_code}`,
+                        sub: `${c.style_code || ''} ${c.color_name || ''} · good ${c.good_qty} PCS · bundled ${c.bundled_qty} PCS`,
+                        right: `${c.remaining_qty} PCS left`,
+                      }))} />
+                    <ScanInput label="Scan / type cut output no" onScan={code => {
+                      const hit = cutOutputs.find((c: any) => String(c.output_no).toUpperCase() === code.toUpperCase());
+                      if (!hit) { toast(`Cut output ${code} not found or fully bundled`, 'error'); return; }
+                      setGenOutput({ ...genOutput, cut_output_id: String(hit.id), qty: '' });
+                    }} />
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <Input label="Bundle size (PCS / bundle)" type="number" min={1} value={genOutput.bundle_size}
+                      onChange={e => setGenOutput({ ...genOutput, bundle_size: e.target.value })} />
+                    <Input label={`PCS to bundle${co ? ` (max ${co.remaining_qty} PCS)` : ''}`} type="number" min={1}
+                      placeholder={co ? String(co.remaining_qty) : ''} value={genOutput.qty}
+                      onChange={e => setGenOutput({ ...genOutput, qty: e.target.value })} />
+                    <Input label="Garment part" placeholder={co?.part_name || 'TOP'} value={genOutput.part_name}
+                      onChange={e => setGenOutput({ ...genOutput, part_name: e.target.value.toUpperCase() })} />
+                    <Input label="Components (comma separated)" placeholder="FRONT,BACK,SLEEVE" value={genOutput.components}
+                      onChange={e => setGenOutput({ ...genOutput, components: e.target.value })} />
+                  </div>
+                  {co && Number(genOutput.qty) > Number(co.remaining_qty) && (
+                    <p className="text-xs font-semibold text-red-600">Bundle quantity cannot exceed the cut output balance of {co.remaining_qty} PCS.</p>
+                  )}
+                  {preview && (
+                    <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-3 space-y-2">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        <MetricTile label="Bundles" value={preview.bundle_count} sub={`last bundle ${preview.last_bundle_qty} PCS`} />
+                        <MetricTile label="PCS" value={fmtNumber(preview.qty)} uom="PCS" />
+                        <MetricTile label="KG / PC" value={preview.kg_per_pc != null ? fmtNumber(preview.kg_per_pc, 4) : '—'} uom="KG" />
+                        <MetricTile label={`Per ${preview.bundle_size}-PC bundle`} value={preview.allocated_kg_per_full_bundle != null ? fmtNumber(preview.allocated_kg_per_full_bundle, 3) : '—'} uom="KG" tone="indigo" />
+                      </div>
+                      <p className="text-[11px] text-blue-900"><b>{ALLOCATED_KG_LABEL}.</b> Basis: {preview.allocation_method || 'none'} — {preview.allocation_source || 'no consumption source available'}.</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })() : (
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <Select
@@ -457,7 +546,7 @@ export function CutQcBundlesPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <Input label="Total Cutting Qty" type="number" value={bundleForm.total_qty}
+                <Input label="Total Cutting Qty (PCS)" type="number" value={bundleForm.total_qty}
                   onChange={e => setBundleForm({ ...bundleForm, total_qty: Number(e.target.value) })} />
                 <Input label="Bundle Size (Pcs per bundle)" type="number" value={bundleForm.bundle_size}
                   onChange={e => setBundleForm({ ...bundleForm, bundle_size: Number(e.target.value) })} />
@@ -482,9 +571,11 @@ export function CutQcBundlesPage() {
               </div>
             </div>
 
+            )}
+
             <div className="flex justify-end gap-2 border-t px-6 py-4 bg-slate-50">
               <Button variant="ghost" onClick={() => setShowBundleModal(false)}>Cancel</Button>
-              <Button onClick={handleGenerateBundles} loading={saving}>Generate</Button>
+              <Button onClick={genMode === 'OUTPUT' ? handleGenerateFromOutput : handleGenerateBundles} loading={saving}>Generate</Button>
             </div>
           </div>
         </div>

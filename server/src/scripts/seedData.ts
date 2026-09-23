@@ -311,6 +311,39 @@ export const ROLES: {
       'EXPORT.VIEW','REPORT.VIEW',
     ],
   },
+  // Cutting roles (traceability doc §21) — also created by db/55_cutting_core.sql.
+  {
+    code: 'CUTTING_OPERATOR', name: 'Cutting Operator',
+    description: 'Creates and executes lays, records cut output and generates bundles',
+    permissions: [
+      'DASHBOARD.VIEW','PRODUCTION.VIEW','PRODUCTION.CREATE','PRODUCTION.UPDATE',
+      'STYLE.VIEW','SIZE.VIEW','COLOR.VIEW','MATERIAL.VIEW','INVENTORY.VIEW','REPORT.VIEW',
+    ],
+  },
+  {
+    code: 'CUTTING_SUPERVISOR', name: 'Cutting Supervisor',
+    description: 'Approves lays, consumption, cutting reconciliation and variances',
+    permissions: [
+      'DASHBOARD.VIEW','PRODUCTION.VIEW','PRODUCTION.CREATE','PRODUCTION.UPDATE','PRODUCTION.APPROVE',
+      'STYLE.VIEW','SIZE.VIEW','COLOR.VIEW','MATERIAL.VIEW','INVENTORY.VIEW','QC.VIEW','REPORT.VIEW',
+    ],
+  },
+  {
+    code: 'FABRIC_STORE', name: 'Fabric Store',
+    description: 'Creates, issues and returns fabric DC (roll-wise) transactions',
+    permissions: [
+      'DASHBOARD.VIEW','PRODUCTION.VIEW','PRODUCTION.CREATE','PRODUCTION.UPDATE','INVENTORY.VIEW',
+      'ISSUE.VIEW','ISSUE.CREATE','GRN.VIEW','WAREHOUSE.VIEW','MATERIAL.VIEW','STYLE.VIEW','REPORT.VIEW',
+    ],
+  },
+  {
+    code: 'QA', name: 'Quality Assurance',
+    description: 'Views cut / production traceability and records quality checks',
+    permissions: [
+      'DASHBOARD.VIEW','PRODUCTION.VIEW','QC.VIEW','QC.CREATE','STYLE.VIEW','SALES_ORDER.VIEW',
+      'PACKING.VIEW','DISPATCH.VIEW','REPORT.VIEW',
+    ],
+  },
 ];
 
 /** Expand 'MODULE.*' wildcards against the real permission list. */

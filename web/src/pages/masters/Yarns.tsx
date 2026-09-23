@@ -398,7 +398,7 @@ export function YarnsPage() {
    ============================================================================== */
 export function YarnDetailPage() {
   const { id } = useParams();
-  const isNew = id === 'new';
+  const isNew = !id || id === 'new';
   const nav = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();

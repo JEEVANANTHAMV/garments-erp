@@ -2,19 +2,22 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Boxes, Search, Filter, RefreshCw, Edit3, PackageCheck, Layers
+  Boxes, Search, Filter, RefreshCw, Edit3, PackageCheck, Layers, X, AlertCircle,
 } from 'lucide-react';
 import { http } from '../../lib/api';
 import { fmtDecimal, fmtNumber } from '../../lib/format';
-import { Badge, Modal, Input } from '../../components/ui';
+import { Badge, Modal, Input, useDebounced } from '../../components/ui';
 import { useToast } from '../../hooks/useToast';
 
 export default function FabricRollStockPage() {
   const nav = useNavigate();
   const toast = useToast();
   const [search, setSearch] = useState('');
-  const [qcFilter, setQcFilter] = useState('ALL');
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [qcFilter, setQcFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [ioFilter, setIoFilter] = useState('');
+  const [styleFilter, setStyleFilter] = useState('');
+  const debouncedSearch = useDebounced(search.trim());
 
   // Edit Roll Modal
   const [editRoll, setEditRoll] = useState<any | null>(null);
@@ -23,33 +26,32 @@ export default function FabricRollStockPage() {
   const [editQc, setEditQc] = useState('ACCEPTED');
   const [updating, setUpdating] = useState(false);
 
-  const { data: rolls = [], isLoading, refetch } = useQuery({
-    queryKey: ['fabric-rolls', search, qcFilter, statusFilter],
-    queryFn: async () => {
-      const res = await http.get<{ data: any[] }>('/fabric-rolls');
-      return res.data || [];
-    },
+  // Filtering is done by the API so IO / style resolution (GRN line → PO →
+  // sales order → GRN header) is applied consistently.
+  const params = useMemo(() => {
+    const p: Record<string, string> = {};
+    if (debouncedSearch) p.search = debouncedSearch;
+    if (qcFilter) p.qc_status = qcFilter;
+    if (statusFilter) p.stock_status = statusFilter;
+    if (ioFilter) p.io_no = ioFilter;
+    if (styleFilter) p.style_id = styleFilter;
+    return p;
+  }, [debouncedSearch, qcFilter, statusFilter, ioFilter, styleFilter]);
+
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
+    queryKey: ['fabric-rolls', params],
+    queryFn: async () =>
+      http.get<{ data: any[]; facets?: { io_nos: string[]; styles: { id: number; style_code: string; style_name: string }[] } }>(
+        '/fabric-rolls', params),
   });
-
-  const filtered = useMemo(() => {
-    return rolls.filter((r) => {
-      const matchesSearch =
-        !search ||
-        r.roll_no?.toLowerCase().includes(search.toLowerCase()) ||
-        r.lot_no?.toLowerCase().includes(search.toLowerCase()) ||
-        r.fabric_name?.toLowerCase().includes(search.toLowerCase()) ||
-        r.shade?.toLowerCase().includes(search.toLowerCase()) ||
-        r.location_bin?.toLowerCase().includes(search.toLowerCase()) ||
-        r.grn_no?.toLowerCase().includes(search.toLowerCase()) ||
-        r.internal_ir_no?.toLowerCase().includes(search.toLowerCase()) ||
-        r.style_code?.toLowerCase().includes(search.toLowerCase());
-
-      const matchesQc = qcFilter === 'ALL' || r.qc_status === qcFilter;
-      const matchesStatus = statusFilter === 'ALL' || r.stock_status === statusFilter;
-
-      return matchesSearch && matchesQc && matchesStatus;
-    });
-  }, [rolls, search, qcFilter, statusFilter]);
+  const rolls = data?.data ?? [];
+  const filtered = rolls;
+  const facets = data?.facets ?? { io_nos: [], styles: [] };
+  const errorMessage = error instanceof Error ? error.message : error ? 'Unable to load fabric rolls' : null;
+  const hasFilters = !!(search || qcFilter || statusFilter || ioFilter || styleFilter);
+  const clearFilters = () => {
+    setSearch(''); setQcFilter(''); setStatusFilter(''); setIoFilter(''); setStyleFilter('');
+  };
 
   const kpis = useMemo(() => {
     const totalRolls = rolls.length;
@@ -79,8 +81,8 @@ export default function FabricRollStockPage() {
       toast(`Roll ${editRoll.roll_no} updated`, 'success');
       setEditRoll(null);
       refetch();
-    } catch {
-      toast('Failed to update roll status', 'error');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Failed to update roll status', 'error');
     } finally {
       setUpdating(false);
     }
@@ -193,9 +195,10 @@ export default function FabricRollStockPage() {
             onChange={(e) => setStatusFilter(e.target.value)}
             className="text-xs rounded-lg border border-slate-300 py-1.5 px-2.5 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
           >
-            <option value="ALL">All Stock Status</option>
+            <option value="">All Stock Status</option>
             <option value="AVAILABLE">Available</option>
             <option value="RESERVED">Reserved</option>
+            <option value="PARTIAL">Partly Issued</option>
             <option value="ISSUED">Issued</option>
             <option value="CLOSED">Closed</option>
           </select>
@@ -205,18 +208,47 @@ export default function FabricRollStockPage() {
             onChange={(e) => setQcFilter(e.target.value)}
             className="text-xs rounded-lg border border-slate-300 py-1.5 px-2.5 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
           >
-            <option value="ALL">All QC Status</option>
+            <option value="">All QC Status</option>
             <option value="ACCEPTED">Accepted</option>
-            <option value="CONDITIONAL">Conditional</option>
+            <option value="PENDING">Pending</option>
+            <option value="HOLD">Hold</option>
             <option value="REJECTED">Rejected</option>
           </select>
+
+          <select
+            value={ioFilter}
+            onChange={(e) => setIoFilter(e.target.value)}
+            title="Internal Order No"
+            className="text-xs rounded-lg border border-slate-300 py-1.5 px-2.5 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
+          >
+            <option value="">All IO No</option>
+            {facets.io_nos.map((io) => <option key={io} value={io}>{io}</option>)}
+          </select>
+
+          <select
+            value={styleFilter}
+            onChange={(e) => setStyleFilter(e.target.value)}
+            title="Style"
+            className="text-xs rounded-lg border border-slate-300 py-1.5 px-2.5 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
+          >
+            <option value="">All Styles</option>
+            {facets.styles.map((st) => (
+              <option key={st.id} value={String(st.id)}>{st.style_code}{st.style_name ? ` — ${st.style_name}` : ''}</option>
+            ))}
+          </select>
+
+          {hasFilters && (
+            <button onClick={clearFilters} className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800 px-2 py-1">
+              <X size={13} /> Clear
+            </button>
+          )}
 
           <button
             onClick={() => refetch()}
             className="p-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-600 transition"
             title="Refresh list"
           >
-            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
           </button>
         </div>
       </div>
@@ -249,12 +281,22 @@ export default function FabricRollStockPage() {
                     Loading fabric roll stock...
                   </td>
                 </tr>
+              ) : errorMessage ? (
+                <tr>
+                  <td colSpan={13} className="py-12 text-center">
+                    <AlertCircle size={32} className="mx-auto text-red-400 mb-2" />
+                    <p className="text-sm font-medium text-slate-700">Unable to load fabric rolls</p>
+                    <p className="text-xs text-red-600 mt-1">{errorMessage}</p>
+                  </td>
+                </tr>
               ) : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={13} className="py-12 text-center text-slate-400">
                     <Boxes size={36} className="mx-auto text-slate-300 mb-2" />
                     <p className="text-sm font-medium text-slate-600">No fabric rolls found</p>
-                    <p className="text-xs text-slate-400 mt-1">Rolls are created when fabric GRNs are inwarded</p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      {hasFilters ? 'No roll matches these filters.' : 'Rolls are created when fabric GRNs are inwarded'}
+                    </p>
                   </td>
                 </tr>
               ) : (
@@ -278,6 +320,9 @@ export default function FabricRollStockPage() {
                     </td>
                     <td className="py-3 px-3 text-right font-medium text-indigo-700">
                       {fmtDecimal(r.weight_kg)} kg
+                      {Number(r.issued_kg) > 0 && (
+                        <div className="text-[10px] text-slate-500 font-normal">Bal {fmtDecimal(r.balance_kg)} kg</div>
+                      )}
                     </td>
                     <td className="py-3 px-3">
                       <div className="text-slate-800 font-medium">{r.warehouse_name || 'Main Fabric Store'}</div>
@@ -287,13 +332,15 @@ export default function FabricRollStockPage() {
                     </td>
                     <td className="py-3 px-3 text-[11px]">
                       {r.internal_ir_no ? (
-                        <div className="font-mono font-semibold text-indigo-700">{r.internal_ir_no}</div>
+                        <button onClick={() => setIoFilter(r.internal_ir_no)} title="Filter by this IO"
+                          className="font-mono font-semibold text-indigo-700 hover:underline">{r.internal_ir_no}</button>
                       ) : (
-                        <span className="text-slate-300">—</span>
+                        <span className="text-slate-300">No IO</span>
                       )}
                       {r.style_code && (
-                        <div className="text-[10px] text-slate-500 mt-0.5">{r.style_code}</div>
+                        <div className="text-[10px] text-slate-500 mt-0.5" title={r.style_name ?? ''}>{r.style_code}</div>
                       )}
+                      {r.so_no && <div className="text-[10px] text-slate-400">{r.so_no}</div>}
                     </td>
                     <td className="py-3 px-3 text-[11px]">
                       {r.grn_no && (
@@ -364,6 +411,7 @@ export default function FabricRollStockPage() {
                 >
                   <option value="AVAILABLE">AVAILABLE (In Store, Ready for Issue)</option>
                   <option value="RESERVED">RESERVED (Allocated to Cutting Order)</option>
+                  <option value="PARTIAL">PARTIAL (Part of roll issued)</option>
                   <option value="ISSUED">ISSUED (Moved to Cutting Table)</option>
                   <option value="CLOSED">CLOSED (Consumed / Scrapped)</option>
                 </select>
@@ -379,7 +427,8 @@ export default function FabricRollStockPage() {
                   className="w-full text-xs rounded-lg border border-slate-300 py-1.5 px-2 font-medium"
                 >
                   <option value="ACCEPTED">ACCEPTED</option>
-                  <option value="CONDITIONAL">CONDITIONAL</option>
+                  <option value="PENDING">PENDING</option>
+                  <option value="HOLD">HOLD</option>
                   <option value="REJECTED">REJECTED</option>
                 </select>
               </div>

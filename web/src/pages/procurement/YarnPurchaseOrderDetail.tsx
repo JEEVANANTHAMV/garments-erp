@@ -139,7 +139,7 @@ export default function YarnPurchaseOrderDetailPage() {
     queryKey: ['bom-for-job-yarn', header.style_id],
     queryFn: async () => {
       if (!header.style_id) return null;
-      const res = await http.get<{ data: any }>(`/api/boms/for-job?style_id=${header.style_id}`);
+      const res = await http.get<{ data: any }>(`/boms/for-job?style_id=${header.style_id}`);
       return res.data;
     },
     enabled: Boolean(header.style_id),

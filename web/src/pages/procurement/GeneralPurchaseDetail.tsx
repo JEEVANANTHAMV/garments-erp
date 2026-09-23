@@ -75,7 +75,7 @@ export function GeneralPurchaseDetailPage() {
   const { data: generalPos = [] } = useQuery({
     queryKey: ['general-pos-for-grn'],
     queryFn: async () => {
-      const res = await http.get<any>('/api/resources/general-purchases?limit=50');
+      const res = await http.get<any>('/general-purchases?limit=50');
       return (res.data || []).filter((p: any) => !p.gate_inward_id);
     },
     enabled: !isPoMode && isNew,
@@ -132,7 +132,7 @@ export function GeneralPurchaseDetailPage() {
   const purchaseQuery = useQuery({
     queryKey: ['general-purchase-detail', id],
     queryFn: async () => {
-      const res = await http.get<any>(`/api/resources/general-purchases/${id}`);
+      const res = await http.get<any>(`/general-purchases/${id}`);
       return res.data;
     },
     enabled: !isNew,
@@ -225,7 +225,7 @@ export function GeneralPurchaseDetailPage() {
     setHead((h) => ({ ...h, reference_po_id: poId }));
     if (!poId) return;
     try {
-      const res = await http.get<any>(`/api/resources/general-purchases/${poId}`);
+      const res = await http.get<any>(`/general-purchases/${poId}`);
       const po = res.data;
       if (po) {
         setHead((h) => ({
@@ -480,12 +480,12 @@ export function GeneralPurchaseDetailPage() {
       };
 
       if (isNew) {
-        const created = await http.post<any>('/api/resources/general-purchases', payload);
+        const created = await http.post<any>('/general-purchases', payload);
         toast(`${isPoMode ? 'General PO' : 'General GRN'} ${created.data?.purchase_no || created.data?.grn_no || 'record'} created successfully`, 'success');
         void qc.invalidateQueries({ queryKey: ['general-purchases'] });
         nav(isPoMode ? `/procurement/general-orders/${created.data?.id}` : `/procurement/general-purchases/${created.data?.id}`);
       } else {
-        await http.put(`/api/resources/general-purchases/${id}`, payload);
+        await http.put(`/general-purchases/${id}`, payload);
         toast(`${isPoMode ? 'General PO' : 'General GRN'} updated successfully`, 'success');
         void qc.invalidateQueries({ queryKey: ['general-purchase-detail', id] });
         void qc.invalidateQueries({ queryKey: ['general-purchases'] });

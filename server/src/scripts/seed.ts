@@ -654,9 +654,13 @@ async function main() {
 
   // Number series
   for (const [docType, prefix] of NUMBER_SERIES) {
+    // branch_id/fy_id are NULL, so the UNIQUE key never matches — guard explicitly
+    // or every seed run adds another series row starting at 1.
     await exec(`INSERT INTO cfg_number_series (company_id,branch_id,doc_type,fy_id,prefix,next_number,padding)
-                VALUES (?,NULL,?,NULL,?,1,5)
-                ON DUPLICATE KEY UPDATE prefix=VALUES(prefix)`, [companyId, docType, prefix]);
+                SELECT ?,NULL,?,NULL,?,1,5 FROM DUAL
+                 WHERE NOT EXISTS (SELECT 1 FROM cfg_number_series
+                                    WHERE company_id=? AND doc_type=? AND branch_id IS NULL AND fy_id IS NULL)`,
+               [companyId, docType, prefix, companyId, docType]);
   }
   log(`company "${'CK Exports'}" with ${UNITS.length} units, FY 2026-27, ${NUMBER_SERIES.length} number series`);
 

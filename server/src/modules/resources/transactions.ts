@@ -1,5 +1,16 @@
 import type { ResourceConfig } from '../../core/crud.js';
 import { s, f } from './schemas.js';
+import { queryOne } from '../../config/db.js';
+import { BadRequest } from '../../core/errors.js';
+
+/** Cutting records that already produced bundles / cut output are never deleted or rewritten (doc §19). */
+async function cuttingDownstream(id: number) {
+  return queryOne<{ bundles: number; outputs: number; moved: number }>(
+    `SELECT (SELECT COUNT(*) FROM trx_cutting_bundle WHERE cutting_id = ?) AS bundles,
+            (SELECT COUNT(*) FROM trx_cut_output WHERE cutting_id = ?) AS outputs,
+            (SELECT COUNT(*) FROM trx_cutting_bundle WHERE cutting_id = ? AND status NOT IN ('GENERATED','CHECKED')) AS moved`,
+    [id, id, id]);
+}
 
 const INCOTERM = ['FOB','CIF','CFR','EXW','DDP','DAP','FCA'] as const;
 
@@ -327,6 +338,21 @@ export const transactionResources: ResourceConfig[] = [
     path: 'cuttings', table: 'trx_cutting', permission: 'PRODUCTION', label: 'Cutting',
     searchable: ['cut_no', 'marker_ref'], sortable: ['cut_no', 'cut_date'], defaultSort: 't.cut_date',
     hasIsActive: false, softDelete: false, filters: ['prod_order_id', 'fabric_id', 'status_id'],
+    // Never hard-delete a cutting: DELETE marks it cancelled, and only while nothing hangs off it.
+    cancelFlag: 'is_cancelled',
+    beforeDelete: async (_req, id) => {
+      const d = await cuttingDownstream(id);
+      if (Number(d?.bundles) || Number(d?.outputs)) {
+        throw BadRequest('This cutting already has bundles / cut output — it cannot be deleted. Reverse it through the cutting module.');
+      }
+    },
+    beforeUpdate: async (req, id) => {
+      if (!Array.isArray(req.body?.bundles)) return;
+      const d = await cuttingDownstream(id);
+      if (Number(d?.moved) || Number(d?.outputs)) {
+        throw BadRequest('Bundles of this cutting have moved downstream (or come from a cut output) — they cannot be rewritten here');
+      }
+    },
     autoNumber: { column: 'cut_no', docType: 'CUTTING' },
     selectExtra: 'po.po_prod_no, fb.fabric_name',
     joins: `LEFT JOIN trx_production_order po ON po.id = t.prod_order_id
@@ -850,6 +876,7 @@ export const transactionResources: ResourceConfig[] = [
   // ------------------------------------------------ Job Work Challan / Receipt / In / Invoice
   {
     path: 'jobwork-challans', table: 'trx_jobwork_challan', permission: 'PRODUCTION', label: 'Job Work Challan',
+    readOnly: 'Job work DCs are created, issued, received and cancelled from Production → Job Work DCs (/process-dcs) so bundle quantities stay in balance',
     searchable: ['challan_no'], sortable: ['challan_no', 'challan_date'],
     defaultSort: 't.challan_date DESC', hasIsActive: false, softDelete: false,
     filters: ['prod_order_id', 'vendor_id', 'stage_id', 'status'],
@@ -875,6 +902,7 @@ export const transactionResources: ResourceConfig[] = [
   },
   {
     path: 'jobwork-receipts', table: 'trx_jobwork_receipt', permission: 'PRODUCTION', label: 'Job Work Receipt',
+    readOnly: 'Job work receipts are posted against their DC from Production → Job Work DCs (/process-dcs/:id/receipts)',
     searchable: ['receipt_no'], sortable: ['receipt_no', 'receipt_date'],
     defaultSort: 't.receipt_date DESC', hasIsActive: false, softDelete: false, hasAuditCols: false,
     filters: ['challan_id', 'vendor_id', 'status'],

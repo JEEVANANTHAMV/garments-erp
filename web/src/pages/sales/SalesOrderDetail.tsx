@@ -39,7 +39,7 @@ const newLine = (): Line => ({
 
 export default function SalesOrderDetail() {
   const { id } = useParams();
-  const isNew = id === 'new';
+  const isNew = !id || id === 'new';
   const nav = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();

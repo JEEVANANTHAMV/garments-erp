@@ -7,6 +7,7 @@ import { useToast } from '../../hooks/useToast';
 export function FgReceiptsPage() {
   const [receipts, setReceipts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [styles, setStyles] = useState<any[]>([]);
   const [warehouses, setWarehouses] = useState<any[]>([]);
@@ -17,7 +18,7 @@ export function FgReceiptsPage() {
   const [header, setHeader] = useState<any>({
     receipt_no: '',
     receipt_date: today(),
-    io_no: 'IO-2026-00125',
+    io_no: '',
     style_id: '',
     warehouse_id: '',
     source_stage: 'FINISHING',
@@ -25,15 +26,15 @@ export function FgReceiptsPage() {
     remarks: '',
   });
 
-  const [lines, setLines] = useState<any[]>([
-    { color_id: 1, size_id: 1, good_qty: 100, reject_qty: 0, batch_no: 'FG-B-001' },
-  ]);
+  const [lines, setLines] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
 
   const fetchReceipts = () => {
     setLoading(true);
+    setLoadError(null);
     api.get('/fg-receipts')
       .then(r => setReceipts(r.data.data || []))
+      .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : 'Unable to load FG receipts'))
       .finally(() => setLoading(false));
   };
 
@@ -49,13 +50,13 @@ export function FgReceiptsPage() {
       setWarehouses(wh.data.data || []);
       setColors(col.data.data || []);
       setSizes(sz.data.data || []);
-    });
+    }).catch((e: unknown) => toast(e instanceof Error ? e.message : 'Unable to load lookups', 'error'));
   }, []);
 
   const addLine = () => {
     setLines(prev => [
       ...prev,
-      { color_id: colors[0]?.id || 1, size_id: sizes[0]?.id || 1, good_qty: 0, reject_qty: 0, batch_no: '' },
+      { color_id: '', size_id: '', good_qty: 0, reject_qty: 0, batch_no: '' },
     ]);
   };
 
@@ -68,8 +69,25 @@ export function FgReceiptsPage() {
   };
 
   const handleSave = async () => {
-    if (!header.style_id || !header.io_no) {
+    if (!header.style_id || !header.io_no.trim()) {
       toast('Please enter I/O No and select a Style', 'error');
+      return;
+    }
+    if (!lines.length) {
+      toast('Add at least one colour / size line', 'error');
+      return;
+    }
+    const badLine = lines.findIndex((l) => !l.color_id || !l.size_id);
+    if (badLine >= 0) {
+      toast(`Line ${badLine + 1}: select colour and size`, 'error');
+      return;
+    }
+    if (lines.some((l) => Number(l.good_qty) < 0 || Number(l.reject_qty) < 0)) {
+      toast('Quantities cannot be negative', 'error');
+      return;
+    }
+    if (!lines.some((l) => Number(l.good_qty) > 0 || Number(l.reject_qty) > 0)) {
+      toast('Enter good or reject pieces on at least one line', 'error');
       return;
     }
     setSaving(true);
@@ -78,13 +96,22 @@ export function FgReceiptsPage() {
         ...header,
         style_id: Number(header.style_id),
         warehouse_id: header.warehouse_id ? Number(header.warehouse_id) : null,
-        lines,
+        io_no: header.io_no.trim(),
+        lines: lines.map((l) => ({
+          color_id: Number(l.color_id),
+          size_id: Number(l.size_id),
+          good_qty: Number(l.good_qty) || 0,
+          reject_qty: Number(l.reject_qty) || 0,
+          batch_no: l.batch_no || null,
+        })),
       });
       toast('FG Receipt created successfully');
       setShowModal(false);
+      setLines([]);
+      setHeader((h: any) => ({ ...h, receipt_no: '', io_no: '', remarks: '' }));
       fetchReceipts();
-    } catch (e: any) {
-      toast(e?.response?.data?.error?.message || 'Failed to create FG receipt', 'error');
+    } catch (e: unknown) {
+      toast(e instanceof Error ? e.message : 'Failed to create FG receipt', 'error');
     } finally {
       setSaving(false);
     }
@@ -100,6 +127,12 @@ export function FgReceiptsPage() {
         <Button onClick={() => setShowModal(true)}>+ Receive Finished Goods</Button>
       </div>
 
+      {loadError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          Unable to load FG receipts: {loadError}
+        </div>
+      )}
+
       <Card>
         <DataTable
           data={receipts}
@@ -107,12 +140,12 @@ export function FgReceiptsPage() {
           columns={[
             { key: 'receipt_no', header: 'Receipt No', sortable: true, render: (r: any) => <span className="font-mono text-xs font-semibold text-brand-700">{r.receipt_no}</span> },
             { key: 'receipt_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.receipt_date) },
-            { key: 'io_no', header: 'I/O No', render: (r: any) => <Badge variant="outline" color="indigo">{r.io_no}</Badge> },
+            { key: 'io_no', header: 'I/O No', render: (r: any) => r.io_no ? <Badge variant="outline" color="indigo">{r.io_no}</Badge> : <span className="text-slate-300">—</span> },
             { key: 'style_code', header: 'Style', render: (r: any) => <span className="font-medium">{r.style_code}</span> },
             { key: 'warehouse_name', header: 'Warehouse' },
             { key: 'source_stage', header: 'Source', render: (r: any) => <Badge color="slate">{r.source_stage}</Badge> },
-            { key: 'total_qty', header: 'Good Qty', align: 'right' as const, render: (r: any) => <span className="text-emerald-700 font-semibold">{fmtNumber(r.total_qty)}</span> },
-            { key: 'total_reject', header: 'Reject Qty', align: 'right' as const, render: (r: any) => <span className="text-red-600 font-semibold">{fmtNumber(r.total_reject)}</span> },
+            { key: 'total_qty', header: 'Good Qty (PCS)', align: 'right' as const, render: (r: any) => <span className="text-emerald-700 font-semibold">{fmtNumber(r.total_qty)}</span> },
+            { key: 'total_reject', header: 'Reject Qty (PCS)', align: 'right' as const, render: (r: any) => <span className="text-red-600 font-semibold">{fmtNumber(r.total_reject)}</span> },
             { key: 'status', header: 'Status', render: (r: any) => <Badge color={r.status === 'RECEIVED' ? 'emerald' : 'slate'}>{r.status}</Badge> },
           ]}
         />
@@ -139,7 +172,7 @@ export function FgReceiptsPage() {
                   onChange={e => setHeader({ ...header, style_id: e.target.value })}
                   options={[
                     { value: '', label: '— Select Style —' },
-                    ...styles.map(st => ({ value: st.id, label: `${st.style_code} (${st.style_name || ''})` })),
+                    ...styles.map(st => ({ value: st.id, label: st.label ? `${st.code} (${st.label})` : String(st.code ?? st.id) })),
                   ]}
                 />
               </div>
@@ -170,8 +203,8 @@ export function FgReceiptsPage() {
                     <tr>
                       <th className="p-2">Colour</th>
                       <th className="p-2">Size</th>
-                      <th className="p-2">Good Qty</th>
-                      <th className="p-2">Reject Qty</th>
+                      <th className="p-2">Good Qty (PCS)</th>
+                      <th className="p-2">Reject Qty (PCS)</th>
                       <th className="p-2">Batch No</th>
                       <th className="p-2 w-10"></th>
                     </tr>
@@ -181,22 +214,24 @@ export function FgReceiptsPage() {
                       <tr key={idx} className="border-b">
                         <td className="p-1.5">
                           <select className="w-full border rounded px-1.5 py-1" value={line.color_id}
-                            onChange={e => updateLine(idx, 'color_id', Number(e.target.value))}>
+                            onChange={e => updateLine(idx, 'color_id', e.target.value ? Number(e.target.value) : '')}>
+                            <option value="">— Colour —</option>
                             {colors.map(c => <option key={c.id} value={c.id}>{c.label || c.color_name}</option>)}
                           </select>
                         </td>
                         <td className="p-1.5">
                           <select className="w-full border rounded px-1.5 py-1" value={line.size_id}
-                            onChange={e => updateLine(idx, 'size_id', Number(e.target.value))}>
-                            {sizes.map(s => <option key={s.id} value={s.id}>{s.label || s.size_code}</option>)}
+                            onChange={e => updateLine(idx, 'size_id', e.target.value ? Number(e.target.value) : '')}>
+                            <option value="">— Size —</option>
+                            {sizes.map(s => <option key={s.id} value={s.id}>{s.size_code || s.code}{s.group_name ? ` (${s.group_name})` : ''}</option>)}
                           </select>
                         </td>
                         <td className="p-1.5">
-                          <input type="number" className="w-full border rounded px-1.5 py-1" value={line.good_qty}
+                          <input type="number" min={0} className="w-full border rounded px-1.5 py-1" value={line.good_qty}
                             onChange={e => updateLine(idx, 'good_qty', Number(e.target.value))} />
                         </td>
                         <td className="p-1.5">
-                          <input type="number" className="w-full border rounded px-1.5 py-1" value={line.reject_qty}
+                          <input type="number" min={0} className="w-full border rounded px-1.5 py-1" value={line.reject_qty}
                             onChange={e => updateLine(idx, 'reject_qty', Number(e.target.value))} />
                         </td>
                         <td className="p-1.5">
@@ -208,7 +243,20 @@ export function FgReceiptsPage() {
                         </td>
                       </tr>
                     ))}
+                    {lines.length === 0 && (
+                      <tr><td colSpan={6} className="p-3 text-center text-slate-400">No lines yet — click “+ Add Line”.</td></tr>
+                    )}
                   </tbody>
+                  {lines.length > 0 && (
+                    <tfoot className="bg-slate-50 font-semibold">
+                      <tr>
+                        <td className="p-2" colSpan={2}>Total</td>
+                        <td className="p-2">{fmtNumber(lines.reduce((t, l) => t + (Number(l.good_qty) || 0), 0))} PCS</td>
+                        <td className="p-2">{fmtNumber(lines.reduce((t, l) => t + (Number(l.reject_qty) || 0), 0))} PCS</td>
+                        <td colSpan={2} />
+                      </tr>
+                    </tfoot>
+                  )}
                 </table>
               </div>
 

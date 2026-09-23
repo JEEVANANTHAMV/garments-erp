@@ -65,6 +65,7 @@ import ProcessRoutePage from './pages/production/ProcessRoutePage';
 import YarnProcessPage from './pages/production/YarnProcessPage';
 import CollarKnittingPage from './pages/production/CollarKnittingPage';
 import ProcessReportsPage from './pages/production/ProcessReportsPage';
+import CuttingReportsPage from './pages/production/CuttingReportsPage';
 import ProcessExecutionPage from './pages/production/ProcessExecutionPage';
 import FabricProcessingPage from './pages/production/FabricProcessingPage';
 
@@ -74,6 +75,7 @@ import { CuttingPlansPage, CuttingPlanDetailPage } from './pages/production/Cutt
 import { FabricIssuePage } from './pages/production/FabricIssuePage';
 import { LaySpreadingPage } from './pages/production/LaySpreadingPage';
 import { CutQcBundlesPage } from './pages/production/CutQcBundlesPage';
+import { CuttingReconciliationPage } from './pages/production/CuttingReconciliationPage';
 import { SewingFinishingFloorPage } from './pages/production/SewingFinishingFloorPage';
 import { TraceabilitySearchPage } from './pages/production/TraceabilitySearchPage';
 import {
@@ -261,11 +263,13 @@ export default function App() {
                   <Route path="yarn-processes" element={<YarnProcessPage />} />
                   <Route path="collar-knitting" element={<CollarKnittingPage />} />
                   <Route path="process-reports" element={<ProcessReportsPage />} />
+                  <Route path="cutting-reports" element={<CuttingReportsPage />} />
                   <Route path="process-execution" element={<ProcessExecutionPage />} />
                   <Route path="fabric-processing" element={<FabricProcessingPage />} />
                   <Route path="fabric-issues" element={<FabricIssuePage />} />
                   <Route path="lay-spreading" element={<LaySpreadingPage />} />
                   <Route path="cut-qc-bundles" element={<CutQcBundlesPage />} />
+                  <Route path="cutting-reconciliation" element={<CuttingReconciliationPage />} />
                   <Route path="sewing-finishing" element={<SewingFinishingFloorPage />} />
                   <Route path="wip" element={<WipDashboardPage />} />
                   <Route path="daily-plans" element={<DailyProductionPlansPage />} />

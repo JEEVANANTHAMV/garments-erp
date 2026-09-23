@@ -48,8 +48,28 @@ async function recalcPacking(tx: any, packingId: number) {
 const cbmOf = (l?: number | null, w?: number | null, h?: number | null) =>
   l && w && h ? Number(((l * w * h) / 1_000_000).toFixed(5)) : null;
 
+/** Packing must belong to the caller's company. */
+async function companyPacking(packingId: number, cid: number) {
+  if (!Number.isInteger(packingId) || packingId <= 0) throw BadRequest('Invalid packing id');
+  const p = await queryOne<any>(`SELECT * FROM trx_packing WHERE id = ? AND company_id = ?`, [packingId, cid]);
+  if (!p) throw NotFound('Packing record not found');
+  return p;
+}
+
+/**
+ * Cartons of a packing that is already on a CONFIRMED / CLOSED packing list are
+ * frozen: the list was issued to the buyer with exactly those cartons.
+ */
+async function assertPackingOpen(packingId: number, cid: number) {
+  const pl = await queryOne<{ pl_no: string; status: string }>(
+    `SELECT pl_no, status FROM trx_packing_list
+      WHERE company_id = ? AND packing_id = ? AND status IN ('CONFIRMED','CLOSED') LIMIT 1`, [cid, packingId]);
+  if (pl) throw BadRequest(`Packing is on ${pl.status.toLowerCase()} packing list ${pl.pl_no}; cartons can no longer be changed`);
+}
+
 cartonRouter.get('/packings/:packingId/cartons', requirePermission('PACKING.VIEW'), ah(async (req, res) => {
   const packingId = Number(req.params.packingId);
+  await companyPacking(packingId, req.user!.companyId);
   const cartons = await query(
     `SELECT * FROM trx_carton WHERE packing_id = ? ORDER BY carton_no`, [packingId]);
   for (const c of cartons as any[]) {
@@ -68,9 +88,8 @@ cartonRouter.post('/packings/:packingId/cartons', requirePermission('PACKING.CRE
   const packingId = Number(req.params.packingId);
   const body = cartonSchema.parse(req.body);
 
-  const packing = await queryOne(`SELECT * FROM trx_packing WHERE id = ? AND company_id = ?`,
-    [packingId, req.user!.companyId]);
-  if (!packing) throw NotFound('Packing record not found');
+  await companyPacking(packingId, req.user!.companyId);
+  await assertPackingOpen(packingId, req.user!.companyId);
 
   const created = await transaction(async (tx) => {
     const r = await txExecute(tx,
@@ -113,9 +132,8 @@ cartonRouter.post('/packings/:packingId/cartons/bulk', requirePermission('PACKIN
   const packingId = Number(req.params.packingId);
   const body = bulkSchema.parse(req.body);
 
-  const packing = await queryOne(`SELECT * FROM trx_packing WHERE id = ? AND company_id = ?`,
-    [packingId, req.user!.companyId]);
-  if (!packing) throw NotFound('Packing record not found');
+  await companyPacking(packingId, req.user!.companyId);
+  await assertPackingOpen(packingId, req.user!.companyId);
 
   const count = await transaction(async (tx) => {
     const cbm = cbmOf(body.length_cm, body.width_cm, body.height_cm);
@@ -140,26 +158,59 @@ cartonRouter.post('/packings/:packingId/cartons/bulk', requirePermission('PACKIN
   res.status(201).json({ data: { created: count } });
 }));
 
+/**
+ * DELETE /cartons/:id — only a DRAFT carton may be removed: never one whose
+ * packing is on a confirmed/closed packing list, one that is allocated to a
+ * shipment or shipment plan, one referenced by a confirmed packing-list row,
+ * or one that still holds scanned bundles. The full carton (with contents)
+ * is written to the audit trail.
+ */
 cartonRouter.delete('/cartons/:id', requirePermission('PACKING.DELETE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
   const id = Number(req.params.id);
-  const carton = await queryOne<{ id: number; packing_id: number }>(
-    `SELECT c.id, c.packing_id FROM trx_carton c
-       JOIN trx_packing p ON p.id = c.packing_id
-      WHERE c.id = ? AND p.company_id = ?`, [id, req.user!.companyId]);
-  if (!carton) throw NotFound('Carton not found');
+  if (!Number.isInteger(id) || id <= 0) throw BadRequest('Invalid carton id');
 
-  await transaction(async (tx) => {
+  const snapshot = await transaction(async (tx) => {
+    const carton = await txQueryOne<any>(tx,
+      `SELECT c.* FROM trx_carton c
+         JOIN trx_packing p ON p.id = c.packing_id
+        WHERE c.id = ? AND p.company_id = ? FOR UPDATE`, [id, cid]);
+    if (!carton) throw NotFound('Carton not found');
+
+    const pl = await txQueryOne<any>(tx,
+      `SELECT pl_no, status FROM trx_packing_list
+        WHERE company_id = ? AND status IN ('CONFIRMED','CLOSED')
+          AND (packing_id = ? OR id IN (SELECT r.packing_list_id FROM trx_packing_list_row r
+                                         WHERE r.company_id = ? AND JSON_CONTAINS(r.source_carton_ids, CAST(? AS JSON))))
+        LIMIT 1`, [cid, carton.packing_id, cid, String(id)]);
+    if (pl) throw BadRequest(`Carton ${carton.carton_no} is on ${pl.status.toLowerCase()} packing list ${pl.pl_no} and cannot be deleted`);
+    const ship = await txQueryOne<any>(tx,
+      `SELECT sh.shipment_no, sp.status FROM trx_shipment_package sp JOIN trx_shipment sh ON sh.id = sp.shipment_id
+        WHERE sp.carton_id = ? AND sp.status <> 'CANCELLED' LIMIT 1`, [id]);
+    if (ship) throw BadRequest(`Carton ${carton.carton_no} is ${ship.status.toLowerCase()} on shipment ${ship.shipment_no} and cannot be deleted`);
+    const plan = await txQueryOne<any>(tx,
+      `SELECT sp.plan_no FROM trx_shipment_plan_package spp JOIN trx_shipment_plan sp ON sp.id = spp.plan_id
+        WHERE spp.carton_id = ? AND sp.status IN ('DRAFT','CONFIRMED') LIMIT 1`, [id]);
+    if (plan) throw BadRequest(`Carton ${carton.carton_no} is planned on shipment plan ${plan.plan_no}; remove it from the plan first`);
+    const bundles = await txQueryOne<any>(tx, `SELECT COUNT(*) AS n FROM trx_carton_bundle WHERE carton_id = ?`, [id]);
+    if (Number(bundles?.n || 0) > 0) throw BadRequest(`Carton ${carton.carton_no} still holds ${bundles.n} bundle(s); unpack them first`);
+
+    const contents = await txQueryOne<any>(tx,
+      `SELECT JSON_ARRAYAGG(JSON_OBJECT('sku_id', sku_id, 'qty', qty)) AS j FROM trx_carton_content WHERE carton_id = ?`, [id]);
     await txExecute(tx, `DELETE FROM trx_carton_content WHERE carton_id = ?`, [id]);
     await txExecute(tx, `DELETE FROM trx_carton WHERE id = ?`, [id]);
     await recalcPacking(tx, carton.packing_id);
+    const snap = { ...carton, contents: contents?.j ?? [] };
+    await audit(req, 'trx_carton', id, 'DELETE', snap, undefined, tx);
+    return snap;
   });
-  await audit(req, 'trx_carton', id, 'DELETE', carton, undefined);
-  res.json({ data: { id, deleted: true } });
+  res.json({ data: { id, deleted: true, carton_no: snapshot.carton_no } });
 }));
 
 /** Packing summary by SKU — feeds the packing list document. */
 cartonRouter.get('/packings/:packingId/summary', requirePermission('PACKING.VIEW'), ah(async (req, res) => {
   const packingId = Number(req.params.packingId);
+  await companyPacking(packingId, req.user!.companyId);
   const rows = await query(
     `SELECT k.id AS sku_id, k.sku_code, col.color_name, sz.size_code, sz.sort_order,
             SUM(cc.qty) AS total_qty, COUNT(DISTINCT c.id) AS carton_count

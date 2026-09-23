@@ -682,7 +682,7 @@ export function FabricDetailPage() {
   const qBase = useQuery({
     queryKey: ['fabric-base-detail', id],
     queryFn: async () => {
-      const res = await http.get<any>(`/api/resources/fabric-bases/${id}`);
+      const res = await http.get<any>(`/fabric-bases/${id}`);
       return res.data;
     },
     enabled: !isNew,
@@ -691,7 +691,7 @@ export function FabricDetailPage() {
   const qVariants = useQuery({
     queryKey: ['fabric-variants-by-base', id],
     queryFn: async () => {
-      const res = await http.get<any>(`/api/resources/fabrics?fabric_base_id=${id}&pageSize=100`);
+      const res = await http.get<any>(`/fabrics?fabric_base_id=${id}&pageSize=100`);
       return res.data?.items || [];
     },
     enabled: !isNew,
@@ -933,7 +933,7 @@ export function FabricDetailPage() {
       let compositionId = head.composition_id;
       if (autoCompositionString) {
         try {
-          const compRes = await http.post<any>('/api/resources/compositions', {
+          const compRes = await http.post<any>('/compositions', {
             code: `COMP-${Date.now().toString().slice(-6)}`,
             description: autoCompositionString,
             is_active: 1,
@@ -971,10 +971,10 @@ export function FabricDetailPage() {
 
       let baseId = id;
       if (isNew) {
-        const created = await http.post<any>('/api/resources/fabric-bases', basePayload);
+        const created = await http.post<any>('/fabric-bases', basePayload);
         baseId = created.data?.id;
       } else {
-        await http.put(`/api/resources/fabric-bases/${id}`, basePayload);
+        await http.put(`/fabric-bases/${id}`, basePayload);
       }
 
       // 3. Save / Synchronize Child Variants
@@ -1007,9 +1007,9 @@ export function FabricDetailPage() {
         };
 
         if (v.id) {
-          await http.put(`/api/resources/fabrics/${v.id}`, vPayload);
+          await http.put(`/fabrics/${v.id}`, vPayload);
         } else {
-          await http.post('/api/resources/fabrics', vPayload);
+          await http.post('/fabrics', vPayload);
         }
       }
 
@@ -1032,7 +1032,7 @@ export function FabricDetailPage() {
   const handleDelete = async () => {
     if (!window.confirm('Are you sure you want to delete this Fabric Base and its variants?')) return;
     try {
-      await http.del(`/api/resources/fabric-bases/${id}`);
+      await http.del(`/fabric-bases/${id}`);
       toast('Fabric Base deleted', 'success');
       qc.invalidateQueries({ queryKey: ['fabric-bases'] });
       qc.invalidateQueries({ queryKey: ['fabrics'] });

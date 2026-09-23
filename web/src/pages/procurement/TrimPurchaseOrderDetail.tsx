@@ -52,7 +52,7 @@ const emptyTrimLine = (): TrimLine => ({
 
 export default function TrimPurchaseOrderDetailPage() {
   const { id } = useParams();
-  const isNew = id === 'new';
+  const isNew = !id || id === 'new';
   const nav = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();

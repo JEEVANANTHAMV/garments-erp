@@ -11,7 +11,8 @@ import { http, ApiError } from '../../lib/api';
 import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
 import { Input, Select, Badge } from '../../components/ui';
-import { fmtDecimal, fmtNumber, today } from '../../lib/format';
+import { fmtDecimal, fmtNumber, fmtDate, today } from '../../lib/format';
+import { createPortal } from 'react-dom';
 
 interface ColorwayRow {
   color_name: string;
@@ -2812,126 +2813,555 @@ export default function CadRequirementDetailPage() {
 
       {/* TAB 6: RATIO PATTI */}
       {activeTab === 'RATIO_PATTI' && (
-        <div className="space-y-4">
-          {/* Header bar */}
-          <div className="flex items-center justify-between bg-white rounded-xl border border-slate-200/80 shadow-sm p-4">
-            <div>
-              <h3 className="text-sm font-bold text-slate-800">Ratio Patti — Cutting Floor Reference Card</h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Size ratio, pieces per lay, piece weight, and fabric requirement per marker.
-                Share this with the cutting supervisor before laying.
-              </p>
+        <RatioPattiTab
+          markers={markers}
+          forceWoven={isWoven}
+          refData={(existingData?.ratio_patti_ref as RatioPattiRef) ?? EMPTY_RP_REF}
+          header={{
+            req_no: header.req_no,
+            req_date: header.req_date,
+            internal_ir_no: header.internal_ir_no,
+            style_code: existingData?.style_code
+              || (styles.data?.find((st: any) => String(st.id) === String(header.style_id))?.code as string)
+              || '',
+            style_name: existingData?.style_name
+              || (styles.data?.find((st: any) => String(st.id) === String(header.style_id))?.label as string)
+              || '',
+            buyer_name: existingData?.buyer_name || '',
+            order_qty: Number(header.order_qty) || 0,
+            rejection_pct: Number(header.rejection_pct) || 0,
+            fabric_allowance_pct: Number(header.fabric_allowance_pct) || 0,
+          }}
+        />
+      )}
+
+    </div>
+  );
+}
+
+/* ==============================================================================
+   RATIO PATTI (cutting-floor ratio sheet)
+   ============================================================================== */
+
+const EMPTY_RP_REF: RatioPattiRef = { marker_versions: [], lay_summary: [] };
+
+interface RatioPattiRef {
+  marker_versions?: { marker_no: string; version: number; size_consumption: Record<string, number> | null;
+    cad_kg_per_pc: number | null; marker_kg_per_ply: number | null; uom: string; approved: boolean }[];
+  lay_summary?: { marker_no: string; lays: number; plies: number; expected_pieces: number; actual_cut_qty: number }[];
+}
+
+interface RatioPattiHeader {
+  req_no: string;
+  req_date: string;
+  internal_ir_no: string;
+  style_code: string;
+  style_name: string;
+  buyer_name: string;
+  order_qty: number;
+  rejection_pct: number;
+  fabric_allowance_pct: number;
+}
+
+interface RatioPattiSizeRow {
+  size: string;
+  ratio: number;
+  pcsPerPly: number;
+  orderQty: number;
+  cutQty: number;
+  pcsFromLays: number;
+  netPerPc: number;       // g (knit) or cm (woven)
+  grossPerPc: number;
+  netQty: number;         // KG / MTR
+  rejectionQty: number;
+  allowanceQty: number;
+  grossQty: number;
+}
+
+interface RatioPattiCalc {
+  woven: boolean;
+  unit: 'KG' | 'MTR';
+  perPcUnit: 'g' | 'cm';
+  layerMult: number;
+  rows: RatioPattiSizeRow[];
+  totals: Omit<RatioPattiSizeRow, 'size' | 'netPerPc' | 'grossPerPc'>;
+  pcsPerLay: number;
+  pliesRequired: number;
+  pliesPlanned: number | null;
+  laysPlanned: number | null;
+  plies: number;
+  pliesSource: 'LAY_PLAN' | 'CALCULATED';
+  weightSource: 'SIZE_WISE' | 'MARKER_AVG';
+  markerVersion: number | null;
+  rejectionPct: number;
+  allowancePct: number;
+  layAllowanceCm: number;
+  widthAllowanceIn: number;
+  fabricPerLayQty: number;   // KG or MTR for one ply
+  layFabricQty: number;      // plies × fabric per lay
+  layEndAllowanceQty: number;
+  widthAllowanceQty: number;
+  warnings: string[];
+}
+
+const n0 = (v: unknown) => {
+  const x = Number(v);
+  return Number.isFinite(x) ? x : 0;
+};
+
+function computeRatioPatti(m: CadMarker, hdr: RatioPattiHeader, forceWoven: boolean, ref: RatioPattiRef): RatioPattiCalc {
+  const woven = forceWoven || m.uom === 'MTR';
+  const unit: 'KG' | 'MTR' = woven ? 'MTR' : 'KG';
+  const perPcUnit: 'g' | 'cm' = woven ? 'cm' : 'g';
+  const div = woven ? 100 : 1000; // cm→m, g→kg
+  const tube = !woven && m.fabric_dia_type === 'TUBE';
+  const layerMult = tube ? 2 : 1;
+  const gsm = n0(m.gsm);
+  const rejectionPct = m.rejection_pct != null ? n0(m.rejection_pct) : n0(hdr.rejection_pct);
+  const allowancePct = m.fabric_allowance_pct != null ? n0(m.fabric_allowance_pct) : n0(hdr.fabric_allowance_pct);
+  const layAllowanceCm = n0(m.lay_allowance_cm);
+  const widthAllowanceIn = n0(m.width_allowance_in);
+  const warnings: string[] = [];
+
+  const sizes: string[] = Array.isArray(m.sizes) ? m.sizes.map(String) : [];
+  const ratios: number[] = (Array.isArray(m.ratios) ? m.ratios : []).map(n0);
+  const colorways = Array.isArray(m.colorways) ? m.colorways : [];
+
+  // Per size / colour order and cut quantities. Cut qty = order + rejection %,
+  // exactly as the Markers tab computes it (reuse its figures when present).
+  const orderBy: number[][] = colorways.map((cw) => sizes.map((_, si) => n0(cw.quantities?.[si])));
+  const cutBy: number[][] = colorways.map((cw, ci) => sizes.map((_, si) => {
+    const stored = cw.cut_quantities?.[si];
+    return stored != null && stored !== ('' as any) ? n0(stored) : Math.ceil(orderBy[ci][si] * (1 + rejectionPct / 100));
+  }));
+
+  // Plies needed per colour = the size that needs the most plies decides the lay.
+  let pliesRequired = 0;
+  colorways.forEach((_, ci) => {
+    let need = 0;
+    sizes.forEach((sz, si) => {
+      const perPly = ratios[si] * layerMult;
+      const cut = cutBy[ci][si];
+      if (cut > 0 && perPly <= 0) {
+        const msg = `Size ${sz} has cut quantity but ratio 0 — it cannot be cut from this marker`;
+        if (!warnings.includes(msg)) warnings.push(msg);
+        return;
+      }
+      if (perPly > 0) need = Math.max(need, Math.ceil(cut / perPly));
+    });
+    pliesRequired += need;
+  });
+
+  const layRef = ref.lay_summary?.find((l) => l.marker_no === m.marker_ref);
+  const pliesPlanned = layRef ? layRef.plies : null;
+  const laysPlanned = layRef ? layRef.lays : null;
+  const plies = pliesPlanned && pliesPlanned > 0 ? pliesPlanned : pliesRequired;
+  const pliesSource: RatioPattiCalc['pliesSource'] = pliesPlanned && pliesPlanned > 0 ? 'LAY_PLAN' : 'CALCULATED';
+
+  // Piece weight: marker average (lay weight ÷ pieces per lay). When a CAD
+  // marker version carries size-wise consumption, that is used per size.
+  const mv = ref.marker_versions?.find((v) => v.marker_no === m.marker_ref);
+  const sizeCons = !woven && mv?.size_consumption ? mv.size_consumption : null;
+  const markerAvgNet = woven
+    ? (n0(m.act_length_per_pc_cm) || (n0(m.req_length_per_pc_cm) / (1 + allowancePct / 100)))
+    : (n0(m.act_wt_per_pc_g) || (n0(m.avg_wt_per_pc_g) / (1 + allowancePct / 100)));
+  let usedSizeWise = false;
+
+  const rows: RatioPattiSizeRow[] = sizes.map((sz, si) => {
+    const ratio = ratios[si] || 0;
+    const pcsPerPly = ratio * layerMult;
+    const orderQty = orderBy.reduce((s, r) => s + r[si], 0);
+    const cutQty = cutBy.reduce((s, r) => s + r[si], 0);
+    let netPerPc = markerAvgNet;
+    if (sizeCons && sizeCons[sz] != null) {
+      netPerPc = n0(sizeCons[sz]) * 1000; // KG/pc → g/pc
+      usedSizeWise = true;
+    }
+    const grossPerPc = netPerPc * (1 + allowancePct / 100);
+    const netQty = (orderQty * netPerPc) / div;
+    const rejectionQty = ((cutQty - orderQty) * netPerPc) / div;
+    const allowanceQty = (cutQty * (grossPerPc - netPerPc)) / div;
+    return {
+      size: sz,
+      ratio,
+      pcsPerPly,
+      orderQty,
+      cutQty,
+      pcsFromLays: plies * pcsPerPly,
+      netPerPc,
+      grossPerPc,
+      netQty,
+      rejectionQty,
+      allowanceQty,
+      grossQty: netQty + rejectionQty + allowanceQty,
+    };
+  });
+
+  const totals = rows.reduce(
+    (t, r) => ({
+      ratio: t.ratio + r.ratio,
+      pcsPerPly: t.pcsPerPly + r.pcsPerPly,
+      orderQty: t.orderQty + r.orderQty,
+      cutQty: t.cutQty + r.cutQty,
+      pcsFromLays: t.pcsFromLays + r.pcsFromLays,
+      netQty: t.netQty + r.netQty,
+      rejectionQty: t.rejectionQty + r.rejectionQty,
+      allowanceQty: t.allowanceQty + r.allowanceQty,
+      grossQty: t.grossQty + r.grossQty,
+    }),
+    { ratio: 0, pcsPerPly: 0, orderQty: 0, cutQty: 0, pcsFromLays: 0, netQty: 0, rejectionQty: 0, allowanceQty: 0, grossQty: 0 },
+  );
+
+  // Lay-level figures. The lay-end and width allowances are already inside
+  // the lay length / table width and therefore inside the piece weight — they
+  // are broken out here so the cutting floor can see where the fabric goes.
+  const layLenCm = n0(m.lay_length_cm) || (n0(m.length_mm) / 10 + layAllowanceCm);
+  const tblWidthIn = n0(m.table_width_in) || (n0(m.width_mm) / 25.4 + widthAllowanceIn);
+  let fabricPerLayQty: number;
+  let layEndPerPly: number;
+  let widthPerPly: number;
+  if (woven) {
+    fabricPerLayQty = layLenCm / 100;
+    layEndPerPly = layAllowanceCm / 100;
+    widthPerPly = 0;
+  } else {
+    fabricPerLayQty = n0(m.fabric_wt_per_lay_g) / 1000
+      || (layLenCm * tblWidthIn * 2.54 * gsm / 10000 * layerMult) / 1000;
+    layEndPerPly = (layAllowanceCm * tblWidthIn * 2.54 * gsm / 10000 * layerMult) / 1000;
+    widthPerPly = ((layLenCm - layAllowanceCm) * widthAllowanceIn * 2.54 * gsm / 10000 * layerMult) / 1000;
+  }
+
+  const extraPcs = totals.pcsFromLays - totals.cutQty;
+  if (totals.cutQty > 0 && extraPcs > totals.cutQty * 0.05) {
+    warnings.push(
+      `Ratio does not follow the order size mix — ${fmtNumber(plies)} plies give ${fmtNumber(extraPcs)} pcs more than the cut quantity `
+      + `(${fmtNumber(plies * fabricPerLayQty, 0)} ${unit} laid vs ${fmtNumber(totals.grossQty, 0)} ${unit} gross requirement)`,
+    );
+  }
+  if (!sizes.length) warnings.push('No sizes / ratios on this marker — set them in the Markers Cockpit tab');
+  if (!colorways.length) warnings.push('No colour-wise order quantities on this marker — plies and fabric cannot be calculated');
+  if (!markerAvgNet && !usedSizeWise) warnings.push('Piece weight is 0 — run "Calculate" on the Markers tab');
+
+  return {
+    woven, unit, perPcUnit, layerMult, rows, totals,
+    pcsPerLay: totals.pcsPerPly,
+    pliesRequired, pliesPlanned, laysPlanned, plies, pliesSource,
+    weightSource: usedSizeWise ? 'SIZE_WISE' : 'MARKER_AVG',
+    markerVersion: mv?.version ?? null,
+    rejectionPct, allowancePct, layAllowanceCm, widthAllowanceIn,
+    fabricPerLayQty,
+    layFabricQty: plies * fabricPerLayQty,
+    layEndAllowanceQty: plies * layEndPerPly,
+    widthAllowanceQty: plies * widthPerPly,
+    warnings,
+  };
+}
+
+const q3 = (v: number) => fmtDecimal(v, 3);
+
+function RatioPattiMarkerSheet({ m, idx, calc, print }: {
+  m: CadMarker; idx: number; calc: RatioPattiCalc; print?: boolean;
+}) {
+  const u = calc.unit;
+  const pu = calc.perPcUnit;
+  const dia = m.dia_val || (m.dia_in ? `${m.dia_in}"` : m.table_width_in ? `${fmtDecimal(m.table_width_in, 1)}"` : '—');
+  const th = 'py-2 px-2 border border-slate-300 text-[11px] font-semibold text-slate-700 bg-slate-100';
+  const td = 'py-1.5 px-2 border border-slate-200 text-[11.5px] tabular-nums';
+
+  return (
+    <div className={`rp-marker bg-white ${print ? 'border border-slate-400 mb-4' : 'rounded-xl border border-slate-200/80 shadow-sm overflow-hidden'}`}>
+      {/* Marker header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-indigo-50 border-b border-indigo-100">
+        <div className="flex items-center gap-3">
+          <span className="inline-flex items-center justify-center min-w-8 h-8 px-1.5 rounded-lg bg-indigo-600 text-white text-xs font-bold">
+            {m.marker_ref || `M${idx + 1}`}
+          </span>
+          <div>
+            <div className="text-sm font-bold text-indigo-900">{m.marker_name || `Marker ${m.marker_ref || idx + 1}`}</div>
+            <div className="text-[11px] text-indigo-700">
+              {m.fabric_type || 'Fabric'} · {m.gsm ? `${m.gsm} GSM` : 'GSM —'} · Dia {dia} {m.fabric_dia_type || ''}
+              {m.parts_in_lay ? ` · Parts: ${m.parts_in_lay}` : ''}
             </div>
-            <button
-              onClick={() => window.print()}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow transition"
-            >
-              <Printer size={14} />
-              <span>Print Ratio Patti</span>
-            </button>
           </div>
-
-          {/* One table per marker */}
-          {markers.map((m, idx) => {
-            const sizeNames: string[] = Array.isArray(m.sizes) ? m.sizes : [];
-            const ratios: number[] = Array.isArray(m.ratios) ? m.ratios : [];
-            const sumRatios = ratios.reduce((a, b) => a + (Number(b) || 0), 0);
-            const pcsLay = m.no_of_pcs_lay || sumRatios || 0;
-            const avgWt = Number(m.avg_wt_per_pc_g) || 0;
-            const reqKgPer100 = avgWt > 0 ? ((avgWt * 100) / 1000).toFixed(3) : '—';
-            const totalKg = m.total_req_qty || 0;
-
-            return (
-              <div key={idx} className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
-                {/* Marker header */}
-                <div className="flex items-center justify-between px-5 py-3 bg-indigo-50 border-b border-indigo-100">
-                  <div className="flex items-center gap-3">
-                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-600 text-white text-xs font-bold">
-                      {m.marker_ref || `M${idx + 1}`}
-                    </span>
-                    <div>
-                      <div className="text-sm font-bold text-indigo-900">{m.marker_name || `Marker ${m.marker_ref || idx + 1}`}</div>
-                      <div className="text-xs text-indigo-600">
-                        {m.fabric_type || 'Fabric'} &bull; {m.dia_in ? `${m.dia_in}"` : m.table_width_in ? `${m.table_width_in}"` : '—'} dia &bull; {m.gsm || '—'} GSM
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs font-medium text-slate-600">Pcs / Lay</div>
-                    <div className="text-lg font-bold text-indigo-800">{m.no_of_pcs_lay || '—'}</div>
-                  </div>
-                </div>
-
-                {/* Ratio table */}
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
-                        <th className="py-2.5 px-4 text-left">Size</th>
-                        <th className="py-2.5 px-4 text-center">Ratio</th>
-                        <th className="py-2.5 px-4 text-center">Pcs / Lay</th>
-                        <th className="py-2.5 px-4 text-right">Avg Wt / Pc (g)</th>
-                        <th className="py-2.5 px-4 text-right">Req KG / 100 Pcs</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {ratios.length > 0 ? ratios.map((ratio, si) => {
-                        const sizeName = sizeNames[si] || `Size ${si + 1}`;
-                        const pcsInLay = sumRatios > 0 ? Math.round((ratio / sumRatios) * pcsLay) : ratio;
-                        const kgPer100 = avgWt > 0 ? ((avgWt * 100) / 1000).toFixed(3) : '—';
-                        return (
-                          <tr key={si} className="hover:bg-indigo-50/30 transition">
-                            <td className="py-2.5 px-4 font-semibold text-slate-800">{sizeName}</td>
-                            <td className="py-2.5 px-4 text-center font-bold text-indigo-700 text-sm">{ratio}</td>
-                            <td className="py-2.5 px-4 text-center font-medium text-slate-700">{pcsInLay}</td>
-                            <td className="py-2.5 px-4 text-right text-slate-700">{avgWt.toFixed(2)} g</td>
-                            <td className="py-2.5 px-4 text-right font-medium text-emerald-700">{kgPer100} kg</td>
-                          </tr>
-                        );
-                      }) : (
-                        <tr>
-                          <td colSpan={5} className="py-4 text-center text-slate-400 text-[11px]">
-                            No size ratios defined — set ratios in the Markers Cockpit tab
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                    <tfoot>
-                      <tr className="bg-indigo-50 border-t-2 border-indigo-200 font-bold text-slate-800">
-                        <td className="py-2.5 px-4">TOTAL</td>
-                        <td className="py-2.5 px-4 text-center text-indigo-700">{sumRatios}</td>
-                        <td className="py-2.5 px-4 text-center">{pcsLay}</td>
-                        <td className="py-2.5 px-4 text-right">{avgWt.toFixed(2)} g</td>
-                        <td className="py-2.5 px-4 text-right text-emerald-800">{reqKgPer100} kg / 100 pcs</td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-
-                {/* Marker summary row */}
-                <div className="flex items-center gap-6 px-5 py-3 bg-slate-50 border-t border-slate-100 text-[11px] text-slate-600">
-                  <span>Lay Length: <strong>{m.lay_length_cm ? `${m.lay_length_cm} cm` : '—'}</strong></span>
-                  <span>Table Width: <strong>{m.table_width_in ? `${m.table_width_in}"` : '—'}</strong></span>
-                  <span>Fabric Wt / Lay: <strong className="text-indigo-700">{m.fabric_wt_per_lay_g ? `${(m.fabric_wt_per_lay_g / 1000).toFixed(3)} kg` : '—'}</strong></span>
-                  <span>UOM: <strong>{m.uom || 'KG'}</strong></span>
-                  <span className="ml-auto font-semibold text-slate-800">
-                    Total Required: <span className="text-emerald-700">{totalKg.toFixed(3)} {m.uom || 'KG'}</span>
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-
-          {markers.length === 0 && (
-            <div className="bg-white rounded-xl border border-slate-200 p-10 text-center text-slate-400">
-              <Scissors size={32} className="mx-auto text-slate-300 mb-2" />
-              <p className="text-sm font-medium text-slate-600">No markers defined yet</p>
-              <p className="text-xs mt-1">Add markers in the Markers Cockpit tab, then return here to view the Ratio Patti.</p>
+        </div>
+        <div className="flex gap-4 text-right">
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-slate-500">Pcs / Ply</div>
+            <div className="text-base font-bold text-indigo-800">{fmtNumber(calc.pcsPerLay)}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-slate-500">
+              Plies {calc.pliesSource === 'LAY_PLAN' ? '(lay plan)' : '(required)'}
             </div>
+            <div className="text-base font-bold text-indigo-800">{fmtNumber(calc.plies)}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Marker parameters */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-px bg-slate-200 text-[11px]">
+        {[
+          ['Marker Length', m.length_mm ? `${fmtNumber(m.length_mm)} mm` : '—'],
+          ['Marker Width', m.width_mm ? `${fmtNumber(m.width_mm)} mm` : '—'],
+          ['Lay Length', m.lay_length_cm ? `${fmtDecimal(m.lay_length_cm, 1)} cm` : '—'],
+          ['Table Width', m.table_width_in ? `${fmtDecimal(m.table_width_in, 2)}"` : '—'],
+          ['Dia / GSM', `${dia} / ${m.gsm || '—'}`],
+          [calc.woven ? 'Fabric / Ply' : 'Fabric Wt / Lay', `${q3(calc.fabricPerLayQty)} ${u}`],
+          ['Pcs / Lay', fmtNumber(calc.pcsPerLay)],
+          ['Direction', m.direction || '—'],
+        ].map(([k, v]) => (
+          <div key={k} className="bg-white px-2.5 py-1.5">
+            <div className="text-[10px] text-slate-500">{k}</div>
+            <div className="font-semibold text-slate-800">{v}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Size-wise ratio sheet */}
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr>
+              <th className={`${th} text-left`}>Size</th>
+              <th className={`${th} text-center`}>Ratio</th>
+              <th className={`${th} text-center`}>Pcs / Ply</th>
+              <th className={`${th} text-right`}>Order Pcs</th>
+              <th className={`${th} text-right`}>Cut Pcs (+{fmtDecimal(calc.rejectionPct, 1)}%)</th>
+              <th className={`${th} text-right`}>Pcs from {fmtNumber(calc.plies)} Plies</th>
+              <th className={`${th} text-right`}>
+                Net {calc.woven ? 'Length' : 'Wt'} / Pc ({pu})
+                <div className="font-normal text-[9.5px] text-slate-500">
+                  {calc.weightSource === 'SIZE_WISE' ? `CAD size-wise (v${calc.markerVersion})` : 'Marker average'}
+                </div>
+              </th>
+              <th className={`${th} text-right`}>Gross / Pc ({pu})<div className="font-normal text-[9.5px] text-slate-500">+{fmtDecimal(calc.allowancePct, 1)}% allowance</div></th>
+              <th className={`${th} text-right`}>Net Fabric ({u})</th>
+              <th className={`${th} text-right`}>Rejection Wastage ({u})</th>
+              <th className={`${th} text-right`}>Allowance Wastage ({u})</th>
+              <th className={`${th} text-right`}>Gross Req. ({u})</th>
+            </tr>
+          </thead>
+          <tbody>
+            {calc.rows.length ? calc.rows.map((r) => (
+              <tr key={r.size}>
+                <td className={`${td} font-semibold text-slate-800`}>{r.size}</td>
+                <td className={`${td} text-center font-bold text-indigo-700`}>{r.ratio}</td>
+                <td className={`${td} text-center`}>{fmtNumber(r.pcsPerPly)}</td>
+                <td className={`${td} text-right`}>{fmtNumber(r.orderQty)}</td>
+                <td className={`${td} text-right font-medium`}>{fmtNumber(r.cutQty)}</td>
+                <td className={`${td} text-right ${r.pcsFromLays < r.cutQty ? 'text-red-600 font-semibold' : ''}`}>{fmtNumber(r.pcsFromLays)}</td>
+                <td className={`${td} text-right`}>{fmtDecimal(r.netPerPc, 2)}</td>
+                <td className={`${td} text-right`}>{fmtDecimal(r.grossPerPc, 2)}</td>
+                <td className={`${td} text-right`}>{q3(r.netQty)}</td>
+                <td className={`${td} text-right text-amber-700`}>{q3(r.rejectionQty)}</td>
+                <td className={`${td} text-right text-amber-700`}>{q3(r.allowanceQty)}</td>
+                <td className={`${td} text-right font-bold text-emerald-700`}>{q3(r.grossQty)}</td>
+              </tr>
+            )) : (
+              <tr>
+                <td colSpan={12} className="py-4 text-center text-slate-400 text-[11px] border border-slate-200">
+                  No size ratios defined — set ratios in the Markers Cockpit tab
+                </td>
+              </tr>
+            )}
+          </tbody>
+          {calc.rows.length > 0 && (
+            <tfoot>
+              <tr className="bg-indigo-50 font-bold text-slate-900">
+                <td className={td}>TOTAL</td>
+                <td className={`${td} text-center text-indigo-700`}>{calc.totals.ratio}</td>
+                <td className={`${td} text-center`}>{fmtNumber(calc.totals.pcsPerPly)}</td>
+                <td className={`${td} text-right`}>{fmtNumber(calc.totals.orderQty)}</td>
+                <td className={`${td} text-right`}>{fmtNumber(calc.totals.cutQty)}</td>
+                <td className={`${td} text-right`}>{fmtNumber(calc.totals.pcsFromLays)}</td>
+                <td className={`${td} text-right text-slate-500 font-normal`}>
+                  {calc.totals.cutQty ? fmtDecimal((calc.totals.netQty + calc.totals.rejectionQty) * (calc.woven ? 100 : 1000) / calc.totals.cutQty, 2) : '—'}
+                  <div className="text-[9px]">wtd. avg</div>
+                </td>
+                <td className={`${td} text-right text-slate-500 font-normal`}>
+                  {calc.totals.cutQty ? fmtDecimal(calc.totals.grossQty * (calc.woven ? 100 : 1000) / calc.totals.cutQty, 2) : '—'}
+                  <div className="text-[9px]">wtd. avg</div>
+                </td>
+                <td className={`${td} text-right`}>{q3(calc.totals.netQty)}</td>
+                <td className={`${td} text-right text-amber-800`}>{q3(calc.totals.rejectionQty)}</td>
+                <td className={`${td} text-right text-amber-800`}>{q3(calc.totals.allowanceQty)}</td>
+                <td className={`${td} text-right text-emerald-800`}>{q3(calc.totals.grossQty)}</td>
+              </tr>
+            </tfoot>
           )}
+        </table>
+      </div>
+
+      {/* Wastage summary */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 px-4 py-3 bg-slate-50 border-t border-slate-200 text-[11px] text-slate-700">
+        <div className="space-y-0.5">
+          <div className="font-semibold text-slate-800 mb-1">Wastage allowances</div>
+          <div>Rejection: <strong>{fmtDecimal(calc.rejectionPct, 2)}%</strong> → {q3(calc.totals.rejectionQty)} {u}</div>
+          <div>Fabric allowance: <strong>{fmtDecimal(calc.allowancePct, 2)}%</strong> → {q3(calc.totals.allowanceQty)} {u}</div>
+          <div className="font-semibold">Total wastage: {q3(calc.totals.rejectionQty + calc.totals.allowanceQty)} {u}
+            {calc.totals.grossQty > 0 && <> ({fmtDecimal(((calc.totals.rejectionQty + calc.totals.allowanceQty) / calc.totals.grossQty) * 100, 2)}% of gross)</>}
+          </div>
+        </div>
+        <div className="space-y-0.5">
+          <div className="font-semibold text-slate-800 mb-1">Lay allowances (inside piece {calc.woven ? 'length' : 'weight'})</div>
+          <div>Lay-end allowance: <strong>{fmtDecimal(calc.layAllowanceCm, 1)} cm</strong> / ply → {q3(calc.layEndAllowanceQty)} {u}</div>
+          <div>Width allowance: <strong>{fmtDecimal(calc.widthAllowanceIn, 2)}"</strong>
+            {calc.woven ? ' (not applicable to metre consumption)' : <> → {q3(calc.widthAllowanceQty)} {u}</>}
+          </div>
+          <div>Fabric for {fmtNumber(calc.plies)} plies × {q3(calc.fabricPerLayQty)} {u}: <strong>{q3(calc.layFabricQty)} {u}</strong></div>
+        </div>
+        <div className="space-y-0.5">
+          <div className="font-semibold text-slate-800 mb-1">Plies</div>
+          <div>Required for cut qty: <strong>{fmtNumber(calc.pliesRequired)}</strong></div>
+          <div>Lay plans: {calc.pliesPlanned != null ? <><strong>{fmtNumber(calc.pliesPlanned)}</strong> plies in {calc.laysPlanned} lay(s)</> : <span className="text-slate-400">none yet</span>}</div>
+          <div className="text-emerald-800 font-semibold">Gross requirement: {q3(calc.totals.grossQty)} {u}</div>
+        </div>
+      </div>
+
+      {calc.warnings.length > 0 && (
+        <div className="px-4 py-2 bg-amber-50 border-t border-amber-200 text-[11px] text-amber-800 space-y-0.5">
+          {calc.warnings.map((w) => <div key={w}>⚠ {w}</div>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const RP_PRINT_CSS = `
+.rp-print-root { display: none; }
+@media print {
+  body.rp-printing > *:not(.rp-print-root) { display: none !important; }
+  body.rp-printing > .rp-print-root { display: block !important; }
+  body.rp-printing { background: #fff !important; }
+  .rp-print-root { font-size: 11px; color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .rp-print-root .rp-marker { break-inside: avoid; page-break-inside: avoid; }
+  .rp-print-root table { width: 100%; }
+  @page { size: A4 landscape; margin: 10mm; }
+}
+`;
+
+function RatioPattiTab({ markers, header, forceWoven, refData }: {
+  markers: CadMarker[]; header: RatioPattiHeader; forceWoven: boolean; refData: RatioPattiRef;
+}) {
+  const calcs = useMemo(
+    () => markers.map((m) => computeRatioPatti(m, header, forceWoven, refData)),
+    [markers, header, forceWoven, refData],
+  );
+
+  const grand = calcs.reduce(
+    (t, c) => {
+      const k = c.unit;
+      t[k] = t[k] ?? { net: 0, rej: 0, allow: 0, gross: 0 };
+      t[k].net += c.totals.netQty; t[k].rej += c.totals.rejectionQty;
+      t[k].allow += c.totals.allowanceQty; t[k].gross += c.totals.grossQty;
+      return t;
+    },
+    {} as Record<string, { net: number; rej: number; allow: number; gross: number }>,
+  );
+
+  const doPrint = () => {
+    document.body.classList.add('rp-printing');
+    const done = () => {
+      document.body.classList.remove('rp-printing');
+      window.removeEventListener('afterprint', done);
+    };
+    window.addEventListener('afterprint', done);
+    // Give React a frame to flush the portal before the print dialog snapshots.
+    requestAnimationFrame(() => {
+      window.print();
+      setTimeout(done, 500);
+    });
+  };
+
+  const headerBlock = (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-1 text-[12px]">
+      <div><span className="text-slate-500">CAD No:</span> <strong>{header.req_no || 'Unsaved'}</strong></div>
+      <div><span className="text-slate-500">Date:</span> <strong>{header.req_date ? fmtDate(header.req_date) : '—'}</strong></div>
+      <div><span className="text-slate-500">IO No:</span> <strong>{header.internal_ir_no || '—'}</strong></div>
+      <div><span className="text-slate-500">Order Qty:</span> <strong>{fmtNumber(header.order_qty)} pcs</strong></div>
+      <div className="col-span-2"><span className="text-slate-500">Style:</span> <strong>{header.style_code || '—'}</strong>{header.style_name ? ` — ${header.style_name}` : ''}</div>
+      <div className="col-span-2"><span className="text-slate-500">Buyer:</span> <strong>{header.buyer_name || '—'}</strong></div>
+    </div>
+  );
+
+  const grandBlock = Object.entries(grand).map(([unit, g]) => (
+    <div key={unit} className="flex flex-wrap gap-x-6 gap-y-1 text-[12px]">
+      <span>All markers ({unit}) —</span>
+      <span>Net: <strong>{q3(g.net)}</strong></span>
+      <span>Rejection: <strong>{q3(g.rej)}</strong></span>
+      <span>Allowance: <strong>{q3(g.allow)}</strong></span>
+      <span className="text-emerald-800">Gross requirement: <strong>{q3(g.gross)} {unit}</strong></span>
+    </div>
+  ));
+
+  const signatures = (
+    <div className="grid grid-cols-3 gap-10 pt-12 text-[12px] text-center">
+      {['Prepared by (CAD)', 'Cutting Supervisor', 'Checked / Approved'].map((s) => (
+        <div key={s}><div className="border-t border-slate-500 pt-1">{s}</div></div>
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <style>{RP_PRINT_CSS}</style>
+
+      {/* On-screen header bar */}
+      <div className="flex flex-wrap items-start justify-between gap-3 bg-white rounded-xl border border-slate-200/80 shadow-sm p-4">
+        <div className="space-y-2">
+          <div>
+            <h3 className="text-sm font-bold text-slate-800">Ratio Patti — Cutting Floor Ratio Sheet</h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Size ratio, plies, pieces, piece weight and wastage per marker. Figures follow the last
+              "Calculate" on the Markers tab{header.req_no ? '' : ' — save the CAD sheet to get a CAD No on the print'}.
+            </p>
+          </div>
+          {headerBlock}
+        </div>
+        <button
+          onClick={doPrint}
+          disabled={!markers.length}
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow transition disabled:opacity-50"
+        >
+          <Printer size={14} />
+          <span>Print Ratio Patti</span>
+        </button>
+      </div>
+
+      {markers.map((m, idx) => (
+        <RatioPattiMarkerSheet key={m._key || idx} m={m} idx={idx} calc={calcs[idx]} />
+      ))}
+
+      {markers.length > 1 && (
+        <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm px-4 py-3 space-y-1">{grandBlock}</div>
+      )}
+
+      {markers.length === 0 && (
+        <div className="bg-white rounded-xl border border-slate-200 p-10 text-center text-slate-400">
+          <Scissors size={32} className="mx-auto text-slate-300 mb-2" />
+          <p className="text-sm font-medium text-slate-600">No markers defined yet</p>
+          <p className="text-xs mt-1">Add markers in the Markers Cockpit tab, then return here to view the Ratio Patti.</p>
         </div>
       )}
 
+      {/* Print-only copy, rendered outside the app shell so nothing else prints */}
+      {markers.length > 0 && createPortal(
+        <div className="rp-print-root">
+          <div className="border-b-2 border-black pb-2 mb-3">
+            <div className="flex items-baseline justify-between">
+              <h1 className="text-lg font-bold">RATIO PATTI — CUTTING RATIO SHEET</h1>
+              <span className="text-[11px]">Printed {new Date().toLocaleString('en-GB')}</span>
+            </div>
+            <div className="mt-1.5">{headerBlock}</div>
+          </div>
+          {markers.map((m, idx) => (
+            <RatioPattiMarkerSheet key={m._key || idx} m={m} idx={idx} calc={calcs[idx]} print />
+          ))}
+          {markers.length > 1 && <div className="border border-slate-400 px-3 py-2 space-y-1">{grandBlock}</div>}
+          {signatures}
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }

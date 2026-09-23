@@ -25,6 +25,7 @@ export async function nextDocNumber(
         AND (branch_id <=> ?)
         AND doc_type = ?
         AND (fy_id <=> ?)
+      ORDER BY id
       LIMIT 1
       FOR UPDATE`,
     [companyId, branchId, docType, fyId],

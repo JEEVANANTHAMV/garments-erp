@@ -14,7 +14,7 @@ import { fmtDate, fmtNumber, today, toDateInput } from '../../lib/format';
 
 export default function ProductionCostDetailPage() {
   const { id } = useParams();
-  const isNew = id === 'new';
+  const isNew = !id || id === 'new';
   const nav = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();

@@ -33,7 +33,12 @@ import { fabricYarnProcurementRouter } from './modules/procurement/fabricYarnPro
 import { cuttingPlanRouter } from './modules/production/cuttingPlan.routes.js';
 import { shipmentRouter } from './modules/packing/shipment.routes.js';
 import { productionStagesRouter } from './modules/production/productionStages.routes.js';
+import { productionFloorRouter } from './modules/production/productionFloor.routes.js';
+import { processDcRouter } from './modules/production/processDc.routes.js';
+import { cuttingExecutionRouter } from './modules/production/cuttingExecution.routes.js';
+import { cuttingReconciliationRouter } from './modules/production/cuttingReconciliation.routes.js';
 import { traceabilityRouter } from './modules/production/traceability.routes.js';
+import { cuttingReportsRouter } from './modules/production/cuttingReports.routes.js';
 import { knittingRouter } from './modules/knitting/knitting.routes.js';
 import { processRouteRouter } from './modules/yarnProcess/processRoute.routes.js';
 import { yarnProcessRouter } from './modules/yarnProcess/yarnProcess.routes.js';
@@ -103,8 +108,13 @@ export function createApp() {
   api.use('/', fabricYarnProcurementRouter); // /fabric-purchase-orders, /fabric-grns, /yarn-grns, etc.
   api.use('/', cuttingPlanRouter);            // /cutting-plans, /bundles, /fg-receipts
   api.use('/', shipmentRouter);               // /packing-lists, /shipments, /dispatches, /available-packages
-  api.use('/', productionStagesRouter);       // /fabric-issues, /lay-plans, /cut-piece-qc, /sewing, /finishing, /final-qc
+  api.use('/', productionStagesRouter);       // /fabric-issues, /lay-plans, /cut-piece-qc, /bundles/generate-detailed
+  api.use('/', productionFloorRouter);        // /bundles/scan, /sewing, /finishing, /final-qc
+  api.use('/', processDcRouter);              // /process-dcs (bundle DCs: stitching/ironing/packing), /bundle-stock/available
+  api.use('/', cuttingExecutionRouter);       // /marker-versions, /size-consumptions, /lay-plans/:id/execute, /cut-outputs
+  api.use('/', cuttingReconciliationRouter);  // /cutting-reconciliation(s), /cutting-plans/:id/losses
   api.use('/', traceabilityRouter);           // /production/io/:ioNo/styles, /io/:ioNo/traceability, /traceability/search
+  api.use('/', cuttingReportsRouter);         // /cutting-reports, /cutting-reports/:key (doc §22)
   api.use('/', knittingRouter);               // /knitting/orders, /knitting/yarn-issues, /knitting/rolls, etc.
   // Yarn process module (doc §4-§20): routes, dyeing/winding/twisting, the shared
   // reserve→issue→receipt→QC engine, collar knitting, and process reporting.

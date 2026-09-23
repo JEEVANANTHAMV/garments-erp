@@ -93,7 +93,7 @@ const emptyFabricLine = (): FabricLine => ({
 
 export default function FabricPurchaseOrderDetailPage() {
   const { id } = useParams();
-  const isNew = id === 'new';
+  const isNew = !id || id === 'new';
   const nav = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();
@@ -152,7 +152,7 @@ export default function FabricPurchaseOrderDetailPage() {
     queryKey: ['bom-for-job-fabric', head.style_id],
     queryFn: async () => {
       if (!head.style_id) return null;
-      const res = await http.get<{ data: any }>(`/api/boms/for-job?style_id=${head.style_id}`);
+      const res = await http.get<{ data: any }>(`/boms/for-job?style_id=${head.style_id}`);
       return res.data;
     },
     enabled: Boolean(head.style_id),
