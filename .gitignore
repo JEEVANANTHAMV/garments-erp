@@ -19,3 +19,6 @@ server/uploads/
 # Sample Excels
 *.xls
 *.xlsx
+*.docs
+*.docx
+

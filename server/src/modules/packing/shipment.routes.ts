@@ -25,6 +25,8 @@ const packingListSchema = z.object({
   consignee_id: s.id(),
   shipment_type: z.enum(['DOMESTIC', 'EXPORT']).default('DOMESTIC'),
   destination: s.nullableStr(120),
+  pl_type: z.enum(['ASSORTED', 'SOLID', 'MIXED']).default('ASSORTED'),
+  size_headers: z.array(z.string()).optional().nullable(),
   status: z.enum(['DRAFT', 'CONFIRMED', 'CLOSED']).default('DRAFT'),
 });
 
@@ -126,11 +128,14 @@ shipmentRouter.post('/packing-lists', requirePermission('PACKING.CREATE'), ah(as
     const r = await txExecute(tx,
       `INSERT INTO trx_packing_list
         (company_id, pl_no, pl_date, io_no, so_id, packing_id, invoice_id, buyer_id, consignee_id,
-         shipment_type, destination, total_cartons, total_qty, net_weight_kg, gross_weight_kg, total_cbm, status)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         shipment_type, destination, total_cartons, total_qty, net_weight_kg, gross_weight_kg, total_cbm,
+         pl_type, size_headers, status)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [cid, plNo, body.pl_date, body.io_no ?? null, body.so_id ?? null,
        body.packing_id ?? null, body.invoice_id ?? null, body.buyer_id ?? null, body.consignee_id ?? null,
        body.shipment_type, body.destination ?? null, totalCartons, totalQty, netWt, grossWt, totalCbm,
+       body.pl_type ?? 'ASSORTED',
+       body.size_headers ? JSON.stringify(body.size_headers) : null,
        body.status]);
 
     return txQueryOne(tx, `SELECT * FROM trx_packing_list WHERE id = ?`, [r.insertId]);

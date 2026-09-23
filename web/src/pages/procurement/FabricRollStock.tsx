@@ -40,7 +40,9 @@ export default function FabricRollStockPage() {
         r.fabric_name?.toLowerCase().includes(search.toLowerCase()) ||
         r.shade?.toLowerCase().includes(search.toLowerCase()) ||
         r.location_bin?.toLowerCase().includes(search.toLowerCase()) ||
-        r.grn_no?.toLowerCase().includes(search.toLowerCase());
+        r.grn_no?.toLowerCase().includes(search.toLowerCase()) ||
+        r.internal_ir_no?.toLowerCase().includes(search.toLowerCase()) ||
+        r.style_code?.toLowerCase().includes(search.toLowerCase());
 
       const matchesQc = qcFilter === 'ALL' || r.qc_status === qcFilter;
       const matchesStatus = statusFilter === 'ALL' || r.stock_status === statusFilter;
@@ -177,7 +179,7 @@ export default function FabricRollStockPage() {
           <Search size={16} className="absolute left-3 top-2.5 text-slate-400" />
           <input
             type="text"
-            placeholder="Search Roll No, Lot, Fabric, Shade, Bin..."
+            placeholder="Search Roll No, Lot, Fabric, Shade, GRN, IO No, Style..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
@@ -233,6 +235,7 @@ export default function FabricRollStockPage() {
                 <th className="py-3 px-3 text-right">Length (Mtrs)</th>
                 <th className="py-3 px-3 text-right">Weight (KG)</th>
                 <th className="py-3 px-3">Warehouse / Bin</th>
+                <th className="py-3 px-3">Internal Order / Style</th>
                 <th className="py-3 px-3">Origin (GRN / PO)</th>
                 <th className="py-3 px-3 text-center">QC Status</th>
                 <th className="py-3 px-3 text-center">Stock Status</th>
@@ -242,13 +245,13 @@ export default function FabricRollStockPage() {
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {isLoading ? (
                 <tr>
-                  <td colSpan={12} className="py-10 text-center text-slate-400">
+                  <td colSpan={13} className="py-10 text-center text-slate-400">
                     Loading fabric roll stock...
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-12 text-center text-slate-400">
+                  <td colSpan={13} className="py-12 text-center text-slate-400">
                     <Boxes size={36} className="mx-auto text-slate-300 mb-2" />
                     <p className="text-sm font-medium text-slate-600">No fabric rolls found</p>
                     <p className="text-xs text-slate-400 mt-1">Rolls are created when fabric GRNs are inwarded</p>
@@ -281,6 +284,16 @@ export default function FabricRollStockPage() {
                       <span className="font-mono text-[10px] bg-slate-100 px-1 py-0.5 rounded text-slate-600">
                         Bin: {r.location_bin || 'Unassigned'}
                       </span>
+                    </td>
+                    <td className="py-3 px-3 text-[11px]">
+                      {r.internal_ir_no ? (
+                        <div className="font-mono font-semibold text-indigo-700">{r.internal_ir_no}</div>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                      {r.style_code && (
+                        <div className="text-[10px] text-slate-500 mt-0.5">{r.style_code}</div>
+                      )}
                     </td>
                     <td className="py-3 px-3 text-[11px]">
                       {r.grn_no && (

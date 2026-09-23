@@ -82,6 +82,7 @@ export const NAV: NavSection[] = [
       { label: 'Fabric Roll Stock',   to: '/procurement/fabric/roll-stock', icon: Boxes, perms: ['INVENTORY.VIEW'] },
       { label: 'Yarn POs',            to: '/procurement/yarn/orders', icon: GitBranch, perms: ['PURCHASE.VIEW'] },
       { label: 'Yarn GRN',            to: '/procurement/yarn/grn', icon: PackageCheck, perms: ['GRN.VIEW'] },
+      { label: 'Yarn Stock List',     to: '/procurement/yarn/stock', icon: Boxes, perms: ['INVENTORY.VIEW'] },
       { label: 'Trim POs',            to: '/procurement/trim/orders', icon: Scissors, perms: ['PURCHASE.VIEW'] },
       { label: 'Trim GRN & Stock',    to: '/procurement/trim/grn', icon: PackageCheck, perms: ['GRN.VIEW'] },
       { label: 'General POs',         to: '/procurement/general-orders', icon: ShoppingCart, perms: ['PURCHASE.VIEW'] },

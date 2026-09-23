@@ -45,7 +45,12 @@ export function PackingListPage() {
             { key: 'io_no', header: 'I/O No', render: (r: any) => r.io_no ? <Badge variant="outline" color="indigo">{r.io_no}</Badge> : '—' },
             { key: 'so_no', header: 'Sales Order' },
             { key: 'buyer_name', header: 'Buyer' },
-            { key: 'shipment_type', header: 'Type', render: (r: any) => (
+            { key: 'pl_type', header: 'PL Type', render: (r: any) => {
+              const t = r.pl_type || 'ASSORTED';
+              const color = t === 'ASSORTED' ? 'indigo' : t === 'SOLID' ? 'amber' : 'violet';
+              return <Badge color={color}>{t}</Badge>;
+            }},
+            { key: 'shipment_type', header: 'Shipment', render: (r: any) => (
               <Badge color={r.shipment_type === 'EXPORT' ? 'blue' : 'slate'}>{r.shipment_type}</Badge>
             ) },
             { key: 'total_cartons', header: 'Cartons', align: 'right' as const, render: (r: any) => fmtNumber(r.total_cartons) },
@@ -72,6 +77,7 @@ export function PackingListDetailPage() {
     pl_no: '', pl_date: today(), io_no: '', so_id: null, packing_id: null,
     invoice_id: null, buyer_id: null, consignee_id: null,
     shipment_type: 'DOMESTIC', destination: '', status: 'DRAFT',
+    pl_type: 'ASSORTED', size_headers: null,
   });
   const [cartons, setCartons] = useState<any[]>([]);
   const [summary, setSummary] = useState<any[]>([]);
@@ -105,6 +111,8 @@ export function PackingListDetailPage() {
           invoice_id: d.invoice_id, buyer_id: d.buyer_id, consignee_id: d.consignee_id,
           shipment_type: d.shipment_type || 'DOMESTIC', destination: d.destination || '',
           status: d.status || 'DRAFT',
+          pl_type: d.pl_type || 'ASSORTED',
+          size_headers: d.size_headers ? JSON.parse(d.size_headers) : null,
           total_cartons: d.total_cartons, total_qty: d.total_qty,
           net_weight_kg: d.net_weight_kg, gross_weight_kg: d.gross_weight_kg,
           total_cbm: d.total_cbm,
@@ -177,11 +185,17 @@ export function PackingListDetailPage() {
       </div>
 
       {!isNew && (
-        <div className="flex gap-3">
+        <div className="flex gap-3 flex-wrap">
           <Badge color={header.status === 'CONFIRMED' ? 'emerald' : 'slate'} size="lg">
             {header.status}
           </Badge>
           {header.shipment_type === 'EXPORT' && <Badge color="blue" size="lg">EXPORT</Badge>}
+          <Badge
+            color={header.pl_type === 'ASSORTED' ? 'indigo' : header.pl_type === 'SOLID' ? 'amber' : 'violet'}
+            size="lg"
+          >
+            {header.pl_type || 'ASSORTED'}
+          </Badge>
         </div>
       )}
 
@@ -211,6 +225,16 @@ export function PackingListDetailPage() {
           <Select label="Shipment Type" value={header.shipment_type}
             onChange={e => setField('shipment_type', e.target.value)}
             options={[{ value: 'DOMESTIC', label: 'Domestic' }, { value: 'EXPORT', label: 'Export' }]} />
+          <Select
+            label="Packing List Type"
+            value={header.pl_type || 'ASSORTED'}
+            onChange={e => setField('pl_type', e.target.value)}
+            options={[
+              { value: 'ASSORTED', label: 'Assorted — Multiple sizes per carton (size ratio)' },
+              { value: 'SOLID',    label: 'Solid — One size per carton (e.g. EU numeric sizes)' },
+              { value: 'MIXED',    label: 'Mixed — Two size sets combined (e.g. Kids + Adults)' },
+            ]}
+          />
           <Input label="Destination" value={header.destination} onChange={e => setField('destination', e.target.value)} />
         </div>
       </Card>
@@ -243,7 +267,7 @@ export function PackingListDetailPage() {
       )}
 
       {cartons.length > 0 && (
-        <Card title={`Package Content Breakdown (${cartons.length} cartons)`}>
+        <Card title={`Package Content Breakdown (${cartons.length} cartons) — ${header.pl_type || 'ASSORTED'}`}>
           <div className="p-4">
             <table className="w-full text-sm">
               <thead className="border-b text-slate-500">

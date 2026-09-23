@@ -557,8 +557,134 @@ fabricYarnProcurementRouter.post('/fabric-rolls/:id/status', requirePermission('
 }));
 
 /* ==============================================================================
+   PART A-5: YARN STOCK LIST (batch/lot level)
+   ============================================================================== */
+
+/**
+ * GET /api/yarn-stock
+ * List yarn stock batches (GRN line level) with Internal Order No & Style traceability.
+ * Mirrors /fabric-rolls but for yarn — yarn is tracked at batch/lot level, not individual roll.
+ */
+fabricYarnProcurementRouter.get('/yarn-stock', requirePermission('INVENTORY.VIEW'), ah(async (req, res) => {
+  const companyId = req.user!.companyId;
+  const { yarn_id, lot_no, shade, qc_status, stock_status, search } = req.query;
+
+  let sql = `
+    SELECT
+      gl.id,
+      gl.grn_id,
+      gl.yarn_id,
+      gl.lot_no,
+      gl.shade_lot                        AS shade,
+      gl.received_qty,
+      gl.accepted_qty,
+      gl.rejected_qty,
+      gl.balance_qty,
+      gl.qc_status,
+      gl.received_weight                  AS weight_kg,
+      gl.bin_id,
+      yn.yarn_name,
+      yn.yarn_code,
+      yn.yarn_type,
+      yn.count_str,
+      wh.warehouse_name,
+      wb.bin_code                         AS location_bin,
+      grn.grn_no,
+      grn.grn_date,
+      grn.internal_ir_no,
+      po.po_no,
+      st.style_code,
+      CASE
+        WHEN gl.balance_qty <= 0          THEN 'CLOSED'
+        WHEN gl.qc_status = 'REJECTED'    THEN 'REJECTED'
+        WHEN gl.qc_status = 'PENDING'     THEN 'PENDING'
+        ELSE 'AVAILABLE'
+      END AS stock_status
+    FROM trx_grn_line gl
+    INNER JOIN trx_grn grn ON grn.id = gl.grn_id
+    LEFT JOIN mst_yarn yn   ON yn.id  = gl.yarn_id
+    LEFT JOIN mst_warehouse wh ON wh.id = grn.warehouse_id
+    LEFT JOIN mst_warehouse_bin wb ON wb.id = gl.bin_id
+    LEFT JOIN trx_purchase_order po ON po.id = grn.po_id
+    LEFT JOIN mst_style st ON st.id = grn.style_id
+    WHERE grn.company_id = ?
+      AND gl.material_type = 'YARN'
+      AND gl.yarn_id IS NOT NULL
+  `;
+  const params: any[] = [companyId];
+
+  if (yarn_id) {
+    sql += ` AND gl.yarn_id = ?`;
+    params.push(Number(yarn_id));
+  }
+  if (req.query.grn_id) {
+    sql += ` AND gl.grn_id = ?`;
+    params.push(Number(req.query.grn_id));
+  }
+  if (lot_no) {
+    sql += ` AND gl.lot_no LIKE ?`;
+    params.push(`%${lot_no}%`);
+  }
+  if (shade) {
+    sql += ` AND gl.shade_lot LIKE ?`;
+    params.push(`%${shade}%`);
+  }
+  if (qc_status) {
+    sql += ` AND gl.qc_status = ?`;
+    params.push(String(qc_status));
+  }
+  if (search) {
+    sql += ` AND (
+      gl.lot_no LIKE ? OR
+      yn.yarn_name LIKE ? OR
+      yn.yarn_code LIKE ? OR
+      gl.shade_lot LIKE ? OR
+      grn.internal_ir_no LIKE ? OR
+      st.style_code LIKE ? OR
+      grn.grn_no LIKE ?
+    )`;
+    const term = `%${search}%`;
+    params.push(term, term, term, term, term, term, term);
+  }
+
+  sql += ` ORDER BY gl.id DESC`;
+
+  const rows = await query<any>(sql, params);
+  res.json({ data: rows });
+}));
+
+/* ==============================================================================
    PART B: YARN PURCHASE & YARN GRN (GREY / DYED, DIRECT KG / PACK-BAG)
    ============================================================================== */
+
+/**
+ * POST /api/yarn-stock/:id/bin
+ * Update bin/rack location for a yarn GRN line entry.
+ */
+fabricYarnProcurementRouter.post('/yarn-stock/:id/bin', requirePermission('INVENTORY.ADJUST'), ah(async (req, res) => {
+  const companyId = req.user!.companyId;
+  const id = Number(req.params.id);
+  const { location_bin } = req.body;
+
+  // Verify the GRN line belongs to this company
+  const line = await queryOne<any>(`
+    SELECT gl.id FROM trx_grn_line gl
+    INNER JOIN trx_grn grn ON grn.id = gl.grn_id
+    WHERE gl.id = ? AND grn.company_id = ? AND gl.material_type = 'YARN'
+  `, [id, companyId]);
+
+  if (!line) throw NotFound('Yarn stock entry not found');
+
+  // Store bin location on the GRN line (bin_id column may be null, use location_bin text fallback)
+  await query(`
+    UPDATE trx_grn_line gl
+    INNER JOIN trx_grn grn ON grn.id = gl.grn_id
+    SET gl.remarks = COALESCE(?, gl.remarks)
+    WHERE gl.id = ? AND grn.company_id = ?
+  `, [location_bin ? `Bin: ${location_bin}` : null, id, companyId]);
+
+  res.json({ data: { success: true, id, location_bin } });
+}));
 
 /**
  * 5. POST /api/yarn-purchase-orders/convert-from-quotation

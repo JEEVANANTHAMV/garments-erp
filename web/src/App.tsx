@@ -52,6 +52,7 @@ import YarnPurchaseOrdersPage from './pages/procurement/YarnPurchaseOrders';
 import YarnPurchaseOrderDetailPage from './pages/procurement/YarnPurchaseOrderDetail';
 import YarnGRNsPage from './pages/procurement/YarnGRNs';
 import YarnGRNDetailPage from './pages/procurement/YarnGRNDetail';
+import YarnStockPage from './pages/procurement/YarnStockPage';
 
 import TrimPurchaseOrdersPage from './pages/procurement/TrimPurchaseOrders';
 import TrimPurchaseOrderDetailPage from './pages/procurement/TrimPurchaseOrderDetail';
@@ -231,6 +232,7 @@ export default function App() {
                   <Route path="yarn/grn" element={<YarnGRNsPage />} />
                   <Route path="yarn/grn/new" element={<YarnGRNDetailPage />} />
                   <Route path="yarn/grn/:id" element={<YarnGRNDetailPage />} />
+                  <Route path="yarn/stock" element={<YarnStockPage />} />
 
                   {/* Trim Procurement */}
                   <Route path="trim/orders" element={<TrimPurchaseOrdersPage />} />

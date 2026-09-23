@@ -120,7 +120,7 @@ export default function CadRequirementDetailPage() {
 
   const styles = useLookup('styles');
 
-  const [activeTab, setActiveTab] = useState<'MARKERS' | 'F_PRGM' | 'CUT' | 'TRIMS' | 'OUTPUT'>('MARKERS');
+  const [activeTab, setActiveTab] = useState<'MARKERS' | 'F_PRGM' | 'CUT' | 'TRIMS' | 'OUTPUT' | 'RATIO_PATTI'>('MARKERS');
   const [activeMarkerIdx, setActiveMarkerIdx] = useState(0);
   const [saving, setSaving] = useState(false);
   const [calculating, setCalculating] = useState(false);
@@ -1367,6 +1367,7 @@ export default function CadRequirementDetailPage() {
           { id: 'CUT', label: '3. Cutting Lay Sheet (CUT)', icon: Layers },
           { id: 'TRIMS', label: '4. Trims & Accessories', icon: Disc },
           { id: 'OUTPUT', label: '5. BOM & Sourcing Hand-off', icon: FileCheck },
+          { id: 'RATIO_PATTI', label: '6. Ratio Patti', icon: Printer },
         ].map((tab) => {
           const Icon = tab.icon;
           const active = activeTab === tab.id;
@@ -2808,6 +2809,129 @@ export default function CadRequirementDetailPage() {
           </div>
         </div>
       )}
+
+      {/* TAB 6: RATIO PATTI */}
+      {activeTab === 'RATIO_PATTI' && (
+        <div className="space-y-4">
+          {/* Header bar */}
+          <div className="flex items-center justify-between bg-white rounded-xl border border-slate-200/80 shadow-sm p-4">
+            <div>
+              <h3 className="text-sm font-bold text-slate-800">Ratio Patti — Cutting Floor Reference Card</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Size ratio, pieces per lay, piece weight, and fabric requirement per marker.
+                Share this with the cutting supervisor before laying.
+              </p>
+            </div>
+            <button
+              onClick={() => window.print()}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow transition"
+            >
+              <Printer size={14} />
+              <span>Print Ratio Patti</span>
+            </button>
+          </div>
+
+          {/* One table per marker */}
+          {markers.map((m, idx) => {
+            const sizeNames: string[] = Array.isArray(m.sizes) ? m.sizes : [];
+            const ratios: number[] = Array.isArray(m.ratios) ? m.ratios : [];
+            const sumRatios = ratios.reduce((a, b) => a + (Number(b) || 0), 0);
+            const pcsLay = m.no_of_pcs_lay || sumRatios || 0;
+            const avgWt = Number(m.avg_wt_per_pc_g) || 0;
+            const reqKgPer100 = avgWt > 0 ? ((avgWt * 100) / 1000).toFixed(3) : '—';
+            const totalKg = m.total_req_qty || 0;
+
+            return (
+              <div key={idx} className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
+                {/* Marker header */}
+                <div className="flex items-center justify-between px-5 py-3 bg-indigo-50 border-b border-indigo-100">
+                  <div className="flex items-center gap-3">
+                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-600 text-white text-xs font-bold">
+                      {m.marker_ref || `M${idx + 1}`}
+                    </span>
+                    <div>
+                      <div className="text-sm font-bold text-indigo-900">{m.marker_name || `Marker ${m.marker_ref || idx + 1}`}</div>
+                      <div className="text-xs text-indigo-600">
+                        {m.fabric_type || 'Fabric'} &bull; {m.dia_in ? `${m.dia_in}"` : m.table_width_in ? `${m.table_width_in}"` : '—'} dia &bull; {m.gsm || '—'} GSM
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs font-medium text-slate-600">Pcs / Lay</div>
+                    <div className="text-lg font-bold text-indigo-800">{m.no_of_pcs_lay || '—'}</div>
+                  </div>
+                </div>
+
+                {/* Ratio table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                        <th className="py-2.5 px-4 text-left">Size</th>
+                        <th className="py-2.5 px-4 text-center">Ratio</th>
+                        <th className="py-2.5 px-4 text-center">Pcs / Lay</th>
+                        <th className="py-2.5 px-4 text-right">Avg Wt / Pc (g)</th>
+                        <th className="py-2.5 px-4 text-right">Req KG / 100 Pcs</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {ratios.length > 0 ? ratios.map((ratio, si) => {
+                        const sizeName = sizeNames[si] || `Size ${si + 1}`;
+                        const pcsInLay = sumRatios > 0 ? Math.round((ratio / sumRatios) * pcsLay) : ratio;
+                        const kgPer100 = avgWt > 0 ? ((avgWt * 100) / 1000).toFixed(3) : '—';
+                        return (
+                          <tr key={si} className="hover:bg-indigo-50/30 transition">
+                            <td className="py-2.5 px-4 font-semibold text-slate-800">{sizeName}</td>
+                            <td className="py-2.5 px-4 text-center font-bold text-indigo-700 text-sm">{ratio}</td>
+                            <td className="py-2.5 px-4 text-center font-medium text-slate-700">{pcsInLay}</td>
+                            <td className="py-2.5 px-4 text-right text-slate-700">{avgWt.toFixed(2)} g</td>
+                            <td className="py-2.5 px-4 text-right font-medium text-emerald-700">{kgPer100} kg</td>
+                          </tr>
+                        );
+                      }) : (
+                        <tr>
+                          <td colSpan={5} className="py-4 text-center text-slate-400 text-[11px]">
+                            No size ratios defined — set ratios in the Markers Cockpit tab
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-indigo-50 border-t-2 border-indigo-200 font-bold text-slate-800">
+                        <td className="py-2.5 px-4">TOTAL</td>
+                        <td className="py-2.5 px-4 text-center text-indigo-700">{sumRatios}</td>
+                        <td className="py-2.5 px-4 text-center">{pcsLay}</td>
+                        <td className="py-2.5 px-4 text-right">{avgWt.toFixed(2)} g</td>
+                        <td className="py-2.5 px-4 text-right text-emerald-800">{reqKgPer100} kg / 100 pcs</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+
+                {/* Marker summary row */}
+                <div className="flex items-center gap-6 px-5 py-3 bg-slate-50 border-t border-slate-100 text-[11px] text-slate-600">
+                  <span>Lay Length: <strong>{m.lay_length_cm ? `${m.lay_length_cm} cm` : '—'}</strong></span>
+                  <span>Table Width: <strong>{m.table_width_in ? `${m.table_width_in}"` : '—'}</strong></span>
+                  <span>Fabric Wt / Lay: <strong className="text-indigo-700">{m.fabric_wt_per_lay_g ? `${(m.fabric_wt_per_lay_g / 1000).toFixed(3)} kg` : '—'}</strong></span>
+                  <span>UOM: <strong>{m.uom || 'KG'}</strong></span>
+                  <span className="ml-auto font-semibold text-slate-800">
+                    Total Required: <span className="text-emerald-700">{totalKg.toFixed(3)} {m.uom || 'KG'}</span>
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+
+          {markers.length === 0 && (
+            <div className="bg-white rounded-xl border border-slate-200 p-10 text-center text-slate-400">
+              <Scissors size={32} className="mx-auto text-slate-300 mb-2" />
+              <p className="text-sm font-medium text-slate-600">No markers defined yet</p>
+              <p className="text-xs mt-1">Add markers in the Markers Cockpit tab, then return here to view the Ratio Patti.</p>
+            </div>
+          )}
+        </div>
+      )}
+
     </div>
   );
 }
