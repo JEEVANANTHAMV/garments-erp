@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -16,11 +16,13 @@ import {
   LoadingBlock, ErrorState, Tabs, useDebounced
 } from '../../components/ui';
 import { fmtDate, fmtDecimal, fmtNumber, today, toDateInput } from '../../lib/format';
+import { FabricPicker } from './CostingsFabricPicker';
 
 /* ------------------------------------------------------ Types & Interfaces */
 export interface FabricCostLine {
   _key: string;
   fabric_type: string;
+  fabric_id?: string;
   fabric_name: string;
   gsm: number | '';
   consumption_kg: number | '';
@@ -281,8 +283,10 @@ export function CostingDetailPage() {
   const styles = useLookup('styles');
   const buyers = useLookup('buyers');
   const currencies = useLookup('currencies');
-
-  // Header & Buyer Context State
+  const fabricMaster = useLookup('fabrics');
+  // Full data_json of the record; this sheet only owns its `classic` block and
+  // leaves the Pre-Costing screen's keys untouched on save.
+  const dataJsonRef = useRef<Record<string, unknown>>({});
   const [head, setHead] = useState({
     costing_no: '',
     costing_date: today(),
@@ -307,7 +311,8 @@ export function CostingDetailPage() {
     {
       _key: `fab_${++lineSeq}`,
       fabric_type: 'Main Fabric',
-      fabric_name: 'Single Jersey',
+      fabric_id: '2',
+      fabric_name: 'Single Jersey 160 GSM',
       gsm: 160,
       consumption_kg: 0.22,
       rate_per_kg: 6.5,
@@ -315,8 +320,9 @@ export function CostingDetailPage() {
     {
       _key: `fab_${++lineSeq}`,
       fabric_type: 'Rib',
-      fabric_name: '1x1 Rib',
-      gsm: 240,
+      fabric_id: '4',
+      fabric_name: 'Rib 1x1 200 GSM',
+      gsm: 200,
       consumption_kg: 0.025,
       rate_per_kg: 7.2,
     },
@@ -365,7 +371,35 @@ export function CostingDetailPage() {
       costing_date: toDateInput(c.costing_date),
       profit_pct: Number(c.margin_pct) || prev.profit_pct,
     }));
+    try {
+      const parsed = c.data_json ? (typeof c.data_json === 'string' ? JSON.parse(c.data_json) : c.data_json) : {};
+      dataJsonRef.current = parsed && typeof parsed === 'object' ? parsed : {};
+      const cl = (dataJsonRef.current as any).classic;
+      if (cl) {
+        if (Array.isArray(cl.fabrics) && cl.fabrics.length) setFabrics(cl.fabrics);
+        if (Array.isArray(cl.cmtLines) && cl.cmtLines.length) setCmtLines(cl.cmtLines);
+        if (Array.isArray(cl.embellishments)) setEmbellishments(cl.embellishments);
+        if (Array.isArray(cl.trims)) setTrims(cl.trims);
+        if (Array.isArray(cl.packings)) setPackings(cl.packings);
+      }
+    } catch {
+      dataJsonRef.current = {};
+    }
   }, [costingQuery.data]);
+
+  // CMT rows: Cutting / Finishing / Packing map to their own cost heads; Sewing
+  // and every extra making row the user adds go to stitching, so the saved heads
+  // always add up to the CMT total.
+  const cmtRate = (name: string) =>
+    cmtLines.filter((c) => c.component.trim().toLowerCase() === name).reduce((s, c) => s + (Number(c.rate) || 0), 0);
+
+  const addCmtLine = () => {
+    setCmtLines((prev) => [...prev, { _key: `cmt_${++lineSeq}`, component: '', rate: '' }]);
+    setTimeout(() => {
+      const els = document.querySelectorAll<HTMLInputElement>('input[data-cmt-name]');
+      els[els.length - 1]?.focus();
+    }, 0);
+  };
 
   // ------------------------------------------------------------ Calculations
   // 1. Total Fabric Cost Per Pc
@@ -451,17 +485,21 @@ export function CostingDetailPage() {
         currency_id: head.currency_id ? Number(head.currency_id) : (currencies.data?.[0]?.id ?? 1),
         order_qty: Number(head.order_qty) || 0,
         fabric_cost: totalFabricCostPerPc,
-        cutting_cost: Number(cmtLines.find((c) => c.component === 'Cutting')?.rate) || 0,
-        stitching_cost: Number(cmtLines.find((c) => c.component === 'Sewing')?.rate) || 0,
-        finishing_cost: Number(cmtLines.find((c) => c.component === 'Finishing')?.rate) || 0,
+        cutting_cost: cmtRate('cutting'),
+        stitching_cost: totalCmtPerPc - cmtRate('cutting') - cmtRate('finishing') - cmtRate('packing'),
+        finishing_cost: cmtRate('finishing'),
         printing_cost: totalEmbellishmentPerPc,
         trim_cost: totalTrimsPerPc,
-        packing_cost: totalPackingPerPc,
+        packing_cost: totalPackingPerPc + cmtRate('packing'),
         total_cost: totalCostPerPc,
         margin_pct: profitPct,
         fob_price: finalFobPerPc,
         remarks: head.remarks || null,
         status_id: head.status_id || null,
+        data_json: JSON.stringify({
+          ...dataJsonRef.current,
+          classic: { fabrics, cmtLines, embellishments, trims, packings },
+        }),
       };
 
       const res = isNew
@@ -661,8 +699,9 @@ export function CostingDetailPage() {
                         {
                           _key: `fab_${++lineSeq}`,
                           fabric_type: 'Main Fabric',
-                          fabric_name: 'Single Jersey',
-                          gsm: 160,
+                          fabric_id: '',
+                          fabric_name: '',
+                          gsm: '',
                           consumption_kg: 0.2,
                           rate_per_kg: 6.5,
                         },
@@ -712,19 +751,28 @@ export function CostingDetailPage() {
                               className="input py-1 px-1.5 text-xs font-semibold text-slate-700 w-28"
                             />
                           </td>
-                          <td className="py-1 px-1">
-                            <input
-                              type="text"
-                              value={f.fabric_name}
+                          <td className="py-1 px-1 min-w-[200px]">
+                            <FabricPicker
+                              fabricId={f.fabric_id}
+                              fabricName={f.fabric_name}
+                              options={fabricMaster.data}
                               disabled={!editable}
-                              onChange={(e) =>
+                              onPick={(m) => {
+                                const stdRate = Number(m.std_rate) || 0;
                                 setFabrics((prev) =>
                                   prev.map((item) =>
-                                    item._key === f._key ? { ...item, fabric_name: e.target.value } : item
+                                    item._key === f._key
+                                      ? {
+                                          ...item,
+                                          fabric_id: String(m.id),
+                                          fabric_name: m.label,
+                                          // Master std rate is in INR; only apply it on INR sheets or empty rates.
+                                          rate_per_kg: stdRate > 0 && (head.currency_code === 'INR' || !item.rate_per_kg) ? stdRate : item.rate_per_kg,
+                                        }
+                                      : item
                                   )
-                                )
-                              }
-                              className="input py-1 px-1.5 text-xs w-full"
+                                );
+                              }}
                             />
                           </td>
                           <td className="py-1 px-1">
@@ -827,32 +875,110 @@ export function CostingDetailPage() {
                   Total CMT: {head.currency_code} {totalCmtPerPc.toFixed(2)}
                 </span>
               </div>
-              <div className="p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                {cmtLines.map((c) => (
-                  <div key={c._key} className="rounded-lg border border-slate-200 bg-slate-50/60 p-2.5">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600 block mb-1">
-                      {c.component}
-                    </label>
-                    <div className="flex items-center gap-1 font-mono">
-                      <span className="text-slate-400 font-medium">{head.currency_code}</span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={c.rate}
-                        disabled={!editable}
-                        onChange={(e) =>
-                          setCmtLines((prev) =>
-                            prev.map((item) =>
-                              item._key === c._key ? { ...item, rate: Number(e.target.value) || 0 } : item
-                            )
-                          )
-                        }
-                        className="input py-1 px-2 font-mono font-bold text-slate-900 text-xs w-full text-right"
-                      />
-                    </div>
-                  </div>
-                ))}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-surface-border bg-slate-100/60 text-[11px] font-bold uppercase text-slate-600">
+                      <th className="py-2 px-2.5 w-8">#</th>
+                      <th className="py-2 px-2">Making Component / Operation</th>
+                      <th className="py-2 px-2 w-36 text-right">Rate / Pc ({head.currency_code})</th>
+                      {editable && <th className="py-2 px-2 w-8 text-center" />}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {cmtLines.map((c, idx) => (
+                      <tr key={c._key} className="hover:bg-slate-50/70">
+                        <td className="py-2 px-2.5 font-bold text-slate-400">{idx + 1}</td>
+                        <td className="py-1 px-1">
+                          <input
+                            type="text"
+                            value={c.component}
+                            data-cmt-name={idx}
+                            placeholder="e.g. Cutting, Sewing, Ironing, Checking…"
+                            disabled={!editable}
+                            onChange={(e) =>
+                              setCmtLines((prev) =>
+                                prev.map((item) => (item._key === c._key ? { ...item, component: e.target.value } : item))
+                              )
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                (e.currentTarget.closest('tr')?.querySelector('input[type="number"]') as HTMLInputElement | null)?.focus();
+                              }
+                            }}
+                            className="input py-1 px-1.5 text-xs font-semibold text-slate-700 w-full"
+                          />
+                        </td>
+                        <td className="py-1 px-1 text-right">
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={c.rate}
+                            disabled={!editable}
+                            onChange={(e) =>
+                              setCmtLines((prev) =>
+                                prev.map((item) =>
+                                  item._key === c._key
+                                    ? { ...item, rate: e.target.value === '' ? '' : Number(e.target.value) }
+                                    : item
+                                )
+                              )
+                            }
+                            onKeyDown={(e) => {
+                              // Enter on the last row's rate adds the next CMT row (row-by-row entry).
+                              if (e.key === 'Enter' && editable) {
+                                e.preventDefault();
+                                if (idx === cmtLines.length - 1) addCmtLine();
+                                else {
+                                  const names = document.querySelectorAll<HTMLInputElement>('input[data-cmt-name]');
+                                  names[idx + 1]?.focus();
+                                }
+                              }
+                            }}
+                            className="input py-1 px-1.5 text-right font-mono font-bold text-slate-900 w-32 text-xs"
+                          />
+                        </td>
+                        {editable && (
+                          <td className="py-1 px-1 text-center">
+                            <button
+                              type="button"
+                              onClick={() => setCmtLines((prev) => prev.filter((item) => item._key !== c._key))}
+                              disabled={cmtLines.length <= 1}
+                              className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold text-xs">
+                      <td colSpan={2} className="py-2.5 px-4 text-slate-800 uppercase tracking-wider">
+                        Total CMT Per Piece
+                      </td>
+                      <td className="py-2.5 px-2 text-right font-mono font-black text-sm text-slate-900">
+                        {head.currency_code} {totalCmtPerPc.toFixed(2)}
+                      </td>
+                      {editable && <td />}
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
+              {editable && (
+                <div className="flex items-center justify-between border-t border-surface-border px-4 py-2 text-[11px] text-slate-500">
+                  <span>Press Enter in the last row&apos;s rate to add the next row.</span>
+                  <button
+                    type="button"
+                    onClick={addCmtLine}
+                    className="btn-secondary btn-sm text-xs py-1 px-2.5 flex items-center gap-1"
+                  >
+                    <Plus size={13} /> Add Row
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

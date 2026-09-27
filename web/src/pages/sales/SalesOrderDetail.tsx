@@ -14,12 +14,16 @@ import { fmtDate, fmtNumber, fmtDecimal, today, toDateInput } from '../../lib/fo
 const INCOTERMS = ['FOB','CIF','CFR','EXW','DDP','DAP','FCA'];
 const PAY_TERMS = ['LC','TT_ADVANCE','TT_AGAINST_DOC','DA','DP','CAD','OPEN'];
 const STATES = ['DRAFT','PENDING','APPROVED','REJECTED','ON_HOLD','CLOSED','CANCELLED'];
+/** Merchandiser groups — the first block of the SO number (G11E26CAPE0570). */
+const GROUPS = Array.from({ length: 20 }, (_, i) => `G${String(i + 1).padStart(2, '0')}`);
 
 interface Line {
   _key: string;
   id?: number;
   style_id: number | '';
   color_id: number | '';
+  /** Assort colour — entered here and shown alongside the colour downstream */
+  assort_color: string;
   /** Garment part: TOP / BOTTOM / COLLAR / CUFF / FOLDING */
   part_name?: string;
   description: string;
@@ -33,7 +37,7 @@ interface Line {
 
 let keySeq = 0;
 const newLine = (): Line => ({
-  _key: `l${++keySeq}`, style_id: '', color_id: '', part_name: undefined,
+  _key: `l${++keySeq}`, style_id: '', color_id: '', assort_color: '', part_name: undefined,
   description: '', unit_price: '', excess_pct: '', plan_cut_qty: 0, ship_date: '', skus: {},
 });
 
@@ -69,6 +73,26 @@ export default function SalesOrderDetail() {
   const branches = useLookup('branches');
   const statuses = useStatuses('SALES_ORDER');
 
+  // Live preview of the auto SO number once group, type, date and buyer are known.
+  const soPreviewKey = {
+    order_group: head.order_group || '', merchandiser_id: head.merchandiser_id || '',
+    order_type: head.order_type || 'EXPORT', so_date: head.so_date || '', buyer_id: head.buyer_id || '',
+  };
+  const soPreview = useQuery({
+    queryKey: ['sales-orders', 'next-so-number', soPreviewKey],
+    queryFn: async () => (await http.get<{ data: { so_no: string | null; hint?: string } }>(
+      `/sales-orders/next-so-number?${new URLSearchParams(
+        Object.entries(soPreviewKey).filter(([, v]) => v !== '').map(([k, v]) => [k, String(v)]),
+      )}`)).data,
+    enabled: isNew && !!head.buyer_id,
+  });
+  const groupOptions = useMemo(() => {
+    const all = new Set(GROUPS);
+    for (const m of merchandisers.data ?? []) if ((m as any).group_code) all.add(String((m as any).group_code));
+    if (head.order_group) all.add(String(head.order_group));
+    return [...all].sort().map((g) => ({ value: g, label: g }));
+  }, [merchandisers.data, head.order_group]);
+
   const detail = useQuery({
     queryKey: ['sales-orders', 'item', id],
     queryFn: async () => (await http.get<{ data: any }>(`/sales-orders/${id}`)).data,
@@ -90,6 +114,7 @@ export default function SalesOrderDetail() {
     });
     setLines((d.lines ?? []).map((l: any) => ({
       _key: `l${++keySeq}`, id: l.id, style_id: l.style_id, color_id: l.color_id ?? '',
+      assort_color: l.assort_color ?? '',
       part_name: l.part_name ?? undefined,
       description: l.description ?? '', unit_price: Number(l.unit_price),
       excess_pct: l.excess_pct !== null && l.excess_pct !== undefined ? Number(l.excess_pct) : '',
@@ -195,6 +220,7 @@ export default function SalesOrderDetail() {
             return {
               style_id: Number(l.style_id),
               color_id: l.color_id === '' ? null : Number(l.color_id),
+              assort_color: l.assort_color.trim() || null,
               part_name: l.part_name || null,
               description: l.description || null,
               unit_price: Number(l.unit_price) || 0,
@@ -295,9 +321,27 @@ export default function SalesOrderDetail() {
           <h4 className="text-[12px] font-bold uppercase tracking-wider text-slate-700">Order &amp; Buyer Details</h4>
         </div>
         <div className="grid grid-cols-1 gap-x-4 gap-y-3 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          <Input label="SO number" hint={isNew ? 'Blank to auto-generate' : undefined}
-            value={head.so_no ?? ''} onChange={(e) => setH('so_no', e.target.value)}
-            disabled={!editable} error={errors.so_no} />
+          <div>
+            <label className="mb-1 block text-[12px] font-medium text-slate-700">SO number</label>
+            <input
+              className="input font-mono font-semibold w-full"
+              placeholder={isNew ? (soPreview.data?.so_no ?? 'Auto-generated') : undefined}
+              value={head.so_no ?? ''}
+              onChange={(e) => setH('so_no', e.target.value)}
+              disabled={!editable}
+            />
+            {errors.so_no ? (
+              <p className="text-[12px] text-red-600 mt-1">{errors.so_no}</p>
+            ) : isNew ? (
+              <p className="text-[11px] text-slate-400 mt-1">
+                {head.so_no?.trim()
+                  ? 'Manual number — clear to auto-generate'
+                  : soPreview.data?.so_no
+                    ? <>Blank to auto-generate: <span className="font-mono font-bold text-brand-700">{soPreview.data.so_no}</span></>
+                    : 'Blank to auto-generate — pick group, order type, date and buyer'}
+              </p>
+            ) : null}
+          </div>
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="text-[12px] font-medium text-slate-700">IO number (Internal Order)</label>
@@ -345,7 +389,17 @@ export default function SalesOrderDetail() {
           <Select label="Agent" options={toOptions(agents.data)} placeholder="— None —"
             value={head.agent_id ?? ''} onChange={(e) => setH('agent_id', e.target.value)} disabled={!editable} />
           <Select label="Merchandiser" options={toOptions(merchandisers.data)} placeholder="— Select merchandiser —"
-            value={head.merchandiser_id ?? ''} onChange={(e) => setH('merchandiser_id', e.target.value)} disabled={!editable} />
+            value={head.merchandiser_id ?? ''} disabled={!editable}
+            onChange={(e) => {
+              setH('merchandiser_id', e.target.value);
+              // The order group follows the merchandiser's group unless picked by hand.
+              const m = merchandisers.data?.find((x) => x.id === Number(e.target.value)) as any;
+              if (m?.group_code) setH('order_group', m.group_code);
+            }} />
+          <Select label="Merchandiser group" options={groupOptions} placeholder="— Select group —"
+            hint="First block of the SO number — blank uses the merchandiser's group, else the company default"
+            value={head.order_group ?? ''} onChange={(e) => setH('order_group', e.target.value || null)}
+            disabled={!editable} error={errors.order_group} />
           <Input label="Buyer PO no" value={head.buyer_po_no ?? ''}
             onChange={(e) => setH('buyer_po_no', e.target.value)} disabled={!editable} />
           <Input label="Buyer PO date" type="date" value={head.buyer_po_date ?? ''}
@@ -1537,6 +1591,9 @@ function LineCard({
           placeholder={line.style_id ? '— All colours —' : 'Select a style first'}
           value={line.color_id} disabled={!editable || !line.style_id}
           onChange={(e) => onChange({ color_id: e.target.value ? Number(e.target.value) : '', skus: {} })} />
+        <Input label="Assort colour" placeholder="e.g. Navy / Grey Mel" maxLength={80}
+          value={line.assort_color} disabled={!editable}
+          onChange={(e) => onChange({ assort_color: e.target.value })} />
         {/* Part Name — TOP / BOTTOM / COLLAR / CUFF / FOLDING */}
         <div>
           <label className="mb-1 block text-[12px] font-medium text-slate-700">

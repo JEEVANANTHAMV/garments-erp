@@ -6,6 +6,11 @@ import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
 import { http, ApiError } from '../../lib/api';
 import { Plus, Trash2, CheckCircle2, Sparkles, Layers } from 'lucide-react';
+import { InvoiceSummary } from '../../components/InvoiceSummary';
+import {
+  computeInvoice, chargesFromRow, chargesPayload, EMPTY_CHARGES,
+  type GstMode, type InvoiceCharges,
+} from '../../lib/invoiceCalc';
 
 export const BILL_TYPES = [
   { value: 'YARN_PURCHASE', label: 'Yarn Purchase Bill', icon: '🧵', tone: 'indigo', material: 'YARN' },
@@ -87,7 +92,6 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
     boe_no: '',
     boe_date: '',
     port_code: '',
-    tds_pct: 0.1,
     po_matched: false,
     grn_matched: true,
     gate_matched: false,
@@ -98,6 +102,8 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
   });
 
   const [lines, setLines] = useState<BillLineItem[]>([]);
+  // Common invoice summary heads (TDS / TCS / other charges / landed cost / round off)
+  const [charges, setCharges] = useState<InvoiceCharges>(EMPTY_CHARGES);
 
   // Load existing bill for editing
   useEffect(() => {
@@ -123,7 +129,6 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
             boe_no: b.boe_no || '',
             boe_date: b.boe_date?.slice(0, 10) || '',
             port_code: b.port_code || '',
-            tds_pct: b.subtotal > 0 && b.tds_amount ? Math.round((b.tds_amount / b.subtotal) * 1000) / 10 : 0.1,
             po_matched: Boolean(b.po_matched),
             grn_matched: Boolean(b.grn_matched),
             gate_matched: Boolean(b.gate_matched),
@@ -132,6 +137,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
             status: b.status || 'DRAFT',
             remarks: b.remarks || '',
           });
+          setCharges(chargesFromRow(b));
           setBillType(b.bill_type || 'YARN_PURCHASE');
           let gids: number[] = [];
           if (Array.isArray(b.grn_ids)) {
@@ -172,6 +178,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
       const bType = initialType && initialType !== 'ALL' ? initialType : 'YARN_PURCHASE';
       setBillType(bType);
       setSelectedGrnIds([]);
+      setCharges(EMPTY_CHARGES);
       setHeader({
         bill_no: '',
         bill_date: today(),
@@ -188,7 +195,6 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
         boe_no: '',
         boe_date: '',
         port_code: '',
-        tds_pct: 0.1,
         po_matched: false,
         grn_matched: false,
         gate_matched: false,
@@ -457,37 +463,16 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
   const currencySymbol: string = String(isForeignCurrency ? (selectedCurrency?.symbol || selectedCurrency?.code || 'FC') : '₹');
   const exRate = isImport && Number(header.exchange_rate) > 0 ? Number(header.exchange_rate) : 1.0;
 
-  // Dynamic Financial Summary Calculations
+  // Dynamic Financial Summary Calculations (common invoice summary)
   const totals = useMemo(() => {
-    const subtotal = Math.round(lines.reduce((acc, l) => acc + (Number(l.amount) || 0), 0) * 100) / 100;
-    const gstAmount = Math.round(
-      lines.reduce((acc, l) => {
-        const gst = Number(l.gst_rate) || 0;
-        const amt = Number(l.amount) || 0;
-        return acc + (amt * (gst / 100.0));
-      }, 0) * 100
-    ) / 100;
-    const tdsAmount = Math.round((subtotal * ((Number(header.tds_pct) || 0) / 100.0)) * 100) / 100;
-    const totalAmount = Math.round((subtotal + gstAmount - tdsAmount) * 100) / 100;
+    const inv = computeInvoice(
+      lines.map((l) => ({ taxable: Number(l.amount) || 0, gst_rate: Number(l.gst_rate) || 0 })),
+      header.gst_type as GstMode,
+      charges,
+    );
     const totalQty = lines.reduce((acc, l) => acc + (Number(l.bill_qty) || 0), 0);
-
-    const baseSubtotal = Math.round(subtotal * exRate * 100) / 100;
-    const baseGstAmount = Math.round(gstAmount * exRate * 100) / 100;
-    const baseTdsAmount = Math.round(tdsAmount * exRate * 100) / 100;
-    const baseTotalAmount = Math.round(totalAmount * exRate * 100) / 100;
-
-    return {
-      subtotal,
-      gstAmount,
-      tdsAmount,
-      totalAmount,
-      totalQty,
-      baseSubtotal,
-      baseGstAmount,
-      baseTdsAmount,
-      baseTotalAmount,
-    };
-  }, [lines, header.tds_pct, exRate]);
+    return { inv, totalQty, baseTotalAmount: Math.round(inv.net * exRate * 100) / 100 };
+  }, [lines, header.gst_type, charges, exRate]);
 
   // Save handler
   const handleSave = async () => {
@@ -517,11 +502,11 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
         currency_id: Number(header.currency_id) || 1,
         gst_type: header.gst_type,
         exchange_rate: exRate,
-        subtotal: totals.subtotal,
-        gst_amount: totals.gstAmount,
-        tds_amount: totals.tdsAmount,
-        total_amount: totals.totalAmount,
+        subtotal: totals.inv.taxable,
+        gst_amount: totals.inv.gst,
+        total_amount: totals.inv.net,
         base_currency_total: totals.baseTotalAmount,
+        ...chargesPayload(charges, totals.inv),
         boe_no: header.boe_no || null,
         boe_date: header.boe_date || null,
         port_code: header.port_code || null,
@@ -592,7 +577,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
             <span>Total Qty: <strong>{fmtDecimal(totals.totalQty, 2)}</strong></span>
             <span>•</span>
             <span className="text-brand-700 font-bold">
-              Grand Total: ₹{fmtDecimal(totals.totalAmount, 2)}
+              Grand Total: {currencySymbol}{fmtDecimal(totals.inv.net, 2)}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -1190,86 +1175,17 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
               </div>
             </div>
 
-            {/* Financial Calculations Card */}
-            <div className="p-4 bg-brand-50/40 rounded-xl border border-brand-200/80 space-y-2 text-xs">
-              <div className="flex items-center justify-between pb-1 border-b border-brand-200/60">
-                <h4 className="text-xs font-bold text-brand-900 uppercase tracking-wider">
-                  Invoice Financial Summary
-                </h4>
-                <span className="font-semibold text-[11px] text-brand-700">
-                  {header.gst_type === 'INTRA_STATE' ? 'Intra-State (CGST + SGST)' : header.gst_type === 'INTER_STATE' ? 'Inter-State (IGST)' : 'Overseas Import (Customs)'}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between py-0.5">
-                <span className="text-slate-600">Taxable Subtotal:</span>
-                <span className="font-bold text-slate-900 text-sm">
-                  {currencySymbol}{fmtDecimal(totals.subtotal, 2)}
-                </span>
-              </div>
-
-              {header.gst_type === 'INTRA_STATE' ? (
-                <>
-                  <div className="flex items-center justify-between py-0.5 text-slate-700">
-                    <span className="text-[11.5px] text-slate-500 pl-2">↳ Central GST (CGST 50%):</span>
-                    <span className="font-medium text-slate-800 font-mono">
-                      {currencySymbol}{fmtDecimal(totals.gstAmount / 2, 2)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between py-0.5 text-slate-700">
-                    <span className="text-[11.5px] text-slate-500 pl-2">↳ State GST (SGST 50%):</span>
-                    <span className="font-medium text-slate-800 font-mono">
-                      {currencySymbol}{fmtDecimal(totals.gstAmount / 2, 2)}
-                    </span>
-                  </div>
-                </>
-              ) : (
-                <div className="flex items-center justify-between py-0.5 text-slate-700">
-                  <span>{header.gst_type === 'IMPORT' ? 'Import IGST / Customs Duty:' : 'Integrated GST (IGST):'}</span>
-                  <span className="font-bold text-slate-900 font-mono">
-                    {currencySymbol}{fmtDecimal(totals.gstAmount, 2)}
-                  </span>
-                </div>
-              )}
-
-              <div className="flex items-center justify-between py-0.5 text-slate-700">
-                <div className="flex items-center gap-1.5">
-                  <span>TDS Deduction:</span>
-                  <input
-                    type="number"
-                    step="0.05"
-                    value={header.tds_pct}
-                    onChange={(e) => setHeader((p) => ({ ...p, tds_pct: parseFloat(e.target.value) || 0 }))}
-                    className="w-14 text-[11px] text-right border border-slate-300 rounded px-1 py-0.5 bg-white"
-                  />
-                  <span className="text-[10px] text-slate-400">%</span>
-                </div>
-                <span className="font-bold text-red-600">- {currencySymbol}{fmtDecimal(totals.tdsAmount, 2)}</span>
-              </div>
-
-              <div className="flex items-center justify-between pt-2 border-t border-brand-200 text-sm">
-                <span className="font-extrabold text-brand-900">Total Payable ({selectedCurrency?.code || 'INR'}):</span>
-                <span className="font-extrabold text-brand-900 text-base font-mono">
-                  {currencySymbol}{fmtDecimal(totals.totalAmount, 2)}
-                </span>
-              </div>
-
-              {/* Converted INR Section for Imports / Foreign Currency */}
-              {(isImport || isForeignCurrency) && (
-                <div className="mt-2 pt-2 border-t border-emerald-300/80 bg-emerald-100/60 -mx-2 -mb-2 p-2 rounded-b-lg space-y-1 text-emerald-950">
-                  <div className="flex items-center justify-between text-[11px] font-bold">
-                    <span>Equivalent Base Value (₹ INR at Rate: {exRate}):</span>
-                    <span>Subtotal: ₹{fmtDecimal(totals.baseSubtotal, 2)}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span>Customs / IGST in INR: ₹{fmtDecimal(totals.baseGstAmount, 2)}</span>
-                    <span className="font-extrabold text-xs text-emerald-900">
-                      Total INR: ₹{fmtDecimal(totals.baseTotalAmount, 2)}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
+            {/* Financial Calculations Card — common invoice summary */}
+            <InvoiceSummary
+              totals={totals.inv}
+              value={charges}
+              onChange={(patch) => setCharges((c) => ({ ...c, ...patch }))}
+              gstMode={header.gst_type as GstMode}
+              currencySymbol={currencySymbol}
+              currencyCode={String(selectedCurrency?.code || 'INR')}
+              showLandedCost={Boolean(isImport)}
+              exchangeRate={exRate}
+            />
           </div>
         </div>
       )}

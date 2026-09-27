@@ -6,6 +6,7 @@ import { NotFound, BadRequest } from '../../core/errors.js';
 import { requirePermission } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
+import { isKgUom, partKg, partQtyPerKg, readPartFactor, factorUnitLabel, withPartWeight } from '../../core/partWeight.js';
 
 export const cadRouter = Router();
 
@@ -215,10 +216,79 @@ cadRouter.get('/cad-requirements/:id', requirePermission('PRODUCTION.VIEW'), ah(
       flat_knit_spec: dataJson.flat_knit_spec || null,
       special_parts: dataJson.special_parts || [],
       trims: dataJson.trims || [],
+      purchase_requirement: buildPurchaseRequirement(dataJson.special_parts, dataJson.flat_knit_spec),
       dataJson,
     },
   });
 }));
+
+/** Normalise saved specialized-part rows: factor + unit kept, total_kg / qty_per_kg derived. */
+function normalizeSpecialParts(parts: any) {
+  if (!Array.isArray(parts)) return parts;
+  return parts.map((p) => (p && typeof p === 'object' ? withPartWeight(p) : p));
+}
+
+/**
+ * Purchase requirement for the BOM & sourcing hand-off: every specialized part / tape /
+ * cord and every flat-knit component, with the quantity to buy in KG. MTRS (or PCS) rows
+ * convert through the row's weight factor — `m/pcs per kg` or `g per m/pc`, see
+ * core/partWeight.ts (290 m / 50 m-per-kg = 290 m x 20 g/m = 5.8 KG); rows with no valid
+ * factor stay in their own unit and are counted in `unconverted`. Flat-knit specs saved before components existed carry
+ * fixed collar/cuff columns where yarn = collar pcs x set weight — handled the same way.
+ */
+export function buildPurchaseRequirement(specialParts: any, flatKnitSpec: any) {
+  const lines: {
+    source: 'SPECIAL_PART' | 'FLAT_KNIT'; item_name: string; spec: string | null; color: string | null;
+    req_qty: number; req_uom: string; qty_per_kg: number | null;
+    kg_factor?: number | null; kg_factor_unit?: string | null; purchase_qty: number; purchase_uom: string;
+  }[] = [];
+  const r3 = (n: number) => Math.round(n * 1000) / 1000;
+
+  if (flatKnitSpec && flatKnitSpec.enabled !== false && Array.isArray(flatKnitSpec.size_rows)) {
+    const rows: any[] = flatKnitSpec.size_rows;
+    let comps: any[] = Array.isArray(flatKnitSpec.components) ? flatKnitSpec.components : [];
+    const legacy = comps.length === 0;
+    if (legacy) {
+      const w = Number(flatKnitSpec.weight_per_set_g) || 0;
+      comps = [{ key: 'collar', label: 'Collar', weight_g: w > 1 ? w : w * 1000 }];
+      if (rows.some((r) => Number(r.cuff_pcs) > 0)) comps.push({ key: 'cuff', label: 'Cuff', weight_g: 0 });
+    }
+    for (const c of comps) {
+      const pcs = rows.reduce((s, r) => {
+        const v = legacy ? (c.key === 'collar' ? r.collar_pcs : r.cuff_pcs) : r.values?.[c.key]?.pcs;
+        return s + (Number(v) || 0);
+      }, 0);
+      const kg = r3((pcs * (Number(c.weight_g) || 0)) / 1000);
+      lines.push({
+        source: 'FLAT_KNIT', item_name: `Flat Knit ${c.label || c.key}`, spec: flatKnitSpec.item_type || null,
+        color: flatKnitSpec.color || null, req_qty: pcs, req_uom: 'NOS', qty_per_kg: null,
+        purchase_qty: kg, purchase_uom: 'KG',
+      });
+    }
+  }
+
+  for (const sp of Array.isArray(specialParts) ? specialParts : []) {
+    if (!sp || typeof sp !== 'object') continue;
+    const qty = Number(sp.total_qty) || 0;
+    const uom = String(sp.uom || 'KG').toUpperCase();
+    const isKg = isKgUom(uom);
+    // Always recomputed from qty + factor (+ unit) — a client-sent total_kg is ignored.
+    const kg = partKg(sp);
+    const { factor, unit } = readPartFactor(sp);
+    lines.push({
+      source: 'SPECIAL_PART', item_name: sp.part_name || 'Specialized Part',
+      spec: [sp.fabric_type, sp.dia_spec].filter(Boolean).join(' · ') || null, color: sp.color || null,
+      req_qty: qty, req_uom: uom,
+      qty_per_kg: isKg ? null : partQtyPerKg(sp),
+      kg_factor: isKg || !(factor > 0) ? null : factor,
+      kg_factor_unit: isKg ? null : factorUnitLabel(unit, uom),
+      purchase_qty: kg ?? qty, purchase_uom: kg != null ? 'KG' : uom,
+    });
+  }
+
+  const total_kg = r3(lines.filter((l) => l.purchase_uom === 'KG').reduce((s, l) => s + l.purchase_qty, 0));
+  return { lines, total_kg, unconverted: lines.filter((l) => l.purchase_uom !== 'KG').length };
+}
 
 /**
  * Cutting-floor references for the Ratio Patti tab: the latest approved-or-draft
@@ -323,7 +393,8 @@ const saveCadRequirementHandler = ah(async (req, res) => {
       cutting_lay: body.cutting_lay ?? inputDataJson?.cutting_lay,
       summary_metrics: body.summary_metrics ?? inputDataJson?.summary_metrics,
       flat_knit_spec: body.flat_knit_spec ?? inputDataJson?.flat_knit_spec,
-      special_parts: body.special_parts ?? inputDataJson?.special_parts,
+      // Stored KG is recomputed from qty + factor + unit; the client's total_kg is not trusted
+      special_parts: normalizeSpecialParts(body.special_parts ?? inputDataJson?.special_parts),
       trims: body.trims ?? inputDataJson?.trims,
       total_fabric_kg: body.total_fabric_kg ?? inputDataJson?.total_fabric_kg,
     };
@@ -1003,6 +1074,8 @@ cadRouter.post('/cad-requirements/:id/approve', requirePermission('PRODUCTION.AP
   const userId = req.user!.id;
   const id = Number(req.params.id);
   const { data_json, total_fabric_kg, total_fabric_mtrs, total_yarn_kg } = req.body;
+  const bodySpecialParts = req.body.special_parts;
+  const bodyFlatKnit = req.body.flat_knit_spec;
 
   const cr = await queryOne<any>(`
     SELECT * FROM trx_cad_requirement WHERE id = ? AND company_id = ?
@@ -1011,6 +1084,17 @@ cadRouter.post('/cad-requirements/:id/approve', requirePermission('PRODUCTION.AP
   if (!cr) throw NotFound('CAD Requirement not found');
 
   const isWoven = cr.cad_type === 'WOVEN' || cr.uom === 'MTR';
+
+  let savedJson: any = {};
+  try {
+    savedJson = cr.data_json ?? {};
+    while (typeof savedJson === 'string') savedJson = JSON.parse(savedJson);
+  } catch { savedJson = {}; }
+  // Purchase hand-off in KG: prefer what the screen sends (may be unsaved), else the saved sheet
+  const purchaseRequirement = buildPurchaseRequirement(
+    Array.isArray(bodySpecialParts) ? bodySpecialParts : savedJson.special_parts,
+    bodyFlatKnit ?? savedJson.flat_knit_spec,
+  );
   const finalFabricQty = Number(isWoven ? (total_fabric_mtrs || total_fabric_kg) : (total_fabric_kg || 0));
 
   await transaction(async (tx) => {
@@ -1019,7 +1103,7 @@ cadRouter.post('/cad-requirements/:id/approve', requirePermission('PRODUCTION.AP
          SET status = 'APPROVED',
              data_json = ?
        WHERE id = ? AND company_id = ?
-    `, [JSON.stringify(data_json || cr.data_json || {}), id, companyId]);
+    `, [data_json ? JSON.stringify(data_json) : JSON.stringify(savedJson || {}), id, companyId]);
 
     // Insert or update Material Requirement Output
     await txExecute(tx, `
@@ -1035,7 +1119,11 @@ cadRouter.post('/cad-requirements/:id/approve', requirePermission('PRODUCTION.AP
       'APPROVED',
       finalFabricQty,
       Number(total_yarn_kg || 0),
-      JSON.stringify(data_json || {}),
+      JSON.stringify({
+        ...(data_json && typeof data_json === 'object' ? data_json : {}),
+        purchase_requirement: purchaseRequirement,
+        summary_metrics: req.body.summary_metrics ?? savedJson.summary_metrics ?? null,
+      }),
       userId,
     ]);
 
@@ -1077,5 +1165,5 @@ cadRouter.post('/cad-requirements/:id/approve', requirePermission('PRODUCTION.AP
 
   await audit(req, 'trx_cad_requirement', id, 'UPDATE', null, { status: 'APPROVED', cad_version: cr.cad_version });
 
-  res.json({ data: { status: 'APPROVED', cad_req_id: id } });
+  res.json({ data: { status: 'APPROVED', cad_req_id: id, purchase_requirement: purchaseRequirement } });
 }));

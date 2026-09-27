@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { query, queryOne, transaction, txQueryOne, txExecute } from '../../config/db.js';
+import { query, queryOne, transaction, txQueryOne, txExecute, type Tx } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
 import { NotFound, BadRequest, Forbidden } from '../../core/errors.js';
 import { requirePermission } from '../../middleware/auth.js';
@@ -30,7 +30,7 @@ const SRC_TABLE: Record<SrcType, { table: string; label: string }> = {
   COLLAR_PROGRAM: { table: 'trx_collar_program', label: 'collar program' },
 };
 
-async function loadSrc(srcType: SrcType, srcId: number, cid: number) {
+export async function loadSrc(srcType: SrcType, srcId: number, cid: number) {
   const { table, label } = SRC_TABLE[srcType];
   const row = await queryOne<any>(
     `SELECT * FROM ${table} WHERE id = ? AND company_id = ?`, [srcId, cid]);
@@ -42,7 +42,7 @@ async function loadSrc(srcType: SrcType, srcId: number, cid: number) {
    MATERIAL ISSUE (doc §18) — moves stock
 ================================================================ */
 
-const issueSchema = z.object({
+export const issueSchema = z.object({
   src_type: z.enum(SRC_TYPES),
   src_id: s.idReq(),
   src_line_id: s.id(),
@@ -77,6 +77,91 @@ processFlowRouter.get('/process-issues', requirePermission('PRODUCTION.VIEW'), a
   res.json({ success: true, data: rows });
 }));
 
+/**
+ * Doc §18/§22: an issue cannot exceed what is physically available unless it
+ * is explicitly authorised, and the override is recorded on the document.
+ * Shared by the generic issue screen and the knitting DC (yarn outward).
+ * `alreadyKg` is what earlier lines of the same document take from the same
+ * yarn + warehouse; `ownReservationKg` is this document's own live
+ * reservation, which must not block its own issue.
+ */
+export async function assertIssuable(user: NonNullable<Express.Request['user']>, l: {
+  yarn_id: number; warehouse_id: number; issued_qty_kg: number;
+  allow_override: boolean; override_reason?: string | null;
+  alreadyKg?: number; ownReservationKg?: number;
+}): Promise<boolean> {
+  const cid = user.companyId;
+  const onHand = await yarnStockOnHand(cid, l.yarn_id, l.warehouse_id) - (l.alreadyKg ?? 0);
+  const reservedElsewhere = await yarnReservedQty(cid, l.yarn_id) - (l.ownReservationKg ?? 0);
+  const available = onHand - Math.max(0, reservedElsewhere);
+  const exceeds = l.issued_qty_kg > available + 1e-9;
+
+  if (exceeds && !l.allow_override) {
+    throw BadRequest(
+      `Issue of ${l.issued_qty_kg} KG exceeds available stock ` +
+      `(${onHand} KG on hand, ${reservedElsewhere} KG reserved, ${available} KG free). ` +
+      `Re-submit with allow_override and a reason to proceed.`,
+    );
+  }
+  if (exceeds && !l.override_reason) {
+    throw BadRequest('An override reason is required when issuing beyond available stock');
+  }
+  // Doc §22/§26: over-issuing is an authorised act, not merely a flag the
+  // caller can set, so it needs its own right.
+  if (exceeds && !user.isSuperAdmin && !user.permissions.has('PROCESS.OVERRIDE_ISSUE')) {
+    throw Forbidden('You are not authorised to issue beyond available stock');
+  }
+  return exceeds;
+}
+
+/** Insert one issue line, move stock and roll the source forward (doc §5, §18). */
+export async function insertProcessIssue(tx: Tx, cid: number, uid: number,
+  body: z.infer<typeof issueSchema> & {
+    dc_no?: string | null; vendor_id?: number | null; vehicle_no?: string | null; no_of_cones?: number;
+  },
+  exceeds: boolean,
+) {
+  const issueNo = body.issue_no || await nextDocNumber(tx, cid, 'PROC_ISSUE');
+  const r = await txExecute(tx,
+    `INSERT INTO trx_process_issue
+       (company_id, issue_no, dc_no, vendor_id, vehicle_no, issue_date, src_type, src_id,
+        src_line_id, reservation_id, yarn_id, batch_id, lot_no, yarn_po_no, warehouse_id,
+        issued_qty_kg, no_of_cones, is_override, override_reason, remarks, created_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [cid, issueNo, body.dc_no ?? null, body.vendor_id ?? null, body.vehicle_no ?? null,
+     body.issue_date, body.src_type, body.src_id, body.src_line_id ?? null,
+     body.reservation_id ?? null, body.yarn_id, body.batch_id ?? null, body.lot_no ?? null,
+     body.yarn_po_no ?? null, body.warehouse_id, body.issued_qty_kg, body.no_of_cones ?? 0,
+     exceeds ? 1 : 0, exceeds ? body.override_reason ?? null : null,
+     body.remarks ?? null, uid]);
+  const issueId = r.insertId;
+
+  // Issue is the step that actually moves stock (doc §5).
+  await postLedger(tx, {
+    companyId: cid, warehouseId: body.warehouse_id, materialType: 'YARN',
+    yarnId: body.yarn_id, batchId: body.batch_id ?? null,
+    txnType: 'ISSUE', refType: 'PROCESS_ISSUE', refId: issueId,
+    qtyOut: body.issued_qty_kg, uomId: UOM_KG, createdBy: uid,
+  });
+
+  if (body.reservation_id) await consumeReservation(tx, body.reservation_id, body.issued_qty_kg);
+
+  // Knitting program yarn lines keep their own issued running total.
+  if (body.src_type === 'KNITTING_PROGRAM' && body.src_line_id) {
+    await txExecute(tx,
+      `UPDATE trx_knitting_program_yarns SET issued_qty_kg = issued_qty_kg + ?
+        WHERE id = ? AND program_id = ?`,
+      [body.issued_qty_kg, body.src_line_id, body.src_id]);
+  }
+
+  const { table } = SRC_TABLE[body.src_type];
+  await txExecute(tx,
+    `UPDATE ${table} SET status = 'MATERIAL_ISSUED'
+      WHERE id = ? AND status IN ('RELEASED','RESERVED','STOCK_CHECK')`, [body.src_id]);
+
+  return { id: issueId, issue_no: issueNo, is_override: exceeds };
+}
+
 processFlowRouter.post('/process-issues', requirePermission('PROCESS.ISSUE'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const uid = req.user!.id;
@@ -85,69 +170,8 @@ processFlowRouter.post('/process-issues', requirePermission('PROCESS.ISSUE'), ah
   const src = await loadSrc(body.src_type, body.src_id, cid);
   assertEditable(src.status, SRC_TABLE[body.src_type].label);
 
-  // Doc §18/§22: an issue cannot exceed what is physically available unless it
-  // is explicitly authorised, and the override is recorded on the document.
-  const onHand = await yarnStockOnHand(cid, body.yarn_id, body.warehouse_id);
-  const reservedElsewhere = await yarnReservedQty(cid, body.yarn_id);
-  const available = onHand - Math.max(0, reservedElsewhere);
-  const exceeds = body.issued_qty_kg > available;
-
-  if (exceeds && !body.allow_override) {
-    throw BadRequest(
-      `Issue of ${body.issued_qty_kg} KG exceeds available stock ` +
-      `(${onHand} KG on hand, ${reservedElsewhere} KG reserved, ${available} KG free). ` +
-      `Re-submit with allow_override and a reason to proceed.`,
-    );
-  }
-  if (exceeds && !body.override_reason) {
-    throw BadRequest('An override reason is required when issuing beyond available stock');
-  }
-  // Doc §22/§26: over-issuing is an authorised act, not merely a flag the
-  // caller can set, so it needs its own right.
-  if (exceeds && !req.user!.isSuperAdmin && !req.user!.permissions.has('PROCESS.OVERRIDE_ISSUE')) {
-    throw Forbidden('You are not authorised to issue beyond available stock');
-  }
-
-  const result = await transaction(async (tx) => {
-    const issueNo = body.issue_no || await nextDocNumber(tx, cid, 'PROC_ISSUE');
-    const r = await txExecute(tx,
-      `INSERT INTO trx_process_issue
-         (company_id, issue_no, issue_date, src_type, src_id, src_line_id, reservation_id,
-          yarn_id, batch_id, lot_no, yarn_po_no, warehouse_id, issued_qty_kg,
-          is_override, override_reason, remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [cid, issueNo, body.issue_date, body.src_type, body.src_id, body.src_line_id ?? null,
-       body.reservation_id ?? null, body.yarn_id, body.batch_id ?? null, body.lot_no ?? null,
-       body.yarn_po_no ?? null, body.warehouse_id, body.issued_qty_kg,
-       exceeds ? 1 : 0, exceeds ? body.override_reason ?? null : null,
-       body.remarks ?? null, uid]);
-    const issueId = r.insertId;
-
-    // Issue is the step that actually moves stock (doc §5).
-    await postLedger(tx, {
-      companyId: cid, warehouseId: body.warehouse_id, materialType: 'YARN',
-      yarnId: body.yarn_id, batchId: body.batch_id ?? null,
-      txnType: 'ISSUE', refType: 'PROCESS_ISSUE', refId: issueId,
-      qtyOut: body.issued_qty_kg, uomId: UOM_KG, createdBy: uid,
-    });
-
-    if (body.reservation_id) await consumeReservation(tx, body.reservation_id, body.issued_qty_kg);
-
-    // Knitting program yarn lines keep their own issued running total.
-    if (body.src_type === 'KNITTING_PROGRAM' && body.src_line_id) {
-      await txExecute(tx,
-        `UPDATE trx_knitting_program_yarns SET issued_qty_kg = issued_qty_kg + ?
-          WHERE id = ? AND program_id = ?`,
-        [body.issued_qty_kg, body.src_line_id, body.src_id]);
-    }
-
-    const { table } = SRC_TABLE[body.src_type];
-    await txExecute(tx,
-      `UPDATE ${table} SET status = 'MATERIAL_ISSUED'
-        WHERE id = ? AND status IN ('RELEASED','RESERVED','STOCK_CHECK')`, [body.src_id]);
-
-    return { id: issueId, issue_no: issueNo, is_override: exceeds };
-  });
+  const exceeds = await assertIssuable(req.user!, body);
+  const result = await transaction((tx) => insertProcessIssue(tx, cid, uid, body, exceeds));
 
   await audit(req, 'trx_process_issue', result.id, 'INSERT', undefined, result);
   res.status(201).json({ success: true, data: result });
@@ -226,8 +250,11 @@ processFlowRouter.post('/process-receipts', requirePermission('PROCESS.PRODUCTIO
       }
       await postLedger(tx, {
         companyId: cid, warehouseId: body.warehouse_id,
-        materialType: body.src_type === 'COLLAR_PROGRAM' ? 'WIP' : 'YARN',
+        materialType: body.src_type === 'COLLAR_PROGRAM' ? 'WIP'
+          : body.src_type === 'KNITTING_PROGRAM' ? 'FABRIC' : 'YARN',
         yarnId: src.yarn_id ?? null,
+        // Knitting output is grey fabric, not yarn.
+        fabricId: body.src_type === 'KNITTING_PROGRAM' ? src.fabric_id ?? null : null,
         txnType: 'PRODUCTION_IN', refType: 'PROCESS_RECEIPT', refId: receiptId,
         qtyIn: body.output_qty, uomId: body.output_uom_id ?? UOM_KG, createdBy: uid,
       });
@@ -277,8 +304,10 @@ processFlowRouter.post('/process-receipts/:id/post-stock', requirePermission('PR
   await transaction(async (tx) => {
     await postLedger(tx, {
       companyId: cid, warehouseId: rc.warehouse_id,
-      materialType: rc.src_type === 'COLLAR_PROGRAM' ? 'WIP' : 'YARN',
+      materialType: rc.src_type === 'COLLAR_PROGRAM' ? 'WIP'
+        : rc.src_type === 'KNITTING_PROGRAM' ? 'FABRIC' : 'YARN',
       yarnId: src.yarn_id ?? null,
+      fabricId: rc.src_type === 'KNITTING_PROGRAM' ? src.fabric_id ?? null : null,
       txnType: 'PRODUCTION_IN', refType: 'PROCESS_RECEIPT', refId: id,
       qtyIn: Number(rc.output_qty), uomId: rc.output_uom_id ?? UOM_KG, createdBy: req.user!.id,
     });

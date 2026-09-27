@@ -8,11 +8,15 @@ import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
 import { assertEditable, postLedger, UOM_KG } from '../../core/processEngine.js';
+import { knittingDcRouter } from './knittingDc.routes.js';
 
 /**
  * Knitting production entry (doc §14) and fabric roll receipt (doc §15).
  */
 export const knittingProductionRouter = Router();
+
+// Knitting DC (yarn outward) and grey fabric inward: /knitting-dcs, /knitting-inwards.
+knittingProductionRouter.use(knittingDcRouter);
 
 const productionSchema = z.object({
   program_id: s.idReq(),

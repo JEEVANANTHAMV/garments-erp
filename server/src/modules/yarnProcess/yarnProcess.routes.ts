@@ -63,8 +63,8 @@ const processSchema = z.object({
   process_type: z.enum(PROCESS_TYPES),
   route_id: s.id(), route_seq_no: z.coerce.number().int().nullable().optional(),
   so_id: s.id(), so_line_id: s.id(),
-  io_no: s.nullableStr(60), buyer_po_no: s.nullableStr(60),
-  style_id: s.id(),
+  io_no: s.strReq(60), buyer_po_no: s.nullableStr(60),   // IO no + style compulsory (client review 24-Sep-2026)
+  style_id: s.idReq(),
   part_name: s.nullableStr(50),
   yarn_id: s.id(),
   input_qty_kg: z.coerce.number().min(0).default(0),

@@ -1,0 +1,748 @@
+import { useEffect, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Truck, PackagePlus, Printer, Plus, Trash2, Save, X, Scale } from 'lucide-react';
+import { http } from '../../lib/api';
+import { fmtDate, fmtDecimal, today } from '../../lib/format';
+import { useToast } from '../../hooks/useToast';
+import { Modal, Input, Select, Textarea, LoadingBlock } from '../../components/ui';
+
+/**
+ * Knitting DC (yarn outward to the knitter) and grey fabric inward against it,
+ * with the yarn-vs-fabric reconciliation for the program.
+ *
+ * Client review 27-Sep-2026: after a program is released the yarn goes out on
+ * a DC, and the grey fabric comes back against that DC (our ref + their DC no)
+ * into fabric roll stock. Screens are kept line-wise and simple on purpose.
+ */
+
+/** Program statuses from which yarn may go out to the knitter. */
+export const KNIT_DC_READY = [
+  'RELEASED', 'MATERIAL_ISSUED', 'IN_PROGRESS', 'PRODUCTION_COMPLETED',
+  'OUTPUT_RECEIPT', 'QC', 'STOCK_POSTED',
+];
+
+const useLookup = (name: string) => useQuery({
+  queryKey: ['lookups', name],
+  queryFn: async () => (await http.get<{ data: any[] }>(`/lookups/${name}`)).data || [],
+});
+
+const useReconciliation = (programId: number | null) => useQuery({
+  queryKey: ['knit-recon', programId],
+  queryFn: async () => (await http.get<{ data: any }>(
+    `/knitting-programs/${programId}/reconciliation`)).data,
+  enabled: !!programId,
+});
+
+const invalidateKnitting = (qc: ReturnType<typeof useQueryClient>) => {
+  for (const k of ['knitting-programs', 'knitting-program', 'knit-recon', 'knit-dcs', 'knit-inwards']) {
+    void qc.invalidateQueries({ queryKey: [k] });
+  }
+};
+
+/* ─────────────────────────────────────────────────────────────────
+   Reconciliation — yarn given vs grey fabric received
+───────────────────────────────────────────────────────────────── */
+export function KnittingReconciliation({ programId, compact = false }: { programId: number; compact?: boolean }) {
+  const { data, isLoading } = useReconciliation(programId);
+  if (isLoading || !data) return <LoadingBlock rows={3} />;
+  const t = data.totals;
+
+  const tiles: [string, string, string][] = [
+    ['Yarn given', `${fmtDecimal(t.issued_kg, 3)} kg`, 'text-orange-700'],
+    ['Grey fabric received', `${fmtDecimal(t.fabric_received_kg, 3)} kg`, 'text-emerald-700'],
+    ['Process loss', `${fmtDecimal(t.loss_kg, 3)} kg · ${fmtDecimal(t.loss_pct, 2)}%`, 'text-rose-700'],
+    ['Balance yarn at knitter', `${fmtDecimal(t.balance_yarn_kg, 3)} kg`, 'text-brand-700'],
+    ['Cones given / balance', `${t.cones_issued} / ≈${t.cones_balance}`, 'text-slate-800'],
+    ['Rolls received', `${t.rolls_received}`, 'text-slate-800'],
+  ];
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        {tiles.map(([label, value, tone]) => (
+          <div key={label} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+            <p className={`mt-0.5 text-[13px] font-bold tabular-nums ${tone}`}>{value}</p>
+          </div>
+        ))}
+      </div>
+      <p className="text-[10.5px] text-slate-400">
+        Yarn consumed {fmtDecimal(t.consumed_kg, 3)} kg = fabric {fmtDecimal(t.fabric_received_kg, 3)} +
+        rejected {fmtDecimal(t.rejected_kg, 3)} + loss {fmtDecimal(t.loss_kg, 3)}.
+        Balance = yarn given − yarn consumed. Required fabric {fmtDecimal(t.required_fabric_kg, 2)} kg.
+      </p>
+
+      <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <table className="w-full text-[12px]">
+          <thead className="bg-slate-50">
+            <tr>
+              <th className="th">#</th>
+              <th className="th">Yarn</th>
+              <th className="th">Colour</th>
+              <th className="th text-right">Planned KG</th>
+              <th className="th text-right">Given KG</th>
+              <th className="th text-right">Consumed KG</th>
+              <th className="th text-right">Balance KG</th>
+              <th className="th text-right">Cones given</th>
+              <th className="th text-right">Cones bal.</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.lines.map((l: any) => (
+              <tr key={l.program_yarn_id} className="border-t border-slate-100">
+                <td className="td text-slate-500">{l.seq_no}</td>
+                <td className="td font-medium">{l.yarn}</td>
+                <td className="td">{l.colour || '—'}</td>
+                <td className="td text-right tabular-nums">{fmtDecimal(l.planned_kg, 3)}</td>
+                <td className="td text-right tabular-nums text-orange-700 font-semibold">{fmtDecimal(l.issued_kg, 3)}</td>
+                <td className="td text-right tabular-nums">{fmtDecimal(l.consumed_kg, 3)}</td>
+                <td className="td text-right tabular-nums font-semibold text-brand-700">{fmtDecimal(l.balance_kg, 3)}</td>
+                <td className="td text-right tabular-nums">{l.cones_issued}</td>
+                <td className="td text-right tabular-nums">≈{l.cones_balance}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {!compact && data.dcs.length > 0 && (
+        <div className="overflow-x-auto rounded-lg border border-slate-200">
+          <table className="w-full text-[12px]">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="th">Knitting DC</th>
+                <th className="th">Date</th>
+                <th className="th text-right">Yarn given KG</th>
+                <th className="th text-right">Cones</th>
+                <th className="th text-right">Fabric in KG</th>
+                <th className="th text-right">Yarn consumed KG</th>
+                <th className="th text-right">Balance KG</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.dcs.map((d: any) => (
+                <tr key={d.dc_no} className="border-t border-slate-100">
+                  <td className="td font-mono font-semibold text-brand-700">{d.dc_no}</td>
+                  <td className="td text-slate-500">{fmtDate(d.dc_date)}</td>
+                  <td className="td text-right tabular-nums">{fmtDecimal(d.issued_kg, 3)}</td>
+                  <td className="td text-right tabular-nums">{d.cones}</td>
+                  <td className="td text-right tabular-nums text-emerald-700">{fmtDecimal(d.fabric_kg, 3)}</td>
+                  <td className="td text-right tabular-nums">{fmtDecimal(d.consumed_kg, 3)}</td>
+                  <td className="td text-right tabular-nums font-semibold">{fmtDecimal(d.balance_kg, 3)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Knitting DC — yarn outward (line-wise)
+───────────────────────────────────────────────────────────────── */
+export function KnittingDcModal({ programId, open, onClose, onPrint }: {
+  programId: number | null; open: boolean; onClose: () => void; onPrint: (dcNo: string) => void;
+}) {
+  const toast = useToast();
+  const qc = useQueryClient();
+  const { data: warehouses = [] } = useLookup('warehouses');
+  const { data: parties = [] } = useLookup('parties');
+  const { data: prog } = useQuery({
+    queryKey: ['knitting-program', programId],
+    queryFn: async () => (await http.get<{ data: any }>(`/knitting/programs/${programId}`)).data,
+    enabled: open && !!programId,
+  });
+
+  const [h, setH] = useState<any>({});
+  const [lines, setLines] = useState<any[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  // Prefill every yarn line with what is still to go out.
+  useEffect(() => {
+    if (!open || !prog) return;
+    setH({
+      dc_date: today(), vendor_id: prog.vendor_id ?? '', vehicle_no: '', warehouse_id: '',
+      remarks: '', allow_override: false, override_reason: '',
+    });
+    setLines((prog.yarns ?? []).filter((y: any) => y.yarn_id).map((y: any) => {
+      const pending = Math.max(0, Number(y.planned_qty_kg) - Number(y.issued_qty_kg));
+      return {
+        program_yarn_id: y.id, yarn_id: y.yarn_id,
+        yarn: `${y.yarn_code ?? ''} — ${y.yarn_name ?? ''}`, colour: y.colour, count: y.count_value,
+        pending, lot_no: y.yarn_lot_no ?? '', yarn_po_no: y.yarn_po_no ?? '',
+        issued_qty_kg: pending ? String(Math.round(pending * 1000) / 1000) : '', no_of_cones: '',
+      };
+    }));
+  }, [open, prog]);
+
+  const setLine = (i: number, patch: any) =>
+    setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  const totalKg = lines.reduce((n, l) => n + (Number(l.issued_qty_kg) || 0), 0);
+  const totalCones = lines.reduce((n, l) => n + (Number(l.no_of_cones) || 0), 0);
+
+  const save = async () => {
+    if (!h.warehouse_id) { toast('Select the store the yarn goes out from', 'error'); return; }
+    if (!h.vendor_id) { toast('Select the knitting vendor', 'error'); return; }
+    if (!(totalKg > 0)) { toast('Enter the KG to send on at least one line', 'error'); return; }
+    setSaving(true);
+    try {
+      const r = await http.post<{ data: { dc_no: string } }>('/knitting-dcs', {
+        program_id: programId, dc_date: h.dc_date, vendor_id: Number(h.vendor_id),
+        vehicle_no: h.vehicle_no || null, warehouse_id: Number(h.warehouse_id),
+        allow_override: h.allow_override, override_reason: h.override_reason || null,
+        remarks: h.remarks || null,
+        lines: lines.filter((l) => Number(l.issued_qty_kg) > 0).map((l) => ({
+          program_yarn_id: l.program_yarn_id, yarn_id: l.yarn_id,
+          lot_no: l.lot_no || null, yarn_po_no: l.yarn_po_no || null,
+          issued_qty_kg: Number(l.issued_qty_kg), no_of_cones: Number(l.no_of_cones) || 0,
+        })),
+      });
+      toast(`Knitting DC ${r.data.dc_no} created`);
+      invalidateKnitting(qc);
+      onClose();
+      onPrint(r.data.dc_no);
+    } catch (e: any) {
+      toast(e?.message || 'Could not create the knitting DC', 'error');
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} size="xl"
+      title={`Knitting DC — Yarn Outward${prog ? ` · ${prog.program_no}` : ''}`}
+      footer={<>
+        <button className="btn-secondary" onClick={onClose}><X size={14} /> Cancel</button>
+        <button className="btn-primary" onClick={save} disabled={saving} id="btn-save-knit-dc">
+          <Truck size={14} /> {saving ? 'Saving…' : 'Save & Print DC'}
+        </button>
+      </>}>
+      {!prog ? <LoadingBlock rows={4} /> : (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-100 bg-slate-50 p-3 text-[12px] sm:grid-cols-4">
+            <Info label="Program" value={prog.program_no} />
+            <Info label="I/O (Job) No" value={prog.io_no ?? '—'} />
+            <Info label="Style" value={prog.style_code ? `${prog.style_code} — ${prog.style_name ?? ''}` : '—'} />
+            <Info label="Fabric / GSM / Dia" value={`${prog.fabric_name ?? prog.fabric_type ?? '—'} · ${prog.gsm ?? '—'} · ${prog.dia ?? '—'}`} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Input label="DC Date" type="date" value={h.dc_date ?? ''}
+              onChange={(e) => setH({ ...h, dc_date: e.target.value })} id="kdc-date" />
+            <Select label="Knitting Vendor" required value={h.vendor_id ?? ''} placeholder="— Select —"
+              onChange={(e) => setH({ ...h, vendor_id: e.target.value })} id="kdc-vendor">
+              {parties.map((p: any) => <option key={p.id} value={p.id}>{p.label}</option>)}
+            </Select>
+            <Select label="From Store" required value={h.warehouse_id ?? ''} placeholder="— Select —"
+              onChange={(e) => setH({ ...h, warehouse_id: e.target.value })} id="kdc-wh">
+              {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.label}</option>)}
+            </Select>
+            <Input label="Vehicle No" value={h.vehicle_no ?? ''}
+              onChange={(e) => setH({ ...h, vehicle_no: e.target.value })} id="kdc-vehicle" />
+          </div>
+
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="w-full text-[12px]">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="th">Yarn</th>
+                  <th className="th">Colour</th>
+                  <th className="th text-right">To give KG</th>
+                  <th className="th">Lot No</th>
+                  <th className="th">Yarn PO</th>
+                  <th className="th text-right">KG</th>
+                  <th className="th text-right">Cones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lines.length === 0 && (
+                  <tr><td colSpan={7} className="td py-6 text-center text-slate-400">
+                    This program has no yarn lines with a yarn selected
+                  </td></tr>
+                )}
+                {lines.map((l, i) => (
+                  <tr key={l.program_yarn_id} className="border-t border-slate-100">
+                    <td className="td font-medium">{l.yarn}{l.count ? <span className="ml-1 text-slate-400">{l.count}</span> : null}</td>
+                    <td className="td">{l.colour || '—'}</td>
+                    <td className="td text-right tabular-nums text-slate-500">{fmtDecimal(l.pending, 3)}</td>
+                    <td className="td"><input className="input w-28" value={l.lot_no}
+                      onChange={(e) => setLine(i, { lot_no: e.target.value })} id={`kdc-lot-${i}`} /></td>
+                    <td className="td"><input className="input w-28" value={l.yarn_po_no}
+                      onChange={(e) => setLine(i, { yarn_po_no: e.target.value })} id={`kdc-po-${i}`} /></td>
+                    <td className="td"><input className="input w-24 text-right" type="number" step="0.001"
+                      value={l.issued_qty_kg} onChange={(e) => setLine(i, { issued_qty_kg: e.target.value })}
+                      id={`kdc-kg-${i}`} /></td>
+                    <td className="td"><input className="input w-20 text-right" type="number" step="1"
+                      value={l.no_of_cones} onChange={(e) => setLine(i, { no_of_cones: e.target.value })}
+                      id={`kdc-cones-${i}`} /></td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="border-t-2 border-slate-200 bg-slate-50">
+                <tr>
+                  <td colSpan={5} className="td font-bold">Total</td>
+                  <td className="td text-right font-bold tabular-nums">{fmtDecimal(totalKg, 3)}</td>
+                  <td className="td text-right font-bold tabular-nums">{totalCones}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+            <label className="flex items-center gap-2 text-[12px] text-slate-700">
+              <input type="checkbox" checked={!!h.allow_override}
+                onChange={(e) => setH({ ...h, allow_override: e.target.checked })} id="kdc-override" />
+              Send beyond available stock (needs authorisation)
+            </label>
+            {h.allow_override && (
+              <Input label="Override reason" required value={h.override_reason ?? ''} className="mt-2"
+                onChange={(e) => setH({ ...h, override_reason: e.target.value })} id="kdc-reason" />
+            )}
+          </div>
+          <Textarea label="Remarks" value={h.remarks ?? ''}
+            onChange={(e) => setH({ ...h, remarks: e.target.value })} id="kdc-remarks" />
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Printable knitting DC
+───────────────────────────────────────────────────────────────── */
+const PRINT_CSS = `
+  .kdc { font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #0f172a; }
+  .kdc h1 { font-size: 18px; margin: 0; text-align: center; }
+  .kdc .sub { text-align: center; color: #475569; font-size: 11px; margin: 2px 0 8px; }
+  .kdc .title { text-align: center; font-weight: 700; font-size: 14px; letter-spacing: 1px;
+    border-top: 2px solid #0f172a; border-bottom: 2px solid #0f172a; padding: 4px 0; margin-bottom: 10px; }
+  .kdc .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; margin-bottom: 10px; }
+  .kdc .grid div span { color: #64748b; display: inline-block; min-width: 110px; }
+  .kdc table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+  .kdc th, .kdc td { border: 1px solid #94a3b8; padding: 4px 6px; text-align: left; }
+  .kdc th { background: #f1f5f9; font-size: 11px; }
+  .kdc td.n, .kdc th.n { text-align: right; }
+  .kdc tfoot td { font-weight: 700; }
+  .kdc .sign { display: flex; justify-content: space-between; margin-top: 48px; font-size: 11px; }
+  .kdc .sign div { border-top: 1px solid #0f172a; padding-top: 4px; min-width: 160px; text-align: center; }
+`;
+
+export function KnittingDcPrint({ dcNo, onClose }: { dcNo: string | null; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const { data: dc, isLoading } = useQuery({
+    queryKey: ['knit-dc', dcNo],
+    queryFn: async () => (await http.get<{ data: any }>(`/knitting-dcs/${encodeURIComponent(dcNo!)}`)).data,
+    enabled: !!dcNo,
+  });
+
+  // Print just the DC sheet in its own window so the app behind it stays out.
+  const print = () => {
+    const w = window.open('', '_blank', 'width=900,height=700');
+    if (!w || !ref.current) return;
+    w.document.write(`<!doctype html><html><head><title>${dcNo}</title><style>${PRINT_CSS}</style></head>` +
+      `<body>${ref.current.innerHTML}</body></html>`);
+    w.document.close();
+    w.focus();
+    w.print();
+  };
+
+  const c = dc?.company ?? {};
+  return (
+    <Modal open={!!dcNo} onClose={onClose} size="lg" title={`Knitting DC ${dcNo ?? ''}`}
+      footer={<>
+        <button className="btn-secondary" onClick={onClose}>Close</button>
+        <button className="btn-primary" onClick={print} disabled={!dc} id="btn-print-knit-dc">
+          <Printer size={14} /> Print
+        </button>
+      </>}>
+      {isLoading || !dc ? <LoadingBlock rows={5} /> : (
+        <div ref={ref}>
+          <style>{PRINT_CSS}</style>
+          <div className="kdc">
+            <h1>{c.trade_name || c.legal_name || 'Company'}</h1>
+            <p className="sub">
+              {[c.address_line1, c.address_line2, c.city, c.state, c.pincode].filter(Boolean).join(', ')}
+              {c.gstin ? ` · GSTIN ${c.gstin}` : ''}
+            </p>
+            <div className="title">DELIVERY CHALLAN — YARN FOR KNITTING (JOB WORK)</div>
+            <div className="grid">
+              <div><span>DC No</span><b>{dc.dc_no}</b></div>
+              <div><span>DC Date</span>{fmtDate(dc.dc_date)}</div>
+              <div><span>To (Knitter)</span><b>{dc.vendor_name ?? '—'}</b></div>
+              <div><span>Vendor GSTIN</span>{dc.vendor_gstin ?? '—'}</div>
+              <div><span>Program No</span><b>{dc.program_no}</b></div>
+              <div><span>I/O (Job) No</span><b>{dc.io_no ?? '—'}</b></div>
+              <div><span>Style</span>{dc.style_code ? `${dc.style_code} — ${dc.style_name ?? ''}` : '—'}</div>
+              <div><span>Buyer PO</span>{dc.buyer_po_no ?? '—'}</div>
+              <div><span>Fabric</span>{dc.fabric_name ?? '—'} {dc.part_name ? `(${dc.part_name})` : ''}</div>
+              <div><span>GSM / Dia / Gauge</span>{dc.gsm ?? '—'} / {dc.dia ?? '—'} / {dc.gauge ?? '—'}</div>
+              <div><span>Required fabric</span>{fmtDecimal(dc.required_qty_kg, 2)} kg</div>
+              <div><span>Vehicle No</span>{dc.vehicle_no ?? '—'}</div>
+              <div><span>From Store</span>{dc.warehouse_name ?? '—'}</div>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th><th>Yarn</th><th>Count</th><th>Colour</th><th>Lot No</th><th>Yarn PO</th>
+                  <th className="n">Cones</th><th className="n">Qty (KG)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dc.lines.map((l: any, i: number) => (
+                  <tr key={l.id}>
+                    <td>{i + 1}</td>
+                    <td>{l.yarn_code} — {l.yarn_name}</td>
+                    <td>{l.count_value || l.yarn_count || '—'}</td>
+                    <td>{l.colour || '—'}</td>
+                    <td>{l.lot_no || '—'}</td>
+                    <td>{l.yarn_po_no || '—'}</td>
+                    <td className="n">{l.no_of_cones}</td>
+                    <td className="n">{fmtDecimal(l.issued_qty_kg, 3)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan={6}>Total</td>
+                  <td className="n">{dc.total_cones}</td>
+                  <td className="n">{fmtDecimal(dc.total_kg, 3)}</td>
+                </tr>
+              </tfoot>
+            </table>
+            {dc.remarks && <p style={{ marginTop: 8 }}><b>Remarks:</b> {dc.remarks}</p>}
+            <p style={{ marginTop: 8, fontSize: 11, color: '#475569' }}>
+              Sent for knitting on job-work basis, not for sale. Please return grey fabric quoting this DC no
+              and your DC no.
+            </p>
+            <div className="sign">
+              <div>Prepared by</div><div>Received by (Knitter)</div><div>Authorised signatory</div>
+            </div>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Grey fabric inward — against the knitting DC (roll-wise)
+───────────────────────────────────────────────────────────────── */
+const newRoll = (p?: any) => ({ roll_no: '', weight_kg: '', dia: p?.dia ?? '', gsm: p?.gsm ?? '', meters: '' });
+
+export function KnittingInwardModal({ programId, open, onClose }: {
+  programId: number | null; open: boolean; onClose: () => void;
+}) {
+  const toast = useToast();
+  const qc = useQueryClient();
+  const { data: warehouses = [] } = useLookup('warehouses');
+  const { data: fabrics = [] } = useLookup('fabrics');
+  const { data: recon } = useReconciliation(open ? programId : null);
+  const [h, setH] = useState<any>({});
+  const [rolls, setRolls] = useState<any[]>([newRoll()]);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open || !recon) return;
+    const p = recon.program;
+    const openDc = recon.dcs.find((d: any) => d.balance_kg > 0);
+    setH({
+      ref_dc_no: openDc?.dc_no ?? '', party_dc_no: '', receipt_date: today(), vehicle_no: '',
+      warehouse_id: '', fabric_id: p.fabric_id ?? '', lot_no: '', yarn_consumed_kg: '',
+      rejected_kg: '', remarks: '',
+    });
+    setRolls([newRoll(p)]);
+    // Only reset when the dialog opens for a program, not on every refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, recon?.program?.id]);
+
+  const setRoll = (i: number, patch: any) => setRolls((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const fabricKg = rolls.reduce((n, r) => n + (Number(r.weight_kg) || 0), 0);
+  const rejected = Number(h.rejected_kg) || 0;
+  const consumed = h.yarn_consumed_kg === '' || h.yarn_consumed_kg == null
+    ? fabricKg + rejected : Number(h.yarn_consumed_kg);
+  const loss = Math.max(0, consumed - fabricKg - rejected);
+  const scope = h.ref_dc_no ? recon?.dcs.find((d: any) => d.dc_no === h.ref_dc_no) : recon?.totals;
+  const openKg = scope ? Number(scope.issued_kg) - Number(scope.consumed_kg) : 0;
+
+  const save = async () => {
+    if (!h.party_dc_no) { toast('Enter the knitter DC number', 'error'); return; }
+    if (!h.warehouse_id) { toast('Select the store receiving the fabric', 'error'); return; }
+    const good = rolls.filter((r) => Number(r.weight_kg) > 0);
+    if (!good.length) { toast('Enter the KG of at least one roll', 'error'); return; }
+    setSaving(true);
+    try {
+      const r = await http.post<{ data: any }>('/knitting-inwards', {
+        program_id: programId, ref_dc_no: h.ref_dc_no || null, party_dc_no: h.party_dc_no,
+        receipt_date: h.receipt_date, vehicle_no: h.vehicle_no || null,
+        warehouse_id: Number(h.warehouse_id), fabric_id: h.fabric_id ? Number(h.fabric_id) : null,
+        lot_no: h.lot_no || null,
+        yarn_consumed_kg: h.yarn_consumed_kg === '' ? null : Number(h.yarn_consumed_kg),
+        rejected_kg: rejected, remarks: h.remarks || null,
+        rolls: good.map((x) => ({
+          roll_no: x.roll_no || null, weight_kg: Number(x.weight_kg),
+          meters: x.meters === '' ? null : Number(x.meters),
+          gsm: x.gsm === '' || Number.isNaN(Number.parseInt(x.gsm, 10)) ? null : Number.parseInt(x.gsm, 10),
+          dia: x.dia || null,
+        })),
+      });
+      toast(`Grey fabric inward ${r.data.receipt_no} saved — ${r.data.rolls.length} roll(s) in roll stock`);
+      invalidateKnitting(qc);
+      onClose();
+    } catch (e: any) {
+      toast(e?.message || 'Could not save the inward', 'error');
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} size="xl"
+      title={`Grey Fabric Inward — against Knitting DC${recon ? ` · ${recon.program.program_no}` : ''}`}
+      footer={<>
+        <button className="btn-secondary" onClick={onClose}><X size={14} /> Cancel</button>
+        <button className="btn-primary" onClick={save} disabled={saving} id="btn-save-knit-inward">
+          <Save size={14} /> {saving ? 'Saving…' : 'Save Inward'}
+        </button>
+      </>}>
+      {!recon ? <LoadingBlock rows={4} /> : (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-100 bg-slate-50 p-3 text-[12px] sm:grid-cols-4">
+            <Info label="Program" value={recon.program.program_no} />
+            <Info label="I/O (Job) No" value={recon.program.io_no ?? '—'} />
+            <Info label="Style" value={recon.program.style_code ?? '—'} />
+            <Info label="Knitter" value={recon.program.vendor_name ?? '—'} />
+          </div>
+
+          <KnittingReconciliation programId={recon.program.id} compact />
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Select label="Our Knitting DC" value={h.ref_dc_no ?? ''} placeholder="— Program level —"
+              onChange={(e) => setH({ ...h, ref_dc_no: e.target.value })} id="kin-ref-dc">
+              {recon.dcs.map((d: any) => (
+                <option key={d.dc_no} value={d.dc_no}>
+                  {d.dc_no} · {fmtDate(d.dc_date)} · bal {fmtDecimal(d.balance_kg, 3)} kg
+                </option>
+              ))}
+            </Select>
+            <Input label="Knitter DC No" required value={h.party_dc_no ?? ''}
+              onChange={(e) => setH({ ...h, party_dc_no: e.target.value })} id="kin-party-dc" />
+            <Input label="Inward Date" type="date" value={h.receipt_date ?? ''}
+              onChange={(e) => setH({ ...h, receipt_date: e.target.value })} id="kin-date" />
+            <Input label="Vehicle No" value={h.vehicle_no ?? ''}
+              onChange={(e) => setH({ ...h, vehicle_no: e.target.value })} id="kin-vehicle" />
+            <Select label="Receiving Store" required value={h.warehouse_id ?? ''} placeholder="— Select —"
+              onChange={(e) => setH({ ...h, warehouse_id: e.target.value })} id="kin-wh">
+              {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.label}</option>)}
+            </Select>
+            <Select label="Grey Fabric" required value={h.fabric_id ?? ''} placeholder="— Select —"
+              onChange={(e) => setH({ ...h, fabric_id: e.target.value })} id="kin-fabric">
+              {fabrics.map((f: any) => <option key={f.id} value={f.id}>{f.code ? `${f.code} — ` : ''}{f.label}</option>)}
+            </Select>
+            <Input label="Lot No" value={h.lot_no ?? ''} placeholder="Auto if blank"
+              onChange={(e) => setH({ ...h, lot_no: e.target.value })} id="kin-lot" />
+            <Input label="Rejected KG" type="number" step="0.001" value={h.rejected_kg ?? ''}
+              onChange={(e) => setH({ ...h, rejected_kg: e.target.value })} id="kin-rejected" />
+          </div>
+
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="w-full text-[12px]">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="th">#</th>
+                  <th className="th">Roll No</th>
+                  <th className="th text-right">KG</th>
+                  <th className="th">Dia</th>
+                  <th className="th">GSM</th>
+                  <th className="th text-right">Meters</th>
+                  <th className="th" />
+                </tr>
+              </thead>
+              <tbody>
+                {rolls.map((r, i) => (
+                  <tr key={i} className="border-t border-slate-100">
+                    <td className="td text-slate-500">{i + 1}</td>
+                    <td className="td"><input className="input w-32" value={r.roll_no} placeholder="Auto"
+                      onChange={(e) => setRoll(i, { roll_no: e.target.value })} id={`kin-roll-${i}`} /></td>
+                    <td className="td"><input className="input w-24 text-right" type="number" step="0.001"
+                      value={r.weight_kg} onChange={(e) => setRoll(i, { weight_kg: e.target.value })}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && i === rolls.length - 1) setRolls((rs) => [...rs, newRoll(r)]); }}
+                      id={`kin-kg-${i}`} /></td>
+                    <td className="td"><input className="input w-20" value={r.dia}
+                      onChange={(e) => setRoll(i, { dia: e.target.value })} /></td>
+                    <td className="td"><input className="input w-20" value={r.gsm}
+                      onChange={(e) => setRoll(i, { gsm: e.target.value })} /></td>
+                    <td className="td"><input className="input w-24 text-right" type="number" step="0.01"
+                      value={r.meters} onChange={(e) => setRoll(i, { meters: e.target.value })} /></td>
+                    <td className="td">
+                      {rolls.length > 1 && (
+                        <button className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                          onClick={() => setRolls((rs) => rs.filter((_, j) => j !== i))} title="Remove roll">
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="border-t-2 border-slate-200 bg-slate-50">
+                <tr>
+                  <td colSpan={2} className="td font-bold">{rolls.filter((r) => Number(r.weight_kg) > 0).length} roll(s)</td>
+                  <td className="td text-right font-bold tabular-nums">{fmtDecimal(fabricKg, 3)}</td>
+                  <td colSpan={4} className="td">
+                    <button className="btn-secondary btn-sm" onClick={() => setRolls((rs) => [...rs, newRoll(rs[rs.length - 1])])}
+                      id="btn-add-inward-roll">
+                      <Plus size={13} /> Add roll
+                    </button>
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Input label="Yarn consumed KG (knitter)" type="number" step="0.001" value={h.yarn_consumed_kg ?? ''}
+              placeholder={fmtDecimal(fabricKg + rejected, 3)}
+              onChange={(e) => setH({ ...h, yarn_consumed_kg: e.target.value })} id="kin-consumed" />
+            <div className="sm:col-span-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[12px]">
+              <Scale size={15} className="text-slate-400" />
+              <span>This inward: fabric <b>{fmtDecimal(fabricKg, 3)}</b> + rejected <b>{fmtDecimal(rejected, 3)}</b> + loss <b className="text-rose-700">{fmtDecimal(loss, 3)}</b>
+                {' '}({consumed > 0 ? fmtDecimal((loss / consumed) * 100, 2) : '0.00'}%) = yarn <b>{fmtDecimal(consumed, 3)}</b> kg.</span>
+              <span className={`ml-auto font-semibold ${consumed > openKg + 1e-9 ? 'text-red-600' : 'text-brand-700'}`}>
+                Balance after: {fmtDecimal(openKg - consumed, 3)} kg
+              </span>
+            </div>
+          </div>
+          <Textarea label="Remarks" value={h.remarks ?? ''}
+            onChange={(e) => setH({ ...h, remarks: e.target.value })} id="kin-remarks" />
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Detail tab — DCs, inwards and reconciliation for one program
+───────────────────────────────────────────────────────────────── */
+export function KnittingDcInwardTab({ prog }: { prog: any }) {
+  const [dcOpen, setDcOpen] = useState(false);
+  const [inOpen, setInOpen] = useState(false);
+  const [printDc, setPrintDc] = useState<string | null>(null);
+  const ready = KNIT_DC_READY.includes(prog.status);
+
+  const { data: dcs = [] } = useQuery({
+    queryKey: ['knit-dcs', prog.id],
+    queryFn: async () => (await http.get<{ data: any[] }>(`/knitting-dcs?program_id=${prog.id}`)).data || [],
+  });
+  const { data: inwards = [] } = useQuery({
+    queryKey: ['knit-inwards', prog.id],
+    queryFn: async () => (await http.get<{ data: any[] }>(`/knitting-inwards?program_id=${prog.id}`)).data || [],
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[12px] text-slate-500">
+          {ready ? 'Give yarn to the knitter on a DC, then receive grey fabric against it.'
+            : 'Release the program to give the knitting DC.'}
+        </p>
+        <div className="flex gap-2">
+          <button className="btn-secondary btn-sm" disabled={!ready} onClick={() => setDcOpen(true)} id="btn-detail-knit-dc">
+            <Truck size={13} /> Knitting DC (yarn outward)
+          </button>
+          <button className="btn-secondary btn-sm" disabled={!dcs.length} onClick={() => setInOpen(true)} id="btn-detail-knit-inward">
+            <PackagePlus size={13} /> Grey fabric inward
+          </button>
+        </div>
+      </div>
+
+      <KnittingReconciliation programId={prog.id} />
+
+      <div>
+        <h5 className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">Knitting DCs</h5>
+        {dcs.length === 0 ? <p className="py-3 text-center text-[12px] text-slate-400">No knitting DC given yet</p> : (
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="w-full text-[12px]">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="th">DC No</th><th className="th">Date</th><th className="th">Knitter</th>
+                  <th className="th">Vehicle</th><th className="th text-right">Lines</th>
+                  <th className="th text-right">KG</th><th className="th text-right">Cones</th>
+                  <th className="th text-right">Fabric in</th><th className="th text-right">Balance</th><th className="th" />
+                </tr>
+              </thead>
+              <tbody>
+                {dcs.map((d: any) => (
+                  <tr key={d.dc_no} className="border-t border-slate-100">
+                    <td className="td font-mono font-semibold text-brand-700">{d.dc_no}</td>
+                    <td className="td text-slate-500">{fmtDate(d.dc_date)}</td>
+                    <td className="td">{d.vendor_name ?? '—'}</td>
+                    <td className="td">{d.vehicle_no ?? '—'}</td>
+                    <td className="td text-right">{d.line_count}</td>
+                    <td className="td text-right tabular-nums font-semibold">{fmtDecimal(d.total_kg, 3)}</td>
+                    <td className="td text-right tabular-nums">{d.total_cones}</td>
+                    <td className="td text-right tabular-nums text-emerald-700">{fmtDecimal(d.fabric_received_kg, 3)}</td>
+                    <td className="td text-right tabular-nums">{fmtDecimal(d.balance_yarn_kg, 3)}</td>
+                    <td className="td">
+                      <button className="rounded p-1 text-slate-400 hover:bg-brand-50 hover:text-brand-600"
+                        title="Print DC" onClick={() => setPrintDc(d.dc_no)} id={`btn-print-dc-${d.dc_no}`}>
+                        <Printer size={13} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h5 className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">Grey fabric inwards</h5>
+        {inwards.length === 0 ? <p className="py-3 text-center text-[12px] text-slate-400">No grey fabric received yet</p> : (
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="w-full text-[12px]">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="th">Inward No</th><th className="th">Date</th><th className="th">Our DC</th>
+                  <th className="th">Knitter DC</th><th className="th">Lot</th><th className="th text-right">Rolls</th>
+                  <th className="th text-right">Fabric KG</th><th className="th text-right">Yarn used</th>
+                  <th className="th text-right">Loss</th><th className="th">Rolls</th>
+                </tr>
+              </thead>
+              <tbody>
+                {inwards.map((r: any) => (
+                  <tr key={r.id} className="border-t border-slate-100 align-top">
+                    <td className="td font-mono font-semibold text-brand-700">{r.receipt_no}</td>
+                    <td className="td text-slate-500">{fmtDate(r.receipt_date)}</td>
+                    <td className="td font-mono">{r.ref_dc_no ?? '—'}</td>
+                    <td className="td font-mono">{r.party_dc_no ?? '—'}</td>
+                    <td className="td">{r.output_lot_no}</td>
+                    <td className="td text-right">{r.no_of_rolls}</td>
+                    <td className="td text-right tabular-nums font-semibold text-emerald-700">{fmtDecimal(r.output_qty, 3)}</td>
+                    <td className="td text-right tabular-nums">{fmtDecimal(r.input_qty, 3)}</td>
+                    <td className="td text-right tabular-nums text-rose-700">{fmtDecimal(r.loss_qty, 3)}</td>
+                    <td className="td text-[11px] text-slate-500">
+                      {(r.rolls ?? []).map((x: any) => `${x.roll_no} (${fmtDecimal(x.weight_kg, 2)})`).join(', ')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <KnittingDcModal programId={dcOpen ? prog.id : null} open={dcOpen} onClose={() => setDcOpen(false)}
+        onPrint={setPrintDc} />
+      <KnittingInwardModal programId={inOpen ? prog.id : null} open={inOpen} onClose={() => setInOpen(false)} />
+      <KnittingDcPrint dcNo={printDc} onClose={() => setPrintDc(null)} />
+    </div>
+  );
+}
+
+function Info({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-[10.5px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="mt-0.5 font-medium text-slate-800">{value}</p>
+    </div>
+  );
+}

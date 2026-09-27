@@ -6,6 +6,7 @@ import { NotFound, BadRequest } from '../../core/errors.js';
 import { requirePermission } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
+import { computeInvoice, chargesFromRow, invoiceSummaryColumns } from '../../core/invoiceCalc.js';
 import { s } from '../resources/schemas.js';
 
 export const trimProcurementRouter = Router();
@@ -430,7 +431,14 @@ trimProcurementRouter.post('/trim-grns', requirePermission('PROCUREMENT.CREATE')
       };
     });
 
-    const netAmount = totTaxable + totTax;
+    // Common invoice summary (header heads read from the raw body; all optional).
+    const summary = computeInvoice(
+      calculatedLines.map((l: any) => ({ taxable: l.taxable, tax: l.tax })),
+      isInterstate ? 'INTER_STATE' : 'INTRA_STATE',
+      chargesFromRow(req.body ?? {}),
+    );
+    const summaryCols = invoiceSummaryColumns(req.body ?? {}, summary);
+    const netAmount = summary.net;
 
     const poIds = Array.isArray(body.po_ids)
       ? body.po_ids.map(Number).filter((n: number) => n > 0)
@@ -454,6 +462,9 @@ trimProcurementRouter.post('/trim-grns', requirePermission('PROCUREMENT.CREATE')
     );
 
     const grnId = resGrn.insertId;
+    const sumKeys = Object.keys(summaryCols);
+    await txExecute(tx, `UPDATE trx_trim_grn SET ${sumKeys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`,
+      [...sumKeys.map((k) => summaryCols[k]), grnId]);
 
     if (body.gate_inward_id) {
       await txExecute(tx, `

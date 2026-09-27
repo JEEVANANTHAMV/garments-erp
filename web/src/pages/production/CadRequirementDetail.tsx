@@ -12,6 +12,9 @@ import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
 import { Input, Select, Badge } from '../../components/ui';
 import { fmtDecimal, fmtNumber, fmtDate, today } from '../../lib/format';
+import {
+  partKg, withPartWeight, readPartFactor, factorUnitLabel, isKgUom, type PartFactorUnit,
+} from '../../lib/partWeight';
 import { createPortal } from 'react-dom';
 
 interface ColorwayRow {
@@ -79,10 +82,31 @@ interface TrimItem {
   remarks: string;
 }
 
+/** Flat-knit trim component kinds. Not every garment has a cuff, and extra add-on
+ *  components (bottom rib, placket, tipping...) are added as OTHER. */
+export type TrimComponentType = 'COLLAR' | 'CUFF' | 'OTHER';
+
+export interface TrimComponent {
+  key: string;
+  type: TrimComponentType;
+  label: string;
+  /** Yarn weight per piece of this component, in grams. */
+  weight_g: number;
+}
+
+export interface ComponentCell {
+  dimension: string;
+  pcs: number;
+}
+
 export interface CollarDimensionRow {
   size: string;
-  collar_dimension: string;
-  collar_pcs: number;
+  /** Per-component dimension / piece count, keyed by TrimComponent.key. */
+  values?: Record<string, ComponentCell>;
+  // Legacy fixed columns — still written (mirrors the first Collar / Cuff component)
+  // so older readers and saved sheets keep working.
+  collar_dimension?: string;
+  collar_pcs?: number;
   cuff_dimension?: string;
   cuff_pcs?: number;
 }
@@ -92,7 +116,10 @@ export interface FlatKnitSpec {
   item_type: string;
   color: string;
   gsm: number;
+  /** Sum of component weights (grams per garment set). Legacy sheets stored the whole set weight here. */
   weight_per_set_g: number;
+  components?: TrimComponent[];
+  component_totals?: Record<string, number>;
   size_rows: CollarDimensionRow[];
   total_collar_pcs: number;
   total_cuff_pcs: number;
@@ -109,7 +136,95 @@ export interface SpecialPartRow {
   consumption_per_pc: number;
   uom: string;
   total_qty: number;
+  /** Weight factor as entered for non-KG rows (MTRS / PCS); its meaning is set by kg_factor_unit. */
+  kg_factor?: number;
+  /** PER_KG = m (or pcs) per kg, e.g. draw cord 50 m/kg · G_PER = g per m (or per pc), e.g. 20 g/m. */
+  kg_factor_unit?: PartFactorUnit;
+  /** Per-kg equivalent (derived). Legacy rows carry only this and are read as PER_KG. */
+  qty_per_kg?: number;
+  /** Derived purchase weight in KG — see lib/partWeight.ts (recomputed server-side). */
+  total_kg?: number;
   remarks: string;
+}
+
+const COMPONENT_TYPE_LABEL: Record<TrimComponentType, string> = {
+  COLLAR: 'Collar',
+  CUFF: 'Cuff',
+  OTHER: 'Other Component',
+};
+
+/** KG equivalent of a specialized part, or null when a non-KG row has no valid factor (shared calc). */
+export const specialPartKg = (sp: SpecialPartRow): number | null => partKg(sp);
+
+const withPartKg = (sp: SpecialPartRow): SpecialPartRow => withPartWeight(sp);
+
+/** "50 m/kg", "20 g/m" ... for read-only displays; null when not set. */
+const partFactorText = (sp: SpecialPartRow): string | null => {
+  const { factor, unit } = readPartFactor(sp);
+  if (!(factor > 0)) return null;
+  return `${fmtDecimal(factor, 3)} ${factorUnitLabel(unit, sp.uom)}`;
+};
+
+const legacyWeightG = (w: number) => (w > 1 ? w : w * 1000);
+
+/** Recompute component totals, yarn KG and the legacy collar/cuff mirror fields. */
+export function recalculateFlatKnit(spec: FlatKnitSpec): FlatKnitSpec {
+  const components = spec.components || [];
+  const totals: Record<string, number> = {};
+  components.forEach((c) => { totals[c.key] = 0; });
+  const firstCollar = components.find((c) => c.type === 'COLLAR');
+  const firstCuff = components.find((c) => c.type === 'CUFF');
+
+  const size_rows = spec.size_rows.map((r) => {
+    const values = { ...(r.values || {}) };
+    components.forEach((c) => {
+      totals[c.key] += Number(values[c.key]?.pcs) || 0;
+    });
+    return {
+      ...r,
+      values,
+      collar_dimension: firstCollar ? values[firstCollar.key]?.dimension || '' : '',
+      collar_pcs: firstCollar ? Number(values[firstCollar.key]?.pcs) || 0 : 0,
+      cuff_dimension: firstCuff ? values[firstCuff.key]?.dimension || '' : '',
+      cuff_pcs: firstCuff ? Number(values[firstCuff.key]?.pcs) || 0 : 0,
+    };
+  });
+
+  const yarnKg = components.reduce((s, c) => s + (totals[c.key] || 0) * (Number(c.weight_g) || 0) / 1000, 0);
+  const setWeight = components.reduce((s, c) => s + (Number(c.weight_g) || 0), 0);
+  return {
+    ...spec,
+    components,
+    size_rows,
+    component_totals: totals,
+    weight_per_set_g: Math.round(setWeight * 1000) / 1000,
+    total_collar_pcs: components.filter((c) => c.type === 'COLLAR').reduce((s, c) => s + totals[c.key], 0),
+    total_cuff_pcs: components.filter((c) => c.type === 'CUFF').reduce((s, c) => s + totals[c.key], 0),
+    total_yarn_kg: Math.round(yarnKg * 100) / 100,
+  };
+}
+
+/**
+ * Bring a saved / imported spec into the component structure. Legacy sheets had fixed
+ * Collar + Cuff columns with yarn = collar pcs x set weight, so the collar component
+ * inherits the whole set weight and cuff 0 g — totals stay exactly as before.
+ */
+export function normalizeFlatKnit(spec: FlatKnitSpec): FlatKnitSpec {
+  if (spec.components && spec.components.length > 0) return recalculateFlatKnit(spec);
+  const rows = spec.size_rows || [];
+  const hasCuff = rows.some((r) => (Number(r.cuff_pcs) || 0) > 0 || (r.cuff_dimension || '').trim() !== '');
+  const components: TrimComponent[] = [
+    { key: 'collar', type: 'COLLAR', label: 'Collar', weight_g: legacyWeightG(Number(spec.weight_per_set_g) || 0) },
+  ];
+  if (hasCuff) components.push({ key: 'cuff', type: 'CUFF', label: 'Cuff', weight_g: 0 });
+  const size_rows = rows.map((r) => {
+    const values: Record<string, ComponentCell> = {
+      collar: { dimension: r.collar_dimension || '', pcs: Number(r.collar_pcs) || 0 },
+    };
+    if (hasCuff) values.cuff = { dimension: r.cuff_dimension || '', pcs: Number(r.cuff_pcs) || 0 };
+    return { ...r, values };
+  });
+  return recalculateFlatKnit({ ...spec, components, size_rows });
 }
 
 export default function CadRequirementDetailPage() {
@@ -229,7 +344,7 @@ export default function CadRequirementDetailPage() {
   ]);
 
   // Flat Knit Collar & Cuff Specification (Size-wise breakdown matrix matching ESTOVIR & NOTRE tech packs)
-  const [flatKnitSpec, setFlatKnitSpec] = useState<FlatKnitSpec>({
+  const [flatKnitSpec, setFlatKnitSpec] = useState<FlatKnitSpec>(() => normalizeFlatKnit({
     enabled: true,
     item_type: '95% COTTON 5% ELASTANE 2X2 FLATKNIT',
     color: 'NAVY',
@@ -248,7 +363,7 @@ export default function CadRequirementDetailPage() {
     total_cuff_pcs: 549,
     total_yarn_kg: 102.5,
     remarks: 'Mens: 0.040+0.052+0.092 = 0.184 GRM | 500 GSM Flatknit',
-  });
+  }));
 
   // Specialized Parts, Foldings & Tapes (Zip Foldings, Twill Tape, Draw Cords, BNT)
   const [specialParts, setSpecialParts] = useState<SpecialPartRow[]>([
@@ -283,6 +398,10 @@ export default function CadRequirementDetailPage() {
       consumption_per_pc: 1.10,
       uom: 'MTRS',
       total_qty: 290,
+      kg_factor: 50,
+      kg_factor_unit: 'PER_KG',
+      qty_per_kg: 50,
+      total_kg: 5.8,
       remarks: '15MM Draw Cord - 110 CM per pcs (or ~6 KG)',
     },
     {
@@ -297,19 +416,6 @@ export default function CadRequirementDetailPage() {
       remarks: 'BNT - 0.003 GRM (S/J)',
     },
   ]);
-
-  const recalculateFlatKnit = (spec: FlatKnitSpec): FlatKnitSpec => {
-    const totCollar = spec.size_rows.reduce((s, r) => s + (Number(r.collar_pcs) || 0), 0);
-    const totCuff = spec.size_rows.reduce((s, r) => s + (Number(r.cuff_pcs) || 0), 0);
-    const wtKg = spec.weight_per_set_g > 1 ? spec.weight_per_set_g / 1000.0 : spec.weight_per_set_g;
-    const yarnKg = Math.round(totCollar * wtKg * 100) / 100;
-    return {
-      ...spec,
-      total_collar_pcs: totCollar,
-      total_cuff_pcs: totCuff,
-      total_yarn_kg: yarnKg,
-    };
-  };
 
   const syncSizesFromMarkers = () => {
     if (!markers.length) {
@@ -329,15 +435,17 @@ export default function CadRequirementDetailPage() {
     });
 
     const existingRowMap = new Map(flatKnitSpec.size_rows.map((r) => [r.size, r]));
+    const comps = flatKnitSpec.components || [];
     const newRows: CollarDimensionRow[] = Object.entries(sizeMap).map(([sz, counts]) => {
       const existing = existingRowMap.get(sz);
-      return {
-        size: sz,
-        collar_dimension: existing?.collar_dimension || `${sz} Collar`,
-        collar_pcs: counts.cut || counts.order || 0,
-        cuff_dimension: existing?.cuff_dimension || `${sz} Cuff`,
-        cuff_pcs: counts.cut || counts.order || 0,
-      };
+      const values: Record<string, ComponentCell> = {};
+      comps.forEach((c) => {
+        values[c.key] = {
+          dimension: existing?.values?.[c.key]?.dimension || `${sz} ${c.label}`,
+          pcs: counts.cut || counts.order || 0,
+        };
+      });
+      return { size: sz, values };
     });
 
     if (newRows.length === 0) {
@@ -351,6 +459,87 @@ export default function CadRequirementDetailPage() {
     });
     setFlatKnitSpec(updated);
     toast(`Synced ${newRows.length} sizes with piece counts from CAD markers!`, 'success');
+  };
+
+  // Flat-knit components (Collar / Cuff / other add-ons) — selectable per section
+  const [newComponentType, setNewComponentType] = useState<TrimComponentType>('CUFF');
+
+  const addFlatKnitComponent = (type: TrimComponentType) => {
+    const comps = flatKnitSpec.components || [];
+    const sameType = comps.filter((c) => c.type === type).length;
+    const base = type === 'OTHER' ? 'Component' : COMPONENT_TYPE_LABEL[type];
+    const comp: TrimComponent = {
+      key: `c_${Date.now()}`,
+      type,
+      label: sameType > 0 || type === 'OTHER' ? `${base} ${sameType + 1}` : base,
+      weight_g: 0,
+    };
+    setFlatKnitSpec(recalculateFlatKnit({
+      ...flatKnitSpec,
+      components: [...comps, comp],
+      size_rows: flatKnitSpec.size_rows.map((r) => ({
+        ...r,
+        values: { ...(r.values || {}), [comp.key]: { dimension: '', pcs: 0 } },
+      })),
+    }));
+  };
+
+  const updateFlatKnitComponent = (key: string, patch: Partial<TrimComponent>) => {
+    setFlatKnitSpec(recalculateFlatKnit({
+      ...flatKnitSpec,
+      components: (flatKnitSpec.components || []).map((c) => {
+        if (c.key !== key) return c;
+        const next = { ...c, ...patch };
+        // Changing the type renames an untouched default label
+        if (patch.type && patch.label === undefined && c.label === COMPONENT_TYPE_LABEL[c.type]) {
+          next.label = COMPONENT_TYPE_LABEL[patch.type];
+        }
+        return next;
+      }),
+    }));
+  };
+
+  const removeFlatKnitComponent = (key: string) => {
+    setFlatKnitSpec(recalculateFlatKnit({
+      ...flatKnitSpec,
+      components: (flatKnitSpec.components || []).filter((c) => c.key !== key),
+      size_rows: flatKnitSpec.size_rows.map((r) => {
+        const values = { ...(r.values || {}) };
+        delete values[key];
+        return { ...r, values };
+      }),
+    }));
+  };
+
+  const setFlatKnitCell = (rowIdx: number, key: string, patch: Partial<ComponentCell>) => {
+    const size_rows = flatKnitSpec.size_rows.map((r, i) => {
+      if (i !== rowIdx) return r;
+      const cur = r.values?.[key] || { dimension: '', pcs: 0 };
+      return { ...r, values: { ...(r.values || {}), [key]: { ...cur, ...patch } } };
+    });
+    setFlatKnitSpec(recalculateFlatKnit({ ...flatKnitSpec, size_rows }));
+  };
+
+  /**
+   * Mens / Boys presets — same meaning as before components existed: yarn = counted
+   * collar pcs x set weight. The whole set weight goes on the primary counted component
+   * (the first Collar, else the first component); other components keep their weights.
+   */
+  const applyFlatKnitPreset = (setWeightG: number, remarks: string) => {
+    let comps = flatKnitSpec.components || [];
+    let size_rows = flatKnitSpec.size_rows;
+    if (comps.length === 0) {
+      comps = [{ key: 'collar', type: 'COLLAR', label: 'Collar', weight_g: 0 }];
+      size_rows = size_rows.map((r) => ({
+        ...r,
+        values: { ...(r.values || {}), collar: r.values?.collar || { dimension: '', pcs: 0 } },
+      }));
+    }
+    const primary = comps.find((c) => c.type === 'COLLAR') || comps[0];
+    const components = comps.map((c) => (c.key === primary.key ? { ...c, weight_g: setWeightG } : c));
+    const updated = recalculateFlatKnit({ ...flatKnitSpec, components, size_rows, remarks });
+    setFlatKnitSpec(updated);
+    return { updated, primary };
   };
 
   // Load existing requirement
@@ -428,15 +617,15 @@ export default function CadRequirementDetailPage() {
       }
 
       if (existingData.flat_knit_spec) {
-        setFlatKnitSpec(existingData.flat_knit_spec);
+        setFlatKnitSpec(normalizeFlatKnit(existingData.flat_knit_spec));
       } else if (existingData.dataJson?.flat_knit_spec) {
-        setFlatKnitSpec(existingData.dataJson.flat_knit_spec);
+        setFlatKnitSpec(normalizeFlatKnit(existingData.dataJson.flat_knit_spec));
       }
 
       if (existingData.special_parts?.length) {
-        setSpecialParts(existingData.special_parts);
+        setSpecialParts(existingData.special_parts.map(withPartKg));
       } else if (existingData.dataJson?.special_parts?.length) {
-        setSpecialParts(existingData.dataJson.special_parts);
+        setSpecialParts(existingData.dataJson.special_parts.map(withPartKg));
       }
 
       if (existingData.trims?.length) {
@@ -649,15 +838,26 @@ export default function CadRequirementDetailPage() {
 
     const collarYarnKg = flatKnitSpec.enabled ? Number(flatKnitSpec.total_yarn_kg || 0) : 0;
     const foldingFabricKg = specialParts
-      .filter((p) => p.uom === 'KG')
+      .filter((p) => isKgUom(p.uom))
       .reduce((sum, p) => sum + (Number(p.total_qty) || 0), 0);
     const totalTapesMtrs = specialParts
       .filter((p) => p.uom === 'MTRS')
       .reduce((sum, p) => sum + (Number(p.total_qty) || 0), 0);
+    // Tapes / cords / PCS items bought by weight: MTRS (or PCS) / qty-per-KG factor
+    const nonKgParts = specialParts.filter((p) => !isKgUom(p.uom));
+    const tapesKg = Math.round(nonKgParts.reduce((sum, p) => sum + (specialPartKg(p) || 0), 0) * 1000) / 1000;
+    const partsMissingKgFactor = nonKgParts.filter((p) => specialPartKg(p) == null && (Number(p.total_qty) || 0) > 0).length;
+    const partsKg = Math.round((collarYarnKg + foldingFabricKg + tapesKg) * 1000) / 1000;
 
     const grandTotalMaterial = isWoven
       ? Math.round(grandFabric * 100) / 100
-      : Math.round((grandFabric + collarYarnKg + foldingFabricKg) * 100) / 100;
+      : Math.round((grandFabric + partsKg) * 100) / 100;
+
+    // Average per piece from the bottom totals — fabric PLUS collar/cuff yarn, foldings, tapes & cords
+    const partsKgPerPc = totalOrderPcs > 0 ? partsKg / totalOrderPcs : 0;
+    const avgConsInclParts = totalOrderPcs > 0
+      ? (isWoven ? avgGarmentCons : grandTotalMaterial / totalOrderPcs)
+      : 0;
 
     return {
       totalOrderPcs,
@@ -667,6 +867,11 @@ export default function CadRequirementDetailPage() {
       collarYarnKg,
       foldingFabricKg,
       totalTapesMtrs,
+      tapesKg,
+      partsKg,
+      partsMissingKgFactor,
+      partsKgPerPc: Math.round(partsKgPerPc * 100000) / 100000,
+      avgConsInclParts: Math.round(avgConsInclParts * 100000) / 100000,
       grandTotalMaterial,
       uom: isWoven ? 'MTR' : 'KG',
     };
@@ -898,8 +1103,7 @@ export default function CadRequirementDetailPage() {
             if (sz && sz !== '-' && dim) {
               parsedCollarRows.push({
                 size: sz,
-                collar_dimension: dim,
-                collar_pcs: pcs,
+                values: { collar: { dimension: dim, pcs } },
               });
             }
           }
@@ -1026,20 +1230,20 @@ export default function CadRequirementDetailPage() {
         setActiveMarkerIdx(0);
 
         if (parsedCollarRows.length > 0) {
-          const totCollar = parsedCollarRows.reduce((sum, r) => sum + r.collar_pcs, 0);
-          const wtKg = parsedFlatKnitWeight / 1000.0;
-          setFlatKnitSpec({
+          // Sheet gives collar counts only; the set weight rides on the collar component (as before).
+          setFlatKnitSpec(recalculateFlatKnit({
             enabled: true,
             item_type: '95% COTTON 5% ELASTANE 2X2 FLATKNIT',
             color: 'NAVY',
             gsm: 500,
             weight_per_set_g: parsedFlatKnitWeight,
+            components: [{ key: 'collar', type: 'COLLAR', label: 'Collar', weight_g: parsedFlatKnitWeight }],
             size_rows: parsedCollarRows,
-            total_collar_pcs: totCollar,
+            total_collar_pcs: 0,
             total_cuff_pcs: 0,
-            total_yarn_kg: Math.round(totCollar * wtKg * 100) / 100,
+            total_yarn_kg: 0,
             remarks: `Imported from ${file.name} FABRIC sheet (${parsedCollarRows.length} sizes, 500 GSM Flatknit)`,
-          });
+          }));
         }
 
         toast(`Imported ${parsedMarkers.length} markers from ${file.name}!`, 'success');
@@ -1069,7 +1273,7 @@ export default function CadRequirementDetailPage() {
         cutting_lay: cuttingLay,
         summary_metrics: summaryKpis,
         flat_knit_spec: flatKnitSpec,
-        special_parts: specialParts,
+        special_parts: specialParts.map(withPartKg),
         trims,
         total_fabric_kg: isWoven ? 0 : summaryKpis.grandTotalMaterial,
         total_fabric_mtrs: isWoven ? summaryKpis.grandFabric : 0,
@@ -1099,6 +1303,10 @@ export default function CadRequirementDetailPage() {
           total_fabric_kg: isWoven ? 0 : summaryKpis.grandTotalMaterial,
           total_fabric_mtrs: isWoven ? summaryKpis.grandFabric : 0,
           total_yarn_kg: isWoven ? 0 : Math.round(summaryKpis.grandTotalMaterial * 1.05 * 10) / 10,
+          // Purchase hand-off: specialized parts & flat-knit components, converted to KG server-side
+          special_parts: specialParts.map(withPartKg),
+          flat_knit_spec: flatKnitSpec,
+          summary_metrics: summaryKpis,
         });
       }
       setHeader((p) => ({ ...p, status: 'APPROVED' }));
@@ -1229,9 +1437,13 @@ export default function CadRequirementDetailPage() {
         <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-200 shadow-sm">
           <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">Average Cons / Pc</div>
           <div className="text-lg font-bold text-emerald-900 mt-0.5">
-            {fmtDecimal(summaryKpis.avgGarmentCons * (isWoven ? 1 : 1000), 2)} {isWoven ? 'Mtrs' : 'Gms'}
+            {fmtDecimal(summaryKpis.avgConsInclParts * (isWoven ? 1 : 1000), 2)} {isWoven ? 'Mtrs' : 'Gms'}
           </div>
-          <div className="text-[10px] text-emerald-600">With {header.fabric_allowance_pct}% fabric allowance</div>
+          <div className="text-[10px] text-emerald-600">
+            {isWoven
+              ? `Fabric only · parts +${fmtDecimal(summaryKpis.partsKgPerPc * 1000, 2)} Gms`
+              : `Fabric ${fmtDecimal(summaryKpis.avgGarmentCons * 1000, 2)} + Parts ${fmtDecimal(summaryKpis.partsKgPerPc * 1000, 2)} Gms`}
+          </div>
         </div>
 
         <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200 shadow-sm">
@@ -2026,19 +2238,8 @@ export default function CadRequirementDetailPage() {
                 </tbody>
                 <tfoot>
                   <tr className="bg-indigo-50/60 font-bold text-indigo-900 border-t border-indigo-200">
-                    <td colSpan={5} className="py-3 px-3">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                        <span>TOTAL CONSOLIDATED FABRIC INDENT</span>
-                        <div className="flex items-center gap-3 text-xs font-semibold">
-                          <span className="text-amber-800 bg-amber-100/70 px-2 py-0.5 rounded">
-                            Actual Net Cons: {fmtDecimal(summaryKpis.actGarmentCons * (isWoven ? 1 : 1000), 2)} {isWoven ? 'Mtrs' : 'Gms'}
-                          </span>
-                          <span className="text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded">
-                            Gross Avg Cons: {fmtDecimal(summaryKpis.avgGarmentCons * (isWoven ? 1 : 1000), 2)} {isWoven ? 'Mtrs' : 'Gms'}
-                          </span>
-                        </div>
-                      </div>
-                    </td>
+                    {/* Avg cons / pc moved to the consolidated summary below (includes Part B items) */}
+                    <td colSpan={5} className="py-3 px-3">TOTAL CONSOLIDATED FABRIC INDENT</td>
                     <td className="py-3 px-2 text-right">{fmtNumber(summaryKpis.totalOrderPcs)} Pcs</td>
                     <td className="py-3 px-2 text-right">
                       {fmtDecimal(fabricProgram.reduce((s, x) => s + Number(x.net_qty || 0), 0))}
@@ -2087,7 +2288,7 @@ export default function CadRequirementDetailPage() {
                     <tr className="hover:bg-amber-50/40 bg-amber-50/20 font-medium">
                       <td className="py-2.5 px-3 font-bold text-slate-900 flex items-center gap-1.5">
                         <Disc size={13} className="text-amber-700" />
-                        <span>Flat Knit Collar & Cuff Set</span>
+                        <span>Flat Knit {(flatKnitSpec.components || []).map((c) => c.label).join(' & ') || 'Components'}</span>
                       </td>
                       <td className="py-2.5 px-3">{flatKnitSpec.item_type} ({flatKnitSpec.gsm} GSM)</td>
                       <td className="py-2.5 px-2 font-mono text-slate-600">
@@ -2095,7 +2296,9 @@ export default function CadRequirementDetailPage() {
                       </td>
                       <td className="py-2.5 px-2 font-semibold text-slate-800">{flatKnitSpec.color}</td>
                       <td className="py-2.5 px-2 text-right font-mono font-bold text-slate-800">
-                        {fmtNumber(flatKnitSpec.total_collar_pcs)} Nos
+                        {(flatKnitSpec.components || []).map((c) => (
+                          <div key={c.key}>{fmtNumber(flatKnitSpec.component_totals?.[c.key] || 0)} {c.label}</div>
+                        ))}
                       </td>
                       <td className="py-2.5 px-2 font-bold text-amber-900">KG</td>
                       <td className="py-2.5 px-3 text-right font-mono font-extrabold text-amber-900 text-sm">
@@ -2120,7 +2323,14 @@ export default function CadRequirementDetailPage() {
                       </td>
                       <td className="py-2.5 px-2 font-bold text-slate-700">{sp.uom}</td>
                       <td className="py-2.5 px-3 text-right font-mono font-bold text-indigo-900 text-sm">
-                        {fmtDecimal(sp.total_qty, 1)} {sp.uom}
+                        <div>{fmtDecimal(sp.total_qty, 1)} {sp.uom}</div>
+                        {!isKgUom(sp.uom) && (
+                          specialPartKg(sp) != null ? (
+                            <div className="text-amber-900 text-xs">= {fmtDecimal(specialPartKg(sp), 2)} KG <span className="font-normal text-slate-500">@ {partFactorText(sp)}</span></div>
+                          ) : (
+                            <div className="text-[10px] font-normal text-red-600">KG factor not set</div>
+                          )
+                        )}
                       </td>
                       <td className="py-2.5 px-3 text-xs text-slate-500">{sp.remarks}</td>
                     </tr>
@@ -2142,7 +2352,7 @@ export default function CadRequirementDetailPage() {
               </span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               <div className="p-3 bg-white/90 rounded-lg border border-slate-200/80">
                 <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Main & Rib Fabric</span>
                 <div className="text-base font-extrabold text-slate-900 font-mono mt-1">
@@ -2164,7 +2374,17 @@ export default function CadRequirementDetailPage() {
                 <div className="text-base font-extrabold text-amber-900 font-mono mt-1">
                   {fmtDecimal(summaryKpis.collarYarnKg, 2)} <span className="text-xs font-normal text-amber-700">KG</span>
                 </div>
-                <div className="text-[10px] text-amber-700/80 mt-0.5">{fmtNumber(flatKnitSpec.total_collar_pcs)} Collars + Cuffs</div>
+                <div className="text-[10px] text-amber-700/80 mt-0.5">
+                  {(flatKnitSpec.components || []).map((c) => `${fmtNumber(flatKnitSpec.component_totals?.[c.key] || 0)} ${c.label}`).join(' + ')}
+                </div>
+              </div>
+
+              <div className="p-3 bg-white/90 rounded-lg border border-slate-200/80">
+                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Tapes & Cords</span>
+                <div className="text-base font-extrabold text-indigo-900 font-mono mt-1">
+                  {fmtDecimal(summaryKpis.tapesKg, 2)} <span className="text-xs font-normal text-slate-500">KG</span>
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">{fmtDecimal(summaryKpis.totalTapesMtrs, 1)} MTRS converted</div>
               </div>
 
               <div className="p-3 bg-indigo-600 text-white rounded-lg shadow-sm">
@@ -2172,7 +2392,7 @@ export default function CadRequirementDetailPage() {
                 <div className="text-lg font-extrabold font-mono mt-0.5">
                   {fmtDecimal(summaryKpis.grandTotalMaterial, 2)} <span className="text-xs font-normal text-indigo-200">{summaryKpis.uom}</span>
                 </div>
-                <div className="text-[10px] text-indigo-200/90 mt-0.5">{isWoven ? 'Total Woven Fabric (MTR)' : 'Fabric + Collar + Fold'}</div>
+                <div className="text-[10px] text-indigo-200/90 mt-0.5">{isWoven ? 'Total Woven Fabric (MTR)' : 'Fabric + Collar + Fold + Tapes'}</div>
               </div>
             </div>
 
@@ -2180,10 +2400,36 @@ export default function CadRequirementDetailPage() {
               <div className="text-xs text-slate-600 flex items-center justify-between pt-1">
                 <span>Total Tapes & Drawcords Requirement:</span>
                 <span className="font-bold text-slate-900 font-mono">
-                  {fmtDecimal(summaryKpis.totalTapesMtrs, 1)} MTRS (Twill Tape & Tube Rope)
+                  {fmtDecimal(summaryKpis.totalTapesMtrs, 1)} MTRS = {fmtDecimal(summaryKpis.tapesKg, 2)} KG (Twill Tape & Tube Rope)
                 </span>
               </div>
             )}
+            {summaryKpis.partsMissingKgFactor > 0 && (
+              <div className="text-[11px] text-red-600">
+                {summaryKpis.partsMissingKgFactor} non-KG part(s) have no weight factor — set it in Trims & Accessories so the KG purchase requirement is complete.
+              </div>
+            )}
+
+            {/* Average consumption per piece, computed from the totals above incl. all Part B items */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-2 border-t border-indigo-200/60 text-xs">
+              <span className="font-bold text-indigo-950 uppercase tracking-wider">
+                Average Consumption / Pc (incl. collar, foldings, tapes & cords)
+              </span>
+              <div className="flex flex-wrap items-center gap-2 font-mono">
+                <span className="text-slate-600">
+                  Fabric {fmtDecimal(summaryKpis.avgGarmentCons * (isWoven ? 1 : 1000), 2)} {isWoven ? 'Mtrs' : 'Gms'}
+                </span>
+                <span className="text-slate-600">+ Parts {fmtDecimal(summaryKpis.partsKgPerPc * 1000, 2)} Gms</span>
+                {!isWoven && (
+                  <span className="text-emerald-900 bg-emerald-100/80 px-2 py-0.5 rounded font-extrabold text-sm">
+                    = {fmtDecimal(summaryKpis.avgConsInclParts * 1000, 2)} Gms / pc
+                  </span>
+                )}
+                <span className="text-slate-400 font-sans">
+                  ({fmtDecimal(summaryKpis.grandTotalMaterial, 2)} {summaryKpis.uom} ÷ {fmtNumber(summaryKpis.totalOrderPcs)} pcs)
+                </span>
+              </div>
+            </div>
           </div>
 
           {/* Signoff / Approval Signature Grid */}
@@ -2269,13 +2515,64 @@ export default function CadRequirementDetailPage() {
               </tfoot>
             </table>
           </div>
+
+          {/* Foldings / specialized parts are issued to cutting too (zip folding, BNT, tapes & cords) */}
+          {specialParts.length > 0 && (
+            <div className="space-y-2 pt-3 border-t border-slate-200">
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                <Scissors size={14} className="text-amber-700" />
+                <span>Foldings, Specialized Parts, Tapes & Cords — Cutting Issue</span>
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-amber-50/70 text-amber-950 font-bold border-b border-amber-200">
+                      <th className="py-2.5 px-3">Part Name</th>
+                      <th className="py-2.5 px-3">Fabric / Material Spec</th>
+                      <th className="py-2.5 px-2">Dia / Form</th>
+                      <th className="py-2.5 px-2">Colour</th>
+                      <th className="py-2.5 px-2 text-right">Cons / Pc</th>
+                      <th className="py-2.5 px-2 text-right">Total Qty</th>
+                      <th className="py-2.5 px-3 text-right text-amber-900">Total KG</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                    {specialParts.map((sp, idx) => {
+                      const kg = specialPartKg(sp);
+                      return (
+                        <tr key={idx} className="hover:bg-slate-50/70">
+                          <td className="py-2.5 px-3 font-semibold text-slate-900">{sp.part_name}</td>
+                          <td className="py-2.5 px-3">{sp.fabric_type} {sp.gsm ? `(${sp.gsm} GSM)` : ''}</td>
+                          <td className="py-2.5 px-2 font-mono text-slate-600">{sp.dia_spec || '—'}</td>
+                          <td className="py-2.5 px-2 font-semibold text-slate-800">{sp.color}</td>
+                          <td className="py-2.5 px-2 text-right font-mono">{fmtDecimal(sp.consumption_per_pc, 3)} {sp.uom}</td>
+                          <td className="py-2.5 px-2 text-right font-mono font-bold">{fmtDecimal(sp.total_qty, 1)} {sp.uom}</td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-amber-900">
+                            {kg != null ? `${fmtDecimal(kg, 2)} KG` : '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-amber-50/60 font-bold text-amber-950 border-t border-amber-200">
+                      <td colSpan={6} className="py-3 px-3">TOTAL FOLDINGS & SPECIALIZED PARTS</td>
+                      <td className="py-3 px-3 text-right font-mono">
+                        {fmtDecimal(summaryKpis.foldingFabricKg + summaryKpis.tapesKg, 2)} KG
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* TAB 4: TRIMS & ACCESSORIES */}
       {activeTab === 'TRIMS' && (
         <div className="space-y-6">
-          {/* Card 1: Flat Knit Collar & Cuff Size-Dimension Matrix */}
+          {/* Card 1: Flat Knit Component Size-Dimension Matrix (Collar / Cuff / other add-on components) */}
           <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100">
               <div>
@@ -2284,14 +2581,14 @@ export default function CadRequirementDetailPage() {
                     <Disc size={16} />
                   </span>
                   <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                    Flat Knit Collar & Cuff Size-Dimension Matrix
+                    Flat Knit Components Size-Dimension Matrix
                   </h2>
                   <Badge tone={flatKnitSpec.enabled ? 'emerald' : 'slate'}>
                     {flatKnitSpec.enabled ? 'Active / Indented' : 'Optional / Disabled'}
                   </Badge>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Size-specific collar dimensions (e.g. 14.75" x 5"), piece counts, weight per set, and yarn indent calculations
+                  Select the components this garment needs (Collar, Cuff, or other add-ons) — size-wise dimensions, piece counts, weight per piece and yarn indent
                 </p>
               </div>
 
@@ -2308,12 +2605,11 @@ export default function CadRequirementDetailPage() {
                 <button
                   type="button"
                   onClick={() => {
+                    const values: Record<string, ComponentCell> = {};
+                    (flatKnitSpec.components || []).forEach((c) => { values[c.key] = { dimension: '', pcs: 50 }; });
                     const newRow: CollarDimensionRow = {
                       size: `Size ${flatKnitSpec.size_rows.length + 1}`,
-                      collar_dimension: '15.00" X 5.00"',
-                      collar_pcs: 50,
-                      cuff_dimension: '16.00" X 6.50"',
-                      cuff_pcs: 50,
+                      values,
                     };
                     const updated = recalculateFlatKnit({
                       ...flatKnitSpec,
@@ -2359,22 +2655,13 @@ export default function CadRequirementDetailPage() {
 
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                  Weight / Set (Grams or Kg)
+                  Weight / Set (sum of components)
                 </label>
                 <div className="flex items-center gap-1">
-                  <input
-                    type="number"
-                    step="0.001"
-                    value={flatKnitSpec.weight_per_set_g}
-                    onChange={(e) => {
-                      const val = parseFloat(e.target.value) || 0;
-                      setFlatKnitSpec(recalculateFlatKnit({ ...flatKnitSpec, weight_per_set_g: val }));
-                    }}
-                    className="w-full text-xs font-mono font-bold text-amber-900 border border-slate-300 rounded px-2 py-1.5 bg-white"
-                  />
-                  <span className="text-[11px] text-slate-500 font-medium whitespace-nowrap">
-                    {flatKnitSpec.weight_per_set_g > 1 ? 'Gms' : 'Kg'}
-                  </span>
+                  <div className="w-full text-xs font-mono font-bold text-amber-900 border border-slate-200 rounded px-2 py-1.5 bg-slate-100">
+                    {fmtDecimal(flatKnitSpec.weight_per_set_g, 1)}
+                  </div>
+                  <span className="text-[11px] text-slate-500 font-medium whitespace-nowrap">Gms</span>
                 </div>
               </div>
 
@@ -2386,12 +2673,11 @@ export default function CadRequirementDetailPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      setFlatKnitSpec(recalculateFlatKnit({
-                        ...flatKnitSpec,
-                        weight_per_set_g: 184,
-                        remarks: 'Mens: 0.040+0.052+0.092 = 0.184 GRM (Collar, Cuff, Bottom) | 500 GSM',
-                      }));
-                      toast('Applied Mens Set Preset (184g / 0.184kg)', 'info');
+                      const { updated, primary } = applyFlatKnitPreset(
+                        184,
+                        'Mens: 0.040+0.052+0.092 = 0.184 GRM (Collar, Cuff, Bottom) | 500 GSM',
+                      );
+                      toast(`Applied Mens preset — ${primary.label} 184g / set (Weight / Set ${updated.weight_per_set_g}g)`, 'info');
                     }}
                     className="px-2 py-1 text-[11px] font-semibold rounded border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 transition"
                   >
@@ -2400,16 +2686,83 @@ export default function CadRequirementDetailPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      setFlatKnitSpec(recalculateFlatKnit({
-                        ...flatKnitSpec,
-                        weight_per_set_g: 137,
-                        remarks: 'Boys: 0.031+0.040+0.066 = 0.137 GRM (Collar, Cuff, Bottom) | 500 GSM',
-                      }));
-                      toast('Applied Boys Set Preset (137g / 0.137kg)', 'info');
+                      const { updated, primary } = applyFlatKnitPreset(
+                        137,
+                        'Boys: 0.031+0.040+0.066 = 0.137 GRM (Collar, Cuff, Bottom) | 500 GSM',
+                      );
+                      toast(`Applied Boys preset — ${primary.label} 137g / set (Weight / Set ${updated.weight_per_set_g}g)`, 'info');
                     }}
                     className="px-2 py-1 text-[11px] font-semibold rounded border border-sky-300 bg-sky-50 hover:bg-sky-100 text-sky-800 transition"
                   >
                     Boys (137g)
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Component selector: choose which components this garment has */}
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-end gap-2">
+                {(flatKnitSpec.components || []).map((c) => (
+                  <div key={c.key} className="flex items-end gap-1.5 p-2 rounded-lg border border-amber-200 bg-amber-50/40">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Component</label>
+                      <select
+                        value={c.type}
+                        onChange={(e) => updateFlatKnitComponent(c.key, { type: e.target.value as TrimComponentType })}
+                        className="text-xs font-semibold border border-slate-300 rounded px-1 py-1 bg-white"
+                      >
+                        <option value="COLLAR">Collar</option>
+                        <option value="CUFF">Cuff</option>
+                        <option value="OTHER">Other</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Name</label>
+                      <input
+                        type="text"
+                        value={c.label}
+                        onChange={(e) => updateFlatKnitComponent(c.key, { label: e.target.value })}
+                        className="w-28 text-xs font-semibold border border-slate-300 rounded px-1.5 py-1 bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Wt / Pc (g)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={c.weight_g}
+                        onChange={(e) => updateFlatKnitComponent(c.key, { weight_g: parseFloat(e.target.value) || 0 })}
+                        className="w-16 text-xs text-right font-mono font-bold text-amber-900 border border-slate-300 rounded px-1 py-1 bg-white"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeFlatKnitComponent(c.key)}
+                      className="p-1 mb-0.5 text-slate-400 hover:text-red-600 rounded"
+                      title={`Remove ${c.label}`}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
+                <div className="flex items-end gap-1.5 p-2 rounded-lg border border-dashed border-slate-300">
+                  <select
+                    value={newComponentType}
+                    onChange={(e) => setNewComponentType(e.target.value as TrimComponentType)}
+                    className="text-xs font-medium border border-slate-300 rounded px-1 py-1 bg-white"
+                  >
+                    <option value="COLLAR">Collar</option>
+                    <option value="CUFF">Cuff</option>
+                    <option value="OTHER">Other Component</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => addFlatKnitComponent(newComponentType)}
+                    className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded border border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
+                  >
+                    <Plus size={12} />
+                    <span>Add Component</span>
                   </button>
                 </div>
               </div>
@@ -2421,18 +2774,21 @@ export default function CadRequirementDetailPage() {
                 <thead>
                   <tr className="bg-slate-100/90 text-slate-700 font-bold border-b border-slate-200">
                     <th className="py-2.5 px-3 w-28">Size Label</th>
-                    <th className="py-2.5 px-3">Collar Dimension Description</th>
-                    <th className="py-2.5 px-2 text-right w-24">Collar (Nos)</th>
-                    <th className="py-2.5 px-3">Sleeve Cuff Dimension Description</th>
-                    <th className="py-2.5 px-2 text-right w-24">Cuff (Nos)</th>
+                    {(flatKnitSpec.components || []).map((c) => (
+                      <React.Fragment key={c.key}>
+                        <th className="py-2.5 px-3">{c.label} Dimension</th>
+                        <th className="py-2.5 px-2 text-right w-24">{c.label} (Nos)</th>
+                      </React.Fragment>
+                    ))}
                     <th className="py-2.5 px-3 text-right w-28 text-amber-900">Yarn Wt (Kg)</th>
                     <th className="py-2.5 px-2 text-center w-12">Del</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
                   {flatKnitSpec.size_rows.map((row, idx) => {
-                    const wtKg = flatKnitSpec.weight_per_set_g > 1 ? flatKnitSpec.weight_per_set_g / 1000.0 : flatKnitSpec.weight_per_set_g;
-                    const rowKg = Math.round((Number(row.collar_pcs) || 0) * wtKg * 100) / 100;
+                    const rowKg = Math.round((flatKnitSpec.components || []).reduce(
+                      (s, c) => s + (Number(row.values?.[c.key]?.pcs) || 0) * (Number(c.weight_g) || 0) / 1000, 0,
+                    ) * 100) / 100;
                     return (
                       <tr key={idx} className="hover:bg-slate-50/70">
                         <td className="py-2 px-3">
@@ -2441,62 +2797,33 @@ export default function CadRequirementDetailPage() {
                             value={row.size}
                             onChange={(e) => {
                               const copy = [...flatKnitSpec.size_rows];
-                              copy[idx].size = e.target.value;
+                              copy[idx] = { ...copy[idx], size: e.target.value };
                               setFlatKnitSpec(recalculateFlatKnit({ ...flatKnitSpec, size_rows: copy }));
                             }}
                             className="w-24 text-xs font-bold text-slate-900 border border-slate-300 rounded px-2 py-1 bg-white"
                           />
                         </td>
-                        <td className="py-2 px-3">
-                          <input
-                            type="text"
-                            value={row.collar_dimension}
-                            onChange={(e) => {
-                              const copy = [...flatKnitSpec.size_rows];
-                              copy[idx].collar_dimension = e.target.value;
-                              setFlatKnitSpec({ ...flatKnitSpec, size_rows: copy });
-                            }}
-                            placeholder='e.g. 15.25" X 5.50"'
-                            className="w-full text-xs font-mono font-medium text-slate-800 border border-slate-300 rounded px-2 py-1 bg-white"
-                          />
-                        </td>
-                        <td className="py-2 px-2 text-right">
-                          <input
-                            type="number"
-                            value={row.collar_pcs}
-                            onChange={(e) => {
-                              const copy = [...flatKnitSpec.size_rows];
-                              copy[idx].collar_pcs = parseInt(e.target.value) || 0;
-                              setFlatKnitSpec(recalculateFlatKnit({ ...flatKnitSpec, size_rows: copy }));
-                            }}
-                            className="w-20 text-xs text-right font-mono font-bold text-slate-900 border border-slate-300 rounded px-1.5 py-1 bg-white"
-                          />
-                        </td>
-                        <td className="py-2 px-3">
-                          <input
-                            type="text"
-                            value={row.cuff_dimension || ''}
-                            onChange={(e) => {
-                              const copy = [...flatKnitSpec.size_rows];
-                              copy[idx].cuff_dimension = e.target.value;
-                              setFlatKnitSpec({ ...flatKnitSpec, size_rows: copy });
-                            }}
-                            placeholder='e.g. 16.75" X 6.50"'
-                            className="w-full text-xs font-mono font-medium text-slate-600 border border-slate-300 rounded px-2 py-1 bg-white"
-                          />
-                        </td>
-                        <td className="py-2 px-2 text-right">
-                          <input
-                            type="number"
-                            value={row.cuff_pcs || 0}
-                            onChange={(e) => {
-                              const copy = [...flatKnitSpec.size_rows];
-                              copy[idx].cuff_pcs = parseInt(e.target.value) || 0;
-                              setFlatKnitSpec(recalculateFlatKnit({ ...flatKnitSpec, size_rows: copy }));
-                            }}
-                            className="w-20 text-xs text-right font-mono text-slate-700 border border-slate-300 rounded px-1.5 py-1 bg-white"
-                          />
-                        </td>
+                        {(flatKnitSpec.components || []).map((c) => (
+                          <React.Fragment key={c.key}>
+                            <td className="py-2 px-3">
+                              <input
+                                type="text"
+                                value={row.values?.[c.key]?.dimension || ''}
+                                onChange={(e) => setFlatKnitCell(idx, c.key, { dimension: e.target.value })}
+                                placeholder='e.g. 15.25" X 5.50"'
+                                className="w-full min-w-[7rem] text-xs font-mono font-medium text-slate-800 border border-slate-300 rounded px-2 py-1 bg-white"
+                              />
+                            </td>
+                            <td className="py-2 px-2 text-right">
+                              <input
+                                type="number"
+                                value={row.values?.[c.key]?.pcs || 0}
+                                onChange={(e) => setFlatKnitCell(idx, c.key, { pcs: parseInt(e.target.value) || 0 })}
+                                className="w-20 text-xs text-right font-mono font-bold text-slate-900 border border-slate-300 rounded px-1.5 py-1 bg-white"
+                              />
+                            </td>
+                          </React.Fragment>
+                        ))}
                         <td className="py-2 px-3 text-right font-mono font-bold text-amber-900">
                           {fmtDecimal(rowKg, 2)} kg
                         </td>
@@ -2518,17 +2845,18 @@ export default function CadRequirementDetailPage() {
                 </tbody>
                 <tfoot>
                   <tr className="bg-amber-50/70 font-bold text-amber-950 border-t-2 border-amber-200">
-                    <td className="py-2.5 px-3">TOTALS</td>
-                    <td className="py-2.5 px-3 text-xs text-slate-500 font-normal">
-                      {flatKnitSpec.size_rows.length} Sizes Defined
+                    <td className="py-2.5 px-3">
+                      TOTALS
+                      <div className="text-[10px] text-slate-500 font-normal">{flatKnitSpec.size_rows.length} Sizes Defined</div>
                     </td>
-                    <td className="py-2.5 px-2 text-right font-mono text-sm">
-                      {fmtNumber(flatKnitSpec.total_collar_pcs)} Nos
-                    </td>
-                    <td className="py-2.5 px-3"></td>
-                    <td className="py-2.5 px-2 text-right font-mono text-sm">
-                      {fmtNumber(flatKnitSpec.total_cuff_pcs)} Nos
-                    </td>
+                    {(flatKnitSpec.components || []).map((c) => (
+                      <React.Fragment key={c.key}>
+                        <td className="py-2.5 px-3"></td>
+                        <td className="py-2.5 px-2 text-right font-mono text-sm">
+                          {fmtNumber(flatKnitSpec.component_totals?.[c.key] || 0)} Nos
+                        </td>
+                      </React.Fragment>
+                    ))}
                     <td className="py-2.5 px-3 text-right font-mono text-sm text-amber-900 font-extrabold">
                       {fmtDecimal(flatKnitSpec.total_yarn_kg, 2)} KG
                     </td>
@@ -2540,7 +2868,9 @@ export default function CadRequirementDetailPage() {
 
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 bg-amber-50/40 rounded-lg border border-amber-200/60 text-xs text-amber-950">
               <span className="font-semibold">
-                Formula: Total Collar Pcs ({flatKnitSpec.total_collar_pcs} Nos) × Weight/Set ({flatKnitSpec.weight_per_set_g > 1 ? flatKnitSpec.weight_per_set_g + 'g' : flatKnitSpec.weight_per_set_g + 'kg'}) = {flatKnitSpec.total_yarn_kg} KG Flat Knit Yarn
+                Formula: {(flatKnitSpec.components || [])
+                  .map((c) => `${c.label} ${fmtNumber(flatKnitSpec.component_totals?.[c.key] || 0)} Nos × ${c.weight_g}g`)
+                  .join(' + ') || 'No components'} = {flatKnitSpec.total_yarn_kg} KG Flat Knit Yarn
               </span>
               <span className="text-[11px] text-amber-800">
                 Auto-synced into Fabric Program (F.PRGM) & Yarn Indent
@@ -2557,7 +2887,7 @@ export default function CadRequirementDetailPage() {
                   <span>Specialized Parts, Foldings, Tapes & Cords Indent</span>
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Requirements for Zip Folding, 10mm Twill Tape, 15mm Draw Cord, and Back Neck Tape (BNT)
+                  Requirements for Zip Folding, 10mm Twill Tape, 15mm Draw Cord, and Back Neck Tape (BNT) — MTRS / PCS items are converted to KG for purchase via the weight factor (m per kg or g per m)
                 </p>
               </div>
               <button
@@ -2574,6 +2904,7 @@ export default function CadRequirementDetailPage() {
                       consumption_per_pc: 0.01,
                       uom: 'KG',
                       total_qty: 10,
+                      total_kg: 10,
                       remarks: '',
                     },
                   ])
@@ -2596,6 +2927,8 @@ export default function CadRequirementDetailPage() {
                     <th className="py-2.5 px-2 text-right">Cons / Pc</th>
                     <th className="py-2.5 px-2">Unit</th>
                     <th className="py-2.5 px-2 text-right">Total Qty</th>
+                    <th className="py-2.5 px-2 text-right" title="Weight factor for MTRS / PCS rows: m (or pcs) per kg, e.g. draw cord 290 m ÷ 50 m/kg = 5.8 kg — or g per m (or per pc) from the supplier spec, e.g. 290 m × 20 g/m = 5.8 kg">Weight Factor</th>
+                    <th className="py-2.5 px-2 text-right text-amber-900">Total KG</th>
                     <th className="py-2.5 px-3">Remarks / Formula</th>
                     <th className="py-2.5 px-2 text-center">Del</th>
                   </tr>
@@ -2660,8 +2993,11 @@ export default function CadRequirementDetailPage() {
                           onChange={(e) => {
                             const copy = [...specialParts];
                             const cVal = parseFloat(e.target.value) || 0;
-                            copy[idx].consumption_per_pc = cVal;
-                            copy[idx].total_qty = Math.round(cVal * header.order_qty * 100) / 100;
+                            copy[idx] = withPartKg({
+                              ...copy[idx],
+                              consumption_per_pc: cVal,
+                              total_qty: Math.round(cVal * header.order_qty * 100) / 100,
+                            });
                             setSpecialParts(copy);
                           }}
                           className="w-20 text-xs text-right font-mono border border-slate-300 rounded px-1.5 py-1 bg-white"
@@ -2672,7 +3008,7 @@ export default function CadRequirementDetailPage() {
                           value={sp.uom}
                           onChange={(e) => {
                             const copy = [...specialParts];
-                            copy[idx].uom = e.target.value;
+                            copy[idx] = withPartKg({ ...copy[idx], uom: e.target.value });
                             setSpecialParts(copy);
                           }}
                           className="text-xs font-medium border border-slate-300 rounded px-1 py-1 bg-white"
@@ -2689,11 +3025,60 @@ export default function CadRequirementDetailPage() {
                           value={sp.total_qty}
                           onChange={(e) => {
                             const copy = [...specialParts];
-                            copy[idx].total_qty = parseFloat(e.target.value) || 0;
+                            copy[idx] = withPartKg({ ...copy[idx], total_qty: parseFloat(e.target.value) || 0 });
                             setSpecialParts(copy);
                           }}
                           className="w-20 text-xs text-right font-mono font-bold text-indigo-900 border border-slate-300 rounded px-1 py-1 bg-white"
                         />
+                      </td>
+                      <td className="py-2 px-2 text-right">
+                        {isKgUom(sp.uom) ? (
+                          <span className="text-slate-400">—</span>
+                        ) : (() => {
+                          const { factor, unit } = readPartFactor(sp);
+                          return (
+                            <div className="flex items-center justify-end gap-1">
+                              <input
+                                type="number"
+                                step="0.001"
+                                min="0"
+                                value={factor > 0 ? factor : ''}
+                                placeholder={unit === 'G_PER' ? 'g' : 'qty'}
+                                onChange={(e) => {
+                                  const copy = [...specialParts];
+                                  copy[idx] = withPartKg({
+                                    ...copy[idx],
+                                    kg_factor: parseFloat(e.target.value) || 0,
+                                    kg_factor_unit: unit,
+                                  });
+                                  setSpecialParts(copy);
+                                }}
+                                className={`w-16 text-xs text-right font-mono border rounded px-1 py-1 bg-white ${factor > 0 ? 'border-slate-300' : 'border-red-300'}`}
+                              />
+                              <select
+                                value={unit}
+                                title="Factor unit"
+                                onChange={(e) => {
+                                  // Only the meaning of the entered number changes; nothing is auto-converted
+                                  const copy = [...specialParts];
+                                  copy[idx] = withPartKg({
+                                    ...copy[idx],
+                                    kg_factor: factor,
+                                    kg_factor_unit: e.target.value as PartFactorUnit,
+                                  });
+                                  setSpecialParts(copy);
+                                }}
+                                className="text-[11px] border border-slate-300 rounded px-0.5 py-1 bg-white"
+                              >
+                                <option value="PER_KG">{factorUnitLabel('PER_KG', sp.uom)}</option>
+                                <option value="G_PER">{factorUnitLabel('G_PER', sp.uom)}</option>
+                              </select>
+                            </div>
+                          );
+                        })()}
+                      </td>
+                      <td className="py-2 px-2 text-right font-mono font-bold text-amber-900 whitespace-nowrap">
+                        {specialPartKg(sp) != null ? `${fmtDecimal(specialPartKg(sp), 2)} KG` : <span className="text-red-500 font-normal">set factor</span>}
                       </td>
                       <td className="py-2 px-3">
                         <input
@@ -2719,6 +3104,22 @@ export default function CadRequirementDetailPage() {
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  <tr className="bg-amber-50/60 font-bold text-amber-950 border-t border-amber-200">
+                    <td colSpan={6} className="py-2.5 px-3">
+                      TOTALS
+                      {summaryKpis.totalTapesMtrs > 0 && (
+                        <span className="ml-2 text-xs font-normal text-slate-600">{fmtDecimal(summaryKpis.totalTapesMtrs, 1)} MTRS tapes & cords</span>
+                      )}
+                    </td>
+                    <td className="py-2.5 px-2"></td>
+                    <td className="py-2.5 px-2"></td>
+                    <td className="py-2.5 px-2 text-right font-mono whitespace-nowrap">
+                      {fmtDecimal(summaryKpis.foldingFabricKg + summaryKpis.tapesKg, 2)} KG
+                    </td>
+                    <td colSpan={2}></td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </div>
@@ -2781,6 +3182,14 @@ export default function CadRequirementDetailPage() {
                     {fmtDecimal(summaryKpis.actGarmentCons, 5)} {summaryKpis.uom}/pc
                   </span>
                 </li>
+                <li className="flex justify-between border-b border-sky-100 pb-1">
+                  <span>Avg / Pc incl. Collar, Foldings, Tapes & Cords:</span>
+                  <span className="font-semibold text-slate-900">
+                    {isWoven
+                      ? `${fmtDecimal(summaryKpis.avgGarmentCons, 5)} MTR + ${fmtDecimal(summaryKpis.partsKgPerPc, 5)} KG/pc`
+                      : `${fmtDecimal(summaryKpis.avgConsInclParts, 5)} KG/pc`}
+                  </span>
+                </li>
               </ul>
             </div>
 
@@ -2807,6 +3216,70 @@ export default function CadRequirementDetailPage() {
                 </li>
               </ul>
             </div>
+          </div>
+
+          {/* Purchase requirement for trims / specialized parts — tapes & cords bought by weight (KG) */}
+          <div className="p-4 bg-white rounded-xl border border-slate-200 space-y-2">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wider flex items-center gap-1">
+                <Scissors size={14} className="text-indigo-600" />
+                <span>Specialized Parts & Flat Knit — Purchase Requirement (KG)</span>
+              </h3>
+              <span className="font-bold text-indigo-900 text-sm">{fmtDecimal(summaryKpis.partsKg, 2)} KG</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                    <th className="py-2 px-3">Item</th>
+                    <th className="py-2 px-3">Spec</th>
+                    <th className="py-2 px-2">Colour</th>
+                    <th className="py-2 px-2 text-right">Requirement</th>
+                    <th className="py-2 px-2 text-right">Conversion</th>
+                    <th className="py-2 px-3 text-right text-indigo-800">Purchase Qty</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700">
+                  {flatKnitSpec.enabled && (flatKnitSpec.components || []).map((c) => {
+                    const pcs = flatKnitSpec.component_totals?.[c.key] || 0;
+                    return (
+                      <tr key={c.key}>
+                        <td className="py-2 px-3 font-semibold text-slate-900">Flat Knit {c.label}</td>
+                        <td className="py-2 px-3">{flatKnitSpec.item_type}</td>
+                        <td className="py-2 px-2">{flatKnitSpec.color}</td>
+                        <td className="py-2 px-2 text-right font-mono">{fmtNumber(pcs)} Nos</td>
+                        <td className="py-2 px-2 text-right font-mono text-slate-500">{c.weight_g} g/pc</td>
+                        <td className="py-2 px-3 text-right font-mono font-bold text-indigo-900">
+                          {fmtDecimal((pcs * (Number(c.weight_g) || 0)) / 1000, 2)} KG
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {specialParts.map((sp, idx) => {
+                    const kg = specialPartKg(sp);
+                    return (
+                      <tr key={`sp_${idx}`}>
+                        <td className="py-2 px-3 font-semibold text-slate-900">{sp.part_name}</td>
+                        <td className="py-2 px-3">{sp.fabric_type} {sp.dia_spec ? `· ${sp.dia_spec}` : ''}</td>
+                        <td className="py-2 px-2">{sp.color}</td>
+                        <td className="py-2 px-2 text-right font-mono">{fmtDecimal(sp.total_qty, 1)} {sp.uom}</td>
+                        <td className="py-2 px-2 text-right font-mono text-slate-500">
+                          {isKgUom(sp.uom) ? '—' : partFactorText(sp) ?? 'set factor'}
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono font-bold text-indigo-900">
+                          {kg != null ? `${fmtDecimal(kg, 2)} KG` : `${fmtDecimal(sp.total_qty, 1)} ${sp.uom}`}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {summaryKpis.partsMissingKgFactor > 0 && (
+              <div className="text-[11px] text-red-600">
+                {summaryKpis.partsMissingKgFactor} item(s) still purchased in their own unit — set the weight factor in Trims & Accessories to buy them in KG.
+              </div>
+            )}
           </div>
         </div>
       )}

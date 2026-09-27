@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -6,10 +6,11 @@ import {
   Plus, Trash2
 } from 'lucide-react';
 import { http, ApiError } from '../../lib/api';
-import { useLookup, toOptions } from '../../hooks/useLookup';
+import { useLookup, useStatuses, toOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
 import { Input, Select, StatusBadge } from '../../components/ui';
 import { fmtDecimal, fmtNumber, today, toDateInput } from '../../lib/format';
+import { FabricPicker } from './CostingsFabricPicker';
 
 export default function PreCostingDetailPage() {
   const { id } = useParams();
@@ -31,6 +32,11 @@ export default function PreCostingDetailPage() {
   const styles = useLookup('styles');
   const buyers = useLookup('buyers');
   const currencies = useLookup('currencies');
+  const fabricMaster = useLookup('fabrics');
+  const costingStatuses = useStatuses('COSTING');
+  // Keys of data_json this screen does not own (e.g. the Classic sheet's `classic` block)
+  // are kept so saving here never wipes them.
+  const extraJsonRef = useRef<Record<string, unknown>>({});
 
   // Header State
   const [costId, setCostId] = useState<number | null>(isNew ? null : Number(id));
@@ -70,7 +76,7 @@ export default function PreCostingDetailPage() {
       _key: 'fab_1',
       component: 'Body',
       fabric_id: '1',
-      fabric_name: 'Single Jersey 100% Cotton 180 GSM',
+      fabric_name: 'Single Jersey 180 GSM',
       color: 'Black',
       size: 'All',
       consumption: 0.22,
@@ -82,8 +88,8 @@ export default function PreCostingDetailPage() {
     {
       _key: 'fab_2',
       component: 'Collar / Neck Rib',
-      fabric_id: '2',
-      fabric_name: '1x1 Rib 100% Cotton 220 GSM',
+      fabric_id: '4',
+      fabric_name: 'Rib 1x1 200 GSM',
       color: 'Black',
       size: 'All',
       consumption: 0.025,
@@ -204,6 +210,15 @@ export default function PreCostingDetailPage() {
     { _key: 'oth_2', charge_type: 'Buyer Sample Couriers & Approvals', rate_per_pc: 0.35 },
   ]);
 
+  const addSewingOp = () => {
+    const key = `op_${Date.now()}`;
+    setSewingOps((prev) => [...prev, { _key: key, operation: '', smv: '' }]);
+    setTimeout(() => {
+      const els = document.querySelectorAll<HTMLInputElement>('input[data-smv-op]');
+      els[els.length - 1]?.focus();
+    }, 0);
+  };
+
   // Load existing costing
   const costingQuery = useQuery({
     queryKey: ['pre-costings', 'item', id],
@@ -239,6 +254,7 @@ export default function PreCostingDetailPage() {
     if (c.data_json) {
       try {
         const parsed = typeof c.data_json === 'string' ? JSON.parse(c.data_json) : c.data_json;
+        extraJsonRef.current = parsed && typeof parsed === 'object' ? { ...parsed } : {};
         if (parsed.fabrics) setFabrics(parsed.fabrics);
         if (parsed.yarns) setYarns(parsed.yarns);
         if (parsed.trims) setTrims(parsed.trims);
@@ -486,6 +502,8 @@ export default function PreCostingDetailPage() {
         version: head.version,
         style_id: Number(head.style_id),
         buyer_id: head.buyer_id ? Number(head.buyer_id) : undefined,
+        currency_id: head.currency_id ? Number(head.currency_id) : 1,
+        status_id: costingStatuses.data?.find((st) => String(st.code).toUpperCase() === statusOverride.toUpperCase())?.id ?? undefined,
         season: head.season,
         buyer_ref: head.buyer_ref,
         unit_id: head.unit_id ? Number(head.unit_id) : 1,
@@ -508,7 +526,9 @@ export default function PreCostingDetailPage() {
         margin_pct: marginPct,
         fob_price: quotedFobPerPc,
         remarks: head.remarks,
-        data_json: {
+        // The generic /costings resource stores data_json as TEXT, so send a string.
+        data_json: JSON.stringify({
+          ...extraJsonRef.current,
           fabrics,
           yarns,
           trims,
@@ -521,7 +541,7 @@ export default function PreCostingDetailPage() {
           useFlatSewingRate,
           flatSewingRate,
           flatSewingDesc,
-        },
+        }),
       };
 
       const isActuallyNew = isNew || !costId || isNaN(Number(costId));
@@ -785,7 +805,7 @@ export default function PreCostingDetailPage() {
                         _key: `fab_${Date.now()}`,
                         component: 'Body',
                         fabric_id: '',
-                        fabric_name: 'Fabric Item',
+                        fabric_name: '',
                         color: 'Assorted',
                         size: 'All',
                         consumption: 0.20,
@@ -831,7 +851,23 @@ export default function PreCostingDetailPage() {
                     return (
                       <tr key={f._key || i}>
                         <td className="py-2 px-3 font-sans font-semibold text-slate-800">{f.component}</td>
-                        <td className="py-2 px-3 font-sans font-bold text-slate-900">{f.fabric_name}</td>
+                        <td className="py-2 px-3 font-sans font-bold text-slate-900 min-w-[220px]">
+                          <FabricPicker
+                            fabricId={f.fabric_id}
+                            fabricName={f.fabric_name}
+                            options={fabricMaster.data}
+                            onPick={(m) => {
+                              const stdRate = Number(m.std_rate) || 0;
+                              setFabrics((prev) => prev.map((row, idx) => idx === i ? {
+                                ...row,
+                                fabric_id: String(m.id),
+                                fabric_name: m.label,
+                                rate: stdRate > 0 ? stdRate : row.rate,
+                                rate_source: stdRate > 0 ? 'Fabric Master Std Rate' : row.rate_source,
+                              } : row));
+                            }}
+                          />
+                        </td>
                         <td className="py-2 px-3 font-sans text-slate-600">{f.color}</td>
                         <td className="py-2 px-3 text-right">
                           <input
@@ -1224,6 +1260,7 @@ export default function PreCostingDetailPage() {
                     <th className="py-2.5 px-3">Operation Description</th>
                     <th className="py-2.5 px-3 text-right">Standard Minute Value (SMV)</th>
                     <th className="py-2.5 px-3 text-right">Cost @ ₹{head.smv_rate_per_min}/Min</th>
+                    <th className="py-2.5 px-2 text-center w-10" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -1232,9 +1269,45 @@ export default function PreCostingDetailPage() {
                     return (
                       <tr key={op._key || i}>
                         <td className="py-2 px-3 text-slate-400">{i + 1}</td>
-                        <td className="py-2 px-3 font-sans font-semibold text-slate-900">{op.operation}</td>
-                        <td className="py-2 px-3 text-right font-bold text-brand-700">{op.smv} mins</td>
+                        <td className="py-1 px-2 font-sans">
+                          <input
+                            type="text"
+                            value={op.operation}
+                            data-smv-op={i}
+                            placeholder="Operation name"
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setSewingOps((prev) => prev.map((row, idx) => idx === i ? { ...row, operation: val } : row));
+                            }}
+                            className="input py-1 px-1.5 text-xs w-full font-semibold text-slate-900"
+                          />
+                        </td>
+                        <td className="py-1 px-2 text-right">
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={op.smv}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? '' : Number(e.target.value);
+                              setSewingOps((prev) => prev.map((row, idx) => idx === i ? { ...row, smv: val } : row));
+                            }}
+                            onKeyDown={(e) => {
+                              // Enter on the last row adds the next operation row (row-by-row entry).
+                              if (e.key === 'Enter') { e.preventDefault(); if (i === sewingOps.length - 1) addSewingOp(); }
+                            }}
+                            className="w-24 rounded border border-slate-200 px-1.5 py-0.5 text-right font-mono text-xs font-bold text-brand-700"
+                          />
+                        </td>
                         <td className="py-2 px-3 text-right font-bold text-slate-800">₹{opCost.toFixed(3)}</td>
+                        <td className="py-1 px-2 text-center">
+                          <button
+                            type="button"
+                            className="text-slate-400 hover:text-rose-600"
+                            onClick={() => setSewingOps((prev) => prev.filter((_, idx) => idx !== i))}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
@@ -1244,9 +1317,16 @@ export default function PreCostingDetailPage() {
                     <td colSpan={2} className="py-2.5 px-3 font-sans">Total Sewing SMV:</td>
                     <td className="py-2.5 px-3 text-right text-brand-700 font-black">{totalSmv.toFixed(2)} mins</td>
                     <td className="py-2.5 px-3 text-right text-brand-900 font-black">₹{sewingCostPerPc.toFixed(2)}</td>
+                    <td />
                   </tr>
                 </tfoot>
               </table>
+              <div className="flex items-center justify-between text-[11px] text-slate-500">
+                <span>Press Enter in the last row's SMV to add the next operation.</span>
+                <button type="button" className="btn-secondary btn-xs flex items-center gap-1" onClick={addSewingOp}>
+                  <Plus size={13} /> Add Operation
+                </button>
+              </div>
             </div>
           )}
         </div>

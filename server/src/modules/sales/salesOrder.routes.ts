@@ -5,7 +5,6 @@ import { ah } from '../../core/asyncHandler.js';
 import { NotFound, BadRequest, Conflict } from '../../core/errors.js';
 import { requirePermission } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
-import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
 
 export const salesOrderRouter = Router();
@@ -13,6 +12,16 @@ export const salesOrderRouter = Router();
 const INCOTERM = ['FOB','CIF','CFR','EXW','DDP','DAP','FCA'] as const;
 const PAYMENT  = ['LC','TT_ADVANCE','TT_AGAINST_DOC','DA','DP','CAD','OPEN'] as const;
 const ORDER_TYPES = ['SAMPLE','PROJECTION','DOMESTIC','EXPORT'] as const;
+
+/** Order type initial used in the SO number (G11 **E** 26 CAPE 0570). */
+const ORDER_TYPE_INITIAL: Record<(typeof ORDER_TYPES)[number], string> = {
+  EXPORT: 'E', DOMESTIC: 'D', PROJECTION: 'P', SAMPLE: 'S',
+};
+/** Merchandiser group: always "G" + 2 digits (G01 .. G99). */
+const GROUP_RE = /^G\d{2}$/;
+const groupCode = () => z.union([
+  z.string().trim().toUpperCase().regex(GROUP_RE, 'Use G + 2 digits, e.g. G11'), z.literal(''), z.null(),
+]).transform((v) => (v === '' ? null : v)).nullish();
 
 const skuLineSchema = z.object({
   sku_id: s.idReq(),
@@ -22,6 +31,8 @@ const skuLineSchema = z.object({
 const lineSchema = z.object({
   style_id: s.idReq(),
   color_id: s.id(),
+  /** Assort colour entered on the order, carried alongside the colour downstream. */
+  assort_color: s.nullableStr(80),
   /** Garment part this line covers: TOP / BOTTOM / COLLAR / CUFF / FOLDING */
   part_name: z.enum(['TOP', 'BOTTOM', 'COLLAR', 'CUFF', 'FOLDING', 'OTHER']).nullable().optional(),
   description: s.nullableStr(255),
@@ -44,6 +55,8 @@ const soSchema = z.object({
   buyer_id: s.idReq(),
   agent_id: s.id(),
   merchandiser_id: s.id(),
+  /** Merchandiser group (G01..G99) — the first block of the SO number. */
+  order_group: groupCode(),
   quotation_id: s.id(),
   buyer_po_no: s.nullableStr(60),
   buyer_po_date: s.date(),
@@ -88,6 +101,21 @@ async function loadLines(id: number) {
   return lines;
 }
 
+/**
+ * Assort colour of an order line, matched the way downstream screens know a
+ * job: IO number + style + colour. Returns null when none was entered.
+ */
+export async function assortColorFor(companyId: number, ioNo: string, styleId: number, colorId: number | null) {
+  const row = await queryOne<{ assort_color: string | null }>(
+    `SELECT l.assort_color
+       FROM trx_sales_order_line l
+       JOIN trx_sales_order so ON so.id = l.so_id
+      WHERE so.company_id = ? AND so.io_no = ? AND so.is_deleted = 0
+        AND l.style_id = ? AND (l.color_id <=> ?) AND l.assort_color IS NOT NULL
+      ORDER BY l.id LIMIT 1`, [companyId, ioNo, styleId, colorId]);
+  return row?.assort_color ?? null;
+}
+
 /** Recalculate header order_qty / total_amount / plan_cut_qty from the persisted lines. */
 async function recalcHeader(tx: Tx, soId: number) {
   const agg = await txQueryOne<{ qty: number; amt: number; plan_cut: number }>(
@@ -114,9 +142,9 @@ async function writeLines(tx: Tx, soId: number, lines: z.infer<typeof lineSchema
 
     const r = await txExecute(tx,
       `INSERT INTO trx_sales_order_line
-         (so_id, style_id, color_id, part_name, description, order_qty, excess_pct, plan_cut_qty, unit_price, amount, ship_date)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-      [soId, l.style_id, l.color_id ?? null, l.part_name ?? null, l.description ?? null, qty, excessPct, planCutQty, l.unit_price, amount,
+         (so_id, style_id, color_id, assort_color, part_name, description, order_qty, excess_pct, plan_cut_qty, unit_price, amount, ship_date)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [soId, l.style_id, l.color_id ?? null, l.assort_color ?? null, l.part_name ?? null, l.description ?? null, qty, excessPct, planCutQty, l.unit_price, amount,
        l.ship_date ?? null]);
 
     for (const sk of l.skus) {
@@ -178,6 +206,119 @@ salesOrderRouter.get('/', requirePermission('SALES_ORDER.VIEW'), ah(async (req, 
 
   res.json({ data: rows, pagination: { page: q.page, pageSize: q.pageSize,
     total: total?.total ?? 0, totalPages: Math.ceil((total?.total ?? 0) / q.pageSize) } });
+}));
+
+// ------------------------------------------------------------ SO NUMBER
+// Legacy format: <group><type initial><yy><buyer prefix><4-digit running no>,
+// e.g. G11E26CAPE0570. The running number is per company per year and lives
+// in cfg_so_number_seq; the IO number is generated separately below.
+
+type One = <T>(sql: string, params: unknown[]) => Promise<T | null>;
+
+interface SoNumberInput {
+  order_group?: string | null;
+  merchandiser_id?: number | null;
+  order_type?: string | null;
+  so_date?: string | null;
+  buyer_id?: number | null;
+}
+
+/**
+ * Merchandiser group for the SO number: picked on the order, else the
+ * merchandiser's group, else the company default (setting SO_DEFAULT_GROUP),
+ * so an order is never blocked only because a group was not set up.
+ */
+async function resolveOrderGroup(one: One, companyId: number, h: SoNumberInput) {
+  let group = h.order_group?.trim().toUpperCase() || null;
+  if (!group && h.merchandiser_id) {
+    const m = await one<{ group_code: string | null }>(
+      `SELECT group_code FROM mst_party WHERE id = ? AND company_id = ?`, [h.merchandiser_id, companyId]);
+    group = m?.group_code?.trim().toUpperCase() || null;
+  }
+  if (!group) {
+    const d = await one<{ setting_value: string | null }>(
+      `SELECT setting_value FROM cfg_system_setting WHERE company_id = ? AND setting_key = 'SO_DEFAULT_GROUP'`, [companyId]);
+    group = d?.setting_value?.trim().toUpperCase() || null;
+  }
+  return group && GROUP_RE.test(group) ? group : null;
+}
+
+/** Resolve the fixed part of the SO number (everything but the running number). */
+async function soNumberStem(one: One, companyId: number, h: SoNumberInput) {
+  const group = await resolveOrderGroup(one, companyId, h);
+  if (!group) return null;
+
+  let prefix = '';
+  if (h.buyer_id) {
+    const b = await one<{ io_prefix: string | null; party_name: string | null }>(
+      `SELECT io_prefix, party_name FROM mst_party WHERE id = ? AND company_id = ?`, [h.buyer_id, companyId]);
+    prefix = (b?.io_prefix ?? '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
+      || (b?.party_name ?? '').replace(/[^a-zA-Z]/g, '').slice(0, 4).toUpperCase();
+  }
+  if (!prefix) return null;
+
+  const initial = ORDER_TYPE_INITIAL[(h.order_type ?? 'EXPORT') as keyof typeof ORDER_TYPE_INITIAL] ?? 'E';
+  const yy = (h.so_date && /^\d{4}/.test(h.so_date) ? h.so_date.slice(2, 4)
+    : String(new Date().getFullYear()).slice(2));
+  return { stem: `${group}${initial}${yy}${prefix}`, yy };
+}
+
+const soNumberHint = 'Pick the buyer to auto-generate the SO number (group: order → merchandiser → company default)';
+
+/**
+ * Take the next SO number inside the transaction. The sequence row is locked
+ * FOR UPDATE, so concurrent orders never share a number; a number already
+ * used (e.g. keyed in manually) is skipped.
+ */
+async function nextSoNumber(tx: Tx, companyId: number, h: SoNumberInput): Promise<string> {
+  const parts = await soNumberStem((sql, p) => txQueryOne(tx, sql, p), companyId, h);
+  if (!parts) {
+    const group = await resolveOrderGroup((sql, p) => txQueryOne(tx, sql, p), companyId, h);
+    if (!group) {
+      throw BadRequest('No merchandiser group — pick one on the order, set it on the merchandiser, or set the company default (SO_DEFAULT_GROUP)',
+        [{ field: 'order_group', message: 'Select the merchandiser group' }]);
+    }
+    throw BadRequest('Choose the buyer — its I/O prefix (or name) forms the SO number', [{ field: 'buyer_id', message: 'Select the buyer' }]);
+  }
+
+  // Upsert takes the row's exclusive lock straight away (INSERT IGNORE would
+  // take a shared lock and deadlock concurrent orders on the FOR UPDATE).
+  await txExecute(tx,
+    `INSERT INTO cfg_so_number_seq (company_id, yy, next_number) VALUES (?,?,1)
+     ON DUPLICATE KEY UPDATE next_number = next_number`, [companyId, parts.yy]);
+  const row = await txQueryOne<{ next_number: number }>(tx,
+    `SELECT next_number FROM cfg_so_number_seq WHERE company_id = ? AND yy = ? FOR UPDATE`, [companyId, parts.yy]);
+  let n = row?.next_number ?? 1;
+  for (;; n++) {
+    if (n > 9999) throw Conflict(`SO running number for 20${parts.yy} has passed 9999`);
+    const soNo = `${parts.stem}${String(n).padStart(4, '0')}`;
+    const dup = await txQueryOne(tx,
+      `SELECT id FROM trx_sales_order WHERE company_id = ? AND so_no = ?`, [companyId, soNo]);
+    if (!dup) {
+      await txExecute(tx, `UPDATE cfg_so_number_seq SET next_number = ? WHERE company_id = ? AND yy = ?`,
+        [n + 1, companyId, parts.yy]);
+      return soNo;
+    }
+  }
+}
+
+/** Preview of the next SO number for the New Sales Order screen (nothing is consumed). */
+salesOrderRouter.get('/next-so-number', requirePermission('SALES_ORDER.CREATE'), ah(async (req, res) => {
+  const companyId = req.user!.companyId;
+  const q = z.object({
+    order_group: z.string().trim().optional(),
+    merchandiser_id: z.coerce.number().int().optional(),
+    order_type: z.enum(ORDER_TYPES).optional(),
+    so_date: z.string().optional(),
+    buyer_id: z.coerce.number().int().optional(),
+  }).parse(req.query);
+
+  const parts = await soNumberStem((sql, p) => queryOne(sql, p), companyId, q);
+  if (!parts) { res.json({ data: { so_no: null, hint: soNumberHint } }); return; }
+  const row = await queryOne<{ next_number: number }>(
+    `SELECT next_number FROM cfg_so_number_seq WHERE company_id = ? AND yy = ?`, [companyId, parts.yy]);
+  const soNo = `${parts.stem}${String(row?.next_number ?? 1).padStart(4, '0')}`;
+  res.json({ data: { so_no: soNo, stem: parts.stem } });
 }));
 
 // -------------------------------------------------------------- NEXT I/O NUMBER
@@ -280,22 +421,23 @@ salesOrderRouter.post('/', requirePermission('SALES_ORDER.CREATE'), ah(async (re
   if (!body.lines.length) throw BadRequest('A sales order needs at least one line');
 
   const created = await transaction(async (tx) => {
-    const soNo = body.so_no || await nextDocNumber(tx, req.user!.companyId, 'SALES_ORDER',
-      { branchId: body.branch_id ?? null });
     const { lines, ...h } = body;
+    // Group defaults from the merchandiser, then the company default, when not picked on the order.
+    if (!h.order_group) h.order_group = await resolveOrderGroup((sql, p) => txQueryOne(tx, sql, p), req.user!.companyId, h);
+    const soNo = body.so_no || await nextSoNumber(tx, req.user!.companyId, h);
     const ioNo = await resolveIoNumber(tx, req.user!.companyId, h.buyer_id, h.io_no);
 
     const r = await txExecute(tx,
       `INSERT INTO trx_sales_order
-        (company_id, branch_id, so_no, io_no, order_type, so_date, buyer_id, agent_id, merchandiser_id, quotation_id,
+        (company_id, branch_id, so_no, io_no, order_type, so_date, buyer_id, agent_id, merchandiser_id, order_group, quotation_id,
          buyer_po_no, buyer_po_date, season, currency_id, exchange_rate, incoterm,
          port_of_loading, destination_country, destination_port, payment_term,
          lc_no, lc_date, lc_expiry, excess_pct, tolerance_plus_pct, tolerance_minus_pct,
          ship_date, delivery_date, status_id,
          approval_state, remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'DRAFT',?,?)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'DRAFT',?,?)`,
       [req.user!.companyId, h.branch_id ?? null, soNo, ioNo, h.order_type ?? 'EXPORT', h.so_date ?? null, h.buyer_id,
-       h.agent_id ?? null, h.merchandiser_id ?? null, h.quotation_id ?? null, h.buyer_po_no ?? null, h.buyer_po_date ?? null,
+       h.agent_id ?? null, h.merchandiser_id ?? null, h.order_group ?? null, h.quotation_id ?? null, h.buyer_po_no ?? null, h.buyer_po_date ?? null,
        h.season ?? null, h.currency_id, h.exchange_rate ?? 1, h.incoterm ?? 'FOB',
        h.port_of_loading ?? null, h.destination_country ?? null, h.destination_port ?? null,
        h.payment_term ?? 'LC', h.lc_no ?? null, h.lc_date ?? null, h.lc_expiry ?? null,

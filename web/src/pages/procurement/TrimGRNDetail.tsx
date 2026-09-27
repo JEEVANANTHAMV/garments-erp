@@ -8,6 +8,8 @@ import { http } from '../../lib/api';
 import { fmtDecimal, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
 import { Badge } from '../../components/ui';
+import { InvoiceSummary } from '../../components/InvoiceSummary';
+import { computeInvoice, chargesFromRow, chargesPayload, EMPTY_CHARGES, type InvoiceCharges } from '../../lib/invoiceCalc';
 
 interface GrnLine {
   _key: string;
@@ -142,6 +144,8 @@ export default function TrimGRNDetailPage() {
 
   const [selectedPoIds, setSelectedPoIds] = useState<string[]>([]);
   const [lines, setLines] = useState<GrnLine[]>([emptyGrnLine()]);
+  // Common invoice summary heads (TDS / TCS / other charges / landed cost / round off)
+  const [charges, setCharges] = useState<InvoiceCharges>(EMPTY_CHARGES);
 
   // Selected Currency Info
   const selectedCurrency = (currencies as any[]).find((c: any) => String(c.id) === String(head.currency_id));
@@ -180,6 +184,7 @@ export default function TrimGRNDetailPage() {
         status: existingGrn.status || 'POSTED',
         remarks: existingGrn.remarks || '',
       });
+      setCharges(chargesFromRow(existingGrn));
 
       let pids: string[] = [];
       if (Array.isArray(existingGrn.po_ids)) {
@@ -404,11 +409,16 @@ export default function TrimGRNDetailPage() {
     });
 
     const taxAmount = cgstAmount + sgstAmount + igstAmount;
-    const grandTotal = taxableAmount + taxAmount;
+    const inv = computeInvoice(
+      lines.map((l) => ({ taxable: Number(l.taxable_amount) || 0, tax: Number(l.tax_amount) || 0 })),
+      head.is_interstate ? 'INTER_STATE' : 'INTRA_STATE',
+      charges,
+    );
+    const grandTotal = inv.net;
     const inrGrandTotal = grandTotal * (Number(head.exchange_rate) || 1.0);
 
-    return { totalReceived, totalAccepted, totalRejected, totalHold, taxableAmount, cgstAmount, sgstAmount, igstAmount, taxAmount, grandTotal, inrGrandTotal };
-  }, [lines, head.is_interstate, head.exchange_rate]);
+    return { totalReceived, totalAccepted, totalRejected, totalHold, taxableAmount, cgstAmount, sgstAmount, igstAmount, taxAmount, grandTotal, inrGrandTotal, inv };
+  }, [lines, head.is_interstate, head.exchange_rate, charges]);
 
   const handleSave = async () => {
     if (!head.io_no) {
@@ -451,8 +461,8 @@ export default function TrimGRNDetailPage() {
         is_interstate: head.is_interstate ? 1 : 0,
         taxable_amount: totals.taxableAmount,
         tax_amount: totals.taxAmount,
-        igst_amount: totals.igstAmount,
         net_amount: totals.grandTotal,
+        ...chargesPayload(charges, totals.inv),
         lines: lines.map((l) => ({
           po_id: l.po_id || (selectedPoIds[0] ? Number(selectedPoIds[0]) : undefined),
           po_line_id: l.po_line_id || null,
@@ -1236,36 +1246,20 @@ export default function TrimGRNDetailPage() {
           </table>
         </div>
 
-        {/* Footer Financial Breakdown */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row justify-end items-end gap-6 text-xs">
-          <div className="space-y-1 text-right font-mono">
-            <div className="text-slate-600">
-              Taxable Amount: <span className="font-semibold text-slate-900">{currSymbol}{fmtDecimal(totals.taxableAmount, 2)}</span>
-            </div>
-            {head.is_interstate ? (
-              <div className="text-purple-700">
-                Integrated GST (IGST): <span className="font-bold">{currSymbol}{fmtDecimal(totals.igstAmount, 2)}</span>
-              </div>
-            ) : (
-              <>
-                <div className="text-slate-600">
-                  Central GST (CGST): <span className="font-semibold">{currSymbol}{fmtDecimal(totals.cgstAmount, 2)}</span>
-                </div>
-                <div className="text-slate-600">
-                  State GST (SGST): <span className="font-semibold">{currSymbol}{fmtDecimal(totals.sgstAmount, 2)}</span>
-                </div>
-              </>
-            )}
-            <div className="text-sm font-black text-indigo-900 border-t border-slate-200 pt-1">
-              Net Payable Grand Total ({currCode}): <span>{currSymbol}{fmtDecimal(totals.grandTotal, 2)}</span>
-            </div>
-            {isForeignCurrency && (
-              <div className="text-xs font-bold text-amber-900 pt-0.5">
-                INR Converted Total: <span>₹{fmtDecimal(totals.inrGrandTotal, 2)}</span>
-                <span className="text-[10px] font-normal text-slate-500 ml-1">(@ ₹{head.exchange_rate}/{currCode})</span>
-              </div>
-            )}
-          </div>
+        {/* Common invoice financial summary */}
+        <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
+          <InvoiceSummary
+            className="w-full max-w-md"
+            totals={totals.inv}
+            value={charges}
+            onChange={(patch) => setCharges((c) => ({ ...c, ...patch }))}
+            gstMode={head.is_interstate ? 'INTER_STATE' : 'INTRA_STATE'}
+            currencySymbol={currSymbol}
+            currencyCode={currCode}
+            showLandedCost={isForeignCurrency}
+            exchangeRate={isForeignCurrency ? Number(head.exchange_rate) : undefined}
+            readOnly={!isNew}
+          />
         </div>
       </div>
     </div>

@@ -15,7 +15,7 @@ const fpoSchema = z.object({
   fpo_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   io_no: s.strReq(60),
   customer_po_no: s.nullableStr(60),
-  style_id: s.id(),
+  style_id: s.idReq(),
   fabric_id: s.id(),
   sub_process: z.enum([
     'DYEING', 'COMPACTING', 'HEAT_SETTING', 'WASHING', 'PRINTING',
@@ -30,6 +30,8 @@ const fpoSchema = z.object({
   remarks: s.text(),
   input_rolls: z.array(z.object({
     knitting_roll_id: s.id(),
+    // Grey roll from fabric roll stock (knitting program inward).
+    fabric_roll_id: s.id(),
     roll_no: s.strReq(60),
     lot_no: s.nullableStr(80),
     weight_kg: z.coerce.number().positive(),
@@ -180,9 +182,10 @@ fabricProcessingRouter.post('/fabric-processing/orders', requirePermission('PROD
           status, remarks, created_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        cid, fpoNo, body.fpo_date, body.io_no, body.customer_po_no, body.style_id, body.fabric_id, body.sub_process,
-        body.vendor_id, body.shade_code, body.color_name, body.target_dia, body.target_gsm,
-        body.input_rolls.length, totalInputWeight, body.status, body.remarks, uid
+        cid, fpoNo, body.fpo_date, body.io_no, body.customer_po_no ?? null, body.style_id ?? null,
+        body.fabric_id ?? null, body.sub_process, body.vendor_id ?? null, body.shade_code ?? null,
+        body.color_name ?? null, body.target_dia ?? null, body.target_gsm ?? null,
+        body.input_rolls.length, totalInputWeight, body.status, body.remarks ?? null, uid
       ]
     );
 
@@ -191,10 +194,32 @@ fabricProcessingRouter.post('/fabric-processing/orders', requirePermission('PROD
     for (const roll of body.input_rolls) {
       await txExecute(
         tx,
-        `INSERT INTO trx_fabric_process_roll_in (fpo_id, knitting_roll_id, roll_no, lot_no, weight_kg, meters)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [fpoId, roll.knitting_roll_id || null, roll.roll_no, roll.lot_no, roll.weight_kg, roll.meters]
+        `INSERT INTO trx_fabric_process_roll_in (fpo_id, knitting_roll_id, fabric_roll_id, roll_no, lot_no, weight_kg, meters)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [fpoId, roll.knitting_roll_id || null, roll.fabric_roll_id || null, roll.roll_no, roll.lot_no ?? null, roll.weight_kg, roll.meters]
       );
+
+      // A grey roll from roll stock is used up by the KG sent for processing.
+      if (roll.fabric_roll_id) {
+        const fr = await txQueryOne<any>(
+          tx,
+          `SELECT id, weight_kg, issued_kg FROM trx_fabric_roll WHERE id = ? AND company_id = ? FOR UPDATE`,
+          [roll.fabric_roll_id, cid]
+        );
+        if (!fr) throw BadRequest(`Grey roll ${roll.roll_no} not found in roll stock`);
+        const avail = Number(fr.weight_kg || 0) - Number(fr.issued_kg || 0);
+        if (roll.weight_kg > avail + 1e-9) {
+          throw BadRequest(`Grey roll ${roll.roll_no} has only ${avail.toFixed(3)} KG left`);
+        }
+        await txExecute(
+          tx,
+          `UPDATE trx_fabric_roll
+              SET issued_kg = issued_kg + ?,
+                  stock_status = IF(issued_kg + 0.0005 >= COALESCE(weight_kg, 0), 'ISSUED', 'PARTIAL')
+            WHERE id = ?`,
+          [roll.weight_kg, roll.fabric_roll_id]
+        );
+      }
 
       if (roll.knitting_roll_id) {
         await txExecute(

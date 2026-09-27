@@ -15,6 +15,7 @@ import {
 import { SizeGroupsPage, SizeGroupDetailPage } from './pages/masters/SizeGroups';
 import { StylesPage, StyleDetailPage } from './pages/masters/Styles';
 import { BomsPage, BomDetailPage } from './pages/masters/Boms';
+import { DivisionsPage } from './pages/masters/Divisions';
 
 /* Sales */
 import { EnquiriesPage, SamplesPage, QuotationsPage } from './pages/sales';
@@ -62,6 +63,7 @@ import TrimGRNDetailPage from './pages/procurement/TrimGRNDetail';
 import KnittingPage from './pages/production/KnittingPage';
 import KnittingProgramPage from './pages/production/KnittingProgramPage';
 import ProcessRoutePage from './pages/production/ProcessRoutePage';
+import { ProcessMasterPage, ContractorBillsPage } from './pages/production/ProcessMasterPage';
 import YarnProcessPage from './pages/production/YarnProcessPage';
 import CollarKnittingPage from './pages/production/CollarKnittingPage';
 import ProcessReportsPage from './pages/production/ProcessReportsPage';
@@ -171,6 +173,7 @@ export default function App() {
                   <Route path="warehouse-bins" element={<WarehouseBinsPage />} />
                   <Route path="branches" element={<BranchesPage />} />
                   <Route path="units" element={<UnitsPage />} />
+                  <Route path="divisions" element={<DivisionsPage />} />
                   <Route path="size-groups" element={<SizeGroupsPage />} />
                   <Route path="size-groups/:id" element={<SizeGroupDetailPage />} />
                   <Route path="sizes" element={<SizesPage />} />
@@ -287,6 +290,8 @@ export default function App() {
                   <Route path="process-transactions" element={<ProcessTransactionsPage />} />
                   <Route path="jobwork-challans" element={<JobWorkChallansPage />} />
                   <Route path="jobwork-receipts" element={<JobWorkReceiptsPage />} />
+                  <Route path="process-master" element={<ProcessMasterPage />} />
+                  <Route path="contractor-bills" element={<ContractorBillsPage />} />
                   <Route path="jobwork-ins" element={<JobWorkInsPage />} />
                   <Route path="jobwork-invoices" element={<JobWorkInvoicesPage />} />
                   <Route path="fg-receipts" element={<FgReceiptsPage />} />

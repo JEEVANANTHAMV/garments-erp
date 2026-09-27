@@ -1,4 +1,7 @@
+import { useState } from 'react';
+import { Printer } from 'lucide-react';
 import { CrudPage } from '../../components/CrudPage';
+import { JobWorkInvoicePrintModal } from './JobWorkInvoicePrint';
 import { StatusBadge, Badge } from '../../components/ui';
 import { fmtDate, fmtNumber, fmtDecimal, humanize, today } from '../../lib/format';
 
@@ -38,6 +41,7 @@ export function JobWorkInsPage() {
         { key: 'customer_name', header: 'Customer' },
         { key: 'customer_dc_no', header: 'Customer DC' },
         { key: 'process_type', header: 'Process', render: (r: any) => <Badge tone="cyan">{r.process_type || 'General'}</Badge> },
+        { key: 'division_name', header: 'Division' },
         { key: 'total_qty', header: 'Qty', align: 'right', render: (r: any) => fmtNumber(r.total_qty) },
         { key: 'rate', header: 'Rate', align: 'right', render: (r: any) => fmtDecimal(r.rate, 2) },
         { key: 'total_amount', header: 'Amount', align: 'right', render: (r: any) => fmtDecimal(r.total_amount, 2) },
@@ -46,6 +50,7 @@ export function JobWorkInsPage() {
       ]}
       filters={[
         { name: 'customer_id', label: 'Customer', lookup: 'customers' },
+        { name: 'division_id', label: 'Division', lookup: 'divisions' },
         { name: 'status', label: 'Status', options: STATES.map((v) => ({ value: v, label: humanize(v) })) },
       ]}
       modalSize="lg"
@@ -56,7 +61,8 @@ export function JobWorkInsPage() {
         { name: 'gate_inward_id', label: 'Inward gate entry', lookup: 'gate-inwards' },
         { name: 'customer_dc_no', label: 'Customer DC no' },
         { name: 'customer_po_ref', label: 'Customer PO ref' },
-        { name: 'process_type', label: 'Process type', placeholder: 'e.g. Screen Printing, Enzyme Wash' },
+        { name: 'process_type', label: 'Process type', placeholder: 'e.g. Screen Printing, Embroidery' },
+        { name: 'division_id', label: 'Division', lookup: 'divisions', hint: 'Blank: Printing / Embroidery process picks its division' },
         { name: 'total_qty', label: 'Total quantity', type: 'number', required: true },
         { name: 'rate', label: 'Rate per piece', type: 'number' },
         { name: 'total_amount', label: 'Total amount', type: 'number' },
@@ -76,7 +82,9 @@ export function JobWorkInsPage() {
 export function JobWorkInvoicesPage() {
   const TYPES = ['RECEIVABLE', 'PAYABLE'];
   const STATES = ['DRAFT', 'SUBMITTED', 'APPROVED', 'PAID', 'CANCELLED'];
+  const [printId, setPrintId] = useState<number | null>(null);
   return (
+    <>
     <CrudPage
       path="jobwork-invoices"
       title="Job Work Invoices"
@@ -95,6 +103,7 @@ export function JobWorkInvoicesPage() {
         },
         { key: 'invoice_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.invoice_date) },
         { key: 'party_name', header: 'Party' },
+        { key: 'division_name', header: 'Division' },
         {
           key: 'invoice_type',
           header: 'Type',
@@ -114,9 +123,24 @@ export function JobWorkInvoicesPage() {
           ),
         },
         { key: 'status', header: 'Status', render: (r: any) => <StatusBadge value={r.status} /> },
+        {
+          key: 'print',
+          header: '',
+          render: (r: any) => (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[12px] text-brand-700 hover:bg-brand-50"
+              title="Print invoice"
+              onClick={(e) => { e.stopPropagation(); setPrintId(r.id); }}
+            >
+              <Printer className="h-3.5 w-3.5" /> Print
+            </button>
+          ),
+        },
       ]}
       filters={[
         { name: 'party_id', label: 'Party', lookup: 'parties' },
+        { name: 'division_id', label: 'Division', lookup: 'divisions' },
         { name: 'invoice_type', label: 'Type', options: TYPES.map((v) => ({ value: v, label: humanize(v) })) },
         { name: 'status', label: 'Status', options: STATES.map((v) => ({ value: v, label: humanize(v) })) },
       ]}
@@ -127,6 +151,7 @@ export function JobWorkInvoicesPage() {
         { name: 'invoice_type', label: 'Invoice type', required: true, options: TYPES.map((v) => ({ value: v, label: humanize(v) })) },
         { name: 'party_id', label: 'Party (Customer/Vendor)', required: true, lookup: 'parties' },
         { name: 'jwin_id', label: 'Job Work In Ref', lookup: 'jobwork-ins' },
+        { name: 'division_id', label: 'Billing division', lookup: 'divisions', hint: 'Blank: taken from the Job Work In. Division bills use its own number series' },
         { name: 'challan_id', label: 'Job Work Challan Ref', lookup: 'jobwork-challans' },
         { name: 'currency_id', label: 'Currency', required: true, lookup: 'currencies' },
         { name: 'total_qty', label: 'Total quantity', type: 'number' },
@@ -144,5 +169,7 @@ export function JobWorkInvoicesPage() {
         { name: 'remarks', label: 'Remarks', type: 'textarea' },
       ]}
     />
+    <JobWorkInvoicePrintModal id={printId} onClose={() => setPrintId(null)} />
+    </>
   );
 }

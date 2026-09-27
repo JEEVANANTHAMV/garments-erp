@@ -52,9 +52,9 @@ const kpSchema = z.object({
   program_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   so_id: s.id(),
   so_line_id: s.id(),
-  io_no: s.nullableStr(60),
+  io_no: s.strReq(60),   // internal order no + style are compulsory (client review 24-Sep-2026)
   buyer_po_no: s.nullableStr(60),
-  style_id: s.id(),
+  style_id: s.idReq(),
   part_name: z.enum(PARTS).nullable().optional(),
   fabric_id: s.id(),
   fabric_type: s.nullableStr(80),
@@ -124,7 +124,7 @@ const kwoSchema = z.object({
   io_no: s.strReq(60),
   customer_po_no: s.nullableStr(60),
   so_line_id: s.id(),
-  style_id: s.id(),
+  style_id: s.idReq(),
   sub_process: z.enum(['KNITTING', 'WINDING', 'TWISTING', 'YARN_DYEING', 'COLLAR_KNITTING']).default('KNITTING'),
   vendor_id: s.id(),
   fabric_id: s.id(),
@@ -920,7 +920,7 @@ knittingRouter.get('/knitting/available-grey-rolls', requirePermission('PRODUCTI
     params.push(style_id);
   }
 
-  const rows = await query(
+  const rows = await query<any>(
     `SELECT kro.*,
             st.style_code, st.style_name,
             fab.fabric_name, fab.fabric_code,
@@ -933,6 +933,42 @@ knittingRouter.get('/knitting/available-grey-rolls', requirePermission('PRODUCTI
       ORDER BY kro.id DESC`,
     params
   );
+  for (const r of rows) {
+    r.source = 'KWO';
+    r.row_key = `KWO-${r.id}`;
+    r.knitting_roll_id = r.id;
+    r.fabric_roll_id = null;
+  }
 
-  res.json({ success: true, data: rows });
+  // Grey rolls received against a knitting program DC live in fabric roll
+  // stock (trx_fabric_roll via the inward's GRN); offer the unissued ones too.
+  let kpWhere = `WHERE fr.company_id = ? AND fr.qc_status = 'ACCEPTED'
+                   AND fr.stock_status IN ('AVAILABLE','PARTIAL')
+                   AND COALESCE(fr.weight_kg,0) - COALESCE(fr.issued_kg,0) > 0`;
+  const kpParams: any[] = [cid];
+  if (io_no) { kpWhere += ' AND kp.io_no = ?'; kpParams.push(io_no); }
+  if (style_id) { kpWhere += ' AND kp.style_id = ?'; kpParams.push(style_id); }
+  const kpRows = await query<any>(
+    `SELECT fr.id AS fabric_roll_id, fr.roll_no, fr.lot_no, fr.dia, fr.gsm, fr.meters,
+            ROUND(COALESCE(fr.weight_kg,0) - COALESCE(fr.issued_kg,0), 3) AS weight_kg,
+            fr.fabric_id, kp.io_no, kp.style_id, kp.program_no, rc.receipt_no, rc.party_dc_no,
+            st.style_code, st.style_name, fab.fabric_name, fab.fabric_code
+       FROM trx_fabric_roll fr
+       JOIN trx_process_receipt rc ON rc.grn_id = fr.grn_id AND rc.company_id = fr.company_id
+                                  AND rc.src_type = 'KNITTING_PROGRAM'
+       JOIN trx_knitting_program kp ON kp.id = rc.src_id
+       LEFT JOIN mst_style st ON st.id = kp.style_id
+       LEFT JOIN mst_fabric fab ON fab.id = fr.fabric_id
+      ${kpWhere}
+      ORDER BY fr.id DESC`,
+    kpParams
+  );
+  for (const r of kpRows) {
+    r.source = 'KP';
+    r.row_key = `KP-${r.fabric_roll_id}`;
+    r.id = r.fabric_roll_id;
+    r.knitting_roll_id = null;
+  }
+
+  res.json({ success: true, data: [...kpRows, ...rows] });
 }));

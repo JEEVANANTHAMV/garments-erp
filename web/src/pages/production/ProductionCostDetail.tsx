@@ -24,7 +24,7 @@ export default function ProductionCostDetailPage() {
   const [loadingData, setLoadingData] = useState(false);
   const [activeTab, setActiveTab] = useState<
     'Overview' | 'Fabric' | 'Trims' | 'Process' | 'Cutting' | 'Sewing' |
-    'Finishing' | 'Packing' | 'Labour' | 'Machine' | 'Overhead' | 'Variance' | 'Traceability'
+    'Finishing' | 'Packing' | 'Labour' | 'Overhead' | 'Variance' | 'Traceability'
   >('Overview');
 
   const [drilldownModalOpen, setDrilldownModalOpen] = useState(false);
@@ -101,6 +101,10 @@ export default function ProductionCostDetailPage() {
   });
 
   const [breakdownHeads, setBreakdownHeads] = useState<any[]>([]);
+  // Standard (approved merchandiser pre-costing) reference used by the P&L statement.
+  const [standard, setStandard] = useState<{ costing_no: string | null; approved: boolean; fob_price: number; currency_code?: string }>({
+    costing_no: null, approved: false, fob_price: 0,
+  });
   const [stageWip, setStageWip] = useState<any[]>([]);
   const [sources, setSources] = useState<any>({
     materials: [],
@@ -180,6 +184,7 @@ export default function ProductionCostDetailPage() {
         const parsed = typeof c.data_json === 'string' ? JSON.parse(c.data_json) : c.data_json;
         if (parsed.tabs) setTabsData(parsed.tabs);
         if (parsed.breakdownHeads) setBreakdownHeads(parsed.breakdownHeads);
+        if (parsed.standard) setStandard(parsed.standard);
         if (parsed.stageWip) setStageWip(parsed.stageWip);
         if (parsed.sources) setSources(parsed.sources);
       } catch (err) {}
@@ -228,6 +233,7 @@ export default function ProductionCostDetailPage() {
       setSummary(d.summary);
       if (d.tabs) setTabsData(d.tabs);
       setBreakdownHeads(d.breakdownHeads || []);
+      if (d.standard) setStandard(d.standard);
       setStageWip(d.stageWip || []);
       setSources(d.sources || {});
 
@@ -299,6 +305,7 @@ export default function ProductionCostDetailPage() {
         data_json: {
           tabs: tabsData,
           breakdownHeads,
+          standard,
           stageWip,
           sources,
         },
@@ -383,8 +390,30 @@ export default function ProductionCostDetailPage() {
 
   const tabs = [
     'Overview', 'Fabric', 'Trims', 'Process', 'Cutting', 'Sewing',
-    'Finishing', 'Packing', 'Labour', 'Machine', 'Overhead', 'Variance', 'Traceability'
+    'Finishing', 'Packing', 'Labour', 'Overhead', 'Variance', 'Traceability'
   ] as const;
+
+  // Machine cost is no longer part of the actual cost sheet (client review). Older
+  // saved sheets may still carry a machine head/amount; it is folded into overheads
+  // for display so the statement still adds up to the saved total.
+  const perPc = (v: number) => v / (head.produced_qty || 1);
+  const legacyMachine = Number(summary.machine_cost) || 0;
+  const displayHeads = (() => {
+    const machine = breakdownHeads.filter((h) => String(h.head).includes('Machine'));
+    const rest = breakdownHeads.filter((h) => !String(h.head).includes('Machine'));
+    if (!machine.length) return rest;
+    const mEst = machine.reduce((s, h) => s + (Number(h.estimated) || 0), 0);
+    const mAct = machine.reduce((s, h) => s + (Number(h.actual) || 0), 0);
+    return rest.map((h) => String(h.head).includes('Overhead')
+      ? { ...h, estimated: (Number(h.estimated) || 0) + mEst, actual: (Number(h.actual) || 0) + mAct }
+      : h);
+  })();
+  const stdTotal = summary.estimated_cost_per_piece * (head.produced_qty || 0);
+  const fobPc = Number(standard.fob_price) || 0;
+  const revenue = fobPc * (head.good_qty || 0);
+  const stdProfit = (fobPc - summary.estimated_cost_per_piece) * (head.produced_qty || 0);
+  const actProfit = revenue - summary.total_actual_cost;
+  const signed = (v: number, digits = 2) => `${v > 0 ? '+' : v < 0 ? '−' : ''}₹${Math.abs(v).toFixed(digits)}`;
 
   return (
     <div className="space-y-4 pb-14">
@@ -660,11 +689,87 @@ export default function ProductionCostDetailPage() {
                 </div>
               </div>
 
+              {/* Management P&L: Standard (pre-costing) vs Actual, head-wise */}
+              <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
+                <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2 text-xs">
+                  <span className="font-bold text-slate-700">Profit &amp; Loss Statement — Standard vs Actual</span>
+                  <span className="text-[11px] text-slate-500">
+                    Standard = {standard.costing_no
+                      ? <>pre-costing <span className="font-mono font-semibold text-indigo-700">{standard.costing_no}</span>{!standard.approved && <span className="text-amber-700 font-semibold"> (not approved)</span>}</>
+                      : <span className="text-amber-700 font-semibold">no pre-costing for this style — estimated</span>}
+                    {' '}· Variance = Actual − Standard (+ adverse, − favourable)
+                    {standard.currency_code && standard.currency_code !== 'INR' && (
+                      <span className="block text-amber-700 font-semibold">
+                        Pre-costing is in {standard.currency_code}; actuals are in INR — convert the standard before comparing.
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-[11px]">
+                      <tr>
+                        <th className="py-2.5 px-3">Cost Head</th>
+                        <th className="py-2.5 px-3 text-right">Standard / Pc</th>
+                        <th className="py-2.5 px-3 text-right">Actual / Pc</th>
+                        <th className="py-2.5 px-3 text-right">Variance / Pc</th>
+                        <th className="py-2.5 px-3 text-right">Variance (Total)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-700">
+                      {displayHeads.map((h, i) => {
+                        const est = Number(h.estimated) || 0;
+                        const act = Number(h.actual) || 0;
+                        const v = act - est;
+                        return (
+                          <tr key={i} className="hover:bg-slate-50">
+                            <td className="py-2 px-3 font-medium">{h.head}</td>
+                            <td className="py-2 px-3 text-right font-mono">₹{perPc(est).toFixed(2)}</td>
+                            <td className="py-2 px-3 text-right font-mono font-semibold">₹{perPc(act).toFixed(2)}</td>
+                            <td className={`py-2 px-3 text-right font-mono font-bold ${v > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{signed(perPc(v))}</td>
+                            <td className={`py-2 px-3 text-right font-mono ${v > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{signed(v, 0)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot className="border-t-2 border-slate-300 text-slate-900">
+                      <tr className="bg-slate-50 font-bold">
+                        <td className="py-2.5 px-3">Total Production Cost</td>
+                        <td className="py-2.5 px-3 text-right font-mono">₹{summary.estimated_cost_per_piece.toFixed(2)}</td>
+                        <td className="py-2.5 px-3 text-right font-mono">₹{summary.actual_cost_per_piece.toFixed(2)}</td>
+                        <td className={`py-2.5 px-3 text-right font-mono ${summary.variance_amount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{signed(perPc(summary.variance_amount))}</td>
+                        <td className={`py-2.5 px-3 text-right font-mono ${summary.variance_amount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{signed(summary.total_actual_cost - stdTotal, 0)}</td>
+                      </tr>
+                      {fobPc > 0 && (
+                        <>
+                          <tr className="font-semibold">
+                            <td className="py-2 px-3">Selling Price (FOB) / Pc</td>
+                            <td className="py-2 px-3 text-right font-mono">₹{fobPc.toFixed(2)}</td>
+                            <td className="py-2 px-3 text-right font-mono">₹{fobPc.toFixed(2)}</td>
+                            <td colSpan={2} className="py-2 px-3 text-right text-[11px] text-slate-500">
+                              Revenue on {fmtNumber(head.good_qty)} good pcs: ₹{fmtNumber(Math.round(revenue))}
+                            </td>
+                          </tr>
+                          <tr className="bg-slate-900 text-white font-bold">
+                            <td className="py-2.5 px-3">Profit / (Loss)</td>
+                            <td className="py-2.5 px-3 text-right font-mono">₹{fmtNumber(Math.round(stdProfit))}</td>
+                            <td className={`py-2.5 px-3 text-right font-mono ${actProfit < 0 ? 'text-rose-300' : 'text-emerald-300'}`}>₹{fmtNumber(Math.round(actProfit))}</td>
+                            <td colSpan={2} className="py-2.5 px-3 text-right font-mono">
+                              {signed(actProfit - stdProfit, 0)} vs standard
+                            </td>
+                          </tr>
+                        </>
+                      )}
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+
               {/* Head-wise comparison bar chart summary */}
               <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">Cost Head Distribution</h3>
                 <div className="space-y-3 text-xs">
-                  {breakdownHeads.map((h, i) => (
+                  {displayHeads.map((h, i) => (
                     <div key={i} className="space-y-1">
                       <div className="flex justify-between font-semibold">
                         <span className="text-slate-700">{h.head}</span>
@@ -1018,44 +1123,6 @@ export default function ProductionCostDetailPage() {
             );
           })()}
 
-          {/* Tab 10: MACHINE */}
-          {activeTab === 'Machine' && (
-            <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
-              <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center text-xs">
-                <span className="font-bold text-slate-700">Machine Hours, Power & Amortisation</span>
-                <span className="text-[11px] text-slate-500">Formula: (Hours × Rate) + Power + Maintenance + Depreciation</span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-[11px]">
-                    <tr>
-                      <th className="py-2.5 px-3">Machine Group</th>
-                      <th className="py-2.5 px-3">Department</th>
-                      <th className="py-2.5 px-3 text-right">Hours</th>
-                      <th className="py-2.5 px-3 text-right">Rate / Hr</th>
-                      <th className="py-2.5 px-3 text-right">Power / Maint / Deprec</th>
-                      <th className="py-2.5 px-3 text-right">Total Cost</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-700">
-                    {(tabsData.machine || []).map((m: any, i: number) => (
-                      <tr key={i} className="hover:bg-slate-50">
-                        <td className="py-2.5 px-3 font-semibold text-slate-900">{m.machine_name}</td>
-                        <td className="py-2.5 px-3 text-slate-600">{m.department_name}</td>
-                        <td className="py-2.5 px-3 text-right font-mono">{m.machine_hours} hrs</td>
-                        <td className="py-2.5 px-3 text-right font-mono">₹{m.hourly_rate.toFixed(2)}</td>
-                        <td className="py-2.5 px-3 text-right font-mono text-slate-500">
-                          ₹{fmtNumber(m.electricity_cost + m.maintenance_cost + m.depreciation_cost)}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">₹{fmtNumber(m.total_cost)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
           {/* Tab 11: OVERHEAD */}
           {activeTab === 'Overhead' && (
             <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
@@ -1203,12 +1270,8 @@ export default function ProductionCostDetailPage() {
                 <span className="font-mono font-semibold">₹{(summary.labour_cost / (head.produced_qty || 1)).toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
-                <span>Machine Cost</span>
-                <span className="font-mono font-semibold">₹{(summary.machine_cost / (head.produced_qty || 1)).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
                 <span>Overhead Cost</span>
-                <span className="font-mono font-semibold">₹{(summary.overhead_cost / (head.produced_qty || 1)).toFixed(2)}</span>
+                <span className="font-mono font-semibold">₹{perPc(summary.overhead_cost + legacyMachine).toFixed(2)}</span>
               </div>
             </div>
 

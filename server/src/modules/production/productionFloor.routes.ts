@@ -260,6 +260,77 @@ productionFloorRouter.post('/bundles/merge', requirePermission('PRODUCTION.UPDAT
   res.status(201).json({ data: result });
 }));
 
+/**
+ * Panel conversion (client review 24-Sep-2026): panels cut separately — e.g. a
+ * front in one colour and a back in another — are combined into one garment
+ * piece before stitching. Each source panel bundle gives `qty` PCS; the new
+ * bundle carries the output part / colour and keeps every source in
+ * trx_bundle_merge_source, so traceability runs back to both lays.
+ */
+productionFloorRouter.post('/bundles/panel-convert', requirePermission('PRODUCTION.UPDATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const body = z.object({
+    bundle_ids: z.array(z.coerce.number().int().positive()).default([]),
+    barcodes: z.array(z.string().trim().min(1).max(120)).default([]),
+    qty: z.coerce.number().int().positive().nullish(),
+    part_name: z.string().trim().min(1, 'Give the output part (e.g. TOP)').max(60),
+    color_id: s.id(),
+    reason: reasonReq,
+  }).parse(req.body);
+
+  const result = await transaction(async (tx) => {
+    const ids = await resolveBundleIds(tx, cid, body.bundle_ids, body.barcodes);
+    if (ids.length < 2) throw BadRequest('Choose at least two panel bundles to convert');
+    const src: BundleRow[] = [];
+    for (const id of ids) {
+      const b = await lockBundle(tx, cid, { id });
+      await assertAtCutting(tx, b, 'converted');
+      src.push(b);
+    }
+    // Panels of one garment: same job, style and size; part / colour may differ.
+    const key = (b: BundleRow) => [b.io_no ?? '', b.style_id, b.size_id].join('|');
+    if (new Set(src.map(key)).size > 1) throw BadRequest('Panel conversion needs bundles of the same job, style and size');
+    const minBal = Math.min(...src.map((b) => n(b.balance_qty)));
+    const qty = body.qty ?? minBal;
+    if (qty > minBal) throw BadRequest(`Only ${minBal} PCS can be converted — every panel bundle must have ${qty} PCS`);
+    const first = src[0];
+    const colorId = body.color_id ?? first.color_id;
+    const sku = await txQueryOne<any>(tx,
+      `SELECT id FROM mst_style_sku WHERE style_id = ? AND color_id = ? AND size_id = ? LIMIT 1`, [first.style_id, colorId, first.size_id]);
+    const barcode = await newBarcode(tx, cid);
+    const bundleNo = (await nextDocNumber(tx, cid, 'BUNDLE_MERGE')).slice(0, 40);
+    const outId = await insertChildBundle(tx, first, {
+      parent_bundle_id: null, bundle_no: bundleNo, barcode, qty, balance_qty: qty, allocated_kg: null,
+      color_id: colorId, sku_id: sku?.id ?? first.sku_id, part_name: body.part_name.toUpperCase(), component: null,
+      allocation_source: `PANEL CONVERSION of ${src.map((b) => `${b.bundle_no} (${b.part_name ?? '—'})`).join(', ')}`.slice(0, 160),
+      status: 'GENERATED', created_by: req.user!.id,
+    });
+    const out = { ...first, id: outId, bundle_no: bundleNo, barcode, qty, color_id: colorId, part_name: body.part_name, status: 'GENERATED' } as BundleRow;
+    for (const b of src) {
+      await txExecute(tx,
+        `INSERT INTO trx_bundle_merge_source (company_id, merged_bundle_id, source_bundle_id, qty, allocated_kg, reason, created_by)
+         VALUES (?,?,?,?,?,?,?)`,
+        [cid, outId, b.id, qty, b.allocated_kg == null || !n(b.qty) ? null : round5(n(b.allocated_kg) * qty / n(b.qty)),
+         `Panel conversion: ${body.reason}`.slice(0, 255), req.user!.id]);
+      const left = n(b.balance_qty) - qty;
+      await applyBundle(tx, b, { balance_qty: -qty }, left === 0 ? 'CLOSED' : undefined);
+      await addMovement(tx, req, b, {
+        txn_type: 'PANEL_OUT', from_stage: b.status, to_stage: left === 0 ? 'CLOSED' : b.status, qty,
+        ref_table: 'trx_cutting_bundle', ref_id: outId, remarks: `Panel converted into ${bundleNo}: ${body.reason}`.slice(0, 255),
+      });
+    }
+    await addMovement(tx, req, out, {
+      txn_type: 'PANEL_IN', from_stage: 'PANEL', to_stage: 'GENERATED', qty, good: qty,
+      ref_table: 'trx_bundle_merge_source', ref_id: outId,
+      remarks: `Panel conversion from ${src.map((b) => b.bundle_no).join(', ')}`.slice(0, 255),
+    });
+    await audit(req, 'trx_cutting_bundle', outId, 'INSERT', undefined,
+      { bundle_no: bundleNo, barcode, qty, part: body.part_name, sources: src.map((b) => b.id), reason: body.reason, panel_conversion: true }, tx);
+    return { id: outId, bundle_no: bundleNo, barcode, qty, part_name: body.part_name.toUpperCase(), sources: src.map((b) => ({ id: b.id, bundle_no: b.bundle_no, part_name: b.part_name })) };
+  });
+  res.status(201).json({ data: result });
+}));
+
 // ============================================================
 // SEWING INPUT & OUTPUT (doc §15)
 // ============================================================

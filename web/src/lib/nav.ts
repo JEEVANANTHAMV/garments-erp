@@ -5,7 +5,7 @@ import {
   Factory, Scissors, ClipboardCheck, PackageCheck, Ship, Receipt, Landmark,
   BarChart3, Shield, Settings, Warehouse, GitBranch, CalendarClock, FileCheck2,
   History, Wallet, TrendingUp, Container, Coins, SlidersHorizontal, Search,
-  Activity, RefreshCw, ShieldAlert, Workflow,
+  Activity, RefreshCw, ShieldAlert, Workflow, ListChecks, HandCoins,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -14,6 +14,8 @@ export interface NavItem {
   icon: LucideIcon;
   /** Item is shown when the user holds any of these permissions. */
   perms: string[];
+  /** Kept routable but off the menu (old screens hidden for the client demo, review 24-Sep-2026). */
+  hidden?: boolean;
 }
 export interface NavSection {
   label: string;
@@ -45,6 +47,7 @@ export const NAV: NavSection[] = [
       { label: 'Warehouses',        to: '/masters/warehouses', icon: Warehouse, perms: ['WAREHOUSE.VIEW'] },
       { label: 'Bins & Racks',      to: '/masters/warehouse-bins', icon: Boxes, perms: ['WAREHOUSE.VIEW'] },
       { label: 'Branches & Units',  to: '/masters/branches', icon: Building2, perms: ['BRANCH.VIEW','UNIT.VIEW'] },
+      { label: 'Divisions',         to: '/masters/divisions', icon: Building2, perms: ['UNIT.VIEW'] },
     ],
   },
   {
@@ -109,7 +112,7 @@ export const NAV: NavSection[] = [
       { label: 'Traceability Search',  to: '/production/traceability', icon: Search, perms: ['PRODUCTION.VIEW'] },
       { label: 'Yarn Processing',      to: '/production/knitting', icon: Activity, perms: ['PRODUCTION.VIEW'] },
       { label: 'Knitting Programs',    to: '/production/knitting-programs', icon: Layers, perms: ['PRODUCTION.VIEW'] },
-      { label: 'Process Routes',       to: '/production/process-routes', icon: Workflow, perms: ['PRODUCTION.VIEW'] },
+      { label: 'Process Routes',       to: '/production/process-routes', icon: Workflow, perms: ['PRODUCTION.VIEW'], hidden: true },
       { label: 'Yarn Processing (D/W/T)', to: '/production/yarn-processes', icon: Beaker, perms: ['PRODUCTION.VIEW'] },
       { label: 'Collar Knitting',      to: '/production/collar-knitting', icon: Shirt, perms: ['PRODUCTION.VIEW'] },
       { label: 'Process Execution',    to: '/production/process-execution', icon: ClipboardCheck, perms: ['PRODUCTION.VIEW'] },
@@ -130,15 +133,17 @@ export const NAV: NavSection[] = [
       { label: 'Sewing Operations',    to: '/production/sewing-operations', icon: Scissors, perms: ['PRODUCTION.VIEW'] },
       { label: 'Production Plans',     to: '/production/plans', icon: CalendarClock, perms: ['PRODUCTION.VIEW'] },
       { label: 'Production Orders (Prod)', to: '/production/orders', icon: Factory, perms: ['PRODUCTION.VIEW'] },
-      { label: 'Cutting',              to: '/production/cuttings', icon: Scissors, perms: ['PRODUCTION.VIEW'] },
-      { label: 'Stitching',            to: '/production/stitchings', icon: Factory, perms: ['PRODUCTION.VIEW'] },
-      { label: 'Printing',             to: '/production/printings', icon: Palette, perms: ['PRODUCTION.VIEW'] },
-      { label: 'Embroidery',           to: '/production/embroideries', icon: Palette, perms: ['PRODUCTION.VIEW'] },
-      { label: 'Washing',              to: '/production/washings', icon: Beaker, perms: ['PRODUCTION.VIEW'] },
-      { label: 'Finishing',            to: '/production/finishings', icon: PackageCheck, perms: ['PRODUCTION.VIEW'] },
-      { label: 'Process Movements',    to: '/production/process-transactions', icon: GitBranch, perms: ['PRODUCTION.VIEW'] },
-      { label: 'Job Work Challans (DC)', to: '/production/jobwork-challans', icon: Truck, perms: ['PRODUCTION.VIEW'] },
-      { label: 'Job Work Receipts',    to: '/production/jobwork-receipts', icon: PackageCheck, perms: ['PRODUCTION.VIEW'] },
+      { label: 'Cutting',              to: '/production/cuttings', icon: Scissors, perms: ['PRODUCTION.VIEW'], hidden: true },
+      { label: 'Stitching',            to: '/production/stitchings', icon: Factory, perms: ['PRODUCTION.VIEW'], hidden: true },
+      { label: 'Printing',             to: '/production/printings', icon: Palette, perms: ['PRODUCTION.VIEW'], hidden: true },
+      { label: 'Embroidery',           to: '/production/embroideries', icon: Palette, perms: ['PRODUCTION.VIEW'], hidden: true },
+      { label: 'Washing',              to: '/production/washings', icon: Beaker, perms: ['PRODUCTION.VIEW'], hidden: true },
+      { label: 'Finishing',            to: '/production/finishings', icon: PackageCheck, perms: ['PRODUCTION.VIEW'], hidden: true },
+      { label: 'Process Movements',    to: '/production/process-transactions', icon: GitBranch, perms: ['PRODUCTION.VIEW'], hidden: true },
+      { label: 'Process Outward (DC)', to: '/production/jobwork-challans', icon: Truck, perms: ['PRODUCTION.VIEW'] },
+      { label: 'Process Inward',       to: '/production/jobwork-receipts', icon: PackageCheck, perms: ['PRODUCTION.VIEW'] },
+      { label: 'Contractor Bills',     to: '/production/contractor-bills', icon: HandCoins, perms: ['PRODUCTION.VIEW'] },
+      { label: 'Process & Operations', to: '/production/process-master', icon: ListChecks, perms: ['PRODUCTION.VIEW'] },
       { label: 'Job Work In',          to: '/production/jobwork-ins', icon: Factory, perms: ['PRODUCTION.VIEW'] },
       { label: 'Job Work Invoices',    to: '/production/jobwork-invoices', icon: Receipt, perms: ['PRODUCTION.VIEW'] },
       { label: 'FG Receipts',          to: '/production/fg-receipts', icon: PackageCheck, perms: ['PRODUCTION.VIEW'] },

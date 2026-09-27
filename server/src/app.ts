@@ -35,6 +35,7 @@ import { shipmentRouter } from './modules/packing/shipment.routes.js';
 import { productionStagesRouter } from './modules/production/productionStages.routes.js';
 import { productionFloorRouter } from './modules/production/productionFloor.routes.js';
 import { processDcRouter } from './modules/production/processDc.routes.js';
+import { processMasterRouter } from './modules/production/processMaster.routes.js';
 import { cuttingExecutionRouter } from './modules/production/cuttingExecution.routes.js';
 import { cuttingReconciliationRouter } from './modules/production/cuttingReconciliation.routes.js';
 import { traceabilityRouter } from './modules/production/traceability.routes.js';
@@ -51,6 +52,7 @@ import { fabricProcessingRouter } from './modules/fabricProcessing/fabricProcess
 import { trimProcurementRouter } from './modules/procurement/trimProcurement.routes.js';
 import { purchaseReturnRouter } from './modules/procurement/purchaseReturn.routes.js';
 import { tnaRouter } from './modules/tna/tna.routes.js';
+import { jobworkDivisionRouter } from './modules/production/jobworkDivision.js';
 
 export function createApp() {
   const app = express();
@@ -111,6 +113,7 @@ export function createApp() {
   api.use('/', productionStagesRouter);       // /fabric-issues, /lay-plans, /cut-piece-qc, /bundles/generate-detailed
   api.use('/', productionFloorRouter);        // /bundles/scan, /sewing, /finishing, /final-qc
   api.use('/', processDcRouter);              // /process-dcs (bundle DCs: stitching/ironing/packing), /bundle-stock/available
+  api.use('/', processMasterRouter);          // /process-master (processes, operations, contractor rates), /contractor-bills
   api.use('/', cuttingExecutionRouter);       // /marker-versions, /size-consumptions, /lay-plans/:id/execute, /cut-outputs
   api.use('/', cuttingReconciliationRouter);  // /cutting-reconciliation(s), /cutting-plans/:id/losses
   api.use('/', traceabilityRouter);           // /production/io/:ioNo/styles, /io/:ioNo/traceability, /traceability/search
@@ -129,6 +132,7 @@ export function createApp() {
   api.use('/', trimProcurementRouter);        // /trim-pos, /trim-grns, /trim-stock
   api.use('/', purchaseReturnRouter);         // /purchase-returns, /purchase-returns/grn/:id, etc.
   api.use('/tna', tnaRouter);                 // /tna, /tna/:id, /tna/dashboard, /tna/templates, etc.
+  api.use('/', jobworkDivisionRouter);       // /jobwork-invoices/:id/print (division billing header)
 
   // Metadata-driven resources.
   const registry = [...masterResources, ...transactionResources];

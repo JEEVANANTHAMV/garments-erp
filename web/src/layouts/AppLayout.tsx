@@ -27,7 +27,7 @@ export default function AppLayout() {
 
   // Only render sections the user can actually reach.
   const sections = useMemo(() => NAV
-    .map((s) => ({ ...s, items: s.items.filter((i) => canAny(...i.perms)) }))
+    .map((s) => ({ ...s, items: s.items.filter((i) => !i.hidden && canAny(...i.perms)) }))
     .filter((s) => s.items.length)
     .map((s) => filter
       ? { ...s, items: s.items.filter((i) => i.label.toLowerCase().includes(filter.toLowerCase())) }

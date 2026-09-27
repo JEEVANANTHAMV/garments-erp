@@ -6,6 +6,7 @@ import { NotFound, BadRequest } from '../../core/errors.js';
 import { requirePermission } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
+import { computeInvoice, chargesFromRow, invoiceSummaryColumns } from '../../core/invoiceCalc.js';
 
 export const fabricYarnProcurementRouter = Router();
 
@@ -207,17 +208,21 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
     const totTax = totCgst + totSgst + totIgst;
     const netAmount = totTaxable + totTax;
 
-    const freightCharges = Number(body.freight_charges) || 0;
-    const otherCharges = Number(body.other_charges) || 0;
-    const roundOff = Number(body.round_off) || 0;
-    const tcsApplicable = Boolean(body.tcs_applicable);
+    // Common invoice summary: landed heads, ± other charges, TCS (+), TDS (−), round off.
+    const summary = computeInvoice(
+      calculatedLines.map((l: any) => ({ taxable: l.taxable, tax: l.taxAmt })),
+      isInterstate ? 'INTER_STATE' : 'INTRA_STATE',
+      chargesFromRow(body, 'tcs_rate'),
+    );
+    const summaryCols = invoiceSummaryColumns(body, summary, 'tcs_rate');
+    const freightCharges = summaryCols.freight_charges;
+    const otherCharges = summaryCols.other_charges;
+    const roundOff = summary.roundOff;
+    const tcsRate = Number(summaryCols.tcs_rate) || 0;
+    const tcsApplicable = tcsRate > 0;
     const tcsSection = tcsApplicable ? (body.tcs_section || '206C(1H)') : null;
-    const tcsRate = tcsApplicable ? (Number(body.tcs_rate) || 0) : 0;
-    const baseBeforeTcs = netAmount + freightCharges + otherCharges;
-    const tcsAmount = tcsApplicable
-      ? Number(((baseBeforeTcs * tcsRate) / 100).toFixed(4))
-      : 0;
-    const grandTotal = Number((baseBeforeTcs + tcsAmount + roundOff).toFixed(4));
+    const tcsAmount = summary.tcs;
+    const grandTotal = summary.net;
 
     const poIds = Array.isArray(body.po_ids)
       ? body.po_ids.map(Number).filter((n: number) => n > 0)
@@ -271,6 +276,14 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
     ]);
 
     const newGrnId = grnRes!.insertId;
+    await txExecute(tx, `
+      UPDATE trx_grn SET insurance = ?, customs_duty = ?, clearing_charges = ?,
+             other_charges_sign = ?, other_charges_label = ?,
+             tds_section = ?, tds_pct = ?, tds_amount = ?
+       WHERE id = ?
+    `, [summaryCols.insurance, summaryCols.customs_duty, summaryCols.clearing_charges,
+        summaryCols.other_charges_sign, summaryCols.other_charges_label,
+        summaryCols.tds_section, summaryCols.tds_pct, summaryCols.tds_amount, newGrnId]);
 
     if (body.gate_inward_id) {
       await txExecute(tx, `
@@ -1136,17 +1149,21 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
     const totTax = totCgst + totSgst + totIgst;
     const netAmount = totTaxable + totTax;
 
-    const freightCharges = Number(body.freight_charges) || 0;
-    const otherCharges = Number(body.other_charges) || 0;
-    const roundOff = Number(body.round_off) || 0;
-    const tcsApplicable = Boolean(body.tcs_applicable);
+    // Common invoice summary: landed heads, ± other charges, TCS (+), TDS (−), round off.
+    const summary = computeInvoice(
+      calculatedLines.map((l: any) => ({ taxable: l.taxable, tax: l.taxAmt })),
+      isInterstate ? 'INTER_STATE' : 'INTRA_STATE',
+      chargesFromRow(body, 'tcs_rate'),
+    );
+    const summaryCols = invoiceSummaryColumns(body, summary, 'tcs_rate');
+    const freightCharges = summaryCols.freight_charges;
+    const otherCharges = summaryCols.other_charges;
+    const roundOff = summary.roundOff;
+    const tcsRate = Number(summaryCols.tcs_rate) || 0;
+    const tcsApplicable = tcsRate > 0;
     const tcsSection = tcsApplicable ? (body.tcs_section || '206C(1H)') : null;
-    const tcsRate = tcsApplicable ? (Number(body.tcs_rate) || 0) : 0;
-    const baseBeforeTcs = netAmount + freightCharges + otherCharges;
-    const tcsAmount = tcsApplicable
-      ? Number(((baseBeforeTcs * tcsRate) / 100).toFixed(4))
-      : 0;
-    const grandTotal = Number((baseBeforeTcs + tcsAmount + roundOff).toFixed(4));
+    const tcsAmount = summary.tcs;
+    const grandTotal = summary.net;
 
     const poIds = Array.isArray(body.po_ids)
       ? body.po_ids.map(Number).filter((n: number) => n > 0)
@@ -1199,6 +1216,14 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
     ]);
 
     const newGrnId = grnRes!.insertId;
+    await txExecute(tx, `
+      UPDATE trx_grn SET insurance = ?, customs_duty = ?, clearing_charges = ?,
+             other_charges_sign = ?, other_charges_label = ?,
+             tds_section = ?, tds_pct = ?, tds_amount = ?
+       WHERE id = ?
+    `, [summaryCols.insurance, summaryCols.customs_duty, summaryCols.clearing_charges,
+        summaryCols.other_charges_sign, summaryCols.other_charges_label,
+        summaryCols.tds_section, summaryCols.tds_pct, summaryCols.tds_amount, newGrnId]);
 
     if (body.gate_inward_id) {
       await txExecute(tx, `

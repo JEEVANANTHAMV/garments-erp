@@ -113,6 +113,7 @@ export function PartyDetailPage() {
     is_supplier: 0,
     is_vendor: 0,
     is_agent: 0,
+    is_contractor: 0,
     party_type: 'EXPORT',
     country_id: 101, // India default or null
     currency_id: 1,
@@ -178,6 +179,7 @@ export function PartyDetailPage() {
     // Merchandiser-specific
     is_merchandiser: isParamMerchandiser ? 1 : 0,
     merchandiser_type: 'PRODUCTION',
+    group_code: '',
     merchandiser_division: 'Knitted Apparel',
     merchandiser_brands: '',
     merchandiser_target: 0,
@@ -213,9 +215,9 @@ export function PartyDetailPage() {
   ----------------------------------------------------------------*/
   const isBuyerRole = !!form.is_buyer || !!form.is_customer;
   const isMerchandiserOnly =
-    !!form.is_merchandiser && !isBuyerRole && !form.is_supplier && !form.is_vendor && !form.is_agent;
+    !!form.is_merchandiser && !isBuyerRole && !form.is_supplier && !form.is_vendor && !form.is_agent && !form.is_contractor;
   const hasAnyRole =
-    isBuyerRole || !!form.is_supplier || !!form.is_vendor || !!form.is_agent || !!form.is_merchandiser;
+    isBuyerRole || !!form.is_supplier || !!form.is_vendor || !!form.is_agent || !!form.is_merchandiser || !!form.is_contractor;
 
   // If the user unticks a role while its tab is open, fall back to General
   // so the form never sits on a tab that no longer exists.
@@ -396,6 +398,11 @@ export function PartyDetailPage() {
 
       // Role-specific mandatory fields. Jump to the offending tab so the
       // user can see exactly what is missing.
+      if (form.is_merchandiser && form.group_code && !/^G\d{2}$/.test(form.group_code)) {
+        toast('Merchandiser Group must be G + 2 digits, e.g. G11', 'error');
+        setTab('merchandiser');
+        return;
+      }
       if (form.is_agent && !(Number(form.commission_pct) > 0)) {
         toast('Commission % is required for a Buying Agent', 'error');
         setTab('agent');
@@ -867,6 +874,7 @@ export function PartyDetailPage() {
                   { key: 'is_customer', label: 'Customer', color: 'indigo' },
                   { key: 'is_supplier', label: 'Supplier', color: 'emerald' },
                   { key: 'is_vendor', label: 'Job Worker / CMT', color: 'purple' },
+                  { key: 'is_contractor', label: 'In-house Contractor', color: 'amber' },
                   { key: 'is_agent', label: 'Buying Agent', color: 'amber' },
                   { key: 'is_merchandiser', label: 'Merchandiser', color: 'sky' },
                 ].map((r) => (
@@ -2309,7 +2317,20 @@ export function PartyDetailPage() {
             <h3 className="text-sm font-bold text-slate-800 border-b border-surface-border pb-2">
               Merchandiser Role &amp; Operations
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-3">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 pt-3">
+              <div>
+                <label className="label">Merchandiser Group</label>
+                <input
+                  className="input font-mono font-semibold uppercase"
+                  maxLength={3}
+                  value={form.group_code || ''}
+                  onChange={(e) => handleField('group_code', e.target.value.toUpperCase())}
+                  placeholder="e.g. G11"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  G + 2 digits. Starts the SO number (e.g. <span className="font-mono font-bold text-brand-700">{form.group_code || 'G11'}E26CAPE0001</span>).
+                </p>
+              </div>
               <div>
                 <label className="label">Merchandiser Category</label>
                 <select

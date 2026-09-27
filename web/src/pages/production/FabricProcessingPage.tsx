@@ -174,11 +174,14 @@ export default function FabricProcessingPage() {
 
   const toggleGreyRollSelection = (roll: any) => {
     setNewOrder(prev => {
-      const exists = prev.selected_rolls.some(r => r.knitting_roll_id === roll.id);
+      // Grey rolls come from legacy knitting orders (KWO) and from knitting
+      // program inwards in roll stock (KP), so ids are only unique per source.
+      const key = roll.row_key ?? `KWO-${roll.id}`;
+      const exists = prev.selected_rolls.some(r => r.row_key === key);
       if (exists) {
         return {
           ...prev,
-          selected_rolls: prev.selected_rolls.filter(r => r.knitting_roll_id !== roll.id),
+          selected_rolls: prev.selected_rolls.filter(r => r.row_key !== key),
         };
       } else {
         return {
@@ -186,7 +189,9 @@ export default function FabricProcessingPage() {
           selected_rolls: [
             ...prev.selected_rolls,
             {
-              knitting_roll_id: roll.id,
+              row_key: key,
+              knitting_roll_id: roll.knitting_roll_id ?? (roll.fabric_roll_id ? null : roll.id),
+              fabric_roll_id: roll.fabric_roll_id ?? null,
               roll_no: roll.roll_no,
               lot_no: roll.lot_no,
               weight_kg: Number(roll.weight_kg),
@@ -491,7 +496,7 @@ export default function FabricProcessingPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="label">Style Reference</label>
+                  <label className="label">Style Reference *</label>
                   <select
                     value={newOrder.style_id}
                     onChange={(e) => setNewOrder({ ...newOrder, style_id: e.target.value })}
@@ -594,10 +599,11 @@ export default function FabricProcessingPage() {
                     </div>
                   ) : (
                     availableGreyRolls.map((roll: any) => {
-                      const isSelected = newOrder.selected_rolls.some(r => r.knitting_roll_id === roll.id);
+                      const rowKey = roll.row_key ?? `KWO-${roll.id}`;
+                      const isSelected = newOrder.selected_rolls.some(r => r.row_key === rowKey);
                       return (
                         <div
-                          key={roll.id}
+                          key={rowKey}
                           onClick={() => toggleGreyRollSelection(roll)}
                           className={`p-2.5 flex items-center justify-between cursor-pointer transition ${
                             isSelected ? 'bg-purple-50 text-purple-900 font-medium' : 'hover:bg-slate-50'
@@ -614,6 +620,9 @@ export default function FabricProcessingPage() {
                               <span className="font-semibold">{roll.roll_no}</span>
                               <span className="text-slate-400 text-[10px] ml-2 font-mono">Lot: {roll.lot_no}</span>
                               <span className="text-slate-400 text-[10px] ml-2">IO: {roll.io_no}</span>
+                              {roll.source === 'KP' && (
+                                <span className="text-sky-600 text-[10px] ml-2">Prog {roll.program_no} · DC {roll.party_dc_no}</span>
+                              )}
                             </div>
                           </div>
                           <div className="text-right font-bold text-slate-700">

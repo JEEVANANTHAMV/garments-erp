@@ -1,4 +1,5 @@
 import type { ResourceConfig } from '../../core/crud.js';
+import { z } from 'zod';
 import { s, f } from './schemas.js';
 
 /**
@@ -35,6 +36,26 @@ export const masterResources: ResourceConfig[] = [
     ],
   },
   {
+    // Printing / Embroidery divisions that bill customer job work (db/63).
+    path: 'divisions', table: 'mst_division', permission: 'UNIT', label: 'Division',
+    searchable: ['division_code', 'division_name', 'billing_name'],
+    sortable: ['division_code', 'division_name', 'process_type'],
+    defaultSort: 't.division_name', filters: ['process_type'],
+    fields: [
+      f('division_code', s.strReq(20)), f('division_name', s.strReq(120)),
+      f('billing_name', s.strReq(200)),
+      f('process_type', s.enumReq(['PRINTING','EMBROIDERY'])),
+      f('invoice_prefix', s.nullableStr(20)),
+      f('gstin', s.nullableStr(15)), f('address_line1', s.nullableStr(200)),
+      f('address_line2', s.nullableStr(200)), f('city', s.nullableStr(80)),
+      f('state', s.nullableStr(80)), f('pincode', s.nullableStr(12)),
+      f('phone', s.nullableStr(40)), f('email', s.email()),
+      f('bank_name', s.nullableStr(120)), f('bank_account_no', s.nullableStr(40)),
+      f('bank_ifsc', s.nullableStr(20)), f('bank_branch', s.nullableStr(120)),
+      f('remarks', s.nullableStr(255)), f('is_active', s.bool()),
+    ],
+  },
+  {
     path: 'financial-years', table: 'mst_financial_year', permission: 'FINYEAR', label: 'Financial Year',
     searchable: ['fy_code'], sortable: ['fy_code', 'start_date'], defaultSort: 't.start_date',
     softDelete: false, hasIsActive: false, hasAuditCols: false,
@@ -59,7 +80,7 @@ export const masterResources: ResourceConfig[] = [
     path: 'parties', table: 'mst_party', permission: 'PARTY', label: 'Business Partner',
     searchable: ['party_code', 'party_name', 'legal_name', 'email', 'gstin', 'pan', 'udyam_no'],
     sortable: ['party_code', 'party_name', 'created_at'], defaultSort: 't.party_name',
-    filters: ['is_customer', 'is_buyer', 'is_supplier', 'is_vendor', 'is_agent', 'party_type', 'country_id'],
+    filters: ['is_customer', 'is_buyer', 'is_supplier', 'is_vendor', 'is_agent', 'is_contractor', 'party_type', 'country_id'],
     selectExtra: 'c.name AS country_name, cur.code AS currency_code',
     joins: 'LEFT JOIN cfg_country c ON c.id = t.country_id LEFT JOIN cfg_currency cur ON cur.id = t.currency_id',
     children: [
@@ -101,7 +122,7 @@ export const masterResources: ResourceConfig[] = [
       f('party_code', s.strReq(30)), f('io_prefix', s.nullableStr(30)), f('party_name', s.strReq(200)),
       f('legal_name', s.nullableStr(200)), f('short_name', s.nullableStr(80)),
       f('is_customer', s.bool()), f('is_buyer', s.bool()), f('is_supplier', s.bool()),
-      f('is_vendor', s.bool()), f('is_agent', s.bool()),
+      f('is_vendor', s.bool()), f('is_agent', s.bool()), f('is_contractor', s.bool()),
       f('party_type', s.enum(['DOMESTIC','EXPORT','BOTH'])),
       f('country_id', s.id()), f('currency_id', s.id()),
       f('gstin', s.nullableStr(15)), f('pan', s.nullableStr(10)),
@@ -139,6 +160,9 @@ export const masterResources: ResourceConfig[] = [
       f('agent_remarks', s.nullableStr(500)),
       // Merchandiser-specific
       f('is_merchandiser', s.bool()),
+      // Merchandiser group (G01..G99) — the first block of the SO number.
+      f('group_code', z.union([z.string().trim().toUpperCase().regex(/^G\d{2}$/, 'Use G + 2 digits, e.g. G11'), z.literal(''), z.null()])
+        .transform((v) => (v === '' ? null : v)).nullish()),
       f('merchandiser_type', s.nullableStr(50)),
       f('merchandiser_division', s.nullableStr(100)),
       f('merchandiser_brands', s.nullableStr(255)),

@@ -19,6 +19,7 @@ const LOOKUPS: Record<string, LookupDef> = {
   uoms:        { sql: `SELECT id, code, name AS label, uom_type FROM cfg_uom WHERE is_active=1 ORDER BY code`, scoped: false },
 
   branches:    { sql: `SELECT id, branch_code AS code, branch_name AS label FROM mst_branch WHERE company_id=? AND is_active=1 AND is_deleted=0 ORDER BY branch_name`, scoped: true },
+  divisions:   { sql: `SELECT id, division_code AS code, division_name AS label, billing_name, process_type FROM mst_division WHERE company_id=? AND is_active=1 AND is_deleted=0 ORDER BY division_name`, scoped: true },
   units:       { sql: `SELECT id, unit_code AS code, unit_name AS label, unit_type FROM mst_unit WHERE company_id=? AND is_active=1 AND is_deleted=0 ORDER BY unit_name`, scoped: true },
   warehouses:  { sql: `SELECT id, warehouse_code AS code, warehouse_name AS label, warehouse_type FROM mst_warehouse WHERE company_id=? AND is_active=1 ORDER BY warehouse_name`, scoped: true },
   'financial-years': { sql: `SELECT id, fy_code AS code, fy_code AS label, start_date, end_date, is_current FROM mst_financial_year WHERE company_id=? ORDER BY start_date DESC`, scoped: true },
@@ -28,7 +29,7 @@ const LOOKUPS: Record<string, LookupDef> = {
   suppliers:   { sql: `SELECT id, party_code AS code, party_name AS label, currency_id FROM mst_party WHERE company_id=? AND is_supplier=1 AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },
   vendors:     { sql: `SELECT id, party_code AS code, party_name AS label FROM mst_party WHERE company_id=? AND is_vendor=1 AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },
   agents:      { sql: `SELECT id, party_code AS code, party_name AS label FROM mst_party WHERE company_id=? AND is_agent=1 AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },
-  merchandisers: { sql: `SELECT id, party_code AS code, party_name AS label FROM mst_party WHERE company_id=? AND is_merchandiser=1 AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },
+  merchandisers: { sql: `SELECT id, party_code AS code, party_name AS label, group_code FROM mst_party WHERE company_id=? AND is_merchandiser=1 AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },
   parties:     { sql: `SELECT p.id, p.party_code AS code, p.party_name AS label, p.is_buyer, p.is_supplier, p.is_vendor, p.is_agent, p.is_merchandiser, p.gstin,
        (SELECT CONCAT_WS(', ', pa.address_line1, pa.address_line2, pa.city, pa.state, pa.pincode)
           FROM mst_party_address pa

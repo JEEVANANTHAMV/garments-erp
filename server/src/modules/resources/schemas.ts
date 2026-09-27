@@ -8,7 +8,7 @@ export const s = {
   int:   () => z.coerce.number().int().nullish(),
   intReq:() => z.coerce.number().int(),
   id:    () => z.coerce.number().int().positive().nullish(),
-  idReq: () => z.coerce.number().int().positive(),
+  idReq: () => z.coerce.number({ error: 'This field is required' }).int().positive('This field is required'),
   dec:   () => z.coerce.number().nullish(),
   decReq:() => z.coerce.number(),
   bool:  () => z.union([z.boolean(), z.coerce.number()]).transform((v) => (v ? 1 : 0)).nullish(),

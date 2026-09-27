@@ -74,6 +74,7 @@ export default function YarnProcessPage() {
   const { data: yarns = [] } = lk('yarns');
   const { data: parties = [] } = lk('parties');
   const { data: warehouses = [] } = lk('warehouses');
+  const { data: styles = [] } = lk('styles');
   const { data: soLines = [] } = lk('sales-order-lines');
   const { data: routes = [] } = useQuery({
     queryKey: ['process-routes-lookup'],
@@ -352,8 +353,12 @@ export default function YarnProcessPage() {
               onChange={(e) => onSoLine(e.target.value)} id="p-soline">
               {soLines.map((l: any) => <option key={l.id} value={l.id}>{l.label}</option>)}
             </Select>
-            <Input label="I/O Number" value={form.io_no}
+            <Input label="I/O Number" required value={form.io_no}
               onChange={(e) => setF('io_no', e.target.value)} id="p-io" />
+            <Select label="Style" required value={form.style_id} placeholder="— Select style —"
+              onChange={(e) => setF('style_id', e.target.value ? Number(e.target.value) : '')} id="p-style">
+              {styles.map((st: any) => <option key={st.id} value={st.id}>{st.code} — {st.label}</option>)}
+            </Select>
             <Input label="Part" value={linkedPart ?? form.part_name}
               readOnly={linkedPart !== null}
               hint={linkedPart ? 'Follows the linked Sales Order line' : undefined}

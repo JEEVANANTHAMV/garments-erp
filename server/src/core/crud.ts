@@ -1,6 +1,6 @@
 import { Router, type Request } from 'express';
 import { z } from 'zod';
-import { query, queryOne, execute, transaction, txQueryOne, txExecute } from '../config/db.js';
+import { query, queryOne, execute, transaction, txQueryOne, txExecute, type Tx } from '../config/db.js';
 import { ah } from './asyncHandler.js';
 import { BadRequest, NotFound } from './errors.js';
 import { requirePermission } from '../middleware/auth.js';
@@ -62,6 +62,10 @@ export interface ResourceConfig {
   beforeDelete?: (req: Request, id: number, row: any) => Promise<void>;
   /** Throw to block an UPDATE. */
   beforeUpdate?: (req: Request, id: number, row: any) => Promise<void>;
+  /** Adjust (default / number) the row about to be INSERTed, inside the create transaction. */
+  beforeCreate?: (req: Request, data: Record<string, unknown>, tx: Tx) => Promise<void>;
+  /** Adjust the parsed header data before INSERT/UPDATE (e.g. recompute totals). `before` is the stored row on update. */
+  beforeWrite?: (req: Request, data: Record<string, unknown>, before?: any) => Promise<void> | void;
 }
 
 export interface ChildConfig {
@@ -115,7 +119,7 @@ export function buildResourceRouter(cfg: ResourceConfig): Router {
     defaultSort = 't.id',
     children = [],
     autoNumber,
-    readOnly, cancelFlag, beforeDelete, beforeUpdate,
+    readOnly, cancelFlag, beforeDelete, beforeUpdate, beforeCreate, beforeWrite,
   } = cfg;
 
   const scope = (req: Request) => (companyScoped ? req.user!.companyId : null);
@@ -221,10 +225,12 @@ export function buildResourceRouter(cfg: ResourceConfig): Router {
   r.post('/', requirePermission(`${permission}.CREATE`), ah(async (req, res) => {
     if (readOnly) throw BadRequest(readOnly);
     const data = pickWritable(fields, req.body, false);
+    if (beforeWrite) await beforeWrite(req, data);
 
     const created = await transaction(async (tx) => {
       if (companyScoped) data.company_id = scope(req);
       if (hasAuditCols) data.created_by = req.user!.id;
+      if (beforeCreate) await beforeCreate(req, data, tx);
 
       if (autoNumber && !data[autoNumber.column]) {
         data[autoNumber.column] = await nextDocNumber(
@@ -278,6 +284,7 @@ export function buildResourceRouter(cfg: ResourceConfig): Router {
     if (beforeUpdate) await beforeUpdate(req, id, before);
 
     const data = pickWritable(fields, req.body, true);
+    if (beforeWrite) await beforeWrite(req, data, before);
     if (hasAuditCols) data.updated_by = req.user!.id;
 
     const after = await transaction(async (tx) => {

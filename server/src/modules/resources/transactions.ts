@@ -2,6 +2,18 @@ import type { ResourceConfig } from '../../core/crud.js';
 import { s, f } from './schemas.js';
 import { queryOne } from '../../config/db.js';
 import { BadRequest } from '../../core/errors.js';
+import { computeInvoice, chargesFromRow, writeInvoiceTotals, type GstMode } from '../../core/invoiceCalc.js';
+
+/** Common invoice-summary header fields (TDS / TCS / other charges / landed heads / round off). */
+const invoiceSummaryFields = () => [
+  f('freight_charges', s.dec()), f('insurance', s.dec()), f('customs_duty', s.dec()), f('clearing_charges', s.dec()),
+  f('other_charges', s.dec()), f('other_charges_sign', s.int()), f('other_charges_label', s.nullableStr(80)),
+  f('tds_section', s.nullableStr(30)), f('tds_pct', s.dec()),
+  f('tcs_section', s.nullableStr(30)), f('tcs_pct', s.dec()), f('tcs_amount', s.dec()),
+  f('round_off', s.dec()),
+  f('cgst_amount', s.dec()), f('sgst_amount', s.dec()), f('igst_amount', s.dec()),
+];
+import { jobworkInBeforeCreate, jobworkInvoiceBeforeCreate } from '../production/jobworkDivision.js';
 
 /** Cutting records that already produced bundles / cut output are never deleted or rewritten (doc §19). */
 async function cuttingDownstream(id: number) {
@@ -265,7 +277,20 @@ export const transactionResources: ResourceConfig[] = [
       f('status_id', s.id()),
       f('approval_state', s.enum(['DRAFT','PENDING','APPROVED','REJECTED','POSTED','CANCELLED'])),
       f('remarks', s.text()),
+      ...invoiceSummaryFields(),
     ],
+    beforeWrite: (req, data, before) => {
+      const lines = req.body?.lines;
+      if (!Array.isArray(lines)) return;
+      const row = { ...(before ?? {}), ...data };
+      const t = computeInvoice(
+        lines.map((l: any) => {
+          const raw = (Number(l.qty) || 0) * (Number(l.rate) || 0);
+          return { taxable: Math.max(0, raw - (raw * (Number(l.discount_pct) || 0)) / 100), tax: Number(l.tax_amount) || 0 };
+        }),
+        Number(row.is_interstate) ? 'INTER_STATE' : 'INTRA_STATE', chargesFromRow(row));
+      writeInvoiceTotals(data, t, { gst: 'tax_amount', net: 'grand_total' });
+    },
   },
 
   // ------------------------------------------------ Production processes
@@ -930,10 +955,12 @@ export const transactionResources: ResourceConfig[] = [
     path: 'jobwork-ins', table: 'trx_jobwork_in', permission: 'PRODUCTION', label: 'Job Work In',
     searchable: ['jwin_no', 'customer_dc_no', 'customer_po_ref'], sortable: ['jwin_no', 'jwin_date'],
     defaultSort: 't.jwin_date DESC', hasIsActive: false, softDelete: false,
-    filters: ['customer_id', 'status'],
+    filters: ['customer_id', 'status', 'division_id'],
     autoNumber: { column: 'jwin_no', docType: 'JW_IN' },
-    selectExtra: 'c.party_name AS customer_name',
-    joins: 'LEFT JOIN mst_party c ON c.id = t.customer_id',
+    beforeCreate: jobworkInBeforeCreate,
+    selectExtra: 'c.party_name AS customer_name, dv.division_name',
+    joins: `LEFT JOIN mst_party c ON c.id = t.customer_id
+            LEFT JOIN mst_division dv ON dv.id = t.division_id`,
     children: [
       { key: 'lines', table: 'trx_jobwork_in_line', fk: 'jwin_id', fields: [
         f('description', s.nullableStr(255)),
@@ -945,7 +972,7 @@ export const transactionResources: ResourceConfig[] = [
     ],
     fields: [
       f('jwin_no', s.nullableStr(40)), f('jwin_date', s.date()),
-      f('customer_id', s.idReq()), f('gate_inward_id', s.id()),
+      f('customer_id', s.idReq()), f('division_id', s.id()), f('gate_inward_id', s.id()),
       f('customer_dc_no', s.nullableStr(60)), f('customer_po_ref', s.nullableStr(60)),
       f('process_type', s.nullableStr(80)), f('total_qty', s.int()),
       f('rate', s.dec()), f('total_amount', s.dec()), f('expected_delivery', s.date()),
@@ -957,14 +984,18 @@ export const transactionResources: ResourceConfig[] = [
     path: 'jobwork-invoices', table: 'trx_jobwork_invoice', permission: 'PRODUCTION', label: 'Job Work Invoice',
     searchable: ['invoice_no'], sortable: ['invoice_no', 'invoice_date'],
     defaultSort: 't.invoice_date DESC', hasIsActive: false, softDelete: false, hasAuditCols: false,
-    filters: ['party_id', 'invoice_type', 'status', 'jwin_id', 'challan_id'],
+    filters: ['party_id', 'invoice_type', 'status', 'jwin_id', 'challan_id', 'division_id'],
     autoNumber: { column: 'invoice_no', docType: 'JW_INVOICE' },
-    selectExtra: 'p.party_name, cur.code AS currency_code',
+    beforeCreate: jobworkInvoiceBeforeCreate,
+    selectExtra: 'p.party_name, cur.code AS currency_code, dv.division_name, jw.jwin_no, jw.process_type',
     joins: `LEFT JOIN mst_party p ON p.id = t.party_id
-            LEFT JOIN cfg_currency cur ON cur.id = t.currency_id`,
+            LEFT JOIN cfg_currency cur ON cur.id = t.currency_id
+            LEFT JOIN mst_division dv ON dv.id = t.division_id
+            LEFT JOIN trx_jobwork_in jw ON jw.id = t.jwin_id`,
     fields: [
       f('invoice_no', s.nullableStr(40)), f('invoice_date', s.date()),
       f('jwin_id', s.id()), f('challan_id', s.id()), f('party_id', s.idReq()),
+      f('division_id', s.id()),
       f('invoice_type', s.enumReq(['RECEIVABLE','PAYABLE'])),
       f('currency_id', s.idReq()), f('total_qty', s.int()),
       f('rate', s.dec()), f('taxable_amount', s.dec()), f('gst_amount', s.dec()),
@@ -1023,7 +1054,20 @@ export const transactionResources: ResourceConfig[] = [
       f('payment_due_date', s.date()), f('voucher_id', s.id()),
       f('status', s.enum(['DRAFT','VERIFIED','APPROVED','PAID','DISPUTED','CANCELLED'])),
       f('remarks', s.nullableStr(500)),
+      ...invoiceSummaryFields(),
     ],
+    // Totals are recomputed from the lines whenever lines are saved (common invoice summary).
+    beforeWrite: (req, data, before) => {
+      const lines = req.body?.lines;
+      if (!Array.isArray(lines)) return;
+      const row = { ...(before ?? {}), ...data };
+      const t = computeInvoice(
+        lines.map((l: any) => ({ taxable: Number(l.amount) || 0, gst_rate: Number(l.gst_rate) || 0 })),
+        (row.gst_type as GstMode) || 'INTRA_STATE', chargesFromRow(row));
+      writeInvoiceTotals(data, t, { taxable: 'subtotal', gst: 'gst_amount', net: 'total_amount' });
+      const fx = Number(row.exchange_rate) > 0 ? Number(row.exchange_rate) : 1;
+      data.base_currency_total = Math.round(t.net * fx * 100) / 100;
+    },
   },
 
   // ------------------------------------------------ Stock Transfer

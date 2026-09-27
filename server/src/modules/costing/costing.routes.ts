@@ -26,7 +26,7 @@ costingRouter.get('/production-costs/order-data/:prodOrderId', requirePermission
   const order = await queryOne<any>(`
     SELECT po.*,
            st.style_code, st.style_name, st.season AS style_season,
-           st.buyer_style_ref, COALESCE(st.smv, 12.5) AS style_smv,
+           st.buyer_style_ref, 12.5 AS style_smv, -- mst_style has no smv column; default SMV
            b.id AS buyer_id, b.party_name AS buyer_name,
            so.so_no, so.buyer_po_no, so.season AS so_season,
            u.unit_name
@@ -40,13 +40,16 @@ costingRouter.get('/production-costs/order-data/:prodOrderId', requirePermission
 
   if (!order) throw NotFound('Production order not found');
 
-  // B. Load Latest Approved Pre-Costing (Baseline Estimate)
+  // B. Load the style's Pre-Costing (Standard / baseline). An APPROVED costing is
+  //    preferred; otherwise the latest version is used and flagged as not approved.
   const estimatedCosting = await queryOne<any>(`
-    SELECT c.*, cur.code AS currency_code, cur.symbol AS currency_symbol
+    SELECT c.*, cur.code AS currency_code, cur.symbol AS currency_symbol,
+           st.code AS status_code
       FROM trx_costing c
       LEFT JOIN cfg_currency cur ON cur.id = c.currency_id
+      LEFT JOIN cfg_status st ON st.id = c.status_id
      WHERE c.style_id = ? AND c.company_id = ? AND c.is_deleted = 0
-     ORDER BY c.version DESC, c.id DESC LIMIT 1
+     ORDER BY (st.code = 'APPROVED') DESC, c.version DESC, c.id DESC LIMIT 1
   `, [order.style_id, companyId]);
 
   // C. Load Actual Material Issues & Return Transactions
@@ -85,9 +88,8 @@ costingRouter.get('/production-costs/order-data/:prodOrderId', requirePermission
 
   // E. Load Stitching / Sewing Transactions
   const stitching = await query<any>(`
-    SELECT s.*, l.line_code, l.line_name
+    SELECT s.*, s.line_no AS line_code, s.line_no AS line_name
       FROM trx_stitching s
-      LEFT JOIN cfg_sewing_line l ON l.id = s.line_id
      WHERE s.prod_order_id = ? AND s.company_id = ?
   `, [prodOrderId, companyId]);
 
@@ -222,8 +224,9 @@ costingRouter.get('/production-costs/order-data/:prodOrderId', requirePermission
     processCost = producedQty * 3.50; // standard in-house washing / ironing
   }
 
-  // 6. Machine Cost
-  const machineCost = producedQty * 2.80; // Power, compressor & machine amortisation
+  // 6. Machine Cost — removed from the actual cost sheet (client review: machine-type
+  //    forecasting does not belong in the management P&L). Column kept at 0 for compatibility.
+  const machineCost = 0;
 
   // 7. Packing Cost
   const cartons = packing.reduce((s: number, p: any) => s + Number(p.total_cartons || 0), 0) || Math.ceil(producedQty / 60);
@@ -322,12 +325,8 @@ costingRouter.get('/production-costs/order-data/:prodOrderId', requirePermission
     { department_name: 'Quality & Floor Supervision', labour_type: 'INDIRECT', hours: Math.round(producedQty / 50), rate_per_hour: 110.00, amount: Math.round(producedQty / 50) * 110.00 },
   ];
 
-  // Tab 10: Machine
-  const machineLines = [
-    { machine_name: 'Automatic Fabric Spreader & Cutter', department_name: 'Cutting', machine_hours: 45, hourly_rate: 150.00, electricity_cost: 3500, maintenance_cost: 1800, depreciation_cost: 2500, total_cost: (45 * 150) + 3500 + 1800 + 2500 },
-    { machine_name: 'Overlock & Flatlock Machine Line', department_name: 'Sewing', machine_hours: 220, hourly_rate: 85.00, electricity_cost: 8500, maintenance_cost: 3200, depreciation_cost: 4500, total_cost: (220 * 85) + 8500 + 3200 + 4500 },
-    { machine_name: 'Vacuum Steam Ironing Stations', department_name: 'Finishing', machine_hours: 60, hourly_rate: 65.00, electricity_cost: 4200, maintenance_cost: 1100, depreciation_cost: 1200, total_cost: (60 * 65) + 4200 + 1100 + 1200 },
-  ];
+  // Tab 10: Machine — no longer part of the actual cost sheet (see machineCost above).
+  const machineLines: any[] = [];
 
   // Tab 11: Overhead
   const overheadLines = [
@@ -340,15 +339,22 @@ costingRouter.get('/production-costs/order-data/:prodOrderId', requirePermission
 
   // Tab 12: Variance Table (Developer Spec §18)
   const stdPerPc = estimatedCostPerPiece || (actualCostPerPiece * 0.98);
+  // Standard per head comes from the pre-costing's own heads when one exists.
+  const num = (v: unknown) => Number(v) || 0;
+  const ecv = estimatedCosting;
+  const stdHead = (fromCosting: number, fallback: number) => Number((ecv ? fromCosting : fallback).toFixed(2));
+  const ecFabric = ecv ? num(ecv.fabric_cost) + num(ecv.yarn_cost) + num(ecv.knitting_cost) + num(ecv.dyeing_cost) : 0;
+  const ecProcess = ecv ? num(ecv.washing_cost) + num(ecv.printing_cost) + num(ecv.embroidery_cost) : 0;
+  const ecNamed = ecv ? ecFabric + num(ecv.trim_cost) + ecProcess + num(ecv.cutting_cost) + num(ecv.stitching_cost) + num(ecv.finishing_cost) + num(ecv.packing_cost) : 0;
   const varianceRows = [
-    { cost_head: 'Fabric', standard_pc: Number((stdPerPc * 0.58).toFixed(2)), actual_pc: Number((materialCost * 0.82 / producedQty).toFixed(2)) },
-    { cost_head: 'Trims', standard_pc: Number((stdPerPc * 0.08).toFixed(2)), actual_pc: Number((materialCost * 0.18 / producedQty).toFixed(2)) },
-    { cost_head: 'Process', standard_pc: Number((stdPerPc * 0.10).toFixed(2)), actual_pc: Number((processCost / producedQty).toFixed(2)) },
-    { cost_head: 'Cutting', standard_pc: 1.40, actual_pc: Number((cuttingCost / producedQty).toFixed(2)) },
-    { cost_head: 'Sewing', standard_pc: Number((stdPerPc * 0.12).toFixed(2)), actual_pc: Number((labourCost / producedQty).toFixed(2)) },
-    { cost_head: 'Finishing', standard_pc: 3.20, actual_pc: 3.50 },
-    { cost_head: 'Packing', standard_pc: Number((stdPerPc * 0.04).toFixed(2)), actual_pc: Number((packingCost / producedQty).toFixed(2)) },
-    { cost_head: 'Overhead', standard_pc: Number((stdPerPc * 0.05).toFixed(2)), actual_pc: Number((overheadCost / producedQty).toFixed(2)) },
+    { cost_head: 'Fabric', standard_pc: stdHead(ecFabric, stdPerPc * 0.58), actual_pc: Number((materialCost * 0.82 / producedQty).toFixed(2)) },
+    { cost_head: 'Trims', standard_pc: stdHead(num(ecv?.trim_cost), stdPerPc * 0.08), actual_pc: Number((materialCost * 0.18 / producedQty).toFixed(2)) },
+    { cost_head: 'Process', standard_pc: stdHead(ecProcess, stdPerPc * 0.10), actual_pc: Number((processCost / producedQty).toFixed(2)) },
+    { cost_head: 'Cutting', standard_pc: stdHead(num(ecv?.cutting_cost), 1.40), actual_pc: Number((cuttingCost / producedQty).toFixed(2)) },
+    { cost_head: 'Sewing', standard_pc: stdHead(num(ecv?.stitching_cost), stdPerPc * 0.12), actual_pc: Number((labourCost / producedQty).toFixed(2)) },
+    { cost_head: 'Finishing', standard_pc: stdHead(num(ecv?.finishing_cost), 3.20), actual_pc: 3.50 },
+    { cost_head: 'Packing', standard_pc: stdHead(num(ecv?.packing_cost), stdPerPc * 0.04), actual_pc: Number((packingCost / producedQty).toFixed(2)) },
+    { cost_head: 'Overhead', standard_pc: stdHead(stdPerPc - ecNamed, stdPerPc * 0.05), actual_pc: Number((overheadCost / producedQty).toFixed(2)) },
   ].map((r) => {
     const variance = Number((r.actual_pc - r.standard_pc).toFixed(2));
     const variance_pct = r.standard_pc > 0 ? Number(((variance / r.standard_pc) * 100).toFixed(2)) : 0;
@@ -367,15 +373,31 @@ costingRouter.get('/production-costs/order-data/:prodOrderId', requirePermission
     variance_pct: totalVarPct,
   });
 
-  // Head-wise breakdown for estimated vs actual
+  // Head-wise breakdown for standard (pre-costing) vs actual. When a pre-costing
+  // exists its own cost heads are used; any part of its total_cost not captured in a
+  // head (other direct charges etc.) is carried in the overhead line so the
+  // standard heads always add up to the standard total.
+  const n = num;
+  let stdHeadsPc: number[];
+  if (estimatedCosting) {
+    const ec = estimatedCosting;
+    const matPc = n(ec.fabric_cost) + n(ec.yarn_cost) + n(ec.trim_cost) + n(ec.knitting_cost) + n(ec.dyeing_cost);
+    const labPc = n(ec.cutting_cost) + n(ec.stitching_cost);
+    const jwPc = n(ec.printing_cost) + n(ec.embroidery_cost);
+    const procPc = n(ec.washing_cost);
+    const packPc = n(ec.finishing_cost) + n(ec.packing_cost);
+    const ohPc = estimatedCostPerPiece - (matPc + labPc + jwPc + procPc + packPc);
+    stdHeadsPc = [matPc, labPc, jwPc, procPc, packPc, ohPc];
+  } else {
+    stdHeadsPc = [0.48, 0.16, 0.12, 0.07, 0.05, 0.12].map((share) => estimatedCostPerPiece * share);
+  }
   const breakdownHeads = [
-    { head: 'Material (Fabric, Yarn, Trims)', estimated: (totalEstimatedCost * 0.48), actual: materialCost },
-    { head: 'Direct Sewing & Cutting Labour', estimated: (totalEstimatedCost * 0.16), actual: labourCost },
-    { head: 'Machine Time, Power & Amortisation', estimated: (totalEstimatedCost * 0.06), actual: machineCost },
-    { head: 'Outsourced Job Work (Printing/Emb)', estimated: (totalEstimatedCost * 0.12), actual: jobworkCost },
-    { head: 'In-House Washing & Processes', estimated: (totalEstimatedCost * 0.07), actual: processCost },
-    { head: 'Finishing, Polybag & Packing Cartons', estimated: (totalEstimatedCost * 0.05), actual: packingCost },
-    { head: 'Factory Overheads & Quality Admin', estimated: (totalEstimatedCost * 0.06), actual: overheadCost },
+    { head: 'Material (Fabric, Yarn, Trims)', estimated: stdHeadsPc[0] * producedQty, actual: materialCost },
+    { head: 'Direct Sewing & Cutting Labour', estimated: stdHeadsPc[1] * producedQty, actual: labourCost },
+    { head: 'Outsourced Job Work (Printing/Emb)', estimated: stdHeadsPc[2] * producedQty, actual: jobworkCost },
+    { head: 'In-House Washing & Processes', estimated: stdHeadsPc[3] * producedQty, actual: processCost },
+    { head: 'Finishing, Polybag & Packing Cartons', estimated: stdHeadsPc[4] * producedQty, actual: packingCost },
+    { head: 'Factory Overheads & Quality Admin', estimated: stdHeadsPc[5] * producedQty, actual: overheadCost },
   ].map((h) => {
     const diff = h.actual - h.estimated;
     const pct = h.estimated > 0 ? (diff / h.estimated) * 100 : 0;
@@ -465,6 +487,15 @@ costingRouter.get('/production-costs/order-data/:prodOrderId', requirePermission
         variance: varianceRows,
       },
       breakdownHeads,
+      // Standard (pre-costing) reference for the management P&L on the Overview tab.
+      standard: {
+        costing_id: estimatedCosting?.id ?? null,
+        costing_no: estimatedCosting?.costing_no ?? null,
+        approved: estimatedCosting?.status_code === 'APPROVED',
+        cost_per_piece: estimatedCostPerPiece,
+        fob_price: estimatedCosting ? n(estimatedCosting.fob_price) : 0,
+        currency_code: estimatedCosting?.currency_code || 'INR',
+      },
       stageWip,
       sources: {
         materials: materialLines,

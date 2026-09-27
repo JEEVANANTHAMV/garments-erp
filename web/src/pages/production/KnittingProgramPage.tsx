@@ -2,13 +2,16 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Plus, Search, Eye, Trash2, X, Save, Layers,
-  RefreshCw, AlertCircle, FileText, Boxes, ShieldCheck, PackageCheck,
+  RefreshCw, AlertCircle, FileText, Boxes, ShieldCheck, PackageCheck, Truck, PackagePlus,
 } from 'lucide-react';
 import { http } from '../../lib/api';
 import { fmtDate, fmtDecimal, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
 import { Modal, PageHeader, Input, Spinner, LoadingBlock } from '../../components/ui';
 import { useQuery as useQ } from '@tanstack/react-query';
+import {
+  KNIT_DC_READY, KnittingDcModal, KnittingDcPrint, KnittingInwardModal, KnittingDcInwardTab,
+} from './KnittingDcInward';
 
 /* ─────────────────────────────────────────────────────────────────
    Constants & Types
@@ -18,7 +21,7 @@ const KNITTING_TYPES = ['SOLID', 'STRIPE', 'FEEDER_STRIPE', 'ENGINEERED_STRIPE',
 const STATUS_LIST = [
   'DRAFT', 'STOCK_CHECK', 'RESERVED', 'RELEASED',
   'MATERIAL_ISSUED', 'IN_PROGRESS', 'PRODUCTION_COMPLETED',
-  'OUTPUT_RECEIPT', 'COMPLETED', 'CANCELLED',
+  'OUTPUT_RECEIPT', 'QC', 'STOCK_POSTED', 'COMPLETED', 'CANCELLED',
 ] as const;
 
 const PART_COLORS: Record<string, string> = {
@@ -115,6 +118,11 @@ export default function KnittingProgramPage() {
   const [editId, setEditId] = useState<number | null>(null);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'yarns' | 'stripes' | 'issues'>('yarns');
+
+  // Knitting DC (yarn outward) and grey fabric inward, per released program.
+  const [dcProgId, setDcProgId] = useState<number | null>(null);
+  const [inwardProgId, setInwardProgId] = useState<number | null>(null);
+  const [printDc, setPrintDc] = useState<string | null>(null);
 
   // Form state
   const [form, setForm] = useState(emptyForm);
@@ -574,6 +582,26 @@ export default function KnittingProgramPage() {
                             <PackageCheck size={14} />
                           </button>
                         )}
+                        {KNIT_DC_READY.includes(p.status) && (
+                          <button
+                            id={`btn-knit-dc-kp-${p.id}`}
+                            className="rounded p-1.5 text-orange-500 hover:bg-orange-50 hover:text-orange-700"
+                            title="Knitting DC (yarn outward to knitter)"
+                            onClick={() => setDcProgId(p.id)}
+                          >
+                            <Truck size={14} />
+                          </button>
+                        )}
+                        {KNIT_DC_READY.includes(p.status) && Number(p.total_issued_yarn_kg) > 0 && (
+                          <button
+                            id={`btn-knit-inward-kp-${p.id}`}
+                            className="rounded p-1.5 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
+                            title="Grey fabric inward (against knitting DC)"
+                            onClick={() => setInwardProgId(p.id)}
+                          >
+                            <PackagePlus size={14} />
+                          </button>
+                        )}
                         <button
                           id={`btn-delete-kp-${p.id}`}
                           className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
@@ -607,7 +635,7 @@ export default function KnittingProgramPage() {
                 onChange={(e) => setF('program_no', e.target.value)} id="kp-program-no" />
               <Input label="Program Date" type="date" value={form.program_date}
                 onChange={(e) => setF('program_date', e.target.value)} id="kp-program-date" />
-              <Input label="I/O Number" value={form.io_no}
+              <Input label="I/O Number" required value={form.io_no}
                 onChange={(e) => setF('io_no', e.target.value)} id="kp-io-no" />
               <Input label="Buyer PO No" value={form.buyer_po_no}
                 onChange={(e) => setF('buyer_po_no', e.target.value)} id="kp-buyer-po" />
@@ -616,7 +644,7 @@ export default function KnittingProgramPage() {
                 {soLines.map((l: any) => <option key={l.id} value={l.id}>{l.label}</option>)}
               </select>
               <select className="input" value={form.style_id} onChange={(e) => setF('style_id', e.target.value ? Number(e.target.value) : '')} id="kp-style">
-                <option value="">— Style —</option>
+                <option value="">— Style (required) —</option>
                 {styles.map((s: any) => <option key={s.id} value={s.id}>{s.style_code} — {s.label}</option>)}
               </select>
               <div>
@@ -961,6 +989,11 @@ export default function KnittingProgramPage() {
           <DetailView prog={detail} onEdit={() => { openEdit(detail); setDetailId(null); }} />
         ) : null}
       </Modal>
+
+      <KnittingDcModal programId={dcProgId} open={!!dcProgId} onClose={() => setDcProgId(null)}
+        onPrint={setPrintDc} />
+      <KnittingInwardModal programId={inwardProgId} open={!!inwardProgId} onClose={() => setInwardProgId(null)} />
+      <KnittingDcPrint dcNo={printDc} onClose={() => setPrintDc(null)} />
     </>
   );
 }
@@ -978,6 +1011,8 @@ function StatusPill({ status }: { status: string }) {
     IN_PROGRESS: 'bg-yellow-100 text-yellow-700 border-yellow-200',
     PRODUCTION_COMPLETED: 'bg-lime-100 text-lime-700 border-lime-200',
     OUTPUT_RECEIPT: 'bg-teal-100 text-teal-700 border-teal-200',
+    QC: 'bg-purple-100 text-purple-700 border-purple-200',
+    STOCK_POSTED: 'bg-green-100 text-green-700 border-green-200',
     COMPLETED: 'bg-emerald-100 text-emerald-700 border-emerald-200',
     CANCELLED: 'bg-red-100 text-red-700 border-red-200',
   };
@@ -992,7 +1027,7 @@ function StatusPill({ status }: { status: string }) {
    Detail View inside the drawer
 ───────────────────────────────────────────────────────────────── */
 function DetailView({ prog, onEdit }: { prog: any; onEdit: () => void }) {
-  const [tab, setTab] = useState<'yarns' | 'stripes' | 'issues'>('yarns');
+  const [tab, setTab] = useState<'yarns' | 'stripes' | 'issues' | 'dc'>('yarns');
 
   return (
     <div className="space-y-4 max-h-[80vh] overflow-y-auto pr-1">
@@ -1025,7 +1060,7 @@ function DetailView({ prog, onEdit }: { prog: any; onEdit: () => void }) {
       {/* Tabs */}
       <div>
         <div className="flex items-center gap-1 border-b border-slate-200 mb-3">
-          {(['yarns', ...(prog.stripes?.length ? ['stripes'] : []), 'issues'] as const).map((t) => (
+          {(['yarns', ...(prog.stripes?.length ? ['stripes'] : []), 'issues', 'dc'] as const).map((t) => (
             <button key={t}
               className={`px-3 py-2 text-[12px] font-semibold border-b-2 -mb-px transition-colors ${
                 tab === t ? 'border-brand-500 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -1035,6 +1070,7 @@ function DetailView({ prog, onEdit }: { prog: any; onEdit: () => void }) {
             >
               {t === 'yarns' ? `🧵 Yarns (${prog.yarns?.length ?? 0})`
                 : t === 'stripes' ? `🎨 Stripes (${prog.stripes?.length ?? 0})`
+                : t === 'dc' ? 'Knitting DC & Grey Inward'
                 : `📋 Issues (${prog.issues?.length ?? 0})`}
             </button>
           ))}
@@ -1133,6 +1169,8 @@ function DetailView({ prog, onEdit }: { prog: any; onEdit: () => void }) {
             </table>
           </div>
         )}
+
+        {tab === 'dc' && <KnittingDcInwardTab prog={prog} />}
 
         {tab === 'issues' && (
           <div>
