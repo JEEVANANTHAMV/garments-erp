@@ -99,7 +99,8 @@ const LOOKUPS: Record<string, LookupDef> = {
   'fg-receipts': { sql: `SELECT id, COALESCE(receipt_no, fg_receipt_no) AS code, COALESCE(receipt_no, fg_receipt_no) AS label, prod_order_id, warehouse_id FROM trx_fg_receipt WHERE company_id=? ORDER BY id DESC LIMIT 500`, scoped: true },
   'production-costs': { sql: `SELECT id, cost_no AS code, cost_no AS label, prod_order_id, style_id FROM trx_production_cost WHERE company_id=? ORDER BY id DESC LIMIT 500`, scoped: true },
 
-  'sewing-lines': { sql: `SELECT id, line_code AS code, line_name AS label, unit_id, capacity_pcs, manpower FROM cfg_sewing_line WHERE company_id=? AND is_active=1 ORDER BY line_code`, scoped: true },
+  'sewing-lines': { sql: `SELECT id, line_code AS code, line_name AS label, unit_id, capacity_pcs, manpower, supervisor_name, floor_name FROM cfg_sewing_line WHERE company_id=? AND is_active=1 ORDER BY line_code`, scoped: true },
+  'checking-lines': { sql: `SELECT id, line_code AS code, line_name AS label, unit_id, capacity_pcs, manpower, supervisor_name, floor_name FROM cfg_checking_line WHERE company_id=? AND is_active=1 ORDER BY line_code`, scoped: true },
   shifts: { sql: `SELECT id, shift_code AS code, shift_name AS label, start_time, end_time FROM cfg_shift WHERE company_id=? AND is_active=1 ORDER BY shift_code`, scoped: true },
   'delay-reasons': { sql: `SELECT id, reason_code AS code, reason_name AS label, category FROM cfg_delay_reason WHERE company_id=? AND is_active=1 ORDER BY reason_name`, scoped: true },
   'sewing-operation-masters': { sql: `SELECT id, operation_code AS code, operation_name AS label, smv FROM cfg_sewing_operation_master WHERE company_id=? AND is_active=1 ORDER BY sort_order, id`, scoped: true },

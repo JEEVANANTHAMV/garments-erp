@@ -105,7 +105,7 @@ async function openDcHolds(runner: Tx | null, cid: number, stageId: number, bund
 interface JobInfo { io_no: string; so_id: number; so_no: string | null; order_type: string | null; buyer_name: string | null; buyer_po_no: string | null }
 
 /** Buyer / buyer PO / SO of each job (IO no) — one DC can carry several jobs. */
-async function jobInfo(cid: number, ioNos: (string | null | undefined)[]) {
+export async function jobInfo(cid: number, ioNos: (string | null | undefined)[]) {
   const ios = [...new Set(ioNos.filter((x): x is string => !!x))];
   if (!ios.length) return new Map<string, JobInfo>();
   // The SO is found by its own IO no, else through the cutting plan / production order of that IO.

@@ -62,6 +62,149 @@ function requireStyle(b: BundleRow) {
 }
 
 // ============================================================
+// SEWING INPUT / OUTPUT POSTING (shared with Daily Output Entry)
+// ============================================================
+
+export interface SewingInputOpts {
+  input_no?: string | null; input_date: string; qty?: number | null; line_name: string;
+  work_center?: string | null; operator_name?: string | null; remarks?: string | null;
+}
+
+/** Bundle PCS from cutting onto a sewing line (bundle must be locked by the caller). */
+export async function postSewingInput(tx: Tx, req: Request, b: BundleRow, o: SewingInputOpts) {
+  const cid = req.user!.companyId;
+  assertActive(b);
+  requireStyle(b);
+  const avail = n(b.balance_qty);
+  if (avail <= 0) {
+    throw BadRequest(`Bundle ${b.bundle_no} is already fully issued — 0 PCS balance at cutting`
+      + (n(b.out_cut_qty) ? ` (${n(b.out_cut_qty)} PCS are out on a job-work DC)` : ''));
+  }
+  const qty = o.qty ?? avail;
+  if (qty > avail) throw BadRequest(`Bundle ${b.bundle_no}: only ${avail} PCS available, ${qty} requested`);
+
+  const inputNo = o.input_no || await nextDocNumber(tx, cid, 'SEW_IN');
+  const r = await txExecute(tx,
+    `INSERT INTO trx_sewing_input
+      (company_id, input_no, input_date, io_no, style_id, color_id, size_id, bundle_id,
+       line_name, work_center, operator_name, input_qty, status, remarks, created_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [cid, inputNo, o.input_date, b.io_no, b.style_id, b.color_id, b.size_id, b.id,
+     o.line_name, o.work_center ?? null, o.operator_name ?? null, qty, 'OPEN', o.remarks ?? null, req.user!.id]);
+  const after = await applyBundle(tx, b, { balance_qty: -qty, sew_in_qty: qty });
+  const fromStage = b.status;
+  Object.assign(b, after);
+  await addMovement(tx, req, b, {
+    txn_type: 'SEWING_IN', from_stage: fromStage, to_stage: after.status, qty, good: qty,
+    location: o.line_name, work_center: o.work_center ?? o.line_name, destination: o.line_name,
+    ref_table: 'trx_sewing_input', ref_id: r.insertId, remarks: o.remarks ?? null,
+  });
+  const row = await txQueryOne<any>(tx, `SELECT * FROM trx_sewing_input WHERE id = ?`, [r.insertId]);
+  await audit(req, 'trx_sewing_input', r.insertId, 'INSERT', undefined, row, tx);
+  return { ...row, bundle_no: b.bundle_no, bundle_balance: n(after.balance_qty) };
+}
+
+export interface SewingOutputOpts {
+  output_no?: string | null; output_date: string; good: number; reject: number; rework: number; remarks?: string | null;
+}
+
+/** PCS still on the line for one sewing input (rework PCS stay on the line). */
+async function inputPending(tx: Tx, input: any) {
+  const done = await txQueryOne<any>(tx,
+    `SELECT COALESCE(SUM(output_qty),0) AS g, COALESCE(SUM(reject_qty),0) AS r FROM trx_sewing_output WHERE sewing_input_id = ?`,
+    [input.id]);
+  return n(input.input_qty) - n(done?.g) - n(done?.r);
+}
+
+/** Good / reject / rework against one sewing input (bundle and input locked by the caller). */
+export async function postSewingOutput(tx: Tx, req: Request, b: BundleRow, input: any, o: SewingOutputOpts) {
+  const cid = req.user!.companyId;
+  if (input.status === 'CANCELLED') throw BadRequest('Sewing input is cancelled');
+  const pending = await inputPending(tx, input);
+  const asked = o.good + o.reject + o.rework;
+  if (asked > pending) {
+    throw BadRequest(`Input ${input.input_no}: good + reject + rework (${asked} PCS) exceeds the ${pending} PCS still on the line`);
+  }
+  const outNo = o.output_no || await nextDocNumber(tx, cid, 'SEW_OUT');
+  const r = await txExecute(tx,
+    `INSERT INTO trx_sewing_output
+      (company_id, output_no, output_date, sewing_input_id, io_no, style_id, color_id, size_id,
+       bundle_id, line_name, output_qty, reject_qty, rework_qty, status, remarks, created_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [cid, outNo, o.output_date, input.id, input.io_no, input.style_id, input.color_id,
+     input.size_id, input.bundle_id, input.line_name, o.good, o.reject,
+     o.rework, 'COMPLETED', o.remarks ?? null, req.user!.id]);
+  const left = pending - o.good - o.reject;
+  if (left === 0) await txExecute(tx, `UPDATE trx_sewing_input SET status = 'COMPLETED' WHERE id = ?`, [input.id]);
+  const after = await applyBundle(tx, b, { sew_good_qty: o.good, sew_reject_qty: o.reject });
+  const fromStage = b.status;
+  Object.assign(b, after);
+  await addMovement(tx, req, b, {
+    txn_type: 'SEWING_OUT', from_stage: fromStage, to_stage: after.status,
+    qty: o.good + o.reject, good: o.good, reject: o.reject, rework: o.rework,
+    location: input.line_name, work_center: input.work_center ?? input.line_name,
+    ref_table: 'trx_sewing_output', ref_id: r.insertId, remarks: o.remarks ?? null,
+  });
+  const row = await txQueryOne(tx, `SELECT * FROM trx_sewing_output WHERE id = ?`, [r.insertId]);
+  await audit(req, 'trx_sewing_output', r.insertId, 'INSERT', undefined, row, tx);
+  return { ...(row as any), input_pending_qty: left, bundle_status: after.status };
+}
+
+/**
+ * Post one bundle's sewing output for a line, FIFO across its open inputs on
+ * that line. PCS not yet on the line are first moved in from cutting (the
+ * sewing input the floor would otherwise scan). Caller holds a transaction.
+ */
+export async function postBundleSewingOutput(tx: Tx, req: Request, bundleId: number, o: {
+  date: string; line_name: string; good: number; reject: number; rework: number;
+  /** Other names the floor may have typed for the same line (e.g. line code and line name). */
+  line_aliases?: string[];
+  operator_name?: string | null; remarks?: string | null;
+}) {
+  const cid = req.user!.companyId;
+  const b = await lockBundle(tx, cid, { id: bundleId });
+  assertActive(b);
+  const needed = o.good + o.reject + o.rework;
+  if (needed <= 0) return [];
+  const inputs = await txQuery<any>(tx,
+    `SELECT * FROM trx_sewing_input WHERE bundle_id = ? AND company_id = ? AND line_name IN (?) AND status = 'OPEN'
+      ORDER BY id FOR UPDATE`, [b.id, cid, [o.line_name, ...(o.line_aliases ?? [])]]);
+  const pend = new Map<number, number>();
+  let onLine = 0;
+  for (const i of inputs) { const p = await inputPending(tx, i); pend.set(i.id, p); onLine += Math.max(p, 0); }
+  if (onLine < needed) {
+    const short = needed - onLine;
+    if (n(b.balance_qty) < short) {
+      throw BadRequest(`Bundle ${b.bundle_no}: ${needed} PCS entered but only ${onLine} PCS are on ${o.line_name}`
+        + ` and ${n(b.balance_qty)} PCS are left at cutting`);
+    }
+    const inp = await postSewingInput(tx, req, b, {
+      input_date: o.date, qty: short, line_name: o.line_name, operator_name: o.operator_name ?? null,
+      remarks: 'Auto input from Daily Output Entry',
+    });
+    const row = await txQueryOne<any>(tx, `SELECT * FROM trx_sewing_input WHERE id = ? FOR UPDATE`, [inp.id]);
+    inputs.push(row);
+    pend.set(row.id, short);
+  }
+  // Split good → reject → rework over the inputs in order.
+  let good = o.good, reject = o.reject, rework = o.rework;
+  const posted: any[] = [];
+  for (const i of inputs) {
+    let room = pend.get(i.id) ?? 0;
+    if (room <= 0) continue;
+    const g = Math.min(good, room); room -= g; good -= g;
+    const r = Math.min(reject, room); room -= r; reject -= r;
+    const w = Math.min(rework, room); room -= w; rework -= w;
+    if (g + r + w === 0) continue;
+    posted.push(await postSewingOutput(tx, req, b, i, {
+      output_date: o.date, good: g, reject: r, rework: w, remarks: o.remarks ?? null,
+    }));
+    if (good + reject + rework === 0) break;
+  }
+  return posted;
+}
+
+// ============================================================
 // BUNDLE SCAN / TRACE (doc §14)
 // ============================================================
 productionFloorRouter.get('/bundles/scan/:code', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
@@ -373,33 +516,11 @@ productionFloorRouter.post('/sewing/input', requirePermission('PRODUCTION.CREATE
 
   const result = await transaction(async (tx) => {
     const b = await lockBundle(tx, cid, refOf(body));
-    assertActive(b);
-    requireStyle(b);
-    const avail = n(b.balance_qty);
-    if (avail <= 0) {
-      throw BadRequest(`Bundle ${b.bundle_no} is already fully issued — 0 PCS balance at cutting`
-        + (n(b.out_cut_qty) ? ` (${n(b.out_cut_qty)} PCS are out on a job-work DC)` : ''));
-    }
-    const qty = body.input_qty ?? avail;
-    if (qty > avail) throw BadRequest(`Bundle ${b.bundle_no}: only ${avail} PCS available, ${qty} requested`);
-
-    const inputNo = body.input_no || await nextDocNumber(tx, cid, 'SEW_IN');
-    const r = await txExecute(tx,
-      `INSERT INTO trx_sewing_input
-        (company_id, input_no, input_date, io_no, style_id, color_id, size_id, bundle_id,
-         line_name, work_center, operator_name, input_qty, status, remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [cid, inputNo, body.input_date, b.io_no, b.style_id, b.color_id, b.size_id, b.id,
-       body.line_name, body.work_center ?? null, body.operator_name ?? null, qty, 'OPEN', body.remarks ?? null, req.user!.id]);
-    const after = await applyBundle(tx, b, { balance_qty: -qty, sew_in_qty: qty });
-    await addMovement(tx, req, b, {
-      txn_type: 'SEWING_IN', from_stage: b.status, to_stage: after.status, qty, good: qty,
-      location: body.line_name, work_center: body.work_center ?? body.line_name, destination: body.line_name,
-      ref_table: 'trx_sewing_input', ref_id: r.insertId, remarks: body.remarks ?? null,
+    return postSewingInput(tx, req, b, {
+      input_no: body.input_no, input_date: body.input_date, qty: body.input_qty ?? null,
+      line_name: body.line_name, work_center: body.work_center ?? null,
+      operator_name: body.operator_name ?? null, remarks: body.remarks ?? null,
     });
-    const row = await txQueryOne(tx, `SELECT * FROM trx_sewing_input WHERE id = ?`, [r.insertId]);
-    await audit(req, 'trx_sewing_input', r.insertId, 'INSERT', undefined, row, tx);
-    return { ...row, bundle_no: b.bundle_no, bundle_balance: n(after.balance_qty) };
   });
   res.status(201).json({ data: result });
 }));
@@ -463,36 +584,10 @@ productionFloorRouter.post('/sewing/output', requirePermission('PRODUCTION.CREAT
     if (!pre) throw NotFound('Sewing input not found');
     const b = await lockBundle(tx, cid, { id: pre.bundle_id });
     const input = await txQueryOne<any>(tx, `SELECT * FROM trx_sewing_input WHERE id = ? FOR UPDATE`, [body.sewing_input_id]);
-    if (input.status === 'CANCELLED') throw BadRequest('Sewing input is cancelled');
-    const done = await txQueryOne<any>(tx,
-      `SELECT COALESCE(SUM(output_qty),0) AS g, COALESCE(SUM(reject_qty),0) AS r FROM trx_sewing_output WHERE sewing_input_id = ?`,
-      [input.id]);
-    const pending = n(input.input_qty) - n(done?.g) - n(done?.r);
-    const asked = body.output_qty + body.reject_qty + body.rework_qty;
-    if (asked > pending) {
-      throw BadRequest(`Input ${input.input_no}: good + reject + rework (${asked} PCS) exceeds the ${pending} PCS still on the line`);
-    }
-    const outNo = body.output_no || await nextDocNumber(tx, cid, 'SEW_OUT');
-    const r = await txExecute(tx,
-      `INSERT INTO trx_sewing_output
-        (company_id, output_no, output_date, sewing_input_id, io_no, style_id, color_id, size_id,
-         bundle_id, line_name, output_qty, reject_qty, rework_qty, status, remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [cid, outNo, body.output_date, input.id, input.io_no, input.style_id, input.color_id,
-       input.size_id, input.bundle_id, input.line_name, body.output_qty, body.reject_qty,
-       body.rework_qty, 'COMPLETED', body.remarks ?? null, req.user!.id]);
-    const left = pending - body.output_qty - body.reject_qty;
-    if (left === 0) await txExecute(tx, `UPDATE trx_sewing_input SET status = 'COMPLETED' WHERE id = ?`, [input.id]);
-    const after = await applyBundle(tx, b, { sew_good_qty: body.output_qty, sew_reject_qty: body.reject_qty });
-    await addMovement(tx, req, b, {
-      txn_type: 'SEWING_OUT', from_stage: b.status, to_stage: after.status,
-      qty: body.output_qty + body.reject_qty, good: body.output_qty, reject: body.reject_qty, rework: body.rework_qty,
-      location: input.line_name, work_center: input.work_center ?? input.line_name,
-      ref_table: 'trx_sewing_output', ref_id: r.insertId, remarks: body.remarks ?? null,
+    return postSewingOutput(tx, req, b, input, {
+      output_no: body.output_no, output_date: body.output_date,
+      good: body.output_qty, reject: body.reject_qty, rework: body.rework_qty, remarks: body.remarks ?? null,
     });
-    const row = await txQueryOne(tx, `SELECT * FROM trx_sewing_output WHERE id = ?`, [r.insertId]);
-    await audit(req, 'trx_sewing_output', r.insertId, 'INSERT', undefined, row, tx);
-    return { ...row, input_pending_qty: left, bundle_status: after.status };
   });
   res.status(201).json({ data: result });
 }));
