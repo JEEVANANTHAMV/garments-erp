@@ -53,6 +53,7 @@ import { trimProcurementRouter } from './modules/procurement/trimProcurement.rou
 import { purchaseReturnRouter } from './modules/procurement/purchaseReturn.routes.js';
 import { tnaRouter } from './modules/tna/tna.routes.js';
 import { jobworkDivisionRouter } from './modules/production/jobworkDivision.js';
+import { lineAllocationPlanRouter } from './modules/production/lineAllocationPlan.routes.js';
 
 export function createApp() {
   const app = express();
@@ -133,6 +134,7 @@ export function createApp() {
   api.use('/', purchaseReturnRouter);         // /purchase-returns, /purchase-returns/grn/:id, etc.
   api.use('/tna', tnaRouter);                 // /tna, /tna/:id, /tna/dashboard, /tna/templates, etc.
   api.use('/', jobworkDivisionRouter);       // /jobwork-invoices/:id/print (division billing header)
+  api.use('/', lineAllocationPlanRouter);    // /sewing/line-allocation, /checking/line-allocation, /sewing/daily-plan, /checking/daily-plan
 
   // Metadata-driven resources.
   const registry = [...masterResources, ...transactionResources];

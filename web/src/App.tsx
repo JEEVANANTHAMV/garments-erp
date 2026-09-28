@@ -80,6 +80,9 @@ import { CutQcBundlesPage } from './pages/production/CutQcBundlesPage';
 import { CuttingReconciliationPage } from './pages/production/CuttingReconciliationPage';
 import { SewingFinishingFloorPage } from './pages/production/SewingFinishingFloorPage';
 import { TraceabilitySearchPage } from './pages/production/TraceabilitySearchPage';
+import { SewingLineAllocationPage } from './pages/production/SewingLineAllocationPage';
+import { CheckingLineAllocationPage } from './pages/production/CheckingLineAllocationPage';
+import { SewingDailyPlanPage, CheckingDailyPlanPage } from './pages/production/CheckingDailyPlanPage';
 import {
   PackingListPage, PackingListDetailPage,
   ShipmentPlanPage,
@@ -274,6 +277,10 @@ export default function App() {
                   <Route path="cut-qc-bundles" element={<CutQcBundlesPage />} />
                   <Route path="cutting-reconciliation" element={<CuttingReconciliationPage />} />
                   <Route path="sewing-finishing" element={<SewingFinishingFloorPage />} />
+                  <Route path="sewing-line-allocation" element={<SewingLineAllocationPage />} />
+                  <Route path="sewing-daily-plan" element={<SewingDailyPlanPage />} />
+                  <Route path="checking-line-allocation" element={<CheckingLineAllocationPage />} />
+                  <Route path="checking-daily-plan" element={<CheckingDailyPlanPage />} />
                   <Route path="wip" element={<WipDashboardPage />} />
                   <Route path="daily-plans" element={<DailyProductionPlansPage />} />
                   <Route path="daily-outputs" element={<DailyOutputsPage />} />
