@@ -203,13 +203,15 @@ async function allocatedOnDate(tx: Tx | null, cid: number, proc: Proc, date: str
 }
 
 /** PCS already planned per line on a date (+ shift) by other open plans. */
-async function plannedOnDate(tx: Tx | null, cid: number, proc: Proc, date: string, shiftId: number | null, excludeId = 0) {
+async function plannedOnDate(tx: Tx | null, cid: number, proc: Proc, date: string, shiftId: number | null | 'ALL', excludeId = 0) {
   const c = CFG[proc];
+  const all = shiftId === 'ALL';
   const rows = await q<any>(tx,
     `SELECT d.line_id, SUM(d.planned_qty) AS qty
        FROM ${c.planD} d JOIN ${c.plan} p ON p.id = d.plan_id
-      WHERE p.company_id = ? AND p.plan_date = ? AND (p.shift_id <=> ?) AND p.status IN (?) AND p.id <> ?
-      GROUP BY d.line_id`, [cid, date, shiftId, [...OPEN_PLAN, 'COMPLETED'], excludeId]);
+      WHERE p.company_id = ? AND p.plan_date = ? ${all ? '' : 'AND (p.shift_id <=> ?)'} AND p.status IN (?) AND p.id <> ?
+        AND d.status <> 'CANCELLED'
+      GROUP BY d.line_id`, all ? [cid, date, [...OPEN_PLAN, 'COMPLETED'], excludeId] : [cid, date, shiftId, [...OPEN_PLAN, 'COMPLETED'], excludeId]);
   return new Map(rows.map((r) => [Number(r.line_id), n(r.qty)]));
 }
 
@@ -1211,7 +1213,7 @@ for (const proc of PROCS) {
     const qp = z.object({ date: dateStr, shift_id: optId }).parse(req.query);
     const lines = await loadLines(null, cid, proc);
     const alloc = await allocatedOnDate(null, cid, proc, qp.date);
-    const planned = await plannedOnDate(null, cid, proc, qp.date, qp.shift_id ?? null);
+    const planned = await plannedOnDate(null, cid, proc, qp.date, qp.shift_id ?? 'ALL');
     const actual = new Map((await planVsActual(cid, proc, qp.date, qp.date)).rows.map((r) => [r.line_id, r]));
     const pctOf = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 10000) / 100 : 0);
     res.json({
