@@ -345,7 +345,12 @@ export function buildResourceRouter(cfg: ResourceConfig): Router {
         hasAuditCols ? [req.user!.id, id, ...scopeParams] : [id, ...scopeParams],
       );
     } else {
-      await execute(`DELETE FROM ${table} WHERE id = ?${scopeSql}`, [id, ...scopeParams]);
+      // A hard delete removes the document's own child lines first (one transaction);
+      // a document still referenced elsewhere keeps failing with FK_IN_USE.
+      await transaction(async (tx) => {
+        for (const c of children) await txExecute(tx, `DELETE FROM ${c.table} WHERE ${c.fk} = ?`, [id]);
+        await txExecute(tx, `DELETE FROM ${table} WHERE id = ?${scopeSql}`, [id, ...scopeParams]);
+      });
     }
 
     await audit(req, table, id, 'DELETE', before, undefined);

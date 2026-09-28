@@ -440,6 +440,157 @@ if not READONLY:
     else:
         skip('yarn return', 'no knitting DC')
 
+# ================================================================== extended flows
+def first(path, key='data'):
+    c, j = call('GET', path)
+    d = j.get(key) or []
+    return d if isinstance(d, list) else []
+
+if not READONLY:
+    # --- Sales order: created with the legacy-format SO number, IO separate
+    buyers_ = first('/lookups/buyers'); styles_ = first('/lookups/styles'); curs_ = first('/lookups/currencies')
+    usd = next((c for c in curs_ if c.get('code') == 'USD'), curs_[0] if curs_ else None)
+    if buyers_ and styles_ and usd:
+        q = {'buyer_id': buyers_[0]['id'], 'order_type': 'EXPORT', 'so_date': '2026-09-28'}
+        prev_ = (call('GET', '/sales-orders/next-so-number?' + urllib.parse.urlencode(q))[1].get('data') or {}).get('so_no')
+        code, js = call('POST', '/sales-orders', {**q, 'currency_id': usd['id'], 'exchange_rate': 83, 'remarks': TAG,
+                                                  'lines': [{'style_id': styles_[0]['id'], 'unit_price': 2.5, 'order_qty': 10, 'assort_color': 'APITEST ASSORT'}]})
+        so = js.get('data') or {}
+        if check('sales order create (auto SO number)', code == 201, f'{code} {err(js) if code != 201 else so.get("so_no")}'):
+            import re
+            check('SO number format G##E26PREFIX####', bool(re.match(r'^G\d{2}E26[A-Z0-9]+\d{4}$', so.get('so_no') or '')) and so.get('so_no') == prev_,
+                  f"so_no={so.get('so_no')} preview={prev_} io={so.get('io_no')}")
+            check('IO number separate from SO number', bool(so.get('io_no')) and so.get('io_no') != so.get('so_no'), f"io={so.get('io_no')}")
+            d = call('GET', f"/sales-orders/{so['id']}")[1].get('data') or {}
+            check('assort colour saved on SO line', any(l.get('assort_color') == 'APITEST ASSORT' for l in d.get('lines') or []), '')
+            code, js = call('DELETE', f"/sales-orders/{so['id']}")
+            check('sales order delete (cleanup)', code == 200, f'{code}')
+        code, js = call('POST', '/sales-orders', {**q, 'currency_id': usd['id'], 'order_group': 'G1', 'lines': [{'style_id': styles_[0]['id'], 'unit_price': 1, 'order_qty': 1}]})
+        check('invalid group code rejected', code in (400, 422), f'{code}')
+    else:
+        skip('sales order', 'no buyer / style / currency')
+
+    # --- Supplier bill: common invoice summary (IGST, other −, TDS, TCS) recomputed by the server
+    sups = first('/lookups/suppliers'); uoms = first('/lookups/uoms'); inr_ = next((c for c in curs_ if c.get('code') == 'INR'), None)
+    if sups and uoms and inr_:
+        body = {'bill_no': TAG, 'bill_type': 'GENERAL', 'bill_date': '2026-09-28', 'supplier_id': sups[0]['id'], 'currency_id': inr_['id'], 'gst_type': 'INTER_STATE',
+                'supplier_inv_no': TAG, 'other_charges': 500, 'other_charges_sign': -1, 'other_charges_label': 'Rate difference',
+                'tds_section': '194Q', 'tds_pct': 0.1, 'tcs_section': '206C(1H)', 'tcs_pct': 0.1,
+                'subtotal': 1, 'gst_amount': 1, 'total_amount': 1, 'remarks': TAG,
+                'lines': [{'material_type': 'SERVICE', 'description': 'APITEST A', 'bill_qty': 100, 'uom_id': uoms[0]['id'], 'rate': 100, 'amount': 10000, 'gst_rate': 5},
+                          {'material_type': 'SERVICE', 'description': 'APITEST B', 'bill_qty': 50, 'uom_id': uoms[0]['id'], 'rate': 100, 'amount': 5000, 'gst_rate': 12}]}
+        code, js = call('POST', '/supplier-bills', body)
+        b = js.get('data') or {}
+        if check('supplier bill create', code == 201, f'{code} {err(js) if code != 201 else b.get("bill_no")}'):
+            b = call('GET', f"/supplier-bills/{b['id']}")[1].get('data') or b
+            ok = near(b.get('subtotal'), 15000) and near(b.get('igst_amount'), 1100) and near(b.get('cgst_amount'), 0) \
+                and near(b.get('tds_amount'), 15) and near(b.get('tcs_amount'), 15.6) and near(b.get('total_amount'), 15600.6)
+            check('bill summary: IGST 1100, TDS 15, TCS 15.60, net 15600.60 (client totals ignored)', ok,
+                  f"sub={b.get('subtotal')} igst={b.get('igst_amount')} tds={b.get('tds_amount')} tcs={b.get('tcs_amount')} net={b.get('total_amount')}")
+            code, js = call('PUT', f"/supplier-bills/{b['id']}", {**body, 'gst_type': 'INTRA_STATE'})
+            b2 = call('GET', f"/supplier-bills/{b['id']}")[1].get('data') or {}
+            check('bill summary intra-state: CGST 550 + SGST 550', near(b2.get('cgst_amount'), 550) and near(b2.get('sgst_amount'), 550) and near(b2.get('igst_amount'), 0),
+                  f"cgst={b2.get('cgst_amount')} sgst={b2.get('sgst_amount')}")
+            code, js = call('DELETE', f"/supplier-bills/{b['id']}")
+            check('supplier bill delete (cleanup)', code in (200, 204), f'{code}')
+    else:
+        skip('supplier bill', 'no supplier / uom / INR')
+
+    # --- Job work in (printing) → invoice gets the Printing Division → print header
+    custs = first('/lookups/customers')
+    if custs and inr_:
+        code, js = call('POST', '/jobwork-ins', {'jwin_date': '2026-09-28', 'customer_id': custs[0]['id'], 'customer_dc_no': TAG,
+                                                'process_type': 'Screen Printing', 'total_qty': 100, 'rate': 4.5, 'remarks': TAG,
+                                                'lines': [{'description': 'APITEST printing', 'material_type': 'GARMENT', 'qty': 100}]})
+        jw = js.get('data') or {}
+        if check('job work in (printing)', code == 201, f'{code} {err(js) if code != 201 else jw.get("jwin_no")}'):
+            jwd = call('GET', f"/jobwork-ins/{jw['id']}")[1].get('data') or {}
+            divs = {d['id']: d for d in first('/divisions')}
+            dv = divs.get(jwd.get('division_id')) or {}
+            check('division auto-picked from process', 'PRINT' in json.dumps(dv).upper(), f"division={dv.get('division_name')}")
+            code, js = call('POST', '/jobwork-invoices', {'invoice_date': '2026-09-28', 'jwin_id': jw['id'], 'party_id': custs[0]['id'],
+                                                         'invoice_type': 'RECEIVABLE', 'currency_id': inr_['id'], 'total_qty': 100, 'rate': 4.5,
+                                                         'taxable_amount': 450, 'gst_amount': 22.5, 'total_amount': 472.5, 'remarks': TAG})
+            inv = js.get('data') or {}
+            if check('job work invoice (division series)', code == 201, f'{code} {err(js) if code != 201 else inv.get("invoice_no")}'):
+                pr = call('GET', f"/jobwork-invoices/{inv['id']}/print")[1].get('data') or {}
+                check('invoice print shows division billing name', 'Division' in json.dumps(pr), '')
+                call('DELETE', f"/jobwork-invoices/{inv['id']}")
+            code, js = call('DELETE', f"/jobwork-ins/{jw['id']}")
+            check('job work in delete (cleanup)', code in (200, 204), f'{code}')
+    else:
+        skip('job work / division', 'no customer / INR')
+
+    # --- CAD: tape / cord KG in both units recomputed by the server (client KG ignored)
+    cads_ = first('/cad-requirements')
+    if cads_:
+        base_cad = call('GET', f"/cad-requirements/{cads_[0]['id']}")[1].get('data') or {}
+        body = {k: v for k, v in base_cad.items() if k not in ('id', 'req_no', 'status', 'purchase_requirement', 'created_at', 'updated_at')}
+        body.update({'req_no': TAG, 'special_notes': TAG, 'special_parts': [
+            {'part_name': 'APITEST draw cord', 'uom': 'MTRS', 'total_qty': 290, 'kg_factor': 50, 'kg_factor_unit': 'PER_KG', 'total_kg': 999},
+            {'part_name': 'APITEST twill tape', 'uom': 'MTRS', 'total_qty': 290, 'kg_factor': 20, 'kg_factor_unit': 'G_PER', 'total_kg': 7},
+            {'part_name': 'APITEST no factor', 'uom': 'MTRS', 'total_qty': 100}]})
+        code, js = call('POST', '/cad-requirements', body)
+        cad = js.get('data') or {}
+        if check('CAD save with specialised parts', code in (200, 201) and cad.get('id'), f'{code} {err(js) if code not in (200, 201) else cad.get("req_no")}'):
+            d = call('GET', f"/cad-requirements/{cad['id']}")[1].get('data') or {}
+            pl = {l['item_name']: l for l in (d.get('purchase_requirement') or {}).get('lines', [])}
+            a, b_ = pl.get('APITEST draw cord', {}), pl.get('APITEST twill tape', {})
+            check('CAD KG: 290 m @ 50 m/kg = 5.8 kg and 290 m @ 20 g/m = 5.8 kg', near(a.get('purchase_qty'), 5.8, 0.001) and near(b_.get('purchase_qty'), 5.8, 0.001),
+                  f"{a.get('purchase_qty')} {a.get('purchase_uom')} / {b_.get('purchase_qty')} {b_.get('purchase_uom')}")
+            check('CAD row without factor stays unconverted', pl.get('APITEST no factor', {}).get('purchase_uom') != 'KG' and (d.get('purchase_requirement') or {}).get('unconverted', 0) >= 1, '')
+    else:
+        skip('CAD', 'no CAD sheet to copy')
+
+    # --- Knitting DC → grey fabric inward → yarn return → cancel
+    progs_ = [p for p in first('/knitting/programs') if p.get('status') in ('RELEASED', 'MATERIAL_ISSUED', 'IN_PROGRESS', 'PRODUCTION_COMPLETED', 'OUTPUT_RECEIPT', 'QC', 'STOCK_POSTED')]
+    stock = first('/yarn-stock')
+    vendors_ = first('/lookups/vendors')
+    done = False
+    for pg in progs_:
+        det = call('GET', f"/knitting/programs/{pg['id']}")[1].get('data') or {}
+        for y in det.get('yarns') or []:
+            srow = next((r for r in stock if r.get('yarn_id') == y.get('yarn_id') and float(r.get('balance_qty') or 0) >= 2), None)
+            if not srow or not vendors_: continue
+            rec0 = call('GET', f"/knitting-programs/{pg['id']}/reconciliation")[1].get('data') or {}
+            code, js = call('POST', '/knitting-dcs', {'program_id': pg['id'], 'dc_date': '2026-09-28', 'vendor_id': det.get('vendor_id') or vendors_[0]['id'],
+                                                     'warehouse_id': srow['warehouse_id'], 'vehicle_no': 'TN00AA0000', 'remarks': TAG,
+                                                     'lines': [{'program_yarn_id': y['id'], 'yarn_id': y['yarn_id'], 'lot_no': srow.get('lot_no'), 'issued_qty_kg': 1, 'no_of_cones': 1}]})
+            if code != 201:
+                RESULTS.append(('INFO', f"knitting DC on {pg.get('program_no')}", f'{code} {err(js)}')); continue
+            dcno = (js.get('data') or {}).get('dc_no')
+            check('knitting DC (yarn outward)', bool(dcno), f'{dcno}')
+            pr = call('GET', f'/knitting-dcs/{urllib.parse.quote(dcno)}')[1].get('data') or {}
+            check('knitting DC print data', bool(pr), '')
+            inw = {'program_id': pg['id'], 'ref_dc_no': dcno, 'party_dc_no': TAG, 'receipt_date': '2026-09-28', 'warehouse_id': srow['warehouse_id'],
+                   'rolls': [{'roll_no': TAG + '-R1', 'weight_kg': 0.5}]}
+            code, js = call('POST', '/knitting-inwards', {**inw, 'yarn_consumed_kg': 5})
+            check('grey inward consuming more yarn than given rejected', code == 400, f'{code} {err(js)}')
+            code, js = call('POST', '/knitting-inwards', {**inw, 'yarn_consumed_kg': 0.6})
+            check('grey fabric inward', code == 201, f'{code} {err(js) if code != 201 else (js.get("data") or {}).get("receipt_no")}')
+            rolls = [r for r in first('/fabric-rolls') if r.get('roll_no') == TAG + '-R1']
+            check('grey roll in fabric roll stock', len(rolls) == 1 and near(rolls[0].get('weight_kg'), 0.5), f'{len(rolls)}')
+            rec = call('GET', f"/knitting-programs/{pg['id']}/reconciliation")[1].get('data') or {}
+            t0, t1 = rec0.get('totals') or {}, rec.get('totals') or {}
+            check('reconciliation: yarn given +1, fabric +0.5', near(float(t1.get('yarn_given_kg', t1.get('issued_kg', 0))) - float(t0.get('yarn_given_kg', t0.get('issued_kg', 0))), 1, 0.002)
+                  and near(float(t1.get('fabric_received_kg', 0)) - float(t0.get('fabric_received_kg', 0)), 0.5, 0.002), json.dumps({k: t1.get(k) for k in list(t1)[:8]}))
+            bal = call('GET', f'/knitting-dcs/{urllib.parse.quote(dcno)}/yarn-returns')[1].get('data') or {}
+            check('DC balance at knitter = 1 − 0.6 = 0.4', near(bal.get('balance_kg'), 0.4, 0.002), f"{bal.get('balance_kg')}")
+            code, js = call('POST', f'/knitting-dcs/{urllib.parse.quote(dcno)}/yarn-returns', {'return_date': '2026-09-28', 'party_dc_no': TAG, 'warehouse_id': srow['warehouse_id'],
+                            'lines': [{'yarn_id': y['yarn_id'], 'lot_no': srow.get('lot_no'), 'return_kg': 0.2, 'no_of_cones': 0}]})
+            rt = js.get('data') or {}
+            if check('yarn return on the new DC', code == 201, f'{code} {err(js) if code != 201 else rt.get("return_no")}'):
+                b2 = call('GET', f'/knitting-dcs/{urllib.parse.quote(dcno)}/yarn-returns')[1].get('data') or {}
+                check('balance after return 0.2', near(b2.get('balance_kg'), 0.2, 0.002), f"{b2.get('balance_kg')}")
+                code, js = call('POST', f"/knitting-yarn-returns/{urllib.parse.quote(rt['return_no'])}/cancel", {'reason': TAG})
+                b3 = call('GET', f'/knitting-dcs/{urllib.parse.quote(dcno)}/yarn-returns')[1].get('data') or {}
+                check('cancel return → balance back to 0.4', code == 200 and near(b3.get('balance_kg'), 0.4, 0.002), f"{code} {b3.get('balance_kg')}")
+            done = True
+            break
+        if done: break
+    if not done:
+        skip('knitting DC flow', 'no released program with yarn in stock')
+
 # ------------------------------------------------------------------ cleanup + report
 for fn in reversed(CLEANUP):
     try: fn()
