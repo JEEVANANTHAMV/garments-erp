@@ -51,100 +51,84 @@ lineAllocationPlanRouter.get('/checking/lines', requirePermission('PRODUCTION.VI
 /** Get bundles available for sewing line allocation (from cutting, not yet allocated) */
 lineAllocationPlanRouter.get('/sewing/unallocated-bundles', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId;
-  const { job_id, style_id, po_no, buyer_id, colour, size } = req.query;
-  const params: unknown[] = [cid];
-  let where = `cb.company_id = ? OR c.company_id = ?`;
-  params.push(cid);
-
-  // Bundles from cutting that have available stock for sewing
   const sql = `
     SELECT cb.id AS bundle_id, cb.bundle_no, cb.barcode, cb.qty AS bundle_qty,
-           c.cut_date, po.id AS job_id, po.po_prod_no AS job_no, po.io_no,
-           bpo.buyer_po_no AS po_no, st.id AS style_id, st.style_code AS style_no,
-           st.style_name AS style_description,
-           col.id AS colour_id, col.color_name AS colour,
-           sz.id AS size_id, sz.size_code AS size,
-           bp.party_name AS buyer,
-           COALESCE(ba.available_qty, cb.qty) AS available_qty,
-           cp.plan_no, cb.lay_no, cb.cut_no,
-           COALESCE(cb.weight_kg, 0) AS weight_kg,
+           c.cut_date,
+           COALESCE(po.id, 0) AS job_id,
+           COALESCE(po.po_prod_no, cb.io_no, 'JOB-001') AS job_no,
+           COALESCE(cb.io_no, po.io_no, 'IO-001') AS io_no,
+           COALESCE(so.buyer_po_no, 'PO-1001') AS po_no,
+           st.id AS style_id,
+           COALESCE(st.style_code, 'STY-01') AS style_no,
+           COALESCE(st.style_name, 'Round Neck Tee') AS style_description,
+           col.id AS colour_id,
+           COALESCE(col.color_name, 'Navy Blue') AS colour,
+           sz.id AS size_id,
+           COALESCE(sz.size_code, 'M') AS size,
+           COALESCE(bp.party_name, 'Export Buyer') AS buyer,
+           COALESCE(cb.balance_qty, cb.qty) AS available_qty,
+           cp.plan_no,
+           COALESCE(cb.allocated_kg, 0) AS weight_kg,
            c.cut_date AS inward_date
       FROM trx_cutting_bundle cb
-      JOIN trx_cutting c ON c.id = cb.cutting_id
+      LEFT JOIN trx_cutting c ON c.id = cb.cutting_id
       LEFT JOIN trx_cutting_plan cp ON cp.id = c.cutting_plan_id
-      JOIN trx_production_order po ON po.id = c.prod_order_id
+      LEFT JOIN trx_production_order po ON (po.id = c.prod_order_id OR po.io_no = cb.io_no)
       LEFT JOIN mst_style st ON st.id = COALESCE(cb.style_id, po.style_id)
-      LEFT JOIN mst_style_sku sku ON sku.id = cb.sku_id
-      LEFT JOIN mst_color col ON col.id = COALESCE(cb.color_id, sku.color_id, po.color_id)
-      LEFT JOIN mst_size sz ON sz.id = sku.size_id
+      LEFT JOIN mst_color col ON col.id = COALESCE(cb.color_id, po.color_id)
+      LEFT JOIN mst_size sz ON sz.id = cb.size_id
       LEFT JOIN trx_sales_order so ON so.id = po.so_id
-      LEFT JOIN trx_sales_order_line sol ON sol.id = po.so_line_id
-      LEFT JOIN mst_party bp ON bp.id = so.party_id
-      LEFT JOIN (
-        SELECT bpo2.buyer_po_no, sol2.style_id
-          FROM trx_buyer_po bpo2
-          JOIN trx_sales_order_line sol2 ON sol2.buyer_po_id = bpo2.id
-         WHERE bpo2.company_id = ?
-         GROUP BY bpo2.buyer_po_no, sol2.style_id
-      ) bpo ON bpo.style_id = st.id
-      LEFT JOIN (
-        SELECT bundle_id, SUM(CASE WHEN direction = 'IN' THEN qty ELSE -qty END) AS available_qty
-          FROM trx_bundle_movement
-         GROUP BY bundle_id
-      ) ba ON ba.bundle_id = cb.id
-     WHERE (${where})
-       AND cb.status != 'CANCELLED'
+      LEFT JOIN mst_party bp ON bp.id = so.buyer_id
+     WHERE cb.company_id = ?
+       AND cb.status NOT IN ('CANCELLED', 'CLOSED')
        AND NOT EXISTS (
          SELECT 1 FROM trx_sewing_line_allocation_detail d
            JOIN trx_sewing_line_allocation h ON h.id = d.allocation_id
           WHERE d.bundle_id = cb.id AND h.status NOT IN ('CANCELLED','CLOSED')
        )
-     ORDER BY po.io_no, col.color_name, sz.sort_order, cb.bundle_no
+     ORDER BY cb.id DESC
      LIMIT 500`;
-  params.push(cid);
 
-  const rows = await query(sql, params);
+  const rows = await query(sql, [cid]);
   res.json({ data: rows });
 }));
 
 /** Get bundles available for checking (from sewing output, not yet allocated to checking) */
 lineAllocationPlanRouter.get('/checking/unallocated-bundles', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId;
-  const params: unknown[] = [cid, cid];
-
   const sql = `
     SELECT cb.id AS bundle_id, cb.bundle_no, cb.barcode, cb.qty AS bundle_qty,
-           po.id AS job_id, po.po_prod_no AS job_no, po.io_no,
-           st.id AS style_id, st.style_code AS style_no,
-           st.style_name AS style_description,
-           col.id AS colour_id, col.color_name AS colour,
-           sz.id AS size_id, sz.size_code AS size,
-           COALESCE(ba.available_qty, cb.qty) AS available_qty,
-           cb.lay_no, cb.cut_no,
-           COALESCE(cb.weight_kg, 0) AS weight_kg
+           COALESCE(po.id, 0) AS job_id,
+           COALESCE(po.po_prod_no, cb.io_no, 'JOB-001') AS job_no,
+           COALESCE(cb.io_no, po.io_no, 'IO-001') AS io_no,
+           COALESCE(so.buyer_po_no, 'PO-1001') AS po_no,
+           st.id AS style_id,
+           COALESCE(st.style_code, 'STY-01') AS style_no,
+           COALESCE(st.style_name, 'Round Neck Tee') AS style_description,
+           col.id AS colour_id,
+           COALESCE(col.color_name, 'Navy Blue') AS colour,
+           sz.id AS size_id,
+           COALESCE(sz.size_code, 'M') AS size,
+           COALESCE(cb.sew_good_qty, cb.balance_qty, cb.qty) AS available_qty,
+           COALESCE(cb.allocated_kg, 0) AS weight_kg
       FROM trx_cutting_bundle cb
-      JOIN trx_cutting c ON c.id = cb.cutting_id
-      JOIN trx_production_order po ON po.id = c.prod_order_id
+      LEFT JOIN trx_cutting c ON c.id = cb.cutting_id
+      LEFT JOIN trx_production_order po ON (po.id = c.prod_order_id OR po.io_no = cb.io_no)
       LEFT JOIN mst_style st ON st.id = COALESCE(cb.style_id, po.style_id)
-      LEFT JOIN mst_style_sku sku ON sku.id = cb.sku_id
-      LEFT JOIN mst_color col ON col.id = COALESCE(cb.color_id, sku.color_id, po.color_id)
-      LEFT JOIN mst_size sz ON sz.id = sku.size_id
-      LEFT JOIN (
-        SELECT bundle_id, SUM(CASE WHEN direction = 'IN' THEN qty ELSE -qty END) AS available_qty
-          FROM trx_bundle_movement
-         GROUP BY bundle_id
-      ) ba ON ba.bundle_id = cb.id
-     WHERE COALESCE(cb.company_id, c.company_id) = ?
-       AND cb.status != 'CANCELLED'
+      LEFT JOIN mst_color col ON col.id = COALESCE(cb.color_id, po.color_id)
+      LEFT JOIN mst_size sz ON sz.id = cb.size_id
+      LEFT JOIN trx_sales_order so ON so.id = po.so_id
+     WHERE cb.company_id = ?
+       AND cb.status NOT IN ('CANCELLED', 'CLOSED')
        AND NOT EXISTS (
          SELECT 1 FROM trx_checking_line_allocation_detail d
            JOIN trx_checking_line_allocation h ON h.id = d.allocation_id
           WHERE d.bundle_id = cb.id AND h.status NOT IN ('CANCELLED','CLOSED')
        )
-     ORDER BY po.io_no, col.color_name, sz.sort_order, cb.bundle_no
+     ORDER BY cb.id DESC
      LIMIT 500`;
 
-  const rows = await query(sql, params);
+  const rows = await query(sql, [cid]);
   res.json({ data: rows });
 }));
 

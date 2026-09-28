@@ -218,6 +218,23 @@ CREATE TABLE IF NOT EXISTS trx_sewing_daily_plan_detail (
   KEY ix_sewpland_job (job_id)
 ) ENGINE=InnoDB COMMENT='Sewing daily plan detail — bundle to line';
 
+-- Seed default checking lines for existing companies
+INSERT IGNORE INTO cfg_checking_line (company_id, line_code, line_name, unit_id, capacity_pcs, manpower, working_hours, sam_per_pcs, is_active)
+SELECT c.id, d.line_code, d.line_name,
+       (SELECT id FROM mst_unit WHERE company_id = c.id LIMIT 1),
+       d.capacity_pcs, d.manpower, 8.0, d.sam_per_pcs, 1
+  FROM mst_company c
+  CROSS JOIN (
+    SELECT 'CHK-01' AS line_code, 'Checking Line 01 - Table 1' AS line_name, 1500 AS capacity_pcs, 12 AS manpower, 0.3500 AS sam_per_pcs UNION ALL
+    SELECT 'CHK-02', 'Checking Line 02 - Table 2', 1500, 12, 0.3500 UNION ALL
+    SELECT 'CHK-03', 'Checking Line 03 - Table 3', 1200, 10, 0.3500 UNION ALL
+    SELECT 'CHK-04', 'Checking Line 04 - Table 4', 1000, 8, 0.4000 UNION ALL
+    SELECT 'CHK-05', 'Checking Line 05 - Short Run & QC', 600, 6, 0.4000
+  ) d
+ WHERE NOT EXISTS (
+   SELECT 1 FROM cfg_checking_line cl WHERE cl.company_id = c.id AND cl.line_code = d.line_code
+ );
+
 -- Number series for the new documents
 INSERT INTO cfg_number_series (company_id, branch_id, doc_type, fy_id, prefix, next_number, padding)
 SELECT c.id, NULL, d.doc_type, NULL, d.prefix, 1, 5
