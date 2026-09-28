@@ -562,7 +562,9 @@ if not READONLY:
             check('knitting DC (yarn outward)', bool(dcno), f'{dcno}')
             pr = call('GET', f'/knitting-dcs/{urllib.parse.quote(dcno)}')[1].get('data') or {}
             check('knitting DC print data', bool(pr), '')
+            fabric_id = det.get('fabric_id') or ((first('/lookups/fabrics') or [{}])[0].get('id'))
             inw = {'program_id': pg['id'], 'ref_dc_no': dcno, 'party_dc_no': TAG, 'receipt_date': '2026-09-28', 'warehouse_id': srow['warehouse_id'],
+                   'fabric_id': fabric_id,
                    'rolls': [{'roll_no': TAG + '-R1', 'weight_kg': 0.5}]}
             code, js = call('POST', '/knitting-inwards', {**inw, 'yarn_consumed_kg': 5})
             check('grey inward consuming more yarn than given rejected', code == 400, f'{code} {err(js)}')
