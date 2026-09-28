@@ -1,59 +1,42 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Plus, ChevronDown, ChevronRight, Trash2, Zap, Copy, XCircle, FileSpreadsheet,
-  Layers, Boxes, AlertTriangle, CheckCircle2, Settings2,
-  Search, Printer, Save, Check, X,
+  Plus, ChevronDown, ChevronRight, Trash2, Zap, Copy, XCircle, FileSpreadsheet, FolderOpen, FilePlus2,
+  Layers, Boxes, AlertTriangle, CheckCircle2, Settings2, Search, Printer, Save, Check, X,
 } from 'lucide-react';
-import { Card, Badge, Button, Input, Select, Tabs } from '../../components/ui';
+import * as XLSX from 'xlsx';
+import { Card, Badge, Button, Input, Select, Tabs, Modal, SearchInput } from '../../components/ui';
 import { api } from '../../lib/api';
 import { fmtDate, fmtNumber, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
 import { useLookup, toOptions } from '../../hooks/useLookup';
+import { useAuth } from '../../lib/auth';
+import {
+  type Proc, type BundleInfo, PROC_LABEL, n, pct, groupByJob, JobHeaderRow, SummaryCard, UtilBar, distinct,
+  EMPTY_FILTERS, applyFilters, summarize, SummaryTable, DocumentsModal, DocStatus, printDocument, printRowsByJob,
+  type RowFilters,
+} from './linePlanUi';
 
 /**
- * Checking Daily Plan — Full-featured page matching Image 3 reference.
+ * Daily Plan (Sewing / Checking) — developer doc §8–§10, §12; client images 2–3.
  *
- * Features:
- * - Pending for Checking summary (from Sewing Inward)
- * - Line Capacity today
- * - Multiple tab views: Line Plan, Job Wise Plan, Style Wise Plan, Colour Wise, Size Wise, Pending Stock
- * - Auto Plan, Copy Previous Day, Clear Plan, Import from Excel
- * - Checking Line Plan table with expandable line detail
- * - Line/Job/Style wise plan summaries at bottom
- *
- * Same pattern is used for Sewing Daily Plan as well.
+ * A daily plan sets the target of a date + shift per line. Its rows come only
+ * from CONFIRMED line allocations (a bundle is planned on the line it was
+ * allocated to); the server re-checks remaining qty and line capacity on save.
  */
 
-type Bundle = {
-  bundle_id: number; bundle_no: string; barcode?: string; bundle_qty: number;
-  job_id: number; job_no: string; io_no?: string; po_no?: string;
-  style_id?: number; style_no?: string; style_description?: string;
-  colour_id?: number; colour?: string; size_id?: number; size?: string;
-  available_qty: number; weight_kg?: number;
+type Pending = BundleInfo & {
+  allocation_detail_id: number; allocation_no: string; line_id: number; pending_qty: number;
+  allocated_qty: number; completed_qty: number; sam: number;
 };
-
-type CheckingLine = {
-  id: number; line_code: string; line_name: string;
-  capacity_pcs: number; manpower: number; sam_per_pcs?: number;
-  capacity_pcs_day: number;
+type PlanRow = Pending & { planned_qty: number; priority: number; remarks: string };
+type Line = {
+  id: number; line_code: string; line_name: string; capacity_pcs: number; manpower: number;
+  supervisor_name?: string | null; planned_other: number; sam_per_pcs: number;
 };
-
-type LinePlan = {
-  line: CheckingLine;
-  supervisor: string;
-  target_qty: number;
-  assigned_qty: number;
-  balance: number;
-  utilization: number;
-  operators: number;
-  status: string;
-  bundles: (Bundle & { planned_qty: number; remarks: string })[];
-};
-
-const n = (v: unknown) => Number(v ?? 0) || 0;
+type LineSetting = { supervisor_name: string; operators: number; target_qty: number; remarks: string };
 
 type TabKey = 'line' | 'job' | 'style' | 'colour' | 'size' | 'pending';
-const PLAN_TABS: { key: TabKey; label: string }[] = [
+const TABS: { key: TabKey; label: string }[] = [
   { key: 'line', label: 'Line Plan' },
   { key: 'job', label: 'Job Wise Plan' },
   { key: 'style', label: 'Style Wise Plan' },
@@ -62,222 +45,227 @@ const PLAN_TABS: { key: TabKey; label: string }[] = [
   { key: 'pending', label: 'Pending Stock' },
 ];
 
-// Reusable page for both Sewing and Checking daily plan
-function DailyPlanPage({ processType }: { processType: 'sewing' | 'checking' }) {
+function DailyPlanPage({ proc }: { proc: Proc }) {
   const toast = useToast();
+  const { can } = useAuth();
   const shifts = useLookup('shifts');
-  const isChecking = processType === 'checking';
-  const title = isChecking ? 'Daily Plan – Checking' : 'Daily Plan – Sewing';
-  const lineEndpoint = isChecking ? '/checking/lines' : '/sewing/lines';
-  const bundleEndpoint = isChecking ? '/checking/unallocated-bundles' : '/sewing/unallocated-bundles';
-  const planEndpoint = isChecking ? '/checking/daily-plan' : '/sewing/daily-plan';
+  const label = PROC_LABEL[proc];
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  // Header
+  const [docId, setDocId] = useState<number | null>(null);
+  const [docNo, setDocNo] = useState<string | null>(null);
+  const [docStatus, setDocStatus] = useState<string | null>(null);
   const [planDate, setPlanDate] = useState(today());
-  const [floorName, setFloorName] = useState(isChecking ? 'Checking Floor-1' : 'Sewing Floor-1');
-  const [shiftId, setShiftId] = useState<string>('');
+  const [floorName, setFloorName] = useState(`${label} Floor-1`);
+  const [shiftId, setShiftId] = useState('');
   const [planType, setPlanType] = useState<'LINE_WISE' | 'JOB_WISE'>('LINE_WISE');
+  const [remarks, setRemarks] = useState('');
+  const [override, setOverride] = useState(false);
+  const editable = !docStatus || ['DRAFT', 'SAVED'].includes(docStatus);
 
-  // Filters
-  const [filterJob, setFilterJob] = useState('');
-  const [filterPO, setFilterPO] = useState('');
-  const [filterStyle, setFilterStyle] = useState('');
-  const [filterColour, setFilterColour] = useState('');
-  const [filterSize, setFilterSize] = useState('');
-
-  // Data
-  const [lines, setLines] = useState<CheckingLine[]>([]);
-  const [pendingBundles, setPendingBundles] = useState<Bundle[]>([]);
-  const [linePlans, setLinePlans] = useState<Map<number, LinePlan>>(new Map());
+  const [lines, setLines] = useState<Line[]>([]);
+  const [pending, setPending] = useState<Pending[]>([]);
+  const [rows, setRows] = useState<PlanRow[]>([]);
+  const [settings, setSettings] = useState<Record<number, LineSetting>>({});
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabKey>('line');
-  const [expandedLines, setExpandedLines] = useState<Set<number>>(new Set());
 
-  const load = useCallback(async () => {
+  const [tab, setTab] = useState<TabKey>('line');
+  const [filters, setFilters] = useState<RowFilters>(EMPTY_FILTERS);
+  const [openLines, setOpenLines] = useState<Set<number>>(new Set());
+  const [sel, setSel] = useState<Set<number>>(new Set());          // selected plan rows (allocation_detail_id)
+  const [selPending, setSelPending] = useState<Set<number>>(new Set());
+  const [picker, setPicker] = useState<{ lineId: number; mode: 'job' | 'bundle' } | null>(null);
+  const [showDocs, setShowDocs] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+
+  const shiftNo = shiftId ? Number(shiftId) : null;
+  const shiftName = shifts.data?.find((s: any) => String(s.id) === shiftId)?.label ?? 'All shifts';
+
+  const load = useCallback(async (excludeId: number | null) => {
+    setLoading(true);
     try {
-      const [linesRes, bundlesRes] = await Promise.all([
-        api.get(lineEndpoint),
-        api.get(bundleEndpoint),
+      const [l, p] = await Promise.all([
+        api.get(`/${proc}/lines`, { params: { date: planDate, shift_id: shiftNo ?? undefined, exclude_id: excludeId ?? 0 } }),
+        api.get(`/${proc}/daily-plan/pending`, { params: { plan_date: planDate, exclude_id: excludeId ?? 0 } }),
       ]);
-      const loadedLines: CheckingLine[] = linesRes.data.data || [];
-      setLines(loadedLines);
-      setPendingBundles(bundlesRes.data.data || []);
-
-      // Initialize line plans
-      const plans = new Map<number, LinePlan>();
-      for (const l of loadedLines) {
-        plans.set(l.id, {
-          line: l,
-          supervisor: '',
-          target_qty: n(l.capacity_pcs_day),
-          assigned_qty: 0,
-          balance: n(l.capacity_pcs_day),
-          utilization: 0,
-          operators: n(l.manpower),
-          status: 'Planned',
-          bundles: [],
-        });
-      }
-      setLinePlans(plans);
-      if (loadedLines.length) setExpandedLines(new Set([loadedLines[0].id]));
+      const ls: Line[] = l.data.data || [];
+      setLines(ls);
+      setPending(p.data.data || []);
+      setSettings((prev) => {
+        const next = { ...prev };
+        for (const x of ls) if (!next[x.id]) next[x.id] = { supervisor_name: x.supervisor_name || '', operators: n(x.manpower), target_qty: n(x.capacity_pcs), remarks: '' };
+        return next;
+      });
+      setOpenLines((o) => (o.size ? o : new Set(ls.slice(0, 1).map((x) => x.id))));
     } catch (e: any) {
-      toast(e?.message || 'Failed to load', 'error');
+      toast(e?.message || 'Failed to load pending stock', 'error');
+    } finally {
+      setLoading(false);
     }
-  }, [lineEndpoint, bundleEndpoint, toast]);
+  }, [proc, planDate, shiftNo, toast]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(docId); }, [load, docId]);
 
-  // Summaries
-  const pendingSummary = useMemo(() => {
-    const totalBundles = pendingBundles.length;
-    const totalQty = pendingBundles.reduce((a, b) => a + n(b.bundle_qty), 0);
-    const allocQty = [...linePlans.values()].reduce((a, p) => a + p.assigned_qty, 0);
-    return { totalBundles, totalQty, allocated: allocQty, unallocated: totalQty - allocQty };
-  }, [pendingBundles, linePlans]);
+  const resetNew = () => {
+    setDocId(null); setDocNo(null); setDocStatus(null); setRows([]); setRemarks(''); setOverride(false); setSel(new Set());
+    setSettings({});
+  };
 
-  const lineCapSummary = useMemo(() => {
-    const totalCap = lines.reduce((a, l) => a + n(l.capacity_pcs_day), 0);
-    const allocQty = [...linePlans.values()].reduce((a, p) => a + p.assigned_qty, 0);
-    const plannedQty = [...linePlans.values()].reduce((a, p) => a + p.target_qty, 0);
+  const openDoc = async (id: number) => {
+    try {
+      const r = await api.get(`/${proc}/daily-plan/${id}`);
+      const d = r.data.data;
+      setDocId(d.id); setDocNo(d.plan_no); setDocStatus(d.status);
+      setPlanDate(String(d.plan_date).slice(0, 10)); setFloorName(d.floor_name || '');
+      setShiftId(d.shift_id ? String(d.shift_id) : ''); setPlanType(d.plan_type || 'LINE_WISE'); setRemarks(d.remarks || '');
+      const st: Record<number, LineSetting> = {};
+      for (const l of d.lines || []) st[Number(l.line_id)] = { supervisor_name: l.supervisor_name || '', operators: n(l.operators), target_qty: n(l.target_qty), remarks: l.remarks || '' };
+      setSettings(st);
+      setRows((d.details || []).map((x: any) => ({
+        ...x, allocation_detail_id: Number(x.allocation_detail_id), line_id: Number(x.line_id), bundle_id: Number(x.bundle_id),
+        planned_qty: n(x.planned_qty), priority: n(x.priority), remarks: x.remarks || '', pending_qty: n(x.planned_qty),
+      })));
+      setOpenLines(new Set((d.details || []).map((x: any) => Number(x.line_id))));
+      setSel(new Set());
+    } catch (e: any) {
+      toast(e?.message || 'Could not open plan', 'error');
+    }
+  };
+
+  // Pending rows keyed by allocation row, and what is still free after this plan.
+  const pendingMap = useMemo(() => new Map(pending.map((p) => [p.allocation_detail_id, p])), [pending]);
+  const maxOf = (r: PlanRow) => pendingMap.get(r.allocation_detail_id)?.pending_qty ?? r.planned_qty;
+  const planned = useMemo(() => new Map(rows.map((r) => [r.allocation_detail_id, r.planned_qty])), [rows]);
+  const freePending = useMemo(() => pending
+    .map((p) => ({ ...p, free_qty: p.pending_qty - (planned.get(p.allocation_detail_id) ?? 0) }))
+    .filter((p) => p.free_qty > 0), [pending, planned]);
+
+  const shownRows = useMemo(() => applyFilters(rows, filters), [rows, filters]);
+  const shownPending = useMemo(() => applyFilters(freePending, filters), [freePending, filters]);
+
+  const lineStat = (l: Line) => {
+    const assigned = rows.filter((r) => r.line_id === l.id).reduce((a, r) => a + r.planned_qty, 0);
+    const target = n(settings[l.id]?.target_qty) || n(l.capacity_pcs);
+    const used = assigned + n(l.planned_other);
+    return { assigned, target, used, balance: target - used, util: target ? Math.round((used / target) * 100) : 0, overCap: n(l.capacity_pcs) > 0 && used > n(l.capacity_pcs) };
+  };
+  const overLines = lines.filter((l) => lineStat(l).overCap);
+
+  const totals = useMemo(() => {
+    const plannedQty = rows.reduce((a, r) => a + r.planned_qty, 0);
+    const unplanned = freePending.reduce((a, r) => a + r.free_qty, 0);
+    const capacity = lines.reduce((a, l) => a + n(l.capacity_pcs), 0);
     return {
-      totalLines: lines.length,
-      totalCapacity: totalCap,
-      plannedQty,
-      utilization: totalCap > 0 ? Math.round((allocQty / totalCap) * 100) : 0,
+      bundles: new Set([...pending.map((p) => p.bundle_id), ...rows.map((r) => r.bundle_id)]).size,
+      total: plannedQty + unplanned, planned: plannedQty, unplanned, capacity,
+      util: capacity ? Math.round(((plannedQty + lines.reduce((a, l) => a + n(l.planned_other), 0)) / capacity) * 100) : 0,
     };
-  }, [lines, linePlans]);
+  }, [rows, freePending, pending, lines]);
 
-  // Add bundle to a line
-  const addBundleToLine = (lineId: number, bundle: Bundle) => {
-    setLinePlans(prev => {
-      const plans = new Map(prev);
-      const plan = plans.get(lineId);
-      if (!plan) return plans;
-      if (plan.bundles.some(b => b.bundle_id === bundle.bundle_id)) return plans;
-      const newBundles = [...plan.bundles, { ...bundle, planned_qty: bundle.bundle_qty, remarks: '' }];
-      const assignedQty = newBundles.reduce((a, b) => a + n(b.planned_qty), 0);
-      plans.set(lineId, {
-        ...plan,
-        bundles: newBundles,
-        assigned_qty: assignedQty,
-        balance: plan.target_qty - assignedQty,
-        utilization: plan.target_qty > 0 ? Math.round((assignedQty / plan.target_qty) * 100) : 0,
-      });
-      return plans;
-    });
-    // Remove from pending
-    setPendingBundles(prev => prev.filter(b => b.bundle_id !== bundle.bundle_id));
-  };
-
-  const removeBundleFromLine = (lineId: number, bundleId: number) => {
-    let removed: Bundle | undefined;
-    setLinePlans(prev => {
-      const plans = new Map(prev);
-      const plan = plans.get(lineId);
-      if (!plan) return plans;
-      removed = plan.bundles.find(b => b.bundle_id === bundleId);
-      const newBundles = plan.bundles.filter(b => b.bundle_id !== bundleId);
-      const assignedQty = newBundles.reduce((a, b) => a + n(b.planned_qty), 0);
-      plans.set(lineId, {
-        ...plan,
-        bundles: newBundles,
-        assigned_qty: assignedQty,
-        balance: plan.target_qty - assignedQty,
-        utilization: plan.target_qty > 0 ? Math.round((assignedQty / plan.target_qty) * 100) : 0,
-      });
-      return plans;
-    });
-    if (removed) {
-      setPendingBundles(prev => [...prev, removed!]);
-    }
-  };
-
-  const toggleLine = (id: number) => {
-    const s = new Set(expandedLines);
-    if (s.has(id)) s.delete(id); else s.add(id);
-    setExpandedLines(s);
-  };
-
-  // Auto plan - distribute bundles evenly across lines
-  const autoPlan = () => {
-    const available = [...pendingBundles];
-    if (!available.length) { toast('No pending bundles to plan', 'warning'); return; }
-
-    const plans = new Map(linePlans);
-    let lineIdx = 0;
-    const lineIds = lines.map(l => l.id);
-
-    for (const bundle of available) {
-      if (!lineIds.length) break;
-      const lineId = lineIds[lineIdx % lineIds.length];
-      const plan = plans.get(lineId)!;
-      const newBundles = [...plan.bundles, { ...bundle, planned_qty: bundle.bundle_qty, remarks: '' }];
-      const assignedQty = newBundles.reduce((a, b) => a + n(b.planned_qty), 0);
-      plans.set(lineId, {
-        ...plan,
-        bundles: newBundles,
-        assigned_qty: assignedQty,
-        balance: plan.target_qty - assignedQty,
-        utilization: plan.target_qty > 0 ? Math.round((assignedQty / plan.target_qty) * 100) : 0,
-      });
-      lineIdx++;
-    }
-
-    setLinePlans(plans);
-    setPendingBundles([]);
-    toast(`Auto-planned ${available.length} bundles across ${lineIds.length} lines`);
-  };
-
-  const clearPlan = () => {
-    const allBundles: Bundle[] = [];
-    for (const [, plan] of linePlans) {
-      allBundles.push(...plan.bundles);
-    }
-    setPendingBundles(prev => [...prev, ...allBundles]);
-    setLinePlans(prev => {
-      const plans = new Map(prev);
-      for (const [id, plan] of plans) {
-        plans.set(id, { ...plan, bundles: [], assigned_qty: 0, balance: plan.target_qty, utilization: 0 });
+  // ── Row actions ──
+  const addRows = (items: (Pending & { free_qty: number })[], qtyOf?: (p: Pending & { free_qty: number }) => number) => {
+    if (!editable || !items.length) return;
+    setRows((prev) => {
+      const next = [...prev];
+      for (const p of items) {
+        const q = Math.min(qtyOf ? qtyOf(p) : p.free_qty, p.free_qty);
+        if (q <= 0) continue;
+        const k = next.findIndex((r) => r.allocation_detail_id === p.allocation_detail_id);
+        if (k >= 0) next[k] = { ...next[k], planned_qty: next[k].planned_qty + q };
+        else next.push({ ...p, planned_qty: q, priority: 0, remarks: '' });
       }
-      return plans;
+      return next;
     });
-    toast('Plan cleared');
+    setOpenLines((o) => { const x = new Set(o); items.forEach((i) => x.add(i.line_id)); return x; });
+  };
+  const removeRows = (ids: number[]) => {
+    if (!editable) return;
+    const s = new Set(ids);
+    setRows((prev) => prev.filter((r) => !s.has(r.allocation_detail_id)));
+    setSel((x) => { const y = new Set(x); ids.forEach((i) => y.delete(i)); return y; });
+  };
+  const patchRow = (id: number, patch: Partial<PlanRow>) => setRows((prev) => prev.map((r) => (r.allocation_detail_id === id ? { ...r, ...patch } : r)));
+  const patchSetting = (lineId: number, patch: Partial<LineSetting>) => setSettings((s) => ({ ...s, [lineId]: { ...s[lineId], ...patch } }));
+
+  const autoPlan = async () => {
+    try {
+      const targets: Record<string, number> = {};
+      for (const l of lines) targets[String(l.id)] = Math.max(lineStat(l).target - lineStat(l).assigned, 0) + n(l.planned_other);
+      const r = await api.post(`/${proc}/daily-plan/auto-plan`, { plan_date: planDate, shift_id: shiftNo, exclude_id: docId ?? 0, targets });
+      const prop: { allocation_detail_id: number; planned_qty: number }[] = r.data.data || [];
+      const byId = new Map(freePending.map((p) => [p.allocation_detail_id, p]));
+      const items = prop.map((x) => byId.get(x.allocation_detail_id)).filter(Boolean) as (Pending & { free_qty: number })[];
+      const q = new Map(prop.map((x) => [x.allocation_detail_id, x.planned_qty]));
+      addRows(items, (p) => q.get(p.allocation_detail_id) ?? 0);
+      toast(items.length ? `Auto plan added ${items.length} bundle(s) within line targets` : 'Nothing left to plan within the line targets', items.length ? 'success' : 'warning');
+    } catch (e: any) {
+      toast(e?.message || 'Auto plan failed', 'error');
+    }
   };
 
-  // Save
-  const savePlan = async (confirm = false) => {
+  const copyPrevious = async () => {
+    try {
+      const r = await api.post(`/${proc}/daily-plan/copy-previous`, { plan_date: planDate, shift_id: shiftNo, exclude_id: docId ?? 0 });
+      const d = r.data.data;
+      const byId = new Map(freePending.map((p) => [p.allocation_detail_id, p]));
+      const q = new Map<number, number>((d.details || []).map((x: any) => [Number(x.allocation_detail_id), n(x.planned_qty)]));
+      const items = [...q.keys()].map((id) => byId.get(id)).filter(Boolean) as (Pending & { free_qty: number })[];
+      addRows(items, (p) => q.get(p.allocation_detail_id) ?? 0);
+      for (const l of d.lines || []) patchSetting(Number(l.line_id), { supervisor_name: l.supervisor_name || '', operators: n(l.operators), target_qty: n(l.target_qty) });
+      toast(`Copied ${items.length} bundle(s) from ${d.source_plan_no} (${fmtDate(d.source_plan_date)})${d.skipped ? ` — ${d.skipped} finished bundle(s) skipped` : ''}`);
+    } catch (e: any) {
+      toast(e?.message || 'Nothing to copy', 'warning');
+    }
+  };
+
+  const clearPlan = () => { if (editable) { setRows([]); setSel(new Set()); toast('Plan cleared'); } };
+
+  const importExcel = async (file: File) => {
+    try {
+      const wb = XLSX.read(await file.arrayBuffer());
+      const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+      const norm = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k.toLowerCase().replace(/[^a-z]/g, ''), v]));
+      const items: (Pending & { free_qty: number })[] = [];
+      const q = new Map<number, number>();
+      const missing: string[] = [];
+      for (const raw of data) {
+        const r = norm(raw);
+        const code = String(r.bundleid ?? r.bundleno ?? r.bundle ?? r.barcode ?? '').trim();
+        if (!code) continue;
+        const lineCode = String(r.linecode ?? r.line ?? '').trim();
+        const hit = freePending.find((p) => (p.bundle_no === code || p.barcode === code)
+          && (!lineCode || lines.find((l) => l.id === p.line_id)?.line_code === lineCode));
+        if (!hit) { missing.push(code); continue; }
+        items.push(hit);
+        q.set(hit.allocation_detail_id, n(r.plannedqty ?? r.qty) || hit.free_qty);
+      }
+      addRows(items, (p) => q.get(p.allocation_detail_id) ?? p.free_qty);
+      toast(`Imported ${items.length} row(s)${missing.length ? ` — not pending: ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? '…' : ''}` : ''}`, missing.length ? 'warning' : 'success');
+    } catch (e: any) {
+      toast(e?.message || 'Could not read the Excel file', 'error');
+    } finally {
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const save = async (confirm: boolean) => {
+    if (!rows.length) { toast('Add at least one bundle to the plan', 'warning'); return; }
+    if (overLines.length && !override) { toast(`Over capacity on ${overLines.map((l) => l.line_code).join(', ')} — reduce or tick "Override capacity"`, 'warning'); return; }
+    const usedLines = new Set(rows.map((r) => r.line_id));
+    const body = {
+      plan_date: planDate, floor_name: floorName || null, shift_id: shiftNo, plan_type: planType,
+      unallocated_qty: totals.unplanned, remarks: remarks || null, capacity_override: override, confirm,
+      lines: [...usedLines].map((id) => ({ line_id: id, supervisor_name: settings[id]?.supervisor_name || null, operators: n(settings[id]?.operators), target_qty: n(settings[id]?.target_qty), remarks: settings[id]?.remarks || null })),
+      details: rows.map((r) => ({ allocation_detail_id: r.allocation_detail_id, line_id: r.line_id, planned_qty: r.planned_qty, priority: r.priority, remarks: r.remarks || null })),
+    };
     setSaving(true);
     try {
-      const allDetails: any[] = [];
-      for (const [lineId, plan] of linePlans) {
-        for (const b of plan.bundles) {
-          allDetails.push({
-            line_id: lineId, bundle_id: b.bundle_id, job_id: b.job_id,
-            style_id: b.style_id, colour_id: b.colour_id, size_id: b.size_id,
-            po_no: b.po_no, style_description: b.style_description,
-            bundle_qty: b.bundle_qty, planned_qty: b.planned_qty,
-            remarks: b.remarks || null,
-          });
-        }
-      }
-
-      if (!allDetails.length) { toast('Add at least one bundle to the plan', 'warning'); setSaving(false); return; }
-
-      const body = {
-        plan_date: planDate, floor_name: floorName,
-        shift_id: shiftId ? Number(shiftId) : null, plan_type: planType,
-        total_bundles: allDetails.length,
-        total_qty: allDetails.reduce((a, d) => a + n(d.bundle_qty), 0),
-        allocated_qty: allDetails.reduce((a, d) => a + n(d.planned_qty), 0),
-        unallocated_qty: pendingBundles.reduce((a, b) => a + n(b.bundle_qty), 0),
-        status: confirm ? undefined : 'SAVED',
-        confirm,
-        details: allDetails,
-      };
-
-      const res = await api.post(planEndpoint, body);
-      toast(`Plan ${res.data.data.plan_no} ${confirm ? 'confirmed' : 'saved'} — ${allDetails.length} bundles planned`);
-      load();
+      const r = docId ? await api.put(`/${proc}/daily-plan/${docId}`, body) : await api.post(`/${proc}/daily-plan`, body);
+      const d = r.data.data;
+      toast(`Plan ${d.plan_no} ${confirm ? 'confirmed' : 'saved'} — ${d.total_bundles} bundles, ${fmtNumber(d.allocated_qty)} PCS`);
+      await openDoc(d.id);
     } catch (e: any) {
       toast(e?.message || 'Save failed', 'error');
     } finally {
@@ -285,278 +273,259 @@ function DailyPlanPage({ processType }: { processType: 'sewing' | 'checking' }) 
     }
   };
 
-  // Job-wise plan summary
-  const jobSummary = useMemo(() => {
-    const map = new Map<string, { job_no: string; style_no: string; planned_qty: number; pct: number }>();
-    const total = [...linePlans.values()].reduce((a, p) => a + p.assigned_qty, 0);
-    for (const [, plan] of linePlans) {
-      for (const b of plan.bundles) {
-        const key = b.job_no || '—';
-        if (!map.has(key)) map.set(key, { job_no: key, style_no: b.style_no || '—', planned_qty: 0, pct: 0 });
-        map.get(key)!.planned_qty += n(b.planned_qty);
-      }
+  const cancelDoc = async () => {
+    if (!docId) return;
+    try {
+      await api.post(`/${proc}/daily-plan/${docId}/cancel`, { reason: cancelReason });
+      toast(`Plan ${docNo} cancelled`);
+      setCancelOpen(false); setCancelReason('');
+      resetNew();
+      load(null);
+    } catch (e: any) {
+      toast(e?.message || 'Cancel failed', 'error');
     }
-    for (const [, v] of map) v.pct = total > 0 ? Math.round((v.planned_qty / total) * 100) : 0;
-    return [...map.values()];
-  }, [linePlans]);
+  };
 
-  // Style-wise plan summary
-  const styleSummary = useMemo(() => {
-    const map = new Map<string, { style_no: string; description: string; planned_qty: number; pct: number }>();
-    const total = [...linePlans.values()].reduce((a, p) => a + p.assigned_qty, 0);
-    for (const [, plan] of linePlans) {
-      for (const b of plan.bundles) {
-        const key = b.style_no || '—';
-        if (!map.has(key)) map.set(key, { style_no: key, description: b.style_description || '—', planned_qty: 0, pct: 0 });
-        map.get(key)!.planned_qty += n(b.planned_qty);
-      }
-    }
-    for (const [, v] of map) v.pct = total > 0 ? Math.round((v.planned_qty / total) * 100) : 0;
-    return [...map.values()];
-  }, [linePlans]);
+  const print = () => {
+    if (!rows.length) { toast('Nothing to print', 'warning'); return; }
+    printDocument(`${label} Daily Plan ${docNo ?? '(unsaved)'}`, [
+      ['Plan date', fmtDate(planDate)], ['Floor', floorName], ['Shift', shiftName], ['Status', docStatus ?? 'Unsaved'],
+      ['Bundles', rows.length], ['Planned PCS', totals.planned],
+    ], lines.filter((l) => rows.some((r) => r.line_id === l.id)).map((l) => {
+      const s = lineStat(l);
+      const pr = printRowsByJob(rows.filter((r) => r.line_id === l.id), (r) => [r.bundle_no, r.colour, r.size, r.bundle_qty, r.planned_qty, r.priority ? 'Urgent' : 'Normal', r.remarks]);
+      return {
+        heading: `${l.line_code} — ${l.line_name} · Supervisor ${settings[l.id]?.supervisor_name || '—'} · Target ${s.target} · Assigned ${s.assigned} PCS`,
+        columns: ['Bundle', 'Colour', 'Size', 'Bundle Qty', 'Planned Qty', 'Priority', 'Remarks'], ...pr,
+      };
+    }));
+  };
+
+  const qtyOf = (r: PlanRow) => r.planned_qty;
+  const supervisors = [...new Set(lines.map((l) => l.supervisor_name).filter(Boolean))] as string[];
 
   return (
     <div className="space-y-4">
-      {/* Page Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">{title}</h1>
-          <p className="text-sm text-slate-500">
-            Plan daily {processType} targets by line with bundle-level detail
-          </p>
+          <h1 className="text-2xl font-bold text-slate-800">Daily Plan – {label}</h1>
+          <p className="text-sm text-slate-500">Plan the day's {label.toLowerCase()} target per line from confirmed line allocations</p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-slate-500">
-          <span>Production</span> <span>›</span> <span className="capitalize">{processType}</span> <span>›</span>
-          <span className="font-medium text-slate-700">Daily Plan</span>
+        <div className="flex items-center gap-2">
+          <DocStatus no={docNo} status={docStatus} />
+          <Button size="sm" variant="secondary" onClick={() => setShowDocs(true)}><FolderOpen size={13} className="mr-1" /> Open</Button>
+          <Button size="sm" variant="secondary" onClick={() => { resetNew(); load(null); }}><FilePlus2 size={13} className="mr-1" /> New</Button>
         </div>
       </div>
 
-      {/* Filters */}
       <Card className="!p-3">
         <div className="flex flex-wrap items-end gap-3">
-          <Input label="Plan Date *" type="date" className="w-40" value={planDate}
-            onChange={(e) => setPlanDate(e.target.value)} />
-          <Input label={isChecking ? 'Checking Floor' : 'Sewing Floor'} className="w-44" value={floorName}
-            onChange={(e) => setFloorName(e.target.value)} />
-          <Select label="Shift" className="w-36" value={shiftId}
-            onChange={(e) => setShiftId(e.target.value)}
-            placeholder="Day Shift" options={toOptions(shifts.data)} />
-          <div className="flex items-center gap-3 px-3 py-1 border border-slate-200 rounded-lg bg-white">
+          <Input label="Plan Date *" type="date" className="w-40" value={planDate} disabled={!editable} onChange={(e) => setPlanDate(e.target.value)} />
+          <Input label={`${label} Floor`} className="w-44" value={floorName} disabled={!editable} onChange={(e) => setFloorName(e.target.value)} />
+          <Select label="Shift" className="w-44" value={shiftId} disabled={!editable} onChange={(e) => setShiftId(e.target.value)} placeholder="Select shift" options={toOptions(shifts.data)} />
+          <div className="flex h-10 items-center gap-3 rounded-lg border border-slate-200 bg-white px-3">
             <span className="text-xs font-medium text-slate-600">Plan Type</span>
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input type="radio" checked={planType === 'LINE_WISE'} onChange={() => setPlanType('LINE_WISE')}
-                className="accent-brand-600" />
-              <span className="text-xs">Line Wise</span>
-            </label>
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input type="radio" checked={planType === 'JOB_WISE'} onChange={() => setPlanType('JOB_WISE')}
-                className="accent-brand-600" />
-              <span className="text-xs">Job Wise</span>
-            </label>
+            {(['LINE_WISE', 'JOB_WISE'] as const).map((t) => (
+              <label key={t} className="flex cursor-pointer items-center gap-1.5">
+                <input type="radio" className="accent-brand-600" checked={planType === t}
+                  onChange={() => { setPlanType(t); setTab(t === 'JOB_WISE' ? 'job' : 'line'); }} />
+                <span className="text-xs">{t === 'LINE_WISE' ? 'Line Wise' : 'Job Wise'}</span>
+              </label>
+            ))}
           </div>
-          <Button variant="secondary" className="!h-10 ml-auto" onClick={load}>
-            <Search size={14} className="mr-1" /> Load Pending
-          </Button>
+          <Button variant="secondary" className="!h-10 ml-auto" onClick={() => load(docId)} loading={loading}><Search size={14} className="mr-1" /> Load Pending</Button>
         </div>
-        {/* Filter row */}
-        <div className="flex flex-wrap items-end gap-2 mt-2 pt-2 border-t border-slate-100">
-          <Select label="Job No" className="w-28" value={filterJob}
-            onChange={(e) => setFilterJob(e.target.value)} placeholder="All"
-            options={[...new Set(pendingBundles.map(b => b.job_no))].map(j => ({ value: j, label: j }))} />
-          <Select label="PO No" className="w-28" value={filterPO}
-            onChange={(e) => setFilterPO(e.target.value)} placeholder="All"
-            options={[...new Set(pendingBundles.map(b => b.po_no).filter(Boolean))].map(p => ({ value: p!, label: p! }))} />
-          <Select label="Style No" className="w-28" value={filterStyle}
-            onChange={(e) => setFilterStyle(e.target.value)} placeholder="All"
-            options={[...new Set(pendingBundles.map(b => b.style_no).filter(Boolean))].map(s => ({ value: s!, label: s! }))} />
-          <Select label="Colour" className="w-28" value={filterColour}
-            onChange={(e) => setFilterColour(e.target.value)} placeholder="All"
-            options={[...new Set(pendingBundles.map(b => b.colour).filter(Boolean))].map(c => ({ value: c!, label: c! }))} />
-          <Select label="Size" className="w-24" value={filterSize}
-            onChange={(e) => setFilterSize(e.target.value)} placeholder="All"
-            options={[...new Set(pendingBundles.map(b => b.size).filter(Boolean))].map(s => ({ value: s!, label: s! }))} />
+        <div className="mt-2 flex flex-wrap items-end gap-2 border-t border-slate-100 pt-2">
+          {([
+            ['job', 'Job No', distinct([...pending, ...rows], (b) => b.io_no)],
+            ['po', 'PO No', distinct([...pending, ...rows], (b) => b.po_no)],
+            ['style', 'Style No', distinct([...pending, ...rows], (b) => b.style_no)],
+            ['buyer', 'Buyer', distinct([...pending, ...rows], (b) => b.buyer)],
+            ['colour', 'Colour', distinct([...pending, ...rows], (b) => b.colour)],
+            ['size', 'Size', distinct([...pending, ...rows], (b) => b.size)],
+          ] as const).map(([k, lbl, opts]) => (
+            <Select key={k} label={lbl} className="w-36" value={filters[k]} placeholder="All" options={opts as any}
+              onChange={(e) => setFilters((f) => ({ ...f, [k]: e.target.value }))} />
+          ))}
+          {Object.values(filters).some(Boolean) && <Button size="sm" variant="ghost" onClick={() => setFilters(EMPTY_FILTERS)}>Clear filters</Button>}
         </div>
       </Card>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-8">
-        {/* Pending for Checking */}
-        <SumCard label="Total Bundles" value={pendingSummary.totalBundles} icon={<Boxes size={18} />}
-          tone="bg-blue-50 border-blue-200 text-blue-800" />
-        <SumCard label="Total Qty (PCS)" value={fmtNumber(pendingSummary.totalQty)} icon={<Layers size={18} />}
-          tone="bg-violet-50 border-violet-200 text-violet-800" />
-        <SumCard label="Allocated" value={fmtNumber(pendingSummary.allocated)} icon={<CheckCircle2 size={18} />}
-          tone="bg-emerald-50 border-emerald-200 text-emerald-800" />
-        <SumCard label="Unallocated" value={fmtNumber(pendingSummary.unallocated)} icon={<AlertTriangle size={18} />}
-          tone="bg-red-50 border-red-200 text-red-800" />
-        {/* Line Capacity */}
-        <SumCard label="Total Lines" value={lineCapSummary.totalLines} icon={<Layers size={18} />}
-          tone="bg-slate-50 border-slate-200 text-slate-800" />
-        <SumCard label="Total Capacity (PCS)" value={fmtNumber(lineCapSummary.totalCapacity)} icon={<CheckCircle2 size={18} />}
-          tone="bg-cyan-50 border-cyan-200 text-cyan-800" />
-        <SumCard label="Planned Qty (PCS)" value={fmtNumber(lineCapSummary.plannedQty)} icon={<CheckCircle2 size={18} />}
-          tone="bg-brand-50 border-brand-200 text-brand-800" />
-        <SumCard label="Utilization" value={`${lineCapSummary.utilization}%`} icon={<Settings2 size={18} />}
-          tone={`${lineCapSummary.utilization >= 80 ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`} />
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+        <Card title={`Pending for ${label} (from confirmed line allocation)`}>
+          <div className="grid grid-cols-2 gap-2 p-3 md:grid-cols-4">
+            <SummaryCard icon={<Boxes size={18} />} label="Total Bundles" value={totals.bundles} tone="bg-violet-50 border-violet-200 text-violet-800" />
+            <SummaryCard icon={<Layers size={18} />} label="Total Qty (PCS)" value={fmtNumber(totals.total)} tone="bg-blue-50 border-blue-200 text-blue-800" />
+            <SummaryCard icon={<CheckCircle2 size={18} />} label="Planned" value={fmtNumber(totals.planned)} tone="bg-emerald-50 border-emerald-200 text-emerald-800" />
+            <SummaryCard icon={<AlertTriangle size={18} />} label="Unplanned" value={fmtNumber(totals.unplanned)} tone="bg-red-50 border-red-200 text-red-800" />
+          </div>
+        </Card>
+        <Card title={`Line Capacity (${fmtDate(planDate)} · ${shiftName})`}>
+          <div className="grid grid-cols-2 gap-2 p-3 md:grid-cols-4">
+            <SummaryCard icon={<Layers size={18} />} label="Total Lines" value={lines.length} tone="bg-slate-50 border-slate-200 text-slate-800" />
+            <SummaryCard icon={<CheckCircle2 size={18} />} label="Total Capacity (PCS)" value={fmtNumber(totals.capacity)} tone="bg-cyan-50 border-cyan-200 text-cyan-800" />
+            <SummaryCard icon={<AlertTriangle size={18} />} label="Planned Qty (PCS)" value={fmtNumber(totals.planned + lines.reduce((a, l) => a + n(l.planned_other), 0))} tone="bg-rose-50 border-rose-200 text-rose-800" />
+            <SummaryCard icon={<Settings2 size={18} />} label="Utilization" value={`${totals.util}%`} tone="bg-blue-50 border-blue-200 text-blue-800" />
+          </div>
+        </Card>
       </div>
 
-      {/* Tabs + Action Buttons */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Tabs tabs={PLAN_TABS} active={activeTab} onChange={(k) => setActiveTab(k as TabKey)} />
-        <div className="flex gap-2">
-          <Button size="sm" onClick={autoPlan}><Zap size={13} className="mr-1" /> Auto Plan</Button>
-          <Button size="sm" variant="secondary"><Copy size={13} className="mr-1" /> Copy Previous Day</Button>
-          <Button size="sm" variant="danger" onClick={clearPlan}><XCircle size={13} className="mr-1" /> Clear Plan</Button>
-          <Button size="sm" variant="secondary"><FileSpreadsheet size={13} className="mr-1" /> Import from Excel</Button>
-        </div>
+        <Tabs tabs={TABS.map((t) => (t.key === 'pending' ? { ...t, count: shownPending.length } : t))} active={tab} onChange={(k) => setTab(k as TabKey)} />
+        {editable && (
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" onClick={autoPlan} disabled={!freePending.length}><Zap size={13} className="mr-1" /> Auto Plan</Button>
+            <Button size="sm" variant="secondary" onClick={copyPrevious}><Copy size={13} className="mr-1" /> Copy Previous Day</Button>
+            <Button size="sm" variant="danger" onClick={clearPlan} disabled={!rows.length}><XCircle size={13} className="mr-1" /> Clear Plan</Button>
+            <Button size="sm" variant="secondary" onClick={() => fileRef.current?.click()}><FileSpreadsheet size={13} className="mr-1" /> Import from Excel</Button>
+            <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => e.target.files?.[0] && importExcel(e.target.files[0])} />
+          </div>
+        )}
       </div>
 
-      {/* Tab Content */}
-      {activeTab === 'line' && (
+      {tab === 'line' && (
         <div className="space-y-4">
-          {/* Line Plan Header */}
-          <Card title={`${isChecking ? 'Checking' : 'Sewing'} Line Plan – ${fmtDate(planDate)} (${shiftId ? 'Day Shift' : 'Day Shift'})`}>
-            <table className="w-full text-xs">
-              <thead className="bg-slate-50 text-slate-500">
-                <tr>
-                  <th className="w-8 px-2 py-2"><input type="checkbox" /></th>
-                  <th className="px-2 py-2 text-left">#</th>
-                  <th className="px-2 py-2 text-left">Line Code</th>
-                  <th className="px-2 py-2 text-left">Line Name</th>
-                  <th className="px-2 py-2 text-left">Supervisor</th>
-                  <th className="px-2 py-2 text-right">Target Qty (PCS)</th>
-                  <th className="px-2 py-2 text-right">Assigned Qty (PCS)</th>
-                  <th className="px-2 py-2 text-right">Balance (PCS)</th>
-                  <th className="px-2 py-2 text-left">Utilization</th>
-                  <th className="px-2 py-2 text-right">No. of Operators</th>
-                  <th className="px-2 py-2 text-left">Status</th>
-                  <th className="px-2 py-2 text-center">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lines.map((l, i) => {
-                  const plan = linePlans.get(l.id);
-                  if (!plan) return null;
-                  return (
-                    <tr key={l.id} className="border-t border-slate-100 hover:bg-slate-50">
-                      <td className="px-2 py-2 text-center"><input type="checkbox" /></td>
-                      <td className="px-2 py-2 text-slate-400">{i + 1}</td>
-                      <td className="px-2 py-2 font-mono font-semibold text-brand-700">{l.line_code}</td>
-                      <td className="px-2 py-2 font-medium">{l.line_name}</td>
-                      <td className="px-2 py-2">
-                        <select className="input h-6 w-24 text-[11px]">
-                          <option>—</option>
-                        </select>
-                      </td>
-                      <td className="px-2 py-2 text-right font-medium">{fmtNumber(plan.target_qty)}</td>
-                      <td className="px-2 py-2 text-right font-medium text-emerald-700">{fmtNumber(plan.assigned_qty)}</td>
-                      <td className={`px-2 py-2 text-right font-medium ${plan.balance < 0 ? 'text-red-600' : ''}`}>
-                        {fmtNumber(plan.balance)}
-                      </td>
-                      <td className="px-2 py-2">
-                        <div className="flex items-center gap-2">
-                          <div className="h-2.5 w-16 overflow-hidden rounded-full bg-slate-100">
-                            <div className={`h-full rounded-full ${plan.utilization >= 90 ? 'bg-emerald-500' : plan.utilization >= 70 ? 'bg-blue-500' : plan.utilization >= 50 ? 'bg-amber-500' : 'bg-red-400'}`}
-                              style={{ width: `${Math.min(100, plan.utilization)}%` }} />
-                          </div>
-                          <span className="text-[11px]">{plan.utilization}%</span>
-                        </div>
-                      </td>
-                      <td className="px-2 py-2 text-right">{plan.operators}</td>
-                      <td className="px-2 py-2"><Badge tone="blue">Planned</Badge></td>
-                      <td className="px-2 py-2 text-center">
-                        <button className="text-brand-600 hover:text-brand-800" onClick={() => toggleLine(l.id)}>
-                          {expandedLines.has(l.id) ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <Card title={`${label} Line Plan – ${fmtDate(planDate)} (${shiftName})`}>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 text-slate-500">
+                  <tr>
+                    <th className="px-2 py-2 text-left">Line Code</th>
+                    <th className="px-2 py-2 text-left">Line Name</th>
+                    <th className="px-2 py-2 text-left">Supervisor</th>
+                    <th className="px-2 py-2 text-right">Target Qty</th>
+                    <th className="px-2 py-2 text-right">Assigned Qty</th>
+                    <th className="px-2 py-2 text-right">Balance</th>
+                    <th className="px-2 py-2 text-left">Utilization</th>
+                    <th className="px-2 py-2 text-right">Operators</th>
+                    <th className="px-2 py-2 text-left">Status</th>
+                    <th className="px-2 py-2 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lines.map((l) => {
+                    const s = lineStat(l);
+                    const st = settings[l.id];
+                    return (
+                      <tr key={l.id} className="border-t border-slate-100 hover:bg-slate-50">
+                        <td className="px-2 py-1.5 font-mono font-semibold text-brand-700">{l.line_code}</td>
+                        <td className="px-2 py-1.5 font-medium">{l.line_name}</td>
+                        <td className="px-2 py-1.5">
+                          <input list={`sup-${proc}`} className="input h-7 w-32 text-[11px]" disabled={!editable} value={st?.supervisor_name ?? ''}
+                            onChange={(e) => patchSetting(l.id, { supervisor_name: e.target.value })} />
+                        </td>
+                        <td className="px-2 py-1.5 text-right">
+                          <input type="number" min={0} className="input h-7 w-24 text-right text-[11px]" disabled={!editable} value={st?.target_qty ?? 0}
+                            onChange={(e) => patchSetting(l.id, { target_qty: Math.max(0, Number(e.target.value) || 0) })} />
+                        </td>
+                        <td className="px-2 py-1.5 text-right font-medium text-emerald-700" title={l.planned_other ? `${l.planned_other} PCS on other plans of this date/shift` : undefined}>
+                          {fmtNumber(s.used)}
+                        </td>
+                        <td className={`px-2 py-1.5 text-right font-medium ${s.balance < 0 ? 'text-red-600' : ''}`}>{fmtNumber(s.balance)}</td>
+                        <td className="px-2 py-1.5"><UtilBar value={s.util} /></td>
+                        <td className="px-2 py-1.5 text-right">
+                          <input type="number" min={0} className="input h-7 w-16 text-right text-[11px]" disabled={!editable} value={st?.operators ?? 0}
+                            onChange={(e) => patchSetting(l.id, { operators: Math.max(0, Number(e.target.value) || 0) })} />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          {s.assigned ? <Badge tone={s.overCap ? 'red' : 'green'}>{s.overCap ? 'Over capacity' : 'Planned'}</Badge> : <Badge tone="slate">Not planned</Badge>}
+                        </td>
+                        <td className="px-2 py-1.5 text-center">
+                          <button className="text-brand-600 hover:text-brand-800" onClick={() => setOpenLines((o) => { const x = new Set(o); x.has(l.id) ? x.delete(l.id) : x.add(l.id); return x; })}>
+                            {openLines.has(l.id) ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {!lines.length && <tr><td colSpan={10} className="px-4 py-6 text-center text-slate-400">No active {label.toLowerCase()} lines</td></tr>}
+                </tbody>
+              </table>
+              <datalist id={`sup-${proc}`}>{supervisors.map((s) => <option key={s} value={s} />)}</datalist>
+            </div>
           </Card>
 
-          {/* Expanded Line Details */}
-          {lines.map((l, li) => {
-            if (!expandedLines.has(l.id)) return null;
-            const plan = linePlans.get(l.id);
-            if (!plan) return null;
-
+          {lines.filter((l) => openLines.has(l.id)).map((l) => {
+            const s = lineStat(l);
+            const lineRows = shownRows.filter((r) => r.line_id === l.id);
+            const ids = lineRows.map((r) => r.allocation_detail_id);
+            const selHere = ids.filter((i) => sel.has(i));
             return (
               <Card key={l.id}>
-                <div className="flex items-center justify-between px-4 py-2 bg-brand-50 border-b border-brand-100 rounded-t-xl">
-                  <span className="font-bold text-sm text-brand-900">
-                    Line {String(li + 1).padStart(2, '0')} – {l.line_code}
-                    <span className="ml-2 font-normal text-slate-600">
-                      (Target: {fmtNumber(plan.target_qty)} PCS | Assigned: {fmtNumber(plan.assigned_qty)} PCS)
-                    </span>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-brand-100 bg-brand-50 px-4 py-2">
+                  <span className="text-sm font-bold text-brand-900">
+                    {l.line_code} – {l.line_name}
+                    <span className="ml-2 font-normal text-slate-600">(Target: {fmtNumber(s.target)} PCS | Assigned: {fmtNumber(s.assigned)} PCS)</span>
                   </span>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="secondary" onClick={() => {
-                      if (pendingBundles.length > 0) addBundleToLine(l.id, pendingBundles[0]);
-                    }}>
-                      <Plus size={12} className="mr-1" /> Add Job
-                    </Button>
-                    <Button size="sm" variant="secondary" onClick={() => {
-                      if (pendingBundles.length > 0) addBundleToLine(l.id, pendingBundles[0]);
-                    }}>
-                      <Plus size={12} className="mr-1" /> Add Bundle
-                    </Button>
-                    <Button size="sm" variant="danger" onClick={() => {
-                      for (const b of plan.bundles) removeBundleFromLine(l.id, b.bundle_id);
-                    }}>Remove Selected</Button>
-                  </div>
+                  {editable && (
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={() => setPicker({ lineId: l.id, mode: 'job' })}><Plus size={12} className="mr-1" /> Add Job</Button>
+                      <Button size="sm" variant="secondary" onClick={() => setPicker({ lineId: l.id, mode: 'bundle' })}><Plus size={12} className="mr-1" /> Add Bundle</Button>
+                      <Button size="sm" variant="danger" disabled={!selHere.length} onClick={() => removeRows(selHere)}>Remove Selected</Button>
+                    </div>
+                  )}
                 </div>
                 <div className="overflow-x-auto">
-                  {plan.bundles.length > 0 ? (
+                  {lineRows.length ? (
                     <table className="w-full text-xs">
                       <thead className="bg-white text-slate-500">
                         <tr>
-                          <th className="w-8 px-2 py-1.5"><input type="checkbox" /></th>
-                          <th className="px-2 py-1.5 text-left">#</th>
-                          <th className="px-2 py-1.5 text-left">Job No</th>
-                          <th className="px-2 py-1.5 text-left">PO No</th>
-                          <th className="px-2 py-1.5 text-left">Style No</th>
-                          <th className="px-2 py-1.5 text-left">Style Description</th>
+                          <th className="w-8 px-2 py-1.5">
+                            <input type="checkbox" disabled={!editable} checked={ids.length > 0 && selHere.length === ids.length}
+                              onChange={() => setSel((x) => { const y = new Set(x); const all = selHere.length === ids.length; ids.forEach((i) => (all ? y.delete(i) : y.add(i))); return y; })} />
+                          </th>
+                          <th className="px-2 py-1.5 text-left">Bundle ID</th>
                           <th className="px-2 py-1.5 text-left">Colour</th>
                           <th className="px-2 py-1.5 text-left">Size</th>
-                          <th className="px-2 py-1.5 text-left">Bundle ID</th>
-                          <th className="px-2 py-1.5 text-right">Bundle Qty (PCS)</th>
-                          <th className="px-2 py-1.5 text-right">Planned Qty (PCS)</th>
+                          <th className="px-2 py-1.5 text-right">Bundle Qty</th>
+                          <th className="px-2 py-1.5 text-right">Left to Plan</th>
+                          <th className="px-2 py-1.5 text-right">Planned Qty</th>
+                          <th className="px-2 py-1.5 text-left">Priority</th>
                           <th className="px-2 py-1.5 text-left">Remarks</th>
-                          <th className="px-2 py-1.5 text-center">Action</th>
+                          <th className="px-2 py-1.5" />
                         </tr>
                       </thead>
                       <tbody>
-                        {plan.bundles.map((b, bi) => (
-                          <tr key={b.bundle_id} className="border-t border-slate-100">
-                            <td className="px-2 py-1 text-center"><input type="checkbox" /></td>
-                            <td className="px-2 py-1 text-slate-400">{bi + 1}</td>
-                            <td className="px-2 py-1 font-mono text-brand-700">{b.job_no}</td>
-                            <td className="px-2 py-1">{b.po_no || '—'}</td>
-                            <td className="px-2 py-1 font-medium">{b.style_no || '—'}</td>
-                            <td className="px-2 py-1 text-slate-500">{b.style_description || '—'}</td>
-                            <td className="px-2 py-1">{b.colour || '—'}</td>
-                            <td className="px-2 py-1 font-semibold">{b.size || '—'}</td>
-                            <td className="px-2 py-1 font-mono font-semibold text-slate-800">{b.bundle_no}</td>
-                            <td className="px-2 py-1 text-right">{fmtNumber(b.bundle_qty)}</td>
-                            <td className="px-2 py-1 text-right font-medium">{fmtNumber(b.planned_qty)}</td>
-                            <td className="px-2 py-1">
-                              <input className="input h-6 w-20 text-[11px]" placeholder="..." />
-                            </td>
-                            <td className="px-2 py-1 text-center">
-                              <button className="text-red-500 hover:text-red-700"
-                                onClick={() => removeBundleFromLine(l.id, b.bundle_id)}>
-                                <Trash2 size={14} />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
+                        {groupByJob(lineRows).map((g) => [
+                          <JobHeaderRow key={g.key} group={g} colSpan={10} qty={g.rows.reduce((a, r) => a + r.planned_qty, 0)} />,
+                          ...g.rows.map((r) => (
+                            <tr key={r.allocation_detail_id} className="border-t border-slate-100">
+                              <td className="px-2 py-1 text-center">
+                                <input type="checkbox" disabled={!editable} checked={sel.has(r.allocation_detail_id)}
+                                  onChange={() => setSel((x) => { const y = new Set(x); y.has(r.allocation_detail_id) ? y.delete(r.allocation_detail_id) : y.add(r.allocation_detail_id); return y; })} />
+                              </td>
+                              <td className="px-2 py-1 font-mono font-semibold">{r.bundle_no}</td>
+                              <td className="px-2 py-1">{r.colour || '—'}</td>
+                              <td className="px-2 py-1 font-semibold">{r.size || '—'}</td>
+                              <td className="px-2 py-1 text-right">{fmtNumber(r.bundle_qty)}</td>
+                              <td className="px-2 py-1 text-right text-slate-500">{fmtNumber(maxOf(r))}</td>
+                              <td className="px-2 py-1 text-right">
+                                {editable ? (
+                                  <input type="number" min={1} max={maxOf(r)} className="input h-6 w-20 text-right text-[11px]" value={r.planned_qty}
+                                    onChange={(e) => patchRow(r.allocation_detail_id, { planned_qty: Math.max(1, Math.min(Math.floor(Number(e.target.value)) || 1, maxOf(r))) })} />
+                                ) : fmtNumber(r.planned_qty)}
+                              </td>
+                              <td className="px-2 py-1">
+                                <select className="input h-6 w-24 text-[11px]" disabled={!editable} value={r.priority}
+                                  onChange={(e) => patchRow(r.allocation_detail_id, { priority: Number(e.target.value) })}>
+                                  <option value={0}>Normal</option><option value={1}>Urgent</option>
+                                </select>
+                              </td>
+                              <td className="px-2 py-1">
+                                <input className="input h-6 w-36 text-[11px]" disabled={!editable} value={r.remarks}
+                                  onChange={(e) => patchRow(r.allocation_detail_id, { remarks: e.target.value })} />
+                              </td>
+                              <td className="px-2 py-1 text-center">
+                                {editable && <button className="text-red-500 hover:text-red-700" onClick={() => removeRows([r.allocation_detail_id])}><Trash2 size={14} /></button>}
+                              </td>
+                            </tr>
+                          )),
+                        ])}
                       </tbody>
                     </table>
                   ) : (
                     <p className="py-6 text-center text-sm text-slate-400">
-                      No bundles assigned. Use Auto Plan or add bundles manually.
+                      No bundles planned. {freePending.some((p) => p.line_id === l.id) ? 'Use Add Job / Add Bundle or Auto Plan.' : 'Nothing is allocated to this line — confirm a line allocation first.'}
                     </p>
                   )}
                 </div>
@@ -566,159 +535,186 @@ function DailyPlanPage({ processType }: { processType: 'sewing' | 'checking' }) 
         </div>
       )}
 
-      {/* Bottom Summaries */}
+      {tab === 'job' && <Card><SummaryTable keyLabel="Job No" labelHeader="Style" data={summarize(shownRows, (r) => r.io_no ?? '', qtyOf, (r) => r.style_no ?? '')} /></Card>}
+      {tab === 'style' && <Card><SummaryTable keyLabel="Style No" labelHeader="Description" data={summarize(shownRows, (r) => r.style_no ?? '', qtyOf, (r) => r.style_description ?? '')} /></Card>}
+      {tab === 'colour' && <Card><SummaryTable keyLabel="Colour" data={summarize(shownRows, (r) => r.colour ?? '', qtyOf)} /></Card>}
+      {tab === 'size' && <Card><SummaryTable keyLabel="Size" data={summarize(shownRows, (r) => r.size ?? '', qtyOf)} /></Card>}
+      {tab === 'pending' && (
+        <Card title="Pending stock (confirmed allocation, not yet planned)"
+          actions={editable && <Button size="sm" disabled={!selPending.size} onClick={() => { addRows(shownPending.filter((p) => selPending.has(p.allocation_detail_id))); setSelPending(new Set()); }}>
+            <Plus size={12} className="mr-1" /> Add {selPending.size || ''} to plan</Button>}>
+          <div className="max-h-[60vh] overflow-auto">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-slate-50 text-slate-500">
+                <tr>
+                  <th className="w-8 px-2 py-2" />
+                  <th className="px-2 py-2 text-left">Line</th>
+                  <th className="px-2 py-2 text-left">Bundle ID</th>
+                  <th className="px-2 py-2 text-left">Colour</th>
+                  <th className="px-2 py-2 text-left">Size</th>
+                  <th className="px-2 py-2 text-left">Allocation</th>
+                  <th className="px-2 py-2 text-right">Pending (PCS)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {groupByJob(shownPending).map((g) => {
+                  const ids = g.rows.map((r) => r.allocation_detail_id);
+                  const all = ids.every((i) => selPending.has(i));
+                  return [
+                    <JobHeaderRow key={g.key} group={g} colSpan={7} qty={g.rows.reduce((a, r) => a + r.free_qty, 0)} checked={all}
+                      onCheck={editable ? () => setSelPending((x) => { const y = new Set(x); ids.forEach((i) => (all ? y.delete(i) : y.add(i))); return y; }) : undefined} />,
+                    ...g.rows.map((p) => (
+                      <tr key={p.allocation_detail_id} className="border-t border-slate-100">
+                        <td className="px-2 py-1 text-center">
+                          <input type="checkbox" disabled={!editable} checked={selPending.has(p.allocation_detail_id)}
+                            onChange={() => setSelPending((x) => { const y = new Set(x); y.has(p.allocation_detail_id) ? y.delete(p.allocation_detail_id) : y.add(p.allocation_detail_id); return y; })} />
+                        </td>
+                        <td className="px-2 py-1 font-mono text-brand-700">{lines.find((l) => l.id === p.line_id)?.line_code ?? p.line_id}</td>
+                        <td className="px-2 py-1 font-mono font-semibold">{p.bundle_no}</td>
+                        <td className="px-2 py-1">{p.colour || '—'}</td>
+                        <td className="px-2 py-1 font-semibold">{p.size || '—'}</td>
+                        <td className="px-2 py-1 text-slate-500">{p.allocation_no}</td>
+                        <td className="px-2 py-1 text-right font-medium">{fmtNumber(p.free_qty)}</td>
+                      </tr>
+                    )),
+                  ];
+                })}
+                {!shownPending.length && <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">{loading ? 'Loading…' : 'Nothing pending — confirm a line allocation to plan its bundles'}</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* Bottom summaries (image 3) */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        {/* Line Wise Summary */}
         <Card title="Line Wise Plan Summary">
           <table className="w-full text-xs">
             <thead className="bg-slate-50 text-slate-500">
               <tr>
-                <th className="px-2 py-1.5 text-left">Line Code</th>
-                <th className="px-2 py-1.5 text-left">Line Name</th>
-                <th className="px-2 py-1.5 text-right">Target Qty</th>
-                <th className="px-2 py-1.5 text-right">Assigned Qty</th>
+                <th className="px-2 py-1.5 text-left">Line</th>
+                <th className="px-2 py-1.5 text-right">Target</th>
+                <th className="px-2 py-1.5 text-right">Assigned</th>
                 <th className="px-2 py-1.5 text-right">Balance</th>
                 <th className="px-2 py-1.5 text-left">Utilization</th>
               </tr>
             </thead>
             <tbody>
-              {lines.map(l => {
-                const plan = linePlans.get(l.id);
-                if (!plan) return null;
+              {lines.map((l) => {
+                const s = lineStat(l);
                 return (
                   <tr key={l.id} className="border-t border-slate-100">
                     <td className="px-2 py-1 font-mono text-brand-700">{l.line_code}</td>
-                    <td className="px-2 py-1">{l.line_name}</td>
-                    <td className="px-2 py-1 text-right">{fmtNumber(plan.target_qty)}</td>
-                    <td className="px-2 py-1 text-right font-medium">{fmtNumber(plan.assigned_qty)}</td>
-                    <td className="px-2 py-1 text-right">{fmtNumber(plan.balance)}</td>
-                    <td className="px-2 py-1">
-                      <div className="flex items-center gap-1.5">
-                        <div className="h-2 w-12 overflow-hidden rounded-full bg-slate-100">
-                          <div className={`h-full rounded-full ${plan.utilization >= 90 ? 'bg-emerald-500' : plan.utilization >= 50 ? 'bg-amber-500' : 'bg-red-400'}`}
-                            style={{ width: `${Math.min(100, plan.utilization)}%` }} />
-                        </div>
-                        <span>{plan.utilization}%</span>
-                      </div>
-                    </td>
+                    <td className="px-2 py-1 text-right">{fmtNumber(s.target)}</td>
+                    <td className="px-2 py-1 text-right font-medium">{fmtNumber(s.used)}</td>
+                    <td className={`px-2 py-1 text-right ${s.balance < 0 ? 'text-red-600' : ''}`}>{fmtNumber(s.balance)}</td>
+                    <td className="px-2 py-1"><UtilBar value={s.util} width="w-14" /></td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </Card>
-
-        {/* Job Wise Summary */}
-        <Card title="Job Wise Plan Summary">
-          <table className="w-full text-xs">
-            <thead className="bg-slate-50 text-slate-500">
-              <tr>
-                <th className="px-2 py-1.5 text-left">Job No</th>
-                <th className="px-2 py-1.5 text-left">Style No</th>
-                <th className="px-2 py-1.5 text-right">Planned Qty (PCS)</th>
-                <th className="px-2 py-1.5 text-left">%</th>
-              </tr>
-            </thead>
-            <tbody>
-              {jobSummary.map(j => (
-                <tr key={j.job_no} className="border-t border-slate-100">
-                  <td className="px-2 py-1 font-mono text-brand-700">{j.job_no}</td>
-                  <td className="px-2 py-1">{j.style_no}</td>
-                  <td className="px-2 py-1 text-right font-medium">{fmtNumber(j.planned_qty)}</td>
-                  <td className="px-2 py-1">
-                    <div className="flex items-center gap-1.5">
-                      <div className="h-2 w-12 overflow-hidden rounded-full bg-slate-100">
-                        <div className="h-full rounded-full bg-blue-500" style={{ width: `${j.pct}%` }} />
-                      </div>
-                      <span>{j.pct}%</span>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {!jobSummary.length && (
-                <tr><td colSpan={4} className="px-4 py-4 text-center text-slate-400">No data</td></tr>
-              )}
-            </tbody>
-          </table>
-        </Card>
-
-        {/* Style Wise Summary */}
-        <Card title="Style Wise Plan Summary">
-          <table className="w-full text-xs">
-            <thead className="bg-slate-50 text-slate-500">
-              <tr>
-                <th className="px-2 py-1.5 text-left">Style No</th>
-                <th className="px-2 py-1.5 text-left">Description</th>
-                <th className="px-2 py-1.5 text-right">Planned Qty (PCS)</th>
-                <th className="px-2 py-1.5 text-left">%</th>
-              </tr>
-            </thead>
-            <tbody>
-              {styleSummary.map(s => (
-                <tr key={s.style_no} className="border-t border-slate-100">
-                  <td className="px-2 py-1 font-medium">{s.style_no}</td>
-                  <td className="px-2 py-1 text-slate-500">{s.description}</td>
-                  <td className="px-2 py-1 text-right font-medium">{fmtNumber(s.planned_qty)}</td>
-                  <td className="px-2 py-1">
-                    <div className="flex items-center gap-1.5">
-                      <div className="h-2 w-12 overflow-hidden rounded-full bg-slate-100">
-                        <div className="h-full rounded-full bg-violet-500" style={{ width: `${s.pct}%` }} />
-                      </div>
-                      <span>{s.pct}%</span>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {!styleSummary.length && (
-                <tr><td colSpan={4} className="px-4 py-4 text-center text-slate-400">No data</td></tr>
-              )}
-            </tbody>
-          </table>
-        </Card>
+        <Card title="Job Wise Plan Summary"><SummaryTable keyLabel="Job No" labelHeader="Style" data={summarize(rows, (r) => r.io_no ?? '', qtyOf, (r) => r.style_no ?? '')} /></Card>
+        <Card title="Style Wise Plan Summary"><SummaryTable keyLabel="Style No" labelHeader="Description" data={summarize(rows, (r) => r.style_no ?? '', qtyOf, (r) => r.style_description ?? '')} /></Card>
       </div>
 
-      {/* Footer Actions */}
       <Card className="!p-0">
-        <div className="flex flex-wrap items-center justify-end gap-3 px-4 py-3 bg-gradient-to-r from-brand-900 to-brand-800 rounded-xl">
-          <Button variant="secondary" className="!bg-white/10 !text-white !border-white/20 hover:!bg-white/20">
-            <X size={14} className="mr-1" /> Cancel
-          </Button>
-          <Button variant="secondary" className="!bg-blue-500 !text-white !border-blue-400 hover:!bg-blue-600"
-            loading={saving} onClick={() => savePlan(false)}>
-            <Save size={14} className="mr-1" /> Save Plan
-          </Button>
-          <Button className="!bg-emerald-500 hover:!bg-emerald-600 !border-emerald-400"
-            loading={saving} onClick={() => savePlan(true)}>
-            <Check size={14} className="mr-1" /> Save & Confirm Plan
-          </Button>
-          <Button variant="secondary" className="!bg-white/10 !text-white !border-white/20 hover:!bg-white/20">
-            <Printer size={14} className="mr-1" /> Print Plan
-          </Button>
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-brand-900 to-brand-800 px-4 py-3 text-white">
+          <div className="flex gap-6">
+            {[['Bundles', rows.length], ['Planned (PCS)', fmtNumber(totals.planned)], ['Unplanned (PCS)', fmtNumber(totals.unplanned)], ['Planned %', `${pct(totals.planned, totals.total)}%`]].map(([k, v]) => (
+              <div key={k as string} className="text-center">
+                <p className="text-[10px] uppercase tracking-wider opacity-80">{k}</p>
+                <p className="text-xl font-bold">{v}</p>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {overLines.length > 0 && editable && (
+              <label className="flex items-center gap-1.5 rounded-lg bg-red-500/20 px-2 py-1 text-xs" title={can('PRODUCTION.APPROVE') ? '' : 'Needs PRODUCTION.APPROVE'}>
+                <input type="checkbox" checked={override} onChange={(e) => setOverride(e.target.checked)} /> Override capacity ({overLines.map((l) => l.line_code).join(', ')})
+              </label>
+            )}
+            <Input className="w-56 !text-slate-800" placeholder="Remarks" value={remarks} disabled={!editable} onChange={(e) => setRemarks(e.target.value)} />
+            {docId && !['CANCELLED', 'COMPLETED', 'CLOSED'].includes(docStatus ?? '') && (
+              <Button variant="secondary" className="!border-white/20 !bg-white/10 !text-white" onClick={() => setCancelOpen(true)}><X size={14} className="mr-1" /> Cancel Plan</Button>
+            )}
+            {editable && (
+              <>
+                <Button variant="secondary" className="!border-blue-400 !bg-blue-500 !text-white" loading={saving} onClick={() => save(false)}><Save size={14} className="mr-1" /> Save Plan</Button>
+                <Button className="!border-emerald-400 !bg-emerald-500" loading={saving} onClick={() => save(true)} disabled={!can('PRODUCTION.UPDATE')}><Check size={14} className="mr-1" /> Save & Confirm Plan</Button>
+              </>
+            )}
+            <Button variant="secondary" className="!border-white/20 !bg-white/10 !text-white" onClick={print}><Printer size={14} className="mr-1" /> Print Plan</Button>
+          </div>
         </div>
       </Card>
+
+      <DocumentsModal open={showDocs} onClose={() => setShowDocs(false)} url={`/${proc}/daily-plan`} title={`${label} Daily Plans`}
+        noKey="plan_no" dateKey="plan_date" onPick={(r) => openDoc(r.id)}
+        columns={[{ key: 'total_bundles', header: 'Bundles' }, { key: 'allocated_qty', header: 'Planned' }, { key: 'achieved_qty', header: 'Achieved' }]} />
+
+      <PendingPicker picker={picker} onClose={() => setPicker(null)} rows={freePending}
+        lineCode={lines.find((l) => l.id === picker?.lineId)?.line_code ?? ''}
+        onPick={(items) => { addRows(items); setPicker(null); }} />
+
+      <Modal open={cancelOpen} onClose={() => setCancelOpen(false)} title={`Cancel plan ${docNo ?? ''}`} size="sm"
+        footer={<><Button variant="secondary" onClick={() => setCancelOpen(false)}>Back</Button><Button variant="danger" onClick={cancelDoc} disabled={cancelReason.trim().length < 3}>Cancel plan</Button></>}>
+        <p className="mb-2 text-sm text-slate-600">The planned bundles become available to plan again.</p>
+        <Input label="Reason *" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} />
+      </Modal>
     </div>
   );
 }
 
-function SumCard({ icon, label, value, tone }: { icon: React.ReactNode; label: string; value: string | number; tone: string }) {
+/** Add Job (whole jobs) or Add Bundle (single bundles) of one line from pending stock. */
+function PendingPicker({ picker, onClose, rows, lineCode, onPick }: {
+  picker: { lineId: number; mode: 'job' | 'bundle' } | null; onClose: () => void;
+  rows: (Pending & { free_qty: number })[]; lineCode: string; onPick: (rows: (Pending & { free_qty: number })[]) => void;
+}) {
+  const [sel, setSel] = useState<Set<number>>(new Set());
+  const [search, setSearch] = useState('');
+  useEffect(() => { setSel(new Set()); setSearch(''); }, [picker]);
+  if (!picker) return null;
+  const mine = rows.filter((r) => r.line_id === picker.lineId
+    && (!search || [r.bundle_no, r.io_no, r.style_no, r.colour, r.size].some((x) => String(x ?? '').toLowerCase().includes(search.toLowerCase()))));
+  const groups = groupByJob(mine);
+  const toggle = (ids: number[], on: boolean) => setSel((x) => { const y = new Set(x); ids.forEach((i) => (on ? y.add(i) : y.delete(i))); return y; });
   return (
-    <div className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 ${tone}`}>
-      <span className="opacity-70">{icon}</span>
-      <div>
-        <p className="text-[10px] font-medium opacity-80">{label}</p>
-        <p className="text-lg font-bold">{value}</p>
-      </div>
-    </div>
+    <Modal open onClose={onClose} title={`${picker.mode === 'job' ? 'Add Job' : 'Add Bundle'} — ${lineCode}`} size="lg"
+      footer={<><Button variant="secondary" onClick={onClose}>Close</Button><Button disabled={!sel.size} onClick={() => onPick(mine.filter((r) => sel.has(r.allocation_detail_id)))}>Add {sel.size} bundle(s)</Button></>}>
+      <SearchInput value={search} onChange={setSearch} placeholder="Search bundle, job, style…" className="mb-2 w-full" />
+      {!mine.length && <p className="py-8 text-center text-sm text-slate-400">Nothing allocated to {lineCode} is left to plan.</p>}
+      <table className="w-full text-xs">
+        <tbody>
+          {groups.map((g) => {
+            const ids = g.rows.map((r) => r.allocation_detail_id);
+            const all = ids.every((i) => sel.has(i));
+            return [
+              <JobHeaderRow key={g.key} group={g} colSpan={5} qty={g.rows.reduce((a, r) => a + r.free_qty, 0)} checked={all} onCheck={() => toggle(ids, !all)} />,
+              ...(picker.mode === 'bundle' ? g.rows.map((r) => (
+                <tr key={r.allocation_detail_id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => toggle([r.allocation_detail_id], !sel.has(r.allocation_detail_id))}>
+                  <td className="w-8 px-2 py-1 text-center"><input type="checkbox" checked={sel.has(r.allocation_detail_id)} readOnly /></td>
+                  <td className="px-2 py-1 font-mono font-semibold">{r.bundle_no}</td>
+                  <td className="px-2 py-1">{r.colour}</td>
+                  <td className="px-2 py-1 font-semibold">{r.size}</td>
+                  <td className="px-2 py-1 text-right">{fmtNumber(r.free_qty)} PCS</td>
+                </tr>
+              )) : []),
+            ];
+          })}
+        </tbody>
+      </table>
+    </Modal>
   );
 }
 
-// Export both Sewing and Checking daily plan pages
 export function SewingDailyPlanPage() {
-  return <DailyPlanPage processType="sewing" />;
+  return <DailyPlanPage proc="sewing" />;
 }
 
 export function CheckingDailyPlanPage() {
-  return <DailyPlanPage processType="checking" />;
+  return <DailyPlanPage proc="checking" />;
 }
 
 export default CheckingDailyPlanPage;

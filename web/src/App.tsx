@@ -83,6 +83,8 @@ import { TraceabilitySearchPage } from './pages/production/TraceabilitySearchPag
 import { SewingLineAllocationPage } from './pages/production/SewingLineAllocationPage';
 import { CheckingLineAllocationPage } from './pages/production/CheckingLineAllocationPage';
 import { SewingDailyPlanPage, CheckingDailyPlanPage } from './pages/production/CheckingDailyPlanPage';
+import { SewingDailyOutputPage } from './pages/production/SewingDailyOutputPage';
+import { SewingLinesPage, CheckingLinesPage } from './pages/production/ProductionLinesPage';
 import {
   PackingListPage, PackingListDetailPage,
   ShipmentPlanPage,
@@ -281,6 +283,9 @@ export default function App() {
                   <Route path="sewing-daily-plan" element={<SewingDailyPlanPage />} />
                   <Route path="checking-line-allocation" element={<CheckingLineAllocationPage />} />
                   <Route path="checking-daily-plan" element={<CheckingDailyPlanPage />} />
+                  <Route path="sewing-daily-output" element={<SewingDailyOutputPage />} />
+                  <Route path="sewing-lines" element={<SewingLinesPage />} />
+                  <Route path="checking-lines" element={<CheckingLinesPage />} />
                   <Route path="wip" element={<WipDashboardPage />} />
                   <Route path="daily-plans" element={<DailyProductionPlansPage />} />
                   <Route path="daily-outputs" element={<DailyOutputsPage />} />
