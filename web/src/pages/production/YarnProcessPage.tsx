@@ -4,6 +4,7 @@ import {
   Plus, Save, X, Eye, Trash2, Beaker, PackageCheck, ShieldCheck, Boxes,
 } from 'lucide-react';
 import { http } from '../../lib/api';
+import { YarnProcessDcPanel } from './YarnProcessDcPanel';
 import { fmtDate, fmtDecimal, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
 import {
@@ -497,6 +498,9 @@ export default function YarnProcessPage() {
                   ])} />
               )}
             </Section>
+
+            <YarnProcessDcPanel process={detail} yarns={yarns} parties={parties} warehouses={warehouses}
+              onChanged={() => { qc.invalidateQueries({ queryKey: ['yarn-process', detailId] }); refetch(); }} />
 
             <Section title={`Issues (${detail.issues?.length ?? 0})`}>
               {(detail.issues ?? []).length === 0 ? <Muted>No yarn issued yet</Muted> : (

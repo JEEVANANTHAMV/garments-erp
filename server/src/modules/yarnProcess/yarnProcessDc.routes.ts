@@ -114,18 +114,19 @@ yarnProcessDcRouter.get('/yarn-process-dcs', requirePermission('PRODUCTION.VIEW'
   if (req.query.vendor_id) { where.push('i.vendor_id = ?'); params.push(Number(req.query.vendor_id)); }
   const rows = await query<any>(
     `SELECT i.dc_no, MIN(i.issue_date) AS dc_date, i.src_id AS process_id, yp.process_no, yp.process_type, yp.io_no,
-            MAX(i.vendor_id) AS vendor_id, p.party_name AS vendor_name, MAX(i.vehicle_no) AS vehicle_no,
+            MAX(i.vendor_id) AS vendor_id, MAX(p.party_name) AS vendor_name, MAX(i.vehicle_no) AS vehicle_no,
             COUNT(*) AS lines, SUM(i.issued_qty_kg) AS issued_kg, SUM(i.no_of_cones) AS cones,
-            COALESCE((SELECT SUM(r.input_qty) FROM trx_process_receipt r
-                       WHERE r.company_id = i.company_id AND r.ref_dc_no = i.dc_no AND r.src_type = 'YARN_PROCESS' AND r.src_id = i.src_id), 0) AS received_kg,
-            COALESCE((SELECT SUM(r.output_qty) FROM trx_process_receipt r
-                       WHERE r.company_id = i.company_id AND r.ref_dc_no = i.dc_no AND r.src_type = 'YARN_PROCESS' AND r.src_id = i.src_id), 0) AS output_kg
+            MAX(COALESCE(rc.received_kg, 0)) AS received_kg, MAX(COALESCE(rc.output_kg, 0)) AS output_kg
        FROM trx_process_issue i
        JOIN trx_yarn_process yp ON yp.id = i.src_id
        LEFT JOIN mst_party p ON p.id = i.vendor_id
+       LEFT JOIN (SELECT ref_dc_no, src_id, SUM(input_qty) AS received_kg, SUM(output_qty) AS output_kg
+                    FROM trx_process_receipt
+                   WHERE company_id = ? AND src_type = 'YARN_PROCESS' AND ref_dc_no IS NOT NULL
+                   GROUP BY ref_dc_no, src_id) rc ON rc.ref_dc_no = i.dc_no AND rc.src_id = i.src_id
       WHERE ${where.join(' AND ')}
-      GROUP BY i.dc_no, i.src_id, yp.process_no, yp.process_type, yp.io_no, p.party_name
-      ORDER BY dc_date DESC, i.dc_no DESC LIMIT 500`, params);
+      GROUP BY i.dc_no, i.src_id, yp.process_no, yp.process_type, yp.io_no
+      ORDER BY dc_date DESC, i.dc_no DESC LIMIT 500`, [cid, ...params]);
   const data = rows.map((r) => {
     const pending = r3(num(r.issued_kg) - num(r.received_kg));
     return { ...r, process_label: PROC_LABEL[r.process_type] ?? r.process_type, issued_kg: r3(num(r.issued_kg)),

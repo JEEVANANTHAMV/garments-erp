@@ -80,11 +80,12 @@ import { CutQcBundlesPage } from './pages/production/CutQcBundlesPage';
 import { CuttingReconciliationPage } from './pages/production/CuttingReconciliationPage';
 import { SewingFinishingFloorPage } from './pages/production/SewingFinishingFloorPage';
 import { TraceabilitySearchPage } from './pages/production/TraceabilitySearchPage';
-import { SewingLineAllocationPage } from './pages/production/SewingLineAllocationPage';
+import { SewingLineAllocationPage, IroningLineAllocationPage, PackingLineAllocationPage } from './pages/production/SewingLineAllocationPage';
 import { CheckingLineAllocationPage } from './pages/production/CheckingLineAllocationPage';
-import { SewingDailyPlanPage, CheckingDailyPlanPage } from './pages/production/CheckingDailyPlanPage';
-import { SewingDailyOutputPage } from './pages/production/SewingDailyOutputPage';
-import { SewingLinesPage, CheckingLinesPage } from './pages/production/ProductionLinesPage';
+import { SewingDailyPlanPage, CheckingDailyPlanPage, IroningDailyPlanPage, PackingDailyPlanPage } from './pages/production/CheckingDailyPlanPage';
+import { SewingDailyOutputPage, CheckingQcEntryPage } from './pages/production/SewingDailyOutputPage';
+import { PlanningReportsPage } from './pages/production/PlanningReportsPage';
+import { SewingLinesPage, CheckingLinesPage, IroningLinesPage, PackingLinesPage } from './pages/production/ProductionLinesPage';
 import {
   PackingListPage, PackingListDetailPage,
   ShipmentPlanPage,
@@ -286,6 +287,14 @@ export default function App() {
                   <Route path="sewing-daily-output" element={<SewingDailyOutputPage />} />
                   <Route path="sewing-lines" element={<SewingLinesPage />} />
                   <Route path="checking-lines" element={<CheckingLinesPage />} />
+                  <Route path="checking-qc-entry" element={<CheckingQcEntryPage />} />
+                  <Route path="ironing-lines" element={<IroningLinesPage />} />
+                  <Route path="ironing-line-allocation" element={<IroningLineAllocationPage />} />
+                  <Route path="ironing-daily-plan" element={<IroningDailyPlanPage />} />
+                  <Route path="packing-lines" element={<PackingLinesPage />} />
+                  <Route path="packing-line-allocation" element={<PackingLineAllocationPage />} />
+                  <Route path="packing-daily-plan" element={<PackingDailyPlanPage />} />
+                  <Route path="planning-reports" element={<PlanningReportsPage />} />
                   <Route path="wip" element={<WipDashboardPage />} />
                   <Route path="daily-plans" element={<DailyProductionPlansPage />} />
                   <Route path="daily-outputs" element={<DailyOutputsPage />} />
