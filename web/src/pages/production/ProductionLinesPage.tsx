@@ -7,7 +7,7 @@ import { fmtNumber } from '../../lib/format';
  * Capacity PCS = available minutes × efficiency % / SAM, or typed in directly.
  * Opened from "Add Line" / "Line Capacity Setup" on the allocation and plan screens.
  */
-function LinesPage({ path, title }: { path: 'sewing-lines' | 'checking-lines'; title: string }) {
+function LinesPage({ path, title }: { path: 'sewing-lines' | 'checking-lines' | 'ironing-lines' | 'packing-lines'; title: string }) {
   return <CrudPage
     path={path} title={title} permission="PRODUCTION" singular="Line"
     subtitle="Line code, supervisor, operators, SAM and daily capacity used by line allocation and daily plan"
@@ -46,4 +46,12 @@ export function SewingLinesPage() {
 
 export function CheckingLinesPage() {
   return <LinesPage path="checking-lines" title="Checking Lines" />;
+}
+
+export function IroningLinesPage() {
+  return <LinesPage path="ironing-lines" title="Ironing Lines" />;
+}
+
+export function PackingLinesPage() {
+  return <LinesPage path="packing-lines" title="Packing Lines" />;
 }

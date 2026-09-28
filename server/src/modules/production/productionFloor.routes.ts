@@ -204,6 +204,51 @@ export async function postBundleSewingOutput(tx: Tx, req: Request, bundleId: num
   return posted;
 }
 
+/**
+ * Checking QC of one bundle (developer doc §14): Input = Good + Rework + Reject.
+ * Good → checked stock (available for checking outward / ironing), Reject →
+ * reject stock, Rework → back to the sewing line it was sewn on as an open
+ * sewing input, so the line can post it again through sewing output.
+ */
+export async function postCheckingQc(tx: Tx, req: Request, bundleId: number, o: {
+  date: string; line_name: string; good: number; reject: number; rework: number; remarks?: string | null;
+}) {
+  const cid = req.user!.companyId;
+  const b = await lockBundle(tx, cid, { id: bundleId });
+  assertActive(b);
+  requireStyle(b);
+  const input = o.good + o.reject + o.rework;
+  if (input <= 0) return null;
+  const pending = bundleAvail(b).checking;
+  if (input > pending) throw BadRequest(`Bundle ${b.bundle_no}: ${input} PCS entered but only ${pending} sewn PCS are waiting for checking`);
+  const fromStage = b.status;
+  const after = await applyBundle(tx, b, {
+    chk_pass_qty: o.good, chk_reject_qty: o.reject, chk_rework_qty: o.rework, sew_good_qty: -o.rework,
+  });
+  await addMovement(tx, req, b, {
+    txn_type: 'CHECKING_QC', from_stage: fromStage, to_stage: after.status, qty: input,
+    good: o.good, reject: o.reject, rework: o.rework, location: o.line_name, work_center: o.line_name,
+    ref_table: 'trx_checking_daily_output', remarks: o.remarks ?? null,
+  });
+  let reworkInput: any = null;
+  if (o.rework > 0) {
+    const last = await txQueryOne<any>(tx,
+      `SELECT line_name, work_center FROM trx_sewing_input WHERE bundle_id = ? AND company_id = ? AND status <> 'CANCELLED' ORDER BY id DESC LIMIT 1`,
+      [b.id, cid]);
+    const lineName = last?.line_name ?? 'REWORK';
+    const no = await nextDocNumber(tx, cid, 'SEW_IN');
+    const r = await txExecute(tx,
+      `INSERT INTO trx_sewing_input
+        (company_id, input_no, input_date, io_no, style_id, color_id, size_id, bundle_id,
+         line_name, work_center, operator_name, input_qty, status, remarks, created_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,NULL,?,'OPEN',?,?)`,
+      [cid, no, o.date, b.io_no, b.style_id, b.color_id, b.size_id, b.id, lineName, last?.work_center ?? null,
+       o.rework, `Rework from checking${o.remarks ? ` — ${o.remarks}` : ''}`.slice(0, 500), req.user!.id]);
+    reworkInput = { id: r.insertId, input_no: no, line_name: lineName, qty: o.rework };
+  }
+  return { bundle_id: b.id, bundle_no: b.bundle_no, status: after.status, rework_input: reworkInput };
+}
+
 // ============================================================
 // BUNDLE SCAN / TRACE (doc §14)
 // ============================================================

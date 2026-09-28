@@ -193,6 +193,10 @@ const receiptSchema = z.object({
   src_id: s.idReq(),
   receipt_no: s.nullableStr(60),
   receipt_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  // Inward against our outward DC (yarn process DC / knitting DC) and the processor's own DC.
+  ref_dc_no: s.nullableStr(60),
+  party_dc_no: s.nullableStr(60),
+  vehicle_no: s.nullableStr(30),
   input_qty: z.coerce.number().min(0).default(0),
   output_qty: z.coerce.number().min(0).default(0),
   output_uom_id: z.coerce.number().int().optional(),
@@ -218,17 +222,34 @@ processFlowRouter.post('/process-receipts', requirePermission('PROCESS.PRODUCTIO
     Math.round((body.input_qty - body.output_qty - body.rejected_qty) * 1000) / 1000);
 
   const result = await transaction(async (tx) => {
+    // Received against our DC: cannot take back more than is pending at the processor.
+    if (body.ref_dc_no) {
+      const dc = await txQueryOne<any>(tx,
+        `SELECT COALESCE(SUM(issued_qty_kg),0) AS issued FROM trx_process_issue
+          WHERE company_id = ? AND dc_no = ? AND src_type = ? AND src_id = ? FOR UPDATE`,
+        [cid, body.ref_dc_no, body.src_type, body.src_id]);
+      if (!Number(dc?.issued)) throw BadRequest(`DC ${body.ref_dc_no} was not issued for this ${SRC_TABLE[body.src_type].label}`);
+      const got = await txQueryOne<any>(tx,
+        `SELECT COALESCE(SUM(input_qty),0) AS kg FROM trx_process_receipt
+          WHERE company_id = ? AND ref_dc_no = ? AND src_type = ? AND src_id = ?`,
+        [cid, body.ref_dc_no, body.src_type, body.src_id]);
+      const pending = Math.round((Number(dc.issued) - Number(got?.kg ?? 0)) * 1000) / 1000;
+      if (body.input_qty > pending + 1e-9) {
+        throw BadRequest(`DC ${body.ref_dc_no}: only ${pending} KG is pending at the processor, ${body.input_qty} KG entered`);
+      }
+    }
     const receiptNo = body.receipt_no || await nextDocNumber(tx, cid, 'PROC_RECEIPT');
     const lotNo = body.output_lot_no
       || `${String(src.process_no ?? src.program_no ?? body.src_id)}-${receiptNo}`;
 
     const r = await txExecute(tx,
       `INSERT INTO trx_process_receipt
-         (company_id, receipt_no, receipt_date, src_type, src_id, input_qty, output_qty,
+         (company_id, receipt_no, receipt_date, ref_dc_no, party_dc_no, vehicle_no, src_type, src_id, input_qty, output_qty,
           output_uom_id, loss_qty, rejected_qty, output_lot_no, warehouse_id,
           qc_status, is_stock_posted, remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [cid, receiptNo, body.receipt_date, body.src_type, body.src_id,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [cid, receiptNo, body.receipt_date, body.ref_dc_no ?? null, body.party_dc_no ?? null, body.vehicle_no ?? null,
+       body.src_type, body.src_id,
        body.input_qty, body.output_qty, body.output_uom_id ?? UOM_KG, loss,
        body.rejected_qty, lotNo, body.warehouse_id, body.qc_status,
        body.post_stock ? 1 : 0, body.remarks ?? null, uid]);

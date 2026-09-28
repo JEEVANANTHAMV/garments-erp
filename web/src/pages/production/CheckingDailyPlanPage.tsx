@@ -717,4 +717,12 @@ export function CheckingDailyPlanPage() {
   return <DailyPlanPage proc="checking" />;
 }
 
+export function IroningDailyPlanPage() {
+  return <DailyPlanPage proc="ironing" />;
+}
+
+export function PackingDailyPlanPage() {
+  return <DailyPlanPage proc="packing" />;
+}
+
 export default CheckingDailyPlanPage;

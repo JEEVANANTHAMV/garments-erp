@@ -8,7 +8,7 @@ import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { bundleAvail, TERMINAL } from './bundleLedger.js';
 import { jobInfo } from './processDc.routes.js';
-import { postBundleSewingOutput } from './productionFloor.routes.js';
+import { postBundleSewingOutput, postCheckingQc } from './productionFloor.routes.js';
 
 /**
  * Sewing & Checking Line Allocation + Daily Plan, and Daily Output Entry – Sewing
@@ -20,14 +20,16 @@ import { postBundleSewingOutput } from './productionFloor.routes.js';
  * Allocation and plan are planning documents: they never move stock. Quantities
  * come from the bundle ledger (bundleLedger.ts):
  *   sewing   — PCS at cutting + PCS already on a sewing line (sewing WIP)
- *   checking — sewn good PCS not yet sent on to finishing
+ *   checking — sewn good PCS not yet checked (checking QC pending)
+ *   ironing  — checked good PCS + PCS already in finishing (finishing WIP)
+ *   packing  — finished PCS ready to pack
  * A bundle's open allocation (allocated − completed) is reserved across all
  * DRAFT / SAVED / CONFIRMED allocations, so the same PCS can never be allocated twice.
  */
 export const lineAllocationPlanRouter = Router();
 
-type Proc = 'sewing' | 'checking';
-const PROCS: Proc[] = ['sewing', 'checking'];
+type Proc = 'sewing' | 'checking' | 'ironing' | 'packing';
+const PROCS: Proc[] = ['sewing', 'checking', 'ironing', 'packing'];
 const CFG = {
   sewing: {
     label: 'Sewing', line: 'cfg_sewing_line',
@@ -40,6 +42,18 @@ const CFG = {
     alloc: 'trx_checking_line_allocation', allocD: 'trx_checking_line_allocation_detail',
     plan: 'trx_checking_daily_plan', planD: 'trx_checking_daily_plan_detail', planL: 'trx_checking_daily_plan_line',
     allocDoc: 'CHK_LINE_ALLOC', planDoc: 'CHK_DAILY_PLAN',
+  },
+  ironing: {
+    label: 'Ironing', line: 'cfg_ironing_line',
+    alloc: 'trx_ironing_line_allocation', allocD: 'trx_ironing_line_allocation_detail',
+    plan: 'trx_ironing_daily_plan', planD: 'trx_ironing_daily_plan_detail', planL: 'trx_ironing_daily_plan_line',
+    allocDoc: 'IRN_LINE_ALLOC', planDoc: 'IRN_DAILY_PLAN',
+  },
+  packing: {
+    label: 'Packing', line: 'cfg_packing_line',
+    alloc: 'trx_packing_line_allocation', allocD: 'trx_packing_line_allocation_detail',
+    plan: 'trx_packing_daily_plan', planD: 'trx_packing_daily_plan_detail', planL: 'trx_packing_daily_plan_line',
+    allocDoc: 'PCK_LINE_ALLOC', planDoc: 'PCK_DAILY_PLAN',
   },
 } as const;
 
@@ -81,8 +95,21 @@ interface BundleFilter {
 /** PCS of a bundle that the process can work on now. */
 function readyQty(proc: Proc, b: Record<string, any>) {
   const a = bundleAvail({ ...b, balance_qty: b.balance_qty ?? b.qty });
-  return proc === 'sewing' ? a.cut + a.sewing_wip : a.sewn;
+  switch (proc) {
+    case 'sewing': return a.cut + a.sewing_wip;
+    case 'checking': return a.checking;
+    case 'ironing': return a.checked + a.finishing_wip;
+    default: return a.pack;
+  }
 }
+
+/** SQL pre-filter: bundles that can hold PCS for the process at all. */
+const CANDIDATE: Record<Proc, string> = {
+  sewing: '(COALESCE(cb.balance_qty, cb.qty) > 0 OR COALESCE(cb.sew_in_qty,0) > COALESCE(cb.sew_good_qty,0) + COALESCE(cb.sew_reject_qty,0))',
+  checking: 'COALESCE(cb.sew_good_qty,0) > 0',
+  ironing: '(COALESCE(cb.chk_pass_qty,0) > 0 OR COALESCE(cb.fin_in_qty,0) > 0)',
+  packing: 'COALESCE(cb.fin_good_qty,0) > 0',
+};
 
 /** Bundles holding PCS for the process, with job / style / colour / size / lay / cut / buyer. */
 async function loadBundles(tx: Tx | null, cid: number, proc: Proc, f: BundleFilter) {
@@ -92,9 +119,7 @@ async function loadBundles(tx: Tx | null, cid: number, proc: Proc, f: BundleFilt
     if (!f.ids.length) return new Map<number, any>();
     where.push('cb.id IN (?)'); params.push(f.ids);
   } else {
-    where.push(proc === 'sewing'
-      ? '(COALESCE(cb.balance_qty, cb.qty) > 0 OR COALESCE(cb.sew_in_qty,0) > COALESCE(cb.sew_good_qty,0) + COALESCE(cb.sew_reject_qty,0))'
-      : 'COALESCE(cb.sew_good_qty,0) > 0');
+    where.push(CANDIDATE[proc]);
   }
   if (f.io_no) { where.push('cb.io_no = ?'); params.push(f.io_no); }
   if (f.style_id) { where.push('cb.style_id = ?'); params.push(f.style_id); }
@@ -804,9 +829,19 @@ for (const proc of PROCS) {
   }));
 }
 
+
 // ════════════════════════════════════════════════════════════════════
-//  DAILY OUTPUT ENTRY – SEWING
+//  DAILY OUTPUT ENTRY – SEWING  /  CHECKING ENTRY (QC)
+//  Same document for both (client image 1, developer doc §10, §14):
+//  Input = Good + Rework + Reject per bundle; confirming posts the bundle ledger.
 // ════════════════════════════════════════════════════════════════════
+
+type OutProc = 'sewing' | 'checking';
+const OUT_PROCS: OutProc[] = ['sewing', 'checking'];
+const OUT = {
+  sewing: { out: 'trx_sewing_daily_output', outL: 'trx_sewing_daily_output_line', doc: 'SEW_DAILY_OUT', label: 'Output' },
+  checking: { out: 'trx_checking_daily_output', outL: 'trx_checking_daily_output_line', doc: 'CHK_DAILY_OUT', label: 'Checking entry' },
+} as const;
 
 const timeStr = z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, 'Use HH:MM').nullish().or(z.literal('')).transform((v) => (v ? v : null));
 const outLineSchema = z.object({
@@ -822,7 +857,7 @@ const outSchema = z.object({
   output_date: dateStr,
   shift_id: optId,
   floor_name: optStr(40),
-  line_id: z.coerce.number().int().positive('Choose the sewing line'),
+  line_id: z.coerce.number().int().positive('Choose the line'),
   plan_id: optId,
   supervisor_name: optStr(80),
   remarks: optStr(500),
@@ -831,28 +866,30 @@ const outSchema = z.object({
 });
 type OutBody = z.infer<typeof outSchema>;
 
-async function validateOutput(tx: Tx, req: Request, body: OutBody, excludeId = 0) {
+const PLAN_OPEN_FOR_OUTPUT = ['CONFIRMED', 'IN_PROGRESS', 'COMPLETED'];
+
+async function validateOutput(tx: Tx, req: Request, proc: OutProc, body: OutBody, excludeId = 0) {
   const cid = req.user!.companyId;
+  const c = CFG[proc]; const o = OUT[proc];
   const problems: string[] = [];
-  const line = (await loadLines(tx, cid, 'sewing', [body.line_id]))[0];
-  if (!line) throw BadRequest('Sewing line not found');
+  const line = (await loadLines(tx, cid, proc, [body.line_id]))[0];
+  if (!line) throw BadRequest(`${c.label} line not found`);
   if (!line.is_active) throw BadRequest(`Line ${line.line_code} is inactive`);
-  let plan: any = null;
   if (body.plan_id) {
-    plan = await txQueryOne<any>(tx, `SELECT * FROM trx_sewing_daily_plan WHERE id = ? AND company_id = ?`, [body.plan_id, cid]);
+    const plan = await txQueryOne<any>(tx, `SELECT * FROM ${c.plan} WHERE id = ? AND company_id = ?`, [body.plan_id, cid]);
     if (!plan) throw BadRequest('Daily plan not found');
-    if (!['CONFIRMED', 'IN_PROGRESS', 'COMPLETED'].includes(plan.status)) throw BadRequest(`Daily plan ${plan.plan_no} is ${plan.status} — confirm the plan first`);
+    if (!PLAN_OPEN_FOR_OUTPUT.includes(plan.status)) throw BadRequest(`Daily plan ${plan.plan_no} is ${plan.status} — confirm the plan first`);
   }
   const ids = body.lines.map((l) => l.bundle_id);
   if (new Set(ids).size !== ids.length) problems.push('The same bundle is entered twice');
-  const bundles = await loadBundles(tx, cid, 'sewing', { ids: [...new Set(ids)] });
+  const bundles = await loadBundles(tx, cid, proc, { ids: [...new Set(ids)] });
   const planRows = body.plan_id
-    ? new Map((await txQuery<any>(tx, `SELECT * FROM trx_sewing_daily_plan_detail WHERE plan_id = ?`, [body.plan_id])).map((r) => [Number(r.id), r]))
+    ? new Map((await txQuery<any>(tx, `SELECT * FROM ${c.planD} WHERE plan_id = ?`, [body.plan_id])).map((r) => [Number(r.id), r]))
     : new Map<number, any>();
-  // PCS already in other draft entries for the same bundle (not yet posted).
+  // PCS already sitting in other draft entries of the same bundle (not posted yet).
   const drafts = new Map((await txQuery<any>(tx,
-    `SELECT l.bundle_id, SUM(l.input_qty) AS q FROM trx_sewing_daily_output_line l JOIN trx_sewing_daily_output o ON o.id = l.output_id
-      WHERE o.company_id = ? AND o.status = 'DRAFT' AND o.id <> ? AND l.bundle_id IN (?) GROUP BY l.bundle_id`,
+    `SELECT l.bundle_id, SUM(l.input_qty) AS q FROM ${o.outL} l JOIN ${o.out} h ON h.id = l.output_id
+      WHERE h.company_id = ? AND h.status = 'DRAFT' AND h.id <> ? AND l.bundle_id IN (?) GROUP BY l.bundle_id`,
     [cid, excludeId, ids.length ? ids : [0]])).map((r) => [Number(r.bundle_id), n(r.q)]));
   for (const l of body.lines) {
     const b = bundles.get(l.bundle_id);
@@ -862,7 +899,7 @@ async function validateOutput(tx: Tx, req: Request, body: OutBody, excludeId = 0
       problems.push(`Bundle ${b.bundle_no}: input ${l.input_qty} ≠ good ${l.good_qty} + rework ${l.rework_qty} + reject ${l.reject_qty}`);
     }
     const free = b.ready_qty - (drafts.get(l.bundle_id) ?? 0);
-    if (l.input_qty > free) problems.push(`Bundle ${b.bundle_no}: only ${Math.max(free, 0)} PCS can still be sewn, ${l.input_qty} entered`);
+    if (l.input_qty > free) problems.push(`Bundle ${b.bundle_no}: only ${Math.max(free, 0)} PCS can still be ${proc === 'sewing' ? 'sewn' : 'checked'}, ${l.input_qty} entered`);
     if (l.plan_detail_id) {
       const pr = planRows.get(l.plan_detail_id);
       if (!pr || Number(pr.bundle_id) !== l.bundle_id) problems.push(`Bundle ${b.bundle_no} is not on the loaded plan`);
@@ -871,7 +908,7 @@ async function validateOutput(tx: Tx, req: Request, body: OutBody, excludeId = 0
     if (l.start_time && l.end_time && l.end_time < l.start_time) problems.push(`Bundle ${b.bundle_no}: end time is before start time`);
   }
   fail(problems);
-  return { line, plan, bundles };
+  return { line, bundles };
 }
 
 function outTotals(lines: OutBody['lines']) {
@@ -881,11 +918,11 @@ function outTotals(lines: OutBody['lines']) {
   }), { input_qty: 0, good_qty: 0, rework_qty: 0, reject_qty: 0 });
 }
 
-async function writeOutLines(tx: Tx, outId: number, lines: OutBody['lines'], bundles: Map<number, any>) {
+async function writeOutLines(tx: Tx, proc: OutProc, outId: number, lines: OutBody['lines'], bundles: Map<number, any>) {
   for (const l of lines) {
     const b = bundles.get(l.bundle_id);
     await txExecute(tx,
-      `INSERT INTO trx_sewing_daily_output_line
+      `INSERT INTO ${OUT[proc].outL}
          (output_id, bundle_id, plan_detail_id, io_no, style_id, color_id, size_id, input_qty, good_qty, rework_qty,
           reject_qty, defect_id, operator_name, start_time, end_time, remarks)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -895,212 +932,345 @@ async function writeOutLines(tx: Tx, outId: number, lines: OutBody['lines'], bun
   }
 }
 
-/** Post a draft output: bundle ledger + plan achieved + allocation completed. */
-async function confirmOutput(tx: Tx, req: Request, outId: number) {
+/** Post a draft entry: bundle ledger + plan achieved + allocation completed. */
+async function confirmOutput(tx: Tx, req: Request, proc: OutProc, outId: number) {
   const cid = req.user!.companyId;
-  const o = await txQueryOne<any>(tx, `SELECT * FROM trx_sewing_daily_output WHERE id = ? AND company_id = ? FOR UPDATE`, [outId, cid]);
-  if (!o) throw NotFound('Output entry not found');
-  if (o.status !== 'DRAFT') throw BadRequest(`Output ${o.output_no} is already ${o.status}`);
-  const line = (await loadLines(tx, cid, 'sewing', [Number(o.line_id)]))[0];
-  const rows = await txQuery<any>(tx, `SELECT * FROM trx_sewing_daily_output_line WHERE output_id = ? ORDER BY bundle_id`, [outId]);
-  const date = String(o.output_date instanceof Date ? o.output_date.toISOString() : o.output_date).slice(0, 10);
+  const c = CFG[proc]; const o = OUT[proc];
+  const h = await txQueryOne<any>(tx, `SELECT * FROM ${o.out} WHERE id = ? AND company_id = ? FOR UPDATE`, [outId, cid]);
+  if (!h) throw NotFound(`${o.label} not found`);
+  if (h.status !== 'DRAFT') throw BadRequest(`${o.label} ${h.output_no} is already ${h.status}`);
+  const line = (await loadLines(tx, cid, proc, [Number(h.line_id)]))[0];
+  const rows = await txQuery<any>(tx, `SELECT * FROM ${o.outL} WHERE output_id = ? ORDER BY bundle_id`, [outId]);
+  const date = String(h.output_date).slice(0, 10);
+  const posted: any[] = [];
   for (const r of rows) {
-    await postBundleSewingOutput(tx, req, Number(r.bundle_id), {
-      date, line_name: line.line_code, line_aliases: [line.line_name],
-      good: n(r.good_qty), reject: n(r.reject_qty), rework: n(r.rework_qty),
-      operator_name: r.operator_name, remarks: `Daily output ${o.output_no}`,
-    });
-    const produced = n(r.good_qty) + n(r.reject_qty);
+    const q1 = { good: n(r.good_qty), reject: n(r.reject_qty), rework: n(r.rework_qty) };
+    if (proc === 'sewing') {
+      posted.push(...await postBundleSewingOutput(tx, req, Number(r.bundle_id), {
+        date, line_name: line.line_code, line_aliases: [line.line_name], ...q1,
+        operator_name: r.operator_name, remarks: `Daily output ${h.output_no}`,
+      }));
+    } else {
+      posted.push(await postCheckingQc(tx, req, Number(r.bundle_id), { date, line_name: line.line_code, ...q1, remarks: `Checking entry ${h.output_no}` }));
+    }
+    const produced = q1.good + q1.reject;
     let allocDetailId: number | null = null;
     if (r.plan_detail_id) {
       await txExecute(tx,
-        `UPDATE trx_sewing_daily_plan_detail SET achieved_qty = achieved_qty + ?,
+        `UPDATE ${c.planD} SET achieved_qty = achieved_qty + ?,
                 status = IF(achieved_qty >= planned_qty, 'COMPLETED', 'IN_PROGRESS') WHERE id = ?`,
-        [n(r.good_qty), r.plan_detail_id]);
-      const pd = await txQueryOne<any>(tx, `SELECT allocation_detail_id FROM trx_sewing_daily_plan_detail WHERE id = ?`, [r.plan_detail_id]);
+        [q1.good, r.plan_detail_id]);
+      const pd = await txQueryOne<any>(tx, `SELECT allocation_detail_id FROM ${c.planD} WHERE id = ?`, [r.plan_detail_id]);
       allocDetailId = pd?.allocation_detail_id ? Number(pd.allocation_detail_id) : null;
     }
     if (!allocDetailId) {
       const ad = await txQueryOne<any>(tx,
-        `SELECT d.id FROM trx_sewing_line_allocation_detail d JOIN trx_sewing_line_allocation h ON h.id = d.allocation_id
-          WHERE h.company_id = ? AND h.status = 'CONFIRMED' AND d.status = 'ALLOCATED' AND d.bundle_id = ? AND d.line_id = ?
-          ORDER BY d.id LIMIT 1`, [cid, r.bundle_id, o.line_id]);
+        `SELECT d.id FROM ${c.allocD} d JOIN ${c.alloc} a ON a.id = d.allocation_id
+          WHERE a.company_id = ? AND a.status = 'CONFIRMED' AND d.status = 'ALLOCATED' AND d.bundle_id = ? AND d.line_id = ?
+          ORDER BY d.id LIMIT 1`, [cid, r.bundle_id, h.line_id]);
       allocDetailId = ad ? Number(ad.id) : null;
     }
     if (allocDetailId && produced > 0) {
       await txExecute(tx,
-        `UPDATE trx_sewing_line_allocation_detail SET completed_qty = LEAST(completed_qty + ?, allocated_qty),
+        `UPDATE ${c.allocD} SET completed_qty = LEAST(completed_qty + ?, allocated_qty),
                 status = IF(completed_qty >= allocated_qty, 'COMPLETED', status) WHERE id = ?`,
         [produced, allocDetailId]);
     }
   }
-  if (o.plan_id) {
+  if (h.plan_id) {
     const s1 = await txQueryOne<any>(tx,
-      `SELECT SUM(planned_qty) AS p, SUM(LEAST(achieved_qty, planned_qty)) AS a FROM trx_sewing_daily_plan_detail
-        WHERE plan_id = ? AND status <> 'CANCELLED'`, [o.plan_id]);
-    await txExecute(tx, `UPDATE trx_sewing_daily_plan SET status = ? WHERE id = ? AND status IN ('CONFIRMED','IN_PROGRESS')`,
-      [n(s1?.a) >= n(s1?.p) && n(s1?.p) > 0 ? 'COMPLETED' : 'IN_PROGRESS', o.plan_id]);
+      `SELECT SUM(planned_qty) AS p, SUM(LEAST(achieved_qty, planned_qty)) AS a FROM ${c.planD} WHERE plan_id = ? AND status <> 'CANCELLED'`, [h.plan_id]);
+    await txExecute(tx, `UPDATE ${c.plan} SET status = ? WHERE id = ? AND status IN ('CONFIRMED','IN_PROGRESS')`,
+      [n(s1?.a) >= n(s1?.p) && n(s1?.p) > 0 ? 'COMPLETED' : 'IN_PROGRESS', h.plan_id]);
   }
-  await txExecute(tx, `UPDATE trx_sewing_daily_output SET status = 'CONFIRMED', confirmed_by = ?, confirmed_at = NOW() WHERE id = ?`, [req.user!.id, outId]);
-  await audit(req, 'trx_sewing_daily_output', outId, 'UPDATE', { status: 'DRAFT' }, { status: 'CONFIRMED' }, tx);
-  return { id: outId, output_no: o.output_no, status: 'CONFIRMED' };
+  await txExecute(tx, `UPDATE ${o.out} SET status = 'CONFIRMED', confirmed_by = ?, confirmed_at = NOW() WHERE id = ?`, [req.user!.id, outId]);
+  await audit(req, o.out, outId, 'UPDATE', { status: 'DRAFT' }, { status: 'CONFIRMED' }, tx);
+  const rework = posted.filter((p) => p?.rework_input).map((p) => p.rework_input);
+  return { id: outId, output_no: h.output_no, status: 'CONFIRMED', ...(rework.length ? { rework_sent_to_sewing: rework } : {}) };
 }
 
-lineAllocationPlanRouter.get('/sewing/daily-output', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
-  const cid = req.user!.companyId;
-  const qp = listQuery.parse(req.query);
-  const where = ['o.company_id = ?']; const params: unknown[] = [cid];
-  if (qp.status) { where.push('o.status = ?'); params.push(qp.status); }
-  if (qp.from) { where.push('o.output_date >= ?'); params.push(qp.from); }
-  if (qp.to) { where.push('o.output_date <= ?'); params.push(qp.to); }
-  const rows = await query(
-    `SELECT o.*, l.line_code, l.line_name, s.shift_name, p.plan_no
-       FROM trx_sewing_daily_output o
-       LEFT JOIN cfg_sewing_line l ON l.id = o.line_id
-       LEFT JOIN cfg_shift s ON s.id = o.shift_id
-       LEFT JOIN trx_sewing_daily_plan p ON p.id = o.plan_id
-      WHERE ${where.join(' AND ')}
-      ORDER BY o.output_date DESC, o.id DESC LIMIT 200`, params);
-  res.json({ data: rows });
-}));
+for (const proc of OUT_PROCS) {
+  const c = CFG[proc]; const o = OUT[proc];
+  const base = `/${proc}/daily-output`;
 
-/** Plan rows of a line for output entry: planned, achieved so far, allocation totals. */
-lineAllocationPlanRouter.get('/sewing/daily-output/load-plan', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
-  const cid = req.user!.companyId;
-  const qp = z.object({ plan_id: optId, plan_no: optStr(40), line_id: optId }).parse(req.query);
-  if (!qp.plan_id && !qp.plan_no) throw BadRequest('Give the daily plan no');
-  const plan = await queryOne<any>(
-    `SELECT p.*, s.shift_name FROM trx_sewing_daily_plan p LEFT JOIN cfg_shift s ON s.id = p.shift_id
-      WHERE p.company_id = ? AND ${qp.plan_id ? 'p.id = ?' : 'p.plan_no = ?'}`, [cid, qp.plan_id ?? qp.plan_no]);
-  if (!plan) throw NotFound('Daily plan not found');
-  if (!['CONFIRMED', 'IN_PROGRESS', 'COMPLETED'].includes(plan.status)) throw BadRequest(`Daily plan ${plan.plan_no} is ${plan.status} — confirm it before entering output`);
-  const rows = (await planDetailRows(null, cid, 'sewing', plan.id))
-    .filter((r) => r.status !== 'CANCELLED' && (!qp.line_id || Number(r.line_id) === qp.line_id));
-  const planLines = await query<any>(
-    `SELECT pl.*, l.line_code, l.line_name FROM trx_sewing_daily_plan_line pl JOIN cfg_sewing_line l ON l.id = pl.line_id WHERE pl.plan_id = ?`, [plan.id]);
-  const adIds = rows.map((r) => Number(r.allocation_detail_id)).filter(Boolean);
-  const alloc = adIds.length
-    ? new Map((await query<any>(`SELECT id, allocated_qty, completed_qty FROM trx_sewing_line_allocation_detail WHERE id IN (?)`, [adIds])).map((a) => [Number(a.id), a]))
-    : new Map();
-  res.json({
-    data: {
-      plan, lines: planLines,
-      details: rows.map((r) => ({
-        ...r,
-        allocation_qty: n(alloc.get(Number(r.allocation_detail_id))?.allocated_qty),
-        previous_output: n(alloc.get(Number(r.allocation_detail_id))?.completed_qty),
-        remaining_qty: Math.max(r.planned_qty - r.achieved_qty, 0),
-      })),
-    },
-  });
-}));
+  lineAllocationPlanRouter.get(base, requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+    const cid = req.user!.companyId;
+    const qp = listQuery.parse(req.query);
+    const where = ['h.company_id = ?']; const params: unknown[] = [cid];
+    if (qp.status) { where.push('h.status = ?'); params.push(qp.status); }
+    if (qp.from) { where.push('h.output_date >= ?'); params.push(qp.from); }
+    if (qp.to) { where.push('h.output_date <= ?'); params.push(qp.to); }
+    const rows = await query(
+      `SELECT h.*, l.line_code, l.line_name, s.shift_name, p.plan_no
+         FROM ${o.out} h
+         LEFT JOIN ${c.line} l ON l.id = h.line_id
+         LEFT JOIN cfg_shift s ON s.id = h.shift_id
+         LEFT JOIN ${c.plan} p ON p.id = h.plan_id
+        WHERE ${where.join(' AND ')}
+        ORDER BY h.output_date DESC, h.id DESC LIMIT 200`, params);
+    res.json({ data: rows });
+  }));
 
-/** Scan / add a bundle that is not on the plan. */
-lineAllocationPlanRouter.get('/sewing/daily-output/bundle', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
-  const cid = req.user!.companyId;
-  const { code } = z.object({ code: z.string().trim().min(1).max(120) }).parse(req.query);
-  const hit = await queryOne<any>(
-    `SELECT cb.id FROM trx_cutting_bundle cb LEFT JOIN trx_cutting c ON c.id = cb.cutting_id
-      WHERE (cb.barcode = ? OR cb.bundle_no = ?) AND COALESCE(cb.company_id, c.company_id) = ?
-      ORDER BY (cb.barcode = ?) DESC LIMIT 1`, [code, code, cid, code]);
-  if (!hit) throw NotFound(`Bundle ${code} not found`);
-  const b = (await loadBundles(null, cid, 'sewing', { ids: [Number(hit.id)] })).get(Number(hit.id));
-  if (!b) throw BadRequest(`Bundle ${code} is closed or cancelled`);
-  if (b.ready_qty <= 0) throw BadRequest(`Bundle ${b.bundle_no} has no PCS left to sew`);
-  res.json({ data: b });
-}));
+  /** Plan rows of a line for the entry: planned, achieved so far, allocation totals. */
+  lineAllocationPlanRouter.get(`${base}/load-plan`, requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+    const cid = req.user!.companyId;
+    const qp = z.object({ plan_id: optId, plan_no: optStr(40), line_id: optId }).parse(req.query);
+    if (!qp.plan_id && !qp.plan_no) throw BadRequest('Give the daily plan no');
+    const plan = await queryOne<any>(
+      `SELECT p.*, s.shift_name FROM ${c.plan} p LEFT JOIN cfg_shift s ON s.id = p.shift_id
+        WHERE p.company_id = ? AND ${qp.plan_id ? 'p.id = ?' : 'p.plan_no = ?'}`, [cid, qp.plan_id ?? qp.plan_no]);
+    if (!plan) throw NotFound('Daily plan not found');
+    if (!PLAN_OPEN_FOR_OUTPUT.includes(plan.status)) throw BadRequest(`Daily plan ${plan.plan_no} is ${plan.status} — confirm it before entering output`);
+    const rows = (await planDetailRows(null, cid, proc, plan.id))
+      .filter((r) => r.status !== 'CANCELLED' && (!qp.line_id || Number(r.line_id) === qp.line_id));
+    const planLines = await query<any>(
+      `SELECT pl.*, l.line_code, l.line_name FROM ${c.planL} pl JOIN ${c.line} l ON l.id = pl.line_id WHERE pl.plan_id = ?`, [plan.id]);
+    const adIds = rows.map((r) => Number(r.allocation_detail_id)).filter(Boolean);
+    const alloc = adIds.length
+      ? new Map((await query<any>(`SELECT id, allocated_qty, completed_qty FROM ${c.allocD} WHERE id IN (?)`, [adIds])).map((a) => [Number(a.id), a]))
+      : new Map();
+    res.json({
+      data: {
+        plan, lines: planLines,
+        details: rows.map((r) => ({
+          ...r,
+          allocation_qty: n(alloc.get(Number(r.allocation_detail_id))?.allocated_qty),
+          previous_output: n(alloc.get(Number(r.allocation_detail_id))?.completed_qty),
+          remaining_qty: Math.max(Math.min(r.planned_qty - r.achieved_qty, n(r.ready_qty)), 0),
+        })),
+      },
+    });
+  }));
 
-lineAllocationPlanRouter.get('/sewing/daily-output/:id', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
-  const cid = req.user!.companyId;
-  const id = idParam(req);
-  const head = await queryOne<any>(
-    `SELECT o.*, l.line_code, l.line_name, s.shift_name, p.plan_no
-       FROM trx_sewing_daily_output o
-       LEFT JOIN cfg_sewing_line l ON l.id = o.line_id
-       LEFT JOIN cfg_shift s ON s.id = o.shift_id
-       LEFT JOIN trx_sewing_daily_plan p ON p.id = o.plan_id
-      WHERE o.id = ? AND o.company_id = ?`, [id, cid]);
-  if (!head) throw NotFound('Output entry not found');
-  const rows = await query<any>(
-    `SELECT l.*, d.defect_name, pd.planned_qty, pd.achieved_qty
-       FROM trx_sewing_daily_output_line l
-       LEFT JOIN mst_defect d ON d.id = l.defect_id
-       LEFT JOIN trx_sewing_daily_plan_detail pd ON pd.id = l.plan_detail_id
-      WHERE l.output_id = ? ORDER BY l.id`, [id]);
-  const bundles = await loadBundles(null, cid, 'sewing', { ids: rows.map((r) => Number(r.bundle_id)) });
-  res.json({ data: { ...head, lines: rows.map((r) => ({ ...(bundles.get(Number(r.bundle_id)) ?? {}), ...r })) } });
-}));
+  /** Scan / add a bundle that is not on the plan. */
+  lineAllocationPlanRouter.get(`${base}/bundle`, requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+    const cid = req.user!.companyId;
+    const { code } = z.object({ code: z.string().trim().min(1).max(120) }).parse(req.query);
+    const hit = await queryOne<any>(
+      `SELECT cb.id FROM trx_cutting_bundle cb LEFT JOIN trx_cutting ct ON ct.id = cb.cutting_id
+        WHERE (cb.barcode = ? OR cb.bundle_no = ?) AND COALESCE(cb.company_id, ct.company_id) = ?
+        ORDER BY (cb.barcode = ?) DESC LIMIT 1`, [code, code, cid, code]);
+    if (!hit) throw NotFound(`Bundle ${code} not found`);
+    const b = (await loadBundles(null, cid, proc, { ids: [Number(hit.id)] })).get(Number(hit.id));
+    if (!b) throw BadRequest(`Bundle ${code} is closed or cancelled`);
+    if (b.ready_qty <= 0) throw BadRequest(`Bundle ${b.bundle_no} has no PCS left to ${proc === 'sewing' ? 'sew' : 'check'}`);
+    res.json({ data: b });
+  }));
 
-lineAllocationPlanRouter.post('/sewing/daily-output', requirePermission('PRODUCTION.CREATE'), ah(async (req, res) => {
-  const cid = req.user!.companyId;
-  const body = outSchema.parse(req.body);
-  if (body.confirm && !can(req, 'PRODUCTION.UPDATE')) throw Forbidden('Confirming output needs PRODUCTION.UPDATE');
-  const result = await transaction(async (tx) => {
-    const { bundles } = await validateOutput(tx, req, body);
-    const no = await nextDocNumber(tx, cid, 'SEW_DAILY_OUT');
-    const t = outTotals(body.lines);
-    const target = body.plan_id
-      ? n((await txQueryOne<any>(tx, `SELECT SUM(planned_qty) AS t FROM trx_sewing_daily_plan_detail WHERE plan_id = ? AND line_id = ?`, [body.plan_id, body.line_id]))?.t)
-      : 0;
-    const ins = await txExecute(tx,
-      `INSERT INTO trx_sewing_daily_output
-         (company_id, output_no, output_date, shift_id, floor_name, line_id, plan_id, supervisor_name, target_qty,
-          input_qty, good_qty, rework_qty, reject_qty, status, remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'DRAFT',?,?)`,
-      [cid, no, body.output_date, body.shift_id ?? null, body.floor_name, body.line_id, body.plan_id ?? null,
-       body.supervisor_name, target, t.input_qty, t.good_qty, t.rework_qty, t.reject_qty, body.remarks, req.user!.id]);
-    await writeOutLines(tx, ins.insertId, body.lines, bundles);
-    await audit(req, 'trx_sewing_daily_output', ins.insertId, 'INSERT', undefined, { output_no: no, ...t }, tx);
-    if (body.confirm) return confirmOutput(tx, req, ins.insertId);
-    return { id: ins.insertId, output_no: no, status: 'DRAFT' };
-  });
-  res.status(201).json({ data: result });
-}));
+  lineAllocationPlanRouter.get(`${base}/:id`, requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+    const cid = req.user!.companyId;
+    const id = idParam(req);
+    const head = await queryOne<any>(
+      `SELECT h.*, l.line_code, l.line_name, s.shift_name, p.plan_no
+         FROM ${o.out} h
+         LEFT JOIN ${c.line} l ON l.id = h.line_id
+         LEFT JOIN cfg_shift s ON s.id = h.shift_id
+         LEFT JOIN ${c.plan} p ON p.id = h.plan_id
+        WHERE h.id = ? AND h.company_id = ?`, [id, cid]);
+    if (!head) throw NotFound(`${o.label} not found`);
+    const rows = await query<any>(
+      `SELECT l.*, d.defect_name, pd.planned_qty, pd.achieved_qty
+         FROM ${o.outL} l
+         LEFT JOIN mst_defect d ON d.id = l.defect_id
+         LEFT JOIN ${c.planD} pd ON pd.id = l.plan_detail_id
+        WHERE l.output_id = ? ORDER BY l.id`, [id]);
+    const bundles = await loadBundles(null, cid, proc, { ids: rows.map((r) => Number(r.bundle_id)) });
+    res.json({ data: { ...head, lines: rows.map((r) => ({ ...(bundles.get(Number(r.bundle_id)) ?? {}), ...r })) } });
+  }));
 
-lineAllocationPlanRouter.put('/sewing/daily-output/:id', requirePermission('PRODUCTION.UPDATE'), ah(async (req, res) => {
-  const cid = req.user!.companyId;
-  const id = idParam(req);
-  const body = outSchema.parse(req.body);
-  const result = await transaction(async (tx) => {
-    const existing = await txQueryOne<any>(tx, `SELECT * FROM trx_sewing_daily_output WHERE id = ? AND company_id = ? FOR UPDATE`, [id, cid]);
-    if (!existing) throw NotFound('Output entry not found');
-    if (existing.status !== 'DRAFT') throw BadRequest(`Output ${existing.output_no} is ${existing.status} — posted output cannot be edited`);
-    const { bundles } = await validateOutput(tx, req, body, id);
-    const t = outTotals(body.lines);
-    const target = body.plan_id
-      ? n((await txQueryOne<any>(tx, `SELECT SUM(planned_qty) AS t FROM trx_sewing_daily_plan_detail WHERE plan_id = ? AND line_id = ?`, [body.plan_id, body.line_id]))?.t)
-      : 0;
-    await txExecute(tx,
-      `UPDATE trx_sewing_daily_output SET output_date = ?, shift_id = ?, floor_name = ?, line_id = ?, plan_id = ?,
-          supervisor_name = ?, target_qty = ?, input_qty = ?, good_qty = ?, rework_qty = ?, reject_qty = ?, remarks = ?
-        WHERE id = ?`,
-      [body.output_date, body.shift_id ?? null, body.floor_name, body.line_id, body.plan_id ?? null,
-       body.supervisor_name, target, t.input_qty, t.good_qty, t.rework_qty, t.reject_qty, body.remarks, id]);
-    await txExecute(tx, `DELETE FROM trx_sewing_daily_output_line WHERE output_id = ?`, [id]);
-    await writeOutLines(tx, id, body.lines, bundles);
-    await audit(req, 'trx_sewing_daily_output', id, 'UPDATE', existing, t, tx);
-    if (body.confirm) return confirmOutput(tx, req, id);
-    return { id, output_no: existing.output_no, status: 'DRAFT' };
-  });
-  res.json({ data: result });
-}));
+  const planTarget = async (tx: Tx, body: OutBody) => (body.plan_id
+    ? n((await txQueryOne<any>(tx, `SELECT SUM(planned_qty) AS t FROM ${c.planD} WHERE plan_id = ? AND line_id = ?`, [body.plan_id, body.line_id]))?.t)
+    : 0);
 
-lineAllocationPlanRouter.post('/sewing/daily-output/:id/confirm', requirePermission('PRODUCTION.UPDATE'), ah(async (req, res) => {
-  const id = idParam(req);
-  res.json({ data: await transaction((tx) => confirmOutput(tx, req, id)) });
-}));
+  lineAllocationPlanRouter.post(base, requirePermission('PRODUCTION.CREATE'), ah(async (req, res) => {
+    const cid = req.user!.companyId;
+    const body = outSchema.parse(req.body);
+    if (body.confirm && !can(req, 'PRODUCTION.UPDATE')) throw Forbidden('Confirming needs PRODUCTION.UPDATE');
+    const result = await transaction(async (tx) => {
+      const { bundles } = await validateOutput(tx, req, proc, body);
+      const no = await nextDocNumber(tx, cid, o.doc);
+      const t = outTotals(body.lines);
+      const ins = await txExecute(tx,
+        `INSERT INTO ${o.out}
+           (company_id, output_no, output_date, shift_id, floor_name, line_id, plan_id, supervisor_name, target_qty,
+            input_qty, good_qty, rework_qty, reject_qty, status, remarks, created_by)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'DRAFT',?,?)`,
+        [cid, no, body.output_date, body.shift_id ?? null, body.floor_name, body.line_id, body.plan_id ?? null,
+         body.supervisor_name, await planTarget(tx, body), t.input_qty, t.good_qty, t.rework_qty, t.reject_qty, body.remarks, req.user!.id]);
+      await writeOutLines(tx, proc, ins.insertId, body.lines, bundles);
+      await audit(req, o.out, ins.insertId, 'INSERT', undefined, { output_no: no, ...t }, tx);
+      if (body.confirm) return confirmOutput(tx, req, proc, ins.insertId);
+      return { id: ins.insertId, output_no: no, status: 'DRAFT' };
+    });
+    res.status(201).json({ data: result });
+  }));
 
-lineAllocationPlanRouter.post('/sewing/daily-output/:id/cancel', requirePermission('PRODUCTION.UPDATE'), ah(async (req, res) => {
+  lineAllocationPlanRouter.put(`${base}/:id`, requirePermission('PRODUCTION.UPDATE'), ah(async (req, res) => {
+    const cid = req.user!.companyId;
+    const id = idParam(req);
+    const body = outSchema.parse(req.body);
+    const result = await transaction(async (tx) => {
+      const existing = await txQueryOne<any>(tx, `SELECT * FROM ${o.out} WHERE id = ? AND company_id = ? FOR UPDATE`, [id, cid]);
+      if (!existing) throw NotFound(`${o.label} not found`);
+      if (existing.status !== 'DRAFT') throw BadRequest(`${o.label} ${existing.output_no} is ${existing.status} — posted entries cannot be edited`);
+      const { bundles } = await validateOutput(tx, req, proc, body, id);
+      const t = outTotals(body.lines);
+      await txExecute(tx,
+        `UPDATE ${o.out} SET output_date = ?, shift_id = ?, floor_name = ?, line_id = ?, plan_id = ?,
+            supervisor_name = ?, target_qty = ?, input_qty = ?, good_qty = ?, rework_qty = ?, reject_qty = ?, remarks = ?
+          WHERE id = ?`,
+        [body.output_date, body.shift_id ?? null, body.floor_name, body.line_id, body.plan_id ?? null,
+         body.supervisor_name, await planTarget(tx, body), t.input_qty, t.good_qty, t.rework_qty, t.reject_qty, body.remarks, id]);
+      await txExecute(tx, `DELETE FROM ${o.outL} WHERE output_id = ?`, [id]);
+      await writeOutLines(tx, proc, id, body.lines, bundles);
+      await audit(req, o.out, id, 'UPDATE', existing, t, tx);
+      if (body.confirm) return confirmOutput(tx, req, proc, id);
+      return { id, output_no: existing.output_no, status: 'DRAFT' };
+    });
+    res.json({ data: result });
+  }));
+
+  lineAllocationPlanRouter.post(`${base}/:id/confirm`, requirePermission('PRODUCTION.UPDATE'), ah(async (req, res) => {
+    const id = idParam(req);
+    res.json({ data: await transaction((tx) => confirmOutput(tx, req, proc, id)) });
+  }));
+
+  lineAllocationPlanRouter.post(`${base}/:id/cancel`, requirePermission('PRODUCTION.UPDATE'), ah(async (req, res) => {
+    const cid = req.user!.companyId;
+    const id = idParam(req);
+    const { reason } = z.object({ reason: reasonReq }).parse(req.body);
+    const result = await transaction(async (tx) => {
+      const h = await txQueryOne<any>(tx, `SELECT * FROM ${o.out} WHERE id = ? AND company_id = ? FOR UPDATE`, [id, cid]);
+      if (!h) throw NotFound(`${o.label} not found`);
+      if (h.status !== 'DRAFT') throw BadRequest(`${o.label} ${h.output_no} is ${h.status} — posted entries are corrected by a reversal entry, not cancelled`);
+      await txExecute(tx, `UPDATE ${o.out} SET status = 'CANCELLED', cancel_reason = ? WHERE id = ?`, [reason, id]);
+      await audit(req, o.out, id, 'UPDATE', { status: 'DRAFT' }, { status: 'CANCELLED', reason }, tx);
+      return { id, output_no: h.output_no, status: 'CANCELLED' };
+    });
+    res.json({ data: result });
+  }));
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  REPORTS (developer doc §10, §28) & DASHBOARD KPIs (§29)
+// ════════════════════════════════════════════════════════════════════
+
+const rangeQuery = z.object({ from: dateStr, to: dateStr, line_id: optId });
+
+/** Plan vs actual per date + line: planned, good, rework, reject, balance, achievement / rework / reject %. */
+async function planVsActual(cid: number, proc: Proc, from: string, to: string, lineId?: number | null) {
+  const c = CFG[proc];
+  const plan = await query<any>(
+    `SELECT p.plan_date, d.line_id, l.line_code, l.line_name, SUM(d.planned_qty) AS planned, SUM(d.achieved_qty) AS achieved
+       FROM ${c.planD} d JOIN ${c.plan} p ON p.id = d.plan_id LEFT JOIN ${c.line} l ON l.id = d.line_id
+      WHERE p.company_id = ? AND p.status <> 'CANCELLED' AND d.status <> 'CANCELLED' AND p.plan_date BETWEEN ? AND ? ${lineId ? 'AND d.line_id = ?' : ''}
+      GROUP BY p.plan_date, d.line_id, l.line_code, l.line_name`, lineId ? [cid, from, to, lineId] : [cid, from, to]);
+  const key = (d: string, l: number) => `${String(d).slice(0, 10)}|${l}`;
+  const map = new Map<string, any>();
+  for (const r of plan) {
+    map.set(key(r.plan_date, r.line_id), {
+      date: String(r.plan_date).slice(0, 10), line_id: Number(r.line_id), line_code: r.line_code, line_name: r.line_name,
+      planned: n(r.planned), good: n(r.achieved), input: 0, rework: 0, reject: 0,
+    });
+  }
+  if (proc === 'sewing' || proc === 'checking') {
+    const o = OUT[proc];
+    const outs = await query<any>(
+      `SELECT h.output_date, h.line_id, l.line_code, l.line_name, SUM(h.input_qty) AS input, SUM(h.good_qty) AS good,
+              SUM(h.rework_qty) AS rework, SUM(h.reject_qty) AS reject
+         FROM ${o.out} h LEFT JOIN ${c.line} l ON l.id = h.line_id
+        WHERE h.company_id = ? AND h.status = 'CONFIRMED' AND h.output_date BETWEEN ? AND ? ${lineId ? 'AND h.line_id = ?' : ''}
+        GROUP BY h.output_date, h.line_id, l.line_code, l.line_name`, lineId ? [cid, from, to, lineId] : [cid, from, to]);
+    for (const r of outs) {
+      const k = key(r.output_date, r.line_id);
+      const m = map.get(k) ?? { date: String(r.output_date).slice(0, 10), line_id: Number(r.line_id), line_code: r.line_code, line_name: r.line_name, planned: 0, good: 0, input: 0, rework: 0, reject: 0 };
+      // Actual comes from the output entries (covers unplanned bundles too).
+      Object.assign(m, { input: n(r.input), good: n(r.good), rework: n(r.rework), reject: n(r.reject) });
+      map.set(k, m);
+    }
+  }
+  const pctOf = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 10000) / 100 : 0);
+  const rows = [...map.values()].sort((a, b) => a.date.localeCompare(b.date) || String(a.line_code).localeCompare(String(b.line_code)))
+    .map((r) => ({ ...r, balance: Math.max(r.planned - r.good, 0), achievement_pct: pctOf(r.good, r.planned), rework_pct: pctOf(r.rework, r.input), reject_pct: pctOf(r.reject, r.input) }));
+  const t = rows.reduce((a, r) => ({ planned: a.planned + r.planned, good: a.good + r.good, input: a.input + r.input, rework: a.rework + r.rework, reject: a.reject + r.reject }),
+    { planned: 0, good: 0, input: 0, rework: 0, reject: 0 });
+  return { rows, totals: { ...t, balance: Math.max(t.planned - t.good, 0), achievement_pct: pctOf(t.good, t.planned), rework_pct: pctOf(t.rework, t.input), reject_pct: pctOf(t.reject, t.input) } };
+}
+
+for (const proc of PROCS) {
+  const c = CFG[proc];
+
+  lineAllocationPlanRouter.get(`/${proc}/reports/plan-vs-actual`, requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+    const qp = rangeQuery.parse(req.query);
+    res.json({ data: await planVsActual(req.user!.companyId, proc, qp.from, qp.to, qp.line_id) });
+  }));
+
+  /** Line capacity vs allocation vs plan vs actual for one date. */
+  lineAllocationPlanRouter.get(`/${proc}/reports/line-utilization`, requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+    const cid = req.user!.companyId;
+    const qp = z.object({ date: dateStr, shift_id: optId }).parse(req.query);
+    const lines = await loadLines(null, cid, proc);
+    const alloc = await allocatedOnDate(null, cid, proc, qp.date);
+    const planned = await plannedOnDate(null, cid, proc, qp.date, qp.shift_id ?? null);
+    const actual = new Map((await planVsActual(cid, proc, qp.date, qp.date)).rows.map((r) => [r.line_id, r]));
+    const pctOf = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 10000) / 100 : 0);
+    res.json({
+      data: lines.map((l) => {
+        const a = alloc.get(Number(l.id)) ?? 0; const p = planned.get(Number(l.id)) ?? 0; const act = actual.get(Number(l.id));
+        return {
+          line_id: l.id, line_code: l.line_code, line_name: l.line_name, supervisor_name: l.supervisor_name, capacity: l.capacity_pcs,
+          allocated: a, planned: p, actual: act?.good ?? 0, rework: act?.rework ?? 0, reject: act?.reject ?? 0,
+          allocation_util_pct: pctOf(a, l.capacity_pcs), plan_util_pct: pctOf(p, l.capacity_pcs), achievement_pct: pctOf(act?.good ?? 0, p),
+        };
+      }),
+    });
+  }));
+
+  /** Allocation grouped by job / style / colour / size / line. */
+  lineAllocationPlanRouter.get(`/${proc}/reports/allocation-summary`, requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+    const cid = req.user!.companyId;
+    const qp = z.object({ from: dateStr, to: dateStr, group_by: z.enum(['job', 'style', 'colour', 'size', 'line']).default('job') }).parse(req.query);
+    const col = { job: 'd.io_no', style: 'st.style_code', colour: 'col.color_name', size: 'sz.size_code', line: 'l.line_code' }[qp.group_by];
+    const rows = await query<any>(
+      `SELECT ${col} AS group_key, COUNT(DISTINCT d.bundle_id) AS bundles, COUNT(DISTINCT d.line_id) AS lines,
+              SUM(d.allocated_qty) AS allocated, SUM(d.completed_qty) AS completed,
+              SUM(GREATEST(CAST(d.allocated_qty AS SIGNED) - CAST(d.completed_qty AS SIGNED), 0)) AS open_qty
+         FROM ${c.allocD} d JOIN ${c.alloc} a ON a.id = d.allocation_id
+         LEFT JOIN ${c.line} l ON l.id = d.line_id
+         LEFT JOIN mst_style st ON st.id = d.style_id
+         LEFT JOIN mst_color col ON col.id = d.colour_id
+         LEFT JOIN mst_size sz ON sz.id = d.size_id
+        WHERE a.company_id = ? AND a.status <> 'CANCELLED' AND d.status <> 'CANCELLED' AND a.allocation_date BETWEEN ? AND ?
+        GROUP BY ${col} ORDER BY allocated DESC`, [cid, qp.from, qp.to]);
+    res.json({ data: rows.map((r) => ({ ...r, allocated: n(r.allocated), completed: n(r.completed), open_qty: n(r.open_qty), bundles: n(r.bundles), lines: n(r.lines) })) });
+  }));
+}
+
+/** Dashboard KPIs of a date (doc §29): sewing plan/actual and checking flow. */
+lineAllocationPlanRouter.get('/production-planning/kpis', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId;
-  const id = idParam(req);
-  const { reason } = z.object({ reason: reasonReq }).parse(req.body);
-  const result = await transaction(async (tx) => {
-    const o = await txQueryOne<any>(tx, `SELECT * FROM trx_sewing_daily_output WHERE id = ? AND company_id = ? FOR UPDATE`, [id, cid]);
-    if (!o) throw NotFound('Output entry not found');
-    if (o.status !== 'DRAFT') throw BadRequest(`Output ${o.output_no} is ${o.status} — posted output is corrected through the sewing floor reversal, not cancelled`);
-    await txExecute(tx, `UPDATE trx_sewing_daily_output SET status = 'CANCELLED', cancel_reason = ? WHERE id = ?`, [reason, id]);
-    await audit(req, 'trx_sewing_daily_output', id, 'UPDATE', { status: 'DRAFT' }, { status: 'CANCELLED', reason }, tx);
-    return { id, output_no: o.output_no, status: 'CANCELLED' };
-  });
-  res.json({ data: result });
+  const { date } = z.object({ date: dateStr }).parse(req.query);
+  const capOf = async (proc: Proc) => (await loadLines(null, cid, proc)).reduce((a, l) => a + n(l.capacity_pcs), 0);
+  const out: Record<string, any> = {};
+  for (const proc of PROCS) {
+    const pva = (await planVsActual(cid, proc, date, date)).totals;
+    out[proc] = { capacity: await capOf(proc), planned: pva.planned, actual: pva.good, balance: pva.balance,
+      achievement_pct: pva.achievement_pct, rework: pva.rework, reject: pva.reject, rework_pct: pva.rework_pct, reject_pct: pva.reject_pct };
+  }
+  // Checking flow: waiting (inward, not yet checked), allocated / unallocated, QC today, outward today.
+  const stock = await loadBundles(null, cid, 'checking', {});
+  const waiting = [...stock.values()].reduce((a, b) => a + b.ready_qty, 0);
+  const open = await openAllocated(null, cid, 'checking', [...stock.keys()]);
+  const allocated = [...stock.values()].reduce((a, b) => a + Math.min(open.get(b.bundle_id) ?? 0, b.ready_qty), 0);
+  const moved = await queryOne<any>(
+    `SELECT COALESCE(SUM(m.moved_qty),0) AS q FROM trx_bundle_movement m
+       LEFT JOIN trx_jobwork_challan_line jl ON m.ref_table = 'trx_jobwork_challan_line' AND jl.id = m.ref_id
+       LEFT JOIN trx_jobwork_challan jc ON jc.id = jl.challan_id
+       LEFT JOIN cfg_process_stage ps ON ps.id = jc.stage_id
+      WHERE m.company_id = ? AND DATE(m.moved_at) = ?
+        AND (m.txn_type = 'FINISHING_IN' OR (m.txn_type = 'DC_ISSUE' AND UPPER(ps.stage_code) IN ('IRON','IRONING','FINISH','FINISHING','PRESS')))`,
+    [cid, date]);
+  out.checking = { ...out.checking, inward_waiting: waiting, allocated, unallocated: Math.max(waiting - allocated, 0),
+    qc_good: out.checking.actual, outward: n(moved?.q) };
+  res.json({ data: { date, ...out } });
 }));

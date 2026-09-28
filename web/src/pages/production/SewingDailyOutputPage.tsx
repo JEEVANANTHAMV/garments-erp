@@ -16,7 +16,11 @@ import {
 } from './linePlanUi';
 
 /**
- * Daily Output Entry – Sewing (client image 1).
+ * Daily Output Entry – Sewing (client image 1) and Checking Entry (QC) —
+ * developer doc §14, same layout.
+ *
+ * Checking: Good → checked stock for ironing, Reject → reject stock, Rework →
+ * back to the sewing line (open sewing input) for correction and re-checking.
  *
  * Load a confirmed sewing daily plan for a line, enter per bundle the input,
  * rework and reject PCS (good = input − rework − reject, so Input = Good +
@@ -43,11 +47,15 @@ const TABS = [
   { key: 'remarks', label: 'Remarks' },
 ];
 
-export function SewingDailyOutputPage() {
+type OutProc = 'sewing' | 'checking';
+const TITLE: Record<OutProc, string> = { sewing: 'Daily Output Entry – Sewing', checking: 'Checking Entry (QC)' };
+
+function DailyOutputPage({ proc }: { proc: OutProc }) {
+  const label = proc === 'sewing' ? 'Sewing' : 'Checking';
   const toast = useToast();
   const { can } = useAuth();
   const shifts = useLookup('shifts');
-  const lines = useLookup('sewing-lines');
+  const lines = useLookup(`${proc}-lines`);
   const defects = useLookup('defects');
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -58,7 +66,7 @@ export function SewingDailyOutputPage() {
 
   const [outDate, setOutDate] = useState(today());
   const [shiftId, setShiftId] = useState('');
-  const [floorName, setFloorName] = useState('Sewing Floor-1');
+  const [floorName, setFloorName] = useState(`${label} Floor-1`);
   const [lineId, setLineId] = useState('');
   const [planNo, setPlanNo] = useState('');
   const [plan, setPlan] = useState<any>(null);
@@ -88,7 +96,7 @@ export function SewingDailyOutputPage() {
     if (!planNo.trim()) { toast('Enter the daily plan no', 'warning'); return; }
     if (!lineId) { toast('Choose the sewing line first', 'warning'); return; }
     try {
-      const r = await api.get('/sewing/daily-output/load-plan', { params: { plan_no: planNo.trim(), line_id: lineId } });
+      const r = await api.get(`/${proc}/daily-output/load-plan`, { params: { plan_no: planNo.trim(), line_id: lineId } });
       const d = r.data.data;
       setPlan(d.plan);
       setPlanRows(d.details || []);
@@ -111,7 +119,7 @@ export function SewingDailyOutputPage() {
 
   const openDoc = async (id: number) => {
     try {
-      const r = await api.get(`/sewing/daily-output/${id}`);
+      const r = await api.get(`/${proc}/daily-output/${id}`);
       const d = r.data.data;
       setDocId(d.id); setDocNo(d.output_no); setDocStatus(d.status);
       setOutDate(String(d.output_date).slice(0, 10)); setShiftId(d.shift_id ? String(d.shift_id) : '');
@@ -125,7 +133,7 @@ export function SewingDailyOutputPage() {
         remarks: l.remarks || '',
       })));
       if (d.plan_id) {
-        const p = await api.get('/sewing/daily-output/load-plan', { params: { plan_id: d.plan_id, line_id: d.line_id } }).catch(() => null);
+        const p = await api.get(`/${proc}/daily-output/load-plan`, { params: { plan_id: d.plan_id, line_id: d.line_id } }).catch(() => null);
         if (p) { setPlan(p.data.data.plan); setPlanRows(p.data.data.details || []); }
       } else { setPlan(null); setPlanRows([]); }
     } catch (e: any) {
@@ -143,7 +151,7 @@ export function SewingDailyOutputPage() {
       return;
     }
     try {
-      const r = await api.get('/sewing/daily-output/bundle', { params: { code: code.trim() } });
+      const r = await api.get(`/${proc}/daily-output/bundle`, { params: { code: code.trim() } });
       const b = r.data.data;
       if (rows.some((x) => x.bundle_id === b.bundle_id)) { toast(`${b.bundle_no} is already in the entry`, 'warning'); return; }
       setRows((x) => [...x, { ...b, plan_detail_id: null, input_qty: b.ready_qty, rework_qty: 0, reject_qty: 0, defect_id: '', operator_name: '', start_time: '', end_time: '', remarks: '' }]);
@@ -230,9 +238,9 @@ export function SewingDailyOutputPage() {
     };
     setSaving(true);
     try {
-      const r = docId ? await api.put(`/sewing/daily-output/${docId}`, body) : await api.post('/sewing/daily-output', body);
+      const r = docId ? await api.put(`/${proc}/daily-output/${docId}`, body) : await api.post(`/${proc}/daily-output`, body);
       const d = r.data.data;
-      toast(confirm ? `Output ${d.output_no} confirmed — posted to bundle stock` : `Draft ${d.output_no} saved`);
+      toast(confirm ? `${d.output_no} confirmed — posted to bundle stock${d.rework_sent_to_sewing?.length ? ` (rework sent back to sewing: ${d.rework_sent_to_sewing.map((x: any) => `${x.qty} PCS → ${x.line_name}`).join(', ')})` : ''}` : `Draft ${d.output_no} saved`);
       await openDoc(d.id);
     } catch (e: any) {
       toast(e?.message || 'Save failed', 'error');
@@ -243,7 +251,7 @@ export function SewingDailyOutputPage() {
 
   const cancelDoc = async () => {
     try {
-      await api.post(`/sewing/daily-output/${docId}/cancel`, { reason: cancelReason });
+      await api.post(`/${proc}/daily-output/${docId}/cancel`, { reason: cancelReason });
       toast(`Draft ${docNo} cancelled`);
       setCancelOpen(false); setCancelReason(''); resetNew();
     } catch (e: any) {
@@ -255,7 +263,7 @@ export function SewingDailyOutputPage() {
     if (!rows.length) { toast('Nothing to print', 'warning'); return; }
     const pr = printRowsByJob(rows, (r) => [r.bundle_no, r.lay_no ?? '', r.cut_no ?? '', r.colour, r.size, r.input_qty, good(r), r.rework_qty, r.reject_qty,
       defectName(r.defect_id), r.operator_name, r.start_time, r.end_time]);
-    printDocument(`Daily Output – Sewing ${docNo ?? '(unsaved)'}`, [
+    printDocument(`${TITLE[proc]} ${docNo ?? '(unsaved)'}`, [
       ['Date', fmtDate(outDate)], ['Shift', shifts.data?.find((s: any) => String(s.id) === shiftId)?.label ?? '—'],
       ['Line', line ? `${line.code} ${line.label}` : '—'], ['Plan', plan?.plan_no ?? '—'], ['Supervisor', supervisor || '—'],
       ['Good', `${totals.good} (${pct(totals.good, totals.input)}%)`], ['Rework', totals.rework], ['Reject', totals.reject],
@@ -271,8 +279,8 @@ export function SewingDailyOutputPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Daily Output Entry – Sewing</h1>
-          <p className="text-sm text-slate-500">Bundle-wise good / rework / reject against the day's plan</p>
+          <h1 className="text-2xl font-bold text-slate-800">{TITLE[proc]}</h1>
+          <p className="text-sm text-slate-500">{proc === 'sewing' ? 'Bundle-wise good / rework / reject against the day\'s plan' : 'Input = Good + Rework + Reject · good goes to ironing, rework back to sewing, reject to reject stock'}</p>
         </div>
         <div className="flex items-center gap-2">
           <DocStatus no={docNo} status={docStatus} />
@@ -285,13 +293,13 @@ export function SewingDailyOutputPage() {
         <div className="flex flex-wrap items-end gap-3">
           <Input label="Date *" type="date" className="w-40" value={outDate} disabled={!editable} onChange={(e) => setOutDate(e.target.value)} />
           <Select label="Shift *" className="w-44" value={shiftId} disabled={!editable} onChange={(e) => setShiftId(e.target.value)} placeholder="Select shift" options={toOptions(shifts.data)} />
-          <Input label="Sewing Floor" className="w-40" value={floorName} disabled={!editable} onChange={(e) => setFloorName(e.target.value)} />
+          <Input label={`${label} Floor`} className="w-40" value={floorName} disabled={!editable} onChange={(e) => setFloorName(e.target.value)} />
           <Select label="Line *" className="w-52" value={lineId} disabled={!editable} onChange={(e) => { setLineId(e.target.value); setSupervisor(''); }} placeholder="Select line"
             options={(lines.data || []).map((l: any) => ({ value: l.id, label: `${l.code} (${l.label})` }))} />
           <Input label="Output No" className="w-36" value={docNo ?? 'AUTO'} disabled />
           <div className="flex items-end gap-1">
             <Input label="Daily Plan No" className="w-40" value={planNo} disabled={!editable} onChange={(e) => setPlanNo(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') loadPlan(); }} placeholder="SDP-00001" />
+              onKeyDown={(e) => { if (e.key === 'Enter') loadPlan(); }} placeholder={proc === 'sewing' ? 'SDP-00001' : 'CDP-00001'} />
             <Button className="!h-10" onClick={() => loadPlan()} disabled={!editable}><Search size={14} className="mr-1" /> Load Plan</Button>
           </div>
           <Input label="Supervisor" className="w-40" value={supervisor} disabled={!editable} onChange={(e) => setSupervisor(e.target.value)} />
@@ -486,7 +494,7 @@ export function SewingDailyOutputPage() {
         <Button variant="secondary" onClick={print}><Printer size={14} className="mr-1" /> Print</Button>
       </div>
 
-      <DocumentsModal open={showDocs} onClose={() => setShowDocs(false)} url="/sewing/daily-output" title="Sewing Daily Output Entries"
+      <DocumentsModal open={showDocs} onClose={() => setShowDocs(false)} url={`/${proc}/daily-output`} title={`${TITLE[proc]} — documents`}
         noKey="output_no" dateKey="output_date" onPick={(r) => openDoc(r.id)}
         columns={[{ key: 'line_code', header: 'Line', render: (r) => r.line_code }, { key: 'plan_no', header: 'Plan', render: (r) => r.plan_no || '—' },
           { key: 'good_qty', header: 'Good' }, { key: 'reject_qty', header: 'Reject' }]} />
@@ -563,6 +571,14 @@ function Donut({ value }: { value: number }) {
       <text x="46" y="51" textAnchor="middle" className="fill-slate-800" style={{ font: '700 15px sans-serif' }}>{value}%</text>
     </svg>
   );
+}
+
+export function SewingDailyOutputPage() {
+  return <DailyOutputPage proc="sewing" />;
+}
+
+export function CheckingQcEntryPage() {
+  return <DailyOutputPage proc="checking" />;
 }
 
 export default SewingDailyOutputPage;

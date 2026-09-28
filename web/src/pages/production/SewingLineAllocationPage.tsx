@@ -12,7 +12,7 @@ import { useToast } from '../../hooks/useToast';
 import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useAuth } from '../../lib/auth';
 import {
-  type Proc, type BundleInfo, PROC_LABEL, n, pct, groupByJob, JobHeaderRow, SummaryCard, UtilBar, distinct,
+  type Proc, type BundleInfo, PROC_LABEL, PROC_SOURCE, n, pct, groupByJob, JobHeaderRow, SummaryCard, UtilBar, distinct,
   EMPTY_FILTERS, applyFilters, summarize, SummaryTable, DocumentsModal, DocStatus, printDocument, printRowsByJob,
   type RowFilters,
 } from './linePlanUi';
@@ -431,7 +431,7 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
             </div>
           </Card>
 
-          <Card title={`Unallocated Bundles (${proc === 'sewing' ? 'from Cutting / Sewing Inward' : 'from Sewing Output'})`}
+          <Card title={`Unallocated Bundles (${PROC_SOURCE[proc]})`}
             actions={<span className="text-xs text-slate-500">{filtered.length} bundle(s) · {fmtNumber(filtered.reduce((a, b) => a + b.free_qty, 0))} PCS</span>}>
             <div className="border-b border-slate-100 p-2">
               <SearchInput value={search} onChange={setSearch} placeholder="Search bundle, barcode, job, style, colour…" className="w-full" />
@@ -733,6 +733,14 @@ function BundlePicker<T extends BundleInfo & { free_qty: number }>({ open, onClo
 
 export function SewingLineAllocationPage() {
   return <LineAllocationPage proc="sewing" />;
+}
+
+export function IroningLineAllocationPage() {
+  return <LineAllocationPage proc="ironing" />;
+}
+
+export function PackingLineAllocationPage() {
+  return <LineAllocationPage proc="packing" />;
 }
 
 export default SewingLineAllocationPage;

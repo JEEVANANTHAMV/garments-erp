@@ -44,6 +44,7 @@ import { knittingRouter } from './modules/knitting/knitting.routes.js';
 import { processRouteRouter } from './modules/yarnProcess/processRoute.routes.js';
 import { yarnProcessRouter } from './modules/yarnProcess/yarnProcess.routes.js';
 import { processFlowRouter } from './modules/yarnProcess/processFlow.routes.js';
+import { yarnProcessDcRouter } from './modules/yarnProcess/yarnProcessDc.routes.js';
 import { collarRouter } from './modules/yarnProcess/collar.routes.js';
 import { knittingProductionRouter } from './modules/yarnProcess/knittingProduction.routes.js';
 import { processReportsRouter } from './modules/yarnProcess/processReports.routes.js';
@@ -124,6 +125,7 @@ export function createApp() {
   // reserve→issue→receipt→QC engine, collar knitting, and process reporting.
   api.use('/', processRouteRouter);           // /process-routes
   api.use('/', yarnProcessRouter);            // /yarn-processes (dyeing / winding / twisting)
+  api.use('/', yarnProcessDcRouter);           // /yarn-process-dcs (outward DC / pending at processor)
   api.use('/', processFlowRouter);            // /process-issues, /process-receipts, /process-qc
   api.use('/', collarRouter);                 // /collars, /collar-programs, /collar-productions
   api.use('/', knittingProductionRouter);     // /knitting-productions, /knitting-rolls

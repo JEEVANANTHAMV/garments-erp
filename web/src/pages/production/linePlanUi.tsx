@@ -13,8 +13,13 @@ import { fmtDate, fmtNumber } from '../../lib/format';
  * a separate grid per bundle.
  */
 
-export type Proc = 'sewing' | 'checking';
-export const PROC_LABEL: Record<Proc, string> = { sewing: 'Sewing', checking: 'Checking' };
+export type Proc = 'sewing' | 'checking' | 'ironing' | 'packing';
+export const PROC_LABEL: Record<Proc, string> = { sewing: 'Sewing', checking: 'Checking', ironing: 'Ironing', packing: 'Packing' };
+/** Where each process takes its bundles from (bundle ledger). */
+export const PROC_SOURCE: Record<Proc, string> = {
+  sewing: 'from Cutting / Sewing Inward', checking: 'sewn good, waiting for checking',
+  ironing: 'checked good / in finishing', packing: 'finished, ready to pack',
+};
 
 export const n = (v: unknown) => Number(v ?? 0) || 0;
 export const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 1000) / 10 : 0);
