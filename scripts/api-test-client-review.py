@@ -359,7 +359,7 @@ else:
 
         # --- panel conversion (validation only when fewer than two panels)
         cut = call('GET', '/bundle-stock/available?level=CUT')[1].get('data') or []
-        cut = [b for b in cut if not b['open_dc_no']]
+        cut = [b for b in cut if not b['open_dc_no'] and b['available_qty'] == b['qty'] and b['status'] in ('GENERATED', 'CHECKED', 'CUT')]
         sizes = {}
         for b in cut: sizes.setdefault((b['io_no'], b['style_code'], b['size_code']), []).append(b)
         pair = next((v[:2] for v in sizes.values() if len(v) >= 2), None)
