@@ -8,7 +8,7 @@ import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
 import {
-  lockBundle, applyBundle, addMovement, availAt, bundleAvail, resolveBundleIds,
+  lockBundle, applyBundle, addMovement, availAt, bundleAvail, resolveBundleIds, ironingRequiresChecking, ironingAvail,
   TERMINAL, type BundleRow, type Counter, type Level,
 } from './bundleLedger.js';
 import { contractorRates } from './processMaster.routes.js';
@@ -247,6 +247,7 @@ async function availableBundles(cid: number, qp: z.infer<typeof availQuery>, onl
       WHERE ${where.join(' AND ')}
       ORDER BY col.color_name, sz.sort_order, sz.size_code, cb.bundle_seq, cb.id
       LIMIT ${qp.limit}`, params);
+  const strictChk = st?.kind === 'FINISHING' && await ironingRequiresChecking(null, cid);
   const holds = st ? await openDcHolds(null, cid, st.id, rows.map((r) => Number(r.id))) : new Map();
   const jobs = await jobInfo(cid, rows.map((r) => r.io_no));
   const assort = await assortColors(jobs, rows);
@@ -257,7 +258,7 @@ async function availableBundles(cid: number, qp: z.infer<typeof availQuery>, onl
     lay_no: b.lay_no, cut_no: b.cut_no, plan_no: b.plan_no, cutting_plan_id: b.cutting_plan_id_resolved,
     buyer_name: jobs.get(b.io_no)?.buyer_name ?? null, buyer_po_no: jobs.get(b.io_no)?.buyer_po_no ?? null,
     assort_color: assort.get(assortKey(b)) ?? null,
-    available_qty: availAt(b, level), avail: bundleAvail(b), open_dc_no: holds.get(Number(b.id)) ?? null,
+    available_qty: strictChk ? ironingAvail(b, true) : availAt(b, level), avail: bundleAvail(b), open_dc_no: holds.get(Number(b.id)) ?? null,
   })).filter((b) => qp.include_zero || b.available_qty > 0);
   return { data, meta: { level, stage: st } };
 }
@@ -496,6 +497,8 @@ async function prepareLines(tx: Tx, cid: number, st: StageInfo, lines: z.infer<t
   }
   ids.sort((a, b) => a - b);
   const holds = await openDcHolds(tx, cid, st.id, ids, challanId);
+  const strictChk = st.kind === 'FINISHING' && await ironingRequiresChecking(tx, cid);
+  const unit = strictChk ? 'checking-passed PCS (checking QC required before ironing)' : LEVEL_LABEL[st.level];
   const out: PreparedLine[] = [];
   const problems: string[] = [];
   for (const id of ids) {
@@ -504,10 +507,10 @@ async function prepareLines(tx: Tx, cid: number, st: StageInfo, lines: z.infer<t
     if (TERMINAL.includes(b.status)) { problems.push(`${b.bundle_no} is ${b.status}`); continue; }
     if (!b.style_id) { problems.push(`${b.bundle_no} has no style`); continue; }
     if (holds.has(id)) { problems.push(`${b.bundle_no} is already on open ${st.stage_name} DC ${holds.get(id)}`); continue; }
-    const avail = availAt(b, st.level);
+    const avail = strictChk ? ironingAvail(b, true) : availAt(b, st.level);
     const qty = l.qty ?? avail;
-    if (avail <= 0) { problems.push(`${b.bundle_no} has no ${LEVEL_LABEL[st.level]}`); continue; }
-    if (qty > avail) { problems.push(`${b.bundle_no}: ${qty} PCS requested, only ${avail} ${LEVEL_LABEL[st.level]}`); continue; }
+    if (avail <= 0) { problems.push(`${b.bundle_no} has no ${unit}`); continue; }
+    if (qty > avail) { problems.push(`${b.bundle_no}: ${qty} PCS requested, only ${avail} ${unit}`); continue; }
     out.push({
       bundle: b, qty, weight_kg: l.weight_kg ?? null, description: l.description ?? null, remarks: l.remarks ?? null,
       operation_id: l.operation_id ?? null, operator_line: l.operator_line ?? null,

@@ -6,7 +6,7 @@ import { NotFound, BadRequest, Forbidden } from '../../core/errors.js';
 import { requirePermission } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
-import { bundleAvail, TERMINAL } from './bundleLedger.js';
+import { bundleAvail, ironingRequiresChecking, TERMINAL } from './bundleLedger.js';
 import { jobInfo } from './processDc.routes.js';
 import { postBundleSewingOutput, postCheckingQc } from './productionFloor.routes.js';
 
@@ -93,12 +93,13 @@ interface BundleFilter {
 }
 
 /** PCS of a bundle that the process can work on now. */
-function readyQty(proc: Proc, b: Record<string, any>) {
+function readyQty(proc: Proc, b: Record<string, any>, strictChecking = true) {
   const a = bundleAvail({ ...b, balance_qty: b.balance_qty ?? b.qty });
   switch (proc) {
     case 'sewing': return a.cut + a.sewing_wip;
     case 'checking': return a.checking;
-    case 'ironing': return a.checked + a.finishing_wip;
+    // STRICT_CHECKING_BEFORE_IRONING: checked good only, else any sewn good (plus PCS already in finishing).
+    case 'ironing': return (strictChecking ? a.checked : a.sewn) + a.finishing_wip;
     default: return a.pack;
   }
 }
@@ -107,7 +108,7 @@ function readyQty(proc: Proc, b: Record<string, any>) {
 const CANDIDATE: Record<Proc, string> = {
   sewing: '(COALESCE(cb.balance_qty, cb.qty) > 0 OR COALESCE(cb.sew_in_qty,0) > COALESCE(cb.sew_good_qty,0) + COALESCE(cb.sew_reject_qty,0))',
   checking: 'COALESCE(cb.sew_good_qty,0) > 0',
-  ironing: '(COALESCE(cb.chk_pass_qty,0) > 0 OR COALESCE(cb.fin_in_qty,0) > 0)',
+  ironing: '(COALESCE(cb.sew_good_qty,0) > 0 OR COALESCE(cb.fin_in_qty,0) > 0)',
   packing: 'COALESCE(cb.fin_good_qty,0) > 0',
 };
 
@@ -128,17 +129,21 @@ async function loadBundles(tx: Tx | null, cid: number, proc: Proc, f: BundleFilt
   if (f.q) { where.push('(cb.bundle_no LIKE ? OR cb.barcode LIKE ? OR cb.io_no LIKE ?)'); params.push(`%${f.q}%`, `%${f.q}%`, `%${f.q}%`); }
   const rows = await q<any>(tx,
     `SELECT cb.*, st.style_code, st.style_name, col.color_name, sz.size_code, sz.sort_order AS size_sort,
-            lp.lay_no, c.cut_no, c.cut_date
+            lp.lay_no, c.cut_no, c.cut_date,
+            fb.fabric_name, fb.fabric_type, fb.knit_structure, gsm.gsm_value
        FROM trx_cutting_bundle cb
        LEFT JOIN trx_cutting c ON c.id = cb.cutting_id
        LEFT JOIN trx_lay_plan lp ON lp.id = COALESCE(cb.lay_id, c.lay_id)
        LEFT JOIN mst_style st ON st.id = cb.style_id
+       LEFT JOIN mst_fabric fb ON fb.id = st.fabric_id
+       LEFT JOIN mst_gsm gsm ON gsm.id = fb.gsm_id
        LEFT JOIN mst_color col ON col.id = cb.color_id
        LEFT JOIN mst_size sz ON sz.id = cb.size_id
       WHERE ${where.join(' AND ')}
       ORDER BY cb.io_no, col.color_name, sz.sort_order, sz.size_code, cb.bundle_seq, cb.id
       LIMIT ${Math.min(f.limit ?? 3000, 5000)}`, params);
   const jobs = await jobInfo(cid, rows.map((r) => r.io_no));
+  const strictChk = proc === 'ironing' ? await ironingRequiresChecking(tx, cid) : true;
   const out = new Map<number, any>();
   for (const b of rows) {
     const j = jobs.get(b.io_no);
@@ -149,7 +154,9 @@ async function loadBundles(tx: Tx | null, cid: number, proc: Proc, f: BundleFilt
       colour_id: b.color_id, colour: b.color_name, size_id: b.size_id, size: b.size_code, size_sort: n(b.size_sort),
       part_name: b.part_name, lay_no: b.lay_no, cut_no: b.cut_no, inward_date: b.cut_date,
       bundle_qty: n(b.qty), weight_kg: b.allocated_kg == null ? null : Number(b.allocated_kg),
-      ready_qty: readyQty(proc, b),
+      fabric_name: b.fabric_name ?? null, fabric_type: b.knit_structure || b.fabric_type || null,
+      gsm: b.gsm_value == null ? null : Number(b.gsm_value),
+      ready_qty: readyQty(proc, b, strictChk),
     });
   }
   return out;

@@ -9,6 +9,7 @@ import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
 import {
   lockBundle, assertActive, applyBundle, addMovement, availAt, bundleAvail, packingRequiresQc,
+  ironingRequiresChecking, ironingAvail,
   resolveBundleIds, linkBundlesToCarton, unlinkBundleFromCarton, type BundleRow,
 } from './bundleLedger.js';
 import { buildBundleTrace } from './bundleTrace.js';
@@ -685,10 +686,15 @@ productionFloorRouter.post('/finishing/input', requirePermission('PRODUCTION.CRE
     const b = await lockBundle(tx, cid, refOf({ bundle_id: ref.id, barcode: ref.code }));
     assertActive(b);
     requireStyle(b);
-    const avail = availAt(b, 'SEWN');
-    if (avail <= 0) throw BadRequest(`Bundle ${b.bundle_no} has no sewn good PCS waiting for finishing`);
+    const strictChk = await ironingRequiresChecking(tx, cid);
+    const avail = ironingAvail(b, strictChk);
+    const what = strictChk ? 'checking-passed PCS' : 'sewn good PCS';
+    if (avail <= 0) {
+      throw BadRequest(`Bundle ${b.bundle_no} has no ${what} waiting for finishing`
+        + (strictChk && bundleAvail(b).checking > 0 ? ` (${bundleAvail(b).checking} PCS still need checking QC)` : ''));
+    }
     const qty = body.input_qty ?? avail;
-    if (qty > avail) throw BadRequest(`Bundle ${b.bundle_no}: only ${avail} sewn good PCS available, ${qty} requested`);
+    if (qty > avail) throw BadRequest(`Bundle ${b.bundle_no}: only ${avail} ${what} available, ${qty} requested`);
 
     let sewOutId = body.sewing_output_id ?? null;
     if (sewOutId) {

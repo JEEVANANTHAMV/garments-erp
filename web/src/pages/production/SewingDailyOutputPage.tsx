@@ -323,6 +323,8 @@ function DailyOutputPage({ proc }: { proc: OutProc }) {
             <dt className="text-slate-500">Plan</dt><dd className="font-medium">{plan ? `${plan.plan_no} · ${fmtDate(plan.plan_date)}` : '—'}</dd>
             <dt className="text-slate-500">Job / Style</dt><dd className="font-medium">{styleInfo ? `${styleInfo.io_no ?? '—'} · ${styleInfo.style_no ?? '—'}` : '—'}</dd>
             <dt className="text-slate-500">Style Description</dt><dd>{styleInfo?.style_description || '—'}</dd>
+            <dt className="text-slate-500">Fabric Type</dt><dd>{styleInfo ? [styleInfo.fabric_type, styleInfo.fabric_name].filter(Boolean).join(' · ') || '—' : '—'}</dd>
+            <dt className="text-slate-500">GSM</dt><dd>{styleInfo?.gsm ?? '—'}</dd>
             <dt className="text-slate-500">Buyer / PO</dt><dd>{styleInfo ? `${styleInfo.buyer || '—'} / ${styleInfo.po_no || '—'}` : '—'}</dd>
             <dt className="text-slate-500">Allocated Qty</dt><dd>{fmtNumber(totals.plannedTotal)} PCS</dd>
             <dt className="text-slate-500">UOM</dt><dd>PCS</dd>

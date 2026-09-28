@@ -31,6 +31,7 @@ export interface BundleInfo {
   colour_id?: number | null; colour?: string | null; size_id?: number | null; size?: string | null; size_sort?: number;
   lay_no?: string | null; cut_no?: string | null; part_name?: string | null;
   bundle_qty: number; weight_kg?: number | null; inward_date?: string | null;
+  fabric_name?: string | null; fabric_type?: string | null; gsm?: number | null;
 }
 
 export interface JobGroup<T> {

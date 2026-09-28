@@ -1,5 +1,5 @@
 import type { Request } from 'express';
-import { txQuery, txQueryOne, txExecute, type Tx } from '../../config/db.js';
+import { queryOne, txQuery, txQueryOne, txExecute, type Tx } from '../../config/db.js';
 import { BadRequest, NotFound } from '../../core/errors.js';
 import { audit } from '../../core/audit.js';
 
@@ -51,6 +51,22 @@ export async function packingRequiresQc(tx: Tx, cid: number): Promise<boolean> {
   const row = await txQueryOne<{ setting_value: string }>(tx,
     `SELECT setting_value FROM cfg_system_setting WHERE company_id = ? AND setting_key = 'PACKING_REQUIRES_FINAL_QC'`, [cid]);
   return String(row?.setting_value ?? '0').trim() === '1';
+}
+
+/**
+ * Whether ironing / finishing may only take checking-QC passed PCS
+ * (cfg_system_setting STRICT_CHECKING_BEFORE_IRONING, default on).
+ */
+export async function ironingRequiresChecking(tx: Tx | null, cid: number): Promise<boolean> {
+  const sql = `SELECT setting_value FROM cfg_system_setting WHERE company_id = ? AND setting_key = 'STRICT_CHECKING_BEFORE_IRONING'`;
+  const row = tx ? await txQueryOne<{ setting_value: string }>(tx, sql, [cid]) : await queryOne<{ setting_value: string }>(sql, [cid]);
+  return String(row?.setting_value ?? '1').trim() !== '0';
+}
+
+/** Sewn PCS that ironing / finishing may take now: checked good only when strict, else all sewn good. */
+export function ironingAvail(b: Record<string, any>, strictChecking: boolean): number {
+  const a = bundleAvail(b);
+  return strictChecking ? a.checked : a.sewn;
 }
 
 /** PCS available at each stage of a bundle. */
