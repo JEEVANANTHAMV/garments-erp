@@ -102,9 +102,15 @@ export default function ProductionCostDetailPage() {
 
   const [breakdownHeads, setBreakdownHeads] = useState<any[]>([]);
   // Standard (approved merchandiser pre-costing) reference used by the P&L statement.
-  const [standard, setStandard] = useState<{ costing_no: string | null; approved: boolean; fob_price: number; currency_code?: string }>({
+  const [standard, setStandard] = useState<{
+    costing_no: string | null; approved: boolean; fob_price: number; currency_code?: string;
+    available?: boolean; fx_rate?: number | null; fx_basis?: string; original_currency_code?: string | null;
+  }>({
     costing_no: null, approved: false, fob_price: 0,
   });
+  // Where each actual head comes from (transactions / rate setting / no data) — never an assumed figure.
+  const [heads, setHeads] = useState<{ key: string; label: string; amount: number; source: string; note: string }[]>([]);
+  const [quality, setQuality] = useState<{ std_rate_valuations: number; unpriced_dcs: number; has_job: boolean } | null>(null);
   const [stageWip, setStageWip] = useState<any[]>([]);
   const [sources, setSources] = useState<any>({
     materials: [],
@@ -187,6 +193,8 @@ export default function ProductionCostDetailPage() {
         if (parsed.standard) setStandard(parsed.standard);
         if (parsed.stageWip) setStageWip(parsed.stageWip);
         if (parsed.sources) setSources(parsed.sources);
+        if (parsed.heads) setHeads(parsed.heads);
+        if (parsed.quality) setQuality(parsed.quality);
       } catch (err) {}
     }
   }, [costQuery.data]);
@@ -211,22 +219,22 @@ export default function ProductionCostDetailPage() {
         style_id: String(d.order.style_id),
         style_code: d.order.style_code,
         style_name: d.order.style_name,
-        buyer_style_ref: d.order.buyer_style_ref || 'BST-2026',
+        buyer_style_ref: d.order.buyer_style_ref || '',
         buyer_id: String(d.order.buyer_id || ''),
         buyer_name: d.order.buyer_name || '',
         buyer_po_no: d.order.buyer_po_no || '',
         so_no: d.order.so_no || '',
-        io_no: d.order.io_no || 'IO-2026-001',
-        season: d.order.season || 'AW-26',
-        unit_name: d.order.unit_name || 'Unit 1 (Tiruppur)',
+        io_no: d.order.io_no || '',
+        season: d.order.season || '',
+        unit_name: d.order.unit_name || '',
         order_qty: d.order.order_qty,
         planned_qty: d.order.planned_qty,
         produced_qty: d.order.produced_qty,
-        good_qty: d.order.good_qty || (d.order.produced_qty - 40),
-        rejection_qty: d.order.rejection_qty || 40,
-        rework_qty: d.order.rework_qty || 25,
+        good_qty: d.order.good_qty ?? 0,
+        rejection_qty: d.order.rejection_qty ?? 0,
+        rework_qty: d.order.rework_qty ?? 0,
         currency_code: d.order.currency_code || 'INR',
-        merchandiser_costing_no: d.order.merchandiser_costing_no || 'CST-APPR-01',
+        merchandiser_costing_no: d.order.merchandiser_costing_no || '',
         status: prev.status === 'APPROVED' || prev.status === 'FINALIZED' ? prev.status : 'CALCULATED',
       }));
 
@@ -236,6 +244,8 @@ export default function ProductionCostDetailPage() {
       if (d.standard) setStandard(d.standard);
       setStageWip(d.stageWip || []);
       setSources(d.sources || {});
+      setHeads(d.heads || []);
+      setQuality(d.quality || null);
 
       toast(`Loaded transaction-driven costing for ${d.order.po_prod_no} (${d.order.style_code})`);
     } catch (err) {
@@ -308,6 +318,8 @@ export default function ProductionCostDetailPage() {
           standard,
           stageWip,
           sources,
+          heads,
+          quality,
         },
       };
 
@@ -396,7 +408,9 @@ export default function ProductionCostDetailPage() {
   // Machine cost is no longer part of the actual cost sheet (client review). Older
   // saved sheets may still carry a machine head/amount; it is folded into overheads
   // for display so the statement still adds up to the saved total.
-  const perPc = (v: number) => v / (head.produced_qty || 1);
+  // Per good piece (as the server computes the standard), falling back to produced PCS.
+  const pcBase = Number(head.good_qty) || Number(head.produced_qty) || 0;
+  const perPc = (v: number) => (pcBase > 0 ? v / pcBase : 0);
   const legacyMachine = Number(summary.machine_cost) || 0;
   const displayHeads = (() => {
     const machine = breakdownHeads.filter((h) => String(h.head).includes('Machine'));
@@ -408,10 +422,12 @@ export default function ProductionCostDetailPage() {
       ? { ...h, estimated: (Number(h.estimated) || 0) + mEst, actual: (Number(h.actual) || 0) + mAct }
       : h);
   })();
-  const stdTotal = summary.estimated_cost_per_piece * (head.produced_qty || 0);
+  const stdTotal = summary.estimated_cost_per_piece * pcBase;
   const fobPc = Number(standard.fob_price) || 0;
   const revenue = fobPc * (head.good_qty || 0);
-  const stdProfit = (fobPc - summary.estimated_cost_per_piece) * (head.produced_qty || 0);
+  const stdProfit = (fobPc - summary.estimated_cost_per_piece) * pcBase;
+  const stdOk = standard.available !== false && !!standard.costing_no;
+  const money = (v: number | null | undefined) => (v == null ? '—' : `₹${Number(v).toFixed(2)}`);
   const actProfit = revenue - summary.total_actual_cost;
   const signed = (v: number, digits = 2) => `${v > 0 ? '+' : v < 0 ? '−' : ''}₹${Math.abs(v).toFixed(digits)}`;
 
@@ -668,8 +684,8 @@ export default function ProductionCostDetailPage() {
 
                 <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-3.5 shadow-xs">
                   <span className="text-[11px] font-bold text-indigo-800 uppercase tracking-wider">Standard Cost / Pc</span>
-                  <div className="text-2xl font-bold text-indigo-700 mt-1">₹{summary.estimated_cost_per_piece.toFixed(2)}</div>
-                  <span className="text-[11px] text-indigo-600">Approved Merchandiser Pre-Costing</span>
+                  <div className="text-2xl font-bold text-indigo-700 mt-1">{stdOk ? `₹${summary.estimated_cost_per_piece.toFixed(2)}` : '—'}</div>
+                  <span className="text-[11px] text-indigo-600">{stdOk ? 'Merchandiser pre-costing (INR)' : 'No pre-costing / exchange rate'}</span>
                 </div>
 
                 <div className="rounded-xl border border-brand-200 bg-brand-50/50 p-3.5 shadow-xs">
@@ -689,6 +705,36 @@ export default function ProductionCostDetailPage() {
                 </div>
               </div>
 
+              {/* Where every actual head comes from */}
+              {heads.length > 0 && (
+                <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
+                  <div className="p-3 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-700">Actual cost sources</div>
+                  {quality && (!quality.has_job || quality.std_rate_valuations > 0 || quality.unpriced_dcs > 0) && (
+                    <div className="px-3 pt-2 text-[11px] text-amber-800 space-y-0.5">
+                      {!quality.has_job && <p>This production order has no IO no (on the order or its sales order) — job transactions cannot be linked.</p>}
+                      {quality.std_rate_valuations > 0 && <p>{quality.std_rate_valuations} material line(s) valued at the master standard rate (no GRN rate found).</p>}
+                      {quality.unpriced_dcs > 0 && <p>{quality.unpriced_dcs} DC(s) have no rate — their PCS are costed at ₹0.</p>}
+                    </div>
+                  )}
+                  <table className="w-full text-xs">
+                    <tbody className="divide-y divide-slate-100">
+                      {heads.map((h) => (
+                        <tr key={h.key}>
+                          <td className="py-1.5 px-3 font-medium w-48">{h.label}</td>
+                          <td className="py-1.5 px-3 w-32">
+                            <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${h.source === 'TRANSACTIONS' ? 'bg-emerald-100 text-emerald-800' : h.source === 'RATE_SETTING' ? 'bg-sky-100 text-sky-800' : 'bg-amber-100 text-amber-800'}`}>
+                              {h.source === 'TRANSACTIONS' ? 'Transactions' : h.source === 'RATE_SETTING' ? 'Rate setting' : 'No data'}
+                            </span>
+                          </td>
+                          <td className="py-1.5 px-3 text-right font-mono w-28">₹{fmtNumber(Math.round(h.amount))}</td>
+                          <td className="py-1.5 px-3 text-slate-500">{h.note}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
               {/* Management P&L: Standard (pre-costing) vs Actual, head-wise */}
               <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
                 <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2 text-xs">
@@ -696,11 +742,16 @@ export default function ProductionCostDetailPage() {
                   <span className="text-[11px] text-slate-500">
                     Standard = {standard.costing_no
                       ? <>pre-costing <span className="font-mono font-semibold text-indigo-700">{standard.costing_no}</span>{!standard.approved && <span className="text-amber-700 font-semibold"> (not approved)</span>}</>
-                      : <span className="text-amber-700 font-semibold">no pre-costing for this style — estimated</span>}
+                      : <span className="text-amber-700 font-semibold">no pre-costing for this style — standard not available</span>}
                     {' '}· Variance = Actual − Standard (+ adverse, − favourable)
-                    {standard.currency_code && standard.currency_code !== 'INR' && (
+                    {standard.original_currency_code && standard.original_currency_code !== 'INR' && standard.fx_rate != null && (
+                      <span className="block text-slate-600">
+                        Standard converted {standard.original_currency_code} → INR at {Number(standard.fx_rate).toFixed(4)} ({standard.fx_basis})
+                      </span>
+                    )}
+                    {standard.costing_no && standard.available === false && (
                       <span className="block text-amber-700 font-semibold">
-                        Pre-costing is in {standard.currency_code}; actuals are in INR — convert the standard before comparing.
+                        No {standard.original_currency_code} → INR rate (sales order or exchange rate master) — variance not computed.
                       </span>
                     )}
                   </span>
@@ -724,10 +775,10 @@ export default function ProductionCostDetailPage() {
                         return (
                           <tr key={i} className="hover:bg-slate-50">
                             <td className="py-2 px-3 font-medium">{h.head}</td>
-                            <td className="py-2 px-3 text-right font-mono">₹{perPc(est).toFixed(2)}</td>
+                            <td className="py-2 px-3 text-right font-mono">{stdOk ? `₹${perPc(est).toFixed(2)}` : '—'}</td>
                             <td className="py-2 px-3 text-right font-mono font-semibold">₹{perPc(act).toFixed(2)}</td>
-                            <td className={`py-2 px-3 text-right font-mono font-bold ${v > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{signed(perPc(v))}</td>
-                            <td className={`py-2 px-3 text-right font-mono ${v > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{signed(v, 0)}</td>
+                            <td className={`py-2 px-3 text-right font-mono font-bold ${v > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{stdOk ? signed(perPc(v)) : '—'}</td>
+                            <td className={`py-2 px-3 text-right font-mono ${v > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{stdOk ? signed(v, 0) : '—'}</td>
                           </tr>
                         );
                       })}
@@ -735,10 +786,10 @@ export default function ProductionCostDetailPage() {
                     <tfoot className="border-t-2 border-slate-300 text-slate-900">
                       <tr className="bg-slate-50 font-bold">
                         <td className="py-2.5 px-3">Total Production Cost</td>
-                        <td className="py-2.5 px-3 text-right font-mono">₹{summary.estimated_cost_per_piece.toFixed(2)}</td>
-                        <td className="py-2.5 px-3 text-right font-mono">₹{summary.actual_cost_per_piece.toFixed(2)}</td>
-                        <td className={`py-2.5 px-3 text-right font-mono ${summary.variance_amount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{signed(perPc(summary.variance_amount))}</td>
-                        <td className={`py-2.5 px-3 text-right font-mono ${summary.variance_amount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{signed(summary.total_actual_cost - stdTotal, 0)}</td>
+                        <td className="py-2.5 px-3 text-right font-mono">{stdOk ? `₹${summary.estimated_cost_per_piece.toFixed(2)}` : '—'}</td>
+                        <td className="py-2.5 px-3 text-right font-mono">₹{perPc(summary.total_actual_cost).toFixed(2)}</td>
+                        <td className={`py-2.5 px-3 text-right font-mono ${summary.variance_amount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{stdOk ? signed(perPc(summary.variance_amount)) : '—'}</td>
+                        <td className={`py-2.5 px-3 text-right font-mono ${summary.variance_amount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{stdOk ? signed(summary.total_actual_cost - stdTotal, 0) : '—'}</td>
                       </tr>
                       {fobPc > 0 && (
                         <>
@@ -1182,13 +1233,17 @@ export default function ProductionCostDetailPage() {
                       return (
                         <tr key={i} className={isTotal ? 'bg-slate-50/90 font-bold border-t-2 border-slate-300' : 'hover:bg-slate-50'}>
                           <td className={`py-2.5 px-3 ${isTotal ? 'text-slate-900 font-bold' : 'font-medium'}`}>{r.cost_head}</td>
-                          <td className="py-2.5 px-3 text-right font-mono">₹{r.standard_pc.toFixed(2)}</td>
-                          <td className="py-2.5 px-3 text-right font-mono font-bold">₹{r.actual_pc.toFixed(2)}</td>
-                          <td className={`py-2.5 px-3 text-right font-mono font-bold ${isPositive ? 'text-rose-600' : 'text-emerald-600'}`}>
-                            {isPositive ? `+₹${r.variance.toFixed(2)}` : `-₹${Math.abs(r.variance).toFixed(2)}`}
+                          <td className="py-2.5 px-3 text-right font-mono">{money(r.standard_pc)}</td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold">
+                            ₹{Number(r.actual_pc).toFixed(2)}
+                            {r.source === 'NO_DATA' && <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] font-semibold text-amber-800" title={r.note}>no data</span>}
+                            {r.source === 'RATE_SETTING' && <span className="ml-1 rounded bg-sky-100 px-1 text-[10px] font-semibold text-sky-800" title={r.note}>rate setting</span>}
                           </td>
                           <td className={`py-2.5 px-3 text-right font-mono font-bold ${isPositive ? 'text-rose-600' : 'text-emerald-600'}`}>
-                            {isPositive ? `+${r.variance_pct.toFixed(2)}%` : `${r.variance_pct.toFixed(2)}%`}
+                            {r.variance == null ? '—' : isPositive ? `+₹${r.variance.toFixed(2)}` : `-₹${Math.abs(r.variance).toFixed(2)}`}
+                          </td>
+                          <td className={`py-2.5 px-3 text-right font-mono font-bold ${isPositive ? 'text-rose-600' : 'text-emerald-600'}`}>
+                            {r.variance_pct == null ? '—' : isPositive ? `+${r.variance_pct.toFixed(2)}%` : `${r.variance_pct.toFixed(2)}%`}
                           </td>
                         </tr>
                       );

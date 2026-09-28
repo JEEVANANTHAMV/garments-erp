@@ -15,21 +15,64 @@ export const costingRouter = Router();
 
 /**
  * 1. GET /api/production-costs/order-data/:prodOrderId
- * Collects live approved transactions against a production order to build
- * the automatic actual costing snapshot, stage WIP, and estimated vs actual variance.
+ *
+ * Actual cost of a production order built ONLY from ERP transactions of its job
+ * (IO no + style) — client review 24-Sep-2026: the management P&L of standard
+ * (approved pre-costing) vs actual. A head with no source data is 0 and flagged
+ * NO_DATA; nothing is estimated.
+ *
+ *   Fabric    fabric rolls issued to cutting × the roll's GRN rate (rolls from our
+ *             own knitting carry no purchase rate — their cost is the yarn below)
+ *   Yarn      yarn issued to knitting / yarn processes × lot GRN rate
+ *             (else weighted receipt rate, else the item's standard rate — flagged)
+ *   Trims     material issues against the production order × receipt rate
+ *   Job work  process inwards on DCs of the job × DC rate (mistake PCS paid only
+ *             when the process says so) — stitching, ironing, packing, printing …
+ *   In-house  cutting / sewing / overhead only from company rate settings
+ *             (COSTING_CUTTING_RATE_PER_PC, COSTING_SEWING_RATE_PER_PC,
+ *             COSTING_OVERHEAD_PER_PC); blank setting → NO_DATA
+ *   Quantity  bundle ledger (cut, sewn, finished, QC, packed) and FG receipts
+ *
+ * Standard figures are converted to INR: sales order exchange rate (same
+ * currency), else the latest rate in trx_exchange_rate; with no rate the
+ * variance is not computed.
  */
-costingRouter.get('/production-costs/order-data/:prodOrderId', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
-  const companyId = req.user!.companyId;
-  const prodOrderId = Number(req.params.prodOrderId);
+type HeadSource = 'TRANSACTIONS' | 'RATE_SETTING' | 'NO_DATA';
+interface CostHead { key: string; label: string; amount: number; source: HeadSource; note: string; docs: number }
 
-  // A. Load Production Order Details
+const r2 = (v: number) => Math.round(v * 100) / 100;
+const numv = (v: unknown) => Number(v) || 0;
+const SEW_STAGES = ['STITCH', 'STITCHING', 'SEW', 'SEWING'];
+const FIN_STAGES = ['IRON', 'IRONING', 'FINISH', 'FINISHING', 'PRESS', 'CHECK', 'CHECKING'];
+const PACK_STAGES = ['PACK', 'PACKING'];
+const EMB_STAGES = ['PRINT', 'PRINTING', 'EMB', 'EMBROIDERY'];
+
+/** Weighted receipt rate of an item (GRN / opening rows of the stock ledger), else its standard rate. */
+async function receiptRate(companyId: number, type: 'YARN' | 'FABRIC' | 'TRIM', itemId: number | null) {
+  if (!itemId) return { rate: 0, basis: 'NO_RATE' as const };
+  const col = type === 'YARN' ? 'yarn_id' : type === 'FABRIC' ? 'fabric_id' : 'trim_id';
+  const w = await queryOne<any>(
+    `SELECT SUM(qty_in * rate) / NULLIF(SUM(qty_in), 0) AS rate FROM trx_stock_ledger
+      WHERE company_id = ? AND ${col} = ? AND qty_in > 0 AND rate > 0 AND ref_type IN ('GRN','OPENING')`, [companyId, itemId]);
+  if (numv(w?.rate) > 0) return { rate: numv(w.rate), basis: 'RECEIPT_AVG' as const };
+  const tbl = type === 'YARN' ? 'mst_yarn' : type === 'FABRIC' ? 'mst_fabric' : 'mst_trim';
+  const s = await queryOne<any>(`SELECT std_rate FROM ${tbl} WHERE id = ?`, [itemId]);
+  return numv(s?.std_rate) > 0 ? { rate: numv(s.std_rate), basis: 'STD_RATE' as const } : { rate: 0, basis: 'NO_RATE' as const };
+}
+
+async function costSetting(companyId: number, key: string) {
+  const r = await queryOne<any>(`SELECT setting_value FROM cfg_system_setting WHERE company_id = ? AND setting_key = ?`, [companyId, key]);
+  const v = Number(String(r?.setting_value ?? '').trim());
+  return r?.setting_value != null && String(r.setting_value).trim() !== '' && Number.isFinite(v) && v >= 0 ? v : null;
+}
+
+export async function buildOrderData(companyId: number, prodOrderId: number) {
+  // A. Production order, its sales order and job (IO no)
   const order = await queryOne<any>(`
-    SELECT po.*,
-           st.style_code, st.style_name, st.season AS style_season,
-           st.buyer_style_ref, 12.5 AS style_smv, -- mst_style has no smv column; default SMV
+    SELECT po.*, st.style_code, st.style_name, st.season AS style_season, st.buyer_style_ref,
            b.id AS buyer_id, b.party_name AS buyer_name,
-           so.so_no, so.buyer_po_no, so.season AS so_season,
-           u.unit_name
+           so.so_no, so.io_no AS so_io_no, so.buyer_po_no, so.season AS so_season, so.currency_id AS so_currency_id,
+           so.exchange_rate AS so_exchange_rate, u.unit_name
       FROM trx_production_order po
       LEFT JOIN mst_style st ON st.id = po.style_id
       LEFT JOIN trx_sales_order so ON so.id = po.so_id
@@ -37,481 +80,353 @@ costingRouter.get('/production-costs/order-data/:prodOrderId', requirePermission
       LEFT JOIN mst_unit u ON u.id = po.unit_id
      WHERE po.id = ? AND po.company_id = ?
   `, [prodOrderId, companyId]);
-
   if (!order) throw NotFound('Production order not found');
+  const ioNo: string | null = order.io_no || order.so_io_no || null;
+  const styleId: number | null = order.style_id ?? null;
 
-  // B. Load the style's Pre-Costing (Standard / baseline). An APPROVED costing is
-  //    preferred; otherwise the latest version is used and flagged as not approved.
+  // B. Standard: the style's pre-costing (approved preferred)
   const estimatedCosting = await queryOne<any>(`
-    SELECT c.*, cur.code AS currency_code, cur.symbol AS currency_symbol,
-           st.code AS status_code
+    SELECT c.*, cur.code AS currency_code, cur.symbol AS currency_symbol, st.code AS status_code
       FROM trx_costing c
       LEFT JOIN cfg_currency cur ON cur.id = c.currency_id
       LEFT JOIN cfg_status st ON st.id = c.status_id
      WHERE c.style_id = ? AND c.company_id = ? AND c.is_deleted = 0
      ORDER BY (st.code = 'APPROVED') DESC, c.version DESC, c.id DESC LIMIT 1
-  `, [order.style_id, companyId]);
+  `, [styleId, companyId]);
 
-  // C. Load Actual Material Issues & Return Transactions
-  const materialIssues = await query<any>(`
-    SELECT mi.id AS issue_id, mi.issue_no, mi.issue_date,
-           mil.id AS line_id, mil.material_type, mil.issued_qty,
-           mil.yarn_id, mil.fabric_id, mil.trim_id,
-           COALESCE(y.yarn_name, fb.fabric_name, tr.trim_name, 'Material Item') AS item_name,
-           COALESCE(y.yarn_code, fb.fabric_code, tr.trim_code, '') AS item_code,
-           COALESCE(y.std_rate, fb.std_rate, tr.std_rate,
-             CASE mil.material_type
-               WHEN 'FABRIC' THEN 420.00
-               WHEN 'YARN' THEN 280.00
-               WHEN 'TRIM' THEN 2.50
-               ELSE 10.00
-             END
-           ) AS valuation_rate,
-           u.code AS uom_code, mil.uom_id
+  // C. Quantities from the bundle ledger of the job (split parents / merge sources excluded from cut qty)
+  const q = ioNo ? await queryOne<any>(`
+    SELECT COUNT(*) AS bundles,
+           COALESCE(SUM(CASE WHEN cb.status <> 'SPLIT' AND NOT EXISTS
+                (SELECT 1 FROM trx_bundle_merge_source ms WHERE ms.source_bundle_id = cb.id AND cb.status = 'CLOSED') THEN cb.qty END), 0) AS cut_qty,
+           COALESCE(SUM(cb.sew_in_qty),0) AS sew_in, COALESCE(SUM(cb.sew_good_qty),0) AS sew_good,
+           COALESCE(SUM(cb.sew_reject_qty),0) AS sew_rej, COALESCE(SUM(cb.fin_in_qty),0) AS fin_in,
+           COALESCE(SUM(cb.fin_good_qty),0) AS fin_good, COALESCE(SUM(cb.fin_reject_qty),0) AS fin_rej,
+           COALESCE(SUM(cb.qc_pass_qty),0) AS qc_pass, COALESCE(SUM(cb.qc_reject_qty),0) AS qc_rej,
+           COALESCE(SUM(cb.packed_qty),0) AS packed,
+           COALESCE(SUM(cb.cut_loss_qty + cb.sewn_loss_qty + cb.pack_loss_qty),0) AS losses
+      FROM trx_cutting_bundle cb
+     WHERE cb.company_id = ? AND cb.io_no = ? AND (? IS NULL OR cb.style_id = ?)
+  `, [companyId, ioNo, styleId, styleId]) : null;
+  const fg = await queryOne<any>(`
+    SELECT COALESCE(SUM(total_qty),0) AS qty, COUNT(*) AS docs FROM trx_fg_receipt
+     WHERE company_id = ? AND (prod_order_id = ? OR (? IS NOT NULL AND io_no = ? AND (? IS NULL OR style_id = ?)))
+  `, [companyId, prodOrderId, ioNo, ioNo, styleId, styleId]);
+  const rw = ioNo ? await queryOne<any>(`
+    SELECT (SELECT COALESCE(SUM(rework_qty),0) FROM trx_sewing_output WHERE company_id = ? AND io_no = ?)
+         + (SELECT COALESCE(SUM(rework_qty),0) FROM trx_final_qc WHERE company_id = ? AND io_no = ?) AS rework
+  `, [companyId, ioNo, companyId, ioNo]) : null;
+
+  const plannedQty = numv(order.planned_qty) || numv(order.order_qty);
+  const cutQty = numv(q?.cut_qty);
+  const sewGood = numv(q?.sew_good);
+  const fgQty = numv(fg?.qty);
+  const goodQty = fgQty || numv(q?.qc_pass) || numv(q?.fin_good) || sewGood;
+  // FG can be received outside the bundle flow (e.g. older orders), so produced is never below good.
+  const producedQty = Math.max(sewGood + numv(q?.sew_rej), goodQty);
+  const rejectionQty = numv(q?.sew_rej) + numv(q?.fin_rej) + numv(q?.qc_rej) + numv(q?.losses);
+  const reworkQty = numv(rw?.rework);
+
+  // D. Fabric rolls issued to cutting for the job
+  const fabricRolls = ioNo ? await query<any>(`
+    SELECT fi.issue_no, fi.issue_date, fi.fabric_id, fb.fabric_code, fb.fabric_name,
+           fir.lot_no, fir.roll_no, fir.issue_kg, fir.consumed_kg, fir.returned_kg,
+           gl.rate AS grn_rate, g.grn_no, sup.party_name AS supplier_name,
+           EXISTS (SELECT 1 FROM trx_process_receipt pr WHERE pr.grn_id = g.id) AS own_knitted
+      FROM trx_fabric_issue fi
+      JOIN trx_fabric_issue_roll fir ON fir.fabric_issue_id = fi.id
+      LEFT JOIN trx_fabric_roll fr ON fr.id = fir.fabric_roll_id
+      LEFT JOIN trx_grn_line gl ON gl.id = fr.grn_line_id
+      LEFT JOIN trx_grn g ON g.id = fr.grn_id
+      LEFT JOIN mst_party sup ON sup.id = g.supplier_id
+      LEFT JOIN mst_fabric fb ON fb.id = fi.fabric_id
+     WHERE fi.company_id = ? AND fi.io_no = ? AND (fi.style_id IS NULL OR ? IS NULL OR fi.style_id = ?)
+     ORDER BY fi.issue_date, fi.id, fir.id
+  `, [companyId, ioNo, styleId, styleId]) : [];
+  let stdRateUsed = 0;
+  const fabricLines: any[] = [];
+  for (const r of fabricRolls) {
+    const kg = numv(r.consumed_kg) > 0 ? numv(r.consumed_kg) : Math.max(0, numv(r.issue_kg) - numv(r.returned_kg));
+    let rate = numv(r.grn_rate);
+    let basis = 'GRN';
+    if (!rate && Number(r.own_knitted)) basis = 'OWN_KNITTING';
+    else if (!rate) { const rr = await receiptRate(companyId, 'FABRIC', r.fabric_id); rate = rr.rate; basis = rr.basis; if (basis === 'STD_RATE') stdRateUsed++; }
+    fabricLines.push({
+      code: r.fabric_code, fabric_name: r.fabric_name, lot_no: r.lot_no, roll_no: r.roll_no,
+      std_qty: null, issue_qty: r2(kg), rate: r2(rate), amount: r2(kg * rate), supplier_name: r.supplier_name,
+      grn_no: r.grn_no, issue_no: r.issue_no, rate_basis: basis,
+    });
+  }
+  const fabricAmt = fabricLines.reduce((a, l) => a + l.amount, 0);
+
+  // E. Yarn issued to knitting / yarn processes of the job
+  const yarnIssues = ioNo ? await query<any>(`
+    SELECT pi.issue_no, pi.dc_no, pi.issue_date, pi.yarn_id, y.yarn_code, y.yarn_name, pi.lot_no, pi.issued_qty_kg,
+           (SELECT gl.rate FROM trx_grn_line gl WHERE gl.yarn_id = pi.yarn_id AND gl.lot_no = pi.lot_no AND gl.rate > 0
+             ORDER BY gl.id DESC LIMIT 1) AS lot_rate
+      FROM trx_process_issue pi
+      LEFT JOIN mst_yarn y ON y.id = pi.yarn_id
+      LEFT JOIN trx_knitting_program kp ON pi.src_type = 'KNITTING_PROGRAM' AND kp.id = pi.src_id
+      LEFT JOIN trx_yarn_process yp ON pi.src_type = 'YARN_PROCESS' AND yp.id = pi.src_id
+     WHERE pi.company_id = ? AND COALESCE(kp.io_no, yp.io_no) = ?
+     ORDER BY pi.issue_date, pi.id
+  `, [companyId, ioNo]) : [];
+  const yarnLines: any[] = [];
+  for (const y of yarnIssues) {
+    let rate = numv(y.lot_rate); let basis = 'LOT_GRN';
+    if (!rate) { const rr = await receiptRate(companyId, 'YARN', y.yarn_id); rate = rr.rate; basis = rr.basis; if (basis === 'STD_RATE') stdRateUsed++; }
+    const kg = numv(y.issued_qty_kg);
+    yarnLines.push({ doc_no: y.dc_no || y.issue_no, item_name: y.yarn_name, item_code: y.yarn_code, lot_no: y.lot_no, qty: r2(kg), rate: r2(rate), amount: r2(kg * rate), rate_basis: basis });
+  }
+  const yarnAmt = yarnLines.reduce((a, l) => a + l.amount, 0);
+
+  // F. Material issues against the production order (trims and any other materials)
+  const matIssues = await query<any>(`
+    SELECT mi.issue_no, mil.material_type, mil.issued_qty, mil.yarn_id, mil.fabric_id, mil.trim_id, u.code AS uom_code,
+           COALESCE(y.yarn_name, fb.fabric_name, tr.trim_name) AS item_name
       FROM trx_material_issue mi
       JOIN trx_material_issue_line mil ON mil.issue_id = mi.id
-      LEFT JOIN mst_yarn y ON y.id = mil.yarn_id
-      LEFT JOIN mst_fabric fb ON fb.id = mil.fabric_id
-      LEFT JOIN mst_trim tr ON tr.id = mil.trim_id
-      LEFT JOIN cfg_uom u ON u.id = mil.uom_id
-     WHERE (mi.prod_order_id = ? OR mi.id = 1) AND mi.company_id = ?
-     ORDER BY mi.issue_date ASC, mil.id ASC
-  `, [prodOrderId, companyId]);
+      LEFT JOIN mst_yarn y ON y.id = mil.yarn_id LEFT JOIN mst_fabric fb ON fb.id = mil.fabric_id
+      LEFT JOIN mst_trim tr ON tr.id = mil.trim_id LEFT JOIN cfg_uom u ON u.id = mil.uom_id
+     WHERE mi.company_id = ? AND mi.prod_order_id = ?
+     ORDER BY mi.issue_date, mil.id
+  `, [companyId, prodOrderId]);
+  const trimLines: any[] = [];
+  let otherMatAmt = 0;
+  for (const m of matIssues) {
+    const type = (m.material_type === 'YARN' || m.material_type === 'FABRIC' ? m.material_type : 'TRIM') as 'YARN' | 'FABRIC' | 'TRIM';
+    const rr = await receiptRate(companyId, type, m.yarn_id ?? m.fabric_id ?? m.trim_id);
+    if (rr.basis === 'STD_RATE') stdRateUsed++;
+    const qty = numv(m.issued_qty); const amt = r2(qty * rr.rate);
+    if (type === 'TRIM') {
+      trimLines.push({ trim_name: m.item_name, uom: m.uom_code, std_qty: null, issue_qty: qty, return_qty: 0, net_qty: qty, rate: r2(rr.rate), actual_cost: amt, issue_no: m.issue_no, rate_basis: rr.basis });
+    } else otherMatAmt += amt;
+  }
+  const trimAmt = trimLines.reduce((a, l) => a + l.actual_cost, 0);
 
-  // D. Load Cutting Transactions
-  const cutting = await query<any>(`
-    SELECT c.*, fb.fabric_name, fb.fabric_code
-      FROM trx_cutting c
-      LEFT JOIN mst_fabric fb ON fb.id = c.fabric_id
-     WHERE c.prod_order_id = ? AND c.company_id = ?
-  `, [prodOrderId, companyId]);
-
-  // E. Load Stitching / Sewing Transactions
-  const stitching = await query<any>(`
-    SELECT s.*, s.line_no AS line_code, s.line_no AS line_name
-      FROM trx_stitching s
-     WHERE s.prod_order_id = ? AND s.company_id = ?
-  `, [prodOrderId, companyId]);
-
-  // F. Load Embellishments & In-house Process Transactions
-  const printing = await query<any>(`
-    SELECT p.*, v.party_name AS vendor_name
-      FROM trx_printing p
-      LEFT JOIN mst_party v ON v.id = p.vendor_id
-     WHERE p.prod_order_id = ? AND p.company_id = ?
-  `, [prodOrderId, companyId]);
-
-  const embroidery = await query<any>(`
-    SELECT e.*, v.party_name AS vendor_name
-      FROM trx_embroidery e
-      LEFT JOIN mst_party v ON v.id = e.vendor_id
-     WHERE e.prod_order_id = ? AND e.company_id = ?
-  `, [prodOrderId, companyId]);
-
-  const washing = await query<any>(`
-    SELECT w.*, v.party_name AS vendor_name
-      FROM trx_washing w
-      LEFT JOIN mst_party v ON v.id = w.vendor_id
-     WHERE w.prod_order_id = ? AND w.company_id = ?
-  `, [prodOrderId, companyId]);
-
-  // G. Load Job Work Outward & Receipts
-  const jobwork = await query<any>(`
-    SELECT jc.id AS challan_id, jc.challan_no, jc.challan_date, jc.total_qty, jc.rate, jc.total_amount,
-           jc.status AS challan_status, ps.stage_name, v.party_name AS vendor_name,
-           jr.receipt_no, jr.receipt_date, jr.received_qty, jr.rejected_qty, jr.shortage_qty, jr.rework_qty,
-           COALESCE(jr.total_amount, jc.total_amount) AS actual_cost
-      FROM trx_jobwork_challan jc
+  // G. Job work: process inwards on DCs of the job × DC rate
+  const jw = await query<any>(`
+    SELECT jc.id, jc.challan_no, jc.rate, ps.stage_code, ps.stage_name, ps.bill_include_mistake, v.party_name AS vendor_name,
+           COALESCE(SUM(rl.received_qty),0) AS good, COALESCE(SUM(rl.rejected_qty),0) AS rej, COUNT(DISTINCT r.id) AS receipts
+      FROM trx_jobwork_receipt r
+      JOIN trx_jobwork_receipt_line rl ON rl.receipt_id = r.id
+      LEFT JOIN trx_jobwork_challan_line jl ON jl.id = rl.challan_line_id
+      JOIN trx_jobwork_challan jc ON jc.id = r.challan_id
       LEFT JOIN cfg_process_stage ps ON ps.id = jc.stage_id
       LEFT JOIN mst_party v ON v.id = jc.vendor_id
-      LEFT JOIN trx_jobwork_receipt jr ON jr.challan_id = jc.id
-     WHERE jc.prod_order_id = ? AND jc.company_id = ?
-  `, [prodOrderId, companyId]);
+     WHERE r.company_id = ? AND ((? IS NOT NULL AND jl.io_no = ? AND (jl.style_id IS NULL OR ? IS NULL OR jl.style_id = ?)) OR jc.prod_order_id = ?)
+     GROUP BY jc.id ORDER BY jc.challan_date, jc.id
+  `, [companyId, ioNo, ioNo, styleId, styleId, prodOrderId]);
+  let unpricedDcs = 0;
+  const dcLine = (d: any) => {
+    const billed = numv(d.good) + (numv(d.bill_include_mistake) ? numv(d.rej) : 0);
+    if (d.rate == null) unpricedDcs++;
+    return { ...d, billed, amount: r2(billed * numv(d.rate)) };
+  };
+  const dcs = jw.map(dcLine);
+  const code = (d: any) => String(d.stage_code ?? '').toUpperCase();
+  const sewDcs = dcs.filter((d) => SEW_STAGES.includes(code(d)));
+  const finDcs = dcs.filter((d) => FIN_STAGES.includes(code(d)));
+  const packDcs = dcs.filter((d) => PACK_STAGES.includes(code(d)));
+  const embDcs = dcs.filter((d) => EMB_STAGES.includes(code(d)));
+  const procDcs = dcs.filter((d) => ![...SEW_STAGES, ...FIN_STAGES, ...PACK_STAGES, ...EMB_STAGES].includes(code(d)));
+  const sum = (ds: any[]) => ds.reduce((a, d) => a + d.amount, 0);
 
-  // H. Load Finishing & Packing
-  const finishing = await query<any>(`
-    SELECT f.* FROM trx_finishing f WHERE f.prod_order_id = ? AND f.company_id = ?
-  `, [prodOrderId, companyId]);
+  // H. In-house rates (company settings) — never assumed
+  const cutRate = await costSetting(companyId, 'COSTING_CUTTING_RATE_PER_PC');
+  const sewRate = await costSetting(companyId, 'COSTING_SEWING_RATE_PER_PC');
+  const ohRate = await costSetting(companyId, 'COSTING_OVERHEAD_PER_PC');
+  const stitchDcGood = sewDcs.reduce((a, d) => a + numv(d.good), 0);
+  const inHouseSewn = Math.max(0, sewGood - stitchDcGood);
+  const cutAmt = cutRate != null ? r2(cutQty * cutRate) : 0;
+  const inSewAmt = sewRate != null ? r2(inHouseSewn * sewRate) : 0;
+  const ohAmt = ohRate != null ? r2(goodQty * ohRate) : 0;
 
-  const packing = await query<any>(`
-    SELECT p.* FROM trx_packing p WHERE p.prod_order_id = ? AND p.company_id = ?
-  `, [prodOrderId, companyId]);
+  const heads: CostHead[] = [
+    { key: 'fabric', label: 'Fabric', amount: r2(fabricAmt + yarnAmt + otherMatAmt),
+      source: fabricLines.length || yarnLines.length || otherMatAmt ? 'TRANSACTIONS' : 'NO_DATA',
+      note: fabricLines.length || yarnLines.length ? `${fabricLines.length} roll(s) issued to cutting, ${yarnLines.length} yarn issue(s)` : 'No fabric issue to cutting or yarn issue for this job',
+      docs: fabricLines.length + yarnLines.length },
+    { key: 'trims', label: 'Trims', amount: r2(trimAmt), source: trimLines.length ? 'TRANSACTIONS' : 'NO_DATA',
+      note: trimLines.length ? `${trimLines.length} trim issue line(s)` : 'No material issue of trims against this production order', docs: trimLines.length },
+    { key: 'process', label: 'Process (print / emb / wash …)', amount: r2(sum(embDcs) + sum(procDcs)),
+      source: embDcs.length + procDcs.length ? 'TRANSACTIONS' : 'NO_DATA',
+      note: embDcs.length + procDcs.length ? `${embDcs.length + procDcs.length} process DC(s) received` : 'No printing / embroidery / washing DC received for this job', docs: embDcs.length + procDcs.length },
+    { key: 'cutting', label: 'Cutting', amount: cutAmt, source: cutRate != null ? 'RATE_SETTING' : 'NO_DATA',
+      note: cutRate != null ? `${fmtQty(cutQty)} cut PCS × ₹${cutRate}/PC (COSTING_CUTTING_RATE_PER_PC)` : 'Set COSTING_CUTTING_RATE_PER_PC to cost in-house cutting', docs: 0 },
+    { key: 'sewing', label: 'Sewing', amount: r2(sum(sewDcs) + inSewAmt),
+      source: sewDcs.length ? 'TRANSACTIONS' : sewRate != null ? 'RATE_SETTING' : 'NO_DATA',
+      note: [sewDcs.length ? `${sewDcs.length} stitching DC(s)` : '', sewRate != null ? `${fmtQty(inHouseSewn)} in-house PCS × ₹${sewRate}/PC` : inHouseSewn ? `${fmtQty(inHouseSewn)} in-house PCS not costed — set COSTING_SEWING_RATE_PER_PC` : '']
+        .filter(Boolean).join(' · ') || 'No stitching DC received and no in-house sewing rate', docs: sewDcs.length },
+    { key: 'finishing', label: 'Finishing / ironing', amount: r2(sum(finDcs)), source: finDcs.length ? 'TRANSACTIONS' : 'NO_DATA',
+      note: finDcs.length ? `${finDcs.length} ironing / finishing DC(s)` : 'No ironing / finishing DC received for this job', docs: finDcs.length },
+    { key: 'packing', label: 'Packing', amount: r2(sum(packDcs)), source: packDcs.length ? 'TRANSACTIONS' : 'NO_DATA',
+      note: packDcs.length ? `${packDcs.length} packing DC(s)` : 'No packing DC received (packing materials are under Trims)', docs: packDcs.length },
+    { key: 'overhead', label: 'Overhead', amount: ohAmt, source: ohRate != null ? 'RATE_SETTING' : 'NO_DATA',
+      note: ohRate != null ? `${fmtQty(goodQty)} good PCS × ₹${ohRate}/PC (COSTING_OVERHEAD_PER_PC)` : 'Set COSTING_OVERHEAD_PER_PC to allocate factory overhead', docs: 0 },
+  ];
+  const H = Object.fromEntries(heads.map((h) => [h.key, h.amount])) as Record<string, number>;
 
-  // I. Load FG Receipts
-  const fgReceipts = await query<any>(`
-    SELECT fgr.* FROM trx_fg_receipt fgr WHERE fgr.prod_order_id = ? AND fgr.company_id = ?
-  `, [prodOrderId, companyId]);
+  const materialCost = r2(H.fabric + H.trims);
+  const labourCost = r2(H.cutting + H.sewing);
+  const jobworkCost = r2(sum(embDcs));
+  const processCost = r2(sum(procDcs));
+  const packingCost = r2(H.finishing + H.packing);
+  const overheadCost = H.overhead;
+  const machineCost = 0; // removed from the sheet (client review) — column kept at 0
+  const totalActualCost = r2(materialCost + labourCost + jobworkCost + processCost + packingCost + overheadCost);
+  const actualCostPerPiece = producedQty > 0 ? totalActualCost / producedQty : 0;
+  const costPerGoodPiece = goodQty > 0 ? totalActualCost / goodQty : 0;
 
-  // -------------------------------------------------------------
-  // Calculate Totals & Aggregations
-  // -------------------------------------------------------------
-  const plannedQty = Number(order.planned_qty) || Number(order.order_qty) || 5000;
-  const producedQty = Number(order.produced_qty) ||
-    fgReceipts.reduce((s: number, f: any) => s + Number(f.total_qty || 0), 0) ||
-    stitching.reduce((s: number, st: any) => s + Number(st.output_qty || 0), 0) ||
-    cutting.reduce((s: number, c: any) => s + Number(c.total_pieces || 0), 0) ||
-    plannedQty;
+  // I. Standard in INR
+  let fx: number | null = null;
+  let fxBasis = 'NONE';
+  if (estimatedCosting) {
+    if (!estimatedCosting.currency_code || estimatedCosting.currency_code === 'INR') { fx = 1; fxBasis = 'INR'; }
+    else if (numv(order.so_currency_id) === numv(estimatedCosting.currency_id) && numv(order.so_exchange_rate) > 1) {
+      fx = numv(order.so_exchange_rate); fxBasis = `Sales order ${order.so_no}`;
+    } else {
+      const inr = await queryOne<any>(`SELECT id FROM cfg_currency WHERE code = 'INR' LIMIT 1`);
+      const xr = inr ? await queryOne<any>(
+        `SELECT rate, rate_date FROM trx_exchange_rate WHERE from_currency = ? AND to_currency = ? ORDER BY rate_date DESC, id DESC LIMIT 1`,
+        [estimatedCosting.currency_id, inr.id]) : null;
+      if (numv(xr?.rate) > 0) { fx = numv(xr.rate); fxBasis = `Exchange rate of ${String(xr.rate_date).slice(0, 10)}`; }
+    }
+  }
+  const stdAvailable = !!estimatedCosting && fx != null;
+  const ec = estimatedCosting;
+  const toInr = (v: number) => (fx != null ? v * fx : 0);
+  const stdTotalPc = ec ? toInr(numv(ec.total_cost)) : 0;
+  const stdPc = {
+    fabric: ec ? toInr(numv(ec.fabric_cost) + numv(ec.yarn_cost) + numv(ec.knitting_cost) + numv(ec.dyeing_cost)) : 0,
+    trims: ec ? toInr(numv(ec.trim_cost)) : 0,
+    process: ec ? toInr(numv(ec.washing_cost) + numv(ec.printing_cost) + numv(ec.embroidery_cost)) : 0,
+    cutting: ec ? toInr(numv(ec.cutting_cost)) : 0,
+    sewing: ec ? toInr(numv(ec.stitching_cost)) : 0,
+    finishing: ec ? toInr(numv(ec.finishing_cost)) : 0,
+    packing: ec ? toInr(numv(ec.packing_cost)) : 0,
+    overhead: 0,
+  } as Record<string, number>;
+  stdPc.overhead = Math.max(0, stdTotalPc - Object.entries(stdPc).filter(([k]) => k !== 'overhead').reduce((a, [, v]) => a + v, 0));
 
-  // 1. Material Cost: Issue Qty * Valuation Rate
-  let materialCost = 0;
-  const materialLines = materialIssues.map((m: any) => {
-    const qty = Number(m.issued_qty) || 0;
-    const rate = Number(m.valuation_rate) || 0;
-    const amt = qty * rate;
-    materialCost += amt;
-    return {
-      id: m.line_id,
-      issue_no: m.issue_no,
-      material_type: m.material_type,
-      item_name: m.item_name,
-      item_code: m.item_code,
-      quantity: qty,
-      uom_code: m.uom_code || 'KG',
-      rate: rate,
-      amount: amt,
-    };
+  const estimatedCostPerPiece = stdAvailable ? stdTotalPc : 0;
+  const perPcBase = goodQty || producedQty;
+  const totalEstimatedCost = estimatedCostPerPiece * perPcBase;
+  const varianceAmount = stdAvailable ? totalActualCost - totalEstimatedCost : 0;
+  const variancePct = stdAvailable && totalEstimatedCost > 0 ? (varianceAmount / totalEstimatedCost) * 100 : 0;
+
+  // Variance per good piece and head (standard in INR)
+  const varianceRows: any[] = heads.map((h) => {
+    const actual_pc = perPcBase > 0 ? r2(h.amount / perPcBase) : 0;
+    const standard_pc = stdAvailable ? r2(stdPc[h.key] ?? 0) : null;
+    const variance = standard_pc != null ? r2(actual_pc - standard_pc) : null;
+    const variance_pct = standard_pc ? r2(((variance as number) / standard_pc) * 100) : null;
+    return { cost_head: h.label, key: h.key, standard_pc, actual_pc, variance, variance_pct, source: h.source, note: h.note };
+  });
+  const totAct = r2(varianceRows.reduce((a, r) => a + r.actual_pc, 0));
+  const totStd = stdAvailable ? r2(varianceRows.reduce((a, r) => a + (r.standard_pc ?? 0), 0)) : null;
+  varianceRows.push({
+    cost_head: 'TOTAL', key: 'total', standard_pc: totStd, actual_pc: totAct,
+    variance: totStd != null ? r2(totAct - totStd) : null,
+    variance_pct: totStd ? r2(((totAct - totStd) / totStd) * 100) : null, source: null, note: null,
   });
 
-  // Fallback realistic material cost if no issues are logged yet
-  if (materialCost === 0) {
-    const fabricUsedKg = cutting.reduce((s: number, c: any) => s + Number(c.fabric_used_kg || 0), 0) || (producedQty * 0.22);
-    const fabricAmt = fabricUsedKg * 420;
-    const trimsAmt = producedQty * 3.5;
-    materialCost = fabricAmt + trimsAmt;
-    materialLines.push(
-      { id: 101, issue_no: 'ISS-AUTO-01', material_type: 'FABRIC', item_name: 'Single Jersey Fabric', item_code: 'F-SJ180', quantity: fabricUsedKg, uom_code: 'KG', rate: 420, amount: fabricAmt },
-      { id: 102, issue_no: 'ISS-AUTO-02', material_type: 'TRIM', item_name: 'Neck Rib & Trims Pack', item_code: 'TR-PACK', quantity: producedQty, uom_code: 'PCS', rate: 3.5, amount: trimsAmt }
-    );
-  }
+  const breakdownHeads = [
+    { head: 'Material (Fabric, Yarn, Trims)', keys: ['fabric', 'trims'], actual: materialCost },
+    { head: 'Direct Sewing & Cutting Labour', keys: ['cutting', 'sewing'], actual: labourCost },
+    { head: 'Outsourced Job Work (Printing/Emb)', keys: [], actual: jobworkCost },
+    { head: 'Washing & Other Processes', keys: [], actual: processCost },
+    { head: 'Finishing, Ironing & Packing', keys: ['finishing', 'packing'], actual: packingCost },
+    { head: 'Factory Overheads', keys: ['overhead'], actual: overheadCost },
+  ].map((h, i) => {
+    const stdKeys = i === 2 ? [] : h.keys;
+    let estimatedPc = stdKeys.reduce((a, k) => a + (stdPc[k] ?? 0), 0);
+    if (i === 2) estimatedPc = ec ? toInr(numv(ec.printing_cost) + numv(ec.embroidery_cost)) : 0;
+    if (i === 3) estimatedPc = ec ? toInr(numv(ec.washing_cost)) : 0;
+    const estimated = stdAvailable ? estimatedPc * perPcBase : 0;
+    const variance = stdAvailable ? h.actual - estimated : 0;
+    return { head: h.head, estimated, actual: h.actual, variance, variance_pct: estimated > 0 ? (variance / estimated) * 100 : 0 };
+  });
 
-  // 2. Cutting Cost (Labour + Marker)
-  const cutPieces = cutting.reduce((s: number, c: any) => s + Number(c.total_pieces || 0), 0) || producedQty;
-  const cuttingCost = cutPieces * 1.50; // Standard cutting rate ₹1.50 / pc
+  // Stage-wise quantities from the bundle ledger
+  const stageWip = [
+    { stage: 'Cutting', input: plannedQty, output: cutQty, rejected: 0, wip: Math.max(0, plannedQty - cutQty) },
+    { stage: 'Sewing / Stitching', input: numv(q?.sew_in), output: sewGood, rejected: numv(q?.sew_rej), wip: Math.max(0, numv(q?.sew_in) - sewGood - numv(q?.sew_rej)) },
+    { stage: 'Finishing / Ironing', input: numv(q?.fin_in), output: numv(q?.fin_good), rejected: numv(q?.fin_rej), wip: Math.max(0, numv(q?.fin_in) - numv(q?.fin_good) - numv(q?.fin_rej)) },
+    { stage: 'Final QC', input: numv(q?.fin_good), output: numv(q?.qc_pass), rejected: numv(q?.qc_rej), wip: Math.max(0, numv(q?.fin_good) - numv(q?.qc_pass) - numv(q?.qc_rej)) },
+    { stage: 'Packing', input: numv(q?.qc_pass), output: numv(q?.packed), rejected: 0, wip: Math.max(0, numv(q?.qc_pass) - numv(q?.packed)) },
+  ];
 
-  // 3. Sewing / Labour Cost
-  let labourCost = 0;
-  if (stitching.length > 0) {
-    for (const st of stitching) {
-      const outPcs = Number(st.output_qty) || producedQty;
-      const smv = Number(st.smv) || Number(order.style_smv) || 12.5;
-      const ratePerMin = Number(st.rate) > 0 ? Number(st.rate) / smv : 0.85;
-      labourCost += outPcs * smv * ratePerMin;
-    }
-  } else {
-    const smv = Number(order.style_smv) || 12.5;
-    labourCost = producedQty * smv * 0.85;
-  }
-  labourCost += cuttingCost; // Include cutting floor direct labour
-
-  // 4. Job Work Cost
-  let jobworkCost = 0;
-  for (const jw of jobwork) {
-    jobworkCost += Number(jw.actual_cost) || Number(jw.total_amount) || 0;
-  }
-  if (jobworkCost === 0 && printing.some((p: any) => p.is_jobwork)) {
-    jobworkCost = producedQty * 6.50;
-  }
-
-  // 5. In-house Process Cost (Printing, Washing, Finishing)
-  let processCost = 0;
-  for (const p of printing) {
-    if (!p.is_jobwork) processCost += (Number(p.receive_qty) || producedQty) * (Number(p.rate_per_piece) || 5.00);
-  }
-  for (const w of washing) {
-    processCost += (Number(w.receive_qty) || producedQty) * (Number(w.rate_per_piece) || 4.50);
-  }
-  if (processCost === 0 && printing.length === 0 && washing.length === 0) {
-    processCost = producedQty * 3.50; // standard in-house washing / ironing
-  }
-
-  // 6. Machine Cost — removed from the actual cost sheet (client review: machine-type
-  //    forecasting does not belong in the management P&L). Column kept at 0 for compatibility.
-  const machineCost = 0;
-
-  // 7. Packing Cost
-  const cartons = packing.reduce((s: number, p: any) => s + Number(p.total_cartons || 0), 0) || Math.ceil(producedQty / 60);
-  const packingCost = (cartons * 85) + (producedQty * 1.80); // Cartons + polybags + packing labour
-
-  // 8. Overhead Cost
-  const overheadCost = producedQty * 3.20; // Factory administration, supervisory, compliance
-
-  // 9. Total Actual Cost
-  const totalActualCost = materialCost + labourCost + machineCost + jobworkCost + processCost + overheadCost + packingCost;
-  const actualCostPerPiece = producedQty > 0 ? (totalActualCost / producedQty) : 0;
-
-  // 10. Estimated Baseline & Variance
-  const estimatedCostPerPiece = estimatedCosting ? Number(estimatedCosting.total_cost || 0) : (actualCostPerPiece * 1.02);
-  const totalEstimatedCost = estimatedCostPerPiece * producedQty;
-  const varianceAmount = totalActualCost - totalEstimatedCost;
-  const variancePct = totalEstimatedCost > 0 ? (varianceAmount / totalEstimatedCost) * 100 : 0;
-
-  // 11. Rejection, Rework & Good Qty Calculations (Developer Spec §16 & §19)
-  const rejectionQty = stitching.reduce((s: number, st: any) => s + Number(st.rejected_qty || 0), 0) +
-                       finishing.reduce((s: number, f: any) => s + Number(f.rejected_qty || 0), 0) || 40;
-  const reworkQty = stitching.reduce((s: number, st: any) => s + Number(st.rework_qty || 0), 0) || 25;
-  const goodQty = Math.max(1, producedQty - rejectionQty);
-  const costPerGoodPiece = totalActualCost / goodQty;
-
-  // 12. Granular Data for the 12 Tabs
-  // Tab 2: Fabric
-  const fabricLines = materialLines.filter((m: any) => m.material_type === 'FABRIC').map((m: any, idx: number) => ({
-    id: m.id || idx + 1,
-    code: m.item_code || `FAB-00${idx + 1}`,
-    fabric_name: m.item_name,
-    lot_no: `LOT-26${idx + 10}`,
-    roll_no: `ROLL-00${idx + 1}`,
-    std_qty: Number((m.quantity * 0.96).toFixed(2)),
-    issue_qty: Number(m.quantity.toFixed(2)),
-    rate: Number(m.rate.toFixed(2)),
-    amount: Number(m.amount.toFixed(2)),
-    supplier_name: 'Premier Mills Pvt Ltd',
-    grn_no: `FGRN-2026-${idx + 101}`,
+  const dcTab = (ds: any[]) => ds.map((d) => ({
+    component: `${d.stage_name ?? 'Job work'} DC ${d.challan_no} — ${d.vendor_name ?? ''} (${fmtQty(d.billed)} PCS × ₹${numv(d.rate).toFixed(2)})`,
+    actual_cost: d.amount,
   }));
 
-  // Tab 3: Trims
-  const trimLines = [
-    { trim_name: 'Main Brand Woven Label', uom: 'PCS', std_qty: producedQty, issue_qty: producedQty + 100, return_qty: 100, net_qty: producedQty, rate: 2.50, actual_cost: producedQty * 2.50 },
-    { trim_name: 'Size / Care Printed Label', uom: 'PCS', std_qty: producedQty, issue_qty: producedQty + 50, return_qty: 50, net_qty: producedQty, rate: 1.20, actual_cost: producedQty * 1.20 },
-    { trim_name: 'Self-color Polybag 14x18', uom: 'PCS', std_qty: producedQty, issue_qty: producedQty, return_qty: 0, net_qty: producedQty, rate: 2.80, actual_cost: producedQty * 2.80 },
-    { trim_name: 'Export 7-Ply Master Carton Box', uom: 'PCS', std_qty: Math.ceil(producedQty / 50), issue_qty: Math.ceil(producedQty / 50), return_qty: 0, net_qty: Math.ceil(producedQty / 50), rate: 85.00, actual_cost: Math.ceil(producedQty / 50) * 85.00 },
-  ];
-
-  // Tab 4: Process
-  const processLines = [
-    { process_name: 'Yarn / Fabric Dyeing', input_qty: Math.round(producedQty * 0.24), output_qty: Math.round(producedQty * 0.23), loss_qty: Math.round(producedQty * 0.01), rate: 30.00, actual_cost: Math.round(producedQty * 0.24) * 30.00 },
-    { process_name: 'Fabric Compacting & Stenter', input_qty: Math.round(producedQty * 0.23), output_qty: Math.round(producedQty * 0.225), loss_qty: Math.round(producedQty * 0.005), rate: 8.00, actual_cost: Math.round(producedQty * 0.23) * 8.00 },
-    { process_name: 'Chest Plastisol / Screen Print', input_qty: producedQty, output_qty: producedQty - 10, loss_qty: 10, rate: 14.50, actual_cost: (producedQty - 10) * 14.50 },
-  ];
-
-  // Tab 5: Cutting
-  const cuttingLines = [
-    { component: 'Spreading Labour', actual_cost: Math.round(cuttingCost * 0.30) },
-    { component: 'Cutting Floor Labour', actual_cost: Math.round(cuttingCost * 0.35) },
-    { component: 'Automatic Cutting Machine Amortisation', actual_cost: Math.round(cuttingCost * 0.15) },
-    { component: 'Marker Paper & CAD Plotting', actual_cost: Math.round(cuttingCost * 0.10) },
-    { component: 'Numbering & Bundle Preparation', actual_cost: Math.round(cuttingCost * 0.10) },
-  ];
-
-  // Tab 6: Sewing (SAM Costing)
-  const sewingOperations = [
-    { operation: 'Shoulder Join (4-Thread Overlock)', sam: 0.40, rate_per_min: 1.20, cost_per_pc: 0.48, total: producedQty * 0.48 },
-    { operation: 'Rib Neck Collar Attach', sam: 0.75, rate_per_min: 1.20, cost_per_pc: 0.90, total: producedQty * 0.90 },
-    { operation: 'Sleeve Attach (Left & Right)', sam: 0.85, rate_per_min: 1.20, cost_per_pc: 1.02, total: producedQty * 1.02 },
-    { operation: 'Side Seam & Label Insert', sam: 0.90, rate_per_min: 1.20, cost_per_pc: 1.08, total: producedQty * 1.08 },
-    { operation: 'Bottom & Sleeve Hem (Flatlock)', sam: 0.80, rate_per_min: 1.20, cost_per_pc: 0.96, total: producedQty * 0.96 },
-  ];
-
-  // Tab 7: Finishing
-  const finishingLines = [
-    { component: 'Loose Thread Cleaning & Trimming', actual_cost: Math.round(producedQty * 0.80) },
-    { component: 'Steam Ironing & Pressing', actual_cost: Math.round(producedQty * 1.20) },
-    { component: 'End-line QC Checking & Measurement', actual_cost: Math.round(producedQty * 0.90) },
-    { component: 'Folding & Hangtag Attachment', actual_cost: Math.round(producedQty * 0.60) },
-  ];
-
-  // Tab 8: Packing
-  const packingLines = [
-    { item_name: 'Polybag Packing Materials', qty: producedQty, rate: 2.80, amount: producedQty * 2.80 },
-    { item_name: 'Export Corrugated Master Cartons', qty: Math.ceil(producedQty / 50), rate: 85.00, amount: Math.ceil(producedQty / 50) * 85.00 },
-    { item_name: 'Barcode & Shipping Stickers', qty: producedQty, rate: 0.50, amount: producedQty * 0.50 },
-    { item_name: 'Carton Sealing & Strapping Labour', qty: 1, rate: Math.round(producedQty * 0.60), amount: Math.round(producedQty * 0.60) },
-  ];
-
-  // Tab 9: Labour (Departmental Direct / Indirect)
-  const labourLines = [
-    { department_name: 'Cutting Floor', labour_type: 'DIRECT', hours: Math.round(producedQty / 30), rate_per_hour: 80.00, amount: Math.round(producedQty / 30) * 80.00 },
-    { department_name: 'Sewing Assembly Lines', labour_type: 'DIRECT', hours: Math.round(producedQty / 8), rate_per_hour: 120.00, amount: Math.round(producedQty / 8) * 120.00 },
-    { department_name: 'Finishing & Ironing', labour_type: 'DIRECT', hours: Math.round(producedQty / 20), rate_per_hour: 75.00, amount: Math.round(producedQty / 20) * 75.00 },
-    { department_name: 'Quality & Floor Supervision', labour_type: 'INDIRECT', hours: Math.round(producedQty / 50), rate_per_hour: 110.00, amount: Math.round(producedQty / 50) * 110.00 },
-  ];
-
-  // Tab 10: Machine — no longer part of the actual cost sheet (see machineCost above).
-  const machineLines: any[] = [];
-
-  // Tab 11: Overhead
-  const overheadLines = [
-    { overhead_head: 'Factory Electricity & Generator Power', allocation_basis: 'PER_PIECE', rate: 1.20, amount: producedQty * 1.20 },
-    { overhead_head: 'Factory Space Lease / Rent', allocation_basis: 'PER_PIECE', rate: 0.80, amount: producedQty * 0.80 },
-    { overhead_head: 'Plant Equipment Maintenance', allocation_basis: 'PER_PIECE', rate: 0.40, amount: producedQty * 0.40 },
-    { overhead_head: 'Factory Supervisory & Administrative Salary', allocation_basis: 'PER_PIECE', rate: 0.50, amount: producedQty * 0.50 },
-    { overhead_head: 'Compliance & Audit Overhead', allocation_basis: 'PER_PIECE', rate: 0.30, amount: producedQty * 0.30 },
-  ];
-
-  // Tab 12: Variance Table (Developer Spec §18)
-  const stdPerPc = estimatedCostPerPiece || (actualCostPerPiece * 0.98);
-  // Standard per head comes from the pre-costing's own heads when one exists.
-  const num = (v: unknown) => Number(v) || 0;
-  const ecv = estimatedCosting;
-  const stdHead = (fromCosting: number, fallback: number) => Number((ecv ? fromCosting : fallback).toFixed(2));
-  const ecFabric = ecv ? num(ecv.fabric_cost) + num(ecv.yarn_cost) + num(ecv.knitting_cost) + num(ecv.dyeing_cost) : 0;
-  const ecProcess = ecv ? num(ecv.washing_cost) + num(ecv.printing_cost) + num(ecv.embroidery_cost) : 0;
-  const ecNamed = ecv ? ecFabric + num(ecv.trim_cost) + ecProcess + num(ecv.cutting_cost) + num(ecv.stitching_cost) + num(ecv.finishing_cost) + num(ecv.packing_cost) : 0;
-  const varianceRows = [
-    { cost_head: 'Fabric', standard_pc: stdHead(ecFabric, stdPerPc * 0.58), actual_pc: Number((materialCost * 0.82 / producedQty).toFixed(2)) },
-    { cost_head: 'Trims', standard_pc: stdHead(num(ecv?.trim_cost), stdPerPc * 0.08), actual_pc: Number((materialCost * 0.18 / producedQty).toFixed(2)) },
-    { cost_head: 'Process', standard_pc: stdHead(ecProcess, stdPerPc * 0.10), actual_pc: Number((processCost / producedQty).toFixed(2)) },
-    { cost_head: 'Cutting', standard_pc: stdHead(num(ecv?.cutting_cost), 1.40), actual_pc: Number((cuttingCost / producedQty).toFixed(2)) },
-    { cost_head: 'Sewing', standard_pc: stdHead(num(ecv?.stitching_cost), stdPerPc * 0.12), actual_pc: Number((labourCost / producedQty).toFixed(2)) },
-    { cost_head: 'Finishing', standard_pc: stdHead(num(ecv?.finishing_cost), 3.20), actual_pc: 3.50 },
-    { cost_head: 'Packing', standard_pc: stdHead(num(ecv?.packing_cost), stdPerPc * 0.04), actual_pc: Number((packingCost / producedQty).toFixed(2)) },
-    { cost_head: 'Overhead', standard_pc: stdHead(stdPerPc - ecNamed, stdPerPc * 0.05), actual_pc: Number((overheadCost / producedQty).toFixed(2)) },
-  ].map((r) => {
-    const variance = Number((r.actual_pc - r.standard_pc).toFixed(2));
-    const variance_pct = r.standard_pc > 0 ? Number(((variance / r.standard_pc) * 100).toFixed(2)) : 0;
-    return { ...r, variance, variance_pct };
-  });
-
-  const totalStd = varianceRows.reduce((s, r) => s + r.standard_pc, 0);
-  const totalAct = varianceRows.reduce((s, r) => s + r.actual_pc, 0);
-  const totalVar = Number((totalAct - totalStd).toFixed(2));
-  const totalVarPct = totalStd > 0 ? Number(((totalVar / totalStd) * 100).toFixed(2)) : 0;
-  varianceRows.push({
-    cost_head: 'TOTAL',
-    standard_pc: Number(totalStd.toFixed(2)),
-    actual_pc: Number(totalAct.toFixed(2)),
-    variance: totalVar,
-    variance_pct: totalVarPct,
-  });
-
-  // Head-wise breakdown for standard (pre-costing) vs actual. When a pre-costing
-  // exists its own cost heads are used; any part of its total_cost not captured in a
-  // head (other direct charges etc.) is carried in the overhead line so the
-  // standard heads always add up to the standard total.
-  const n = num;
-  let stdHeadsPc: number[];
-  if (estimatedCosting) {
-    const ec = estimatedCosting;
-    const matPc = n(ec.fabric_cost) + n(ec.yarn_cost) + n(ec.trim_cost) + n(ec.knitting_cost) + n(ec.dyeing_cost);
-    const labPc = n(ec.cutting_cost) + n(ec.stitching_cost);
-    const jwPc = n(ec.printing_cost) + n(ec.embroidery_cost);
-    const procPc = n(ec.washing_cost);
-    const packPc = n(ec.finishing_cost) + n(ec.packing_cost);
-    const ohPc = estimatedCostPerPiece - (matPc + labPc + jwPc + procPc + packPc);
-    stdHeadsPc = [matPc, labPc, jwPc, procPc, packPc, ohPc];
-  } else {
-    stdHeadsPc = [0.48, 0.16, 0.12, 0.07, 0.05, 0.12].map((share) => estimatedCostPerPiece * share);
-  }
-  const breakdownHeads = [
-    { head: 'Material (Fabric, Yarn, Trims)', estimated: stdHeadsPc[0] * producedQty, actual: materialCost },
-    { head: 'Direct Sewing & Cutting Labour', estimated: stdHeadsPc[1] * producedQty, actual: labourCost },
-    { head: 'Outsourced Job Work (Printing/Emb)', estimated: stdHeadsPc[2] * producedQty, actual: jobworkCost },
-    { head: 'In-House Washing & Processes', estimated: stdHeadsPc[3] * producedQty, actual: processCost },
-    { head: 'Finishing, Polybag & Packing Cartons', estimated: stdHeadsPc[4] * producedQty, actual: packingCost },
-    { head: 'Factory Overheads & Quality Admin', estimated: stdHeadsPc[5] * producedQty, actual: overheadCost },
-  ].map((h) => {
-    const diff = h.actual - h.estimated;
-    const pct = h.estimated > 0 ? (diff / h.estimated) * 100 : 0;
-    return {
-      ...h,
-      variance: diff,
-      variance_pct: pct,
-    };
-  });
-
-  // Stage WIP Reconciliation
-  const cutTotal = cutPieces;
-  const printTotal = printing.reduce((s: number, p: any) => s + Number(p.receive_qty || 0), 0) || cutTotal;
-  const sewTotal = stitching.reduce((s: number, st: any) => s + Number(st.output_qty || 0), 0) || producedQty;
-  const sewRejects = stitching.reduce((s: number, st: any) => s + Number(st.rejected_qty || 0), 0) || 40;
-  const finTotal = finishing.reduce((s: number, f: any) => s + Number(f.passed_qty || 0), 0) || producedQty;
-  const packTotal = packing.reduce((s: number, p: any) => s + Number(p.total_pieces || 0), 0) || producedQty;
-
-  const stageWip = [
-    { stage: 'Cutting', input: plannedQty, output: cutTotal, rejected: 0, wip: Math.max(0, plannedQty - cutTotal) },
-    { stage: 'Printing / Embellishment', input: cutTotal, output: printTotal, rejected: 10, wip: Math.max(0, cutTotal - printTotal - 10) },
-    { stage: 'Sewing / Stitching', input: printTotal, output: sewTotal, rejected: sewRejects, wip: Math.max(0, printTotal - sewTotal - sewRejects) },
-    { stage: 'Finishing & Inspection', input: sewTotal, output: finTotal, rejected: 15, wip: Math.max(0, sewTotal - finTotal - 15) },
-    { stage: 'Packing & Carton Box', input: finTotal, output: packTotal, rejected: 0, wip: Math.max(0, finTotal - packTotal) },
-  ];
-
-  res.json({
-    data: {
+  return ({
       order: {
-        id: order.id,
-        po_prod_no: order.po_prod_no,
-        prod_date: order.prod_date,
-        style_id: order.style_id,
-        style_code: order.style_code,
-        style_name: order.style_name,
-        buyer_style_ref: order.buyer_style_ref || 'BST-2026',
-        buyer_id: order.buyer_id,
-        buyer_name: order.buyer_name,
-        buyer_po_no: order.buyer_po_no,
-        so_no: order.so_no,
-        io_no: order.io_no || 'IO-2026-001',
-        season: order.so_season || order.style_season || 'AW-26',
-        unit_name: order.unit_name || 'Unit 1 (Tiruppur)',
-        order_qty: order.order_qty,
-        planned_qty: plannedQty,
-        produced_qty: producedQty,
-        good_qty: goodQty,
-        rejection_qty: rejectionQty,
-        rework_qty: reworkQty,
-        cost_per_good_piece: Number(costPerGoodPiece.toFixed(2)),
-        currency_code: estimatedCosting?.currency_code || 'INR',
-        merchandiser_costing_no: estimatedCosting?.costing_no || 'CST-APPR-01',
+        id: order.id, po_prod_no: order.po_prod_no, prod_date: order.prod_date, style_id: order.style_id,
+        style_code: order.style_code, style_name: order.style_name, buyer_style_ref: order.buyer_style_ref ?? null,
+        buyer_id: order.buyer_id, buyer_name: order.buyer_name, buyer_po_no: order.buyer_po_no, so_no: order.so_no,
+        io_no: ioNo, season: order.so_season || order.style_season || null, unit_name: order.unit_name ?? null,
+        order_qty: order.order_qty, planned_qty: plannedQty, produced_qty: producedQty, good_qty: goodQty,
+        rejection_qty: rejectionQty, rework_qty: reworkQty, cost_per_good_piece: r2(costPerGoodPiece),
+        currency_code: 'INR', merchandiser_costing_no: estimatedCosting?.costing_no ?? null,
       },
       summary: {
-        planned_qty: plannedQty,
-        produced_qty: producedQty,
-        good_qty: goodQty,
-        rejection_qty: rejectionQty,
-        rework_qty: reworkQty,
-        material_cost: materialCost,
-        labour_cost: labourCost,
-        machine_cost: machineCost,
-        jobwork_cost: jobworkCost,
-        process_cost: processCost,
-        overhead_cost: overheadCost,
-        packing_cost: packingCost,
-        total_actual_cost: totalActualCost,
-        actual_cost_per_piece: actualCostPerPiece,
-        cost_per_good_piece: costPerGoodPiece,
-        estimated_cost_per_piece: estimatedCostPerPiece,
-        total_estimated_cost: totalEstimatedCost,
-        variance_amount: varianceAmount,
-        variance_pct: variancePct,
+        planned_qty: plannedQty, produced_qty: producedQty, good_qty: goodQty, rejection_qty: rejectionQty, rework_qty: reworkQty,
+        material_cost: materialCost, labour_cost: labourCost, machine_cost: machineCost, jobwork_cost: jobworkCost,
+        process_cost: processCost, overhead_cost: overheadCost, packing_cost: packingCost,
+        total_actual_cost: totalActualCost, actual_cost_per_piece: actualCostPerPiece, cost_per_good_piece: costPerGoodPiece,
+        estimated_cost_per_piece: estimatedCostPerPiece, total_estimated_cost: totalEstimatedCost,
+        variance_amount: varianceAmount, variance_pct: variancePct,
       },
-      // 12 Tabs Data
+      heads,
+      quality: { std_rate_valuations: stdRateUsed, unpriced_dcs: unpricedDcs, has_job: !!ioNo },
       tabs: {
         fabric: fabricLines,
+        yarn: yarnLines,
         trims: trimLines,
-        process: processLines,
-        cutting: cuttingLines,
-        sewing: sewingOperations,
-        finishing: finishingLines,
-        packing: packingLines,
-        labour: labourLines,
-        machine: machineLines,
-        overhead: overheadLines,
+        process: [...embDcs, ...procDcs].map((d) => ({
+          process_name: `${d.stage_name} — DC ${d.challan_no} (${d.vendor_name ?? ''})`, part_name: null,
+          input_qty: d.billed, output_qty: numv(d.good), loss_qty: numv(d.rej), rate: numv(d.rate), actual_cost: d.amount,
+        })),
+        cutting: cutRate != null ? [{ component: `In-house cutting — ${fmtQty(cutQty)} PCS × ₹${cutRate}`, actual_cost: cutAmt }] : [],
+        sewing: [
+          ...sewDcs.map((d) => ({ operation: `Stitching DC ${d.challan_no} — ${d.vendor_name ?? ''}`, sam: null, rate_per_min: null, cost_per_pc: numv(d.rate), total: d.amount })),
+          ...(sewRate != null && inHouseSewn ? [{ operation: 'In-house sewing', sam: null, rate_per_min: null, cost_per_pc: sewRate, total: inSewAmt }] : []),
+        ],
+        finishing: dcTab(finDcs),
+        packing: packDcs.map((d) => ({ item_name: `Packing DC ${d.challan_no} — ${d.vendor_name ?? ''}`, qty: d.billed, rate: numv(d.rate), amount: d.amount })),
+        labour: [],
+        machine: [],
+        overhead: ohRate != null ? [{ overhead_head: 'Factory overhead (COSTING_OVERHEAD_PER_PC)', allocation_basis: 'PER_GOOD_PIECE', rate: ohRate, amount: ohAmt }] : [],
         variance: varianceRows,
       },
       breakdownHeads,
-      // Standard (pre-costing) reference for the management P&L on the Overview tab.
       standard: {
         costing_id: estimatedCosting?.id ?? null,
         costing_no: estimatedCosting?.costing_no ?? null,
         approved: estimatedCosting?.status_code === 'APPROVED',
+        available: stdAvailable,
         cost_per_piece: estimatedCostPerPiece,
-        fob_price: estimatedCosting ? n(estimatedCosting.fob_price) : 0,
-        currency_code: estimatedCosting?.currency_code || 'INR',
+        cost_per_piece_original: estimatedCosting ? numv(estimatedCosting.total_cost) : 0,
+        fob_price: stdAvailable ? toInr(numv(estimatedCosting.fob_price)) : 0,
+        fob_price_original: estimatedCosting ? numv(estimatedCosting.fob_price) : 0,
+        original_currency_code: estimatedCosting?.currency_code || null,
+        currency_code: 'INR',
+        fx_rate: fx,
+        fx_basis: fxBasis,
       },
       stageWip,
-      sources: {
-        materials: materialLines,
-        cutting,
-        stitching,
-        printing,
-        embroidery,
-        washing,
-        jobwork,
-        finishing,
-        packing,
-        fgReceipts,
-      },
-    },
+      sources: { fabric_rolls: fabricLines.length, yarn_issues: yarnLines.length, material_issue_lines: matIssues.length, dcs, fg_receipts: numv(fg?.docs) },
   });
+}
+
+costingRouter.get('/production-costs/order-data/:prodOrderId', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  res.json({ data: await buildOrderData(req.user!.companyId, Number(req.params.prodOrderId)) });
 }));
+
+function fmtQty(v: number) { return Number(v || 0).toLocaleString('en-IN'); }
 
 
 /**
@@ -789,24 +704,21 @@ const handleRecalculateProductionCosting = ah(async (req, res) => {
 
   const pId = cost.prod_order_id;
   if (pId) {
-    // 1. Recalculate outputs from production tables
-    const cutOut = await queryOne<any>(`SELECT COALESCE(SUM(cut_qty), 0) AS q, COALESCE(SUM(rejection_qty), 0) AS rej FROM trx_cutting WHERE prod_order_id = ?`, [pId]);
-    const sewOut = await queryOne<any>(`SELECT COALESCE(SUM(stitch_qty), 0) AS q, COALESCE(SUM(rejection_qty), 0) AS rej FROM trx_stitching WHERE prod_order_id = ?`, [pId]);
-    const finOut = await queryOne<any>(`SELECT COALESCE(SUM(finish_qty), 0) AS q, COALESCE(SUM(rejection_qty), 0) AS rej FROM trx_finishing WHERE prod_order_id = ?`, [pId]);
-    const packOut = await queryOne<any>(`SELECT COALESCE(SUM(packed_qty), 0) AS q, COALESCE(SUM(rejection_qty), 0) AS rej FROM trx_packing WHERE prod_order_id = ?`, [pId]);
-
-    const totalRejection = Number(cutOut?.rej || 0) + Number(sewOut?.rej || 0) + Number(finOut?.rej || 0) + Number(packOut?.rej || 0);
-    const producedQty = Number(packOut?.q) || Number(finOut?.q) || Number(sewOut?.q) || Number(cost.produced_qty) || 1;
-    const goodQty = Math.max(1, producedQty - totalRejection);
-    const totalCost = Number(cost.total_cost) || 0;
-    const costPerGoodPiece = Number((totalCost / goodQty).toFixed(4));
-
+    // Same transaction-driven figures as the cost sheet (buildOrderData) — nothing assumed.
+    const d = await buildOrderData(companyId, pId);
+    const sm = d.summary;
     await query(`
       UPDATE trx_production_cost
-         SET produced_qty = ?, rejection_qty = ?, good_qty = ?,
-             cost_per_good_piece = ?, cost_per_piece = ?
+         SET produced_qty = ?, rejection_qty = ?, rework_qty = ?, good_qty = ?,
+             material_cost = ?, labour_cost = ?, machine_cost = 0, jobwork_cost = ?, process_cost = ?,
+             overhead_cost = ?, packing_cost = ?, total_cost = ?, cost_per_piece = ?, cost_per_good_piece = ?,
+             estimated_cost = ?, variance = ?, variance_pct = ?
        WHERE id = ? AND company_id = ?
-    `, [producedQty, totalRejection, goodQty, costPerGoodPiece, (totalCost / producedQty).toFixed(4), id, companyId]);
+    `, [sm.produced_qty, sm.rejection_qty, sm.rework_qty, sm.good_qty,
+        sm.material_cost, sm.labour_cost, sm.jobwork_cost, sm.process_cost, sm.overhead_cost, sm.packing_cost,
+        sm.total_actual_cost, Number(sm.actual_cost_per_piece.toFixed(4)), Number(sm.cost_per_good_piece.toFixed(4)),
+        d.standard.available ? sm.total_estimated_cost : 0, d.standard.available ? sm.variance_amount : 0,
+        d.standard.available ? Number(sm.variance_pct.toFixed(2)) : 0, id, companyId]);
   }
 
   const updated = await queryOne<any>(`SELECT * FROM trx_production_cost WHERE id = ?`, [id]);
@@ -890,19 +802,12 @@ costingRouter.get('/production-costing/:id/drilldown', requirePermission('PRODUC
 
   const pId = cost.prod_order_id;
 
-  // 1. Fabric Issue -> Roll -> Lot -> GRN -> Supplier
-  const fabricTrace = await query<any>(`
-    SELECT mi.issue_no, mi.issue_date, mil.issued_qty,
-           fb.fabric_name, fb.fabric_code,
-           'Premier Mills Ltd' AS supplier_name,
-           'FGRN-2026-901' AS grn_no,
-           'LOT-2601' AS lot_no,
-           'ROLL-101' AS roll_no
-      FROM trx_material_issue mi
-      JOIN trx_material_issue_line mil ON mil.issue_id = mi.id
-      LEFT JOIN mst_fabric fb ON fb.id = mil.fabric_id
-     WHERE mi.prod_order_id = ? AND mi.company_id = ?
-  `, [pId, companyId]);
+  // 1. Fabric issue → roll → lot → GRN → supplier (real rolls of the job, see buildOrderData)
+  const od = pId ? await buildOrderData(companyId, pId) : null;
+  const fabricTrace = (od?.tabs.fabric ?? []).map((f: any) => ({
+    issue_no: f.issue_no, issued_qty: f.issue_qty, fabric_name: f.fabric_name, fabric_code: f.code,
+    supplier_name: f.supplier_name, grn_no: f.grn_no, lot_no: f.lot_no, roll_no: f.roll_no, rate: f.rate, rate_basis: f.rate_basis,
+  }));
 
   // 2. Process Order / Challan / Input / Output
   const processTrace = await query<any>(`
@@ -916,11 +821,12 @@ costingRouter.get('/production-costing/:id/drilldown', requirePermission('PRODUC
      WHERE jc.prod_order_id = ? AND jc.company_id = ?
   `, [pId, companyId]);
 
-  // 3. Production Workflow: Cutting -> Sewing -> Finishing -> Packing -> FG
-  const cuttingTrace = await query<any>(`SELECT cut_no, cut_date, total_pieces, fabric_used_kg FROM trx_cutting WHERE prod_order_id = ?`, [pId]);
-  const sewingTrace = await query<any>(`SELECT id, prod_date, output_qty, rejected_qty, rework_qty FROM trx_stitching WHERE prod_order_id = ?`, [pId]);
-  const finishingTrace = await query<any>(`SELECT id, prod_date, passed_qty, rejected_qty FROM trx_finishing WHERE prod_order_id = ?`, [pId]);
-  const packingTrace = await query<any>(`SELECT id, pack_date, total_pieces, total_cartons FROM trx_packing WHERE prod_order_id = ?`, [pId]);
+  // 3. Production workflow from the bundle ledger (same figures as the cost sheet)
+  const stage = (name: string) => (od?.stageWip ?? []).filter((w: any) => w.stage.startsWith(name));
+  const cuttingTrace = stage('Cutting');
+  const sewingTrace = stage('Sewing');
+  const finishingTrace = [...stage('Finishing'), ...stage('Final QC')];
+  const packingTrace = stage('Packing');
 
   res.json({
     data: {
@@ -1042,9 +948,9 @@ costingRouter.get('/pre-costings/style-data/:styleId', requirePermission('COSTIN
   // B. Load Active Style BOM and lines
   const bomLines = await query<any>(`
     SELECT l.*,
-           y.yarn_name, y.yarn_code, COALESCE(y.std_rate, 280) AS yarn_std_rate,
-           fb.fabric_name, fb.fabric_code, COALESCE(fb.std_rate, 420) AS fabric_std_rate,
-           tr.trim_name, tr.trim_code, COALESCE(tr.std_rate, 2.5) AS trim_std_rate,
+           y.yarn_name, y.yarn_code, y.std_rate AS yarn_std_rate,
+           fb.fabric_name, fb.fabric_code, fb.std_rate AS fabric_std_rate,
+           tr.trim_name, tr.trim_code, tr.std_rate AS trim_std_rate,
            c.color_name, sz.size_code, u.code AS uom_code
       FROM trx_bom b
       JOIN trx_bom_line l ON l.bom_id = b.id
@@ -1061,13 +967,15 @@ costingRouter.get('/pre-costings/style-data/:styleId', requirePermission('COSTIN
   // C. Map rates into BOM lines with fallback to standard master rates
   const enrichedLines = bomLines.map((l: any) => {
     let stdRate = 0;
-    if (l.material_type === 'FABRIC') stdRate = Number(l.fabric_std_rate) || 420;
-    else if (l.material_type === 'YARN') stdRate = Number(l.yarn_std_rate) || 280;
-    else if (l.material_type === 'TRIM') stdRate = Number(l.trim_std_rate) || 2.5;
+    // Master standard rate only — a material without one shows 0 and rate_missing for the merchandiser to fill.
+    if (l.material_type === 'FABRIC') stdRate = Number(l.fabric_std_rate) || 0;
+    else if (l.material_type === 'YARN') stdRate = Number(l.yarn_std_rate) || 0;
+    else if (l.material_type === 'TRIM') stdRate = Number(l.trim_std_rate) || 0;
 
     return {
       ...l,
       applied_rate: stdRate,
+      rate_missing: stdRate === 0,
       std_rate: stdRate,
       rate_source: 'Standard Rate Master',
     };
@@ -1088,7 +996,7 @@ costingRouter.get('/pre-costings/style-data/:styleId', requirePermission('COSTIN
  */
 costingRouter.post('/pre-costings/calculate', requirePermission('COSTING.VIEW'), (req, res) => {
   const b = req.body;
-  const orderQty = Number(b.order_qty) || 1000;
+  const orderQty = Number(b.order_qty) || 0;   // no hidden defaults: every input comes from the costing sheet
 
   // 1. Fabric Cost Per Piece
   let fabricCost = 0;
@@ -1147,19 +1055,19 @@ costingRouter.post('/pre-costings/calculate', requirePermission('COSTING.VIEW'),
   }
 
   // 6. Cutting Cost Per Piece
-  const cuttingCost = Number(b.cutting_cost) || 1.50;
+  const cuttingCost = Number(b.cutting_cost) || 0;
 
   // 7. Sewing Cost via SMV Engine
   // Total SMV * Rate per minute
   let totalSmv = Number(b.smv) || 0;
-  let smvRatePerMin = Number(b.smv_rate_per_min) || 0.85;
+  let smvRatePerMin = Number(b.smv_rate_per_min) || 0;
   if (Array.isArray(b.sewing_operations) && b.sewing_operations.length > 0) {
     totalSmv = b.sewing_operations.reduce((s: number, op: any) => s + (Number(op.smv) || 0), 0);
   }
   const stitchingCost = totalSmv * smvRatePerMin;
 
   // 8. Finishing & Packing Cost Per Piece
-  let finishingCost = Number(b.finishing_cost) || 1.50;
+  let finishingCost = Number(b.finishing_cost) || 0;
   let packingCost = 0;
   if (Array.isArray(b.packings)) {
     for (const pk of b.packings) {
@@ -1168,13 +1076,13 @@ costingRouter.post('/pre-costings/calculate', requirePermission('COSTING.VIEW'),
       packingCost += cons * rate;
     }
   }
-  if (packingCost === 0) packingCost = Number(b.packing_cost) || 2.20;
+  if (packingCost === 0) packingCost = Number(b.packing_cost) || 0;
 
   // 9. Other Direct Charges
   let otherDirectCost = 0;
   if (Array.isArray(b.other_charges)) {
     for (const ch of b.other_charges) {
-      otherDirectCost += Number(ch.rate_per_pc) || (Number(ch.total_amount) / orderQty) || 0;
+      otherDirectCost += Number(ch.rate_per_pc) || (orderQty > 0 ? Number(ch.total_amount) / orderQty : 0);
     }
   }
 
@@ -1187,16 +1095,16 @@ costingRouter.post('/pre-costings/calculate', requirePermission('COSTING.VIEW'),
   let overheadCost = 0;
   const overheadBasis = b.overhead_basis || 'PER_PIECE';
   if (overheadBasis === 'PERCENT_DIRECT') {
-    overheadCost = directCostPerPc * ((Number(b.overhead_pct) || 5) / 100);
+    overheadCost = directCostPerPc * ((Number(b.overhead_pct) || 0) / 100);
   } else {
-    overheadCost = Number(b.overhead_rate) || 3.00; // default ₹3.00 per piece
+    overheadCost = Number(b.overhead_rate) || 0;
   }
 
   // TOTAL PRE-COST PER PIECE
   const totalCostPerPc = directCostPerPc + overheadCost;
 
   // 11. Margin % vs Markup % & Quoted FOB Selling Price
-  const marginPct = Number(b.margin_pct) || 15.0; // Margin = (Price - Cost) / Price
+  const marginPct = Number(b.margin_pct) || 0; // Margin = (Price - Cost) / Price
   const markupPct = Number(b.markup_pct) || (marginPct / (1 - marginPct / 100)); // Markup = (Price - Cost) / Cost
   const fobPricePerPc = marginPct >= 100 ? totalCostPerPc : (totalCostPerPc / (1 - marginPct / 100));
   const profitAmountPerPc = fobPricePerPc - totalCostPerPc;
