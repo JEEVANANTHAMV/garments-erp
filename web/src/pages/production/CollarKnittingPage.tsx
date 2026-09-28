@@ -4,7 +4,7 @@ import {
   Plus, Save, X, Eye, Trash2, Shirt, Factory, ShieldCheck, Boxes, PackageCheck,
   Warehouse,
 } from 'lucide-react';
-import { http } from '../../lib/api';
+import { http, ApiError } from '../../lib/api';
 import { fmtDate, fmtDecimal, fmtNumber, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
 import {
@@ -58,6 +58,7 @@ export default function CollarKnittingPage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ ...emptyForm });
   const [saving, setSaving] = useState(false);
+  const [errs, setErrs] = useState<Record<string, string>>({});
   const [detailId, setDetailId] = useState<number | null>(null);
   const [prodFor, setProdFor] = useState<any | null>(null);
   const [rcptFor, setRcptFor] = useState<any | null>(null);
@@ -128,6 +129,12 @@ export default function CollarKnittingPage() {
   const save = async () => {
     if (!form.yarn_id) { toast('Select a yarn', 'error'); return; }
     if (!form.sizes.length) { toast('Add at least one size row', 'error'); return; }
+    // IO no + style are compulsory on a new program (client review 24-Sep-2026).
+    const missing: Record<string, string> = {};
+    if (!form.io_no.trim()) missing.io_no = 'This field is required';
+    if (form.style_id === '') missing.style_id = 'This field is required';
+    setErrs(missing);
+    if (Object.keys(missing).length) { toast('I/O Number and Style are required', 'error'); return; }
 
     setSaving(true);
     try {
@@ -152,9 +159,10 @@ export default function CollarKnittingPage() {
         })),
       });
       toast('Collar program created');
-      setOpen(false); setForm({ ...emptyForm });
+      setOpen(false); setForm({ ...emptyForm }); setErrs({});
       void qc.invalidateQueries({ queryKey: ['collar-programs'] });
     } catch (e: any) {
+      if (e instanceof ApiError) setErrs(e.fieldErrors);
       toast(e?.message || 'Could not create the program', 'error');
     } finally { setSaving(false); }
   };
@@ -180,7 +188,7 @@ export default function CollarKnittingPage() {
         title="Collar Knitting"
         subtitle="Size-wise planning in PCS against yarn consumed in KG — actual weight is derived from production"
         actions={
-          <button className="btn-primary" onClick={() => { setForm({ ...emptyForm, sizes: [newSize()] }); setOpen(true); }}
+          <button className="btn-primary" onClick={() => { setForm({ ...emptyForm, sizes: [newSize()] }); setErrs({}); setOpen(true); }}
             id="btn-new-collar-prog">
             <Plus size={15} /> New Program
           </button>
@@ -298,7 +306,7 @@ export default function CollarKnittingPage() {
               onChange={(e) => onSoLine(e.target.value)} id="c-soline">
               {soLines.map((l: any) => <option key={l.id} value={l.id}>{l.label}</option>)}
             </Select>
-            <Input label="I/O Number" value={form.io_no}
+            <Input label="I/O Number" required value={form.io_no} error={errs.io_no}
               onChange={(e) => setF('io_no', e.target.value)} id="c-io" />
           </div>
 
@@ -320,7 +328,7 @@ export default function CollarKnittingPage() {
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-            <Select label="Style" value={form.style_id} placeholder="— Select style —"
+            <Select label="Style" required value={form.style_id} placeholder="— Select style —" error={errs.style_id}
               onChange={(e) => setF('style_id', e.target.value ? Number(e.target.value) : '')} id="c-style">
               {styles.map((s: any) => <option key={s.id} value={s.id}>{s.code} — {s.label}</option>)}
             </Select>

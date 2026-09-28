@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import {
   Printer, Plus, ScanLine, X, PackageCheck, Ban, Lock, Send, ChevronDown, ChevronRight, Trash2,
-  Layers, Boxes, Shirt, Weight, CheckCircle2, ListPlus, FileInput, Combine,
+  Layers, Boxes, Shirt, Weight, CheckCircle2, ListPlus, FileInput, Combine, FileSpreadsheet, Paperclip, History, Eye,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { Card, Badge, Button, Input, Select, Textarea, Modal, DataTable, StatusBadge, SearchInput, useDebounced } from '../../components/ui';
 import { api } from '../../lib/api';
 import { fmtDate, fmtDateTime, fmtNumber, today } from '../../lib/format';
@@ -25,9 +26,16 @@ type Avail = {
   cut_no: string | null; plan_no: string; available_qty: number; open_dc_no: string | null;
   buyer_name: string | null; buyer_po_no: string | null; assort_color?: string | null;
 };
-type Line = Avail & { issue_qty: number; weight_kg: string; remarks: string };
-type Job = { key: string; io_no: string | null; buyer_name: string | null; buyer_po_no: string | null; style_codes: string[] };
+type Line = Avail & { issue_qty: number; weight_kg: string; remarks: string; operation_id: string; operator_line: string };
+type Job = { key: string; io_no: string | null; buyer_name: string | null; buyer_po_no: string | null; style_codes: string[]; order_type?: string | null };
 type Op = { id: number; op_code: string; op_name: string; default_rate: number; contractor_rate: number | null; rate: number };
+
+/** Every active operation (any process) — for the per-bundle "process completed". */
+function useAllOperations() {
+  const [rows, setRows] = useState<Op[]>([]);
+  useEffect(() => { api.get('/process-master/operations').then((r) => setRows(r.data.data || [])).catch(() => setRows([])); }, []);
+  return rows;
+}
 
 /** Contractors for DCs — job workers and in-house contractors. */
 function useContractors() {
@@ -87,10 +95,11 @@ function groupByJob<T extends { io_no?: string | null; color_name: string; size_
   }));
 }
 
-function jobTitle(j: { io_no: string | null; buyer_name?: string | null; buyer_po_no?: string | null; style_codes?: string[] }) {
+function jobTitle(j: { io_no: string | null; buyer_name?: string | null; buyer_po_no?: string | null; style_codes?: string[]; order_type?: string | null }) {
   return (
     <>
       <span>{j.io_no ?? 'No job'}</span>
+      {j.order_type && <span className="ml-1 rounded bg-white/70 px-1 text-[10px] font-semibold text-slate-500">{j.order_type}</span>}
       {j.buyer_name && <span className="font-medium text-slate-600"> — {j.buyer_name}</span>}
       {j.buyer_po_no && <span className="font-medium text-slate-600"> (PO {j.buyer_po_no})</span>}
       {!!j.style_codes?.length && <span className="font-medium text-slate-600"> · Style: {j.style_codes.join(', ')}</span>}
@@ -298,9 +307,10 @@ function DcEditor({ id, stages, onClose, onSaved }: {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [scan, setScan] = useState('');
   const [last, setLast] = useState<Avail | null>(null);
-  const [picker, setPicker] = useState<'jobs' | 'bundles' | null>(null);
+  const [picker, setPicker] = useState<'jobs' | 'bundles' | 'import' | null>(null);
   const [saving, setSaving] = useState(false);
   const scanRef = useRef<HTMLInputElement>(null);
+  const allOps = useAllOperations();
   const stage = stages.find((s) => s.id === Number(head.stage_id));
   const readonlyNo = !!id;
 
@@ -326,6 +336,7 @@ function DcEditor({ id, stages, onClose, onSaved }: {
         qty: l.bundle_qty, status: l.bundle_status, lay_no: l.lay_no, cut_no: l.cut_no, plan_no: '',
         available_qty: l.qty, issue_qty: l.qty, open_dc_no: null, buyer_name: null, buyer_po_no: null, assort_color: l.assort_color,
         weight_kg: l.weight_kg != null ? String(Number(l.weight_kg)) : '', remarks: l.remarks ?? '',
+        operation_id: l.operation_id ? String(l.operation_id) : '', operator_line: l.operator_line ?? '',
       })));
     }).catch((e) => toast(errMsg(e), 'error'));
   }, [id]);
@@ -352,7 +363,7 @@ function DcEditor({ id, stages, onClose, onSaved }: {
     const ok = bs.filter((b) => !b.open_dc_no && !inLines.has(b.id) && b.available_qty > 0);
     const skipped = bs.length - ok.length;
     if (ok.length) {
-      setLines((cur) => [...cur, ...ok.map((b) => ({ ...b, issue_qty: b.available_qty, weight_kg: '', remarks: '' }))]);
+      setLines((cur) => [...cur, ...ok.map((b) => ({ ...b, issue_qty: b.available_qty, weight_kg: '', remarks: '', operation_id: '', operator_line: '' }))]);
       setJobMeta((cur) => {
         const next = { ...cur };
         for (const b of ok) {
@@ -408,6 +419,7 @@ function DcEditor({ id, stages, onClose, onSaved }: {
       operations: Object.entries(opSel).map(([oid, rate]) => ({ operation_id: Number(oid), rate: rate === '' ? null : Number(rate) })),
       lines: lines.map((l) => ({
         bundle_id: l.id, qty: Number(l.issue_qty), weight_kg: l.weight_kg === '' ? null : Number(l.weight_kg), remarks: l.remarks || null,
+        operation_id: l.operation_id ? Number(l.operation_id) : null, operator_line: l.operator_line || null,
       })),
       issue,
     };
@@ -501,6 +513,9 @@ function DcEditor({ id, stages, onClose, onSaved }: {
         <Button size="sm" variant="secondary" disabled={!head.stage_id} onClick={() => setPicker('bundles')}>
           <ListPlus size={13} className="inline mr-1" />Load pending bundles
         </Button>
+        <Button size="sm" variant="secondary" disabled={!head.stage_id} onClick={() => setPicker('import')}>
+          <FileSpreadsheet size={13} className="inline mr-1" />Import from Excel
+        </Button>
         <Button size="sm" variant="danger" disabled={!checked.size} onClick={() => removeIds(checked)}>
           <Trash2 size={13} className="inline mr-1" />Remove selected ({checked.size})
         </Button>
@@ -557,6 +572,8 @@ function DcEditor({ id, stages, onClose, onSaved }: {
                         <th className="px-2 py-1.5 text-right">Available</th>
                         <th className="px-2 py-1.5 text-right">Qty (PCS)</th>
                         <th className="px-2 py-1.5 text-right">Weight (KG)</th>
+                        <th className="px-2 py-1.5 text-left">Process completed</th>
+                        <th className="px-2 py-1.5 text-left">Operator / line</th>
                         <th className="px-2 py-1.5 text-left">Remarks</th>
                         <th className="w-8 px-2 py-1.5" />
                       </tr>
@@ -587,6 +604,15 @@ function DcEditor({ id, stages, onClose, onSaved }: {
                               <input type="number" min={0} step="0.01" value={l.weight_kg} placeholder="—"
                                 onChange={(e) => setLine(l.id, { weight_kg: e.target.value })}
                                 className="input h-7 w-20 px-1.5 text-right" />
+                            </td>
+                            <td className="px-2 py-1">
+                              <select value={l.operation_id} onChange={(e) => setLine(l.id, { operation_id: e.target.value })} className="input h-7 w-36 px-1">
+                                <option value="">—</option>
+                                {allOps.map((o) => <option key={o.id} value={o.id}>{o.op_name}</option>)}
+                              </select>
+                            </td>
+                            <td className="px-2 py-1">
+                              <input value={l.operator_line} onChange={(e) => setLine(l.id, { operator_line: e.target.value.toUpperCase() })} className="input h-7 w-24 px-1.5" placeholder="LINE-01" />
                             </td>
                             <td className="px-2 py-1">
                               <input value={l.remarks} onChange={(e) => setLine(l.id, { remarks: e.target.value })} className="input h-7 w-40 px-1.5" />
@@ -635,6 +661,10 @@ function DcEditor({ id, stages, onClose, onSaved }: {
       {picker === 'bundles' && stage && (
         <BundlePicker stage={stage} excluded={inLines} onClose={() => setPicker(null)}
           onAdd={(bs) => { const n = addBundles(bs); if (n) toast(`${n} bundles added`); setPicker(null); }} />
+      )}
+      {picker === 'import' && stage && (
+        <ImportBundlesModal stage={stage} excludeChallanId={id} onClose={() => setPicker(null)}
+          onAdd={(bs) => { const n = addBundles(bs.filter((b) => !inLines.has(b.id))); if (n) toast(`${n} bundles added`); setPicker(null); }} />
       )}
     </Modal>
   );
@@ -703,6 +733,75 @@ function JobPicker({ stage, excluded, onClose, onAdd }: { stage: Stage; excluded
           })}
         </tbody>
       </table>
+    </Modal>
+  );
+}
+
+/**
+ * "Import from Excel" — bundle nos / barcodes from the first column of an .xlsx /
+ * .csv sheet (or pasted), checked by the server against what the process can take.
+ */
+function ImportBundlesModal({ stage, excludeChallanId, onClose, onAdd }: {
+  stage: Stage; excludeChallanId?: number; onClose: () => void; onAdd: (bs: Avail[]) => void;
+}) {
+  const toast = useToast();
+  const [text, setText] = useState('');
+  const [result, setResult] = useState<{ code: string; ok: boolean; reason?: string; bundle?: Avail }[] | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const readFile = async (f: File) => {
+    try {
+      const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' });
+      const rows: any[][] = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, blankrows: false });
+      // First column; a header row such as "Bundle" / "Barcode" is skipped.
+      const codes = rows.map((r) => String(r?.[0] ?? '').trim()).filter((v, i) => v && !(i === 0 && /bundle|barcode|code/i.test(v)));
+      setText(codes.join('\n'));
+      toast(`${codes.length} codes read from ${f.name}`);
+    } catch { toast('Could not read the file — use .xlsx, .xls or .csv', 'error'); }
+  };
+  const check = async () => {
+    const codes = text.split(/[\s,;]+/).map((c) => c.trim()).filter(Boolean);
+    if (!codes.length) { toast('Paste or load bundle nos / barcodes first', 'error'); return; }
+    setBusy(true);
+    try {
+      const r = await api.post('/process-dcs/resolve-bundles', { stage_id: stage.id, codes, exclude_challan_id: excludeChallanId ?? null });
+      setResult(r.data.data || []);
+    } catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(false); }
+  };
+  const ready = (result || []).filter((r) => r.ok && r.bundle).map((r) => r.bundle!) as Avail[];
+
+  return (
+    <Modal open onClose={onClose} size="lg" title={`Import bundles — ${stage.stage_name}`}
+      footer={<>
+        {result && <span className="mr-auto self-center text-xs text-slate-600"><b>{ready.length}</b> ready · <b>{result.length - ready.length}</b> rejected</span>}
+        <Button variant="secondary" onClick={onClose}>Cancel</Button>
+        {!result ? <Button loading={busy} onClick={check}>Check bundles</Button>
+          : <Button disabled={!ready.length} onClick={() => onAdd(ready)}>Add {ready.length} bundles</Button>}
+      </>}>
+      {!result ? (
+        <>
+          <input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => { const f = e.target.files?.[0]; if (f) readFile(f); }} className="mb-2 block text-xs" />
+          <Textarea label="Bundle nos / barcodes (first column of the sheet, or paste — one per line)" rows={10} value={text} onChange={(e) => setText(e.target.value)} />
+        </>
+      ) : (
+        <table className="w-full text-xs">
+          <thead className="bg-slate-50 text-slate-500"><tr>
+            <th className="px-2 py-1.5 text-left">Code</th><th className="px-2 py-1.5 text-left">Bundle</th><th className="px-2 py-1.5 text-left">Job</th>
+            <th className="px-2 py-1.5 text-left">Colour / size</th><th className="px-2 py-1.5 text-right">Available</th><th className="px-2 py-1.5 text-left">Status</th>
+          </tr></thead>
+          <tbody>
+            {result.map((r) => (
+              <tr key={r.code} className={`border-t border-slate-100 ${r.ok ? '' : 'bg-red-50/50'}`}>
+                <td className="px-2 py-1 font-mono">{r.code}</td><td className="px-2 py-1 font-mono">{r.bundle?.bundle_no ?? '—'}</td>
+                <td className="px-2 py-1">{r.bundle?.io_no ?? '—'}</td>
+                <td className="px-2 py-1">{r.bundle ? `${r.bundle.color_name} / ${r.bundle.size_code}` : '—'}</td>
+                <td className="px-2 py-1 text-right">{r.bundle?.available_qty ?? '—'}</td>
+                <td className="px-2 py-1">{r.ok ? <Badge tone="green">Ready</Badge> : <span className="text-red-600">{r.reason}</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </Modal>
   );
 }
@@ -878,6 +977,7 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
             <Button variant="secondary" disabled={busy} onClick={() => { setReason(''); setReasonFor('close'); }}><Lock size={13} className="inline mr-1" />Close short</Button>
           )}
         </div>
+        <Button variant="secondary" onClick={() => printDc(id, toast, false)}><Eye size={13} className="inline mr-1" />Preview DC</Button>
         <Button variant="secondary" onClick={() => printDc(id, toast)}><Printer size={13} className="inline mr-1" />Print DC</Button>
         {dc.status === 'DRAFT' && <Button variant="secondary" onClick={() => onEdit(id)}>Edit draft</Button>}
         {dc.status === 'DRAFT' && (
@@ -940,6 +1040,7 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
                     <th className="px-2 py-1.5 text-right">Sent</th><th className="px-2 py-1.5 text-right">Received</th>
                     <th className="px-2 py-1.5 text-right">Reject</th><th className="px-2 py-1.5 text-right">Shortage</th>
                     <th className="px-2 py-1.5 text-right">Balance</th><th className="px-2 py-1.5 text-right">Weight (KG)</th>
+                    <th className="px-2 py-1.5 text-left">Process completed</th><th className="px-2 py-1.5 text-left">Operator / line</th>
                     <th className="px-2 py-1.5 text-left">Status</th><th className="px-2 py-1.5 text-left">Remarks</th>
                   </tr></thead>
                   <tbody>
@@ -959,6 +1060,8 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
                         <td className="px-2 py-1 text-right text-orange-600">{num(l.shortage_qty) || '—'}</td>
                         <td className="px-2 py-1 text-right font-semibold">{['DRAFT', 'CANCELLED'].includes(dc.status) ? '—' : num(l.pending_qty)}</td>
                         <td className="px-2 py-1 text-right">{l.weight_kg != null ? Number(l.weight_kg).toFixed(2) : '—'}</td>
+                        <td className="px-2 py-1">{l.operation_name ?? '—'}</td>
+                        <td className="px-2 py-1">{l.operator_line ?? '—'}</td>
                         <td className="px-2 py-1">{lineStatus(l, dc.status)}</td>
                         <td className="px-2 py-1 text-slate-500">{l.remarks ?? ''}</td>
                       </tr>
@@ -1004,7 +1107,10 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
         </div>
       )}
 
-      {receiving && <InwardModal dc={dc} onClose={() => setReceiving(false)} onDone={(d) => { setReceiving(false); setDc(d); onChanged(); }} />}
+      <DcAttachments dcId={id} receipts={dc.receipts} />
+      <DcAudit dcId={id} />
+
+      {receiving && <InwardModal dcs={[dc]} onClose={() => setReceiving(false)} onDone={() => { setReceiving(false); load(); onChanged(); }} />}
       {reasonFor && (
         <Modal open onClose={() => setReasonFor(null)} size="sm" title={reasonFor === 'cancel' ? `Cancel DC ${dc.challan_no}` : `Close DC ${dc.challan_no} short`}
           footer={<>
@@ -1026,6 +1132,88 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
   );
 }
 
+/** Files attached to the DC or its inwards — upload goes through POST /uploads (folder attachments). */
+function DcAttachments({ dcId, receipts }: { dcId: number; receipts: any[] }) {
+  const toast = useToast();
+  const [rows, setRows] = useState<any[]>([]);
+  const [docType, setDocType] = useState('PARTY_DC');
+  const [receiptId, setReceiptId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const load = () => api.get(`/process-dcs/${dcId}/attachments`).then((r) => setRows(r.data.data || [])).catch(() => setRows([]));
+  useEffect(() => { load(); }, [dcId]);
+
+  const upload = async (f: File) => {
+    if (f.size > 10 * 1024 * 1024) { toast('File is larger than 10 MB', 'error'); return; }
+    setBusy(true);
+    try {
+      const data = await new Promise<string>((ok, bad) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.onerror = bad; r.readAsDataURL(f); });
+      const up = (await api.post('/uploads', { filename: f.name, data, folder: 'attachments' })).data.data;
+      await api.post(`/process-dcs/${dcId}/attachments`, {
+        file_url: up.url, file_name: f.name, mime_type: up.mimeType ?? f.type, size_bytes: up.size ?? f.size,
+        doc_type: docType, receipt_id: receiptId ? Number(receiptId) : null,
+      });
+      toast('Attachment added'); load();
+    } catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(false); }
+  };
+  const remove = async (a: any) => {
+    try { await api.delete(`/process-dcs/${dcId}/attachments/${a.id}`); load(); } catch (e) { toast(errMsg(e), 'error'); }
+  };
+
+  return (
+    <details className="mt-4 rounded-lg border border-slate-200 p-3" open={rows.length > 0}>
+      <summary className="cursor-pointer text-sm font-semibold text-slate-700"><Paperclip size={13} className="inline mr-1" />Attachments ({rows.length})</summary>
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+        <select value={docType} onChange={(e) => setDocType(e.target.value)} className="input h-8 w-36">
+          <option value="PARTY_DC">Party DC</option><option value="PHOTO">Photo</option><option value="OTHER">Other</option>
+        </select>
+        <select value={receiptId} onChange={(e) => setReceiptId(e.target.value)} className="input h-8 w-44">
+          <option value="">For the DC</option>
+          {receipts.map((r: any) => <option key={r.id} value={r.id}>Inward {r.receipt_no}</option>)}
+        </select>
+        <input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = ''; }} />
+      </div>
+      <table className="mt-2 w-full text-xs">
+        <tbody>
+          {rows.map((a) => (
+            <tr key={a.id} className="border-t border-slate-100">
+              <td className="py-1"><a href={a.file_url} target="_blank" rel="noreferrer" className="text-brand-700 hover:underline">{a.file_name ?? a.file_url}</a></td>
+              <td className="py-1">{a.doc_type.replace('_', ' ')}</td><td className="py-1">{a.receipt_no ? `Inward ${a.receipt_no}` : 'DC'}</td>
+              <td className="py-1 text-slate-500">{a.uploaded_by_name} · {fmtDateTime(a.uploaded_at)}</td>
+              <td className="py-1 text-right"><button onClick={() => remove(a)} className="text-slate-400 hover:text-red-600" aria-label="Remove"><X size={13} /></button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </details>
+  );
+}
+
+/** Audit trail of the DC and its inwards. */
+function DcAudit({ dcId }: { dcId: number }) {
+  const [rows, setRows] = useState<any[] | null>(null);
+  const load = () => { if (!rows) api.get(`/process-dcs/${dcId}/audit`).then((r) => setRows(r.data.data || [])).catch(() => setRows([])); };
+  const summary = (v: any) => (v && typeof v === 'object' ? Object.entries(v).map(([k, x]) => `${k}: ${typeof x === 'object' ? JSON.stringify(x) : x}`).join(' · ') : String(v ?? ''));
+  return (
+    <details className="mt-3 rounded-lg border border-slate-200 p-3" onToggle={(e) => { if ((e.target as HTMLDetailsElement).open) load(); }}>
+      <summary className="cursor-pointer text-sm font-semibold text-slate-700"><History size={13} className="inline mr-1" />Audit trail</summary>
+      <table className="mt-2 w-full text-xs">
+        <tbody>
+          {rows == null && <tr><td className="py-2 text-slate-400">Loading…</td></tr>}
+          {rows?.length === 0 && <tr><td className="py-2 text-slate-400">No audit entries.</td></tr>}
+          {rows?.map((a) => (
+            <tr key={a.id} className="border-t border-slate-100 align-top">
+              <td className="py-1 pr-2 whitespace-nowrap text-slate-500">{fmtDateTime(a.changed_at)}</td>
+              <td className="py-1 pr-2 whitespace-nowrap">{a.changed_by_name ?? '—'}</td>
+              <td className="py-1 pr-2"><Badge tone={a.action === 'INSERT' ? 'green' : 'blue'}>{a.table_name === 'trx_jobwork_receipt' ? 'Inward' : 'DC'} {a.action}</Badge></td>
+              <td className="py-1 text-slate-600">{summary(a.new_values)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </details>
+  );
+}
+
 function Info({ label, children }: { label: string; children: React.ReactNode }) {
   return <div><p className="text-[11px] uppercase tracking-wide text-slate-400">{label}</p><div className="font-medium text-slate-800">{children}</div></div>;
 }
@@ -1033,18 +1221,27 @@ function Info({ label, children }: { label: string; children: React.ReactNode })
 // ════════════════════════════════════════════════════════════════════
 // Process Inward against a DC — job-wise good / reject (+reason) / shortage
 // ════════════════════════════════════════════════════════════════════
-type InRow = { g: number; r: number; s: number; reason: string; kg: string; remarks: string };
+type InRow = { g: number; r: number; s: number; x: number; reason: string; kg: string; remarks: string; op: string; operator: string };
 
-function InwardModal({ dc, onClose, onDone }: { dc: any; onClose: () => void; onDone: (dc: any) => void }) {
+/**
+ * Process Inward. One DC → POST /process-dcs/:id/receipts; several DCs of the same
+ * contractor (one party DC / vehicle) → POST /process-dcs/receipts/batch.
+ */
+function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
   const warehouses = useLookup('warehouses');
-  const open = (dc.lines as any[]).filter((l) => num(l.pending_qty) > 0).map((l) => ({ ...l, io_no: l.job_io_no }));
-  const jobs = groupByJob(open);
-  const jobMeta = new Map<string, any>((dc.summary.jobs as any[]).map((j) => [j.io_no ?? '—', j]));
-  const blank: InRow = { g: 0, r: 0, s: 0, reason: '', kg: '', remarks: '' };
-  const [rows, setRows] = useState<Record<number, InRow>>(Object.fromEntries(open.map((l) => [l.id, { ...blank }])));
+  const allOps = useAllOperations();
+  const first = dcs[0];
+  // Open lines of every DC, tagged with their DC.
+  const open = dcs.flatMap((dc) => (dc.lines as any[]).filter((l) => num(l.pending_qty) > 0)
+    .map((l) => ({ ...l, io_no: l.job_io_no, _dc: dc })));
+  const jobMeta = new Map<string, any>(dcs.flatMap((dc) => (dc.summary.jobs as any[]).map((j) => [j.io_no ?? '—', j] as [string, any])));
+  const blank: InRow = { g: 0, r: 0, s: 0, x: 0, reason: '', kg: '', remarks: '', op: '', operator: '' };
+  const [rows, setRows] = useState<Record<number, InRow>>(Object.fromEntries(open.map((l) => [l.id, {
+    ...blank, op: l.operation_id ? String(l.operation_id) : '', operator: l.operator_line ?? '',
+  }])));
   const [head, setHead] = useState({
-    receipt_date: today(), party_dc_no: '', party_dc_date: '', to_warehouse_id: dc.to_warehouse_id ?? '', vehicle_no: '', remarks: '',
+    receipt_date: today(), party_dc_no: '', party_dc_date: '', ref_no: '', to_warehouse_id: first.to_warehouse_id ?? '', vehicle_no: '', remarks: '',
   });
   const [scan, setScan] = useState('');
   const [last, setLast] = useState<any>(null);
@@ -1059,10 +1256,10 @@ function InwardModal({ dc, onClose, onDone }: { dc: any; onClose: () => void; on
     e.preventDefault();
     const code = scan.trim();
     const l = open.find((x) => x.barcode === code || x.bundle_no === code);
-    if (!l) toast(`${code} is not pending on this DC`, 'error');
+    if (!l) toast(`${code} is not pending on ${dcs.length > 1 ? 'these DCs' : 'this DC'}`, 'error');
     else {
       set(l.id, { g: num(l.pending_qty) - rows[l.id].r - rows[l.id].s });
-      setLast({ bundle_no: l.bundle_no, io_no: l.io_no, style_code: l.style_code, size_code: l.size_code, qty: num(l.pending_qty), note: 'filled as good' });
+      setLast({ bundle_no: l.bundle_no, io_no: l.io_no, style_code: l.style_code, size_code: l.size_code, qty: num(l.pending_qty), note: `DC ${l._dc.challan_no} · filled as good` });
     }
     setScan('');
   };
@@ -1081,26 +1278,36 @@ function InwardModal({ dc, onClose, onDone }: { dc: any; onClose: () => void; on
     return next;
   });
 
-  const tot = open.reduce((a, l) => ({ p: a.p + num(l.pending_qty), g: a.g + rows[l.id].g, r: a.r + rows[l.id].r, s: a.s + rows[l.id].s }), { p: 0, g: 0, r: 0, s: 0 });
+  const tot = open.reduce((a, l) => ({ p: a.p + num(l.pending_qty), g: a.g + rows[l.id].g, r: a.r + rows[l.id].r, s: a.s + rows[l.id].s, x: a.x + rows[l.id].x }), { p: 0, g: 0, r: 0, s: 0, x: 0 });
   const over = open.some((l) => entered(l.id) > num(l.pending_qty));
   const noReason = open.some((l) => rows[l.id].r > 0 && !rows[l.id].reason.trim());
+  const badExcess = open.some((l) => rows[l.id].x > 0 && entered(l.id) !== num(l.pending_qty));
+
+  const linesOf = (dc: any) => open.filter((l) => l._dc.id === dc.id && (entered(l.id) > 0 || rows[l.id].x > 0)).map((l) => ({
+    line_id: l.id, received_qty: rows[l.id].g, rejected_qty: rows[l.id].r, shortage_qty: rows[l.id].s, excess_qty: rows[l.id].x,
+    reject_reason: rows[l.id].reason || null, weight_kg: rows[l.id].kg === '' ? null : Number(rows[l.id].kg), remarks: rows[l.id].remarks || null,
+    operation_id: rows[l.id].op ? Number(rows[l.id].op) : null, operator_line: rows[l.id].operator || null,
+  }));
 
   const save = async () => {
-    const lines = open.filter((l) => entered(l.id) > 0).map((l) => ({
-      line_id: l.id, received_qty: rows[l.id].g, rejected_qty: rows[l.id].r, shortage_qty: rows[l.id].s,
-      reject_reason: rows[l.id].reason || null, weight_kg: rows[l.id].kg === '' ? null : Number(rows[l.id].kg), remarks: rows[l.id].remarks || null,
-    }));
-    if (!lines.length) { toast('Enter quantities for at least one bundle', 'error'); return; }
+    const perDc = dcs.map((dc) => ({ challan_id: dc.id, lines: linesOf(dc) })).filter((d) => d.lines.length);
+    if (!perDc.length) { toast('Enter quantities for at least one bundle', 'error'); return; }
     if (noReason) { toast('Give the mistake / reject reason for every rejected bundle', 'error'); return; }
+    if (badExcess) { toast('Excess PCS only on a bundle whose pending PCS are all accounted for', 'error'); return; }
+    const common = {
+      ...head, party_dc_no: head.party_dc_no || null, party_dc_date: head.party_dc_date || null, ref_no: head.ref_no || null,
+      to_warehouse_id: head.to_warehouse_id ? Number(head.to_warehouse_id) : null, vehicle_no: head.vehicle_no || null, remarks: head.remarks || null,
+    };
     setSaving(true);
     try {
-      const r = await api.post(`/process-dcs/${dc.id}/receipts`, {
-        ...head, party_dc_no: head.party_dc_no || null, party_dc_date: head.party_dc_date || null,
-        to_warehouse_id: head.to_warehouse_id ? Number(head.to_warehouse_id) : null, vehicle_no: head.vehicle_no || null,
-        remarks: head.remarks || null, lines,
-      });
-      toast(`Inward ${r.data.data.receipt_no} saved — DC ${human(r.data.data.dc_status)}`);
-      onDone(r.data.data.dc);
+      if (perDc.length === 1) {
+        const r = await api.post(`/process-dcs/${perDc[0].challan_id}/receipts`, { ...common, lines: perDc[0].lines });
+        toast(`Inward ${r.data.data.receipt_no} saved — DC ${human(r.data.data.dc_status)}`);
+      } else {
+        const r = await api.post('/process-dcs/receipts/batch', { ...common, dcs: perDc });
+        toast(`Inward ${r.data.data.inward_group_no} saved — ${r.data.data.receipts.length} DCs`);
+      }
+      onDone();
     } catch (e) { toast(errMsg(e), 'error'); } finally { setSaving(false); }
   };
 
@@ -1108,32 +1315,40 @@ function InwardModal({ dc, onClose, onDone }: { dc: any; onClose: () => void; on
     const x = rows[l.id]; const e = entered(l.id); const p = num(l.pending_qty);
     if (e === 0) return <Badge tone="slate">Pending</Badge>;
     if (e > p) return <Badge tone="red">Over</Badge>;
+    if (x.x > 0) return <Badge tone="blue">Excess</Badge>;
     if (x.s > 0) return <Badge tone="amber">Shortage</Badge>;
     if (x.r > 0) return <Badge tone="red">Rejected</Badge>;
     if (e < p) return <Badge tone="violet">Partial</Badge>;
     return <Badge tone="green">Received</Badge>;
   };
 
+  // Sections: DC → job (a single DC shows jobs only).
+  const sections = dcs.flatMap((dc) => groupByJob(open.filter((l) => l._dc.id === dc.id)).map((j) => ({ dc, ...j })));
+
   return (
-    <Modal open onClose={onClose} size="full" title={`Process Inward — ${dc.stage_name ?? ''} from ${dc.vendor_name}`}
+    <Modal open onClose={onClose} size="full"
+      title={`Process Inward — ${first.stage_name ?? ''} from ${first.vendor_name}${dcs.length > 1 ? ` (${dcs.length} DCs)` : ''}`}
       footer={<>
-        <span className="mr-auto self-center text-xs text-slate-600">Good <b>{tot.g}</b> · Reject <b>{tot.r}</b> · Shortage <b>{tot.s}</b> · Still pending <b>{tot.p - tot.g - tot.r - tot.s}</b> PCS</span>
+        <span className="mr-auto self-center text-xs text-slate-600">
+          Good <b>{tot.g}</b> · Reject <b>{tot.r}</b> · Shortage <b>{tot.s}</b>{tot.x ? <> · Excess <b>{tot.x}</b></> : null} · Still pending <b>{tot.p - tot.g - tot.r - tot.s}</b> PCS
+        </span>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button loading={saving} disabled={over} onClick={save}><CheckCircle2 size={13} className="inline mr-1" />Save &amp; confirm inward</Button>
       </>}>
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-4">
         <div className="xl:col-span-3 grid grid-cols-2 gap-3 md:grid-cols-4">
           <Input label="Inward no" value="" disabled placeholder="Auto" />
-          <Input label="Source DC no" value={dc.challan_no} disabled />
-          <Input label="From process" value={dc.stage_name ?? ''} disabled />
+          <Input label={dcs.length > 1 ? 'Source DCs' : 'Source DC no'} value={dcs.map((d) => d.challan_no).join(', ')} disabled />
+          <Input label="From process" value={first.stage_name ?? ''} disabled />
           <Input label="Date" type="date" required value={head.receipt_date} onChange={(e) => setHead({ ...head, receipt_date: e.target.value })} />
-          <Input label="Contractor" value={dc.vendor_name ?? ''} disabled />
+          <Input label="Contractor" value={first.vendor_name ?? ''} disabled />
           <Select label="Receiving location" value={head.to_warehouse_id} onChange={(e) => setHead({ ...head, to_warehouse_id: e.target.value })}
             placeholder="— store —" options={toOptions(warehouses.data)} />
           <Input label="Party DC no" value={head.party_dc_no} onChange={(e) => setHead({ ...head, party_dc_no: e.target.value })} />
           <Input label="Party DC date" type="date" value={head.party_dc_date} onChange={(e) => setHead({ ...head, party_dc_date: e.target.value })} />
+          <Input label="Ref / SR no" value={head.ref_no} onChange={(e) => setHead({ ...head, ref_no: e.target.value })} />
           <Input label="Vehicle no" value={head.vehicle_no} onChange={(e) => setHead({ ...head, vehicle_no: e.target.value.toUpperCase() })} />
-          <Input label="Remarks" value={head.remarks} onChange={(e) => setHead({ ...head, remarks: e.target.value })} className="md:col-span-3" />
+          <Input label="Remarks" value={head.remarks} onChange={(e) => setHead({ ...head, remarks: e.target.value })} className="md:col-span-2" />
         </div>
         <ScanCard value={scan} onChange={setScan} onSubmit={onScan} placeholder="Scan returned bundle — fills pending as good" last={last} />
       </div>
@@ -1145,18 +1360,21 @@ function InwardModal({ dc, onClose, onDone }: { dc: any; onClose: () => void; on
       </div>
 
       <div className="mt-3 space-y-3">
-        {jobs.map((j, ji) => {
+        {sections.map((j, ji) => {
+          const key = `${j.dc.id}|${j.key}`;
           const m = jobMeta.get(j.key) ?? { io_no: j.key };
           const jp = j.rows.reduce((a: number, l: any) => a + num(l.pending_qty), 0);
           const jg = j.rows.reduce((a: number, l: any) => a + rows[l.id].g, 0);
-          const isCollapsed = collapsed.has(j.key);
+          const isCollapsed = collapsed.has(key);
           return (
-            <div key={j.key} className="overflow-hidden rounded-xl border border-slate-200">
+            <div key={key} className="overflow-hidden rounded-xl border border-slate-200">
               <div className={`flex flex-wrap items-center gap-x-5 gap-y-1 border-b px-3 py-2 text-sm ${JOB_TONES[ji % JOB_TONES.length]}`}>
-                <button onClick={() => { const s = new Set(collapsed); if (s.has(j.key)) s.delete(j.key); else s.add(j.key); setCollapsed(s); }} className="text-slate-600" aria-label="Collapse">
+                <button onClick={() => { const s2 = new Set(collapsed); if (s2.has(key)) s2.delete(key); else s2.add(key); setCollapsed(s2); }} className="text-slate-600" aria-label="Collapse">
                   {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
                 </button>
-                <span className="mr-auto font-bold text-slate-800">{ji + 1}. {jobTitle(m)}</span>
+                <span className="mr-auto font-bold text-slate-800">
+                  {ji + 1}. {dcs.length > 1 && <span className="font-mono text-xs text-slate-500">DC {j.dc.challan_no} · </span>}{jobTitle(m)}
+                </span>
                 <span className="text-xs text-slate-600">Bundles: <b>{j.rows.length}</b></span>
                 <span className="text-xs text-slate-600">Sent (pending): <b>{fmtNumber(jp)}</b></span>
                 <span className="text-xs text-slate-600">Received: <b>{fmtNumber(jg)}</b></span>
@@ -1172,16 +1390,18 @@ function InwardModal({ dc, onClose, onDone }: { dc: any; onClose: () => void; on
                       <th className="px-2 py-1.5 text-left">#</th><th className="px-2 py-1.5 text-left">Bundle ID</th>
                       <th className="px-2 py-1.5 text-left">Lay no</th><th className="px-2 py-1.5 text-left">Cut no</th>
                       <th className="px-2 py-1.5 text-left">Colour</th><th className="px-2 py-1.5 text-left">Assort colour</th>
-                      <th className="px-2 py-1.5 text-left">Size</th><th className="px-2 py-1.5 text-right">Sent (PCS)</th><th className="px-2 py-1.5 text-right">Received (PCS)</th>
+                      <th className="px-2 py-1.5 text-left">Size</th><th className="px-2 py-1.5 text-right">Sent (PCS)</th>
+                      <th className="px-2 py-1.5 text-right">Received (PCS)</th>
                       <th className="px-2 py-1.5 text-right">Mistake / reject</th><th className="px-2 py-1.5 text-left">Reject reason</th>
-                      <th className="px-2 py-1.5 text-right">Shortage</th><th className="px-2 py-1.5 text-right">Difference</th>
-                      <th className="px-2 py-1.5 text-right">Weight (KG)</th><th className="px-2 py-1.5 text-left">Status</th>
-                      <th className="px-2 py-1.5 text-left">Remarks</th>
+                      <th className="px-2 py-1.5 text-right">Shortage</th><th className="px-2 py-1.5 text-right">Excess</th>
+                      <th className="px-2 py-1.5 text-right">Difference</th><th className="px-2 py-1.5 text-right">Weight (KG)</th>
+                      <th className="px-2 py-1.5 text-left">Process completed</th><th className="px-2 py-1.5 text-left">Operator / line</th>
+                      <th className="px-2 py-1.5 text-left">Status</th><th className="px-2 py-1.5 text-left">Remarks</th>
                     </tr></thead>
                     <tbody>
                       {j.rows.map((l: any, i: number) => {
-                        const x = rows[l.id]; const p = num(l.pending_qty); const diff = x.g - p;
-                        const bad = entered(l.id) > p;
+                        const x = rows[l.id]; const p = num(l.pending_qty); const diff = x.g + x.x - p;
+                        const bad = entered(l.id) > p || (x.x > 0 && entered(l.id) !== p);
                         return (
                           <tr key={l.id} className={`border-t border-slate-100 ${bad ? 'bg-red-50' : x.s > 0 || x.r > 0 ? 'bg-amber-50/50' : ''}`}>
                             <td className="px-2 py-1 text-slate-400">{i + 1}</td>
@@ -1197,8 +1417,16 @@ function InwardModal({ dc, onClose, onDone }: { dc: any; onClose: () => void; on
                                 className={`input h-7 w-36 px-1.5 ${x.r && !x.reason.trim() ? 'input-error' : ''}`} />
                             </td>
                             <td className="px-2 py-1 text-right"><input type="number" min={0} value={x.s} onChange={(e) => set(l.id, { s: clampInt(e.target.value) })} className="input h-7 w-16 px-1.5 text-right" /></td>
-                            <td className={`px-2 py-1 text-right font-semibold ${diff < 0 ? 'text-red-600' : 'text-slate-500'}`}>{entered(l.id) ? diff : '—'}</td>
+                            <td className="px-2 py-1 text-right"><input type="number" min={0} value={x.x} title="PCS returned beyond the DC qty (recorded only)" onChange={(e) => set(l.id, { x: clampInt(e.target.value) })} className="input h-7 w-14 px-1.5 text-right" /></td>
+                            <td className={`px-2 py-1 text-right font-semibold ${diff < 0 ? 'text-red-600' : diff > 0 ? 'text-blue-600' : 'text-slate-500'}`}>{entered(l.id) || x.x ? diff : '—'}</td>
                             <td className="px-2 py-1 text-right"><input type="number" min={0} step="0.01" value={x.kg} placeholder={l.weight_kg != null ? Number(l.weight_kg).toFixed(2) : '—'} onChange={(e) => set(l.id, { kg: e.target.value })} className="input h-7 w-20 px-1.5 text-right" /></td>
+                            <td className="px-2 py-1">
+                              <select value={x.op} onChange={(e) => set(l.id, { op: e.target.value })} className="input h-7 w-32 px-1">
+                                <option value="">—</option>
+                                {allOps.map((o) => <option key={o.id} value={o.id}>{o.op_name}</option>)}
+                              </select>
+                            </td>
+                            <td className="px-2 py-1"><input value={x.operator} onChange={(e) => set(l.id, { operator: e.target.value.toUpperCase() })} className="input h-7 w-24 px-1.5" /></td>
                             <td className="px-2 py-1">{status(l)}</td>
                             <td className="px-2 py-1"><input value={x.remarks} onChange={(e) => set(l.id, { remarks: e.target.value })} className="input h-7 w-36 px-1.5" /></td>
                           </tr>
@@ -1216,11 +1444,11 @@ function InwardModal({ dc, onClose, onDone }: { dc: any; onClose: () => void; on
       <div className="mt-4 rounded-xl border border-red-100 bg-red-50/30 p-3">
         <p className="mb-2 text-sm font-bold text-red-700">DC level summary</p>
         <SummaryTiles tiles={[
-          { label: 'Total jobs', value: String(jobs.length), icon: <Layers size={20} />, tone: 'border-blue-100 bg-blue-50 text-blue-800' },
+          { label: 'Total jobs', value: String(new Set(open.map((l) => l.io_no ?? '—')).size), icon: <Layers size={20} />, tone: 'border-blue-100 bg-blue-50 text-blue-800' },
           { label: 'Total bundles', value: fmtNumber(open.length), icon: <Boxes size={20} />, tone: 'border-violet-100 bg-violet-50 text-violet-800' },
           { label: 'Sent qty (pending)', value: fmtNumber(tot.p), icon: <Shirt size={20} />, tone: 'border-cyan-100 bg-cyan-50 text-cyan-800' },
           { label: 'Total received (good)', value: fmtNumber(tot.g), icon: <CheckCircle2 size={20} />, tone: 'border-emerald-100 bg-emerald-50 text-emerald-800' },
-          { label: 'Total difference', value: fmtNumber(tot.g - tot.p), icon: <Weight size={20} />, tone: 'border-rose-100 bg-rose-50 text-rose-800' },
+          { label: 'Total difference', value: fmtNumber(tot.g + tot.x - tot.p), icon: <Weight size={20} />, tone: 'border-rose-100 bg-rose-50 text-rose-800' },
         ]} />
       </div>
     </Modal>
@@ -1232,7 +1460,7 @@ function InwardModal({ dc, onClose, onDone }: { dc: any; onClose: () => void; on
 // ════════════════════════════════════════════════════════════════════
 const esc = (v: unknown) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 
-async function printDc(id: number, toast: (m: string, k?: any) => void) {
+async function printDc(id: number, toast: (m: string, k?: any) => void, autoPrint = true) {
   const w = window.open('', '_blank', 'width=900,height=1000');
   if (!w) { toast('Allow pop-ups to print the DC', 'error'); return; }
   try {
@@ -1294,7 +1522,7 @@ async function printDc(id: number, toast: (m: string, k?: any) => void) {
     </body></html>`);
     w.document.close();
     w.focus();
-    setTimeout(() => w.print(), 300);
+    if (autoPrint) setTimeout(() => w.print(), 300);
   } catch (e) { w.close(); toast(errMsg(e), 'error'); }
 }
 
@@ -1306,7 +1534,7 @@ export function ProcessDcReceiptsPage() {
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selecting, setSelecting] = useState(false);
-  const [dc, setDc] = useState<any>(null);
+  const [dcs, setDcs] = useState<any[] | null>(null);
   const load = () => {
     setLoading(true);
     api.get('/process-dcs/receipts').then((r) => setRows(r.data.data || []))
@@ -1314,9 +1542,9 @@ export function ProcessDcReceiptsPage() {
   };
   useEffect(load, []);
 
-  const pick = async (id: number) => {
+  const pick = async (ids: number[]) => {
     setSelecting(false);
-    try { setDc((await api.get(`/process-dcs/${id}`)).data.data); } catch (e) { toast(errMsg(e), 'error'); }
+    try { setDcs(await Promise.all(ids.map(async (id) => (await api.get(`/process-dcs/${id}`)).data.data))); } catch (e) { toast(errMsg(e), 'error'); }
   };
 
   return (
@@ -1337,7 +1565,7 @@ export function ProcessDcReceiptsPage() {
             { key: 'receipt_no', header: 'Inward no', render: (r: any) => <span className="font-mono text-[12px] font-semibold text-brand-700">{r.receipt_no}</span> },
             { key: 'receipt_date', header: 'Date', render: (r: any) => fmtDate(r.receipt_date) },
             { key: 'challan_no', header: 'Source DC', render: (r: any) => <Link className="font-mono text-brand-700 hover:underline" to={`/production/jobwork-challans?dc=${r.challan_id}`}>{r.challan_no}</Link> },
-            { key: 'party_dc_no', header: 'Party DC', render: (r: any) => r.party_dc_no ?? '—' },
+            { key: 'party_dc_no', header: 'Party DC / Ref', render: (r: any) => <span className="text-xs">{r.party_dc_no ?? '—'}{r.ref_no ? ` · ${r.ref_no}` : ''}{r.inward_group_no ? <span className="block font-mono text-[10px] text-slate-400">{r.inward_group_no}</span> : null}</span> },
             { key: 'stage_name', header: 'Process', render: (r: any) => r.stage_name ? <Badge tone="violet">{r.stage_name}</Badge> : '—' },
             { key: 'vendor_name', header: 'Contractor' },
             { key: 'io_list', header: 'Jobs', render: (r: any) => <span className="text-xs">{r.io_list ?? '—'}</span> },
@@ -1345,17 +1573,18 @@ export function ProcessDcReceiptsPage() {
             { key: 'received_qty', header: 'Good (PCS)', align: 'right' as const, render: (r: any) => <span className="text-emerald-700">{fmtNumber(r.received_qty)}</span> },
             { key: 'rejected_qty', header: 'Reject (PCS)', align: 'right' as const, render: (r: any) => Number(r.rejected_qty) ? <span className="text-red-600">{fmtNumber(r.rejected_qty)}</span> : '—' },
             { key: 'shortage_qty', header: 'Shortage (PCS)', align: 'right' as const, render: (r: any) => Number(r.shortage_qty) ? <span className="text-orange-600">{fmtNumber(r.shortage_qty)}</span> : '—' },
+            { key: 'excess_qty', header: 'Excess (PCS)', align: 'right' as const, render: (r: any) => Number(r.excess_qty) ? <span className="text-blue-600">{fmtNumber(r.excess_qty)}</span> : '—' },
             { key: 'dc_status', header: 'DC status', render: (r: any) => <StatusBadge value={r.dc_status} /> },
           ]} />
       </Card>
       {selecting && <SelectDcModal onClose={() => setSelecting(false)} onPick={pick} />}
-      {dc && <InwardModal dc={dc} onClose={() => setDc(null)} onDone={() => { setDc(null); load(); }} />}
+      {dcs && <InwardModal dcs={dcs} onClose={() => setDcs(null)} onDone={() => { setDcs(null); load(); }} />}
     </div>
   );
 }
 
 /** Pending DCs to receive against (DC qty / received / balance) — legacy "Select DC's". */
-function SelectDcModal({ onClose, onPick }: { onClose: () => void; onPick: (id: number) => void }) {
+function SelectDcModal({ onClose, onPick }: { onClose: () => void; onPick: (ids: number[]) => void }) {
   const toast = useToast();
   const contractors = useContractors();
   const [stages, setStages] = useState<Stage[]>([]);
@@ -1365,6 +1594,8 @@ function SelectDcModal({ onClose, onPick }: { onClose: () => void; onPick: (id: 
   const dq = useDebounced(q);
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [picked, setPicked] = useState<Set<number>>(new Set());
+  const pickedVendor = rows.find((r) => picked.has(r.id))?.vendor_id;
 
   useEffect(() => { api.get('/process-dcs/stages').then((r) => setStages(r.data.data || [])); }, []);
   useEffect(() => {
@@ -1374,8 +1605,12 @@ function SelectDcModal({ onClose, onPick }: { onClose: () => void; onPick: (id: 
   }, [stageId, vendorId, dq]);
 
   return (
-    <Modal open onClose={onClose} size="xl" title="Select DC to receive against"
-      footer={<Button variant="secondary" onClick={onClose}>Close</Button>}>
+    <Modal open onClose={onClose} size="xl" title="Select DC(s) to receive against"
+      footer={<>
+        <span className="mr-auto self-center text-xs text-slate-500">Tick several DCs of the same contractor for one inward (one party DC / vehicle)</span>
+        <Button variant="secondary" onClick={onClose}>Close</Button>
+        <Button disabled={!picked.size} onClick={() => onPick([...picked])}>Receive {picked.size || ''} DC(s)</Button>
+      </>}>
       <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-3">
         <Select value={stageId} onChange={(e) => setStageId(e.target.value)} placeholder="All processes" options={stages.map((s) => ({ value: s.id, label: s.stage_name }))} />
         <Select value={vendorId} onChange={(e) => setVendorId(e.target.value)} placeholder="All contractors" options={contractors.map((c) => ({ value: c.id, label: c.label }))} />
@@ -1383,16 +1618,20 @@ function SelectDcModal({ onClose, onPick }: { onClose: () => void; onPick: (id: 
       </div>
       <table className="w-full text-xs">
         <thead className="bg-slate-50 text-slate-500"><tr>
-          <th className="px-2 py-1.5 text-left">DC no</th><th className="px-2 py-1.5 text-left">Date</th>
+          <th className="w-8 px-2 py-1.5" /><th className="px-2 py-1.5 text-left">DC no</th><th className="px-2 py-1.5 text-left">Date</th>
           <th className="px-2 py-1.5 text-left">Contractor</th><th className="px-2 py-1.5 text-left">Process</th>
           <th className="px-2 py-1.5 text-left">Jobs</th><th className="px-2 py-1.5 text-right">DC qty</th>
           <th className="px-2 py-1.5 text-right">Received qty</th><th className="px-2 py-1.5 text-right">Balance qty</th>
         </tr></thead>
         <tbody>
-          {loading && <tr><td colSpan={8} className="py-6 text-center text-slate-400">Loading…</td></tr>}
-          {!loading && !rows.length && <tr><td colSpan={8} className="py-6 text-center text-slate-400">No DCs pending receipt.</td></tr>}
-          {rows.map((r) => (
-            <tr key={r.id} onClick={() => onPick(r.id)} className="cursor-pointer border-t border-slate-100 hover:bg-brand-50/40">
+          {loading && <tr><td colSpan={9} className="py-6 text-center text-slate-400">Loading…</td></tr>}
+          {!loading && !rows.length && <tr><td colSpan={9} className="py-6 text-center text-slate-400">No DCs pending receipt.</td></tr>}
+          {rows.map((r) => {
+            const other = pickedVendor != null && Number(pickedVendor) !== Number(r.vendor_id);
+            return (
+            <tr key={r.id} onClick={() => { if (other) return; setPicked((cur) => { const n2 = new Set(cur); if (n2.has(r.id)) n2.delete(r.id); else n2.add(r.id); return n2; }); }}
+              className={`border-t border-slate-100 ${other ? 'opacity-40' : 'cursor-pointer hover:bg-brand-50/40'}`}>
+              <td className="px-2 py-1.5 text-center"><input type="checkbox" readOnly disabled={other} checked={picked.has(r.id)} /></td>
               <td className="px-2 py-1.5 font-mono font-semibold text-brand-700">{r.challan_no}</td>
               <td className="px-2 py-1.5">{fmtDate(r.challan_date)}</td>
               <td className="px-2 py-1.5">{r.vendor_name}</td>
@@ -1402,7 +1641,8 @@ function SelectDcModal({ onClose, onPick }: { onClose: () => void; onPick: (id: 
               <td className="px-2 py-1.5 text-right text-emerald-700">{fmtNumber(Number(r.received_pcs) + Number(r.rejected_pcs) + Number(r.shortage_pcs))}</td>
               <td className="px-2 py-1.5 text-right font-semibold text-amber-700">{fmtNumber(r.pending_pcs)}</td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </Modal>

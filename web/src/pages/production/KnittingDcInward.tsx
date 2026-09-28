@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Truck, PackagePlus, Printer, Plus, Trash2, Save, X, Scale } from 'lucide-react';
+import { Truck, PackagePlus, Printer, Plus, Trash2, Save, X, Scale, Undo2 } from 'lucide-react';
 import { http } from '../../lib/api';
 import { fmtDate, fmtDecimal, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
@@ -34,7 +34,7 @@ const useReconciliation = (programId: number | null) => useQuery({
 });
 
 const invalidateKnitting = (qc: ReturnType<typeof useQueryClient>) => {
-  for (const k of ['knitting-programs', 'knitting-program', 'knit-recon', 'knit-dcs', 'knit-inwards']) {
+  for (const k of ['knitting-programs', 'knitting-program', 'knit-recon', 'knit-dcs', 'knit-inwards', 'knit-yarn-returns', 'knit-dc-balance']) {
     void qc.invalidateQueries({ queryKey: [k] });
   }
 };
@@ -51,14 +51,16 @@ export function KnittingReconciliation({ programId, compact = false }: { program
     ['Yarn given', `${fmtDecimal(t.issued_kg, 3)} kg`, 'text-orange-700'],
     ['Grey fabric received', `${fmtDecimal(t.fabric_received_kg, 3)} kg`, 'text-emerald-700'],
     ['Process loss', `${fmtDecimal(t.loss_kg, 3)} kg · ${fmtDecimal(t.loss_pct, 2)}%`, 'text-rose-700'],
+    ['Yarn returned', `${fmtDecimal(t.returned_kg ?? 0, 3)} kg`, 'text-sky-700'],
     ['Balance yarn at knitter', `${fmtDecimal(t.balance_yarn_kg, 3)} kg`, 'text-brand-700'],
-    ['Cones given / balance', `${t.cones_issued} / ≈${t.cones_balance}`, 'text-slate-800'],
+    ['Cones given / returned / bal.',
+      `${t.cones_issued} / ${t.cones_returned ?? 0} / ${t.cones_estimated ? '≈' : ''}${t.cones_balance}`, 'text-slate-800'],
     ['Rolls received', `${t.rolls_received}`, 'text-slate-800'],
   ];
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
         {tiles.map(([label, value, tone]) => (
           <div key={label} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
@@ -69,7 +71,8 @@ export function KnittingReconciliation({ programId, compact = false }: { program
       <p className="text-[10.5px] text-slate-400">
         Yarn consumed {fmtDecimal(t.consumed_kg, 3)} kg = fabric {fmtDecimal(t.fabric_received_kg, 3)} +
         rejected {fmtDecimal(t.rejected_kg, 3)} + loss {fmtDecimal(t.loss_kg, 3)}.
-        Balance = yarn given − yarn consumed. Required fabric {fmtDecimal(t.required_fabric_kg, 2)} kg.
+        Balance = yarn given − yarn consumed − yarn returned. Cone balance marked ≈ is estimated from the KG
+        still open. Required fabric {fmtDecimal(t.required_fabric_kg, 2)} kg.
       </p>
 
       <div className="overflow-x-auto rounded-lg border border-slate-200">
@@ -82,8 +85,10 @@ export function KnittingReconciliation({ programId, compact = false }: { program
               <th className="th text-right">Planned KG</th>
               <th className="th text-right">Given KG</th>
               <th className="th text-right">Consumed KG</th>
+              <th className="th text-right">Returned KG</th>
               <th className="th text-right">Balance KG</th>
               <th className="th text-right">Cones given</th>
+              <th className="th text-right">Cones ret.</th>
               <th className="th text-right">Cones bal.</th>
             </tr>
           </thead>
@@ -96,9 +101,11 @@ export function KnittingReconciliation({ programId, compact = false }: { program
                 <td className="td text-right tabular-nums">{fmtDecimal(l.planned_kg, 3)}</td>
                 <td className="td text-right tabular-nums text-orange-700 font-semibold">{fmtDecimal(l.issued_kg, 3)}</td>
                 <td className="td text-right tabular-nums">{fmtDecimal(l.consumed_kg, 3)}</td>
+                <td className="td text-right tabular-nums text-sky-700">{fmtDecimal(l.returned_kg ?? 0, 3)}</td>
                 <td className="td text-right tabular-nums font-semibold text-brand-700">{fmtDecimal(l.balance_kg, 3)}</td>
                 <td className="td text-right tabular-nums">{l.cones_issued}</td>
-                <td className="td text-right tabular-nums">≈{l.cones_balance}</td>
+                <td className="td text-right tabular-nums">{l.cones_returned ?? 0}</td>
+                <td className="td text-right tabular-nums">{l.cones_estimated ? '≈' : ''}{l.cones_balance}</td>
               </tr>
             ))}
           </tbody>
@@ -116,6 +123,7 @@ export function KnittingReconciliation({ programId, compact = false }: { program
                 <th className="th text-right">Cones</th>
                 <th className="th text-right">Fabric in KG</th>
                 <th className="th text-right">Yarn consumed KG</th>
+                <th className="th text-right">Returned KG</th>
                 <th className="th text-right">Balance KG</th>
               </tr>
             </thead>
@@ -128,6 +136,7 @@ export function KnittingReconciliation({ programId, compact = false }: { program
                   <td className="td text-right tabular-nums">{d.cones}</td>
                   <td className="td text-right tabular-nums text-emerald-700">{fmtDecimal(d.fabric_kg, 3)}</td>
                   <td className="td text-right tabular-nums">{fmtDecimal(d.consumed_kg, 3)}</td>
+                  <td className="td text-right tabular-nums text-sky-700">{fmtDecimal(d.returned_kg ?? 0, 3)}</td>
                   <td className="td text-right tabular-nums font-semibold">{fmtDecimal(d.balance_kg, 3)}</td>
                 </tr>
               ))}
@@ -462,7 +471,7 @@ export function KnittingInwardModal({ programId, open, onClose }: {
     ? fabricKg + rejected : Number(h.yarn_consumed_kg);
   const loss = Math.max(0, consumed - fabricKg - rejected);
   const scope = h.ref_dc_no ? recon?.dcs.find((d: any) => d.dc_no === h.ref_dc_no) : recon?.totals;
-  const openKg = scope ? Number(scope.issued_kg) - Number(scope.consumed_kg) : 0;
+  const openKg = scope ? Number(scope.issued_kg) - Number(scope.consumed_kg) - Number(scope.returned_kg ?? 0) : 0;
 
   const save = async () => {
     if (!h.party_dc_no) { toast('Enter the knitter DC number', 'error'); return; }
@@ -619,13 +628,261 @@ export function KnittingInwardModal({ programId, open, onClose }: {
 }
 
 /* ─────────────────────────────────────────────────────────────────
+   Unused yarn return — from the knitter, against one knitting DC
+───────────────────────────────────────────────────────────────── */
+export function KnittingYarnReturnModal({ dcNo, onClose, onPrint }: {
+  dcNo: string | null; onClose: () => void; onPrint: (returnNo: string) => void;
+}) {
+  const toast = useToast();
+  const qc = useQueryClient();
+  const open = !!dcNo;
+  const { data: warehouses = [] } = useLookup('warehouses');
+  const { data: bal } = useQuery({
+    queryKey: ['knit-dc-balance', dcNo],
+    queryFn: async () => (await http.get<{ data: any }>(
+      `/knitting-dcs/${encodeURIComponent(dcNo!)}/yarn-returns`)).data,
+    enabled: open,
+  });
+  const [h, setH] = useState<any>({});
+  const [lines, setLines] = useState<any[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open || !bal) return;
+    setH({
+      return_date: today(), party_dc_no: '', vehicle_no: '',
+      warehouse_id: bal.warehouse_id ? String(bal.warehouse_id) : '', remarks: '',
+    });
+    setLines(bal.lines.map((l: any) => ({ ...l, return_kg: '', no_of_cones: '' })));
+    // Reset only when the dialog opens for a DC, not on every refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, bal?.dc_no]);
+
+  const setLine = (i: number, patch: any) =>
+    setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  const totalKg = lines.reduce((n, l) => n + (Number(l.return_kg) || 0), 0);
+  const totalCones = lines.reduce((n, l) => n + (Number(l.no_of_cones) || 0), 0);
+  const over = lines.some((l) => (Number(l.return_kg) || 0) > Number(l.balance_kg) + 1e-9);
+
+  const save = async () => {
+    if (!h.party_dc_no) { toast('Enter the knitter return DC number', 'error'); return; }
+    if (!h.warehouse_id) { toast('Select the store receiving the yarn', 'error'); return; }
+    if (!(totalKg > 0)) { toast('Enter the KG returned on at least one line', 'error'); return; }
+    if (over) { toast('A line returns more than is still with the knitter', 'error'); return; }
+    setSaving(true);
+    try {
+      const r = await http.post<{ data: { return_no: string } }>(
+        `/knitting-dcs/${encodeURIComponent(dcNo!)}/yarn-returns`, {
+          return_date: h.return_date, party_dc_no: h.party_dc_no, vehicle_no: h.vehicle_no || null,
+          warehouse_id: Number(h.warehouse_id), remarks: h.remarks || null,
+          lines: lines.filter((l) => Number(l.return_kg) > 0).map((l) => ({
+            yarn_id: l.yarn_id, lot_no: l.lot_no || null,
+            return_kg: Number(l.return_kg), no_of_cones: Number(l.no_of_cones) || 0,
+          })),
+        });
+      toast(`Yarn return ${r.data.return_no} saved — yarn is back in stock`);
+      invalidateKnitting(qc);
+      onClose();
+      onPrint(r.data.return_no);
+    } catch (e: any) {
+      toast(e?.message || 'Could not save the yarn return', 'error');
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} size="xl" title={`Unused Yarn Return — against Knitting DC ${dcNo ?? ''}`}
+      footer={<>
+        <button className="btn-secondary" onClick={onClose}><X size={14} /> Cancel</button>
+        <button className="btn-primary" onClick={save} disabled={saving || over} id="btn-save-knit-yarn-return">
+          <Undo2 size={14} /> {saving ? 'Saving…' : 'Save Return'}
+        </button>
+      </>}>
+      {!bal ? <LoadingBlock rows={4} /> : (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-100 bg-slate-50 p-3 text-[12px] sm:grid-cols-4">
+            <Info label="Knitting DC" value={`${bal.dc_no} · ${fmtDate(bal.dc_date)}`} />
+            <Info label="Yarn given" value={`${fmtDecimal(bal.issued_kg, 3)} kg`} />
+            <Info label="Consumed / returned" value={`${fmtDecimal(bal.consumed_kg, 3)} / ${fmtDecimal(bal.returned_kg, 3)} kg`} />
+            <Info label="Still with knitter" value={`${fmtDecimal(bal.balance_kg, 3)} kg`} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Input label="Return Date" type="date" value={h.return_date ?? ''}
+              onChange={(e) => setH({ ...h, return_date: e.target.value })} id="kyr-date" />
+            <Input label="Knitter Return DC No" required value={h.party_dc_no ?? ''}
+              onChange={(e) => setH({ ...h, party_dc_no: e.target.value })} id="kyr-party-dc" />
+            <Input label="Vehicle No" value={h.vehicle_no ?? ''}
+              onChange={(e) => setH({ ...h, vehicle_no: e.target.value })} id="kyr-vehicle" />
+            <Select label="Receiving Store" required value={h.warehouse_id ?? ''} placeholder="— Select —"
+              onChange={(e) => setH({ ...h, warehouse_id: e.target.value })} id="kyr-wh">
+              {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.label}</option>)}
+            </Select>
+          </div>
+
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="w-full text-[12px]">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="th">Yarn</th>
+                  <th className="th">Colour</th>
+                  <th className="th">Lot No</th>
+                  <th className="th text-right">Given KG</th>
+                  <th className="th text-right">Consumed KG</th>
+                  <th className="th text-right">Returned KG</th>
+                  <th className="th text-right">With knitter</th>
+                  <th className="th text-right">Return KG</th>
+                  <th className="th text-right">Cones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((l, i) => {
+                  const bad = (Number(l.return_kg) || 0) > Number(l.balance_kg) + 1e-9;
+                  return (
+                    <tr key={l.key} className="border-t border-slate-100">
+                      <td className="td font-medium">{l.yarn}</td>
+                      <td className="td">{l.colour || '—'}</td>
+                      <td className="td font-mono">{l.lot_no || '—'}</td>
+                      <td className="td text-right tabular-nums">{fmtDecimal(l.issued_kg, 3)}</td>
+                      <td className="td text-right tabular-nums">{fmtDecimal(l.consumed_kg, 3)}</td>
+                      <td className="td text-right tabular-nums">{fmtDecimal(l.returned_kg, 3)}</td>
+                      <td className="td text-right tabular-nums font-semibold text-brand-700">{fmtDecimal(l.balance_kg, 3)}</td>
+                      <td className="td"><input className={`input w-24 text-right ${bad ? 'border-red-400' : ''}`}
+                        type="number" step="0.001" min="0" value={l.return_kg} disabled={!(Number(l.balance_kg) > 0)}
+                        onChange={(e) => setLine(i, { return_kg: e.target.value })} id={`kyr-kg-${i}`} /></td>
+                      <td className="td"><input className="input w-20 text-right" type="number" step="1" min="0"
+                        value={l.no_of_cones} placeholder={l.cones_issued ? `≤${l.cones_not_returned}` : ''}
+                        onChange={(e) => setLine(i, { no_of_cones: e.target.value })} id={`kyr-cones-${i}`} /></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot className="border-t-2 border-slate-200 bg-slate-50">
+                <tr>
+                  <td colSpan={7} className="td font-bold">Total</td>
+                  <td className="td text-right font-bold tabular-nums">{fmtDecimal(totalKg, 3)}</td>
+                  <td className="td text-right font-bold tabular-nums">{totalCones}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <p className="text-[10.5px] text-slate-400">
+            Consumed is the DC's grey-inward yarn spread over its lines by KG given. Returned yarn goes back into
+            the same yarn and lot in the receiving store and can be issued again.
+          </p>
+          <Textarea label="Remarks" value={h.remarks ?? ''}
+            onChange={(e) => setH({ ...h, remarks: e.target.value })} id="kyr-remarks" />
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+/** Printable yarn return note — same sheet layout as the knitting DC. */
+export function KnittingYarnReturnPrint({ returnNo, onClose }: { returnNo: string | null; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const { data: rt, isLoading } = useQuery({
+    queryKey: ['knit-yarn-return', returnNo],
+    queryFn: async () => (await http.get<{ data: any }>(
+      `/knitting-yarn-returns/${encodeURIComponent(returnNo!)}`)).data,
+    enabled: !!returnNo,
+  });
+  const print = () => {
+    const w = window.open('', '_blank', 'width=900,height=700');
+    if (!w || !ref.current) return;
+    w.document.write(`<!doctype html><html><head><title>${returnNo}</title><style>${PRINT_CSS}</style></head>` +
+      `<body>${ref.current.innerHTML}</body></html>`);
+    w.document.close();
+    w.focus();
+    w.print();
+  };
+  const c = rt?.company ?? {};
+  return (
+    <Modal open={!!returnNo} onClose={onClose} size="lg" title={`Yarn Return ${returnNo ?? ''}`}
+      footer={<>
+        <button className="btn-secondary" onClick={onClose}>Close</button>
+        <button className="btn-primary" onClick={print} disabled={!rt} id="btn-print-knit-yarn-return">
+          <Printer size={14} /> Print
+        </button>
+      </>}>
+      {isLoading || !rt ? <LoadingBlock rows={5} /> : (
+        <div ref={ref}>
+          <style>{PRINT_CSS}</style>
+          <div className="kdc">
+            <h1>{c.trade_name || c.legal_name || 'Company'}</h1>
+            <p className="sub">
+              {[c.address_line1, c.address_line2, c.city, c.state, c.pincode].filter(Boolean).join(', ')}
+              {c.gstin ? ` · GSTIN ${c.gstin}` : ''}
+            </p>
+            <div className="title">YARN RETURN NOTE — UNUSED YARN FROM KNITTER</div>
+            <div className="grid">
+              <div><span>Return No</span><b>{rt.return_no}</b></div>
+              <div><span>Return Date</span>{fmtDate(rt.return_date)}</div>
+              <div><span>From (Knitter)</span><b>{rt.vendor_name ?? '—'}</b></div>
+              <div><span>Knitter DC No</span><b>{rt.party_dc_no ?? '—'}</b></div>
+              <div><span>Against our DC</span><b>{rt.dc_no}</b></div>
+              <div><span>Program No</span>{rt.program_no}</div>
+              <div><span>I/O (Job) No</span><b>{rt.io_no ?? '—'}</b></div>
+              <div><span>Style</span>{rt.style_code ? `${rt.style_code} — ${rt.style_name ?? ''}` : '—'}</div>
+              <div><span>Vehicle No</span>{rt.vehicle_no ?? '—'}</div>
+              <div><span>Received into</span>{rt.warehouse_name ?? '—'}</div>
+            </div>
+            <table>
+              <thead>
+                <tr><th>#</th><th>Yarn</th><th>Colour</th><th>Lot No</th><th className="n">Cones</th><th className="n">Qty (KG)</th></tr>
+              </thead>
+              <tbody>
+                {rt.lines.map((l: any, i: number) => (
+                  <tr key={l.id}>
+                    <td>{i + 1}</td>
+                    <td>{l.yarn_code} — {l.yarn_name}</td>
+                    <td>{l.colour || '—'}</td>
+                    <td>{l.lot_no || '—'}</td>
+                    <td className="n">{l.no_of_cones}</td>
+                    <td className="n">{fmtDecimal(l.return_kg, 3)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan={4}>Total</td>
+                  <td className="n">{rt.total_cones}</td>
+                  <td className="n">{fmtDecimal(rt.total_kg, 3)}</td>
+                </tr>
+              </tfoot>
+            </table>
+            {rt.remarks && <p style={{ marginTop: 8 }}><b>Remarks:</b> {rt.remarks}</p>}
+            <div className="sign">
+              <div>Delivered by (Knitter)</div><div>Received by (Store)</div><div>Authorised signatory</div>
+            </div>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────
    Detail tab — DCs, inwards and reconciliation for one program
 ───────────────────────────────────────────────────────────────── */
 export function KnittingDcInwardTab({ prog }: { prog: any }) {
   const [dcOpen, setDcOpen] = useState(false);
   const [inOpen, setInOpen] = useState(false);
   const [printDc, setPrintDc] = useState<string | null>(null);
+  const [returnDc, setReturnDc] = useState<string | null>(null);
+  const [printReturn, setPrintReturn] = useState<string | null>(null);
   const ready = KNIT_DC_READY.includes(prog.status);
+  const toast = useToast();
+  const qc = useQueryClient();
+  /** Cancel a yarn return posted by mistake (stock reversed; refused if the yarn was issued again). */
+  const cancelReturn = async (r: any) => {
+    const reason = window.prompt(`Cancel yarn return ${r.return_no}? Reason:`);
+    if (!reason || reason.trim().length < 3) return;
+    try {
+      await http.post(`/knitting-yarn-returns/${encodeURIComponent(r.return_no)}/cancel`, { reason: reason.trim() });
+      toast(`Yarn return ${r.return_no} cancelled — yarn counts as with the knitter again`);
+      invalidateKnitting(qc);
+    } catch (e: any) { toast(e?.message || 'Cancel failed', 'error'); }
+  };
 
   const { data: dcs = [] } = useQuery({
     queryKey: ['knit-dcs', prog.id],
@@ -634,6 +891,10 @@ export function KnittingDcInwardTab({ prog }: { prog: any }) {
   const { data: inwards = [] } = useQuery({
     queryKey: ['knit-inwards', prog.id],
     queryFn: async () => (await http.get<{ data: any[] }>(`/knitting-inwards?program_id=${prog.id}`)).data || [],
+  });
+  const { data: yarnReturns = [] } = useQuery({
+    queryKey: ['knit-yarn-returns', prog.id],
+    queryFn: async () => (await http.get<{ data: any[] }>(`/knitting-yarn-returns?program_id=${prog.id}`)).data || [],
   });
 
   return (
@@ -665,7 +926,8 @@ export function KnittingDcInwardTab({ prog }: { prog: any }) {
                   <th className="th">DC No</th><th className="th">Date</th><th className="th">Knitter</th>
                   <th className="th">Vehicle</th><th className="th text-right">Lines</th>
                   <th className="th text-right">KG</th><th className="th text-right">Cones</th>
-                  <th className="th text-right">Fabric in</th><th className="th text-right">Balance</th><th className="th" />
+                  <th className="th text-right">Fabric in</th><th className="th text-right">Returned</th>
+                  <th className="th text-right">Balance</th><th className="th" />
                 </tr>
               </thead>
               <tbody>
@@ -679,11 +941,17 @@ export function KnittingDcInwardTab({ prog }: { prog: any }) {
                     <td className="td text-right tabular-nums font-semibold">{fmtDecimal(d.total_kg, 3)}</td>
                     <td className="td text-right tabular-nums">{d.total_cones}</td>
                     <td className="td text-right tabular-nums text-emerald-700">{fmtDecimal(d.fabric_received_kg, 3)}</td>
+                    <td className="td text-right tabular-nums text-sky-700">{fmtDecimal(d.yarn_returned_kg ?? 0, 3)}</td>
                     <td className="td text-right tabular-nums">{fmtDecimal(d.balance_yarn_kg, 3)}</td>
-                    <td className="td">
+                    <td className="td whitespace-nowrap">
                       <button className="rounded p-1 text-slate-400 hover:bg-brand-50 hover:text-brand-600"
                         title="Print DC" onClick={() => setPrintDc(d.dc_no)} id={`btn-print-dc-${d.dc_no}`}>
                         <Printer size={13} />
+                      </button>
+                      <button className="ml-1 inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11px] font-medium text-sky-700 hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        title="Unused yarn returned by the knitter" disabled={!(Number(d.balance_yarn_kg) > 0)}
+                        onClick={() => setReturnDc(d.dc_no)} id={`btn-yarn-return-${d.dc_no}`}>
+                        <Undo2 size={13} /> Yarn return
                       </button>
                     </td>
                   </tr>
@@ -730,10 +998,58 @@ export function KnittingDcInwardTab({ prog }: { prog: any }) {
         )}
       </div>
 
+      <div>
+        <h5 className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">Unused yarn returns</h5>
+        {yarnReturns.length === 0 ? <p className="py-3 text-center text-[12px] text-slate-400">No yarn returned by the knitter</p> : (
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="w-full text-[12px]">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="th">Return No</th><th className="th">Date</th><th className="th">Our DC</th>
+                  <th className="th">Knitter DC</th><th className="th">Store</th><th className="th">Yarn / lot</th>
+                  <th className="th text-right">Cones</th><th className="th text-right">KG</th><th className="th" />
+                </tr>
+              </thead>
+              <tbody>
+                {yarnReturns.map((r: any) => (
+                  <tr key={r.id} className={`border-t border-slate-100 align-top ${r.status === 'CANCELLED' ? 'opacity-50 line-through' : ''}`}>
+                    <td className="td font-mono font-semibold text-brand-700">{r.return_no}{r.status === 'CANCELLED' && <span className="ml-1 text-[10px] text-red-600 no-underline">cancelled</span>}</td>
+                    <td className="td text-slate-500">{fmtDate(r.return_date)}</td>
+                    <td className="td font-mono">{r.dc_no}</td>
+                    <td className="td font-mono">{r.party_dc_no ?? '—'}</td>
+                    <td className="td">{r.warehouse_name ?? '—'}</td>
+                    <td className="td text-[11px] text-slate-600">
+                      {(r.lines ?? []).map((l: any) =>
+                        `${l.yarn_code ?? ''}${l.lot_no ? ` / ${l.lot_no}` : ''}: ${fmtDecimal(l.return_kg, 3)}`).join(', ')}
+                    </td>
+                    <td className="td text-right tabular-nums">{r.total_cones}</td>
+                    <td className="td text-right tabular-nums font-semibold text-sky-700">{fmtDecimal(r.total_kg, 3)}</td>
+                    <td className="td">
+                      <button className="rounded p-1 text-slate-400 hover:bg-brand-50 hover:text-brand-600"
+                        title="Print return note" onClick={() => setPrintReturn(r.return_no)} id={`btn-print-yr-${r.return_no}`}>
+                        <Printer size={13} />
+                      </button>
+                      {r.status !== 'CANCELLED' && (
+                        <button className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Cancel return"
+                          onClick={() => cancelReturn(r)} id={`btn-cancel-yr-${r.return_no}`}>
+                          <X size={13} />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       <KnittingDcModal programId={dcOpen ? prog.id : null} open={dcOpen} onClose={() => setDcOpen(false)}
         onPrint={setPrintDc} />
       <KnittingInwardModal programId={inOpen ? prog.id : null} open={inOpen} onClose={() => setInOpen(false)} />
       <KnittingDcPrint dcNo={printDc} onClose={() => setPrintDc(null)} />
+      <KnittingYarnReturnModal dcNo={returnDc} onClose={() => setReturnDc(null)} onPrint={setPrintReturn} />
+      <KnittingYarnReturnPrint returnNo={printReturn} onClose={() => setPrintReturn(null)} />
     </div>
   );
 }

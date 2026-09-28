@@ -27,6 +27,53 @@ export const knittingDcRouter = Router();
 
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
 
+/**
+ * Spread `consumed` KG over yarn lines in proportion to what each was given,
+ * never charging a line more than it still had after its returns (overflow
+ * moves to the other lines). With no returns this is the plain issued-share
+ * split; with returns no line can go negative.
+ */
+export function allocateConsumed(consumed: number, lines: { issued: number; returned: number }[]): number[] {
+  const out = lines.map(() => 0);
+  let left = consumed;
+  let active = lines.map((_, i) => i).filter((i) => lines[i].issued > 0);
+  while (left > 1e-9 && active.length) {
+    const weight = active.reduce((n, i) => n + lines[i].issued, 0);
+    const capped = active.filter((i) =>
+      out[i] + left * lines[i].issued / weight >= lines[i].issued - lines[i].returned - 1e-9);
+    if (!capped.length) {
+      for (const i of active) out[i] += left * lines[i].issued / weight;
+      left = 0;
+      break;
+    }
+    for (const i of capped) {
+      const room = Math.max(0, lines[i].issued - lines[i].returned - out[i]);
+      out[i] += room;
+      left -= room;
+    }
+    active = active.filter((i) => !capped.includes(i));
+  }
+  // Anything still left (consumption beyond what was given) lands pro rata.
+  if (left > 1e-9) {
+    const all = lines.reduce((n, l) => n + l.issued, 0);
+    lines.forEach((l, i) => { if (all > 0) out[i] += left * l.issued / all; });
+  }
+  return out.map(r3);
+}
+
+/**
+ * Cones at the knitter. `cones_not_returned` is actual (given - returned).
+ * Cones used for knitting come back empty or not at all, so the full cones
+ * still there are only known when the line is closed (0) — otherwise
+ * `cones_balance` is the KG-share estimate, capped by what is not returned.
+ */
+function conesAtKnitter(given: number, returned: number, issuedKg: number, balanceKg: number) {
+  const notReturned = Math.max(0, given - returned);
+  if (balanceKg <= 0.0005) return { cones_not_returned: notReturned, cones_balance: 0, cones_estimated: false };
+  const est = issuedKg > 0 ? Math.round(given * Math.max(0, balanceKg) / issuedKg) : 0;
+  return { cones_not_returned: notReturned, cones_balance: Math.min(est, notReturned), cones_estimated: true };
+}
+
 async function loadProgram(id: number, cid: number) {
   const prog = await queryOne<any>(
     `SELECT kp.*, st.style_code, st.style_name, fab.fabric_name, fab.fabric_code,
@@ -158,14 +205,22 @@ knittingDcRouter.get('/knitting-dcs', requirePermission('PRODUCTION.VIEW'), ah(a
                 AND r.src_id = i.src_id AND r.ref_dc_no = i.dc_no) AS fabric_received_kg,
             (SELECT COALESCE(SUM(r.input_qty), 0) FROM trx_process_receipt r
               WHERE r.company_id = i.company_id AND r.src_type = 'KNITTING_PROGRAM'
-                AND r.src_id = i.src_id AND r.ref_dc_no = i.dc_no) AS yarn_consumed_kg
+                AND r.src_id = i.src_id AND r.ref_dc_no = i.dc_no) AS yarn_consumed_kg,
+            (SELECT COALESCE(SUM(yr.total_kg), 0) FROM trx_knitting_yarn_return yr
+              WHERE yr.company_id = i.company_id AND yr.program_id = i.src_id
+                AND yr.dc_no = i.dc_no AND yr.status <> 'CANCELLED') AS yarn_returned_kg,
+            (SELECT COALESCE(SUM(yr.total_cones), 0) FROM trx_knitting_yarn_return yr
+              WHERE yr.company_id = i.company_id AND yr.program_id = i.src_id
+                AND yr.dc_no = i.dc_no AND yr.status <> 'CANCELLED') AS cones_returned
        FROM trx_process_issue i
        JOIN trx_knitting_program kp ON kp.id = i.src_id
        LEFT JOIN mst_party p ON p.id = i.vendor_id
        ${where}
       GROUP BY i.dc_no, i.src_id, kp.program_no, kp.io_no, i.company_id
       ORDER BY MIN(i.id) DESC LIMIT 500`, params);
-  for (const r of rows) r.balance_yarn_kg = r3(Number(r.total_kg) - Number(r.yarn_consumed_kg));
+  for (const r of rows) {
+    r.balance_yarn_kg = r3(Number(r.total_kg) - Number(r.yarn_consumed_kg) - Number(r.yarn_returned_kg));
+  }
   res.json({ success: true, data: rows });
 }));
 
@@ -266,7 +321,8 @@ knittingDcRouter.post('/knitting-inwards', requirePermission('PROCESS.PRODUCTION
   // Fabric cannot come back for more yarn than was given (program or DC level).
   const recon = await reconcile(body.program_id, cid);
   const scope = body.ref_dc_no ? recon.dcs.find((d: any) => d.dc_no === body.ref_dc_no) : recon.totals;
-  const open = r3(Number(scope?.issued_kg ?? 0) - Number(scope?.consumed_kg ?? 0));
+  const open = r3(Number(scope?.issued_kg ?? 0) - Number(scope?.consumed_kg ?? 0) -
+    Number(scope?.returned_kg ?? 0));
   if (consumed > open + 1e-9) {
     throw BadRequest(
       `Only ${open} KG of yarn is still with the knitter${body.ref_dc_no ? ` on DC ${body.ref_dc_no}` : ''}; ` +
@@ -369,6 +425,293 @@ knittingDcRouter.get('/knitting-inwards', requirePermission('PRODUCTION.VIEW'), 
 }));
 
 /* ================================================================
+   UNUSED YARN RETURN — from the knitter, against the knitting DC
+================================================================ */
+
+const lotKey = (yarnId: number, lot: string | null | undefined) => `${yarnId}|${(lot ?? '').trim().toUpperCase()}`;
+
+/**
+ * What of one DC is still with the knitter, per yarn + lot. Consumption is
+ * booked per DC (grey inward against the DC), so it is spread over the DC's
+ * lines by allocateConsumed; returns are actual per line.
+ */
+async function dcYarnBalances(cid: number, dcNo: string) {
+  const issues = await query<any>(
+    `SELECT i.id, i.src_id, i.src_line_id, i.yarn_id, i.batch_id, i.lot_no, i.yarn_po_no,
+            i.issued_qty_kg, i.no_of_cones, i.vendor_id, i.warehouse_id, i.issue_date,
+            y.yarn_code, y.yarn_name, kpy.colour, kpy.count_value
+       FROM trx_process_issue i
+       LEFT JOIN mst_yarn y ON y.id = i.yarn_id
+       LEFT JOIN trx_knitting_program_yarns kpy ON kpy.id = i.src_line_id
+      WHERE i.company_id = ? AND i.src_type = 'KNITTING_PROGRAM' AND i.dc_no = ?
+      ORDER BY i.id`, [cid, dcNo]);
+  if (!issues.length) throw NotFound('Knitting DC not found');
+  const programId = Number(issues[0].src_id);
+
+  const groups = new Map<string, any>();
+  for (const i of issues) {
+    const k = lotKey(Number(i.yarn_id), i.lot_no);
+    const g = groups.get(k) ?? {
+      key: k, issue_id: Number(i.id), program_yarn_id: i.src_line_id ? Number(i.src_line_id) : null,
+      yarn_id: Number(i.yarn_id), batch_id: i.batch_id ? Number(i.batch_id) : null,
+      lot_no: i.lot_no ?? null, yarn_po_no: i.yarn_po_no ?? null,
+      yarn: `${i.yarn_code ?? ''} — ${i.yarn_name ?? ''}`, colour: i.colour ?? null,
+      count_value: i.count_value ?? null, issued_kg: 0, cones_issued: 0, returned_kg: 0, cones_returned: 0,
+    };
+    g.issued_kg = r3(g.issued_kg + Number(i.issued_qty_kg));
+    g.cones_issued += Number(i.no_of_cones || 0);
+    groups.set(k, g);
+  }
+
+  const ret = await query<any>(
+    `SELECT rl.yarn_id, rl.lot_no, SUM(rl.return_kg) AS kg, SUM(rl.no_of_cones) AS cones
+       FROM trx_knitting_yarn_return_line rl
+       JOIN trx_knitting_yarn_return rt ON rt.id = rl.return_id
+      WHERE rt.company_id = ? AND rt.dc_no = ? AND rt.status <> 'CANCELLED' GROUP BY rl.yarn_id, rl.lot_no`, [cid, dcNo]);
+  for (const r of ret) {
+    const g = groups.get(lotKey(Number(r.yarn_id), r.lot_no));
+    if (g) { g.returned_kg = r3(g.returned_kg + Number(r.kg)); g.cones_returned += Number(r.cones); }
+  }
+
+  const rc = await queryOne<any>(
+    `SELECT COALESCE(SUM(input_qty), 0) AS consumed FROM trx_process_receipt
+      WHERE company_id = ? AND src_type = 'KNITTING_PROGRAM' AND src_id = ? AND ref_dc_no = ?`,
+    [cid, programId, dcNo]);
+  const consumed = r3(Number(rc?.consumed ?? 0));
+  const lines = [...groups.values()];
+  const alloc = allocateConsumed(consumed, lines.map((g) => ({ issued: g.issued_kg, returned: g.returned_kg })));
+  lines.forEach((g, i) => {
+    g.consumed_kg = alloc[i];
+    g.balance_kg = Math.max(0, r3(g.issued_kg - g.consumed_kg - g.returned_kg));
+    // Cone cap for a return: cones sent on this line and not yet returned.
+    g.cones_not_returned = Math.max(0, g.cones_issued - g.cones_returned);
+  });
+  const issued = r3(lines.reduce((n, g) => n + g.issued_kg, 0));
+  const returned = r3(lines.reduce((n, g) => n + g.returned_kg, 0));
+  return {
+    program_id: programId, dc_no: dcNo, dc_date: issues[0].issue_date,
+    vendor_id: issues[0].vendor_id ? Number(issues[0].vendor_id) : null,
+    warehouse_id: issues[0].warehouse_id ? Number(issues[0].warehouse_id) : null,
+    issued_kg: issued, consumed_kg: consumed, returned_kg: returned,
+    balance_kg: r3(issued - consumed - returned), lines,
+  };
+}
+
+/** Rate of the lot the yarn went out from: the issue's own ledger rate, else the lot's latest priced inward. */
+async function issueLotRate(cid: number, issueId: number, yarnId: number, batchId: number | null) {
+  const own = await queryOne<any>(
+    `SELECT rate FROM trx_stock_ledger
+      WHERE company_id = ? AND ref_type = 'PROCESS_ISSUE' AND ref_id = ? AND yarn_id = ? LIMIT 1`,
+    [cid, issueId, yarnId]);
+  if (Number(own?.rate) > 0) return Number(own.rate);
+  const inward = await queryOne<any>(
+    `SELECT rate FROM trx_stock_ledger
+      WHERE company_id = ? AND material_type = 'YARN' AND yarn_id = ? AND (batch_id <=> ?)
+        AND qty_in > 0 AND rate > 0
+      ORDER BY id DESC LIMIT 1`, [cid, yarnId, batchId]);
+  return Number(inward?.rate ?? 0);
+}
+
+const yarnReturnSchema = z.object({
+  return_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  party_dc_no: s.strReq(60),
+  vehicle_no: s.nullableStr(30),
+  warehouse_id: s.idReq(),
+  remarks: s.text(),
+  lines: z.array(z.object({
+    yarn_id: s.idReq(),
+    lot_no: s.nullableStr(80),
+    return_kg: z.coerce.number().min(0).default(0),
+    no_of_cones: z.coerce.number().int().min(0).default(0),
+  })).min(1, 'Add at least one yarn line'),
+});
+
+/** GET /knitting-dcs/:dcNo/yarn-returns — what is still with the knitter per yarn/lot, and the returns so far. */
+knittingDcRouter.get('/knitting-dcs/:dcNo/yarn-returns', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const dcNo = String(req.params.dcNo);
+  const bal = await dcYarnBalances(cid, dcNo);
+  const returns = await listYarnReturns(cid, { dc_no: dcNo });
+  res.json({ success: true, data: { ...bal, returns } });
+}));
+
+knittingDcRouter.post('/knitting-dcs/:dcNo/yarn-returns', requirePermission('PROCESS.PRODUCTION'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const uid = req.user!.id;
+  const dcNo = String(req.params.dcNo);
+  const body = yarnReturnSchema.parse(req.body);
+  const want = body.lines.filter((l) => l.return_kg > 0);
+  if (!want.length) throw BadRequest('Enter the KG returned on at least one yarn line');
+
+  const bal = await dcYarnBalances(cid, dcNo);
+  const prog = await loadProgram(bal.program_id, cid);
+  assertEditable(prog.status, 'knitting program');
+
+  // Several request lines may hit the same yarn + lot: judge them together.
+  const asked = new Map<string, { kg: number; cones: number; lot: string | null }>();
+  for (const l of want) {
+    const k = lotKey(l.yarn_id, l.lot_no);
+    const a = asked.get(k) ?? { kg: 0, cones: 0, lot: l.lot_no ?? null };
+    a.kg = r3(a.kg + l.return_kg); a.cones += l.no_of_cones;
+    asked.set(k, a);
+  }
+  const plan: { g: any; kg: number; cones: number }[] = [];
+  for (const [k, a] of asked) {
+    const g = bal.lines.find((x) => x.key === k);
+    if (!g) {
+      throw BadRequest(`That yarn${a.lot ? ` / lot ${a.lot}` : ''} did not go out on DC ${dcNo}`);
+    }
+    const label = `${g.yarn.trim()}${g.lot_no ? ` lot ${g.lot_no}` : ''}`;
+    if (a.kg > g.balance_kg + 1e-9) {
+      throw BadRequest(`Only ${g.balance_kg} KG of ${label} is still with the knitter on DC ${dcNo}; ` +
+        `the return is ${a.kg} KG`);
+    }
+    if (g.cones_issued > 0 && a.cones > g.cones_not_returned) {
+      throw BadRequest(`Only ${g.cones_not_returned} cones of ${label} went out on DC ${dcNo} and are not yet returned; ` +
+        `the return is ${a.cones} cones`);
+    }
+    plan.push({ g, kg: a.kg, cones: a.cones });
+  }
+  const totalKg = r3(plan.reduce((n, p) => n + p.kg, 0));
+  const totalCones = plan.reduce((n, p) => n + p.cones, 0);
+  if (totalKg > bal.balance_kg + 1e-9) {
+    throw BadRequest(`Only ${bal.balance_kg} KG of yarn is still with the knitter on DC ${dcNo}; the return is ${totalKg} KG`);
+  }
+  // Fabric received without a DC reference still used this program's yarn.
+  const recon = await reconcile(bal.program_id, cid);
+  if (totalKg > recon.totals.balance_yarn_kg + 1e-9) {
+    throw BadRequest(`Only ${recon.totals.balance_yarn_kg} KG of yarn is still with the knitter on program ` +
+      `${prog.program_no}; the return is ${totalKg} KG`);
+  }
+  for (const p of plan) p.g.rate = await issueLotRate(cid, p.g.issue_id, p.g.yarn_id, p.g.batch_id);
+
+  const result = await transaction(async (tx) => {
+    const returnNo = await nextDocNumber(tx, cid, 'KNIT_YARN_RETURN');
+    const h = await txExecute(tx,
+      `INSERT INTO trx_knitting_yarn_return
+         (company_id, return_no, return_date, program_id, dc_no, party_dc_no, vendor_id, vehicle_no,
+          warehouse_id, total_kg, total_cones, remarks, created_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [cid, returnNo, body.return_date, bal.program_id, dcNo, body.party_dc_no,
+       bal.vendor_id ?? prog.vendor_id ?? null, body.vehicle_no ?? null, body.warehouse_id,
+       totalKg, totalCones, body.remarks ?? null, uid]);
+    const returnId = h.insertId;
+    const lines = [];
+    for (const p of plan) {
+      const l = await txExecute(tx,
+        `INSERT INTO trx_knitting_yarn_return_line
+           (return_id, issue_id, program_yarn_id, yarn_id, batch_id, lot_no, return_kg, no_of_cones, rate)
+         VALUES (?,?,?,?,?,?,?,?,?)`,
+        [returnId, p.g.issue_id, p.g.program_yarn_id, p.g.yarn_id, p.g.batch_id, p.g.lot_no,
+         p.kg, p.cones, p.g.rate]);
+      // Back into the same yarn + lot so it can go out again.
+      await postLedger(tx, {
+        companyId: cid, warehouseId: body.warehouse_id, materialType: 'YARN',
+        yarnId: p.g.yarn_id, batchId: p.g.batch_id, txnType: 'RETURN',
+        refType: 'KNIT_YARN_RETURN', refId: l.insertId, qtyIn: p.kg, uomId: UOM_KG,
+        rate: p.g.rate, createdBy: uid,
+      });
+      lines.push({ id: l.insertId, yarn_id: p.g.yarn_id, lot_no: p.g.lot_no, return_kg: p.kg,
+                   no_of_cones: p.cones, rate: p.g.rate });
+    }
+    return { id: returnId, return_no: returnNo, dc_no: dcNo, program_id: bal.program_id,
+             total_kg: totalKg, total_cones: totalCones, lines };
+  });
+
+  await audit(req, 'trx_knitting_yarn_return', result.id, 'INSERT', undefined, result);
+  res.status(201).json({ success: true, data: result });
+}));
+
+/**
+ * POST /knitting-yarn-returns/:returnNo/cancel — reverse a yarn return posted by
+ * mistake: the returned KG go back out of stock (refused if that yarn has been
+ * used since) and count as with the knitter again. The return stays on record.
+ */
+knittingDcRouter.post('/knitting-yarn-returns/:returnNo/cancel', requirePermission('PROCESS.PRODUCTION'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const uid = req.user!.id;
+  const { reason } = z.object({ reason: z.string().trim().min(3, 'Give a reason (min 3 characters)').max(255) }).parse(req.body);
+  const out = await transaction(async (tx) => {
+    const rt = await txQueryOne<any>(tx,
+      `SELECT * FROM trx_knitting_yarn_return WHERE company_id = ? AND return_no = ? FOR UPDATE`, [cid, String(req.params.returnNo)]);
+    if (!rt) throw NotFound('Yarn return not found');
+    if (rt.status === 'CANCELLED') throw BadRequest(`Yarn return ${rt.return_no} is already cancelled`);
+    const lines = await query<any>(`SELECT * FROM trx_knitting_yarn_return_line WHERE return_id = ? ORDER BY id`, [rt.id]);
+    for (const l of lines) {
+      const onHand = await txQueryOne<any>(tx,
+        `SELECT COALESCE(SUM(qty_in - qty_out), 0) AS q FROM trx_stock_ledger
+          WHERE company_id = ? AND warehouse_id = ? AND material_type = 'YARN' AND yarn_id = ? AND (batch_id <=> ?)`,
+        [cid, rt.warehouse_id, l.yarn_id, l.batch_id ?? null]);
+      if (Number(onHand?.q ?? 0) + 1e-9 < Number(l.return_kg)) {
+        throw BadRequest(`Only ${Number(onHand?.q ?? 0)} KG of the returned yarn${l.lot_no ? ` (lot ${l.lot_no})` : ''} is still in stock — ` +
+          'it has been issued again, so the return cannot be cancelled');
+      }
+      await postLedger(tx, {
+        companyId: cid, warehouseId: rt.warehouse_id, materialType: 'YARN', yarnId: l.yarn_id, batchId: l.batch_id,
+        txnType: 'RETURN', refType: 'KNIT_YARN_RETURN_CANCEL', refId: l.id, qtyOut: Number(l.return_kg), uomId: UOM_KG,
+        rate: l.rate ?? 0, createdBy: uid,
+      });
+    }
+    await txExecute(tx,
+      `UPDATE trx_knitting_yarn_return SET status = 'CANCELLED', cancel_reason = ?, cancelled_by = ?, cancelled_at = NOW() WHERE id = ?`,
+      [reason, uid, rt.id]);
+    return { id: rt.id, return_no: rt.return_no, status: 'CANCELLED', lines: lines.length };
+  });
+  await audit(req, 'trx_knitting_yarn_return', out.id, 'UPDATE', { status: 'ACTIVE' }, { status: 'CANCELLED', reason });
+  res.json({ success: true, data: out });
+}));
+
+async function listYarnReturns(cid: number, f: { program_id?: unknown; dc_no?: unknown; return_no?: string }) {
+  let where = 'WHERE rt.company_id = ?';
+  const params: any[] = [cid];
+  if (f.return_no) { where += ' AND rt.return_no = ?'; params.push(f.return_no); }
+  if (f.program_id) { where += ' AND rt.program_id = ?'; params.push(f.program_id); }
+  if (f.dc_no) { where += ' AND rt.dc_no = ?'; params.push(f.dc_no); }
+  const rows = await query<any>(
+    `SELECT rt.*, kp.program_no, kp.io_no, w.warehouse_name, p.party_name AS vendor_name
+       FROM trx_knitting_yarn_return rt
+       JOIN trx_knitting_program kp ON kp.id = rt.program_id
+       LEFT JOIN mst_warehouse w ON w.id = rt.warehouse_id
+       LEFT JOIN mst_party p ON p.id = rt.vendor_id
+       ${where} ORDER BY rt.id DESC LIMIT 500`, params);
+  for (const r of rows) {
+    r.lines = await query(
+      `SELECT rl.*, y.yarn_code, y.yarn_name, kpy.colour, kpy.count_value
+         FROM trx_knitting_yarn_return_line rl
+         LEFT JOIN mst_yarn y ON y.id = rl.yarn_id
+         LEFT JOIN trx_knitting_program_yarns kpy ON kpy.id = rl.program_yarn_id
+        WHERE rl.return_id = ? ORDER BY rl.id`, [r.id]);
+  }
+  return rows;
+}
+
+/** GET /knitting-yarn-returns — returns with their lines (filter by program_id / dc_no). */
+knittingDcRouter.get('/knitting-yarn-returns', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  res.json({ success: true, data: await listYarnReturns(req.user!.companyId, req.query) });
+}));
+
+/** GET /knitting-yarn-returns/:returnNo — printable return note. */
+knittingDcRouter.get('/knitting-yarn-returns/:returnNo', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const [rt] = await listYarnReturns(cid, { return_no: String(req.params.returnNo) });
+  if (!rt) throw NotFound('Yarn return not found');
+  const prog = await loadProgram(Number(rt.program_id), cid);
+  const vendor = rt.vendor_id ? await queryOne<any>(
+    `SELECT party_name, gstin, phone FROM mst_party WHERE id = ?`, [rt.vendor_id]) : null;
+  const company = await queryOne<any>(
+    `SELECT legal_name, trade_name, gstin, address_line1, address_line2, city, state, pincode, phone
+       FROM mst_company WHERE id = ?`, [cid]);
+  res.json({
+    success: true,
+    data: {
+      ...rt, program_no: prog.program_no, io_no: prog.io_no, buyer_po_no: prog.buyer_po_no,
+      style_code: prog.style_code, style_name: prog.style_name,
+      vendor_name: vendor?.party_name ?? prog.vendor_name, vendor_gstin: vendor?.gstin ?? null, company,
+    },
+  });
+}));
+
+/* ================================================================
    RECONCILIATION — yarn given vs grey fabric received
 ================================================================ */
 
@@ -378,10 +721,18 @@ async function reconcile(programId: number, cid: number) {
             kpy.issued_qty_kg, y.yarn_code, y.yarn_name, kpy.yarn_name_manual,
             (SELECT COALESCE(SUM(i.no_of_cones), 0) FROM trx_process_issue i
               WHERE i.company_id = ? AND i.src_type = 'KNITTING_PROGRAM' AND i.src_id = kpy.program_id
-                AND i.src_line_id = kpy.id) AS cones_issued
+                AND i.src_line_id = kpy.id) AS cones_issued,
+            (SELECT COALESCE(SUM(rl.return_kg), 0) FROM trx_knitting_yarn_return_line rl
+               JOIN trx_knitting_yarn_return rt ON rt.id = rl.return_id
+              WHERE rt.company_id = ? AND rt.program_id = kpy.program_id AND rt.status <> 'CANCELLED'
+                AND rl.program_yarn_id = kpy.id) AS returned_kg,
+            (SELECT COALESCE(SUM(rl.no_of_cones), 0) FROM trx_knitting_yarn_return_line rl
+               JOIN trx_knitting_yarn_return rt ON rt.id = rl.return_id
+              WHERE rt.company_id = ? AND rt.program_id = kpy.program_id AND rt.status <> 'CANCELLED'
+                AND rl.program_yarn_id = kpy.id) AS cones_returned
        FROM trx_knitting_program_yarns kpy
        LEFT JOIN mst_yarn y ON y.id = kpy.yarn_id
-      WHERE kpy.program_id = ? ORDER BY kpy.seq_no`, [cid, programId]);
+      WHERE kpy.program_id = ? ORDER BY kpy.seq_no`, [cid, cid, cid, programId]);
 
   // Issues from the generic screen without a program line still count as yarn given.
   const unlinked = await queryOne<any>(
@@ -389,6 +740,11 @@ async function reconcile(programId: number, cid: number) {
        FROM trx_process_issue
       WHERE company_id = ? AND src_type = 'KNITTING_PROGRAM' AND src_id = ? AND src_line_id IS NULL`,
     [cid, programId]);
+  const unlinkedRet = await queryOne<any>(
+    `SELECT COALESCE(SUM(rl.return_kg), 0) AS kg, COALESCE(SUM(rl.no_of_cones), 0) AS cones
+       FROM trx_knitting_yarn_return_line rl
+       JOIN trx_knitting_yarn_return rt ON rt.id = rl.return_id
+      WHERE rt.company_id = ? AND rt.program_id = ? AND rl.program_yarn_id IS NULL AND rt.status <> 'CANCELLED'`, [cid, programId]);
 
   const rc = await queryOne<any>(
     `SELECT COALESCE(SUM(input_qty), 0) AS consumed, COALESCE(SUM(output_qty), 0) AS fabric,
@@ -397,27 +753,40 @@ async function reconcile(programId: number, cid: number) {
        FROM trx_process_receipt
       WHERE company_id = ? AND src_type = 'KNITTING_PROGRAM' AND src_id = ?`, [cid, programId]);
 
-  const issuedKg = r3(yarnLines.reduce((n, l) => n + Number(l.issued_qty_kg), 0) + Number(unlinked?.kg ?? 0));
+  const unlinkedKg = Number(unlinked?.kg ?? 0);
+  const unlinkedRetKg = Number(unlinkedRet?.kg ?? 0);
+  const issuedKg = r3(yarnLines.reduce((n, l) => n + Number(l.issued_qty_kg), 0) + unlinkedKg);
   const conesIssued = yarnLines.reduce((n, l) => n + Number(l.cones_issued), 0) + Number(unlinked?.cones ?? 0);
+  const returnedKg = r3(yarnLines.reduce((n, l) => n + Number(l.returned_kg), 0) + unlinkedRetKg);
+  const conesReturned = yarnLines.reduce((n, l) => n + Number(l.cones_returned), 0) + Number(unlinkedRet?.cones ?? 0);
   const consumed = r3(Number(rc?.consumed ?? 0));
-  const balance = r3(issuedKg - consumed);
-  // Share of the issued yarn still at the knitter; cones follow the same share.
-  const openShare = issuedKg > 0 ? Math.max(0, balance) / issuedKg : 0;
+  const balance = r3(issuedKg - consumed - returnedKg);
 
-  // Line-wise: consumption is apportioned by each line's share of the yarn given.
-  const lines = yarnLines.map((l) => {
+  // Line-wise: consumption is apportioned by each line's share of the yarn
+  // given, capped at what the line still had after its returns. Unlinked
+  // issues take part as one extra (hidden) line.
+  const alloc = allocateConsumed(consumed, [
+    ...yarnLines.map((l) => ({ issued: Number(l.issued_qty_kg), returned: Number(l.returned_kg) })),
+    { issued: unlinkedKg, returned: unlinkedRetKg },
+  ]);
+  const lines = yarnLines.map((l, i) => {
     const issued = Number(l.issued_qty_kg);
-    const used = issuedKg > 0 ? r3(consumed * issued / issuedKg) : 0;
+    const returned = Number(l.returned_kg);
+    const used = alloc[i];
+    const bal = r3(issued - used - returned);
     return {
       program_yarn_id: l.id, seq_no: l.seq_no,
       yarn: l.yarn_code ? `${l.yarn_code} — ${l.yarn_name}` : (l.yarn_name_manual || '—'),
       colour: l.colour, count_value: l.count_value,
       planned_kg: Number(l.planned_qty_kg), issued_kg: issued, consumed_kg: used,
-      balance_kg: r3(issued - used), to_issue_kg: r3(Number(l.planned_qty_kg) - issued),
-      cones_issued: Number(l.cones_issued),
-      cones_balance: Math.round(Number(l.cones_issued) * openShare),
+      returned_kg: returned, balance_kg: bal, to_issue_kg: r3(Number(l.planned_qty_kg) - issued),
+      cones_issued: Number(l.cones_issued), cones_returned: Number(l.cones_returned),
+      ...conesAtKnitter(Number(l.cones_issued), Number(l.cones_returned), issued, bal),
     };
   });
+  const unlinkedBal = r3(unlinkedKg - alloc[yarnLines.length] - unlinkedRetKg);
+  const unlinkedCones = conesAtKnitter(Number(unlinked?.cones ?? 0), Number(unlinkedRet?.cones ?? 0),
+    unlinkedKg, unlinkedBal);
 
   const dcRows = await query<any>(
     `SELECT i.dc_no, MIN(i.issue_date) AS dc_date, SUM(i.issued_qty_kg) AS issued_kg,
@@ -430,13 +799,21 @@ async function reconcile(programId: number, cid: number) {
        FROM trx_process_receipt
       WHERE company_id = ? AND src_type = 'KNITTING_PROGRAM' AND src_id = ? AND ref_dc_no IS NOT NULL
       GROUP BY ref_dc_no`, [cid, programId]);
+  const dcRet = await query<any>(
+    `SELECT dc_no, SUM(total_kg) AS kg, SUM(total_cones) AS cones
+       FROM trx_knitting_yarn_return WHERE company_id = ? AND program_id = ? AND status <> 'CANCELLED' GROUP BY dc_no`,
+    [cid, programId]);
   const dcs = dcRows.map((d) => {
     const got = dcRc.find((x) => x.ref_dc_no === d.dc_no);
+    const ret = dcRet.find((x) => x.dc_no === d.dc_no);
     const issued = Number(d.issued_kg);
     const used = Number(got?.consumed ?? 0);
+    const returned = Number(ret?.kg ?? 0);
     return {
       dc_no: d.dc_no, dc_date: d.dc_date, issued_kg: issued, cones: Number(d.cones),
-      consumed_kg: used, fabric_kg: Number(got?.fabric ?? 0), balance_kg: r3(issued - used),
+      consumed_kg: used, fabric_kg: Number(got?.fabric ?? 0),
+      returned_kg: returned, cones_returned: Number(ret?.cones ?? 0),
+      balance_kg: r3(issued - used - returned),
     };
   });
 
@@ -449,13 +826,18 @@ async function reconcile(programId: number, cid: number) {
       planned_yarn_kg: r3(yarnLines.reduce((n, l) => n + Number(l.planned_qty_kg), 0)),
       issued_kg: issuedKg,
       consumed_kg: consumed,
+      returned_kg: returnedKg,
       fabric_received_kg: fabric,
       rejected_kg: r3(Number(rc?.rejected ?? 0)),
       loss_kg: loss,
       loss_pct: consumed > 0 ? Math.round((loss / consumed) * 10000) / 100 : 0,
       balance_yarn_kg: balance,
       cones_issued: conesIssued,
-      cones_balance: Math.round(conesIssued * openShare),
+      cones_returned: conesReturned,
+      cones_not_returned: Math.max(0, conesIssued - conesReturned),
+      cones_balance: lines.reduce((n, l) => n + l.cones_balance, 0) + unlinkedCones.cones_balance,
+      cones_estimated: lines.some((l) => l.cones_estimated && l.cones_balance > 0) ||
+        (unlinkedCones.cones_estimated && unlinkedCones.cones_balance > 0),
       rolls_received: Number(rc?.rolls ?? 0),
       inward_count: Number(rc?.inwards ?? 0),
     },

@@ -129,8 +129,9 @@ const programSchema = z.object({
   program_no: s.nullableStr(60),
   program_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   so_id: s.id(), so_line_id: s.id(),
-  io_no: s.nullableStr(60), buyer_po_no: s.nullableStr(60),
-  style_id: s.id(),
+  // IO no + style compulsory on create (client review 24-Sep-2026); old rows may still lack them.
+  io_no: s.strReq(60), buyer_po_no: s.nullableStr(60),
+  style_id: s.idReq(),
   part_name: s.nullableStr(50),
   collar_id: s.id(),
   collar_type: s.nullableStr(60),
@@ -146,6 +147,8 @@ const programSchema = z.object({
 });
 
 const programUpdateSchema = programSchema.omit({ program_no: true }).partial().extend({
+  io_no: s.nullableStr(60),
+  style_id: s.id(),
   sizes: z.array(sizeLineSchema).optional(),
 });
 

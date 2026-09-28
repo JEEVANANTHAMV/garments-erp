@@ -261,6 +261,8 @@ const billSchema = z.object({
   period_to: s.date(),
   receipt_ids: z.array(s.idReq()).min(1, 'Pick at least one process inward').max(1000),
   tds_pct: z.coerce.number().min(0).max(30).default(0),
+  gst_pct: z.coerce.number().min(0).max(28).default(0),      // job work GST (e.g. 5 / 12 / 18) — optional
+  is_interstate: z.coerce.boolean().default(false),
   other_deduction_label: s.nullableStr(80),
   other_deduction: z.coerce.number().min(0).default(0),
   remarks: s.nullableStr(500),
@@ -283,8 +285,10 @@ processMasterRouter.post('/contractor-bills', requirePermission('PRODUCTION.CREA
     const lines = (await unbilledReceipts(cid, b.vendor_id)).filter((r) => ids.includes(Number(r.receipt_id)));
     const qty = lines.reduce((a, l) => a + l.billed_qty, 0);
     const gross = r2(lines.reduce((a, l) => a + l.amount, 0));
+    // GST on the job-work value; TDS (194C) is deducted on the value before GST.
+    const gst = r2(gross * b.gst_pct / 100);
     const tds = r2(gross * b.tds_pct / 100);
-    const beforeRound = gross - tds - b.other_deduction;
+    const beforeRound = gross + gst - tds - b.other_deduction;
     if (beforeRound < 0) throw BadRequest('Deductions exceed the bill amount');
     const net = Math.round(beforeRound);
     const billNo = b.bill_no || await nextDocNumber(tx, cid, 'CONTRACTOR_BILL');
@@ -292,10 +296,11 @@ processMasterRouter.post('/contractor-bills', requirePermission('PRODUCTION.CREA
     if (dup) throw BadRequest(`Bill no ${billNo} already exists`);
     const r = await txExecute(tx,
       `INSERT INTO trx_contractor_bill
-         (company_id, bill_no, bill_date, vendor_id, period_from, period_to, billed_qty, gross_amount, tds_pct, tds_amount,
-          other_deduction_label, other_deduction, round_off, net_amount, status, remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'DRAFT',?,?)`,
-      [cid, billNo, b.bill_date, b.vendor_id, b.period_from ?? null, b.period_to ?? null, qty, gross, b.tds_pct, tds,
+         (company_id, bill_no, bill_date, vendor_id, period_from, period_to, billed_qty, gross_amount, gst_pct, gst_amount,
+          is_interstate, tds_pct, tds_amount, other_deduction_label, other_deduction, round_off, net_amount, status, remarks, created_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'DRAFT',?,?)`,
+      [cid, billNo, b.bill_date, b.vendor_id, b.period_from ?? null, b.period_to ?? null, qty, gross, b.gst_pct, gst,
+       b.is_interstate ? 1 : 0, b.tds_pct, tds,
        b.other_deduction_label ?? null, b.other_deduction, r2(net - beforeRound), net, b.remarks ?? null, req.user!.id]);
     for (const l of lines) {
       await txExecute(tx,
@@ -304,7 +309,7 @@ processMasterRouter.post('/contractor-bills', requirePermission('PRODUCTION.CREA
         [r.insertId, l.receipt_id, l.challan_id, n(l.received_qty), n(l.rejected_qty), l.billed_qty, l.rate, l.amount]);
     }
     await txExecute(tx, `UPDATE trx_jobwork_receipt SET contractor_bill_id = ? WHERE id IN (${ids.map(() => '?').join(',')})`, [r.insertId, ...ids]);
-    await audit(req, 'trx_contractor_bill', r.insertId, 'INSERT', undefined, { bill_no: billNo, inwards: ids.length, gross, net }, tx);
+    await audit(req, 'trx_contractor_bill', r.insertId, 'INSERT', undefined, { bill_no: billNo, inwards: ids.length, gross, gst, tds, net }, tx);
     return r.insertId;
   });
   res.status(201).json({ data: await loadBill(cid, id) });

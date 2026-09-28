@@ -14,6 +14,35 @@ const invoiceSummaryFields = () => [
   f('cgst_amount', s.dec()), f('sgst_amount', s.dec()), f('igst_amount', s.dec()),
 ];
 import { jobworkInBeforeCreate, jobworkInvoiceBeforeCreate } from '../production/jobworkDivision.js';
+import { computePreCosting, PRE_COST_HEADS } from '../costing/preCostingCalc.js';
+
+/**
+ * Merchandiser Pre-Costing V2: the head columns, smv, total_cost and fob_price of a
+ * PRE_COSTING costing are always recomputed from its data_json rows (create & update);
+ * whatever totals the client sent are overwritten. A tab missing from data_json keeps
+ * the stored head (update) / the sent head (create). Other costing types (Classic
+ * sheet) are untouched.
+ */
+function preCostingBeforeWrite(data: Record<string, unknown>, before?: any) {
+  const type = data.costing_type !== undefined ? data.costing_type : before?.costing_type;
+  if (String(type ?? '').toUpperCase() !== 'PRE_COSTING') return;
+  const rawJson = data.data_json !== undefined ? data.data_json : before?.data_json;
+  let dj: any = {};
+  if (rawJson != null && rawJson !== '') {
+    try { dj = typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson; }
+    catch { throw BadRequest('data_json is not valid JSON'); }
+  }
+  const src = before ?? data;
+  const fallback: Record<string, unknown> = { smv: before ? before.smv : data.smv };
+  for (const h of PRE_COST_HEADS) fallback[h] = src[h];
+  const pick = (k: string) => (data[k] !== undefined ? data[k] : before?.[k]);
+  const r = computePreCosting(dj, { margin_pct: pick('margin_pct'), smv_rate_per_min: pick('smv_rate_per_min'), fallback });
+  if (r.error) throw BadRequest(r.error);
+  for (const h of PRE_COST_HEADS) data[h] = r.heads[h];
+  data.smv = r.smv;
+  data.total_cost = r.total_cost;
+  data.fob_price = r.fob_price;
+}
 
 /** Cutting records that already produced bundles / cut output are never deleted or rewritten (doc §19). */
 async function cuttingDownstream(id: number) {
@@ -103,12 +132,14 @@ export const transactionResources: ResourceConfig[] = [
       f('stitching_cost', s.dec()), f('finishing_cost', s.dec()), f('packing_cost', s.dec()),
       f('smv', s.dec()), f('smv_rate_per_min', s.dec()),
       f('overhead_cost', s.dec()), f('testing_cost', s.dec()), f('freight_cost', s.dec()),
-      f('agent_commission', s.dec()), f('finance_cost', s.dec()),
+      f('agent_commission', s.dec()), f('finance_cost', s.dec()), f('other_direct_cost', s.dec()),
       f('total_cost', s.dec()), f('margin_pct', s.dec()), f('fob_price', s.dec()),
       f('season', s.nullableStr(40)), f('buyer_ref', s.nullableStr(80)), f('unit_id', s.id()),
       f('price_basis', s.nullableStr(30)), f('costing_type', s.nullableStr(30)),
-      f('status_id', s.id()), f('remarks', s.text()), f('data_json', s.text()),
+      // Pre-costing sheets outgrow s.text()'s 20 000 chars; column is LONGTEXT.
+      f('status_id', s.id()), f('remarks', s.text()), f('data_json', s.json()),
     ],
+    beforeWrite: (_req, data, before) => preCostingBeforeWrite(data, before),
   },
   {
     path: 'quotations', table: 'trx_quotation', permission: 'QUOTATION', label: 'Quotation',
@@ -330,7 +361,9 @@ export const transactionResources: ResourceConfig[] = [
             LEFT JOIN mst_party v  ON v.id  = t.vendor_id
             LEFT JOIN cfg_status cs ON cs.id = t.status_id`,
     fields: [
-      f('po_prod_no', s.nullableStr(40)), f('io_no', s.nullableStr(40)), f('prod_date', s.date()), f('so_id', s.idReq()),
+      // IO no + style compulsory on create (client review 24-Sep-2026); old rows may still lack an IO no.
+      f('po_prod_no', s.nullableStr(40)), { ...f('io_no', s.nullableStr(40)), createSchema: s.strReq(40) },
+      f('prod_date', s.date()), f('so_id', s.idReq()),
       f('so_line_id', s.id()), f('plan_id', s.id()), f('style_id', s.idReq()), f('color_id', s.id()),
       f('unit_id', s.id()), f('order_qty', s.intReq()), f('planned_qty', s.int()),
       f('produced_qty', s.int()), f('is_jobwork', s.bool()), f('vendor_id', s.id()),

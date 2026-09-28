@@ -14,6 +14,8 @@ export interface FieldDef {
   schema?: z.ZodTypeAny;
   /** Column is settable on create but not on update. */
   immutable?: boolean;
+  /** Stricter schema used on create only (e.g. compulsory on new rows, old rows may lack it). */
+  createSchema?: z.ZodTypeAny;
 }
 
 export interface ResourceConfig {
@@ -97,7 +99,7 @@ function pickWritable(fields: FieldDef[], body: any, isUpdate: boolean) {
   for (const f of fields) {
     if (!f.schema) continue;
     if (isUpdate && f.immutable) continue;
-    shape[f.name] = isUpdate ? f.schema.optional() : f.schema;
+    shape[f.name] = isUpdate ? f.schema.optional() : (f.createSchema ?? f.schema);
   }
   const parsed = z.object(shape).strip().parse(body ?? {});
   for (const [k, v] of Object.entries(parsed)) {

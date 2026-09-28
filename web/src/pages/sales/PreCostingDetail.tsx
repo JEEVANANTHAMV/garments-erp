@@ -11,6 +11,59 @@ import { useToast } from '../../hooks/useToast';
 import { Input, Select, StatusBadge } from '../../components/ui';
 import { fmtDecimal, fmtNumber, today, toDateInput } from '../../lib/format';
 import { FabricPicker } from './CostingsFabricPicker';
+import { PreCostingRowTable } from './PreCostingRowTable';
+import {
+  computePreCosting, finishingRows, otherDirectRows, processHead, processAmount,
+  PRE_COST_HEADS, type PreCostHeadKey,
+} from '../../lib/preCostingCalc';
+
+const PROCESS_TYPE_OPTIONS = [
+  { value: 'KNITTING', label: 'Knitting → Knitting' },
+  { value: 'DYEING', label: 'Dyeing → Dyeing' },
+  { value: 'COMPACTING', label: 'Compacting → Dyeing' },
+  { value: 'WASHING', label: 'Washing → Washing' },
+  { value: 'OTHER', label: 'Other → Washing / Other' },
+];
+const PROCESS_BASIS_OPTIONS = [
+  { value: 'PER_KG', label: 'Per KG' },
+  { value: 'PER_PC', label: 'Per PC' },
+];
+const FINISH_TYPE_OPTIONS = [
+  { value: 'FINISHING', label: 'Finishing' },
+  { value: 'PACKING', label: 'Packing' },
+];
+const OTHER_TYPE_OPTIONS = [
+  { value: 'TESTING', label: 'Testing' },
+  { value: 'FREIGHT', label: 'Freight / Courier' },
+  { value: 'AGENT_COMMISSION', label: 'Agent Commission' },
+  { value: 'FINANCE', label: 'Finance / Bank' },
+  { value: 'OTHER', label: 'Other' },
+];
+const OTHER_BASIS_OPTIONS = [
+  { value: 'PER_PC', label: '₹ per PC' },
+  { value: 'PCT_FOB', label: '% of FOB' },
+  { value: 'PCT_DIRECT', label: '% of Direct' },
+];
+
+/** Process type for a row saved before the type column existed. */
+const inferProcessType = (row: any) => {
+  const h = processHead(row);
+  if (h === 'knitting_cost') return 'KNITTING';
+  if (h === 'dyeing_cost') return /COMPACT/i.test(String(row?.process_name ?? '')) ? 'COMPACTING' : 'DYEING';
+  return /WASH/i.test(String(row?.process_name ?? '')) ? 'WASHING' : 'OTHER';
+};
+const normalizeProcess = (row: any, i: number) => {
+  const b = String(row?.basis ?? '').toUpperCase().replace(/[\s-]/g, '_');
+  return {
+    _key: row?._key || `prc_${i}`,
+    process_name: row?.process_name ?? '',
+    process_type: row?.process_type || inferProcessType(row),
+    basis: b === 'PER_KG' || b === 'KG' ? 'PER_KG' : 'PER_PC',
+    consumption: row?.consumption ?? '',
+    rate: row?.rate ?? '',
+    rate_source: row?.rate_source,
+  };
+};
 
 export default function PreCostingDetailPage() {
   const { id } = useParams();
@@ -59,16 +112,12 @@ export default function PreCostingDetailPage() {
     version: 1,
     status: 'Draft',
     margin_pct: 15.0,
-    markup_pct: 17.65,
-    cutting_cost: 1.50,
-    finishing_cost: 1.50,
     smv: 12.5,
     smv_rate_per_min: 0.85,
-    overhead_basis: 'PER_PIECE',
-    overhead_rate: 3.00,
-    overhead_pct: 5.0,
     remarks: '',
   });
+  // Stored head values of a loaded sheet: kept for a tab its data_json never had.
+  const [storedHeads, setStoredHeads] = useState<Partial<Record<PreCostHeadKey, number>>>({});
 
   // Tab 1: Fabric Lines
   const [fabrics, setFabrics] = useState<any[]>([
@@ -175,15 +224,16 @@ export default function PreCostingDetailPage() {
     },
   ]);
 
-  // Tab 5: Process / Job Work
+  // Tab 5: Processes (knitting / dyeing / compacting / washing — per KG or per PC)
   const [processes, setProcesses] = useState<any[]>([
-    {
-      _key: 'prc_1',
-      process_name: 'Bio-Washing & Softening',
-      basis: 'Per Garment',
-      rate: 4.50,
-      rate_source: 'In-House Dyeing & Wash Unit',
-    },
+    { _key: 'prc_1', process_name: 'Bio-Washing & Softening', process_type: 'WASHING', basis: 'PER_PC', consumption: '', rate: 4.50 },
+  ]);
+
+  // Tab 6: Cutting operations (₹ / pc)
+  const [cuttingOps, setCuttingOps] = useState<any[]>([
+    { _key: 'cut_1', operation: 'Spreading', rate: 0.40 },
+    { _key: 'cut_2', operation: 'Cutting', rate: 0.70 },
+    { _key: 'cut_3', operation: 'Numbering / Bundling', rate: 0.40 },
   ]);
 
   // Tab 7: Sewing SMV Operations
@@ -197,18 +247,27 @@ export default function PreCostingDetailPage() {
     { _key: 'op_7', operation: 'Check & Trim Thread', smv: 1.50 },
   ]);
 
-  // Tab 8: Packing Materials
-  const [packings, setPackings] = useState<any[]>([
-    { _key: 'pk_1', item: 'Printed Polybag with Warning', consumption: 1.0, rate: 0.85 },
-    { _key: 'pk_2', item: 'Brand Hangtag & Kimble Tag', consumption: 1.0, rate: 1.20 },
-    { _key: 'pk_3', item: '5-Ply Export Master Carton (60 Pcs/Box)', consumption: 0.0167, rate: 85.00 },
+  // Tab 8: Finishing & Packing items (qty / pc × rate, each row Finishing or Packing)
+  const [finishingItems, setFinishingItems] = useState<any[]>([
+    { _key: 'fin_1', item: 'Thread Cutting', cost_type: 'FINISHING', qty_per_pc: 1, rate: 0.30 },
+    { _key: 'fin_2', item: 'Checking', cost_type: 'FINISHING', qty_per_pc: 1, rate: 0.40 },
+    { _key: 'fin_3', item: 'Ironing', cost_type: 'FINISHING', qty_per_pc: 1, rate: 0.80 },
+    { _key: 'fin_4', item: 'Folding', cost_type: 'PACKING', qty_per_pc: 1, rate: 0.25 },
+    { _key: 'fin_5', item: 'Printed Polybag with Warning', cost_type: 'PACKING', qty_per_pc: 1, rate: 0.85 },
+    { _key: 'fin_6', item: 'Brand Hangtag & Kimble Tag', cost_type: 'PACKING', qty_per_pc: 1, rate: 1.20 },
+    { _key: 'fin_7', item: '5-Ply Export Master Carton (60 Pcs/Box)', cost_type: 'PACKING', qty_per_pc: 0.0167, rate: 85.00 },
   ]);
 
-  // Tab 9: Other Direct Charges
-  const [otherCharges, setOtherCharges] = useState<any[]>([
-    { _key: 'oth_1', charge_type: 'Lab Testing & Colour Fastness', rate_per_pc: 0.45 },
-    { _key: 'oth_2', charge_type: 'Buyer Sample Couriers & Approvals', rate_per_pc: 0.35 },
+  // Tab 9: Other Direct Charges (₹/pc, % of FOB or % of direct cost)
+  const [otherDirect, setOtherDirect] = useState<any[]>([
+    { _key: 'oth_1', charge_type: 'TESTING', description: 'Lab Testing & Colour Fastness', basis: 'PER_PC', value: 0.45 },
+    { _key: 'oth_2', charge_type: 'FREIGHT', description: 'Buyer Sample Couriers & Approvals', basis: 'PER_PC', value: 0.35 },
   ]);
+
+  // Tab 10: Overhead
+  const [overhead, setOverhead] = useState<{ basis: string; rate: number | ''; pct: number | '' }>({
+    basis: 'PER_PIECE', rate: 3.00, pct: 5.0,
+  });
 
   const addSewingOp = () => {
     const key = `op_${Date.now()}`;
@@ -247,30 +306,67 @@ export default function PreCostingDetailPage() {
       price_basis: c.price_basis || 'PER_PCS',
       version: Number(c.version) || 1,
       status: c.status_label || 'Draft',
-      margin_pct: Number(c.margin_pct) || 15.0,
+      margin_pct: c.margin_pct != null ? Number(c.margin_pct) : 15.0,
+      smv: c.smv != null ? Number(c.smv) : prev.smv,
+      smv_rate_per_min: c.smv_rate_per_min != null ? Number(c.smv_rate_per_min) : prev.smv_rate_per_min,
       remarks: c.remarks || '',
     }));
+    const stored: Partial<Record<PreCostHeadKey, number>> = {};
+    for (const h of PRE_COST_HEADS) stored[h] = Number(c[h]) || 0;
+    setStoredHeads(stored);
 
+    let parsed: any = {};
     if (c.data_json) {
       try {
-        const parsed = typeof c.data_json === 'string' ? JSON.parse(c.data_json) : c.data_json;
-        extraJsonRef.current = parsed && typeof parsed === 'object' ? { ...parsed } : {};
-        if (parsed.fabrics) setFabrics(parsed.fabrics);
-        if (parsed.yarns) setYarns(parsed.yarns);
-        if (parsed.trims) setTrims(parsed.trims);
-        if (parsed.embellishments) setEmbellishments(parsed.embellishments);
-        if (parsed.processes) setProcesses(parsed.processes);
-        if (parsed.sewingOps) setSewingOps(parsed.sewingOps);
-        if (parsed.packings) setPackings(parsed.packings);
-        if (parsed.otherCharges) setOtherCharges(parsed.otherCharges);
-        if (parsed.useYarnRecipe !== undefined) setUseYarnRecipe(parsed.useYarnRecipe);
-        if (parsed.useFlatSewingRate !== undefined) setUseFlatSewingRate(parsed.useFlatSewingRate);
-        if (parsed.flatSewingRate !== undefined) setFlatSewingRate(Number(parsed.flatSewingRate) || 20.0);
-        if (parsed.flatSewingDesc !== undefined) setFlatSewingDesc(parsed.flatSewingDesc);
-      } catch (err) {
-        // ignore
+        parsed = typeof c.data_json === 'string' ? JSON.parse(c.data_json) : c.data_json;
+      } catch {
+        parsed = {};
       }
     }
+    if (!parsed || typeof parsed !== 'object') parsed = {};
+    extraJsonRef.current = { ...parsed };
+    if (parsed.fabrics) setFabrics(parsed.fabrics);
+    if (parsed.yarns) setYarns(parsed.yarns);
+    if (parsed.trims) setTrims(parsed.trims);
+    if (parsed.embellishments) setEmbellishments(parsed.embellishments);
+    if (parsed.sewingOps) setSewingOps(parsed.sewingOps);
+    if (parsed.useYarnRecipe !== undefined) setUseYarnRecipe(parsed.useYarnRecipe);
+    if (parsed.useFlatSewingRate !== undefined) setUseFlatSewingRate(parsed.useFlatSewingRate);
+    if (parsed.flatSewingRate !== undefined) setFlatSewingRate(Number(parsed.flatSewingRate) || 0);
+    if (parsed.flatSewingDesc !== undefined) setFlatSewingDesc(parsed.flatSewingDesc);
+
+    // Tabs added later: a sheet saved before them gets its stored head as one row,
+    // so the first save keeps the same figure.
+    const carried = (label: string, amount: number) => (amount > 0 ? [{ label, amount }] : []);
+    setProcesses(Array.isArray(parsed.processes)
+      ? parsed.processes.map(normalizeProcess)
+      : [
+          ...carried('Knitting (earlier sheet)', stored.knitting_cost ?? 0).map((x) => ({ process_name: x.label, process_type: 'KNITTING', rate: x.amount })),
+          ...carried('Dyeing (earlier sheet)', stored.dyeing_cost ?? 0).map((x) => ({ process_name: x.label, process_type: 'DYEING', rate: x.amount })),
+          ...carried('Washing / process (earlier sheet)', stored.washing_cost ?? 0).map((x) => ({ process_name: x.label, process_type: 'WASHING', rate: x.amount })),
+        ].map(normalizeProcess));
+    setCuttingOps(Array.isArray(parsed.cuttingOps)
+      ? parsed.cuttingOps
+      : carried('Cutting (earlier sheet)', stored.cutting_cost ?? 0).map((x, i) => ({ _key: `cut_${i}`, operation: x.label, rate: x.amount })));
+    const fin = finishingRows(parsed).map((r: any, i: number) => ({ _key: r._key || `fin_${i}`, ...r }));
+    if (!Array.isArray(parsed.finishingItems)) {
+      if ((stored.finishing_cost ?? 0) > 0) fin.unshift({ _key: 'fin_old', item: 'Finishing (earlier sheet)', cost_type: 'FINISHING', qty_per_pc: 1, rate: stored.finishing_cost });
+      if (!Array.isArray(parsed.packings) && (stored.packing_cost ?? 0) > 0) fin.push({ _key: 'pk_old', item: 'Packing (earlier sheet)', cost_type: 'PACKING', qty_per_pc: 1, rate: stored.packing_cost });
+    }
+    setFinishingItems(fin);
+    const oth = otherDirectRows(parsed).map((r: any, i: number) => ({ _key: r._key || `oth_${i}`, ...r }));
+    if (!Array.isArray(parsed.otherDirect) && !Array.isArray(parsed.otherCharges)) {
+      const old: [PreCostHeadKey, string, string][] = [
+        ['testing_cost', 'TESTING', 'Testing (earlier sheet)'], ['freight_cost', 'FREIGHT', 'Freight (earlier sheet)'],
+        ['agent_commission', 'AGENT_COMMISSION', 'Agent commission (earlier sheet)'], ['finance_cost', 'FINANCE', 'Finance (earlier sheet)'],
+        ['other_direct_cost', 'OTHER', 'Other (earlier sheet)'],
+      ];
+      for (const [h, t, d] of old) if ((stored[h] ?? 0) > 0) oth.push({ _key: `oth_${h}`, charge_type: t, description: d, basis: 'PER_PC', value: stored[h] });
+    }
+    setOtherDirect(oth);
+    setOverhead(parsed.overhead && typeof parsed.overhead === 'object'
+      ? { basis: parsed.overhead.basis === 'PERCENT_DIRECT' ? 'PERCENT_DIRECT' : 'PER_PIECE', rate: parsed.overhead.rate ?? '', pct: parsed.overhead.pct ?? '' }
+      : { basis: 'PER_PIECE', rate: stored.overhead_cost ?? 0, pct: 5.0 });
   }, [costingQuery.data]);
 
   // Load Style BOM & Rates
@@ -368,128 +464,76 @@ export default function PreCostingDetailPage() {
   };
 
   // ------------------------------------------------------------- Calculations
-  // 1. Fabric Cost
-  const totalFabricCostPerPc = useMemo(() => {
-    if (useYarnRecipe) return 0; // If using yarn recipe, fabric cost is derived from yarn + knitting + process
-    return fabrics.reduce((s, f) => {
-      const cons = Number(f.consumption) || 0;
-      const wastage = Number(f.wastage_pct) || 0;
-      const rate = Number(f.rate) || 0;
-      return s + (cons * (1 + wastage / 100) * rate);
-    }, 0);
-  }, [fabrics, useYarnRecipe]);
+  // The sheet as stored in data_json; the server recomputes every head from it on save.
+  const sheetJson = useMemo(() => ({
+    // Keys owned by other screens are kept; older-shape keys are replaced by their new tabs.
+    ...Object.fromEntries(Object.entries(extraJsonRef.current).filter(([k]) => k !== 'packings' && k !== 'otherCharges')),
+    fabrics,
+    yarns,
+    trims,
+    embellishments,
+    processes,
+    cuttingOps,
+    sewingOps,
+    finishingItems,
+    otherDirect,
+    overhead,
+    useYarnRecipe,
+    useFlatSewingRate,
+    flatSewingRate,
+    flatSewingDesc,
+  }), [fabrics, yarns, trims, embellishments, processes, cuttingOps, sewingOps, finishingItems,
+    otherDirect, overhead, useYarnRecipe, useFlatSewingRate, flatSewingRate, flatSewingDesc]);
 
-  // 2. Yarn Recipe Cost
-  const totalYarnCostPerPc = useMemo(() => {
-    if (!useYarnRecipe) return 0;
-    return yarns.reduce((s, y) => {
-      const cons = Number(y.consumption) || 0;
-      const wastage = Number(y.wastage_pct) || 0;
-      const rate = Number(y.rate) || 0;
-      return s + (cons * (1 + wastage / 100) * rate);
-    }, 0);
-  }, [yarns, useYarnRecipe]);
+  // Same function as the server (lib/preCostingCalc mirrors server/src/modules/costing/preCostingCalc).
+  const calc = useMemo(() => computePreCosting(sheetJson, {
+    margin_pct: head.margin_pct,
+    smv_rate_per_min: head.smv_rate_per_min,
+    fallback: { ...storedHeads, smv: head.smv },
+  }), [sheetJson, head.margin_pct, head.smv_rate_per_min, head.smv, storedHeads]);
+  const H = calc.heads;
 
-  // 3. Trims Cost
-  const totalTrimsCostPerPc = useMemo(() => {
-    return trims.reduce((s, t) => {
-      const cons = Number(t.consumption) || 0;
-      const wastage = Number(t.wastage_pct) || 0;
-      const rate = Number(t.rate) || 0;
-      return s + (cons * (1 + wastage / 100) * rate);
-    }, 0);
-  }, [trims]);
-
-  // 4. Embellishments Cost
-  const totalEmbellishmentPerPc = useMemo(() => {
-    return embellishments.reduce((s, e) => s + (Number(e.rate) || 0), 0);
-  }, [embellishments]);
-
-  // 5. Process / Job Work Cost
-  const totalProcessPerPc = useMemo(() => {
-    return processes.reduce((s, p) => s + (Number(p.rate) || 0), 0);
-  }, [processes]);
-
-  // 6. Cutting Cost
-  const cuttingCostPerPc = Number(head.cutting_cost) || 1.50;
-
-  // 7. Sewing Cost (SMV Engine: Total SMV * Rate/Min)
-  const totalSmv = useMemo(() => {
-    return sewingOps.reduce((s, op) => s + (Number(op.smv) || 0), 0) || Number(head.smv) || 12.5;
-  }, [sewingOps, head.smv]);
-
-  const sewingCostPerPc = useMemo(() => {
-    if (useFlatSewingRate) {
-      return Number(flatSewingRate) || 0;
-    }
-    return totalSmv * (Number(head.smv_rate_per_min) || 0.85);
-  }, [useFlatSewingRate, flatSewingRate, totalSmv, head.smv_rate_per_min]);
-
-  // 8. Finishing & Packing Cost
-  const finishingCostPerPc = Number(head.finishing_cost) || 1.50;
-  const packingCostPerPc = useMemo(() => {
-    return packings.reduce((s, pk) => s + (Number(pk.consumption) || 0) * (Number(pk.rate) || 0), 0);
-  }, [packings]);
-
-  // 9. Other Direct Charges
-  const otherDirectPerPc = useMemo(() => {
-    return otherCharges.reduce((s, ch) => s + (Number(ch.rate_per_pc) || 0), 0);
-  }, [otherCharges]);
-
-  // Total Direct Cost Per Piece
-  const totalDirectCostPerPc = useMemo(() => {
-    return (
-      totalFabricCostPerPc +
-      totalYarnCostPerPc +
-      totalTrimsCostPerPc +
-      totalEmbellishmentPerPc +
-      totalProcessPerPc +
-      cuttingCostPerPc +
-      sewingCostPerPc +
-      finishingCostPerPc +
-      packingCostPerPc +
-      otherDirectPerPc
-    );
-  }, [
-    totalFabricCostPerPc,
-    totalYarnCostPerPc,
-    totalTrimsCostPerPc,
-    totalEmbellishmentPerPc,
-    totalProcessPerPc,
-    cuttingCostPerPc,
-    sewingCostPerPc,
-    finishingCostPerPc,
-    packingCostPerPc,
-    otherDirectPerPc,
-  ]);
-
-  // Overhead Allocation
-  const overheadCostPerPc = useMemo(() => {
-    if (head.overhead_basis === 'PERCENT_DIRECT') {
-      return (totalDirectCostPerPc * (Number(head.overhead_pct) || 5.0)) / 100;
-    }
-    return Number(head.overhead_rate) || 3.00;
-  }, [totalDirectCostPerPc, head.overhead_basis, head.overhead_pct, head.overhead_rate]);
-
-  // Total Pre-Cost Per Piece
-  const totalCostPerPc = totalDirectCostPerPc + overheadCostPerPc;
-
-  // Margin % vs Markup % & Quoted FOB Selling Price
-  const marginPct = Number(head.margin_pct) || 15.0;
-  const quotedFobPerPc = marginPct >= 100 ? totalCostPerPc : totalCostPerPc / (1 - marginPct / 100);
-  const profitAmountPerPc = quotedFobPerPc - totalCostPerPc;
-  const markupPct = totalCostPerPc > 0 ? (profitAmountPerPc / totalCostPerPc) * 100 : 0;
+  const totalFabricCostPerPc = H.fabric_cost;
+  const totalYarnCostPerPc = H.yarn_cost;
+  const totalTrimsCostPerPc = H.trim_cost;
+  const totalProcessPerPc = H.knitting_cost + H.dyeing_cost + H.washing_cost;
+  const cuttingCostPerPc = H.cutting_cost;
+  const totalSmv = calc.smv;
+  const sewingCostPerPc = H.stitching_cost;
+  const finishingCostPerPc = H.finishing_cost;
+  const packingCostPerPc = H.packing_cost;
+  const otherDirectPerPc = H.testing_cost + H.freight_cost + H.agent_commission + H.finance_cost + H.other_direct_cost;
+  const totalDirectCostPerPc = calc.direct_cost;
+  const overheadCostPerPc = calc.overhead_cost;
+  const totalCostPerPc = calc.total_cost;
+  const marginPct = Number(head.margin_pct) || 0;
+  const quotedFobPerPc = calc.fob_price;
+  const profitAmountPerPc = calc.profit_per_pc;
+  const markupPct = calc.markup_pct;
 
   // Order Totals
-  const orderQty = Number(head.order_qty) || 5000;
+  const orderQty = Number(head.order_qty) || 0;
   const totalOrderCost = totalCostPerPc * orderQty;
   const totalOrderFob = quotedFobPerPc * orderQty;
   const totalOrderProfit = profitAmountPerPc * orderQty;
+
+  /** Per-piece amount of an Other Direct row (PCT_FOB on the computed FOB). */
+  const otherRowAmount = (r: any) => {
+    const v = Number(r.value) || 0;
+    if (r.basis === 'PCT_FOB') return calc.error ? 0 : (quotedFobPerPc * v) / 100;
+    if (r.basis === 'PCT_DIRECT') return (calc.manufacturing_direct * v) / 100;
+    return v;
+  };
 
   // Save Handler
   const handleSave = async (statusOverride = 'Draft') => {
     if (!head.style_id) {
       toast('Please select a Style.', 'warning');
+      return;
+    }
+
+    if (calc.error) {
+      toast(calc.error, 'warning');
       return;
     }
 
@@ -510,38 +554,16 @@ export default function PreCostingDetailPage() {
         price_basis: head.price_basis,
         costing_type: 'PRE_COSTING',
         order_qty: orderQty,
-        fabric_cost: totalFabricCostPerPc,
-        yarn_cost: totalYarnCostPerPc,
-        trim_cost: totalTrimsCostPerPc,
-        printing_cost: totalEmbellishmentPerPc,
-        washing_cost: totalProcessPerPc,
-        cutting_cost: cuttingCostPerPc,
-        stitching_cost: sewingCostPerPc,
-        finishing_cost: finishingCostPerPc,
-        packing_cost: packingCostPerPc,
+        // Heads / totals are for reference only: the server recomputes all of them from data_json.
+        ...calc.heads,
         smv: totalSmv,
         smv_rate_per_min: head.smv_rate_per_min,
-        overhead_cost: overheadCostPerPc,
         total_cost: totalCostPerPc,
         margin_pct: marginPct,
         fob_price: quotedFobPerPc,
         remarks: head.remarks,
         // The generic /costings resource stores data_json as TEXT, so send a string.
-        data_json: JSON.stringify({
-          ...extraJsonRef.current,
-          fabrics,
-          yarns,
-          trims,
-          embellishments,
-          processes,
-          sewingOps,
-          packings,
-          otherCharges,
-          useYarnRecipe,
-          useFlatSewingRate,
-          flatSewingRate,
-          flatSewingDesc,
-        }),
+        data_json: JSON.stringify(sheetJson),
       };
 
       const isActuallyNew = isNew || !costId || isNaN(Number(costId));
@@ -552,6 +574,9 @@ export default function PreCostingDetailPage() {
       const saved = res.data;
       setCostId(saved.id);
       setHead((h) => ({ ...h, costing_no: saved.costing_no, status: statusOverride }));
+      const stored: Partial<Record<PreCostHeadKey, number>> = {};
+      for (const h of PRE_COST_HEADS) stored[h] = Number(saved[h]) || 0;
+      setStoredHeads(stored);
       toast(`Merchandiser Pre-Costing ${saved.costing_no} saved.`, 'success');
       qc.invalidateQueries({ queryKey: ['costings'] });
       qc.invalidateQueries({ queryKey: ['pre-costings'] });
@@ -752,6 +777,12 @@ export default function PreCostingDetailPage() {
           </p>
         </div>
       </div>
+
+      {calc.error && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-xs font-semibold text-rose-800">
+          {calc.error} — reduce the margin or the % of FOB charges (Other Direct) before saving.
+        </div>
+      )}
 
       {/* 4. Tab Navigation */}
       <div className="border-b border-slate-200">
@@ -1354,69 +1385,34 @@ export default function PreCostingDetailPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-mono">
-                    <tr>
-                      <td className="py-2 px-3 font-sans font-semibold text-slate-900">1. Fabric Materials</td>
-                      <td className="py-2 px-3 text-right font-bold">₹{totalFabricCostPerPc.toFixed(2)}</td>
-                      <td className="py-2 px-3 text-right text-slate-500">
-                        {totalCostPerPc > 0 ? ((totalFabricCostPerPc / totalCostPerPc) * 100).toFixed(1) : 0}%
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="py-2 px-3 font-sans font-semibold text-slate-900">2. Trims & Accessories</td>
-                      <td className="py-2 px-3 text-right font-bold">₹{totalTrimsCostPerPc.toFixed(2)}</td>
-                      <td className="py-2 px-3 text-right text-slate-500">
-                        {totalCostPerPc > 0 ? ((totalTrimsCostPerPc / totalCostPerPc) * 100).toFixed(1) : 0}%
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="py-2 px-3 font-sans font-semibold text-slate-900">3. Cutting Labour & CAD</td>
-                      <td className="py-2 px-3 text-right font-bold">₹{cuttingCostPerPc.toFixed(2)}</td>
-                      <td className="py-2 px-3 text-right text-slate-500">
-                        {totalCostPerPc > 0 ? ((cuttingCostPerPc / totalCostPerPc) * 100).toFixed(1) : 0}%
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="py-2 px-3 font-sans font-semibold text-slate-900">4. Sewing (SMV Engine)</td>
-                      <td className="py-2 px-3 text-right font-bold text-brand-700">₹{sewingCostPerPc.toFixed(2)}</td>
-                      <td className="py-2 px-3 text-right text-slate-500">
-                        {totalCostPerPc > 0 ? ((sewingCostPerPc / totalCostPerPc) * 100).toFixed(1) : 0}%
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="py-2 px-3 font-sans font-semibold text-slate-900">5. Embellishments (Printing)</td>
-                      <td className="py-2 px-3 text-right font-bold">₹{totalEmbellishmentPerPc.toFixed(2)}</td>
-                      <td className="py-2 px-3 text-right text-slate-500">
-                        {totalCostPerPc > 0 ? ((totalEmbellishmentPerPc / totalCostPerPc) * 100).toFixed(1) : 0}%
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="py-2 px-3 font-sans font-semibold text-slate-900">6. Washing / Special Process</td>
-                      <td className="py-2 px-3 text-right font-bold">₹{totalProcessPerPc.toFixed(2)}</td>
-                      <td className="py-2 px-3 text-right text-slate-500">
-                        {totalCostPerPc > 0 ? ((totalProcessPerPc / totalCostPerPc) * 100).toFixed(1) : 0}%
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="py-2 px-3 font-sans font-semibold text-slate-900">7. Finishing & Packaging</td>
-                      <td className="py-2 px-3 text-right font-bold">₹{(finishingCostPerPc + packingCostPerPc).toFixed(2)}</td>
-                      <td className="py-2 px-3 text-right text-slate-500">
-                        {totalCostPerPc > 0 ? (((finishingCostPerPc + packingCostPerPc) / totalCostPerPc) * 100).toFixed(1) : 0}%
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="py-2 px-3 font-sans font-semibold text-slate-900">8. Other Direct Charges</td>
-                      <td className="py-2 px-3 text-right font-bold">₹{otherDirectPerPc.toFixed(2)}</td>
-                      <td className="py-2 px-3 text-right text-slate-500">
-                        {totalCostPerPc > 0 ? ((otherDirectPerPc / totalCostPerPc) * 100).toFixed(1) : 0}%
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="py-2 px-3 font-sans font-semibold text-slate-900">9. Factory Overhead</td>
-                      <td className="py-2 px-3 text-right font-bold">₹{overheadCostPerPc.toFixed(2)}</td>
-                      <td className="py-2 px-3 text-right text-slate-500">
-                        {totalCostPerPc > 0 ? ((overheadCostPerPc / totalCostPerPc) * 100).toFixed(1) : 0}%
-                      </td>
-                    </tr>
+                    {([
+                      ['Fabric Materials', totalFabricCostPerPc],
+                      ['Yarn (In-House Recipe)', totalYarnCostPerPc],
+                      ['Trims & Accessories', totalTrimsCostPerPc],
+                      ['Knitting', H.knitting_cost],
+                      ['Dyeing & Compacting', H.dyeing_cost],
+                      ['Printing', H.printing_cost],
+                      ['Embroidery', H.embroidery_cost],
+                      ['Washing / Other Process', H.washing_cost],
+                      ['Cutting', cuttingCostPerPc],
+                      ['Sewing (SMV / Flat)', sewingCostPerPc],
+                      ['Finishing', finishingCostPerPc],
+                      ['Packing', packingCostPerPc],
+                      ['Testing', H.testing_cost],
+                      ['Freight', H.freight_cost],
+                      ['Agent Commission', H.agent_commission],
+                      ['Finance', H.finance_cost],
+                      ['Other Direct', H.other_direct_cost],
+                      ['Factory Overhead', overheadCostPerPc],
+                    ] as [string, number][]).map(([label, v], i) => (
+                      <tr key={label} className={v === 0 ? 'text-slate-400' : ''}>
+                        <td className="py-2 px-3 font-sans font-semibold text-slate-900">{i + 1}. {label}</td>
+                        <td className="py-2 px-3 text-right font-bold">₹{v.toFixed(2)}</td>
+                        <td className="py-2 px-3 text-right text-slate-500">
+                          {totalCostPerPc > 0 ? ((v / totalCostPerPc) * 100).toFixed(1) : 0}%
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                   <tfoot className="bg-slate-50 font-mono font-black border-t-2 border-slate-300">
                     <tr>
@@ -1491,13 +1487,190 @@ export default function PreCostingDetailPage() {
           </div>
         )}
 
-        {/* Other Tabs (Cutting, Finishing, Other Direct, Overhead) fallback display */}
-        {['Cutting', 'Finishing & Packing', 'Processes', 'Other Direct', 'Overhead'].includes(activeTab) && (
-          <div className="p-4 text-xs text-slate-600 space-y-2">
-            <h3 className="text-sm font-bold text-slate-900">{activeTab} Details</h3>
-            <p className="text-slate-500">
-              Configure parameters and rates for {activeTab}. Values roll directly into the Summary & FOB Pricing engine.
-            </p>
+        {/* TAB 5: PROCESSES */}
+        {activeTab === 'Processes' && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Processes / Job Work</h3>
+                <p className="text-xs text-slate-500">
+                  Per KG: Consumption (kg/pc) × Rate / KG · Per PC: Rate / PC.
+                  Knitting → Knitting head · Dyeing &amp; Compacting → Dyeing head · Washing &amp; Other → Washing / Other head
+                </p>
+              </div>
+              <div className="flex gap-2 font-mono text-[11px]">
+                <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1">Knitting ₹{H.knitting_cost.toFixed(2)}</span>
+                <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1">Dyeing ₹{H.dyeing_cost.toFixed(2)}</span>
+                <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1">Washing/Other ₹{H.washing_cost.toFixed(2)}</span>
+              </div>
+            </div>
+            <PreCostingRowTable
+              gridId="processes"
+              rows={processes}
+              onChange={setProcesses}
+              columns={[
+                { key: 'process_name', label: 'Process', type: 'text', placeholder: 'e.g. Reactive Dyeing' },
+                { key: 'process_type', label: 'Type → Head', type: 'select', options: PROCESS_TYPE_OPTIONS, width: 'w-44' },
+                { key: 'basis', label: 'Basis', type: 'select', options: PROCESS_BASIS_OPTIONS, width: 'w-24' },
+                { key: 'consumption', label: 'Cons / Pc (KG)', type: 'number', step: '0.001', disabled: (r) => r.basis !== 'PER_KG', width: 'w-20' },
+                { key: 'rate', label: 'Rate (₹)', type: 'number', step: '0.01', suffix: (r) => (r.basis === 'PER_KG' ? '/kg' : '/pc') },
+              ]}
+              newRow={() => ({ process_name: '', process_type: 'DYEING', basis: 'PER_KG', consumption: '', rate: '' })}
+              amount={(r) => processAmount(r)}
+              totalLabel="Total Process Cost Per Piece:"
+              total={totalProcessPerPc}
+              addLabel="Add Process"
+            />
+            {useYarnRecipe && (
+              <div className="rounded-lg bg-amber-50 border border-amber-200 p-2.5 text-xs text-amber-900">
+                Yarn recipe is on: knitting and dyeing rows here make up the fabric cost together with the yarn.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 6: CUTTING */}
+        {activeTab === 'Cutting' && (
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Cutting Operations</h3>
+              <p className="text-xs text-slate-500">Spreading, cutting, numbering / bundling — rate per piece. Total → Cutting head.</p>
+            </div>
+            <PreCostingRowTable
+              gridId="cutting"
+              rows={cuttingOps}
+              onChange={setCuttingOps}
+              columns={[
+                { key: 'operation', label: 'Operation', type: 'text', placeholder: 'e.g. Spreading' },
+                { key: 'rate', label: 'Rate / Pc (₹)', type: 'number', step: '0.01' },
+              ]}
+              newRow={() => ({ operation: '', rate: '' })}
+              amount={(r) => Number(r.rate) || 0}
+              totalLabel="Total Cutting Cost Per Piece:"
+              total={cuttingCostPerPc}
+              addLabel="Add Operation"
+            />
+          </div>
+        )}
+
+        {/* TAB 8: FINISHING & PACKING */}
+        {activeTab === 'Finishing & Packing' && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Finishing &amp; Packing</h3>
+                <p className="text-xs text-slate-500">
+                  Thread cutting, checking, ironing, folding, polybag, carton, tags — Qty / Pc × Rate. Each row goes to the Finishing or Packing head.
+                </p>
+              </div>
+              <div className="flex gap-2 font-mono text-[11px]">
+                <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1">Finishing ₹{finishingCostPerPc.toFixed(2)}</span>
+                <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1">Packing ₹{packingCostPerPc.toFixed(2)}</span>
+              </div>
+            </div>
+            <PreCostingRowTable
+              gridId="finishing"
+              rows={finishingItems}
+              onChange={setFinishingItems}
+              columns={[
+                { key: 'item', label: 'Item / Operation', type: 'text', placeholder: 'e.g. Ironing' },
+                { key: 'cost_type', label: 'Head', type: 'select', options: FINISH_TYPE_OPTIONS, width: 'w-28' },
+                { key: 'qty_per_pc', label: 'Qty / Pc', type: 'number', step: '0.0001', width: 'w-20' },
+                { key: 'rate', label: 'Rate (₹)', type: 'number', step: '0.01' },
+              ]}
+              newRow={() => ({ item: '', cost_type: 'FINISHING', qty_per_pc: 1, rate: '' })}
+              amount={(r) => (Number(r.qty_per_pc) || 0) * (Number(r.rate) || 0)}
+              totalLabel="Total Finishing & Packing Per Piece:"
+              total={finishingCostPerPc + packingCostPerPc}
+              addLabel="Add Item"
+            />
+          </div>
+        )}
+
+        {/* TAB 9: OTHER DIRECT */}
+        {activeTab === 'Other Direct' && (
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Other Direct Charges</h3>
+              <p className="text-xs text-slate-500">
+                ₹ per PC, % of FOB (e.g. agent commission, finance) or % of direct manufacturing cost
+                (₹{calc.manufacturing_direct.toFixed(2)}). % of FOB is solved with the margin: FOB = (Direct + Overhead) ÷ (1 − Margin% − ΣFOB%).
+              </p>
+            </div>
+            <PreCostingRowTable
+              gridId="other"
+              rows={otherDirect}
+              onChange={setOtherDirect}
+              columns={[
+                { key: 'charge_type', label: 'Charge → Head', type: 'select', options: OTHER_TYPE_OPTIONS, width: 'w-40' },
+                { key: 'description', label: 'Description', type: 'text', placeholder: 'e.g. Lab testing' },
+                { key: 'basis', label: 'Basis', type: 'select', options: OTHER_BASIS_OPTIONS, width: 'w-32' },
+                { key: 'value', label: 'Value', type: 'number', step: '0.01', suffix: (r) => (r.basis === 'PER_PC' || !r.basis ? '₹' : '%') },
+              ]}
+              newRow={() => ({ charge_type: 'OTHER', description: '', basis: 'PER_PC', value: '' })}
+              amount={otherRowAmount}
+              totalLabel="Total Other Direct Per Piece:"
+              total={otherDirectPerPc}
+              addLabel="Add Charge"
+            />
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 font-mono text-[11px]">
+              {([['Testing', H.testing_cost], ['Freight', H.freight_cost], ['Agent Comm.', H.agent_commission],
+                ['Finance', H.finance_cost], ['Other', H.other_direct_cost]] as [string, number][]).map(([l, v]) => (
+                <span key={l} className="rounded border border-slate-200 bg-slate-50 px-2 py-1">{l} ₹{v.toFixed(2)}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 10: OVERHEAD */}
+        {activeTab === 'Overhead' && (
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Factory Overhead</h3>
+              <p className="text-xs text-slate-500">
+                ₹ per piece, or % of direct cost before %-of-FOB charges (₹{(calc.direct_cost - calc.fob_pct_charges).toFixed(2)}).
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-3xl">
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Basis</label>
+                <select
+                  value={overhead.basis}
+                  onChange={(e) => setOverhead((o) => ({ ...o, basis: e.target.value }))}
+                  className="input text-xs w-full"
+                >
+                  <option value="PER_PIECE">₹ per Piece</option>
+                  <option value="PERCENT_DIRECT">% of Direct Cost</option>
+                </select>
+              </div>
+              {overhead.basis === 'PERCENT_DIRECT' ? (
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Overhead % of Direct</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={overhead.pct}
+                    onChange={(e) => setOverhead((o) => ({ ...o, pct: e.target.value === '' ? '' : Number(e.target.value) }))}
+                    className="input font-mono font-bold w-full"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Overhead ₹ / Piece</label>
+                  <input
+                    type="number"
+                    step="0.05"
+                    value={overhead.rate}
+                    onChange={(e) => setOverhead((o) => ({ ...o, rate: e.target.value === '' ? '' : Number(e.target.value) }))}
+                    className="input font-mono font-bold w-full"
+                  />
+                </div>
+              )}
+              <div className="rounded-lg border border-brand-200 bg-brand-50/40 p-3">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-brand-800">Overhead / Pc</span>
+                <p className="text-xl font-black font-mono text-brand-900">₹{overheadCostPerPc.toFixed(2)}</p>
+              </div>
+            </div>
           </div>
         )}
       </div>

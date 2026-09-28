@@ -3,7 +3,7 @@ import { z } from 'zod';
 /** Common reusable field schemas. */
 export const s = {
   str:   (max = 255) => z.string().trim().max(max),
-  strReq:(max = 255) => z.string().trim().min(1, 'This field is required').max(max),
+  strReq:(max = 255) => z.string({ error: 'This field is required' }).trim().min(1, 'This field is required').max(max),
   text:  () => z.string().trim().max(20000).nullish(),
   int:   () => z.coerce.number().int().nullish(),
   intReq:() => z.coerce.number().int(),

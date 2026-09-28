@@ -15,7 +15,9 @@ const ALLOWED_MIME_TYPES: Record<string, string> = {
   'image/webp': '.webp',
   'image/gif': '.gif',
   'image/svg+xml': '.svg',
+  'application/pdf': '.pdf',
 };
+const IMAGE_EXT = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg'];
 
 uploadRouter.post('/', ah(async (req, res) => {
   const schema = z.object({
@@ -42,8 +44,12 @@ uploadRouter.post('/', ah(async (req, res) => {
     extension = '.png';
   }
 
-  if (extension && !['.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg'].includes(extension)) {
-    throw BadRequest('Invalid image file format. Supported formats: PNG, JPG, JPEG, WEBP, GIF, SVG.');
+  // Document folders also take PDF (party DC scans, bills); style images stay image-only.
+  const allowed = folder === 'styles' ? IMAGE_EXT : [...IMAGE_EXT, '.pdf'];
+  if (extension && !allowed.includes(extension)) {
+    throw BadRequest(folder === 'styles'
+      ? 'Invalid image file format. Supported formats: PNG, JPG, JPEG, WEBP, GIF, SVG.'
+      : 'Invalid file format. Supported formats: PDF, PNG, JPG, JPEG, WEBP, GIF, SVG.');
   }
 
   const buffer = Buffer.from(base64Content, 'base64');

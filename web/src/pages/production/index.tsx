@@ -104,6 +104,7 @@ export function ProductionOrdersPage() {
     modalSize="lg"
     fields={[
       { name: 'po_prod_no', label: 'Work order no', hint: 'Blank to auto-generate' },
+      { name: 'io_no', label: 'Internal order (I/O) no', required: true },
       { name: 'prod_date', label: 'Date', type: 'date', required: true, defaultValue: today() },
       { name: 'so_id', label: 'Sales order', required: true, lookup: 'sales-orders' },
       { name: 'plan_id', label: 'Production plan', lookup: 'production-plans' },

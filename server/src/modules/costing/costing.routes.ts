@@ -6,6 +6,7 @@ import { NotFound, BadRequest } from '../../core/errors.js';
 import { requirePermission } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
+import { computePreCosting, PRE_COST_HEADS } from './preCostingCalc.js';
 
 export const costingRouter = Router();
 
@@ -991,154 +992,33 @@ costingRouter.get('/pre-costings/style-data/:styleId', requirePermission('COSTIN
 
 /**
  * 6. POST /api/pre-costings/calculate
- * Calculates detailed Pre-Costing roll-up: Fabric, Yarn, Trims, Embellishments,
- * Processes, Cutting, SMV Sewing Labour, Finishing, Packing, Overhead, Margin % & Quoted FOB.
+ * Pre-costing roll-up without saving — the same computePreCosting() the costings
+ * resource runs on create / update. Body: the sheet's data_json shape
+ * (fabrics, yarns, trims, embellishments, processes, cuttingOps, sewingOps,
+ * finishingItems, otherDirect, overhead, …) plus margin_pct, smv_rate_per_min,
+ * order_qty. `sewing_operations` / `other_charges` are accepted as aliases.
  */
 costingRouter.post('/pre-costings/calculate', requirePermission('COSTING.VIEW'), (req, res) => {
-  const b = req.body;
-  const orderQty = Number(b.order_qty) || 0;   // no hidden defaults: every input comes from the costing sheet
-
-  // 1. Fabric Cost Per Piece
-  let fabricCost = 0;
-  if (Array.isArray(b.fabrics)) {
-    for (const f of b.fabrics) {
-      const cons = Number(f.consumption) || 0;
-      const wastage = Number(f.wastage_pct) || 0;
-      const rate = Number(f.rate) || 0;
-      const grossCons = cons * (1 + wastage / 100);
-      fabricCost += grossCons * rate;
-    }
-  }
-
-  // 2. Yarn Cost Per Piece (For in-house manufactured fabric recipe)
-  let yarnCost = 0;
-  if (Array.isArray(b.yarns)) {
-    for (const y of b.yarns) {
-      const cons = Number(y.consumption) || 0;
-      const wastage = Number(y.wastage_pct) || 0;
-      const rate = Number(y.rate) || 0;
-      yarnCost += cons * (1 + wastage / 100) * rate;
-    }
-  }
-
-  // 3. Trims Cost Per Piece
-  let trimCost = 0;
-  if (Array.isArray(b.trims)) {
-    for (const t of b.trims) {
-      const cons = Number(t.consumption) || 0;
-      const wastage = Number(t.wastage_pct) || 0;
-      const rate = Number(t.rate) || 0;
-      trimCost += cons * (1 + wastage / 100) * rate;
-    }
-  }
-
-  // 4. Embellishments (Printing & Embroidery)
-  let printingCost = 0;
-  let embroideryCost = 0;
-  if (Array.isArray(b.embellishments)) {
-    for (const e of b.embellishments) {
-      const rate = Number(e.rate) || 0;
-      if (String(e.type || '').toUpperCase().includes('EMB')) {
-        embroideryCost += rate;
-      } else {
-        printingCost += rate;
-      }
-    }
-  }
-
-  // 5. In-house Process / Job Work (Knitting, Dyeing, Washing, etc.)
-  let processCost = 0;
-  if (Array.isArray(b.processes)) {
-    for (const p of b.processes) {
-      processCost += Number(p.rate) || 0;
-    }
-  }
-
-  // 6. Cutting Cost Per Piece
-  const cuttingCost = Number(b.cutting_cost) || 0;
-
-  // 7. Sewing Cost via SMV Engine
-  // Total SMV * Rate per minute
-  let totalSmv = Number(b.smv) || 0;
-  let smvRatePerMin = Number(b.smv_rate_per_min) || 0;
-  if (Array.isArray(b.sewing_operations) && b.sewing_operations.length > 0) {
-    totalSmv = b.sewing_operations.reduce((s: number, op: any) => s + (Number(op.smv) || 0), 0);
-  }
-  const stitchingCost = totalSmv * smvRatePerMin;
-
-  // 8. Finishing & Packing Cost Per Piece
-  let finishingCost = Number(b.finishing_cost) || 0;
-  let packingCost = 0;
-  if (Array.isArray(b.packings)) {
-    for (const pk of b.packings) {
-      const cons = Number(pk.consumption) || 0;
-      const rate = Number(pk.rate) || 0;
-      packingCost += cons * rate;
-    }
-  }
-  if (packingCost === 0) packingCost = Number(b.packing_cost) || 0;
-
-  // 9. Other Direct Charges
-  let otherDirectCost = 0;
-  if (Array.isArray(b.other_charges)) {
-    for (const ch of b.other_charges) {
-      otherDirectCost += Number(ch.rate_per_pc) || (orderQty > 0 ? Number(ch.total_amount) / orderQty : 0);
-    }
-  }
-
-  // DIRECT COST PER PIECE
-  const directCostPerPc =
-    fabricCost + yarnCost + trimCost + printingCost + embroideryCost +
-    processCost + cuttingCost + stitchingCost + finishingCost + packingCost + otherDirectCost;
-
-  // 10. Overhead Allocation
-  let overheadCost = 0;
-  const overheadBasis = b.overhead_basis || 'PER_PIECE';
-  if (overheadBasis === 'PERCENT_DIRECT') {
-    overheadCost = directCostPerPc * ((Number(b.overhead_pct) || 0) / 100);
-  } else {
-    overheadCost = Number(b.overhead_rate) || 0;
-  }
-
-  // TOTAL PRE-COST PER PIECE
-  const totalCostPerPc = directCostPerPc + overheadCost;
-
-  // 11. Margin % vs Markup % & Quoted FOB Selling Price
-  const marginPct = Number(b.margin_pct) || 0; // Margin = (Price - Cost) / Price
-  const markupPct = Number(b.markup_pct) || (marginPct / (1 - marginPct / 100)); // Markup = (Price - Cost) / Cost
-  const fobPricePerPc = marginPct >= 100 ? totalCostPerPc : (totalCostPerPc / (1 - marginPct / 100));
-  const profitAmountPerPc = fobPricePerPc - totalCostPerPc;
-
-  // Total Order Values
-  const totalOrderCost = totalCostPerPc * orderQty;
-  const totalOrderFob = fobPricePerPc * orderQty;
-  const totalOrderProfit = profitAmountPerPc * orderQty;
-
+  const b = { ...(req.body ?? {}) };
+  if (b.sewingOps == null && Array.isArray(b.sewing_operations)) b.sewingOps = b.sewing_operations;
+  if (b.otherCharges == null && Array.isArray(b.other_charges)) b.otherCharges = b.other_charges;
+  const fallback: Record<string, unknown> = { smv: b.smv };
+  for (const h of PRE_COST_HEADS) fallback[h] = b[h];
+  const r = computePreCosting(b, { margin_pct: b.margin_pct, smv_rate_per_min: b.smv_rate_per_min, fallback });
+  if (r.error) throw BadRequest(r.error);
+  const orderQty = Number(b.order_qty) || 0;
   res.json({
     data: {
-      fabric_cost: fabricCost,
-      yarn_cost: yarnCost,
-      trim_cost: trimCost,
-      printing_cost: printingCost,
-      embroidery_cost: embroideryCost,
-      process_cost: processCost,
-      cutting_cost: cuttingCost,
-      stitching_cost: stitchingCost,
-      finishing_cost: finishingCost,
-      packing_cost: packingCost,
-      other_direct_cost: otherDirectCost,
-      overhead_cost: overheadCost,
-      total_smv: totalSmv,
-      smv_rate_per_min: smvRatePerMin,
-      direct_cost_per_pc: directCostPerPc,
-      total_cost_per_pc: totalCostPerPc,
-      profit_amount_per_pc: profitAmountPerPc,
-      margin_pct: marginPct,
-      markup_pct: markupPct,
-      fob_price_per_pc: fobPricePerPc,
-      total_order_cost: totalOrderCost,
-      total_order_fob: totalOrderFob,
-      total_order_profit: totalOrderProfit,
+      ...r.heads,
+      ...r,
+      total_smv: r.smv,
+      direct_cost_per_pc: r.direct_cost,
+      total_cost_per_pc: r.total_cost,
+      profit_amount_per_pc: r.profit_per_pc,
+      fob_price_per_pc: r.fob_price,
+      total_order_cost: r.total_cost * orderQty,
+      total_order_fob: r.fob_price * orderQty,
+      total_order_profit: r.profit_per_pc * orderQty,
     },
   });
 });

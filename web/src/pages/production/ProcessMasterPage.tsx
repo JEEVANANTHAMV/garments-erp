@@ -280,6 +280,7 @@ export function ContractorBillsPage() {
             { key: 'line_count', header: 'Inwards', align: 'right' as const },
             { key: 'billed_qty', header: 'PCS', align: 'right' as const, render: (r: any) => fmtNumber(r.billed_qty) },
             { key: 'gross_amount', header: 'Gross', align: 'right' as const, render: (r: any) => money(r.gross_amount) },
+            { key: 'gst_amount', header: 'GST', align: 'right' as const, render: (r: any) => num(r.gst_amount) ? money(r.gst_amount) : '—' },
             { key: 'tds_amount', header: 'TDS', align: 'right' as const, render: (r: any) => num(r.tds_amount) ? money(r.tds_amount) : '—' },
             { key: 'net_amount', header: 'Net payable', align: 'right' as const, render: (r: any) => <b>{money(r.net_amount)}</b> },
             { key: 'status', header: 'Status', render: (r: any) => <Badge tone={BILL_TONE[r.status] ?? 'slate'}>{r.status}</Badge> },
@@ -294,7 +295,7 @@ export function ContractorBillsPage() {
 function NewBillModal({ onClose, onSaved }: { onClose: () => void; onSaved: (id: number) => void }) {
   const toast = useToast();
   const contractors = useContractors();
-  const [f, setF] = useState<any>({ vendor_id: '', bill_date: today(), period_from: '', period_to: '', tds_pct: '1', other_deduction_label: '', other_deduction: '', remarks: '' });
+  const [f, setF] = useState<any>({ vendor_id: '', bill_date: today(), period_from: '', period_to: '', tds_pct: '1', gst_pct: '0', is_interstate: false, other_deduction_label: '', other_deduction: '', remarks: '' });
   const [rows, setRows] = useState<any[]>([]);
   const [picked, setPicked] = useState<Set<number>>(new Set());
   const [saving, setSaving] = useState(false);
@@ -308,8 +309,10 @@ function NewBillModal({ onClose, onSaved }: { onClose: () => void; onSaved: (id:
 
   const sel = rows.filter((r) => picked.has(r.receipt_id));
   const gross = sel.reduce((a, r) => a + num(r.amount), 0);
+  // Same order as the server: GST on the job-work value, TDS on the value before GST.
+  const gst = Math.round(gross * num(f.gst_pct)) / 100;
   const tds = Math.round(gross * num(f.tds_pct)) / 100;
-  const net = Math.round(gross - tds - num(f.other_deduction));
+  const net = Math.round(gross + gst - tds - num(f.other_deduction));
   const unpriced = sel.some((r) => !num(r.rate));
 
   const save = async () => {
@@ -317,7 +320,8 @@ function NewBillModal({ onClose, onSaved }: { onClose: () => void; onSaved: (id:
     try {
       const r = await api.post('/contractor-bills', {
         ...f, vendor_id: Number(f.vendor_id), period_from: f.period_from || null, period_to: f.period_to || null,
-        tds_pct: num(f.tds_pct), other_deduction: num(f.other_deduction), other_deduction_label: f.other_deduction_label || null,
+        tds_pct: num(f.tds_pct), gst_pct: num(f.gst_pct), is_interstate: !!f.is_interstate,
+        other_deduction: num(f.other_deduction), other_deduction_label: f.other_deduction_label || null,
         remarks: f.remarks || null, receipt_ids: [...picked],
       });
       toast(`Bill ${r.data.data.bill_no} saved`); onSaved(r.data.data.id);
@@ -340,6 +344,11 @@ function NewBillModal({ onClose, onSaved }: { onClose: () => void; onSaved: (id:
         <Input label="Inwards to" type="date" value={f.period_to} onChange={(e) => setF({ ...f, period_to: e.target.value })} />
         <Input label="Other deduction" value={f.other_deduction_label} placeholder="e.g. Advance" onChange={(e) => setF({ ...f, other_deduction_label: e.target.value })} />
         <Input label="Deduction amount (₹)" type="number" min={0} step="0.01" value={f.other_deduction} onChange={(e) => setF({ ...f, other_deduction: e.target.value })} />
+        <Select label="GST % (job work)" value={f.gst_pct} onChange={(e) => setF({ ...f, gst_pct: e.target.value })}
+          options={['0', '5', '12', '18'].map((v) => ({ value: v, label: v === '0' ? 'No GST (unregistered / in-house)' : `${v}%` }))} />
+        <label className="flex items-end gap-2 pb-2 text-sm text-slate-700">
+          <input type="checkbox" checked={!!f.is_interstate} onChange={(e) => setF({ ...f, is_interstate: e.target.checked })} />Inter-state (IGST)
+        </label>
       </div>
       {unpriced && <p className="mt-2 rounded bg-amber-50 px-3 py-1.5 text-xs text-amber-800">Some inwards come from DCs without a rate — they bill at ₹0. Set the rate on the DC or the contractor operation rates.</p>}
       <table className="mt-3 w-full text-xs">
@@ -378,6 +387,10 @@ function NewBillModal({ onClose, onSaved }: { onClose: () => void; onSaved: (id:
       </table>
       <div className="mt-3 ml-auto w-72 space-y-1 text-sm">
         <div className="flex justify-between"><span>Gross</span><span>{money(gross)}</span></div>
+        {gst > 0 && (f.is_interstate
+          ? <div className="flex justify-between"><span>IGST ({num(f.gst_pct)}%)</span><span>+ {money(gst)}</span></div>
+          : <><div className="flex justify-between"><span>CGST ({num(f.gst_pct) / 2}%)</span><span>+ {money(gst / 2)}</span></div>
+              <div className="flex justify-between"><span>SGST ({num(f.gst_pct) / 2}%)</span><span>+ {money(gst / 2)}</span></div></>)}
         <div className="flex justify-between text-red-600"><span>TDS ({num(f.tds_pct)}%)</span><span>− {money(tds)}</span></div>
         {num(f.other_deduction) > 0 && <div className="flex justify-between text-red-600"><span>{f.other_deduction_label || 'Other deduction'}</span><span>− {money(f.other_deduction)}</span></div>}
         <div className="flex justify-between border-t border-slate-200 pt-1 font-bold"><span>Net payable</span><span>{money(net)}</span></div>
@@ -440,6 +453,7 @@ function BillDetail({ id, onClose, onChanged }: { id: number; onClose: () => voi
       </table>
       <div className="mt-3 ml-auto w-72 space-y-1 text-sm">
         <div className="flex justify-between"><span>Gross ({fmtNumber(b.billed_qty)} PCS)</span><span>{money(b.gross_amount)}</span></div>
+        {num(b.gst_amount) > 0 && <div className="flex justify-between"><span>{b.is_interstate ? 'IGST' : 'CGST + SGST'} ({num(b.gst_pct)}%)</span><span>+ {money(b.gst_amount)}</span></div>}
         <div className="flex justify-between text-red-600"><span>TDS ({num(b.tds_pct)}%)</span><span>− {money(b.tds_amount)}</span></div>
         {num(b.other_deduction) > 0 && <div className="flex justify-between text-red-600"><span>{b.other_deduction_label || 'Other deduction'}</span><span>− {money(b.other_deduction)}</span></div>}
         <div className="flex justify-between text-slate-500"><span>Round off</span><span>{num(b.round_off).toFixed(2)}</span></div>
@@ -479,6 +493,9 @@ function printBill(b: any) {
       <th class="r">Billed PCS</th><th class="r">Rate</th><th class="r">Amount</th></tr></thead><tbody>${rows}</tbody></table>
     <table class="tot" style="width:40%;margin-left:auto">
       <tr><td>Gross</td><td class="r">${num(b.gross_amount).toFixed(2)}</td></tr>
+      ${num(b.gst_amount) ? (b.is_interstate
+        ? `<tr><td>IGST (${num(b.gst_pct)}%)</td><td class="r">${num(b.gst_amount).toFixed(2)}</td></tr>`
+        : `<tr><td>CGST (${num(b.gst_pct) / 2}%)</td><td class="r">${(num(b.gst_amount) / 2).toFixed(2)}</td></tr><tr><td>SGST (${num(b.gst_pct) / 2}%)</td><td class="r">${(num(b.gst_amount) / 2).toFixed(2)}</td></tr>`) : ''}
       <tr><td>TDS (${num(b.tds_pct)}%)</td><td class="r">- ${num(b.tds_amount).toFixed(2)}</td></tr>
       ${num(b.other_deduction) ? `<tr><td>${esc(b.other_deduction_label || 'Other deduction')}</td><td class="r">- ${num(b.other_deduction).toFixed(2)}</td></tr>` : ''}
       <tr><td>Round off</td><td class="r">${num(b.round_off).toFixed(2)}</td></tr>
