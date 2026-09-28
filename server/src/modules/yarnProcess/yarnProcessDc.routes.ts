@@ -115,7 +115,7 @@ yarnProcessDcRouter.get('/yarn-process-dcs', requirePermission('PRODUCTION.VIEW'
   const rows = await query<any>(
     `SELECT i.dc_no, MIN(i.issue_date) AS dc_date, i.src_id AS process_id, yp.process_no, yp.process_type, yp.io_no,
             MAX(i.vendor_id) AS vendor_id, MAX(p.party_name) AS vendor_name, MAX(i.vehicle_no) AS vehicle_no,
-            COUNT(*) AS lines, SUM(i.issued_qty_kg) AS issued_kg, SUM(i.no_of_cones) AS cones,
+            COUNT(*) AS line_count, SUM(i.issued_qty_kg) AS issued_kg, SUM(i.no_of_cones) AS cones,
             MAX(COALESCE(rc.received_kg, 0)) AS received_kg, MAX(COALESCE(rc.output_kg, 0)) AS output_kg
        FROM trx_process_issue i
        JOIN trx_yarn_process yp ON yp.id = i.src_id

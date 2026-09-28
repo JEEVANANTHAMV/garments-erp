@@ -1232,7 +1232,7 @@ for (const proc of PROCS) {
     const qp = z.object({ from: dateStr, to: dateStr, group_by: z.enum(['job', 'style', 'colour', 'size', 'line']).default('job') }).parse(req.query);
     const col = { job: 'd.io_no', style: 'st.style_code', colour: 'col.color_name', size: 'sz.size_code', line: 'l.line_code' }[qp.group_by];
     const rows = await query<any>(
-      `SELECT ${col} AS group_key, COUNT(DISTINCT d.bundle_id) AS bundles, COUNT(DISTINCT d.line_id) AS lines,
+      `SELECT ${col} AS group_key, COUNT(DISTINCT d.bundle_id) AS bundles, COUNT(DISTINCT d.line_id) AS line_count,
               SUM(d.allocated_qty) AS allocated, SUM(d.completed_qty) AS completed,
               SUM(GREATEST(CAST(d.allocated_qty AS SIGNED) - CAST(d.completed_qty AS SIGNED), 0)) AS open_qty
          FROM ${c.allocD} d JOIN ${c.alloc} a ON a.id = d.allocation_id
@@ -1242,7 +1242,7 @@ for (const proc of PROCS) {
          LEFT JOIN mst_size sz ON sz.id = d.size_id
         WHERE a.company_id = ? AND a.status <> 'CANCELLED' AND d.status <> 'CANCELLED' AND a.allocation_date BETWEEN ? AND ?
         GROUP BY ${col} ORDER BY allocated DESC`, [cid, qp.from, qp.to]);
-    res.json({ data: rows.map((r) => ({ ...r, allocated: n(r.allocated), completed: n(r.completed), open_qty: n(r.open_qty), bundles: n(r.bundles), lines: n(r.lines) })) });
+    res.json({ data: rows.map((r) => ({ ...r, allocated: n(r.allocated), completed: n(r.completed), open_qty: n(r.open_qty), bundles: n(r.bundles), lines: n(r.line_count) })) });
   }));
 }
 
