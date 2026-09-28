@@ -32,11 +32,18 @@ def call(method, path, body=None, expect=None):
     req = urllib.request.Request(url, method=method, data=data, headers={
         'Content-Type': 'application/json', 'Accept': 'application/json',
         **({'Authorization': f'Bearer {TOKEN}'} if TOKEN else {})})
-    try:
-        with urllib.request.urlopen(req, timeout=60) as r:
-            code, raw = r.status, r.read()
-    except urllib.error.HTTPError as e:
-        code, raw = e.code, e.read()
+    # GETs are retried on a dropped connection (safe); a dropped write is reported, never retried.
+    for attempt in range(3 if method == 'GET' else 1):
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                code, raw = r.status, r.read()
+            break
+        except urllib.error.HTTPError as e:
+            code, raw = e.code, e.read()
+            break
+        except (urllib.error.URLError, ConnectionError, TimeoutError) as e:
+            code, raw = 0, json.dumps({'error': {'message': f'network: {e}'}}).encode()
+            time.sleep(2)
     try:
         js = json.loads(raw or b'{}')
     except Exception:
