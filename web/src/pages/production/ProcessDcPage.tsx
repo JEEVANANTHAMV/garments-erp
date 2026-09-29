@@ -25,6 +25,8 @@ type Avail = {
   color_name: string; size_code: string; size_sort: number; qty: number; status: string; lay_no: string | null;
   cut_no: string | null; plan_no: string; available_qty: number; open_dc_no: string | null;
   buyer_name: string | null; buyer_po_no: string | null; assort_color?: string | null;
+  /** Open in-house line allocation of the bundle for this process (stitching / ironing / packing DC). */
+  line_alloc?: { allocation_no: string; line_code: string; open_qty: number } | null;
 };
 type Line = Avail & { issue_qty: number; weight_kg: string; remarks: string; operation_id: string; operator_line: string };
 type Job = { key: string; io_no: string | null; buyer_name: string | null; buyer_po_no: string | null; style_codes: string[]; order_type?: string | null };
@@ -300,6 +302,7 @@ function DcEditor({ id, stages, onClose, onSaved }: {
   const [head, setHead] = useState<any>({
     challan_no: '', challan_date: today(), stage_id: '', vendor_id: '', from_warehouse_id: '', to_warehouse_id: '',
     ref_no: '', expected_return: '', rate: '', vehicle_no: '', driver_name: '', transporter: '', remarks: '',
+    release_line_allocation: false,
   });
   const [lines, setLines] = useState<Line[]>([]);
   const [jobMeta, setJobMeta] = useState<Record<string, Job>>({});
@@ -324,6 +327,7 @@ function DcEditor({ id, stages, onClose, onSaved }: {
         from_warehouse_id: d.from_warehouse_id ?? '', to_warehouse_id: d.to_warehouse_id ?? '', ref_no: d.ref_no ?? '',
         expected_return: d.expected_return ? String(d.expected_return).slice(0, 10) : '', rate: d.rate ?? '',
         vehicle_no: d.vehicle_no ?? '', driver_name: d.driver_name ?? '', transporter: d.transporter ?? '', remarks: d.remarks ?? '',
+        release_line_allocation: !!d.release_line_alloc,
       });
       setOpSel(Object.fromEntries((d.operations || []).map((o: any) => [o.operation_id, String(Number(o.rate))])));
       setRateTouched(d.rate != null && !(d.operations || []).length);
@@ -468,6 +472,17 @@ function DcEditor({ id, stages, onClose, onSaved }: {
           <Input label="Vehicle no" value={head.vehicle_no} onChange={(e) => setHead({ ...head, vehicle_no: e.target.value.toUpperCase() })} />
           <Input label="Driver" value={head.driver_name} onChange={(e) => setHead({ ...head, driver_name: e.target.value })} />
         </div>
+        {(stage?.kind === 'SEWING' || stage?.kind === 'FINISHING' || ['PACK', 'PACKING'].includes(String(stage?.stage_code ?? '').toUpperCase())) && (
+          <label className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-xs ${lines.some((l) => l.line_alloc) ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
+            <input type="checkbox" className="mt-0.5" checked={!!head.release_line_allocation}
+              onChange={(e) => setHead({ ...head, release_line_allocation: e.target.checked })} />
+            <span>
+              <b>Release in-house line allocation</b> — bundles already allocated to an in-house {stage?.kind === 'SEWING' ? 'sewing' : stage?.kind === 'FINISHING' ? 'ironing' : 'packing'} line
+              can go on this DC only when this is ticked; issuing the DC then takes the PCS off that line allocation and its daily plan.
+              {lines.some((l) => l.line_alloc) && <> <b>{lines.filter((l) => l.line_alloc).length}</b> bundle(s) on this DC are allocated in-house.</>}
+            </span>
+          </label>
+        )}
         <ScanCard value={scan} onChange={setScan} onSubmit={onScan} disabled={!head.stage_id} inputRef={scanRef}
           placeholder={head.stage_id ? 'Scan bundle barcode + Enter' : 'Choose the To process first'}
           last={last ? { ...last, qty: last.available_qty } : null} />
@@ -587,7 +602,10 @@ function DcEditor({ id, stages, onClose, onSaved }: {
                               <input type="checkbox" checked={checked.has(l.id)} onChange={() => setChecked(toggle(checked, l.id))} />
                             </td>
                             <td className="px-2 py-1 text-slate-400">{i + 1}</td>
-                            <td className="px-2 py-1 font-mono font-semibold text-slate-800">{l.bundle_no}</td>
+                            <td className="px-2 py-1 font-mono font-semibold text-slate-800">
+                              {l.bundle_no}
+                              {l.line_alloc && <Badge tone="amber" className="ml-1">line {l.line_alloc.line_code} · {l.line_alloc.allocation_no}</Badge>}
+                            </td>
                             <td className="px-2 py-1">{l.lay_no ?? '—'}</td>
                             <td className="px-2 py-1">{l.cut_no ?? '—'}</td>
                             <td className="px-2 py-1">{l.part_name ?? '—'}</td>
@@ -878,6 +896,7 @@ function BundlePicker({ stage, excluded, onClose, onAdd }: { stage: Stage; exclu
                 <span className="text-slate-400">{b.part_name}</span>
                 {b.lay_no && <span className="text-slate-400">Lay {b.lay_no}</span>}
                 {b.open_dc_no && <Badge tone="amber">on {b.open_dc_no}</Badge>}
+                {b.line_alloc && <Badge tone="violet">in-house line {b.line_alloc.line_code} · {b.line_alloc.allocation_no} ({b.line_alloc.open_qty} PCS)</Badge>}
                 <span className="ml-auto font-semibold text-slate-700">{b.available_qty} PCS</span>
               </label>
             ))}
