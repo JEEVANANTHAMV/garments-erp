@@ -814,6 +814,7 @@ processDcRouter.post('/process-dcs/:id/cancel', requirePermission('PRODUCTION.UP
     const dc = await txQueryOne<any>(tx, `SELECT * FROM trx_jobwork_challan WHERE id = ? AND company_id = ? FOR UPDATE`, [id, cid]);
     if (!dc) throw NotFound('DC not found');
     let restored: any[] = [];
+    if (dc.status === 'CANCELLED') throw BadRequest(`DC ${dc.challan_no} is already cancelled`);
     if (!['DRAFT', 'ISSUED'].includes(dc.status)) {
       throw BadRequest(`DC ${dc.challan_no} is ${dc.status} — goods have been received against it; close it short instead`);
     }
