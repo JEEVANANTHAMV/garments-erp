@@ -1,6 +1,7 @@
 import type { Request } from 'express';
 import { query, txQuery, txExecute, type Tx } from '../../config/db.js';
 import { audit } from '../../core/audit.js';
+import { bundleAvail, ironingRequiresChecking } from './bundleLedger.js';
 
 /**
  * Link between Process DCs (job work) and in-house line allocation.
@@ -60,7 +61,7 @@ export async function openLineAllocations(tx: Tx | null, cid: number, proc: Link
  * Release `qty` PCS of a bundle from its in-house allocations (oldest first) and
  * trim open daily-plan rows of those allocations to match. Returns what was released.
  */
-export async function releaseLineAllocation(tx: Tx, req: Request, proc: LinkProc, bundleId: number, qty: number, reason: string) {
+export async function releaseLineAllocation(tx: Tx, req: Request, proc: LinkProc, bundleId: number, qty: number, reason: string, challanId?: number) {
   const t = T[proc];
   const cid = req.user!.companyId;
   const rows = await txQuery<any>(tx,
@@ -92,7 +93,17 @@ export async function releaseLineAllocation(tx: Tx, req: Request, proc: LinkProc
       const planned = n(pd.planned_qty) - cut;
       await txExecute(tx, `UPDATE ${t.planD} SET planned_qty = ?, status = ? WHERE id = ?`,
         [planned, planned <= 0 ? 'CANCELLED' : planned <= n(pd.achieved_qty) ? 'COMPLETED' : pd.status, pd.id]);
+      if (challanId) {
+        await txExecute(tx,
+          `INSERT INTO trx_dc_alloc_release (company_id, challan_id, bundle_id, proc, kind, allocation_detail_id, plan_detail_id, qty) VALUES (?,?,?,?,'PLAN',?,?,?)`,
+          [cid, challanId, bundleId, proc, d.id, pd.id, cut]);
+      }
       planLeft -= cut;
+    }
+    if (challanId) {
+      await txExecute(tx,
+        `INSERT INTO trx_dc_alloc_release (company_id, challan_id, bundle_id, proc, kind, allocation_detail_id, qty) VALUES (?,?,?,?,'ALLOC',?,?)`,
+        [cid, challanId, bundleId, proc, d.id, take]);
     }
     released.push({ allocation_no: d.allocation_no, qty: take });
     left -= take;
@@ -194,4 +205,114 @@ export async function recordLineOutput(tx: Tx, req: Request, proc: LinkProc, lin
   }
   if (booked) await audit(req, t.allocD, bundleId, 'UPDATE', undefined, { action: 'OUTPUT_FROM_DC', line_id: lineId, bundle_id: bundleId, qty: booked, ref }, tx);
   return booked;
+}
+
+/**
+ * PCS of each bundle out at stitching contractors (issued on an open stitching DC,
+ * not yet received back). A stitching DC books them as sewing WIP, so in-house
+ * sewing stock must leave them out.
+ */
+export async function stitchDcPending(tx: Tx | null, cid: number, bundleIds: number[]) {
+  const map = new Map<number, number>();
+  if (!bundleIds.length) return map;
+  const sql = `SELECT jl.bundle_id, SUM(GREATEST(jl.qty - jl.received_qty - jl.rejected_qty - jl.shortage_qty, 0)) AS pending
+                 FROM trx_jobwork_challan_line jl
+                 JOIN trx_jobwork_challan jc ON jc.id = jl.challan_id
+                 JOIN cfg_process_stage ps ON ps.id = jc.stage_id
+                WHERE jc.company_id = ? AND jc.status IN ('ISSUED','PARTIAL_RECEIVED')
+                  AND UPPER(ps.stage_code) IN ('STITCH','STITCHING','SEW','SEWING') AND jl.bundle_id IN (?)
+                GROUP BY jl.bundle_id`;
+  const rows = tx ? await txQuery<any>(tx, sql, [cid, bundleIds]) : await query<any>(sql, [cid, bundleIds]);
+  for (const r of rows) if (n(r.pending) > 0) map.set(Number(r.bundle_id), n(r.pending));
+  return map;
+}
+
+/** PCS of a bundle the process can take now (same rule as line allocation stock). */
+function readyFor(proc: LinkProc, b: Record<string, any>, strictChecking: boolean) {
+  const a = bundleAvail({ ...b, balance_qty: b.balance_qty ?? b.qty });
+  switch (proc) {
+    case 'sewing': return a.cut + a.sewing_wip;
+    case 'checking': return a.checking;
+    case 'ironing': return (strictChecking ? a.checked : a.sewn) + a.finishing_wip;
+    default: return a.pack;
+  }
+}
+
+/**
+ * DC cancelled: give back to the line allocations (and still-open daily plans)
+ * what this DC released — only while the allocation is active and only as many
+ * PCS as are free again (PCS allocated elsewhere meanwhile keep that allocation).
+ * Call after the DC's stock has been reversed.
+ */
+export async function restoreLineAllocations(tx: Tx, req: Request, challanId: number) {
+  const cid = req.user!.companyId;
+  const rows = await txQuery<any>(tx,
+    `SELECT * FROM trx_dc_alloc_release WHERE company_id = ? AND challan_id = ? AND status = 'RELEASED' ORDER BY kind, id FOR UPDATE`, [cid, challanId]);
+  if (!rows.length) return [];
+  const strict = await ironingRequiresChecking(tx, cid);
+  const restoredByDetail = new Map<string, number>();
+  const out: { proc: string; kind: string; allocation_no?: string; plan_no?: string; qty: number; restored: number; note: string }[] = [];
+  const mark = async (r: any, restored: number, note: string) => {
+    const status = restored >= n(r.qty) ? 'RESTORED' : restored > 0 ? 'PARTIAL' : 'SKIPPED';
+    await txExecute(tx, `UPDATE trx_dc_alloc_release SET restored_qty = ?, status = ?, note = ?, restored_at = NOW() WHERE id = ?`,
+      [restored, status, note.slice(0, 255), r.id]);
+  };
+
+  for (const r of rows.filter((x) => x.kind === 'ALLOC')) {
+    const t = T[r.proc as LinkProc];
+    const d = await txQuery<any>(tx,
+      `SELECT d.*, h.status AS head_status, h.allocation_no FROM ${t.allocD} d JOIN ${t.alloc} h ON h.id = d.allocation_id WHERE d.id = ? FOR UPDATE`,
+      [r.allocation_detail_id]).then((x) => x[0]);
+    if (!d) { await mark(r, 0, 'allocation row not found'); continue; }
+    if (!ACTIVE_ALLOC.includes(d.head_status)) {
+      const note = `allocation ${d.allocation_no} is ${d.head_status} — not restored`;
+      await mark(r, 0, note); out.push({ proc: r.proc, kind: 'ALLOC', allocation_no: d.allocation_no, qty: n(r.qty), restored: 0, note }); continue;
+    }
+    const b = await txQuery<any>(tx, `SELECT * FROM trx_cutting_bundle WHERE id = ? FOR UPDATE`, [r.bundle_id]).then((x) => x[0]);
+    const others = await txQuery<any>(tx,
+      `SELECT COALESCE(SUM(GREATEST(CAST(d.allocated_qty AS SIGNED) - CAST(d.completed_qty AS SIGNED), 0)), 0) AS open_qty
+         FROM ${t.allocD} d JOIN ${t.alloc} h ON h.id = d.allocation_id
+        WHERE h.company_id = ? AND h.status IN (?) AND d.status = 'ALLOCATED' AND d.bundle_id = ? AND d.id <> ?`,
+      [cid, ACTIVE_ALLOC, r.bundle_id, d.id]).then((x) => n(x[0]?.open_qty));
+    const ownOpen = d.status === 'ALLOCATED' ? Math.max(n(d.allocated_qty) - n(d.completed_qty), 0) : 0;
+    const atContractor = r.proc === 'sewing' ? (await stitchDcPending(tx, cid, [Number(r.bundle_id)])).get(Number(r.bundle_id)) ?? 0 : 0;
+    const free = Math.max(readyFor(r.proc, b ?? {}, strict) - atContractor - others - ownOpen, 0);
+    const restore = Math.min(n(r.qty), free);
+    if (restore > 0) {
+      const allocated = n(d.allocated_qty) + restore;
+      await txExecute(tx,
+        `UPDATE ${t.allocD} SET allocated_qty = ?, status = ?, remarks = LEFT(CONCAT_WS(' · ', remarks, ?), 255) WHERE id = ?`,
+        [allocated, allocated > n(d.completed_qty) ? 'ALLOCATED' : d.status, `${restore} PCS restored (DC cancelled)`, d.id]);
+    }
+    const note = restore >= n(r.qty) ? 'restored' : restore > 0 ? `only ${restore} PCS free again — the rest is allocated elsewhere` : 'PCS already allocated elsewhere — not restored';
+    restoredByDetail.set(`${r.proc}|${d.id}`, restore);
+    await mark(r, restore, note);
+    out.push({ proc: r.proc, kind: 'ALLOC', allocation_no: d.allocation_no, qty: n(r.qty), restored: restore, note });
+  }
+
+  for (const r of rows.filter((x) => x.kind === 'PLAN')) {
+    const t = T[r.proc as LinkProc];
+    const key = `${r.proc}|${r.allocation_detail_id}`;
+    const room = restoredByDetail.get(key) ?? 0;
+    const pd = await txQuery<any>(tx,
+      `SELECT pd.*, p.status AS plan_status, p.plan_no, p.plan_date >= CURDATE() AS current_plan
+         FROM ${t.planD} pd JOIN ${t.plan} p ON p.id = pd.plan_id WHERE pd.id = ? FOR UPDATE`, [r.plan_detail_id]).then((x) => x[0]);
+    let restore = 0; let note = '';
+    if (!pd) note = 'plan row not found';
+    else if (!OPEN_PLAN.includes(pd.plan_status)) note = `plan ${pd.plan_no} is ${pd.plan_status} — not restored`;
+    else if (!n(pd.current_plan)) note = `plan ${pd.plan_no} is for a past date — not restored`;
+    else if (room <= 0) note = 'allocation not restored, so the plan is not either';
+    else {
+      restore = Math.min(n(r.qty), room);
+      const planned = n(pd.planned_qty) + restore;
+      await txExecute(tx, `UPDATE ${t.planD} SET planned_qty = ?, status = ? WHERE id = ?`,
+        [planned, n(pd.achieved_qty) >= planned ? 'COMPLETED' : n(pd.achieved_qty) > 0 ? 'IN_PROGRESS' : 'PLANNED', pd.id]);
+      restoredByDetail.set(key, room - restore);
+      note = restore >= n(r.qty) ? 'restored' : `only ${restore} PCS restored`;
+    }
+    await mark(r, restore, note);
+    out.push({ proc: r.proc, kind: 'PLAN', plan_no: pd?.plan_no, qty: n(r.qty), restored: restore, note });
+  }
+  await audit(req, 'trx_dc_alloc_release', challanId, 'UPDATE', undefined, { action: 'RESTORED_ON_DC_CANCEL', challan_id: challanId, result: out }, tx);
+  return out;
 }

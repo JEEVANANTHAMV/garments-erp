@@ -12,8 +12,8 @@ import {
   TERMINAL, type BundleRow, type Counter, type Level,
 } from './bundleLedger.js';
 import {
-  linkProcOf, openLineAllocations, releaseLineAllocation,
-  sourceProcOf, lineInfo, lineOpenBundles, recordLineOutput, type LinkProc,
+  linkProcOf, openLineAllocations, releaseLineAllocation, restoreLineAllocations,
+  sourceProcOf, lineInfo, lineOpenBundles, recordLineOutput, stitchDcPending, type LinkProc,
 } from './lineAllocationLink.js';
 import { postBundleSewingOutput, postCheckingQc } from './productionFloor.routes.js';
 
@@ -24,10 +24,10 @@ import { postBundleSewingOutput, postCheckingQc } from './productionFloor.routes
  * for a checking line (strict checking). Ironing lines post their output on
  * the floor, so no room there.
  */
-function fromLineAvail(b: BundleRow, st: StageInfo, src: LinkProc, strictChk: boolean) {
+function fromLineAvail(b: BundleRow, st: StageInfo, src: LinkProc, strictChk: boolean, atContractor = 0) {
   const a = bundleAvail({ ...b, balance_qty: b.balance_qty ?? b.qty });
   const base = strictChk ? a.checked : availAt(b, st.level);
-  if (src === 'sewing' && st.level === 'SEWN') return { base, room: a.cut + a.sewing_wip };
+  if (src === 'sewing' && st.level === 'SEWN') return { base, room: Math.max(a.cut + a.sewing_wip - atContractor, 0) };
   if (src === 'checking' && strictChk) return { base, room: a.checking };
   return { base, room: 0 };
 }
@@ -290,6 +290,7 @@ async function availableBundles(cid: number, qp: z.infer<typeof availQuery>, onl
   const holds = st ? await openDcHolds(null, cid, st.id, rows.map((r) => Number(r.id))) : new Map();
   const linkProc = st ? linkProcOf(st) : null;
   const lineAllocs = linkProc ? await openLineAllocations(null, cid, linkProc, rows.map((r) => Number(r.id))) : new Map();
+  const contractorPending = fromLine?.proc === 'sewing' ? await stitchDcPending(null, cid, rows.map((r) => Number(r.id))) : new Map<number, number>();
   const jobs = await jobInfo(cid, rows.map((r) => r.io_no));
   const assort = await assortColors(jobs, rows);
   const data = rows.map((b) => ({
@@ -300,7 +301,7 @@ async function availableBundles(cid: number, qp: z.infer<typeof availQuery>, onl
     buyer_name: jobs.get(b.io_no)?.buyer_name ?? null, buyer_po_no: jobs.get(b.io_no)?.buyer_po_no ?? null,
     assort_color: assort.get(assortKey(b)) ?? null,
     available_qty: fromLine
-      ? (() => { const f = fromLineAvail(b, st!, fromLine.proc, strictChk); return f.base + f.room; })()
+      ? (() => { const f = fromLineAvail(b, st!, fromLine.proc, strictChk, contractorPending.get(Number(b.id)) ?? 0); return f.base + f.room; })()
       : strictChk ? ironingAvail(b, true) : availAt(b, level),
     avail: bundleAvail(b), open_dc_no: holds.get(Number(b.id)) ?? null,
     line_alloc: lineAllocs.get(Number(b.id)) ?? null,
@@ -553,6 +554,7 @@ async function prepareLines(tx: Tx, cid: number, st: StageInfo, lines: z.infer<t
   const unit = fromLine ? `PCS on ${fromLine.proc} line ${fromLine.line.line_code}`
     : strictChk ? 'checking-passed PCS (checking QC required before ironing)' : LEVEL_LABEL[st.level];
   const lineOpen = fromLine ? await lineOpenBundles(tx, cid, fromLine.proc, fromLine.lineId) : null;
+  const contractorPending = fromLine?.proc === 'sewing' ? await stitchDcPending(tx, cid, ids) : new Map<number, number>();
   const out: PreparedLine[] = [];
   const problems: string[] = [];
   for (const id of ids) {
@@ -571,7 +573,7 @@ async function prepareLines(tx: Tx, cid: number, st: StageInfo, lines: z.infer<t
       continue;
     }
     const avail = fromLine
-      ? (() => { const f = fromLineAvail(b, st, fromLine.proc, strictChk); return f.base + f.room; })()
+      ? (() => { const f = fromLineAvail(b, st, fromLine.proc, strictChk, contractorPending.get(id) ?? 0); return f.base + f.room; })()
       : strictChk ? ironingAvail(b, true) : availAt(b, st.level);
     const qty = l.qty ?? avail;
     if (avail <= 0) { problems.push(`${b.bundle_no} has no ${unit}`); continue; }
@@ -681,7 +683,7 @@ async function postIssue(tx: Tx, req: Request, dc: any, st: StageInfo, lines: Pr
       l.bundle = await lockBundle(tx, cid, { id: b0.id });
     }
     // PCS leaving on the DC come off the bundle's in-house line allocation / daily plan.
-    if (linkProc) await releaseLineAllocation(tx, req, linkProc, l.bundle.id, l.qty, `${st.stage_name} DC ${dc.challan_no}`);
+    if (linkProc) await releaseLineAllocation(tx, req, linkProc, l.bundle.id, l.qty, `${st.stage_name} DC ${dc.challan_no}`, Number(dc.id));
     const after = await applyBundle(tx, l.bundle, issueDelta(st, l.qty));
     const lr = lineRows.find((r) => Number(r.bundle_id) === l.bundle.id);
     await addMovement(tx, req, l.bundle, {
@@ -808,9 +810,10 @@ processDcRouter.post('/process-dcs/:id/cancel', requirePermission('PRODUCTION.UP
   const cid = req.user!.companyId;
   const id = Number(req.params.id);
   const { reason } = z.object({ reason: reasonReq }).parse(req.body);
-  await transaction(async (tx) => {
+  const allocRestore = await transaction(async (tx) => {
     const dc = await txQueryOne<any>(tx, `SELECT * FROM trx_jobwork_challan WHERE id = ? AND company_id = ? FOR UPDATE`, [id, cid]);
     if (!dc) throw NotFound('DC not found');
+    let restored: any[] = [];
     if (!['DRAFT', 'ISSUED'].includes(dc.status)) {
       throw BadRequest(`DC ${dc.challan_no} is ${dc.status} — goods have been received against it; close it short instead`);
     }
@@ -828,13 +831,16 @@ processDcRouter.post('/process-dcs/:id/cancel', requirePermission('PRODUCTION.UP
           remarks: `DC ${dc.challan_no} cancelled: ${reason}`.slice(0, 255),
         });
       }
+      // PCS are back in stock: give back the line allocation / plan this DC released.
+      restored = await restoreLineAllocations(tx, req, id);
     }
     await txExecute(tx,
       `UPDATE trx_jobwork_challan SET status = 'CANCELLED', cancel_reason = ?, cancelled_by = ?, cancelled_at = NOW(), updated_by = ? WHERE id = ?`,
       [reason, req.user!.id, req.user!.id, id]);
-    await audit(req, 'trx_jobwork_challan', id, 'UPDATE', { status: dc.status }, { status: 'CANCELLED', reason }, tx);
+    await audit(req, 'trx_jobwork_challan', id, 'UPDATE', { status: dc.status }, { status: 'CANCELLED', reason, allocation_restored: restored }, tx);
+    return restored;
   });
-  res.json({ data: await loadDc(cid, id) });
+  res.json({ data: { ...(await loadDc(cid, id)), allocation_restore: allocRestore } });
 }));
 
 // ============================================================

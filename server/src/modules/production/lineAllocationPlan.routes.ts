@@ -9,6 +9,7 @@ import { nextDocNumber } from '../../core/numbering.js';
 import { bundleAvail, ironingRequiresChecking, TERMINAL } from './bundleLedger.js';
 import { jobInfo } from './processDc.routes.js';
 import { postBundleSewingOutput, postCheckingQc } from './productionFloor.routes.js';
+import { stitchDcPending } from './lineAllocationLink.js';
 
 /**
  * Sewing & Checking Line Allocation + Daily Plan, and Daily Output Entry – Sewing
@@ -144,6 +145,8 @@ async function loadBundles(tx: Tx | null, cid: number, proc: Proc, f: BundleFilt
       LIMIT ${Math.min(f.limit ?? 3000, 5000)}`, params);
   const jobs = await jobInfo(cid, rows.map((r) => r.io_no));
   const strictChk = proc === 'ironing' ? await ironingRequiresChecking(tx, cid) : true;
+  // Sewing: PCS out at stitching contractors are sewing WIP in the ledger but not on our lines.
+  const atContractor = proc === 'sewing' ? await stitchDcPending(tx, cid, rows.map((r) => Number(r.id))) : new Map<number, number>();
   const out = new Map<number, any>();
   for (const b of rows) {
     const j = jobs.get(b.io_no);
@@ -156,7 +159,7 @@ async function loadBundles(tx: Tx | null, cid: number, proc: Proc, f: BundleFilt
       bundle_qty: n(b.qty), weight_kg: b.allocated_kg == null ? null : Number(b.allocated_kg),
       fabric_name: b.fabric_name ?? null, fabric_type: b.knit_structure || b.fabric_type || null,
       gsm: b.gsm_value == null ? null : Number(b.gsm_value),
-      ready_qty: readyQty(proc, b, strictChk),
+      ready_qty: Math.max(readyQty(proc, b, strictChk) - (atContractor.get(Number(b.id)) ?? 0), 0),
     });
   }
   return out;
