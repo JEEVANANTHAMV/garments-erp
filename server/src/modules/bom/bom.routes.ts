@@ -7,6 +7,7 @@ import { requirePermission, requireAny } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
+import { orderCells, cellsFor, cellsPlanCut, cellsOrderQty, lineRequirement, type OrderCell } from '../../core/bomRequirement.js';
 
 export const bomRouter = Router();
 
@@ -170,34 +171,7 @@ bomRouter.get('/for-job', requireAny('BOM.VIEW', 'PURCHASE.VIEW', 'PROCUREMENT.V
     styles = [{ style_id: Number(st.id), style_code: st.style_code, style_name: st.style_name, qty: q.order_qty ?? 0 }];
   }
 
-  // 3. Colour / size / colour-size quantities of the job (plan-cut basis)
-  const colorQty = new Map<string, number>();
-  const sizeQty = new Map<string, number>();
-  const colorSizeQty = new Map<string, number>();
-  if (so) {
-    const byColor = await query<any>(
-      `SELECT style_id, color_id,
-              SUM(CASE WHEN COALESCE(plan_cut_qty, 0) > 0 THEN plan_cut_qty ELSE order_qty END) AS qty
-         FROM trx_sales_order_line
-        WHERE so_id = ? AND color_id IS NOT NULL
-        GROUP BY style_id, color_id`, [so.id]);
-    for (const r of byColor) colorQty.set(`${r.style_id}_${r.color_id}`, Number(r.qty) || 0);
-    const bySku = await query<any>(
-      `SELECT sol.style_id, COALESCE(sk.color_id, sol.color_id) AS color_id, sk.size_id,
-              SUM(sos.qty * CASE WHEN COALESCE(sol.plan_cut_qty, 0) > 0 AND sol.order_qty > 0
-                                 THEN sol.plan_cut_qty / sol.order_qty ELSE 1 END) AS qty
-         FROM trx_sales_order_sku sos
-         JOIN trx_sales_order_line sol ON sol.id = sos.so_line_id
-         JOIN mst_style_sku sk ON sk.id = sos.sku_id
-        WHERE sol.so_id = ?
-        GROUP BY sol.style_id, COALESCE(sk.color_id, sol.color_id), sk.size_id`, [so.id]);
-    for (const r of bySku) {
-      const qty = Number(r.qty) || 0;
-      const sk = `${r.style_id}_${r.size_id}`;
-      sizeQty.set(sk, (sizeQty.get(sk) ?? 0) + qty);
-      if (r.color_id) colorSizeQty.set(`${r.style_id}_${r.color_id}_${r.size_id}`, qty);
-    }
-  }
+  // 3. Colour / size cells of the job come per style from orderCells (plan cut incl. size-wise excess)
 
   // 4. Per style: pick the BOM, explode its lines
   const boms: any[] = [];
@@ -246,24 +220,18 @@ bomRouter.get('/for-job', requireAny('BOM.VIEW', 'PURCHASE.VIEW', 'PROCUREMENT.V
           WHERE l.bom_id = ?`, [bom.id]),
     ]);
     const specById = new Map(specs.map((sp) => [Number(sp.id), sp]));
+    const cells: OrderCell[] = so ? await orderCells(null, Number(so.id), st.style_id) : [];
 
     for (const l of lines) {
-      // Quantity this line applies to: whole style, or only its colour / size / colour-size
-      let basisQty = st.qty;
-      if (so && (l.color_id || l.size_id)) {
-        basisQty = l.color_id && l.size_id ? (colorSizeQty.get(`${st.style_id}_${l.color_id}_${l.size_id}`) ?? 0)
-          : l.color_id ? (colorQty.get(`${st.style_id}_${l.color_id}`) ?? 0)
-          : (sizeQty.get(`${st.style_id}_${l.size_id}`) ?? 0);
-      }
+      // Quantity this line applies to: whole style, or only its colour / size / colour-size cells
+      const basisQty = so && (l.color_id || l.size_id) ? cellsPlanCut(cellsFor(l, cells)) : st.qty;
       const cons = Number(l.consumption) || 0;
       const waste = Number(l.wastage_pct) || 0;
-      const addl = Number(l.additional_qty) || 0;
-      const basis = l.consumption_basis || 'PER_PIECE';
-      let baseQty = cons * basisQty;
-      if (basis === 'PER_DOZEN') baseQty = (basisQty / 12) * cons;
-      else if (basis === 'FIXED_QTY') baseQty = cons;
-      const wasteQty = baseQty * (waste / 100);
-      let finalReq = Number((baseQty + addl + wasteQty).toFixed(4));
+      const req = lineRequirement(l, basisQty);
+      const addl = req.addl;
+      const baseQty = req.base;
+      const wasteQty = req.waste;
+      let finalReq = Number(req.required.toFixed(4));
       // Countable units are bought in whole numbers
       if (['PCS', 'NOS', 'PC', 'SET'].includes(String(l.uom_code || '').toUpperCase())) finalReq = Math.ceil(finalReq);
       const rate = Number(l.std_rate) || 0;
@@ -371,56 +339,17 @@ bomRouter.get('/:id/print', requirePermission('BOM.VIEW'), ah(async (req, res) =
 
   let orderQty: number | null = null;
   let planCutQty: number | null = null;
-  // (colour, size) cells of the order with their order / plan-cut qty.
-  let cells: { color_id: number | null; size_id: number | null; qty: number; plan_cut: number }[] = [];
+  // (colour, size) cells of the order with their order / plan-cut qty (shared with MRP and the job BOM pick).
+  let cells: OrderCell[] = [];
   if (bom.so_id) {
-    const tot = await queryOne<{ qty: number; plan_cut: number }>(
-      `SELECT COALESCE(SUM(order_qty),0) AS qty,
-              COALESCE(SUM(COALESCE(NULLIF(plan_cut_qty,0), order_qty)),0) AS plan_cut
-         FROM trx_sales_order_line WHERE so_id = ? AND style_id = ?`, [bom.so_id, bom.style_id]);
-    orderQty = Number(tot?.qty ?? 0);
-    planCutQty = Number(tot?.plan_cut ?? 0);
-    cells = (await query<any>(
-      `SELECT k.color_id, k.size_id, SUM(ss.qty) AS qty,
-              SUM(COALESCE(ss.plan_cut_qty,
-                           ROUND(ss.qty * NULLIF(l.plan_cut_qty,0) / NULLIF(l.order_qty,0)),
-                           ss.qty)) AS plan_cut
-         FROM trx_sales_order_sku ss
-         JOIN trx_sales_order_line l ON l.id = ss.so_line_id
-         JOIN mst_style_sku k ON k.id = ss.sku_id
-        WHERE l.so_id = ? AND l.style_id = ?
-        GROUP BY k.color_id, k.size_id`, [bom.so_id, bom.style_id]))
-      .map((r) => ({ color_id: r.color_id, size_id: r.size_id, qty: Number(r.qty), plan_cut: Number(r.plan_cut) }));
-    if (!cells.length) {
-      // Order entered without a size breakdown — colour-level only.
-      cells = (await query<any>(
-        `SELECT color_id, NULL AS size_id, SUM(order_qty) AS qty,
-                SUM(COALESCE(NULLIF(plan_cut_qty,0), order_qty)) AS plan_cut
-           FROM trx_sales_order_line WHERE so_id = ? AND style_id = ?
-          GROUP BY color_id`, [bom.so_id, bom.style_id]))
-        .map((r) => ({ color_id: r.color_id, size_id: null, qty: Number(r.qty), plan_cut: Number(r.plan_cut) }));
-    }
+    cells = await orderCells(null, Number(bom.so_id), Number(bom.style_id));
+    orderQty = cellsOrderQty(cells);
+    planCutQty = cellsPlanCut(cells);
   }
 
   const items = lines.map((l) => {
-    const cons = Number(l.consumption) || 0;
-    const waste = Number(l.wastage_pct) || 0;
-    const addl = Number(l.additional_qty) || 0;
-    let applicableQty: number | null = null;
-    if (planCutQty !== null) {
-      applicableQty = (l.color_id || l.size_id)
-        ? cells.filter((c) => (!l.color_id || c.color_id === l.color_id) && (!l.size_id || c.size_id === l.size_id))
-            .reduce((a, c) => a + c.plan_cut, 0)
-        : planCutQty;
-    }
-    let required: number | null = null;
-    if (applicableQty !== null) {
-      const basis = l.consumption_basis || 'PER_PIECE';
-      let base = applicableQty * cons;
-      if (basis === 'PER_DOZEN') base = (applicableQty / 12) * cons;
-      else if (basis === 'FIXED_QTY') base = cons;
-      required = Number((base * (1 + waste / 100) + addl).toFixed(4));
-    }
+    const applicableQty = planCutQty !== null ? cellsPlanCut(cellsFor(l, cells)) : null;
+    const required = applicableQty !== null ? Number(lineRequirement(l, applicableQty).required.toFixed(4)) : null;
     return { ...l, applicable_qty: applicableQty, required_qty: required };
   });
 

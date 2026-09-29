@@ -72,28 +72,22 @@ const emptyLine = (): GrnLineItem => ({
   yarn_count_str: '',
   shade_code: '',
   pantone_spec: '',
-  lot_no: 'LOT-2026-01',
-  po_qty: 1000,
-  received_qty: 1000,
-  received_weight: 250,
-  no_of_rolls: 5,
-  accepted_qty: 1000,
+  lot_no: '',
+  po_qty: 0,
+  received_qty: 0,
+  received_weight: 0,
+  no_of_rolls: 0,
+  accepted_qty: 0,
   rejected_qty: 0,
   hold_qty: 0,
   balance_qty: 0,
-  rate: 65.0,
-  gst_rate: 5.0,
-  taxable_amount: 65000,
-  total_amount: 68250,
+  rate: 0,
+  gst_rate: 0,
+  taxable_amount: 0,
+  total_amount: 0,
   qc_status: 'ACCEPTED',
   uom_id: 9,
-  rolls: [
-    { roll_no: 'R-01', lot_no: 'LOT-2026-01', meters: 200, weight_kg: 50, gsm: 180, dia: '30"', shade: 'NVY-01', location_bin: 'A-01', qc_status: 'ACCEPTED' },
-    { roll_no: 'R-02', lot_no: 'LOT-2026-01', meters: 200, weight_kg: 50, gsm: 180, dia: '30"', shade: 'NVY-01', location_bin: 'A-02', qc_status: 'ACCEPTED' },
-    { roll_no: 'R-03', lot_no: 'LOT-2026-01', meters: 200, weight_kg: 50, gsm: 180, dia: '30"', shade: 'NVY-01', location_bin: 'A-03', qc_status: 'ACCEPTED' },
-    { roll_no: 'R-04', lot_no: 'LOT-2026-01', meters: 200, weight_kg: 50, gsm: 180, dia: '30"', shade: 'NVY-01', location_bin: 'A-04', qc_status: 'ACCEPTED' },
-    { roll_no: 'R-05', lot_no: 'LOT-2026-01', meters: 200, weight_kg: 50, gsm: 180, dia: '30"', shade: 'NVY-01', location_bin: 'A-05', qc_status: 'ACCEPTED' },
-  ],
+  rolls: [],
 });
 
 export default function FabricGRNDetailPage() {
@@ -224,7 +218,7 @@ export default function FabricGRNDetailPage() {
             yarn_count_str: l.yarn_count_str || '',
             shade_code: l.shade_code || '',
             pantone_spec: l.pantone_spec || '',
-            lot_no: l.lot_no || 'LOT-1',
+            lot_no: l.lot_no || '',
             po_qty: Number(l.received_qty) + Number(l.balance_qty || 0),
             received_qty: Number(l.received_qty || 0),
             received_weight: Number(l.received_weight || 0),
@@ -306,13 +300,15 @@ export default function FabricGRNDetailPage() {
           );
           if (poLines.length > 0) {
             const mappedLines: GrnLineItem[] = poLines.map((pl: any, idx: number) => {
-              const qty = Number(pl.qty) || 1000;
-              const weight = Number(pl.weight_kg) || qty * 0.25;
-              const rollsCount = Number(pl.no_of_rolls) || 5;
+              // Receive what is still open on the PO line; rate and GST come from the PO.
+              // Rolls are entered (or auto-generated) from the delivery, never invented here.
+              const qty = Math.max(Number(pl.qty || 0) - Number(pl.received_qty || 0), 0);
+              const weight = Number(pl.weight_kg) || 0;
+              const rollsCount = Number(pl.no_of_rolls) || 0;
               const mPerRoll = qty / (rollsCount || 1);
               const wPerRoll = weight / (rollsCount || 1);
-              const rate = Number(pl.rate) || 65.0;
-              const gstRate = Number(pl.gst_rate) || 5.0;
+              const rate = Number(pl.rate) || 0;
+              const gstRate = Number(pl.gst_rate ?? 0) || 0;
               const taxable = qty * rate;
               const totalAmt = taxable * (1 + gstRate / 100);
 
@@ -320,12 +316,12 @@ export default function FabricGRNDetailPage() {
               for (let i = 1; i <= rollsCount; i++) {
                 generatedRolls.push({
                   roll_no: `R-${po.po_no || 'PO'}-${idx + 1}-${i}`,
-                  lot_no: 'LOT-01',
+                  lot_no: '',
                   meters: Math.round(mPerRoll * 10) / 10,
                   weight_kg: Math.round(wPerRoll * 10) / 10,
-                  gsm: Number(pl.gsm) || 180,
-                  dia: pl.dia || '30"',
-                  shade: pl.shade_code || 'NVY-01',
+                  gsm: Number(pl.gsm) || 0,
+                  dia: pl.dia || '',
+                  shade: pl.shade_code || '',
                   location_bin: `BIN-${idx + 1}`,
                   qc_status: 'ACCEPTED',
                 });
@@ -346,7 +342,7 @@ export default function FabricGRNDetailPage() {
                 yarn_count_str: pl.yarn_count_str || '',
                 shade_code: pl.shade_code || '',
                 pantone_spec: pl.pantone_spec || '',
-                lot_no: 'LOT-01',
+                lot_no: '',
                 po_qty: qty,
                 received_qty: qty,
                 received_weight: weight,
@@ -470,12 +466,12 @@ export default function FabricGRNDetailPage() {
       const nextNum = curLine.rolls.length + 1;
       const newRoll: PhysicalRoll = {
         roll_no: `R-${nextNum < 10 ? '0' + nextNum : nextNum}`,
-        lot_no: curLine.lot_no || 'LOT-01',
+        lot_no: curLine.lot_no || '',
         meters: 100,
         weight_kg: 25,
         gsm: 180,
         dia: '30"',
-        shade: curLine.shade_code || 'NVY-01',
+        shade: curLine.shade_code || '',
         location_bin: 'A-01',
         qc_status: 'ACCEPTED',
       };
@@ -492,12 +488,12 @@ export default function FabricGRNDetailPage() {
     for (let i = 1; i <= genRollCount; i++) {
       newRolls.push({
         roll_no: `${genPrefix}${i < 10 ? '0' + i : i}`,
-        lot_no: activeLine.lot_no || 'LOT-01',
+        lot_no: activeLine.lot_no || '',
         meters: Number(genMetersPerRoll),
         weight_kg: Number(genWeightPerRoll),
         gsm: 180,
         dia: '30"',
-        shade: activeLine.shade_code || 'NVY-01',
+        shade: activeLine.shade_code || '',
         location_bin: `BIN-${i}`,
         qc_status: 'ACCEPTED',
       });

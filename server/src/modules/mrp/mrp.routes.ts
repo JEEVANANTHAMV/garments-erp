@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { orderCells, cellsFor, cellsPlanCut, lineRequirement } from '../../core/bomRequirement.js';
 import { z } from 'zod';
 import { query, queryOne, transaction, txQuery, txQueryOne, txExecute } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
@@ -107,45 +108,54 @@ mrpRouter.post('/run', requirePermission('MRP.CREATE'), ah(async (req, res) => {
     }>();
 
     let bomsFound = 0;
-    for (const line of lines) {
-      // 1. Check for Order-Specific BOM first
+    const add = (bl: any, styleId: number, colorId: number | null, gross: number) => {
+      if (!(gross > 0)) return;
+      const key = [bl.material_type, bl.yarn_id, bl.fabric_id, bl.trim_id, colorId].join(':');
+      const prev = agg.get(key);
+      if (prev) prev.gross += gross;
+      else agg.set(key, {
+        material_type: bl.material_type, yarn_id: bl.yarn_id, fabric_id: bl.fabric_id,
+        trim_id: bl.trim_id, color_id: colorId, uom_id: bl.uom_id, style_id: styleId, gross,
+      });
+    };
+    for (const styleId of [...new Set(lines.map((l: any) => Number(l.style_id)))]) {
+      // 1. Order-specific BOM first, else the style master BOM
       let bom = await txQueryOne<{ id: number }>(
         tx,
         `SELECT id FROM trx_bom
           WHERE style_id = ? AND so_id = ? AND company_id = ? AND is_active = 1
-          ORDER BY version DESC LIMIT 1`, [line.style_id, body.so_id, req.user!.companyId]);
-
-      // 2. Fallback to Style Master BOM
+          ORDER BY version DESC LIMIT 1`, [styleId, body.so_id, req.user!.companyId]);
       if (!bom) {
         bom = await txQueryOne<{ id: number }>(
           tx,
           `SELECT id FROM trx_bom
             WHERE style_id = ? AND (so_id IS NULL OR so_id = 0) AND company_id = ? AND is_active = 1
-            ORDER BY version DESC LIMIT 1`, [line.style_id, req.user!.companyId]);
+            ORDER BY version DESC LIMIT 1`, [styleId, req.user!.companyId]);
       }
       if (!bom) continue;   // style without a BOM contributes nothing
       bomsFound++;
 
       const bomLines = await txQuery<any>(
         tx,
-        `SELECT material_type, yarn_id, fabric_id, trim_id, color_id, consumption, uom_id, wastage_pct
+        `SELECT material_type, yarn_id, fabric_id, trim_id, color_id, size_id, consumption, consumption_basis,
+                additional_qty, uom_id, wastage_pct
            FROM trx_bom_line WHERE bom_id = ?`, [bom.id]);
-
-      const planQty = Number(line.plan_cut_qty && line.plan_cut_qty > 0 ? line.plan_cut_qty : line.order_qty);
+      // Plan-cut PCS per colour × size of this style (size-wise excess included).
+      const cells = await orderCells(tx, body.so_id, styleId);
 
       for (const bl of bomLines) {
-        const perUnit = Number(bl.consumption) * (1 + Number(bl.wastage_pct ?? 0) / 100);
-        const gross = perUnit * planQty;
-        // BOM line colour wins; otherwise inherit the order line's colour.
-        const colorId = bl.color_id ?? line.color_id ?? null;
-        const key = [bl.material_type, bl.yarn_id, bl.fabric_id, bl.trim_id, colorId].join(':');
-
-        const prev = agg.get(key);
-        if (prev) prev.gross += gross;
-        else agg.set(key, {
-          material_type: bl.material_type, yarn_id: bl.yarn_id, fabric_id: bl.fabric_id,
-          trim_id: bl.trim_id, color_id: colorId, uom_id: bl.uom_id,
-          style_id: line.style_id, gross,
+        // A colour / size specific line counts only the order cells it covers.
+        const covered = cellsFor(bl, cells);
+        if (!covered.length) continue;
+        const colours = [...new Set(covered.map((c) => c.color_id))];
+        if (bl.color_id || String(bl.consumption_basis) === 'FIXED_QTY' || colours.length === 1) {
+          add(bl, styleId, bl.color_id ?? (colours.length === 1 ? colours[0] : null), lineRequirement(bl, cellsPlanCut(covered)).required);
+          continue;
+        }
+        // Generic line: plan each order colour separately; the additional qty is counted once.
+        colours.forEach((colorId, i) => {
+          const qty = cellsPlanCut(covered.filter((c) => c.color_id === colorId));
+          add(bl, styleId, colorId, lineRequirement({ ...bl, additional_qty: i === 0 ? bl.additional_qty : 0 }, qty).required);
         });
       }
     }

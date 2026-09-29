@@ -50,18 +50,18 @@ const emptyYarnGrnLine = (): YarnGrnLine => ({
   yarn_type: 'Grey Yarn',
   shade_code: '',
   color_name: '',
-  lot_no: 'LOT-Y-001',
-  po_qty: 2268,
-  received_qty: 2268,
-  packs: 50,
-  accepted_qty: 2268,
+  lot_no: '',
+  po_qty: 0,
+  received_qty: 0,
+  packs: 0,
+  accepted_qty: 0,
   rejected_qty: 0,
   hold_qty: 0,
   balance_qty: 0,
-  rate: 220.0,
-  gst_rate: 5.0,
-  taxable_amount: 498960.0,
-  total_amount: 523908.0,
+  rate: 0,
+  gst_rate: 0,
+  taxable_amount: 0,
+  total_amount: 0,
   qc_status: 'ACCEPTED',
 });
 
@@ -175,7 +175,7 @@ export default function YarnGRNDetailPage() {
             shade_code: l.shade_code || '',
             color_name: l.color_name || '',
             composition: l.composition,
-            lot_no: l.lot_no || 'LOT-1',
+            lot_no: l.lot_no || '',
             po_qty: Number(l.received_qty) + Number(l.balance_qty || 0),
             received_qty: Number(l.received_qty || 0),
             packs: Number(l.no_of_rolls || l.packs || 1),
@@ -242,10 +242,11 @@ export default function YarnGRNDetailPage() {
           );
           if (poLines.length > 0) {
             const mappedLines: YarnGrnLine[] = poLines.map((pl: any) => {
-              const qty = Number(pl.qty) || 2268;
-              const bags = Number(pl.packs) || Math.round(qty / 45.36) || 50;
-              const rate = Number(pl.rate) || 220.0;
-              const gstRate = Number(pl.gst_rate !== undefined ? pl.gst_rate : 5.0);
+              // Receive what is still open on the PO line; rate and GST come from the PO.
+              const qty = Math.max(Number(pl.qty || 0) - Number(pl.received_qty || 0), 0);
+              const bags = Number(pl.packs) || 0;
+              const rate = Number(pl.rate) || 0;
+              const gstRate = Number(pl.gst_rate ?? 0) || 0;
               const taxable = Math.round(qty * rate * 100) / 100;
               const taxAmt = Math.round((taxable * (gstRate / 100)) * 100) / 100;
               const totalAmt = taxable + taxAmt;
@@ -263,7 +264,7 @@ export default function YarnGRNDetailPage() {
                 shade_code: pl.shade_code || '',
                 color_name: pl.color_name || '',
                 composition: pl.composition,
-                lot_no: 'LOT-Y-01',
+                lot_no: '',
                 po_qty: qty,
                 received_qty: qty,
                 packs: bags,

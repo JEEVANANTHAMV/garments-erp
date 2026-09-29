@@ -116,7 +116,7 @@ export function PartyDetailPage() {
     is_contractor: 0,
     party_type: 'EXPORT',
     country_id: null, // defaulted to India once the countries lookup loads (new partners only)
-    currency_id: 1,
+    currency_id: null, // INR for an Indian partner, else USD — looked up by code once currencies load (new partners only)
     gstin: '',
     pan: '',
     tan: '',
@@ -206,6 +206,16 @@ export function PartyDetailPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNew, indiaCountryId]);
+
+  // Default currency from the currency master by code (never a hard-coded id), until the user picks one.
+  const [currencyTouched, setCurrencyTouched] = useState(false);
+  useEffect(() => {
+    if (!isNew || currencyTouched || !(currencies || []).length) return;
+    const code = form.country_id && indiaCountryId && Number(form.country_id) !== Number(indiaCountryId) ? 'USD' : 'INR';
+    const cur = (currencies || []).find((c: any) => String(c.code).toUpperCase() === code);
+    if (cur && Number(form.currency_id) !== Number(cur.id)) setForm((prev: any) => ({ ...prev, currency_id: cur.id }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNew, currencyTouched, currencies, form.country_id, indiaCountryId]);
 
   useEffect(() => {
     if (itemQuery.data?.data) {
@@ -1000,7 +1010,7 @@ export function PartyDetailPage() {
                 <select
                   className="input"
                   value={form.currency_id || ''}
-                  onChange={(e) => handleField('currency_id', e.target.value)}
+                  onChange={(e) => { setCurrencyTouched(true); handleField('currency_id', e.target.value); }}
                 >
                   <option value="">Select Currency</option>
                   {(currencies || []).map((c: any) => (
