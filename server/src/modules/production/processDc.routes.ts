@@ -831,12 +831,12 @@ processDcRouter.post('/process-dcs/:id/cancel', requirePermission('PRODUCTION.UP
           remarks: `DC ${dc.challan_no} cancelled: ${reason}`.slice(0, 255),
         });
       }
-      // PCS are back in stock: give back the line allocation / plan this DC released.
-      restored = await restoreLineAllocations(tx, req, id);
     }
     await txExecute(tx,
       `UPDATE trx_jobwork_challan SET status = 'CANCELLED', cancel_reason = ?, cancelled_by = ?, cancelled_at = NOW(), updated_by = ? WHERE id = ?`,
       [reason, req.user!.id, req.user!.id, id]);
+    // PCS are back in stock and the DC no longer holds them: give back the line allocation / plan it released.
+    if (dc.status === 'ISSUED') restored = await restoreLineAllocations(tx, req, id);
     await audit(req, 'trx_jobwork_challan', id, 'UPDATE', { status: dc.status }, { status: 'CANCELLED', reason, allocation_restored: restored }, tx);
     return restored;
   });
