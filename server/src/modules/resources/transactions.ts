@@ -147,6 +147,15 @@ export const transactionResources: ResourceConfig[] = [
     defaultSort: 't.quotation_date', hasIsActive: false,
     filters: ['buyer_id', 'supplier_id', 'quotation_type', 'quotation_category', 'agent_id', 'status_id', 'enquiry_id', 'branch_id'],
     autoNumber: { column: 'quotation_no', docType: 'QUOTATION' },
+    // Purchase quotations (fabric / yarn / trims / general) come from a supplier; buyer quotations go to a buyer.
+    beforeWrite: (_req, data, before) => {
+      const type = String(data.quotation_type ?? before?.quotation_type ?? '');
+      const purchase = ['FABRIC', 'YARN', 'TRIMS', 'GENERAL'].includes(type);
+      const supplier = data.supplier_id !== undefined ? data.supplier_id : before?.supplier_id;
+      const buyer = data.buyer_id !== undefined ? data.buyer_id : before?.buyer_id;
+      if (purchase && !supplier) throw BadRequest('Choose the supplier of this purchase quotation');
+      if (!purchase && !buyer) throw BadRequest('Choose the buyer of this quotation');
+    },
     selectExtra: `b.party_name AS buyer_name, sup.party_name AS supplier_name,
                   cur.code AS currency_code, cur.symbol AS currency_symbol,
                   cs.label AS status_label`,
