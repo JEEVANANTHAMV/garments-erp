@@ -387,6 +387,8 @@ export default function CadRequirementDetailPage() {
       consumption_per_pc: 0.60,
       uom: 'MTRS',
       total_qty: 380,
+      kg_factor: 50,
+      kg_factor_unit: 'PER_KG',
       remarks: '10MM Twill Tape - 60 CM per pcs',
     },
     {
@@ -422,17 +424,28 @@ export default function CadRequirementDetailPage() {
       toast('No markers found to sync sizes from', 'warning');
       return;
     }
-    const sizeMap: Record<string, { order: number; cut: number }> = {};
+    // Garments per size = colour-wise maximum across markers: body and rib markers of the
+    // same garment are NOT added together (that doubled the collar / cuff pcs).
+    const perColour: Record<string, Record<string, { order: number; cut: number }>> = {};
     markers.forEach((m) => {
       (m.sizes || []).forEach((sz, sIdx) => {
         if (!sz) return;
-        if (!sizeMap[sz]) sizeMap[sz] = { order: 0, cut: 0 };
         (m.colorways || []).forEach((cw) => {
-          sizeMap[sz].order += Number(cw.quantities?.[sIdx]) || 0;
-          sizeMap[sz].cut += Number(cw.cut_quantities?.[sIdx]) || Number(cw.quantities?.[sIdx]) || 0;
+          const c = (cw.color_name || 'Solid').trim().toUpperCase();
+          perColour[c] = perColour[c] || {};
+          const cur = perColour[c][sz] || { order: 0, cut: 0 };
+          const o = Number(cw.quantities?.[sIdx]) || 0;
+          const k = Number(cw.cut_quantities?.[sIdx]) || o;
+          perColour[c][sz] = { order: Math.max(cur.order, o), cut: Math.max(cur.cut, k) };
         });
       });
     });
+    const sizeMap: Record<string, { order: number; cut: number }> = {};
+    Object.values(perColour).forEach((sizes) => Object.entries(sizes).forEach(([sz, v]) => {
+      if (!sizeMap[sz]) sizeMap[sz] = { order: 0, cut: 0 };
+      sizeMap[sz].order += v.order;
+      sizeMap[sz].cut += v.cut;
+    }));
 
     const existingRowMap = new Map(flatKnitSpec.size_rows.map((r) => [r.size, r]));
     const comps = flatKnitSpec.components || [];
@@ -814,27 +827,44 @@ export default function CadRequirementDetailPage() {
     }
   };
 
+  /**
+   * Fabric meterage of a knitted F.PRGM row: processes such as compacting are
+   * measured and charged in metres, so the KG indent is also shown in metres.
+   * m = KG × 1000 ÷ (GSM × width in m); tubular fabric has two layers (width × 2).
+   */
+  const fabricMeterage = (fp: { grand_total_qty?: number | string; gsm?: number | string; dia_val?: string; dia_spec?: string; dia_type?: string }) => {
+    if (isWoven) return null;
+    const kg = Number(fp.grand_total_qty) || 0;
+    const gsm = Number(fp.gsm) || 0;
+    const dia = parseFloat(String(fp.dia_val || fp.dia_spec || '').replace(/[^0-9.]/g, '')) || 0;
+    const tube = fp.dia_type === 'TUBE' || String(fp.dia_spec || '').includes('TUBE');
+    const widthM = dia * 0.0254 * (tube ? 2 : 1);
+    if (!(kg > 0 && gsm > 0 && widthM > 0)) return null;
+    return Math.round((kg * 1000) / (gsm * widthM));
+  };
+
   // Grand KPI Metrics
   const summaryKpis = useMemo(() => {
-    const totalOrderPcs = markers.reduce(
-      (sum, m) => sum + (m.colorways?.[0]?.total_order_pcs || 0),
-      0
-    ) || header.order_qty;
+    // Order qty in garments: per colour the largest marker quantity, summed over colours.
+    // Body + rib / collar markers of the same garment must not add up (4900 + 4900 is not 9800);
+    // additional fabrics are accessories of the same order quantity (client call 29-Sep-2026).
+    const colourPcs: Record<string, number> = {};
+    markers.forEach((m) => (m.colorways || []).forEach((cw) => {
+      const c = (cw.color_name || 'Solid').trim().toUpperCase();
+      const pcs = Number(cw.total_order_pcs) || (cw.quantities || []).reduce((a, b) => a + (Number(b) || 0), 0);
+      colourPcs[c] = Math.max(colourPcs[c] || 0, pcs);
+    }));
+    const totalOrderPcs = Object.values(colourPcs).reduce((a, b) => a + b, 0) || header.order_qty;
 
     const grandFabric = fabricProgram.length > 0
       ? fabricProgram.reduce((sum, f) => sum + Number(f.grand_total_qty || 0), 0)
       : markers.reduce((sum, m) => sum + Number(m.total_req_qty || 0), 0);
 
-    const totalActNetFabric = markers.reduce((sum, m) => {
-      const pcs = (m.colorways || []).reduce((cs, cw) => cs + (Number(cw.total_cut_pcs) || Number(cw.total_order_pcs) || 0), 0);
-      const netPerPc = isWoven ? (m.act_length_per_pc_cm || 0) / 100 : (m.act_wt_per_pc_g || 0) / 1000;
-      return sum + (pcs * netPerPc);
-    }, 0);
-
+    // Fabric loss % entered on this document is taken OFF the fabric to give the actual
+    // piece weight; collar / cuff / twill tape / cords are not reduced (client call 29-Sep-2026).
+    const lossPct = Number(header.fabric_allowance_pct) || 0;
     const avgGarmentCons = totalOrderPcs > 0 ? (grandFabric / totalOrderPcs) : 0;
-    const actGarmentCons = totalOrderPcs > 0 && totalActNetFabric > 0 
-      ? (totalActNetFabric / totalOrderPcs) 
-      : avgGarmentCons * (1 - (totalAllowancePct / 100.0));
+    const actGarmentCons = avgGarmentCons * (1 - lossPct / 100.0);
 
     const collarYarnKg = flatKnitSpec.enabled ? Number(flatKnitSpec.total_yarn_kg || 0) : 0;
     const foldingFabricKg = specialParts
@@ -858,6 +888,10 @@ export default function CadRequirementDetailPage() {
     const avgConsInclParts = totalOrderPcs > 0
       ? (isWoven ? avgGarmentCons : grandTotalMaterial / totalOrderPcs)
       : 0;
+    // Actual piece weight = average piece weight less the fabric loss % on the fabric part only.
+    const actualPieceWt = totalOrderPcs > 0
+      ? (isWoven ? actGarmentCons : actGarmentCons + partsKg / totalOrderPcs)
+      : 0;
 
     return {
       totalOrderPcs,
@@ -872,10 +906,12 @@ export default function CadRequirementDetailPage() {
       partsMissingKgFactor,
       partsKgPerPc: Math.round(partsKgPerPc * 100000) / 100000,
       avgConsInclParts: Math.round(avgConsInclParts * 100000) / 100000,
+      actualPieceWt: Math.round(actualPieceWt * 100000) / 100000,
+      lossPct,
       grandTotalMaterial,
       uom: isWoven ? 'MTR' : 'KG',
     };
-  }, [markers, fabricProgram, header.order_qty, totalAllowancePct, isWoven, flatKnitSpec, specialParts]);
+  }, [markers, fabricProgram, header.order_qty, header.fabric_allowance_pct, isWoven, flatKnitSpec, specialParts]);
 
   // Marker Operations
   const addMarker = () => {
@@ -1421,9 +1457,9 @@ export default function CadRequirementDetailPage() {
         </div>
 
         <div className="p-3 bg-white rounded-xl border border-slate-200/80 shadow-sm">
-          <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Planned Garment Qty</div>
+          <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Order Qty (Garments)</div>
           <div className="text-lg font-bold text-indigo-600 mt-0.5">{fmtNumber(summaryKpis.totalOrderPcs)} Pcs</div>
-          <div className="text-[10px] text-slate-400">Rejection: +{header.rejection_pct}% CEIL</div>
+          <div className="text-[10px] text-slate-400">Main fabric colours · rib / collar not added · Rej +{header.rejection_pct}%</div>
         </div>
 
         <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-200 shadow-sm">
@@ -1435,7 +1471,7 @@ export default function CadRequirementDetailPage() {
         </div>
 
         <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-200 shadow-sm">
-          <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">Average Cons / Pc</div>
+          <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">Average Piece Weight</div>
           <div className="text-lg font-bold text-emerald-900 mt-0.5">
             {fmtDecimal(summaryKpis.avgConsInclParts * (isWoven ? 1 : 1000), 2)} {isWoven ? 'Mtrs' : 'Gms'}
           </div>
@@ -1447,11 +1483,11 @@ export default function CadRequirementDetailPage() {
         </div>
 
         <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200 shadow-sm">
-          <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Actual Net Cons / Pc</div>
+          <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Actual Piece Weight</div>
           <div className="text-lg font-bold text-amber-900 mt-0.5">
-            {fmtDecimal(summaryKpis.actGarmentCons * (isWoven ? 1 : 1000), 2)} {isWoven ? 'Mtrs' : 'Gms'}
+            {fmtDecimal(summaryKpis.actualPieceWt * (isWoven ? 1 : 1000), 2)} {isWoven ? 'Mtrs' : 'Gms'}
           </div>
-          <div className="text-[10px] text-amber-600">Pure net lay consumption</div>
+          <div className="text-[10px] text-amber-600">Average − fabric loss {summaryKpis.lossPct}% (collar / tapes not reduced)</div>
         </div>
       </div>
 
@@ -1542,7 +1578,13 @@ export default function CadRequirementDetailPage() {
               type="number"
               step="0.5"
               value={header.rejection_pct}
-              onChange={(e) => setHeader((p) => ({ ...p, rejection_pct: parseFloat(e.target.value) || 0 }))}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value) || 0;
+                const prev = Number(header.rejection_pct);
+                // Markers still on the document value follow the change; per-marker overrides stay.
+                setMarkers((ms) => ms.map((m) => (m.rejection_pct == null || Number(m.rejection_pct) === prev ? { ...m, rejection_pct: v } : m)));
+                setHeader((p) => ({ ...p, rejection_pct: v }));
+              }}
               className="w-20 text-xs font-bold text-amber-700 border border-slate-300 rounded px-2 py-1 text-right"
             />
             <span className="text-[11px] text-slate-500">(CEIL per size)</span>
@@ -1554,7 +1596,13 @@ export default function CadRequirementDetailPage() {
               type="number"
               step="0.5"
               value={header.fabric_allowance_pct}
-              onChange={(e) => setHeader((p) => ({ ...p, fabric_allowance_pct: parseFloat(e.target.value) || 0 }))}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value) || 0;
+                const prev = Number(header.fabric_allowance_pct);
+                // Loss % is set per document each time; markers on the old value follow it.
+                setMarkers((ms) => ms.map((m) => (m.fabric_allowance_pct == null || Number(m.fabric_allowance_pct) === prev ? { ...m, fabric_allowance_pct: v } : m)));
+                setHeader((p) => ({ ...p, fabric_allowance_pct: v }));
+              }}
               className="w-20 text-xs font-bold text-indigo-700 border border-slate-300 rounded px-2 py-1 text-right"
             />
             <span className="text-[11px] text-slate-500">(Total: {totalAllowancePct}%)</span>
@@ -2053,6 +2101,35 @@ export default function CadRequirementDetailPage() {
                 <Plus size={13} />
                 <span>Add Colorway</span>
               </button>
+              {markers.length > 1 && (
+                <button
+                  type="button"
+                  title="Copy this marker's colours and size quantities to the other markers (rib / collar fabric follows the body order qty)"
+                  onClick={() => {
+                    const src = activeMarker;
+                    const key = (c?: string) => (c || '').trim().toUpperCase();
+                    setMarkers((ms) => ms.map((m, i) => {
+                      if (i === activeMarkerIdx) return m;
+                      const sizes = m.sizes?.length ? m.sizes : [...src.sizes];
+                      const cws = [...(m.colorways || [])];
+                      src.colorways.forEach((cw) => {
+                        const qtys = sizes.map((sz) => {
+                          const k = src.sizes.indexOf(sz);
+                          return k >= 0 ? Number(cw.quantities?.[k]) || 0 : 0;
+                        });
+                        const j = cws.findIndex((x) => key(x.color_name) === key(cw.color_name));
+                        if (j >= 0) cws[j] = { ...cws[j], quantities: qtys };
+                        else cws.push({ color_name: cw.color_name, quantities: qtys });
+                      });
+                      return recomputeSingleMarker({ ...m, sizes, colorways: cws });
+                    }));
+                    toast(`${src.colorways.length} colour(s) copied from ${src.marker_ref} to the other markers — run Auto-Consumption to refresh F.PRGM`, 'success');
+                  }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 text-indigo-700"
+                >
+                  <span>Copy colours to all markers</span>
+                </button>
+              )}
             </div>
 
             <div className="overflow-x-auto">
@@ -2211,6 +2288,7 @@ export default function CadRequirementDetailPage() {
                     <th className="py-2.5 px-2 text-right">Net Req ({header.uom})</th>
                     <th className="py-2.5 px-2 text-right">Buffer ({header.uom})</th>
                     <th className="py-2.5 px-3 text-right text-indigo-700">Grand Total ({header.uom})</th>
+                    {!isWoven && <th className="py-2.5 px-3 text-right text-sky-700" title="KG × 1000 ÷ (GSM × width m); tube = 2 layers">Meterage (MTR)</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -2233,6 +2311,11 @@ export default function CadRequirementDetailPage() {
                       <td className="py-2.5 px-3 text-right font-bold text-indigo-700 text-sm">
                         {fmtDecimal(fp.grand_total_qty)} {fp.uom}
                       </td>
+                      {!isWoven && (
+                        <td className="py-2.5 px-3 text-right font-semibold text-sky-800">
+                          {fabricMeterage(fp) != null ? `${fmtNumber(fabricMeterage(fp))} MTR` : '—'}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -2250,6 +2333,11 @@ export default function CadRequirementDetailPage() {
                     <td className="py-3 px-3 text-right text-base text-indigo-900">
                       {fmtDecimal(summaryKpis.grandFabric)} {summaryKpis.uom}
                     </td>
+                    {!isWoven && (
+                      <td className="py-3 px-3 text-right text-sky-900">
+                        {fmtNumber(fabricProgram.reduce((a, fp) => a + (fabricMeterage(fp) || 0), 0))} MTR
+                      </td>
+                    )}
                   </tr>
                 </tfoot>
               </table>
@@ -3008,7 +3096,11 @@ export default function CadRequirementDetailPage() {
                           value={sp.uom}
                           onChange={(e) => {
                             const copy = [...specialParts];
-                            copy[idx] = withPartKg({ ...copy[idx], uom: e.target.value });
+                            copy[idx] = withPartKg({
+                              ...copy[idx], uom: e.target.value,
+                              // Tapes / cords: 50 m = 1 kg unless a factor is already set (client call 29-Sep-2026)
+                              ...(e.target.value === 'MTRS' && !(Number(copy[idx].kg_factor) > 0) ? { kg_factor: 50, kg_factor_unit: 'PER_KG' as const } : {}),
+                            });
                             setSpecialParts(copy);
                           }}
                           className="text-xs font-medium border border-slate-300 rounded px-1 py-1 bg-white"
@@ -3214,6 +3306,12 @@ export default function CadRequirementDetailPage() {
                   <span>Yarn Spinning / Knitting Allowance:</span>
                   <span className="font-semibold text-slate-900">+5.0%</span>
                 </li>
+                {summaryKpis.tapesKg > 0 && (
+                  <li className="flex justify-between border-b border-amber-100 pb-1" title="Grey yarn to issue for knitting the twill tape / tube rope (tape metres ÷ m per kg)">
+                    <span>Yarn for Tapes & Cords ({fmtDecimal(summaryKpis.totalTapesMtrs, 0)} MTRS):</span>
+                    <span className="font-semibold text-slate-900">{fmtDecimal(summaryKpis.tapesKg, 2)} KG</span>
+                  </li>
+                )}
               </ul>
             </div>
           </div>

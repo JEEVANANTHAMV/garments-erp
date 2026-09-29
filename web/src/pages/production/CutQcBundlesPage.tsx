@@ -4,6 +4,7 @@ import { api } from '../../lib/api';
 import { fmtDate, fmtNumber, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
 import { SearchSelect, ScanInput, Qty, MetricTile, ALLOCATED_KG_LABEL, errMsg } from './cuttingUi';
+import { printBundleLabels, LABEL_LAYOUTS } from './bundleLabels';
 
 export function CutQcBundlesPage() {
   const [activeTab, setActiveTab] = useState<'bundles' | 'cut_qc' | 'scanner'>('bundles');
@@ -20,8 +21,13 @@ export function CutQcBundlesPage() {
   // New Bundle Generator Form
   const [showBundleModal, setShowBundleModal] = useState(false);
   const [selectedPartFilter, setSelectedPartFilter] = useState<string>('ALL');
-  const [showPrintModal, setShowPrintModal] = useState(false);
-  const [printBundle, setPrintBundle] = useState<any>(null);
+  // Bundle list: filtered and paged on the server (thousands of bundles per season stay usable).
+  const [bf, setBf] = useState({ io_no: '', status: '', q: '', from: '', to: '' });
+  const [bPage, setBPage] = useState(1);
+  const [bMeta, setBMeta] = useState<any>({ pagination: { page: 1, totalPages: 1, total: 0 }, summary: { bundles: 0, qty: 0, by_status: [], jobs: [] } });
+  const [bSel, setBSel] = useState<Set<number>>(new Set());
+  const [labelLayout, setLabelLayout] = useState('A4_3');
+  const [lastGenerated, setLastGenerated] = useState<any[]>([]);
 
   const [bundleForm, setBundleForm] = useState<any>({
     cutting_id: '',
@@ -63,24 +69,70 @@ export function CutQcBundlesPage() {
   const [scanning, setScanning] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const fetchAll = () => {
+  const bundleParams = (extra: Record<string, unknown> = {}) => ({
+    io_no: bf.io_no || undefined, status: bf.status || undefined, q: bf.q || undefined,
+    from: bf.from || undefined, to: bf.to || undefined,
+    part_name: selectedPartFilter === 'ALL' ? undefined : selectedPartFilter, ...extra,
+  });
+  const loadBundles = (page = bPage) => {
     setLoading(true);
+    api.get('/bundles', { params: bundleParams({ page, pageSize: 100 }) })
+      .then((b) => { setBundles(b.data.data || []); setBMeta({ pagination: b.data.pagination, summary: b.data.summary }); })
+      .catch((e) => toast(errMsg(e, 'Failed to load bundles'), 'error'))
+      .finally(() => setLoading(false));
+  };
+
+  const loadOthers = () => {
     Promise.all([
-      api.get('/bundles'),
       api.get('/cut-piece-qc'),
       api.get('/cuttings', { params: { pageSize: 200 } }).catch(() => ({ data: { data: [] } })),
       api.get('/cut-outputs', { params: { open: 1 } }),
-    ]).then(([b, q, c, co]) => {
-      setBundles(b.data.data || []);
+    ]).then(([q, c, co]) => {
       setCutQcs(q.data.data || []);
       setCuttings(c.data.data || []);
       setCutOutputs(co.data.data || []);
-    }).finally(() => setLoading(false));
+    });
   };
+  const fetchAll = () => { loadBundles(); loadOthers(); };
 
+  // Bundles load through the filter effect below; the other lists once here.
   useEffect(() => {
-    fetchAll();
+    loadOthers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // Filters change → back to page 1.
+  useEffect(() => { setBPage(1); setBSel(new Set()); loadBundles(1); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [bf.io_no, bf.status, bf.from, bf.to, selectedPartFilter]);
+
+  /** Print the ticked bundles, else every bundle matching the filter (one label each). */
+  const printLabels = async () => {
+    try {
+      const params = bSel.size ? { ids: [...bSel].join(',') } : bundleParams();
+      const r = await api.get('/bundles', { params });
+      const rows = r.data.data || [];
+      if (!rows.length) { toast('No bundles to print', 'warning'); return; }
+      printBundleLabels(rows, labelLayout);
+    } catch (e: any) {
+      toast(errMsg(e, 'Could not load bundles to print'), 'error');
+    }
+  };
+  const printBatch = async (list: any[]) => {
+    const ids = list.map((b: any) => b.id ?? b.bundle_id).filter(Boolean);
+    if (!ids.length) return;
+    const r = await api.get('/bundles', { params: { ids: ids.join(',') } });
+    printBundleLabels(r.data.data || [], labelLayout);
+  };
+  const verifyBundles = async () => {
+    const body = bSel.size ? { ids: [...bSel] } : { io_no: bf.io_no || null, part_name: selectedPartFilter === 'ALL' ? null : selectedPartFilter };
+    if (!bSel.size && !bf.io_no) { toast('Tick bundles, or filter by a job, to verify in bulk', 'warning'); return; }
+    try {
+      const r = await api.post('/bundles/verify', body);
+      toast(`${r.data.data.verified} bundle(s) verified`);
+      setBSel(new Set());
+      loadBundles();
+    } catch (e: any) {
+      toast(errMsg(e, 'Verify failed'), 'error');
+    }
+  };
 
   // Live allocated-KG preview for the selected cut output (doc §12).
   useEffect(() => {
@@ -105,6 +157,7 @@ export function CutQcBundlesPage() {
         components: String(genOutput.components || '').split(',').map((s: string) => s.trim()).filter(Boolean),
       });
       toast(`${r.data.data.bundles.length} bundles generated from ${r.data.data.output_no}`);
+      setLastGenerated(r.data.data.bundles || []);
       setShowBundleModal(false);
       setGenOutput({ cut_output_id: '', bundle_size: 10, qty: '', part_name: '', components: '' });
       fetchAll();
@@ -140,7 +193,7 @@ export function CutQcBundlesPage() {
         ? (bundleForm.custom_part || 'CUSTOM').trim().toUpperCase()
         : (bundleForm.part_name || 'TOP').toUpperCase();
 
-      await api.post('/bundles/generate-detailed', {
+      const gen = await api.post('/bundles/generate-detailed', {
         ...bundleForm,
         cutting_id: Number(bundleForm.cutting_id),
         style_id: Number(bundleForm.style_id),
@@ -150,6 +203,7 @@ export function CutQcBundlesPage() {
         components,
       });
       toast(`Bundles generated for Part: ${effectivePart}!`);
+      setLastGenerated(gen.data?.data?.bundles || []);
       setShowBundleModal(false);
       fetchAll();
     } catch (e: any) {
@@ -210,10 +264,9 @@ export function CutQcBundlesPage() {
     }
   };
 
-  const filteredBundles = bundles.filter((b: any) => {
-    if (selectedPartFilter === 'ALL') return true;
-    return (b.part_name || 'TOP').toUpperCase() === selectedPartFilter;
-  });
+  const filteredBundles = bundles;
+  const pageIds = filteredBundles.map((b: any) => Number(b.id));
+  const allOnPage = pageIds.length > 0 && pageIds.every((id) => bSel.has(id));
 
   return (
     <div className="space-y-6">
@@ -223,10 +276,15 @@ export function CutQcBundlesPage() {
           <p className="text-sm text-slate-500">Component QC, garment part barcode generation (TOP / BOTTOM / FOLDING), and floor stage tracking</p>
         </div>
         <div className="flex gap-2">
-          {activeTab === 'bundles' && filteredBundles.length > 0 && (
-            <Button variant="outline" onClick={() => { setPrintBundle(null); setShowPrintModal(true); }}>
-              🖨️ Print Tickets ({filteredBundles.length})
-            </Button>
+          {activeTab === 'bundles' && bMeta.summary.bundles > 0 && (
+            <>
+              <select className="input h-9 w-56 text-xs" value={labelLayout} onChange={(e) => setLabelLayout(e.target.value)} title="Label sheet / roll size">
+                {Object.entries(LABEL_LAYOUTS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+              </select>
+              <Button variant="outline" onClick={printLabels}>
+                🖨️ Print Barcodes ({bSel.size || bMeta.summary.bundles})
+              </Button>
+            </>
           )}
           <Button variant="outline" onClick={() => setShowQcModal(true)}>+ Record Cut QC</Button>
           <Button onClick={() => setShowBundleModal(true)}>+ Generate Bundles</Button>
@@ -238,7 +296,7 @@ export function CutQcBundlesPage() {
           onClick={() => setActiveTab('bundles')}
           className={`pb-3 ${activeTab === 'bundles' ? 'border-b-2 border-brand-600 text-brand-700 font-bold' : 'text-slate-500'}`}
         >
-          Bundles List ({bundles.length})
+          Bundles List ({bMeta.summary.bundles})
         </button>
         <button
           onClick={() => setActiveTab('scanner')}
@@ -270,12 +328,58 @@ export function CutQcBundlesPage() {
                       : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
                   }`}
                 >
-                  {p === 'ALL' ? `All Parts (${bundles.length})` : p}
+                  {p === 'ALL' ? 'All Parts' : p}
                 </button>
               ))}
             </div>
             <div className="text-slate-500 font-mono">
-              Showing {filteredBundles.length} of {bundles.length} bundles
+              {fmtNumber(bMeta.summary.bundles)} bundles · {fmtNumber(bMeta.summary.qty)} PCS
+            </div>
+          </div>
+
+          {lastGenerated.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+              <span><b>{lastGenerated.length}</b> bundle(s) just generated — print all their barcode labels in one go.</span>
+              <span className="flex gap-2">
+                <Button size="sm" onClick={() => printBatch(lastGenerated).catch((e) => toast(errMsg(e, 'Print failed'), 'error'))}>🖨️ Print these {lastGenerated.length} labels</Button>
+                <Button size="sm" variant="ghost" onClick={() => setLastGenerated([])}>Dismiss</Button>
+              </span>
+            </div>
+          )}
+
+          {/* Server-side filters: job, stage, bundle / barcode, date */}
+          <div className="flex flex-wrap items-end gap-2 border-b border-slate-200 bg-white p-3 text-xs">
+            <label className="flex flex-col gap-1"><span className="font-semibold text-slate-600">Job / IO</span>
+              <select className="input h-8 w-44 text-xs" value={bf.io_no} onChange={(e) => setBf({ ...bf, io_no: e.target.value })}>
+                <option value="">All jobs</option>
+                {(bMeta.summary.jobs || []).map((j: any) => <option key={j.io_no ?? '-'} value={j.io_no ?? ''}>{j.io_no ?? '—'} ({j.bundles})</option>)}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1"><span className="font-semibold text-slate-600">Stage</span>
+              <select className="input h-8 w-36 text-xs" value={bf.status} onChange={(e) => setBf({ ...bf, status: e.target.value })}>
+                <option value="">All stages</option>
+                {['GENERATED', 'CHECKED', 'ISSUED', 'IN_SEWING', 'COMPLETED', 'FINISHING', 'PACKED', 'CLOSED'].map((st) => <option key={st} value={st}>{st}</option>)}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1"><span className="font-semibold text-slate-600">From</span>
+              <input type="date" className="input h-8 w-36 text-xs" value={bf.from} onChange={(e) => setBf({ ...bf, from: e.target.value })} /></label>
+            <label className="flex flex-col gap-1"><span className="font-semibold text-slate-600">To</span>
+              <input type="date" className="input h-8 w-36 text-xs" value={bf.to} onChange={(e) => setBf({ ...bf, to: e.target.value })} /></label>
+            <form className="flex items-end gap-1" onSubmit={(e) => { e.preventDefault(); setBPage(1); loadBundles(1); }}>
+              <label className="flex flex-col gap-1"><span className="font-semibold text-slate-600">Bundle / barcode</span>
+                <input className="input h-8 w-44 text-xs" placeholder="Search…" value={bf.q} onChange={(e) => setBf({ ...bf, q: e.target.value })} /></label>
+              <Button size="sm" variant="outline" type="submit">Search</Button>
+            </form>
+            <div className="ml-auto flex flex-wrap items-center gap-1.5">
+              {(bMeta.summary.by_status || []).map((st: any) => (
+                <button key={st.status} type="button" onClick={() => setBf({ ...bf, status: bf.status === st.status ? '' : st.status })}
+                  className={`rounded-md border px-2 py-1 font-mono ${bf.status === st.status ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-slate-200 text-slate-600'}`}>
+                  {st.status} {fmtNumber(st.bundles)}
+                </button>
+              ))}
+              <Button size="sm" variant="outline" onClick={verifyBundles} title="GENERATED → CHECKED for the ticked bundles, or for the whole filtered job">
+                ✔ Verify {bSel.size ? `${bSel.size} selected` : bf.io_no ? `job ${bf.io_no}` : ''}
+              </Button>
             </div>
           </div>
 
@@ -283,6 +387,13 @@ export function CutQcBundlesPage() {
             data={filteredBundles}
             loading={loading}
             columns={[
+              { key: 'sel', header: (
+                  <input type="checkbox" checked={allOnPage}
+                    onChange={() => setBSel((prev) => { const n = new Set(prev); pageIds.forEach((id) => (allOnPage ? n.delete(id) : n.add(id))); return n; })} />
+                ) as any, render: (r: any) => (
+                  <input type="checkbox" checked={bSel.has(Number(r.id))}
+                    onChange={() => setBSel((prev) => { const n = new Set(prev); n.has(Number(r.id)) ? n.delete(Number(r.id)) : n.add(Number(r.id)); return n; })} />
+                ) },
               { key: 'bundle_no', header: 'Bundle No & Sequence', sortable: true, render: (r: any) => (
                 <div>
                   <div className="flex items-center gap-1.5">
@@ -330,7 +441,7 @@ export function CutQcBundlesPage() {
               } },
               { key: 'actions', header: 'Actions', align: 'right' as const, render: (r: any) => (
                 <div className="flex justify-end gap-1 items-center">
-                  <Button size="sm" variant="ghost" onClick={() => { setPrintBundle(r); setShowPrintModal(true); }}>
+                  <Button size="sm" variant="ghost" title="Print this bundle's barcode label" onClick={() => printBundleLabels([r], labelLayout)}>
                     🏷️
                   </Button>
                   {r.status === 'GENERATED' && (
@@ -340,6 +451,13 @@ export function CutQcBundlesPage() {
               ) },
             ]}
           />
+          <div className="flex items-center justify-between border-t border-slate-200 px-3 py-2 text-xs text-slate-600">
+            <span>Page {bMeta.pagination.page} of {bMeta.pagination.totalPages} · {fmtNumber(bMeta.pagination.total)} bundles{bSel.size ? ` · ${bSel.size} ticked` : ''}</span>
+            <span className="flex gap-2">
+              <Button size="sm" variant="outline" disabled={bPage <= 1} onClick={() => { const p = bPage - 1; setBPage(p); loadBundles(p); }}>‹ Prev</Button>
+              <Button size="sm" variant="outline" disabled={bPage >= bMeta.pagination.totalPages} onClick={() => { const p = bPage + 1; setBPage(p); loadBundles(p); }}>Next ›</Button>
+            </span>
+          </div>
         </Card>
       )}
 
@@ -576,85 +694,6 @@ export function CutQcBundlesPage() {
             <div className="flex justify-end gap-2 border-t px-6 py-4 bg-slate-50">
               <Button variant="ghost" onClick={() => setShowBundleModal(false)}>Cancel</Button>
               <Button onClick={genMode === 'OUTPUT' ? handleGenerateFromOutput : handleGenerateBundles} loading={saving}>Generate</Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Print Barcode Tickets Modal */}
-      {showPrintModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 overflow-y-auto">
-          <div className="w-full max-w-4xl bg-white rounded-xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between border-b px-6 py-4 bg-slate-50">
-              <div>
-                <h3 className="text-lg font-bold text-slate-800">Print Bundle Barcode Tickets</h3>
-                <p className="text-xs text-slate-500">
-                  {printBundle ? `1 Ticket: ${printBundle.bundle_no}` : `${filteredBundles.length} Tickets for Part: ${selectedPartFilter}`}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <Button variant="primary" onClick={() => window.print()}>🖨️ Print Labels</Button>
-                <button onClick={() => { setShowPrintModal(false); setPrintBundle(null); }} className="text-slate-400 hover:text-slate-600 font-bold text-lg">✕</button>
-              </div>
-            </div>
-
-            <div className="p-6 overflow-y-auto flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-100/50">
-              {(printBundle ? [printBundle] : filteredBundles).map((b: any, idx: number) => {
-                const part = (b.part_name || 'TOP').toUpperCase();
-                const partColor = part === 'BOTTOM' ? 'bg-emerald-600' : part === 'FOLDING' ? 'bg-purple-600' : part === 'COLLAR' ? 'bg-amber-600' : 'bg-blue-600';
-                return (
-                  <div key={b.id || idx} className="bg-white border-2 border-slate-300 rounded-xl p-4 shadow-sm flex flex-col justify-between">
-                    <div>
-                      {/* Top Header: Part Banner & Bundle Seq */}
-                      <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-3">
-                        <span className={`px-3 py-1 rounded-md text-white font-black text-sm tracking-wider uppercase ${partColor}`}>
-                          PART: {part}
-                        </span>
-                        <div className="text-right">
-                          <span className="text-[10px] font-semibold text-slate-400 uppercase">BUNDLE NO</span>
-                          <p className="text-lg font-black font-mono text-slate-900 leading-none">
-                            {b.bundle_seq ? `#${String(b.bundle_seq).padStart(2, '0')} / ${b.total_bundles || '?'}` : b.bundle_no}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Details Grid */}
-                      <div className="grid grid-cols-2 gap-2 text-xs mb-3">
-                        <div>
-                          <span className="text-slate-400 font-medium">I/O Number:</span>
-                          <p className="font-mono font-bold text-slate-800">{b.io_no}</p>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 font-medium">Style Code:</span>
-                          <p className="font-bold text-slate-800">{b.style_code || 'N/A'}</p>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 font-medium">Colour:</span>
-                          <p className="font-semibold text-slate-800">{b.color_name || 'N/A'}</p>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 font-medium">Size:</span>
-                          <p className="font-bold text-slate-800">{b.size_code || 'N/A'}</p>
-                        </div>
-                      </div>
-
-                      {/* Quantity Highlight */}
-                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-2 text-center mb-3">
-                        <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Bundle Quantity</span>
-                        <p className="text-2xl font-black text-blue-700">{b.qty} PCS</p>
-                      </div>
-                    </div>
-
-                    {/* Barcode representation */}
-                    <div className="border-t border-slate-200 pt-3 text-center">
-                      <div className="font-mono tracking-widest text-lg font-bold bg-slate-100 py-1.5 px-3 rounded text-slate-800 select-all">
-                        {b.barcode || b.bundle_no}
-                      </div>
-                      <p className="text-[10px] text-slate-400 font-mono mt-1">{b.bundle_no}</p>
-                    </div>
-                  </div>
-                );
-              })}
             </div>
           </div>
         </div>

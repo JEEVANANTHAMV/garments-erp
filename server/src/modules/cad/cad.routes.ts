@@ -781,7 +781,8 @@ cadRouter.post('/cad-requirements/:id/calculate', requirePermission('PRODUCTION.
   const fabricProgramLines: any[] = [];
   const cuttingLayLines: any[] = [];
   let grandTotalFabric = 0;
-  let totalOrderPcs = 0;
+  // Garment order qty: per colour the largest fabric row (body + rib of the same garment are not added).
+  const colourPcs: Record<string, number> = {};
 
   Object.values(fabricMap).forEach((fab: any) => {
     Object.entries(fab.colorways).forEach(([colorName, data]: [string, any]) => {
@@ -791,7 +792,8 @@ cadRouter.post('/cad-requirements/:id/calculate', requirePermission('PRODUCTION.
       const grand = Math.round(net + buffer);
 
       grandTotalFabric += grand;
-      totalOrderPcs += data.order_pcs;
+      const ck = String(colorName).trim().toUpperCase();
+      colourPcs[ck] = Math.max(colourPcs[ck] ?? 0, Number(data.order_pcs) || 0);
 
       fabricProgramLines.push({
         fabric_type: fab.fabric_type,
@@ -823,8 +825,10 @@ cadRouter.post('/cad-requirements/:id/calculate', requirePermission('PRODUCTION.
     });
   });
 
+  const totalOrderPcs = Object.values(colourPcs).reduce((a, b) => a + b, 0);
   const avgWtPerGarment = totalOrderPcs > 0 ? (grandTotalFabric / totalOrderPcs) : 0;
-  const actWtPerGarment = avgWtPerGarment * (1 - (totalAllowancePct / 100.0));
+  // Actual piece weight = average less the document's fabric loss % (client call 29-Sep-2026).
+  const actWtPerGarment = avgWtPerGarment * (1 - (fabricAllowancePct / 100.0));
 
   const calculationResult = {
     cad_type: cadType,

@@ -370,16 +370,92 @@ cuttingPlanRouter.get('/bundles', requirePermission('PRODUCTION.VIEW'), ah(async
       WHERE ${BUNDLE_COMPANY}`;
   const params: any[] = [cid, cid];
 
-  if (f('io_no')) { sql += ` AND cb.io_no = ?`; params.push(f('io_no')); }
-  if (f('status')) { sql += ` AND cb.status = ?`; params.push(f('status')); }
-  if (f('part_name')) { sql += ` AND cb.part_name = ?`; params.push(f('part_name')); }
-  if (f('lay_id')) { sql += ` AND cb.lay_id = ?`; params.push(Number(f('lay_id'))); }
-  if (f('cut_output_id')) { sql += ` AND cb.cut_output_id = ?`; params.push(Number(f('cut_output_id'))); }
-  if (f('cutting_plan_id')) { sql += ` AND cp.id = ?`; params.push(Number(f('cutting_plan_id'))); }
-  sql += ` ORDER BY cb.id DESC LIMIT 5000`;
+  let where = '';
+  if (f('io_no')) { where += ` AND cb.io_no = ?`; params.push(f('io_no')); }
+  if (f('status')) { where += ` AND cb.status = ?`; params.push(f('status')); }
+  if (f('part_name')) { where += ` AND cb.part_name = ?`; params.push(f('part_name')); }
+  if (f('lay_id')) { where += ` AND cb.lay_id = ?`; params.push(Number(f('lay_id'))); }
+  if (f('cut_output_id')) { where += ` AND cb.cut_output_id = ?`; params.push(Number(f('cut_output_id'))); }
+  if (f('cutting_id')) { where += ` AND cb.cutting_id = ?`; params.push(Number(f('cutting_id'))); }
+  if (f('cutting_plan_id')) { where += ` AND cp.id = ?`; params.push(Number(f('cutting_plan_id'))); }
+  if (f('color_id')) { where += ` AND cb.color_id = ?`; params.push(Number(f('color_id'))); }
+  if (f('size_id')) { where += ` AND cb.size_id = ?`; params.push(Number(f('size_id'))); }
+  if (f('from')) { where += ` AND DATE(cb.created_at) >= ?`; params.push(f('from')); }
+  if (f('to')) { where += ` AND DATE(cb.created_at) <= ?`; params.push(f('to')); }
+  if (f('q')) { where += ` AND (cb.bundle_no LIKE ? OR cb.barcode LIKE ?)`; params.push(`%${f('q')}%`, `%${f('q')}%`); }
+  // ids=1,2,3 — the bundles just generated (print exactly that batch).
+  const ids = (f('ids') ?? '').split(',').map(Number).filter((x) => Number.isInteger(x) && x > 0);
+  if (ids.length) { where += ` AND cb.id IN (${ids.map(() => '?').join(',')})`; params.push(...ids); }
 
-  const rows = await query(sql, params);
+  // Paged mode (page / pageSize given): thousands of bundles per season stay usable.
+  if (f('page')) {
+    const pageSize = Math.min(Math.max(Number(f('pageSize')) || 100, 10), 1000);
+    const page = Math.max(Number(f('page')) || 1, 1);
+    const from = `FROM trx_cutting_bundle cb
+       LEFT JOIN trx_cutting c ON c.id = cb.cutting_id
+       LEFT JOIN trx_cut_output co ON co.id = cb.cut_output_id
+       LEFT JOIN trx_cutting_plan cp ON cp.id = COALESCE(co.cutting_plan_id, c.cutting_plan_id)
+      WHERE ${BUNDLE_COMPANY}${where}`;
+    const [tot] = await query<any>(`SELECT COUNT(*) AS n, COALESCE(SUM(cb.qty),0) AS qty ${from}`, params);
+    const byStatus = await query<any>(`SELECT cb.status, COUNT(*) AS n, COALESCE(SUM(cb.qty),0) AS qty ${from} GROUP BY cb.status`, params);
+    const jobs = await query<any>(`SELECT cb.io_no, COUNT(*) AS n ${from} GROUP BY cb.io_no ORDER BY cb.io_no`, params);
+    const rows = await query(`${sql}${where} ORDER BY cb.id DESC LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`, params);
+    const total = Number(tot?.n ?? 0);
+    res.json({
+      data: rows,
+      pagination: { page, pageSize, total, totalPages: Math.max(Math.ceil(total / pageSize), 1) },
+      summary: {
+        bundles: total, qty: Number(tot?.qty ?? 0),
+        by_status: byStatus.map((r) => ({ status: r.status, bundles: Number(r.n), qty: Number(r.qty) })),
+        jobs: jobs.map((r) => ({ io_no: r.io_no, bundles: Number(r.n) })),
+      },
+    });
+    return;
+  }
+
+  const rows = await query(`${sql}${where} ORDER BY cb.id DESC LIMIT 5000`, params);
   res.json({ data: rows });
+}));
+
+/**
+ * POST /bundles/verify — cutting-room verification of many bundles at once
+ * (GENERATED → CHECKED), by ids or by the list filter (io_no / cut_output_id / cutting_id / part_name).
+ */
+cuttingPlanRouter.post('/bundles/verify', requirePermission('PRODUCTION.UPDATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const body = z.object({
+    ids: z.array(z.coerce.number().int().positive()).max(5000).optional(),
+    io_no: s.nullableStr(40), cut_output_id: s.id(), cutting_id: s.id(), part_name: s.nullableStr(50),
+    remarks: s.nullableStr(255),
+  }).parse(req.body);
+  if (!body.ids?.length && !body.io_no && !body.cut_output_id && !body.cutting_id) {
+    throw BadRequest('Choose the bundles to verify (tick them, or filter by job / cut output)');
+  }
+  let where = `${BUNDLE_COMPANY} AND cb.status = 'GENERATED'`;
+  const params: any[] = [cid, cid];
+  if (body.ids?.length) { where += ` AND cb.id IN (${body.ids.map(() => '?').join(',')})`; params.push(...body.ids); }
+  if (body.io_no) { where += ` AND cb.io_no = ?`; params.push(body.io_no); }
+  if (body.cut_output_id) { where += ` AND cb.cut_output_id = ?`; params.push(body.cut_output_id); }
+  if (body.cutting_id) { where += ` AND cb.cutting_id = ?`; params.push(body.cutting_id); }
+  if (body.part_name) { where += ` AND cb.part_name = ?`; params.push(body.part_name); }
+  const targets = await query<any>(
+    `SELECT cb.id FROM trx_cutting_bundle cb LEFT JOIN trx_cutting c ON c.id = cb.cutting_id WHERE ${where} ORDER BY cb.id LIMIT 5000`, params);
+  const verified = await transaction(async (tx) => {
+    let n = 0;
+    for (const t of targets) {
+      const b = await lockBundle(tx, cid, { id: Number(t.id) });
+      if (b.status !== 'GENERATED') continue;
+      await txExecute(tx, `UPDATE trx_cutting_bundle SET status = 'CHECKED' WHERE id = ?`, [b.id]);
+      await addMovement(tx, req, b, {
+        txn_type: 'CUT_VERIFY', from_stage: 'GENERATED', to_stage: 'CHECKED',
+        qty: Number(b.balance_qty ?? b.qty), remarks: body.remarks ?? 'Bulk verify',
+      });
+      n++;
+    }
+    return n;
+  });
+  await audit(req, 'trx_cutting_bundle', 0, 'UPDATE', undefined, { action: 'BULK_VERIFY', verified, filter: { ...body, ids: body.ids?.length } });
+  res.json({ data: { verified } });
 }));
 
 /**
