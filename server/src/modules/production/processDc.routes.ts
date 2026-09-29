@@ -11,7 +11,36 @@ import {
   lockBundle, applyBundle, addMovement, availAt, bundleAvail, resolveBundleIds, ironingRequiresChecking, ironingAvail,
   TERMINAL, type BundleRow, type Counter, type Level,
 } from './bundleLedger.js';
-import { linkProcOf, openLineAllocations, releaseLineAllocation } from './lineAllocationLink.js';
+import {
+  linkProcOf, openLineAllocations, releaseLineAllocation,
+  sourceProcOf, lineInfo, lineOpenBundles, recordLineOutput, type LinkProc,
+} from './lineAllocationLink.js';
+import { postBundleSewingOutput, postCheckingQc } from './productionFloor.routes.js';
+
+/**
+ * PCS a bundle can put on a DC that carries a line's output: what the stage
+ * already has (base) plus what the DC may post as that line's output first
+ * (room): sewing WIP / cut panels for a sewing line, PCS waiting for checking
+ * for a checking line (strict checking). Ironing lines post their output on
+ * the floor, so no room there.
+ */
+function fromLineAvail(b: BundleRow, st: StageInfo, src: LinkProc, strictChk: boolean) {
+  const a = bundleAvail({ ...b, balance_qty: b.balance_qty ?? b.qty });
+  const base = strictChk ? a.checked : availAt(b, st.level);
+  if (src === 'sewing' && st.level === 'SEWN') return { base, room: a.cut + a.sewing_wip };
+  if (src === 'checking' && strictChk) return { base, room: a.checking };
+  return { base, room: 0 };
+}
+type FromLine = { proc: LinkProc; lineId: number; line: { line_code: string; line_name: string } };
+
+async function resolveFromLine(tx: Tx | null, cid: number, st: StageInfo, lineId: number | null | undefined): Promise<FromLine | null> {
+  if (!lineId) return null;
+  const proc = sourceProcOf(st);
+  if (!proc) throw BadRequest(`${st.stage_name} does not follow an in-house line — "From line" is for checking, washing, ironing and packing DCs`);
+  const line = await lineInfo(tx, cid, proc, lineId);
+  if (!line) throw BadRequest(`${proc} line #${lineId} not found`);
+  return { proc, lineId, line };
+}
 import { contractorRates } from './processMaster.routes.js';
 
 /**
@@ -163,6 +192,8 @@ const availQuery = z.object({
   size_id: z.coerce.number().int().positive().optional(),
   q: z.string().trim().max(120).optional(),
   include_zero: z.coerce.boolean().optional(),
+  // Only bundles allocated to this line of the process before the stage (DC carries its output).
+  from_line_id: z.coerce.number().int().positive().optional(),
   limit: z.coerce.number().int().min(1).max(5000).default(500),
 });
 
@@ -218,6 +249,13 @@ processDcRouter.get('/bundle-stock/available-jobs', requirePermission('PRODUCTIO
 async function availableBundles(cid: number, qp: z.infer<typeof availQuery>, onlyIds?: number[]) {
   const st = qp.stage_id ? await stageInfo(cid, qp.stage_id) : null;
   const level: Level = st?.level ?? qp.level ?? 'CUT';
+  const fromLine = st && qp.from_line_id ? await resolveFromLine(null, cid, st, qp.from_line_id) : null;
+  const lineOpen = fromLine ? await lineOpenBundles(null, cid, fromLine.proc, fromLine.lineId) : null;
+  if (lineOpen) {
+    const ids = [...lineOpen.keys()].filter((id) => !onlyIds || onlyIds.includes(id));
+    if (!ids.length) return { data: [], meta: { level, stage: st, from_line: fromLine } };
+    onlyIds = ids;
+  }
 
   const where = ['COALESCE(cb.company_id, c.company_id) = ?', `cb.status NOT IN (${TERMINAL.map(() => '?').join(',')})`];
   const params: unknown[] = [cid, ...TERMINAL];
@@ -231,7 +269,7 @@ async function availableBundles(cid: number, qp: z.infer<typeof availQuery>, onl
   if (qp.color_id) { where.push('cb.color_id = ?'); params.push(qp.color_id); }
   if (qp.size_id) { where.push('cb.size_id = ?'); params.push(qp.size_id); }
   if (qp.q) { where.push('(cb.bundle_no LIKE ? OR cb.barcode LIKE ?)'); params.push(`%${qp.q}%`, `%${qp.q}%`); }
-  if (!qp.include_zero) {
+  if (!qp.include_zero && !lineOpen) {
     where.push(level === 'CUT' ? 'cb.balance_qty > 0' : level === 'SEWN' ? 'cb.sew_good_qty > 0' : 'cb.fin_good_qty > 0');
   }
   const rows = await query<any>(
@@ -261,10 +299,14 @@ async function availableBundles(cid: number, qp: z.infer<typeof availQuery>, onl
     lay_no: b.lay_no, cut_no: b.cut_no, plan_no: b.plan_no, cutting_plan_id: b.cutting_plan_id_resolved,
     buyer_name: jobs.get(b.io_no)?.buyer_name ?? null, buyer_po_no: jobs.get(b.io_no)?.buyer_po_no ?? null,
     assort_color: assort.get(assortKey(b)) ?? null,
-    available_qty: strictChk ? ironingAvail(b, true) : availAt(b, level), avail: bundleAvail(b), open_dc_no: holds.get(Number(b.id)) ?? null,
+    available_qty: fromLine
+      ? (() => { const f = fromLineAvail(b, st!, fromLine.proc, strictChk); return f.base + f.room; })()
+      : strictChk ? ironingAvail(b, true) : availAt(b, level),
+    avail: bundleAvail(b), open_dc_no: holds.get(Number(b.id)) ?? null,
     line_alloc: lineAllocs.get(Number(b.id)) ?? null,
+    from_line_open_qty: lineOpen?.get(Number(b.id))?.open_qty ?? null,
   })).filter((b) => qp.include_zero || b.available_qty > 0);
-  return { data, meta: { level, stage: st } };
+  return { data, meta: { level, stage: st, from_line: fromLine } };
 }
 
 // ============================================================
@@ -484,6 +526,8 @@ const dcSchema = z.object({
   issue: z.coerce.boolean().default(false),
   // Bundles allocated to an in-house line may go on this DC only when their allocation is released.
   release_line_allocation: z.coerce.boolean().default(false),
+  // Line of the previous process whose bundles this DC moves on (issuing = that line's output).
+  from_line_id: z.coerce.number().int().positive().nullish(),
 });
 
 interface PreparedLine {
@@ -492,7 +536,7 @@ interface PreparedLine {
 }
 
 /** Validate DC lines against bundle balances and other open DCs (bundles locked by the caller). */
-async function prepareLines(tx: Tx, cid: number, st: StageInfo, lines: z.infer<typeof lineSchema>[], challanId?: number, releaseAlloc = false) {
+async function prepareLines(tx: Tx, cid: number, st: StageInfo, lines: z.infer<typeof lineSchema>[], challanId?: number, releaseAlloc = false, fromLine: FromLine | null = null) {
   const ids: number[] = [];
   const byId = new Map<number, z.infer<typeof lineSchema>>();
   for (const l of lines) {
@@ -506,7 +550,9 @@ async function prepareLines(tx: Tx, cid: number, st: StageInfo, lines: z.infer<t
   const linkProc = linkProcOf(st);
   const lineAllocs = linkProc ? await openLineAllocations(tx, cid, linkProc, ids) : new Map();
   const strictChk = st.kind === 'FINISHING' && await ironingRequiresChecking(tx, cid);
-  const unit = strictChk ? 'checking-passed PCS (checking QC required before ironing)' : LEVEL_LABEL[st.level];
+  const unit = fromLine ? `PCS on ${fromLine.proc} line ${fromLine.line.line_code}`
+    : strictChk ? 'checking-passed PCS (checking QC required before ironing)' : LEVEL_LABEL[st.level];
+  const lineOpen = fromLine ? await lineOpenBundles(tx, cid, fromLine.proc, fromLine.lineId) : null;
   const out: PreparedLine[] = [];
   const problems: string[] = [];
   for (const id of ids) {
@@ -520,7 +566,13 @@ async function prepareLines(tx: Tx, cid: number, st: StageInfo, lines: z.infer<t
       problems.push(`${b.bundle_no} is allocated to in-house ${linkProc} line ${la.line_code} (${la.allocation_no}, ${la.open_qty} PCS) — tick "Release in-house line allocation" to send it on this DC`);
       continue;
     }
-    const avail = strictChk ? ironingAvail(b, true) : availAt(b, st.level);
+    if (lineOpen && !lineOpen.has(id)) {
+      problems.push(`${b.bundle_no} is not allocated to ${fromLine!.proc} line ${fromLine!.line.line_code}`);
+      continue;
+    }
+    const avail = fromLine
+      ? (() => { const f = fromLineAvail(b, st, fromLine.proc, strictChk); return f.base + f.room; })()
+      : strictChk ? ironingAvail(b, true) : availAt(b, st.level);
     const qty = l.qty ?? avail;
     if (avail <= 0) { problems.push(`${b.bundle_no} has no ${unit}`); continue; }
     if (qty > avail) { problems.push(`${b.bundle_no}: ${qty} PCS requested, only ${avail} ${unit}`); continue; }
@@ -603,10 +655,31 @@ async function locationCheck(cid: number, ...ids: (number | null | undefined)[])
 }
 
 /** Post an issued DC through the bundle ledger (bundles already locked in prepareLines). */
-async function postIssue(tx: Tx, req: Request, dc: any, st: StageInfo, lines: PreparedLine[], vendorName: string, releaseAlloc = false) {
+async function postIssue(tx: Tx, req: Request, dc: any, st: StageInfo, lines: PreparedLine[], vendorName: string, releaseAlloc = false, fromLine: FromLine | null = null) {
+  const cid = req.user!.companyId;
   const lineRows = await txQuery<any>(tx, `SELECT id, bundle_id, qty FROM trx_jobwork_challan_line WHERE challan_id = ?`, [dc.id]);
   const linkProc = releaseAlloc ? linkProcOf(st) : null;
+  const strictChk = st.kind === 'FINISHING' && await ironingRequiresChecking(tx, cid);
+  const dcDate = String(dc.challan_date ?? new Date().toISOString()).slice(0, 10);
   for (const l of lines) {
+    // DC from a line: PCS not yet posted as that line's output are posted now, then booked to its plan.
+    if (fromLine) {
+      const b0 = await lockBundle(tx, cid, { id: l.bundle.id });
+      const short = l.qty - fromLineAvail(b0, st, fromLine.proc, strictChk).base;
+      if (short > 0 && fromLine.proc === 'sewing') {
+        await postBundleSewingOutput(tx, req, b0.id, {
+          date: dcDate, line_name: fromLine.line.line_code, line_aliases: [fromLine.line.line_name],
+          good: short, reject: 0, rework: 0, remarks: `Output on ${st.stage_name} DC ${dc.challan_no}`,
+        });
+      } else if (short > 0 && fromLine.proc === 'checking') {
+        await postCheckingQc(tx, req, b0.id, {
+          date: dcDate, line_name: fromLine.line.line_code, good: short, reject: 0, rework: 0,
+          remarks: `Passed on ${st.stage_name} DC ${dc.challan_no}`,
+        });
+      }
+      await recordLineOutput(tx, req, fromLine.proc, fromLine.lineId, b0.id, l.qty, dcDate, `${st.stage_name} DC ${dc.challan_no}`);
+      l.bundle = await lockBundle(tx, cid, { id: b0.id });
+    }
     // PCS leaving on the DC come off the bundle's in-house line allocation / daily plan.
     if (linkProc) await releaseLineAllocation(tx, req, linkProc, l.bundle.id, l.qty, `${st.stage_name} DC ${dc.challan_no}`);
     const after = await applyBundle(tx, l.bundle, issueDelta(st, l.qty));
@@ -634,7 +707,8 @@ processDcRouter.post('/process-dcs', requirePermission('PRODUCTION.CREATE'), ah(
   if (body.rate == null && ops.length) body.rate = opsRate(ops);
 
   const id = await transaction(async (tx) => {
-    const lines = await prepareLines(tx, cid, st, body.lines, undefined, body.release_line_allocation);
+    const fromLine = await resolveFromLine(tx, cid, st, body.from_line_id);
+    const lines = await prepareLines(tx, cid, st, body.lines, undefined, body.release_line_allocation, fromLine);
     const h = headerFrom(lines);
     const challanNo = body.challan_no || await nextDocNumber(tx, cid, 'JW_CHALLAN');
     const dup = await txQueryOne(tx, `SELECT id FROM trx_jobwork_challan WHERE company_id = ? AND challan_no = ?`, [cid, challanNo]);
@@ -643,17 +717,19 @@ processDcRouter.post('/process-dcs', requirePermission('PRODUCTION.CREATE'), ah(
       `INSERT INTO trx_jobwork_challan
          (company_id, challan_no, challan_date, prod_order_id, vendor_id, stage_id, gate_outward_id, total_qty, rate,
           total_amount, expected_return, status, remarks, io_no, cutting_plan_id, style_id, is_bundle_dc,
-          vehicle_no, driver_name, transporter, ref_no, from_warehouse_id, to_warehouse_id, release_line_alloc, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,'DRAFT',?,?,?,?,1,?,?,?,?,?,?,?,?)`,
+          vehicle_no, driver_name, transporter, ref_no, from_warehouse_id, to_warehouse_id, release_line_alloc,
+          from_line_proc, from_line_id, created_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,'DRAFT',?,?,?,?,1,?,?,?,?,?,?,?,?,?,?)`,
       [cid, challanNo, body.challan_date, body.prod_order_id ?? null, body.vendor_id, st.id, body.gate_outward_id ?? null,
        h.total_qty, body.rate ?? null, body.rate != null ? Math.round(body.rate * h.total_qty * 100) / 100 : null,
        body.expected_return ?? null, body.remarks ?? null, h.io_no, body.cutting_plan_id ?? null, h.style_id,
        body.vehicle_no ?? null, body.driver_name ?? null, body.transporter ?? null, body.ref_no ?? null,
-       body.from_warehouse_id ?? null, body.to_warehouse_id ?? null, body.release_line_allocation ? 1 : 0, req.user!.id]);
-    const dc = { id: r.insertId, challan_no: challanNo };
+       body.from_warehouse_id ?? null, body.to_warehouse_id ?? null, body.release_line_allocation ? 1 : 0,
+       fromLine?.proc ?? null, fromLine?.lineId ?? null, req.user!.id]);
+    const dc = { id: r.insertId, challan_no: challanNo, challan_date: body.challan_date };
     await writeLines(tx, dc.id, st, lines);
     await writeOps(tx, dc.id, ops);
-    if (body.issue) await postIssue(tx, req, dc, st, lines, vendor?.party_name ?? 'Vendor', body.release_line_allocation);
+    if (body.issue) await postIssue(tx, req, dc, st, lines, vendor?.party_name ?? 'Vendor', body.release_line_allocation, fromLine);
     await audit(req, 'trx_jobwork_challan', dc.id, 'INSERT', undefined,
       { challan_no: challanNo, stage: st.stage_code, bundles: lines.length, qty: h.total_qty, issued: body.issue }, tx);
     return dc.id;
@@ -677,24 +753,26 @@ processDcRouter.put('/process-dcs/:id', requirePermission('PRODUCTION.UPDATE'), 
     const before = await txQueryOne<any>(tx, `SELECT * FROM trx_jobwork_challan WHERE id = ? AND company_id = ? FOR UPDATE`, [id, cid]);
     if (!before) throw NotFound('DC not found');
     if (before.status !== 'DRAFT') throw BadRequest(`DC ${before.challan_no} is ${before.status} — only a draft DC can be edited`);
-    const lines = await prepareLines(tx, cid, st, body.lines, id, body.release_line_allocation);
+    const fromLine = await resolveFromLine(tx, cid, st, body.from_line_id);
+    const lines = await prepareLines(tx, cid, st, body.lines, id, body.release_line_allocation, fromLine);
     const h = headerFrom(lines);
     await txExecute(tx,
       `UPDATE trx_jobwork_challan SET challan_date = ?, prod_order_id = ?, vendor_id = ?, stage_id = ?, gate_outward_id = ?,
               total_qty = ?, rate = ?, total_amount = ?, expected_return = ?, remarks = ?, io_no = ?, cutting_plan_id = ?,
               style_id = ?, vehicle_no = ?, driver_name = ?, transporter = ?, ref_no = ?, from_warehouse_id = ?,
-              to_warehouse_id = ?, release_line_alloc = ?, updated_by = ?
+              to_warehouse_id = ?, release_line_alloc = ?, from_line_proc = ?, from_line_id = ?, updated_by = ?
         WHERE id = ?`,
       [body.challan_date, body.prod_order_id ?? null, body.vendor_id, st.id, body.gate_outward_id ?? null,
        h.total_qty, body.rate ?? null, body.rate != null ? Math.round(body.rate * h.total_qty * 100) / 100 : null,
        body.expected_return ?? null, body.remarks ?? null, h.io_no, body.cutting_plan_id ?? null, h.style_id,
        body.vehicle_no ?? null, body.driver_name ?? null, body.transporter ?? null, body.ref_no ?? null,
-       body.from_warehouse_id ?? null, body.to_warehouse_id ?? null, body.release_line_allocation ? 1 : 0, req.user!.id, id]);
+       body.from_warehouse_id ?? null, body.to_warehouse_id ?? null, body.release_line_allocation ? 1 : 0,
+       fromLine?.proc ?? null, fromLine?.lineId ?? null, req.user!.id, id]);
     // Draft lines have no ledger effect yet, so replacing them is safe.
     await txExecute(tx, `DELETE FROM trx_jobwork_challan_line WHERE challan_id = ?`, [id]);
     await writeLines(tx, id, st, lines);
     await writeOps(tx, id, ops);
-    if (body.issue) await postIssue(tx, req, before, st, lines, vendor?.party_name ?? 'Vendor', body.release_line_allocation);
+    if (body.issue) await postIssue(tx, req, { ...before, challan_date: body.challan_date }, st, lines, vendor?.party_name ?? 'Vendor', body.release_line_allocation, fromLine);
     await audit(req, 'trx_jobwork_challan', id, 'UPDATE', before,
       { bundles: lines.length, qty: h.total_qty, issued: body.issue }, tx);
   });
@@ -716,8 +794,8 @@ processDcRouter.post('/process-dcs/:id/issue', requirePermission('PRODUCTION.CRE
     if (cur.some((l) => !l.bundle_id)) throw BadRequest('This DC has lines without bundles — it was not created as a bundle DC');
     const lines = await prepareLines(tx, cid, st, cur.map((l) => ({
       bundle_id: l.bundle_id, qty: l.qty, description: l.description, operation_id: l.operation_id, operator_line: l.operator_line,
-    })), id, !!dc.release_line_alloc);
-    await postIssue(tx, req, dc, st, lines, dc.vendor_name ?? 'Vendor', !!dc.release_line_alloc);
+    })), id, !!dc.release_line_alloc, await resolveFromLine(tx, cid, st, dc.from_line_id));
+    await postIssue(tx, req, dc, st, lines, dc.vendor_name ?? 'Vendor', !!dc.release_line_alloc, await resolveFromLine(tx, cid, st, dc.from_line_id));
     await audit(req, 'trx_jobwork_challan', id, 'UPDATE', { status: 'DRAFT' }, { status: 'ISSUED' }, tx);
   });
   res.json({ data: await loadDc(cid, id) });

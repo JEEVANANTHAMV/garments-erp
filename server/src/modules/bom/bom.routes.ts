@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { query, queryOne, transaction, txQuery, txQueryOne, txExecute } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
 import { NotFound, BadRequest } from '../../core/errors.js';
-import { requirePermission } from '../../middleware/auth.js';
+import { requirePermission, requireAny } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
@@ -21,6 +21,8 @@ const lineSchema = z.object({
   additional_qty: z.coerce.number().min(0).default(0),
   uom_id: s.idReq(),
   wastage_pct: z.coerce.number().min(0).max(100).default(0),
+  /** Free-text spec typed next to the material (e.g. poly bag 12x16 in, care label "100% Cotton"); printed on the BOM. */
+  specification: s.nullableStr(255),
   remarks: s.nullableStr(255),
 }).refine(
   (l) => (l.material_type === 'YARN' && l.yarn_id) ||
@@ -96,113 +98,220 @@ bomRouter.get('/', requirePermission('BOM.VIEW'), ah(async (req, res) => {
 }));
 
 /**
- * GET /for-job — Find Active BOM and materials for a Job / Sales Order / Style
- * Used by Yarn, Fabric, Trim, and General POs to load and filter only planned BOM materials.
+ * GET /for-job — BOM materials and requirement for a Job (Sales Order / IO No) and/or Style.
+ * Used by Yarn, Fabric and Trim POs and by purchase Quotations ("Load from BOM").
+ *
+ * Query: so_id | io_no (matched on trx_sales_order.io_no, then so_no), optional style_id;
+ *        order_qty only for a style without a job.
+ * - The job's styles and quantities come from trx_sales_order_line: order qty of a style =
+ *   SUM(plan_cut_qty), falling back to SUM(order_qty) when plan-cut is not entered.
+ * - Per style the BOM linked to that SO (trx_bom.so_id) wins, else the style's generic BOM
+ *   (so_id NULL); approved before draft, then the latest version. Cancelled / superseded
+ *   BOMs are ignored.
+ * - Colour-wise / size-wise BOM lines are multiplied by that colour's / size's plan-cut qty
+ *   only (size split from trx_sales_order_sku scaled by the line's plan-cut ratio), not by
+ *   the whole order.
+ * Response keeps the shape the pages read: bom, order_qty, so, lines + yarns / fabrics / trims /
+ * accessories / packings / generals with order_required_qty / final_requirement per line.
  */
-bomRouter.get('/for-job', requirePermission('BOM.VIEW'), ah(async (req, res) => {
+bomRouter.get('/for-job', requireAny('BOM.VIEW', 'PURCHASE.VIEW', 'PROCUREMENT.VIEW', 'QUOTATION.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId;
-  const soId = req.query.so_id ? Number(req.query.so_id) : undefined;
-  let styleId = req.query.style_id ? Number(req.query.style_id) : undefined;
-  const ioNo = req.query.io_no ? String(req.query.io_no).trim() : undefined;
+  const q = z.object({
+    so_id: z.coerce.number().int().positive().optional(),
+    io_no: z.string().trim().min(1).max(60).optional(),
+    style_id: z.coerce.number().int().positive().optional(),
+    order_qty: z.coerce.number().min(0).optional(),
+  }).parse(req.query);
+  if (!q.so_id && !q.io_no && !q.style_id) throw BadRequest('Select a job (IO No) or a style to load its BOM');
 
-  let orderQty = 1000;
-  let soRecord: any = null;
+  // 1. Resolve the job
+  const SO_SELECT = `
+    SELECT so.id, so.so_no, so.io_no, so.buyer_po_no, so.buyer_id, so.plan_cut_qty, so.order_qty,
+           b.party_name AS buyer_name
+      FROM trx_sales_order so
+      LEFT JOIN mst_party b ON b.id = so.buyer_id`;
+  let so: any = null;
+  if (q.so_id) {
+    so = await queryOne(`${SO_SELECT} WHERE so.id = ? AND so.company_id = ? AND so.is_deleted = 0`, [q.so_id, cid]);
+    if (!so) throw NotFound('Job / sales order not found');
+  } else if (q.io_no) {
+    so = await queryOne(
+      `${SO_SELECT} WHERE so.company_id = ? AND so.is_deleted = 0 AND (so.io_no = ? OR so.so_no = ?)
+        ORDER BY (so.io_no = ?) DESC, so.id DESC LIMIT 1`, [cid, q.io_no, q.io_no, q.io_no]);
+    if (!so) throw NotFound(`No job found for IO No "${q.io_no}"`);
+  }
+  const jobNo: string | null = so ? (so.io_no || so.so_no) : null;
 
-  if (soId) {
-    soRecord = await queryOne<any>(`
-      SELECT so.*, st.id AS style_id, st.style_code, st.style_name
-        FROM trx_sales_order so
-        LEFT JOIN mst_style st ON st.id = so.style_id
-       WHERE so.id = ? AND so.company_id = ?
-    `, [soId, cid]);
-    if (soRecord) {
-      if (!styleId && soRecord.style_id) styleId = Number(soRecord.style_id);
-      orderQty = Number(soRecord.total_qty || soRecord.order_qty || 1000);
+  // 2. Styles to explode, with the quantity each one is planned to cut
+  type StyleQty = { style_id: number; style_code: string; style_name: string; qty: number };
+  let styles: StyleQty[];
+  if (so) {
+    const rows = await query<any>(
+      `SELECT sol.style_id, st.style_code, st.style_name,
+              SUM(COALESCE(sol.plan_cut_qty, 0)) AS plan_cut, SUM(COALESCE(sol.order_qty, 0)) AS ordered
+         FROM trx_sales_order_line sol
+         JOIN mst_style st ON st.id = sol.style_id
+        WHERE sol.so_id = ?${q.style_id ? ' AND sol.style_id = ?' : ''}
+        GROUP BY sol.style_id, st.style_code, st.style_name
+        ORDER BY st.style_code`, q.style_id ? [so.id, q.style_id] : [so.id]);
+    styles = rows.map((r) => ({
+      style_id: Number(r.style_id), style_code: r.style_code, style_name: r.style_name,
+      qty: Number(r.plan_cut) > 0 ? Number(r.plan_cut) : Number(r.ordered) || 0,
+    }));
+    if (!styles.length) {
+      throw BadRequest(q.style_id
+        ? `The selected style is not part of job ${jobNo}`
+        : `Job ${jobNo} has no style lines — add styles to the sales order first`);
     }
-  } else if (ioNo) {
-    soRecord = await queryOne<any>(`
-      SELECT so.*, st.id AS style_id, st.style_code, st.style_name
-        FROM trx_sales_order so
-        LEFT JOIN mst_style st ON st.id = so.style_id
-       WHERE (so.so_no = ? OR so.buyer_po_no = ?) AND so.company_id = ?
-       LIMIT 1
-    `, [ioNo, ioNo, cid]);
-    if (soRecord) {
-      if (!styleId && soRecord.style_id) styleId = Number(soRecord.style_id);
-      orderQty = Number(soRecord.total_qty || soRecord.order_qty || 1000);
+  } else {
+    const st = await queryOne<any>(
+      'SELECT id, style_code, style_name FROM mst_style WHERE id = ? AND company_id = ?', [q.style_id, cid]);
+    if (!st) throw NotFound('Style not found');
+    styles = [{ style_id: Number(st.id), style_code: st.style_code, style_name: st.style_name, qty: q.order_qty ?? 0 }];
+  }
+
+  // 3. Colour / size / colour-size quantities of the job (plan-cut basis)
+  const colorQty = new Map<string, number>();
+  const sizeQty = new Map<string, number>();
+  const colorSizeQty = new Map<string, number>();
+  if (so) {
+    const byColor = await query<any>(
+      `SELECT style_id, color_id,
+              SUM(CASE WHEN COALESCE(plan_cut_qty, 0) > 0 THEN plan_cut_qty ELSE order_qty END) AS qty
+         FROM trx_sales_order_line
+        WHERE so_id = ? AND color_id IS NOT NULL
+        GROUP BY style_id, color_id`, [so.id]);
+    for (const r of byColor) colorQty.set(`${r.style_id}_${r.color_id}`, Number(r.qty) || 0);
+    const bySku = await query<any>(
+      `SELECT sol.style_id, COALESCE(sk.color_id, sol.color_id) AS color_id, sk.size_id,
+              SUM(sos.qty * CASE WHEN COALESCE(sol.plan_cut_qty, 0) > 0 AND sol.order_qty > 0
+                                 THEN sol.plan_cut_qty / sol.order_qty ELSE 1 END) AS qty
+         FROM trx_sales_order_sku sos
+         JOIN trx_sales_order_line sol ON sol.id = sos.so_line_id
+         JOIN mst_style_sku sk ON sk.id = sos.sku_id
+        WHERE sol.so_id = ?
+        GROUP BY sol.style_id, COALESCE(sk.color_id, sol.color_id), sk.size_id`, [so.id]);
+    for (const r of bySku) {
+      const qty = Number(r.qty) || 0;
+      const sk = `${r.style_id}_${r.size_id}`;
+      sizeQty.set(sk, (sizeQty.get(sk) ?? 0) + qty);
+      if (r.color_id) colorSizeQty.set(`${r.style_id}_${r.color_id}_${r.size_id}`, qty);
     }
   }
 
-  if (!styleId && !soId) {
-    return res.json({ success: true, data: null, message: 'Please provide so_id, style_id or io_no' });
+  // 4. Per style: pick the BOM, explode its lines
+  const boms: any[] = [];
+  const items: any[] = [];
+  const warnings: string[] = [];
+  for (const st of styles) {
+    const bom = so
+      ? await queryOne<any>(
+        `SELECT b.*, st.style_code, st.style_name, so.so_no, so.io_no, so.buyer_po_no
+           FROM trx_bom b
+           LEFT JOIN mst_style st ON st.id = b.style_id
+           LEFT JOIN trx_sales_order so ON so.id = b.so_id
+          WHERE b.company_id = ? AND b.is_active = 1 AND b.style_id = ?
+            AND COALESCE(b.approval_state, 'DRAFT') NOT IN ('CANCELLED', 'SUPERSEDED')
+            AND (b.so_id = ? OR b.so_id IS NULL)
+          ORDER BY (b.so_id IS NOT NULL) DESC, (b.approval_state = 'APPROVED') DESC, b.version DESC, b.id DESC
+          LIMIT 1`, [cid, st.style_id, so.id])
+      : await queryOne<any>(
+        `SELECT b.*, st.style_code, st.style_name, so.so_no, so.io_no, so.buyer_po_no
+           FROM trx_bom b
+           LEFT JOIN mst_style st ON st.id = b.style_id
+           LEFT JOIN trx_sales_order so ON so.id = b.so_id
+          WHERE b.company_id = ? AND b.is_active = 1 AND b.style_id = ?
+            AND COALESCE(b.approval_state, 'DRAFT') NOT IN ('CANCELLED', 'SUPERSEDED')
+          ORDER BY (b.so_id IS NULL) DESC, (b.approval_state = 'APPROVED') DESC, b.version DESC, b.id DESC
+          LIMIT 1`, [cid, st.style_id]);
+    if (!bom) { warnings.push(`No active BOM for style ${st.style_code}`); continue; }
+    boms.push({ ...bom, order_qty: st.qty });
+    if (so && st.qty <= 0) warnings.push(`Style ${st.style_code}: plan-cut / order qty is zero on job ${jobNo}`);
+
+    const [lines, specs] = await Promise.all([
+      query<any>(LINE_SELECT, [bom.id]),
+      // Material specs the POs / quotations prefill (dia, GSM, count, composition …)
+      query<any>(
+        `SELECT l.id, fb.dia_inch AS fabric_dia, g.gsm_value AS fabric_gsm, fb.fabric_type AS fabric_master_type,
+                fcomp.description AS fabric_composition,
+                y.count_value, y.count_type, y.yarn_type AS yarn_master_type, ycomp.description AS yarn_composition,
+                tr.specification AS trim_specification
+           FROM trx_bom_line l
+           LEFT JOIN mst_fabric fb ON fb.id = l.fabric_id
+           LEFT JOIN mst_gsm g ON g.id = fb.gsm_id
+           LEFT JOIN mst_composition fcomp ON fcomp.id = fb.composition_id
+           LEFT JOIN mst_yarn y ON y.id = l.yarn_id
+           LEFT JOIN mst_composition ycomp ON ycomp.id = y.composition_id
+           LEFT JOIN mst_trim tr ON tr.id = l.trim_id
+          WHERE l.bom_id = ?`, [bom.id]),
+    ]);
+    const specById = new Map(specs.map((sp) => [Number(sp.id), sp]));
+
+    for (const l of lines) {
+      // Quantity this line applies to: whole style, or only its colour / size / colour-size
+      let basisQty = st.qty;
+      if (so && (l.color_id || l.size_id)) {
+        basisQty = l.color_id && l.size_id ? (colorSizeQty.get(`${st.style_id}_${l.color_id}_${l.size_id}`) ?? 0)
+          : l.color_id ? (colorQty.get(`${st.style_id}_${l.color_id}`) ?? 0)
+          : (sizeQty.get(`${st.style_id}_${l.size_id}`) ?? 0);
+      }
+      const cons = Number(l.consumption) || 0;
+      const waste = Number(l.wastage_pct) || 0;
+      const addl = Number(l.additional_qty) || 0;
+      const basis = l.consumption_basis || 'PER_PIECE';
+      let baseQty = cons * basisQty;
+      if (basis === 'PER_DOZEN') baseQty = (basisQty / 12) * cons;
+      else if (basis === 'FIXED_QTY') baseQty = cons;
+      const wasteQty = baseQty * (waste / 100);
+      let finalReq = Number((baseQty + addl + wasteQty).toFixed(4));
+      // Countable units are bought in whole numbers
+      if (['PCS', 'NOS', 'PC', 'SET'].includes(String(l.uom_code || '').toUpperCase())) finalReq = Math.ceil(finalReq);
+      const rate = Number(l.std_rate) || 0;
+      const sp = specById.get(Number(l.id)) ?? {};
+      items.push({
+        ...l,
+        ...sp,
+        id: l.id,
+        bom_line_id: l.id,
+        bom_no: bom.bom_no,
+        bom_version: bom.version,
+        style_id: st.style_id,
+        style_code: st.style_code,
+        style_name: st.style_name,
+        so_id: so ? Number(so.id) : null,
+        job_no: jobNo,
+        material_name: l.fabric_name || l.yarn_name || l.trim_name || l.item_description || '',
+        yarn_count: sp.count_value ? `${sp.count_value}${sp.count_type && sp.count_type !== 'Ne' ? ` ${sp.count_type}` : ''}` : null,
+        consumption: cons,
+        additional_qty: addl,
+        wastage_pct: waste,
+        order_qty: basisQty,
+        base_qty: Number(baseQty.toFixed(4)),
+        wastage_qty: Number(wasteQty.toFixed(4)),
+        order_required_qty: finalReq,
+        final_requirement: finalReq,
+        std_rate: rate,
+        estimated_amount: Number((finalReq * rate).toFixed(2)),
+      });
+    }
   }
 
-  // 1. Order-specific active BOM
-  let bom: any = null;
-  if (soId && styleId) {
-    bom = await queryOne<any>(`
-      SELECT b.*, st.style_code, st.style_name, so.so_no, so.buyer_po_no
-        FROM trx_bom b
-        LEFT JOIN mst_style st ON st.id = b.style_id
-        LEFT JOIN trx_sales_order so ON so.id = b.so_id
-       WHERE b.company_id = ? AND b.is_active = 1 AND b.so_id = ? AND b.style_id = ?
-       ORDER BY b.version DESC, b.id DESC LIMIT 1
-    `, [cid, soId, styleId]);
+  if (!boms.length) {
+    throw NotFound(so
+      ? `No active BOM found for job ${jobNo} (style ${styles.map((s2) => s2.style_code).join(', ')}). Create the BOM first.`
+      : `No active BOM found for style ${styles[0].style_code}. Create the BOM first.`);
   }
-
-  // 2. Fallback to Style Master active BOM
-  if (!bom && styleId) {
-    bom = await queryOne<any>(`
-      SELECT b.*, st.style_code, st.style_name, so.so_no, so.buyer_po_no
-        FROM trx_bom b
-        LEFT JOIN mst_style st ON st.id = b.style_id
-        LEFT JOIN trx_sales_order so ON so.id = b.so_id
-       WHERE b.company_id = ? AND b.is_active = 1 AND b.style_id = ? AND (b.so_id IS NULL OR b.so_id = ?)
-       ORDER BY b.version DESC, b.id DESC LIMIT 1
-    `, [cid, styleId, soId || 0]);
-  }
-
-  if (!bom) {
-    return res.json({
-      success: true,
-      data: null,
-      message: 'No active BOM found for this Job / Style',
-    });
-  }
-
-  const lines = await query<any>(LINE_SELECT, [bom.id]);
-
-  const items = lines.map((l) => {
-    const cons = Number(l.consumption) || 0;
-    const waste = Number(l.wastage_pct) || 0;
-    const addl = Number(l.additional_qty) || 0;
-    const basis = l.consumption_basis || 'PER_PIECE';
-    let baseQty = cons * orderQty;
-    if (basis === 'PER_DOZEN') baseQty = (orderQty / 12) * cons;
-    else if (basis === 'FIXED_QTY') baseQty = cons;
-    const wasteQty = baseQty * (waste / 100);
-    const finalReq = Number((baseQty + addl + wasteQty).toFixed(4));
-    return {
-      ...l,
-      consumption: cons,
-      additional_qty: addl,
-      wastage_pct: waste,
-      order_qty: orderQty,
-      base_qty: Number(baseQty.toFixed(4)),
-      wastage_qty: Number(wasteQty.toFixed(4)),
-      order_required_qty: finalReq,
-      final_requirement: finalReq,
-      std_rate: Number(l.std_rate) || 0,
-      estimated_amount: Number((finalReq * (Number(l.std_rate) || 0)).toFixed(2)),
-    };
-  });
 
   res.json({
     success: true,
     data: {
-      bom,
-      order_qty: orderQty,
-      so: soRecord,
+      bom: boms[0],
+      boms,
+      so,
+      job_no: jobNo,
+      styles,
+      order_qty: styles.reduce((t, s2) => t + s2.qty, 0),
+      warnings,
       lines: items,
       yarns: items.filter((i) => i.material_type === 'YARN'),
       fabrics: items.filter((i) => i.material_type === 'FABRIC'),
@@ -228,19 +337,109 @@ bomRouter.get('/:id', requirePermission('BOM.VIEW'), ah(async (req, res) => {
   res.json({ data: { ...bom, lines: await query(LINE_SELECT, [id]) } });
 }));
 
+/**
+ * GET /:id/print — everything the printable BOM needs: company, header (style,
+ * buyer, SO / IO, order and plan-cut qty) and lines with their specification
+ * and required quantity. Required qty is worked on the PLAN-CUT quantity
+ * (order + excess, size-wise where given) of the colours / sizes each line
+ * applies to; a master BOM (no SO) prints consumption only.
+ */
+bomRouter.get('/:id/print', requirePermission('BOM.VIEW'), ah(async (req, res) => {
+  const id = z.coerce.number().int().positive().parse(req.params.id);
+  const cid = req.user!.companyId;
+  const bom = await queryOne<any>(
+    `SELECT b.*, st.style_code, st.style_name, cs.label AS status_label,
+            so.so_no, so.io_no, so.buyer_po_no, so.so_date, so.ship_date AS so_ship_date,
+            COALESCE(bso.party_name, bst.party_name) AS buyer_name,
+            cu.full_name AS created_by_name, au.full_name AS approved_by_name
+       FROM trx_bom b
+       LEFT JOIN mst_style st ON st.id = b.style_id
+       LEFT JOIN trx_sales_order so ON so.id = b.so_id
+       LEFT JOIN mst_party bso ON bso.id = so.buyer_id
+       LEFT JOIN mst_party bst ON bst.id = st.buyer_id
+       LEFT JOIN cfg_status cs ON cs.id = b.status_id
+       LEFT JOIN mst_user cu ON cu.id = b.created_by
+       LEFT JOIN mst_user au ON au.id = b.approved_by
+      WHERE b.id = ? AND b.company_id = ?`, [id, cid]);
+  if (!bom) throw NotFound('BOM not found');
+
+  const company = await queryOne<any>(
+    `SELECT legal_name, trade_name, gstin, address_line1, address_line2, city, state, pincode, phone, email
+       FROM mst_company WHERE id = ?`, [cid]);
+
+  const lines = await query<any>(LINE_SELECT, [id]);
+
+  let orderQty: number | null = null;
+  let planCutQty: number | null = null;
+  // (colour, size) cells of the order with their order / plan-cut qty.
+  let cells: { color_id: number | null; size_id: number | null; qty: number; plan_cut: number }[] = [];
+  if (bom.so_id) {
+    const tot = await queryOne<{ qty: number; plan_cut: number }>(
+      `SELECT COALESCE(SUM(order_qty),0) AS qty,
+              COALESCE(SUM(COALESCE(NULLIF(plan_cut_qty,0), order_qty)),0) AS plan_cut
+         FROM trx_sales_order_line WHERE so_id = ? AND style_id = ?`, [bom.so_id, bom.style_id]);
+    orderQty = Number(tot?.qty ?? 0);
+    planCutQty = Number(tot?.plan_cut ?? 0);
+    cells = (await query<any>(
+      `SELECT k.color_id, k.size_id, SUM(ss.qty) AS qty,
+              SUM(COALESCE(ss.plan_cut_qty,
+                           ROUND(ss.qty * NULLIF(l.plan_cut_qty,0) / NULLIF(l.order_qty,0)),
+                           ss.qty)) AS plan_cut
+         FROM trx_sales_order_sku ss
+         JOIN trx_sales_order_line l ON l.id = ss.so_line_id
+         JOIN mst_style_sku k ON k.id = ss.sku_id
+        WHERE l.so_id = ? AND l.style_id = ?
+        GROUP BY k.color_id, k.size_id`, [bom.so_id, bom.style_id]))
+      .map((r) => ({ color_id: r.color_id, size_id: r.size_id, qty: Number(r.qty), plan_cut: Number(r.plan_cut) }));
+    if (!cells.length) {
+      // Order entered without a size breakdown — colour-level only.
+      cells = (await query<any>(
+        `SELECT color_id, NULL AS size_id, SUM(order_qty) AS qty,
+                SUM(COALESCE(NULLIF(plan_cut_qty,0), order_qty)) AS plan_cut
+           FROM trx_sales_order_line WHERE so_id = ? AND style_id = ?
+          GROUP BY color_id`, [bom.so_id, bom.style_id]))
+        .map((r) => ({ color_id: r.color_id, size_id: null, qty: Number(r.qty), plan_cut: Number(r.plan_cut) }));
+    }
+  }
+
+  const items = lines.map((l) => {
+    const cons = Number(l.consumption) || 0;
+    const waste = Number(l.wastage_pct) || 0;
+    const addl = Number(l.additional_qty) || 0;
+    let applicableQty: number | null = null;
+    if (planCutQty !== null) {
+      applicableQty = (l.color_id || l.size_id)
+        ? cells.filter((c) => (!l.color_id || c.color_id === l.color_id) && (!l.size_id || c.size_id === l.size_id))
+            .reduce((a, c) => a + c.plan_cut, 0)
+        : planCutQty;
+    }
+    let required: number | null = null;
+    if (applicableQty !== null) {
+      const basis = l.consumption_basis || 'PER_PIECE';
+      let base = applicableQty * cons;
+      if (basis === 'PER_DOZEN') base = (applicableQty / 12) * cons;
+      else if (basis === 'FIXED_QTY') base = cons;
+      required = Number((base * (1 + waste / 100) + addl).toFixed(4));
+    }
+    return { ...l, applicable_qty: applicableQty, required_qty: required };
+  });
+
+  res.json({ data: { company, bom, order_qty: orderQty, plan_cut_qty: planCutQty, lines: items } });
+}));
+
 async function writeLines(tx: any, bomId: number, lines: z.infer<typeof lineSchema>[]) {
   for (const l of lines) {
     await txExecute(tx,
       `INSERT INTO trx_bom_line
          (bom_id, material_type, yarn_id, fabric_id, trim_id, item_description,
           color_id, size_id, consumption_basis, applicability, consumption, additional_qty,
-          uom_id, wastage_pct, remarks)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          uom_id, wastage_pct, specification, remarks)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [bomId, l.material_type, l.yarn_id ?? null, l.fabric_id ?? null, l.trim_id ?? null,
        l.item_description ?? null, l.color_id ?? null, l.size_id ?? null,
        l.consumption_basis || 'PER_PIECE', l.applicability || 'ALL',
        l.consumption, l.additional_qty || 0, l.uom_id, l.wastage_pct ?? 0,
-       l.remarks ?? null]);
+       l.specification ?? null, l.remarks ?? null]);
   }
 }
 
@@ -459,11 +658,11 @@ bomRouter.post('/:id/revision', requirePermission('BOM.CREATE'), ah(async (req, 
       await txExecute(tx, `
         INSERT INTO trx_bom_line (bom_id, material_type, yarn_id, fabric_id, trim_id, item_description,
                                   color_id, size_id, consumption_basis, applicability, consumption,
-                                  additional_qty, uom_id, wastage_pct, remarks)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                  additional_qty, uom_id, wastage_pct, specification, remarks)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [newId, l.material_type, l.yarn_id, l.fabric_id, l.trim_id, l.item_description,
           l.color_id, l.size_id, l.consumption_basis || 'PER_PIECE', l.applicability || 'ALL',
-          l.consumption, l.additional_qty || 0, l.uom_id, l.wastage_pct || 0, l.remarks]);
+          l.consumption, l.additional_qty || 0, l.uom_id, l.wastage_pct || 0, l.specification ?? null, l.remarks]);
     }
 
     return txQueryOne(tx, `SELECT * FROM trx_bom WHERE id = ?`, [newId]);

@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Plus, Trash2, Save, FileText, Printer, Layers, Sparkles,
 } from 'lucide-react';
-import { http } from '../../lib/api';
+import { http, ApiError } from '../../lib/api';
 import { useLookup, useStatuses } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
 import {
@@ -68,6 +68,12 @@ interface QLine {
   _key: string;
   id?: number;
   job_no: string;
+  so_id: number | '';
+  bom_line_id: number | '';
+  material_type: string;
+  fabric_id: number | '';
+  yarn_id: number | '';
+  trim_id: number | '';
   style_id: number | '';
   color_id: number | '';
   size_id: number | '';
@@ -91,6 +97,12 @@ let keySeq = 0;
 const newLine = (sort = 0): QLine => ({
   _key: `q${++keySeq}`,
   job_no: '',
+  so_id: '',
+  bom_line_id: '',
+  material_type: '',
+  fabric_id: '',
+  yarn_id: '',
+  trim_id: '',
   style_id: '',
   color_id: '',
   size_id: '',
@@ -109,6 +121,29 @@ const newLine = (sort = 0): QLine => ({
   igst_rate: 0,
   sort_order: sort,
 });
+
+/** A job (sales order) from GET /procurement/jobs — the "IO No" selector of Load from BOM. */
+interface JobOption {
+  id: number;
+  so_no: string;
+  io_no: string | null;
+  job_no: string;
+  buyer_id?: number | null;
+  label: string;
+  styles: { style_id: number; style_code: string; style_name: string; plan_cut_qty: number }[];
+}
+
+/** Quotation type → BOM material line type(s) it quotes and the master id column. */
+const BOM_MATERIAL: Record<string, { key: 'fabric_id' | 'yarn_id' | 'trim_id'; types: string[]; lookup: string; label: string }> = {
+  FABRIC: { key: 'fabric_id', types: ['FABRIC'], lookup: 'fabrics', label: 'Fabric' },
+  YARN:   { key: 'yarn_id',   types: ['YARN'], lookup: 'yarns', label: 'Yarn' },
+  TRIMS:  { key: 'trim_id',   types: ['TRIM', 'ACCESSORY', 'PACKING'], lookup: 'trims', label: 'Trim' },
+};
+
+const titleCase = (v: unknown) => {
+  const t = String(v ?? '').trim();
+  return t ? t.charAt(0).toUpperCase() + t.slice(1).toLowerCase() : '';
+};
 
 /* ─────────────────────────────────────────────────────────────── */
 
@@ -150,6 +185,7 @@ export default function QuotationDetailPage() {
   const isDomesticLike = !isBuyer && !isImport; // FABRIC, YARN, TRIMS, GENERAL, DOMESTIC
   const isProcess  = isDomesticLike && head.quotation_category === 'PROCESS';
   const showJobAndStyle = !isGeneral || Boolean(head.is_io_wise);
+  const bomMaterial = BOM_MATERIAL[head.quotation_type as string];   // FABRIC / YARN / TRIMS only
 
   /* ── lookups ── */
   const buyers     = useLookup('buyers');
@@ -165,6 +201,19 @@ export default function QuotationDetailPage() {
   const diaLookup  = useLookup('dias');        // tube diameter values
   const yarnCounts = useLookup('yarn-counts'); // yarn counts
   const statuses   = useStatuses('QUOTATION');
+  const materials  = useLookup(bomMaterial?.lookup ?? null);   // fabric / yarn / trim masters
+
+  /* ── Load from BOM: job (IO No) → that job's BOM lines of this quotation's material ── */
+  const jobs = useQuery({
+    queryKey: ['procurement-jobs'],
+    queryFn: async () => (await http.get<{ data: JobOption[] }>('/procurement/jobs')).data || [],
+    enabled: Boolean(bomMaterial),
+    staleTime: 60 * 1000,
+  });
+  const [bomJobId, setBomJobId] = useState('');
+  const [bomStyleId, setBomStyleId] = useState('');
+  const [bomLoading, setBomLoading] = useState(false);
+  const bomJob = (jobs.data ?? []).find(j => String(j.id) === bomJobId);
 
   const inrCurrency = currencies.data?.find((c: any) => c.code === 'INR');
   const usdCurrency = currencies.data?.find((c: any) => c.code === 'USD');
@@ -241,6 +290,12 @@ export default function QuotationDetailPage() {
         _key: `q${++keySeq}`,
         id: l.id,
         job_no: l.job_no ?? '',
+        so_id: l.so_id ?? '',
+        bom_line_id: l.bom_line_id ?? '',
+        material_type: l.material_type ?? '',
+        fabric_id: l.fabric_id ?? '',
+        yarn_id: l.yarn_id ?? '',
+        trim_id: l.trim_id ?? '',
         style_id: l.style_id ?? '',
         color_id: l.color_id ?? '',
         size_id: l.size_id ?? '',
@@ -369,6 +424,69 @@ export default function QuotationDetailPage() {
   const setLine = (key: string, patch: Partial<QLine>) =>
     setLines(ls => ls.map(l => l._key === key ? { ...l, ...patch } : l));
 
+  /** Fills the line items from the selected job's BOM (only this quotation's material type). */
+  async function loadFromBom() {
+    if (!bomMaterial) return;
+    if (!bomJobId) { toast('Select the IO No (job) first', 'warning'); return; }
+    setBomLoading(true);
+    try {
+      const qs = new URLSearchParams({ so_id: bomJobId });
+      if (bomStyleId) qs.set('style_id', bomStyleId);
+      const data = (await http.get<{ data: any }>(`/boms/for-job?${qs.toString()}`)).data;
+      (data?.warnings || []).forEach((w: string) => toast(w, 'warning'));
+      const items: any[] = (data?.lines || []).filter((it: any) =>
+        bomMaterial.types.includes(it.material_type) && it[bomMaterial.key]);
+      if (!items.length) {
+        toast(`The BOM of job ${data?.job_no || ''} has no ${bomMaterial.label.toLowerCase()} items`, 'warning');
+        return;
+      }
+      const hasEntered = lines.some(l => l.description || l.qty || l.fabric_id || l.yarn_id || l.trim_id);
+      if (hasEntered && !window.confirm(`Replace the ${lines.length} existing line(s) with ${items.length} ${bomMaterial.label.toLowerCase()} item(s) from the BOM?`)) return;
+
+      setLines(items.map((it, i): QLine => {
+        const rate = Number(it.std_rate) || 0;
+        const base: QLine = {
+          ...newLine(i),
+          job_no: it.job_no || data.job_no || '',
+          so_id: it.so_id ?? '',
+          bom_line_id: it.bom_line_id ?? '',
+          material_type: it.material_type,
+          style_id: it.style_id ?? '',
+          color_id: it.color_id ?? '',
+          size_id: it.size_id ?? '',
+          qty: Number(it.final_requirement ?? it.order_required_qty) || '',
+          uom_id: it.uom_id ?? '',
+          quotation_rate: rate > 0 ? rate : '',
+        };
+        if (bomMaterial.key === 'fabric_id') {
+          return { ...base, fabric_id: it.fabric_id,
+            description: [it.fabric_name, it.item_description].filter(Boolean).join(' — '),
+            dia: it.fabric_dia ? `${Number(it.fabric_dia)}"` : '',
+            gsm: it.fabric_gsm ? String(it.fabric_gsm) : '' };
+        }
+        if (bomMaterial.key === 'yarn_id') {
+          return { ...base, yarn_id: it.yarn_id,
+            description: [it.yarn_name, it.item_description].filter(Boolean).join(' — '),
+            yarn_type: titleCase(it.yarn_master_type),
+            yarn_count: it.yarn_count || '' };
+        }
+        return { ...base, trim_id: it.trim_id,
+          description: [it.trim_name, it.trim_specification || it.item_description].filter(Boolean).join(' — '),
+          trim_size: it.size_code || '' };
+      }));
+      setHead(h => ({
+        ...h,
+        job_no: data.job_no || h.job_no,
+        buyer_id: h.buyer_id || bomJob?.buyer_id || h.buyer_id,
+      }));
+      toast(`Loaded ${items.length} ${bomMaterial.label.toLowerCase()} item(s) from BOM ${data.bom?.bom_no || ''}`, 'success');
+    } catch (e: any) {
+      toast(e instanceof ApiError ? e.message : 'Failed to load the BOM of this job', 'error');
+    } finally {
+      setBomLoading(false);
+    }
+  }
+
   /* ── save ── */
   async function handleSave(asDraft = false) {
     const errs: Record<string, string> = {};
@@ -419,6 +537,12 @@ export default function QuotationDetailPage() {
         return {
           id: l.id,
           job_no: l.job_no || null,
+          so_id: l.so_id || null,
+          bom_line_id: l.bom_line_id || null,
+          material_type: bomMaterial ? (l.material_type || bomMaterial.types[0]) : (l.material_type || null),
+          fabric_id: bomMaterial?.key === 'fabric_id' ? (l.fabric_id || null) : null,
+          yarn_id: bomMaterial?.key === 'yarn_id' ? (l.yarn_id || null) : null,
+          trim_id: bomMaterial?.key === 'trim_id' ? (l.trim_id || null) : null,
           style_id: l.style_id || null,
           color_id: l.color_id || null,
           size_id: l.size_id || null,
@@ -472,6 +596,10 @@ export default function QuotationDetailPage() {
   const currSymbol: string = isDomesticLike
     ? '₹'
     : String(selectedCur?.symbol || (currCode === 'USD' ? '$' : currCode === 'EUR' ? '€' : currCode === 'GBP' ? '£' : currCode));
+
+  // Footer alignment: S.No + I/O & Style + material master + type-specific columns
+  const colsBeforeQty = 1 + (showJobAndStyle ? 2 : 0) + (bomMaterial ? 1 : 0)
+    + (isFabric ? 4 : isYarn ? 3 : isTrims ? 3 : isGeneral ? 1 : (isBuyer || isImport) ? 3 : 0);
 
   const typeBadgeTone = isBuyer ? 'emerald' : isImport ? 'violet' : isFabric ? 'sky' : isYarn ? 'amber' : isTrims ? 'rose' : 'slate';
   const typeLabel = QUOTATION_TYPES.find(t => t.value === head.quotation_type)?.label || 'Quotation';
@@ -955,6 +1083,70 @@ export default function QuotationDetailPage() {
             </div>
           </div>
 
+          {/* ── Load from Bill of Material (Fabric / Yarn / Trims quotations) ── */}
+          {bomMaterial && (
+            <div className="card overflow-hidden">
+              <div className="flex items-center justify-between border-b border-surface-border bg-slate-50/70 px-4 py-2.5">
+                <div className="flex items-center gap-2">
+                  <Sparkles size={13} className="text-brand-600" />
+                  <h4 className="text-[12px] font-bold uppercase tracking-wider text-slate-700">
+                    Load from Bill of Material
+                  </h4>
+                </div>
+                <span className="text-[11px] text-slate-500">
+                  Picks only the job's BOM {bomMaterial.label.toLowerCase()} items with the planned requirement
+                </span>
+              </div>
+              <div className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-3 items-end">
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                    IO No (Internal Order)
+                  </label>
+                  <select
+                    value={bomJobId}
+                    onChange={e => {
+                      const job = (jobs.data ?? []).find(j => String(j.id) === e.target.value);
+                      setBomJobId(e.target.value);
+                      setBomStyleId(job && job.styles.length === 1 ? String(job.styles[0].style_id) : '');
+                    }}
+                    className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none"
+                  >
+                    <option value="">— Select Job / IO No —</option>
+                    {(jobs.data ?? []).map(j => (
+                      <option key={j.id} value={j.id}>{j.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                    Style No
+                  </label>
+                  <select
+                    value={bomStyleId}
+                    onChange={e => setBomStyleId(e.target.value)}
+                    disabled={!bomJob}
+                    className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none disabled:bg-slate-50"
+                  >
+                    <option value="">{bomJob ? 'All styles of the job' : '— Select job first —'}</option>
+                    {(bomJob?.styles ?? []).map(st => (
+                      <option key={st.style_id} value={st.style_id}>{st.style_code} — {st.style_name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <button
+                    type="button"
+                    className="btn-primary w-full justify-center"
+                    disabled={!bomJobId || bomLoading}
+                    onClick={() => void loadFromBom()}
+                  >
+                    {bomLoading ? <Spinner size={14} /> : <Layers size={14} />} Load {bomMaterial.label} Items from BOM
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ── Product Details Table ── */}
           <div className="card overflow-hidden shadow-xs">
             <div className="flex items-center justify-between border-b border-surface-border bg-slate-50/70 px-4 py-2.5">
@@ -994,6 +1186,11 @@ export default function QuotationDetailPage() {
                     {/* Style No */}
                     {showJobAndStyle && (
                       <th className="min-w-[120px] px-2 py-2">Style No</th>
+                    )}
+
+                    {/* Material master (Fabric / Yarn / Trim) — carried into the PO */}
+                    {bomMaterial && (
+                      <th className="min-w-[150px] px-2 py-2">{bomMaterial.label === 'Trim' ? 'Trim Item' : bomMaterial.label}</th>
                     )}
 
                     {/* FABRIC SPECIFIC */}
@@ -1090,6 +1287,30 @@ export default function QuotationDetailPage() {
                               <option value="">— Style —</option>
                               {(styles.data ?? []).map((s: any) => (
                                 <option key={s.id} value={s.id}>{s.code}</option>
+                              ))}
+                            </select>
+                          </td>
+                        )}
+
+                        {/* Material master */}
+                        {bomMaterial && (
+                          <td className="px-1.5 py-1">
+                            <select
+                              value={l[bomMaterial.key]}
+                              onChange={e => {
+                                const m: any = (materials.data ?? []).find((x: any) => String(x.id) === e.target.value);
+                                setLine(l._key, {
+                                  [bomMaterial.key]: Number(e.target.value) || '',
+                                  material_type: l.material_type || bomMaterial.types[0],
+                                  description: l.description || m?.label || '',
+                                  uom_id: l.uom_id || (Number(m?.base_uom) || ''),
+                                } as Partial<QLine>);
+                              }}
+                              className="w-full rounded border border-surface-border bg-white px-2 py-1 text-xs focus:border-brand-500 focus:outline-none"
+                            >
+                              <option value="">— {bomMaterial.label} —</option>
+                              {(materials.data ?? []).map((m: any) => (
+                                <option key={m.id} value={m.id}>{m.code ? `${m.code} — ${m.label}` : m.label}</option>
                               ))}
                             </select>
                           </td>
@@ -1387,13 +1608,14 @@ export default function QuotationDetailPage() {
                     </td>
                   </tr>
                   <tr className="border-t-2 border-surface-border bg-slate-50/90 font-bold text-slate-800">
-                    <td colSpan={isDomesticLike ? 8 : 6} className="px-3 py-2.5 text-right uppercase tracking-wider text-[11px] text-slate-600">
+                    <td colSpan={colsBeforeQty} className="px-3 py-2.5 text-right uppercase tracking-wider text-[11px] text-slate-600">
                       Total Basic Value
                     </td>
                     <td className="px-3 py-2.5 text-right font-mono text-xs">
                       {fmtDecimal(lines.reduce((s, l) => s + (Number(l.qty) || 0), 0), 2)}
                     </td>
-                    <td colSpan={isDomesticLike ? 4 : 2}></td>
+                    {/* UOM, Quotation Rate, Confirm Rate (+ GST %, IGST % on domestic) */}
+                    <td colSpan={isDomesticLike ? 5 : 3}></td>
                     <td className="px-3 py-2.5 text-right font-mono text-sm font-bold text-brand-700">
                       {currSymbol} {fmtDecimal(calc.basicAmount, 2)}
                     </td>

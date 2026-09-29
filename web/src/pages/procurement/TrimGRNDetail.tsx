@@ -48,25 +48,25 @@ const emptyGrnLine = (): GrnLine => ({
   so_id: '',
   style_id: '',
   trim_id: '',
-  specification: '4 Hole, 15L',
-  color_name: 'Navy',
-  trim_size: '15L',
+  specification: '',
+  color_name: '',
+  trim_size: '',
   uom_id: 1,
-  po_qty: 5000,
-  received_qty: 5000,
-  accepted_qty: 4950,
-  rejected_qty: 50,
+  po_qty: 0,
+  received_qty: 0,
+  accepted_qty: 0,
+  rejected_qty: 0,
   hold_qty: 0,
-  rate: 0.85,
-  taxable_amount: 4207.5,
-  gst_rate: 18,
-  tax_amount: 757.35,
-  total_amount: 4964.85,
-  supplier_lot_no: 'SLOT-001',
+  rate: 0,
+  taxable_amount: 0,
+  gst_rate: 0,
+  tax_amount: 0,
+  total_amount: 0,
+  supplier_lot_no: '',
   internal_lot_no: `TLOT-${Date.now().toString().slice(-6)}`,
-  bin_location: 'BIN-T01',
+  bin_location: '',
   qc_status: 'ACCEPTED',
-  rejection_reason: '50 pcs cracked / defective finish',
+  rejection_reason: '',
 });
 
 export default function TrimGRNDetailPage() {
@@ -128,15 +128,15 @@ export default function TrimGRNDetailPage() {
     grn_date: today(),
     po_id: '',
     gate_inward_id: '',
-    io_no: 'IO-2026-001',
+    io_no: '',
     style_id: '',
     supplier_id: '',
     warehouse_id: '1',
     currency_id: '1',
     exchange_rate: 1.0,
-    supplier_inv_no: 'INV-2026-889',
-    supplier_dc_no: 'DC-4421',
-    vehicle_no: 'TN-39-AB-1234',
+    supplier_inv_no: '',
+    supplier_dc_no: '',
+    vehicle_no: '',
     is_interstate: false,
     status: 'POSTED',
     remarks: '',
@@ -204,8 +204,8 @@ export default function TrimGRNDetailPage() {
         setLines(
           existingGrn.lines.map((l: any) => {
             const acc = Number(l.accepted_qty);
-            const rate = Number(l.rate || 0.85);
-            const gstRate = Number(l.gst_rate !== undefined ? l.gst_rate : 18);
+            const rate = Number(l.rate) || 0;
+            const gstRate = Number(l.gst_rate) || 0;
             const taxable = Number(l.taxable_amount !== undefined ? l.taxable_amount : Math.round(acc * rate * 100) / 100);
             const taxAmt = Number(l.tax_amount !== undefined ? l.tax_amount : Math.round(((taxable * gstRate) / 100) * 100) / 100);
             const totalAmt = Number(l.total_amount !== undefined ? l.total_amount : (taxable + taxAmt));
@@ -292,8 +292,8 @@ export default function TrimGRNDetailPage() {
         if (po.lines?.length) {
           const mappedLines: GrnLine[] = po.lines.map((l: any, i: number) => {
             const pending = Math.max(0, Number(l.order_qty) - Number(l.received_qty || 0));
-            const rate = Number(l.rate || 0.85);
-            const gstRate = Number(l.gst_rate !== undefined ? l.gst_rate : 18);
+            const rate = Number(l.rate) || 0;
+            const gstRate = Number(l.gst_rate) || 0;
             const taxable = Math.round(pending * rate * 100) / 100;
             const tax = Math.round(((taxable * gstRate) / 100) * 100) / 100;
             const total = taxable + tax;
@@ -422,7 +422,7 @@ export default function TrimGRNDetailPage() {
 
   const handleSave = async () => {
     if (!head.io_no) {
-      toast('Please enter I/O No', 'error');
+      toast('Please enter the IO No (Internal Order)', 'error');
       return;
     }
     if (!head.supplier_id) {
@@ -612,7 +612,7 @@ export default function TrimGRNDetailPage() {
           </label>
         </div>
 
-        {/* Row 1: GRN Number, PO Link, Gate Entry, Date */}
+        {/* Row 1: GRN No, GRN Date, PO Link, Gate Entry */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
           <div>
             <label className="label font-bold text-slate-800">GRN No</label>
@@ -621,6 +621,18 @@ export default function TrimGRNDetailPage() {
               value={isNew ? '(Auto-Generated on Save)' : (head.grn_no || `TGRN-${id}`)}
               disabled
               className="input text-xs font-mono font-bold text-indigo-700 bg-indigo-50/40 border-indigo-200"
+            />
+          </div>
+
+          <div>
+            <label className="label">GRN Date *</label>
+            <input
+              type="date"
+              required
+              disabled={!isNew}
+              value={head.grn_date}
+              onChange={(e) => setHead({ ...head, grn_date: e.target.value })}
+              className="input text-xs"
             />
           </div>
 
@@ -712,49 +724,10 @@ export default function TrimGRNDetailPage() {
               />
             )}
           </div>
-
-          <div>
-            <label className="label">GRN Date *</label>
-            <input
-              type="date"
-              required
-              disabled={!isNew}
-              value={head.grn_date}
-              onChange={(e) => setHead({ ...head, grn_date: e.target.value })}
-              className="input text-xs"
-            />
-          </div>
         </div>
 
-        {/* Row 2: I/O No, Style Reference, Supplier, Warehouse */}
+        {/* Row 2: Supplier, Warehouse, IO No, Style */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-          <div>
-            <label className="label">I/O No (Internal Order) *</label>
-            <input
-              type="text"
-              required
-              disabled={!isNew}
-              value={head.io_no}
-              onChange={(e) => setHead({ ...head, io_no: e.target.value })}
-              className="input text-xs font-semibold text-slate-900"
-            />
-          </div>
-          <div>
-            <label className="label">Style Reference (Default)</label>
-            <select
-              disabled={!isNew}
-              value={head.style_id}
-              onChange={(e) => setHead({ ...head, style_id: e.target.value })}
-              className="input text-xs"
-            >
-              <option value="">-- Select Style --</option>
-              {styles.map((s: any) => (
-                <option key={s.id} value={s.id}>
-                  {s.style_code} - {s.style_name}
-                </option>
-              ))}
-            </select>
-          </div>
           <div>
             <label className="label">Supplier / Vendor *</label>
             <select
@@ -765,8 +738,8 @@ export default function TrimGRNDetailPage() {
               className="input text-xs font-medium"
             >
               <option value="">-- Choose Supplier --</option>
-              {suppliers.map((s: any) => (
-                <option key={s.id} value={s.id}>{s.party_name}</option>
+              {suppliers.map((sp: any) => (
+                <option key={sp.id} value={sp.id}>{sp.label || sp.party_name}</option>
               ))}
             </select>
           </div>
@@ -781,17 +754,79 @@ export default function TrimGRNDetailPage() {
             >
               {warehouses.length > 0 ? (
                 warehouses.map((w: any) => (
-                  <option key={w.id} value={w.id}>{w.warehouse_name}</option>
+                  <option key={w.id} value={w.id}>{w.label || w.warehouse_name}</option>
                 ))
               ) : (
                 <option value="1">Main Trims Store</option>
               )}
             </select>
           </div>
+          <div>
+            <label className="label">IO No (Internal Order) *</label>
+            <input
+              type="text"
+              required
+              disabled={!isNew}
+              value={head.io_no}
+              onChange={(e) => setHead({ ...head, io_no: e.target.value })}
+              placeholder="Filled from the linked Trim PO"
+              className="input text-xs font-semibold text-slate-900"
+            />
+          </div>
+          <div>
+            <label className="label">Style No (Default)</label>
+            <select
+              disabled={!isNew}
+              value={head.style_id}
+              onChange={(e) => setHead({ ...head, style_id: e.target.value })}
+              className="input text-xs"
+            >
+              <option value="">-- Select Style --</option>
+              {styles.map((st: any) => (
+                <option key={st.id} value={st.id}>
+                  {st.code ? `${st.code} — ${st.label}` : st.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        {/* Row 3: Currency, Exchange Rate, Invoice, DC, Vehicle */}
+        {/* Row 3: Supplier DC No, Supplier Inv / Bill No, Vehicle No, Currency, Exchange Rate */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 text-xs">
+          <div>
+            <label className="label">Supplier DC No</label>
+            <input
+              type="text"
+              disabled={!isNew}
+              value={head.supplier_dc_no}
+              onChange={(e) => setHead({ ...head, supplier_dc_no: e.target.value })}
+              className="input text-xs"
+            />
+          </div>
+
+          <div>
+            <label className="label">Supplier Inv / Bill No</label>
+            <input
+              type="text"
+              disabled={!isNew}
+              value={head.supplier_inv_no}
+              onChange={(e) => setHead({ ...head, supplier_inv_no: e.target.value })}
+              className="input text-xs"
+            />
+          </div>
+
+          <div>
+            <label className="label">Vehicle No</label>
+            <input
+              type="text"
+              disabled={!isNew}
+              value={head.vehicle_no}
+              onChange={(e) => setHead({ ...head, vehicle_no: e.target.value })}
+              placeholder="TN 38 AB 1234"
+              className="input text-xs"
+            />
+          </div>
+
           <div>
             <label className="label font-semibold text-emerald-800">Currency *</label>
             <select
@@ -827,40 +862,6 @@ export default function TrimGRNDetailPage() {
               className={`input text-xs ${isForeignCurrency ? 'font-semibold border-amber-300 bg-amber-50/50' : 'bg-slate-50 text-slate-500'}`}
             />
           </div>
-
-          <div>
-            <label className="label">Supplier Inv / Bill No</label>
-            <input
-              type="text"
-              disabled={!isNew}
-              value={head.supplier_inv_no}
-              onChange={(e) => setHead({ ...head, supplier_inv_no: e.target.value })}
-              className="input text-xs"
-            />
-          </div>
-
-          <div>
-            <label className="label">Supplier DC No</label>
-            <input
-              type="text"
-              disabled={!isNew}
-              value={head.supplier_dc_no}
-              onChange={(e) => setHead({ ...head, supplier_dc_no: e.target.value })}
-              className="input text-xs"
-            />
-          </div>
-
-          <div>
-            <label className="label">Vehicle No</label>
-            <input
-              type="text"
-              disabled={!isNew}
-              value={head.vehicle_no}
-              onChange={(e) => setHead({ ...head, vehicle_no: e.target.value })}
-              placeholder="TN-39-AB-1234"
-              className="input text-xs"
-            />
-          </div>
         </div>
 
         {/* Remarks */}
@@ -886,7 +887,7 @@ export default function TrimGRNDetailPage() {
               <span>Inspection, Amount Details & Job Allocation ({lines.length})</span>
             </h3>
             <p className="text-[11px] text-slate-500">
-              Columns strictly ordered: # → I/O (Job No) → Style No → Trim Item → Specifications & Quantities
+              Columns strictly ordered: # → IO No (Job) → Style No → Trim Item → Specifications & Quantities
             </p>
           </div>
           {isNew && (
@@ -909,7 +910,7 @@ export default function TrimGRNDetailPage() {
                 {/* PO Ref */}
                 <th className="py-2.5 px-2 text-left min-w-[100px]">PO Ref</th>
                 {/* 2nd: I/O Job No */}
-                <th className="py-2.5 px-2 text-left min-w-[130px]">I/O (Job No)</th>
+                <th className="py-2.5 px-2 text-left min-w-[130px]">IO No (Job)</th>
                 {/* 3rd: Style No */}
                 <th className="py-2.5 px-2 text-left min-w-[120px]">Style No</th>
                 {/* 4th: Trim Item */}

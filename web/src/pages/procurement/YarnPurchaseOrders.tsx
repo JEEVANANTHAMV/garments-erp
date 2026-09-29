@@ -103,7 +103,7 @@ export default function YarnPurchaseOrdersPage() {
           <Search size={16} className="absolute left-3 top-2.5 text-slate-400" />
           <input
             type="text"
-            placeholder="Search PO No, Mill, IR No, Style..."
+            placeholder="Search PO No, Mill, IO No, Style..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
@@ -133,7 +133,7 @@ export default function YarnPurchaseOrdersPage() {
             <thead>
               <tr className="bg-slate-50/80 text-slate-600 font-semibold border-b border-slate-200">
                 <th className="py-3 px-4">PO Number & Date</th>
-                <th className="py-3 px-3">Internal / IR No</th>
+                <th className="py-3 px-3">IO No (Internal Order)</th>
                 <th className="py-3 px-3">Spinning Mill / Supplier</th>
                 <th className="py-3 px-3">Style Code</th>
                 <th className="py-3 px-3">Delivery Date</th>

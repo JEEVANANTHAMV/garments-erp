@@ -142,7 +142,7 @@ export default function TrimGRNsPage() {
                   <th className="py-3 px-4 text-left">GRN No</th>
                   <th className="py-3 px-4 text-left">Date</th>
                   <th className="py-3 px-4 text-left">PO No</th>
-                  <th className="py-3 px-4 text-left">I/O No</th>
+                  <th className="py-3 px-4 text-left">IO No (Internal Order)</th>
                   <th className="py-3 px-4 text-left">Supplier</th>
                   <th className="py-3 px-4 text-left">Warehouse</th>
                   <th className="py-3 px-4 text-right">Received Qty</th>

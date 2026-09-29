@@ -33,13 +33,45 @@ interface Line {
   ship_date: string;
   /** skuId -> qty */
   skus: Record<number, number>;
+  /**
+   * skuId -> size-wise excess %. Entered once per size column (applied to that
+   * size in every colour of the line); '' / absent = use the line / header %.
+   */
+  sku_excess: Record<number, number | ''>;
 }
 
 let keySeq = 0;
 const newLine = (): Line => ({
   _key: `l${++keySeq}`, style_id: '', color_id: '', assort_color: '', part_name: undefined,
-  description: '', unit_price: '', excess_pct: '', plan_cut_qty: 0, ship_date: '', skus: {},
+  description: '', unit_price: '', excess_pct: '', plan_cut_qty: 0, ship_date: '', skus: {}, sku_excess: {},
 });
+
+/** Effective line excess %: the line's own, else the order header's. */
+const lineExcessOf = (l: Line, headPct: number) =>
+  (l.excess_pct !== '' && l.excess_pct !== undefined) ? Number(l.excess_pct) || 0 : (headPct || 0);
+
+/**
+ * Planned cut for one line — mirrors the server (salesOrder.routes writeLines):
+ * each size gets qty × (1 + (size% ?? line% ?? header%)/100), rounded; when any
+ * size has its own %, the line plan cut is the sum of those, otherwise the
+ * original line-level rounding is kept. `onlySkuIds` limits to visible cells.
+ */
+function linePlan(l: Line, headPct: number, onlySkuIds?: Set<number>) {
+  const linePct = lineExcessOf(l, headPct);
+  let qty = 0, sizeSum = 0, hasSize = false;
+  for (const [k, v] of Object.entries(l.skus)) {
+    const skuId = Number(k);
+    const q = Number(v) || 0;
+    if (q <= 0 || (onlySkuIds && !onlySkuIds.has(skuId))) continue;
+    const sp = l.sku_excess[skuId];
+    const has = sp !== '' && sp !== undefined && sp !== null;
+    if (has) hasSize = true;
+    qty += q;
+    sizeSum += Math.round(q * (1 + (has ? Number(sp) : linePct) / 100));
+  }
+  const planCut = hasSize ? sizeSum : Math.round(qty * (1 + linePct / 100));
+  return { qty, planCut, linePct, hasSize };
+}
 
 export default function SalesOrderDetail() {
   const { id } = useParams();
@@ -121,6 +153,9 @@ export default function SalesOrderDetail() {
       plan_cut_qty: Number(l.plan_cut_qty || 0),
       ship_date: toDateInput(l.ship_date),
       skus: Object.fromEntries((l.skus ?? []).map((s: any) => [s.sku_id, Number(s.qty)])),
+      sku_excess: Object.fromEntries((l.skus ?? [])
+        .filter((s: any) => s.excess_pct !== null && s.excess_pct !== undefined)
+        .map((s: any) => [s.sku_id, Number(s.excess_pct)])),
     })));
   }, [detail.data]);
 
@@ -128,9 +163,7 @@ export default function SalesOrderDetail() {
     let qty = 0, amount = 0, planCutQty = 0;
     const defaultExcess = Number(head.excess_pct) || 0;
     for (const l of lines) {
-      const q = Object.values(l.skus).reduce((a, b) => a + (Number(b) || 0), 0);
-      const lineExcess = (l.excess_pct !== '' && l.excess_pct !== undefined) ? Number(l.excess_pct) : defaultExcess;
-      const linePlanCut = Math.round(q * (1 + (lineExcess || 0) / 100));
+      const { qty: q, planCut: linePlanCut } = linePlan(l, defaultExcess);
       qty += q;
       planCutQty += linePlanCut;
       amount += q * (Number(l.unit_price) || 0);
@@ -214,9 +247,7 @@ export default function SalesOrderDetail() {
         lines: lines
           .filter((l) => l.style_id)
           .map((l) => {
-            const lineQty = Object.values(l.skus).reduce((a, b) => a + (Number(b) || 0), 0);
-            const lineExcess = (l.excess_pct !== '' && l.excess_pct !== undefined) ? Number(l.excess_pct) : defaultExcess;
-            const planCut = Math.round(lineQty * (1 + lineExcess / 100));
+            const planCut = linePlan(l, defaultExcess).planCut;
             return {
               style_id: Number(l.style_id),
               color_id: l.color_id === '' ? null : Number(l.color_id),
@@ -229,7 +260,13 @@ export default function SalesOrderDetail() {
               ship_date: l.ship_date || null,
               skus: Object.entries(l.skus)
                 .filter(([, q]) => Number(q) > 0)
-                .map(([sku_id, qty]) => ({ sku_id: Number(sku_id), qty: Number(qty) })),
+                .map(([sku_id, qty]) => {
+                  const sp = l.sku_excess[Number(sku_id)];
+                  return {
+                    sku_id: Number(sku_id), qty: Number(qty),
+                    excess_pct: sp === '' || sp === undefined || sp === null ? null : Number(sp),
+                  };
+                }),
             };
           }),
       };
@@ -510,7 +547,7 @@ export default function SalesOrderDetail() {
               currencySymbol={currencySymbol}
               exchangeRate={exchangeRate}
               isForeign={isForeign}
-              headExcessPct={Number(head.excess_pct) || 5}
+              headExcessPct={Number(head.excess_pct) || 0}
               onChange={(patch) => setLine(line._key, patch)}
               onRemove={() => setLines((s) => s.filter((l) => l._key !== line._key))}
               canRemove={lines.length > 1}
@@ -1561,11 +1598,40 @@ function LineCard({
     .reduce((a, [, q]) => a + (Number(q) || 0), 0);
   const lineAmount = lineQty * (Number(line.unit_price) || 0);
 
-  const lineExcessPct = (line.excess_pct !== '' && line.excess_pct !== undefined)
-    ? Number(line.excess_pct)
-    : headExcessPct;
-  const linePlanCutQty = Math.round(lineQty * (1 + (lineExcessPct || 0) / 100));
+  const visibleIds = useMemo(() => new Set(visibleSkus.map((s) => s.id)), [visibleSkus]);
+  const plan = linePlan(line, headExcessPct, visibleIds);
+  const lineExcessPct = plan.linePct;
+  const linePlanCutQty = plan.planCut;
   const lineExcessPcs = Math.max(0, linePlanCutQty - lineQty);
+  const effectiveExcessPct = lineQty > 0 ? Math.round((lineExcessPcs / lineQty) * 1000) / 10 : lineExcessPct;
+
+  /** Size-wise excess shown in a size column: the first visible SKU of that size carrying one. */
+  const sizeExcessValue = (sizeCode: string): number | '' => {
+    for (const s of visibleSkus) {
+      if (s.size_code !== sizeCode) continue;
+      const v = line.sku_excess[s.id];
+      if (v !== '' && v !== undefined && v !== null) return v;
+    }
+    return '';
+  };
+  const setSizeExcess = (sizeCode: string, raw: string) => {
+    let v: number | '' = raw === '' ? '' : Number(raw);
+    if (v !== '' && (!Number.isFinite(v) || v < 0)) v = 0;
+    if (v !== '' && v > 100) { toast('Size excess % cannot exceed 100', 'error'); v = 100; }
+    const next = { ...line.sku_excess };
+    for (const s of visibleSkus) if (s.size_code === sizeCode) next[s.id] = v;
+    onChange({ sku_excess: next });
+  };
+  /** Planned cut for one size column across the visible colours. */
+  const sizePlanCut = (sizeCode: string) => visibleSkus
+    .filter((s) => s.size_code === sizeCode)
+    .reduce((a, s) => {
+      const q = Number(line.skus[s.id]) || 0;
+      if (q <= 0) return a;
+      const sp = line.sku_excess[s.id];
+      const pct = sp !== '' && sp !== undefined && sp !== null ? Number(sp) : lineExcessPct;
+      return a + Math.round(q * (1 + pct / 100));
+    }, 0);
 
   return (
     <div className="card p-4">
@@ -1585,12 +1651,12 @@ function LineCard({
         <Select label="Style" required options={toOptions(styles.data)} placeholder="— Select style —"
           value={line.style_id} disabled={!editable}
           onChange={(e) => onChange({
-            style_id: e.target.value ? Number(e.target.value) : '', color_id: '', skus: {},
+            style_id: e.target.value ? Number(e.target.value) : '', color_id: '', skus: {}, sku_excess: {},
           })} />
         <Select label="Colour" options={colors.data?.map((c) => ({ value: c.id, label: c.label })) ?? []}
           placeholder={line.style_id ? '— All colours —' : 'Select a style first'}
           value={line.color_id} disabled={!editable || !line.style_id}
-          onChange={(e) => onChange({ color_id: e.target.value ? Number(e.target.value) : '', skus: {} })} />
+          onChange={(e) => onChange({ color_id: e.target.value ? Number(e.target.value) : '', skus: {}, sku_excess: {} })} />
         <Input label="Assort colour" placeholder="e.g. Navy / Grey Mel" maxLength={80}
           value={line.assort_color} disabled={!editable}
           onChange={(e) => onChange({ assort_color: e.target.value })} />
@@ -1669,8 +1735,9 @@ function LineCard({
               <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 font-medium text-slate-700 border border-slate-200">
                 Order: <strong className="font-bold text-slate-900">{fmtNumber(lineQty)}</strong> pcs
               </span>
-              <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 font-medium text-amber-800 border border-amber-200" title={`Cutting allowance: +${lineExcessPct}%`}>
-                +{lineExcessPct}% Excess: <strong className="font-bold text-amber-900">+{fmtNumber(lineExcessPcs)} pcs</strong>
+              <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 font-medium text-amber-800 border border-amber-200"
+                title={plan.hasSize ? `Size-wise excess applied (line default +${lineExcessPct}%)` : `Cutting allowance: +${lineExcessPct}%`}>
+                +{plan.hasSize ? effectiveExcessPct : lineExcessPct}% Excess{plan.hasSize ? ' (size-wise)' : ''}: <strong className="font-bold text-amber-900">+{fmtNumber(lineExcessPcs)} pcs</strong>
               </span>
               <span className="inline-flex items-center gap-1 rounded bg-brand-50 px-2 py-0.5 font-semibold text-brand-800 border border-brand-200" title="Total planned cutting quantity with buffer">
                 Planned Cut: <strong className="font-bold text-brand-950">{fmtNumber(linePlanCutQty)}</strong> pcs
@@ -1763,6 +1830,40 @@ function LineCard({
                     </tr>
                   );
                 })}
+                {/* Size-wise excess %: blank = line / header default */}
+                <tr className="bg-amber-50/50">
+                  {!line.color_id && (
+                    <td className="td whitespace-nowrap text-[11.5px] font-semibold text-amber-800">Excess %</td>
+                  )}
+                  {distinctSizes.map((sz) => (
+                    <td key={sz.size_code} className="td p-1 text-center">
+                      <input type="number" min={0} max={100} step="0.1" disabled={!editable}
+                        className="w-[68px] rounded-md border border-amber-200 bg-white px-1.5 py-1 text-center
+                                   text-[12px] tabular-nums focus:border-amber-500 focus:outline-none
+                                   focus:ring-1 focus:ring-amber-500/25 disabled:bg-slate-50"
+                        value={sizeExcessValue(sz.size_code)}
+                        placeholder={`${lineExcessPct}`}
+                        title={`Excess % for size ${sz.size_code}. Leave blank to use ${lineExcessPct}% (line/order default).`}
+                        onChange={(e) => setSizeExcess(sz.size_code, e.target.value)} />
+                    </td>
+                  ))}
+                  <td className="td text-right text-[11px] text-amber-800">
+                    {line.color_id ? 'Excess %' : ''}
+                  </td>
+                </tr>
+                <tr className="bg-brand-50/40">
+                  {!line.color_id && (
+                    <td className="td whitespace-nowrap text-[11.5px] font-semibold text-brand-800">Planned cut</td>
+                  )}
+                  {distinctSizes.map((sz) => (
+                    <td key={sz.size_code} className="td text-center text-[12px] font-semibold tabular-nums text-brand-900">
+                      {fmtNumber(sizePlanCut(sz.size_code))}
+                    </td>
+                  ))}
+                  <td className="td text-right font-bold tabular-nums text-brand-900">
+                    {fmtNumber(linePlanCutQty)}
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>

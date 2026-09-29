@@ -254,6 +254,7 @@ export function ContractorBillsPage() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [openId, setOpenId] = useState<number | null>(null);
+  const [revising, setRevising] = useState<number | null>(null);
   const load = () => {
     setLoading(true);
     api.get('/contractor-bills').then((r) => setRows(r.data.data || []))
@@ -266,7 +267,7 @@ export function ContractorBillsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Contractor Bills</h1>
-          <p className="text-sm text-slate-500">Pass process inwards of in-house contractors and job workers for payment — good PCS × DC rate, less TDS</p>
+          <p className="text-sm text-slate-500">Pass process inwards for payment — PCS × job rate card (else DC rate), contractor's rate checked, less TDS, % deduction, advance and debit notes</p>
         </div>
         <Button onClick={() => setCreating(true)}><Plus size={14} className="inline mr-1" />New bill</Button>
       </div>
@@ -283,116 +284,205 @@ export function ContractorBillsPage() {
             { key: 'gst_amount', header: 'GST', align: 'right' as const, render: (r: any) => num(r.gst_amount) ? money(r.gst_amount) : '—' },
             { key: 'tds_amount', header: 'TDS', align: 'right' as const, render: (r: any) => num(r.tds_amount) ? money(r.tds_amount) : '—' },
             { key: 'net_amount', header: 'Net payable', align: 'right' as const, render: (r: any) => <b>{money(r.net_amount)}</b> },
-            { key: 'status', header: 'Status', render: (r: any) => <Badge tone={BILL_TONE[r.status] ?? 'slate'}>{r.status}</Badge> },
+            { key: 'status', header: 'Status', render: (r: any) => <span><Badge tone={BILL_TONE[r.status] ?? 'slate'}>{r.status}</Badge>{num(r.to_revise) > 0 && <Badge tone="amber" className="ml-1">to revise</Badge>}</span> },
           ]} />
       </Card>
-      {creating && <NewBillModal onClose={() => setCreating(false)} onSaved={(id) => { setCreating(false); load(); setOpenId(id); }} />}
-      {openId && <BillDetail id={openId} onClose={() => setOpenId(null)} onChanged={load} />}
+      {creating && <BillEditor onClose={() => setCreating(false)} onSaved={(id) => { setCreating(false); load(); setOpenId(id); }} />}
+      {revising && <BillEditor billId={revising} onClose={() => setRevising(null)} onSaved={(id) => { setRevising(null); load(); setOpenId(id); }} />}
+      {openId && <BillDetail id={openId} onClose={() => setOpenId(null)} onChanged={load} onRevise={(id) => { setOpenId(null); setRevising(id); }} />}
     </div>
   );
 }
 
-function NewBillModal({ onClose, onSaved }: { onClose: () => void; onSaved: (id: number) => void }) {
+const VARIANCE_LABEL: Record<string, string> = {
+  NONE: '— decide —', ALLOW: 'Allow (pay billed rate)', ADVANCE: 'Pay & keep excess as advance', REVISE: 'Revise (hold bill)',
+};
+
+/**
+ * New bill or revision of a draft. Our rate comes from the job rate card (else
+ * the DC rate); the contractor's invoice rate is entered per inward and any
+ * excess must be allowed, kept as advance (paid now, recovered later) or revised.
+ */
+function BillEditor({ billId, onClose, onSaved }: { billId?: number; onClose: () => void; onSaved: (id: number) => void }) {
   const toast = useToast();
   const contractors = useContractors();
-  const [f, setF] = useState<any>({ vendor_id: '', bill_date: today(), period_from: '', period_to: '', tds_pct: '1', gst_pct: '0', is_interstate: false, other_deduction_label: '', other_deduction: '', remarks: '' });
+  const [f, setF] = useState<any>({
+    vendor_id: '', bill_date: today(), period_from: '', period_to: '', tds_pct: '1', gst_pct: '0', is_interstate: false,
+    deduction_pct: '0', deduction_label: '', other_deduction_label: '', other_deduction: '', advance_adjust: '', remarks: '',
+  });
   const [rows, setRows] = useState<any[]>([]);
   const [picked, setPicked] = useState<Set<number>>(new Set());
+  const [billRates, setBillRates] = useState<Record<number, { bill_rate: string; action: string }>>({});
+  const [adv, setAdv] = useState<{ balance: number } | null>(null);
+  const [dns, setDns] = useState<any[]>([]);
+  const [dnSel, setDnSel] = useState<Set<number>>(new Set());
   const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(!billId);
+
+  // Revising a draft: load its values first.
+  useEffect(() => {
+    if (!billId) return;
+    api.get(`/contractor-bills/${billId}`).then((r) => {
+      const b = r.data.data;
+      setF({
+        vendor_id: String(b.vendor_id), bill_date: String(b.bill_date).slice(0, 10), period_from: b.period_from ? String(b.period_from).slice(0, 10) : '',
+        period_to: b.period_to ? String(b.period_to).slice(0, 10) : '', tds_pct: String(num(b.tds_pct)), gst_pct: String(num(b.gst_pct)),
+        is_interstate: !!b.is_interstate, deduction_pct: String(num(b.deduction_pct)), deduction_label: b.deduction_label ?? '',
+        other_deduction_label: b.other_deduction_label ?? '', other_deduction: num(b.other_deduction) ? String(num(b.other_deduction)) : '',
+        advance_adjust: num(b.advance_adjusted) ? String(num(b.advance_adjusted)) : '', remarks: b.remarks ?? '',
+      });
+      setPicked(new Set(b.lines.map((l: any) => Number(l.receipt_id))));
+      setBillRates(Object.fromEntries(b.lines.map((l: any) => [Number(l.receipt_id), { bill_rate: l.bill_rate != null ? String(num(l.bill_rate)) : '', action: l.variance_action || 'NONE' }])));
+      setDnSel(new Set((b.debit_notes || []).map((d: any) => Number(d.id))));
+      setLoaded(true);
+    }).catch((e) => toast(errMsg(e), 'error'));
+  }, [billId]);
 
   useEffect(() => {
-    if (!f.vendor_id) { setRows([]); return; }
-    api.get('/contractor-bills/unbilled', { params: { vendor_id: f.vendor_id, from: f.period_from || undefined, to: f.period_to || undefined } })
-      .then((r) => { const d = r.data.data || []; setRows(d); setPicked(new Set(d.map((x: any) => x.receipt_id))); })
+    if (!f.vendor_id || !loaded) { setRows([]); return; }
+    const params = { vendor_id: f.vendor_id, from: f.period_from || undefined, to: f.period_to || undefined, bill_id: billId || undefined };
+    api.get('/contractor-bills/unbilled', { params })
+      .then((r) => { const d = r.data.data || []; setRows(d); if (!billId) setPicked(new Set(d.map((x: any) => x.receipt_id))); })
       .catch((e) => toast(errMsg(e), 'error'));
-  }, [f.vendor_id, f.period_from, f.period_to]);
+    api.get('/contractor-advances/balance', { params: { vendor_id: f.vendor_id, bill_id: billId || undefined } }).then((r) => setAdv(r.data.data)).catch(() => setAdv(null));
+    api.get('/contractor-debit-notes', { params: { vendor_id: f.vendor_id } })
+      .then((r) => setDns((r.data.data || []).filter((d: any) => d.status === 'OPEN' || (billId && Number(d.bill_id) === billId))))
+      .catch(() => setDns([]));
+  }, [f.vendor_id, f.period_from, f.period_to, loaded]);
 
-  const sel = rows.filter((r) => picked.has(r.receipt_id));
-  const gross = sel.reduce((a, r) => a + num(r.amount), 0);
-  // Same order as the server: GST on the job-work value, TDS on the value before GST.
+  // Same pricing as the server: pay the lower rate unless the excess is allowed / kept as advance.
+  const priced = rows.filter((r) => picked.has(r.receipt_id)).map((r) => {
+    const inp = billRates[r.receipt_id];
+    const billRate = inp && inp.bill_rate !== '' ? num(inp.bill_rate) : num(r.our_rate);
+    const over = billRate > num(r.our_rate) + 0.00005;
+    const action = over ? (inp?.action || 'NONE') : 'NONE';
+    const payRate = over && (action === 'ALLOW' || action === 'ADVANCE') ? billRate : Math.min(billRate, num(r.our_rate));
+    return { ...r, billRate, over, action, payRate, excess: over ? (billRate - num(r.our_rate)) * r.billed_qty : 0, pay: r.billed_qty * payRate };
+  });
+  const gross = Math.round(priced.reduce((a, r) => a + r.pay, 0) * 100) / 100;
   const gst = Math.round(gross * num(f.gst_pct)) / 100;
   const tds = Math.round(gross * num(f.tds_pct)) / 100;
-  const net = Math.round(gross + gst - tds - num(f.other_deduction));
-  const unpriced = sel.some((r) => !num(r.rate));
+  const pctDed = Math.round(gross * num(f.deduction_pct)) / 100;
+  const dnAmt = dns.filter((d) => dnSel.has(Number(d.id))).reduce((a, d) => a + num(d.amount), 0);
+  const net = Math.round(gross + gst - tds - pctDed - num(f.other_deduction) - num(f.advance_adjust) - dnAmt);
+  const undecided = priced.filter((r) => r.over && r.action === 'NONE').length;
+  const toRevise = priced.filter((r) => r.over && r.action === 'REVISE').length;
 
   const save = async () => {
     setSaving(true);
     try {
-      const r = await api.post('/contractor-bills', {
+      const body = {
         ...f, vendor_id: Number(f.vendor_id), period_from: f.period_from || null, period_to: f.period_to || null,
         tds_pct: num(f.tds_pct), gst_pct: num(f.gst_pct), is_interstate: !!f.is_interstate,
+        deduction_pct: num(f.deduction_pct), deduction_label: f.deduction_label || null,
         other_deduction: num(f.other_deduction), other_deduction_label: f.other_deduction_label || null,
-        remarks: f.remarks || null, receipt_ids: [...picked],
-      });
-      toast(`Bill ${r.data.data.bill_no} saved`); onSaved(r.data.data.id);
+        advance_adjust: num(f.advance_adjust), debit_note_ids: [...dnSel], remarks: f.remarks || null,
+        receipt_ids: [...picked],
+        lines: priced.map((r) => ({ receipt_id: r.receipt_id, bill_rate: r.billRate, variance_action: r.action })),
+      };
+      const r = billId ? await api.put(`/contractor-bills/${billId}`, body) : await api.post('/contractor-bills', body);
+      toast(`Bill ${r.data.data.bill_no} ${billId ? 'revised' : 'saved'}`); onSaved(r.data.data.id);
     } catch (e) { toast(errMsg(e), 'error'); } finally { setSaving(false); }
   };
 
   return (
-    <Modal open onClose={onClose} size="xl" title="New contractor bill"
+    <Modal open onClose={onClose} size="full" title={billId ? 'Revise contractor bill' : 'New contractor bill'}
       footer={<>
-        <span className="mr-auto self-center text-sm text-slate-600">{sel.length} inwards · Gross <b>{money(gross)}</b> · Net <b>{money(net)}</b></span>
+        <span className="mr-auto self-center text-sm text-slate-600">
+          {priced.length} inwards · Gross <b>{money(gross)}</b> · Net <b>{money(net)}</b>
+          {undecided > 0 && <span className="ml-2 text-red-600">{undecided} line(s) billed above our rate need a decision</span>}
+          {toRevise > 0 && <span className="ml-2 text-amber-700">{toRevise} line(s) held for revision — the bill can't be approved until revised</span>}
+        </span>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button loading={saving} disabled={!sel.length || net < 0} onClick={save}><Save size={13} className="inline mr-1" />Save bill</Button>
+        <Button loading={saving} disabled={!priced.length || net < 0} onClick={save}><Save size={13} className="inline mr-1" />{billId ? 'Save revision' : 'Save bill'}</Button>
       </>}>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Select label="Contractor" required value={f.vendor_id} onChange={(e) => setF({ ...f, vendor_id: e.target.value })}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+        <Select label="Contractor" required value={f.vendor_id} disabled={!!billId} onChange={(e) => setF({ ...f, vendor_id: e.target.value })}
           placeholder="— choose —" options={contractors.map((c) => ({ value: c.id, label: c.label }))} className="md:col-span-2" />
         <Input label="Bill date" type="date" value={f.bill_date} onChange={(e) => setF({ ...f, bill_date: e.target.value })} />
-        <Input label="TDS %" type="number" min={0} step="0.01" value={f.tds_pct} hint="194C: 1% individual / 2% others" onChange={(e) => setF({ ...f, tds_pct: e.target.value })} />
         <Input label="Inwards from" type="date" value={f.period_from} onChange={(e) => setF({ ...f, period_from: e.target.value })} />
         <Input label="Inwards to" type="date" value={f.period_to} onChange={(e) => setF({ ...f, period_to: e.target.value })} />
-        <Input label="Other deduction" value={f.other_deduction_label} placeholder="e.g. Advance" onChange={(e) => setF({ ...f, other_deduction_label: e.target.value })} />
-        <Input label="Deduction amount (₹)" type="number" min={0} step="0.01" value={f.other_deduction} onChange={(e) => setF({ ...f, other_deduction: e.target.value })} />
         <Select label="GST % (job work)" value={f.gst_pct} onChange={(e) => setF({ ...f, gst_pct: e.target.value })}
-          options={['0', '5', '12', '18'].map((v) => ({ value: v, label: v === '0' ? 'No GST (unregistered / in-house)' : `${v}%` }))} />
+          options={['0', '5', '12', '18'].map((v) => ({ value: v, label: v === '0' ? 'No GST' : `${v}%` }))} />
+        <Input label="TDS %" type="number" min={0} step="0.01" value={f.tds_pct} hint="194C: 1% individual / 2% others" onChange={(e) => setF({ ...f, tds_pct: e.target.value })} />
+        <Input label="Deduction %" type="number" min={0} max={50} step="0.01" value={f.deduction_pct} hint="% of gross (retention / quality)" onChange={(e) => setF({ ...f, deduction_pct: e.target.value })} />
+        <Input label="Deduction % label" value={f.deduction_label} placeholder="e.g. Retention" onChange={(e) => setF({ ...f, deduction_label: e.target.value })} />
+        <Input label={`Advance adjust (₹)${adv ? ` · open ${money(adv.balance)}` : ''}`} type="number" min={0} step="0.01" value={f.advance_adjust}
+          onChange={(e) => setF({ ...f, advance_adjust: e.target.value })} />
+        <Input label="Other deduction" value={f.other_deduction_label} placeholder="Label" onChange={(e) => setF({ ...f, other_deduction_label: e.target.value })} />
+        <Input label="Other deduction (₹)" type="number" min={0} step="0.01" value={f.other_deduction} onChange={(e) => setF({ ...f, other_deduction: e.target.value })} />
         <label className="flex items-end gap-2 pb-2 text-sm text-slate-700">
           <input type="checkbox" checked={!!f.is_interstate} onChange={(e) => setF({ ...f, is_interstate: e.target.checked })} />Inter-state (IGST)
         </label>
       </div>
-      {unpriced && <p className="mt-2 rounded bg-amber-50 px-3 py-1.5 text-xs text-amber-800">Some inwards come from DCs without a rate — they bill at ₹0. Set the rate on the DC or the contractor operation rates.</p>}
       <table className="mt-3 w-full text-xs">
         <thead className="bg-slate-50 text-slate-500"><tr>
           <th className="w-8 px-2 py-1.5">
             <input type="checkbox" checked={rows.length > 0 && picked.size === rows.length}
               onChange={(e) => setPicked(e.target.checked ? new Set(rows.map((r) => r.receipt_id)) : new Set())} />
           </th>
-          <th className="px-2 py-1.5 text-left">Inward</th><th className="px-2 py-1.5 text-left">Date</th><th className="px-2 py-1.5 text-left">DC</th>
-          <th className="px-2 py-1.5 text-left">Process / operations</th><th className="px-2 py-1.5 text-left">Jobs</th>
-          <th className="px-2 py-1.5 text-right">Good</th><th className="px-2 py-1.5 text-right">Mistake</th><th className="px-2 py-1.5 text-right">Billed PCS</th>
-          <th className="px-2 py-1.5 text-right">Rate</th><th className="px-2 py-1.5 text-right">Amount</th>
+          <th className="px-2 py-1.5 text-left">Inward</th><th className="px-2 py-1.5 text-left">DC / process</th><th className="px-2 py-1.5 text-left">Jobs</th>
+          <th className="px-2 py-1.5 text-right">Billed PCS</th><th className="px-2 py-1.5 text-right" title="Job rate card, else DC rate">Our rate</th>
+          <th className="px-2 py-1.5 text-right">Contractor rate</th><th className="px-2 py-1.5 text-left">If billed above ours</th>
+          <th className="px-2 py-1.5 text-right">Pay rate</th><th className="px-2 py-1.5 text-right">Amount</th>
         </tr></thead>
         <tbody>
-          {!f.vendor_id && <tr><td colSpan={11} className="py-6 text-center text-slate-400">Choose the contractor to see inwards not billed yet.</td></tr>}
-          {f.vendor_id && !rows.length && <tr><td colSpan={11} className="py-6 text-center text-slate-400">No unbilled inwards for this contractor.</td></tr>}
-          {rows.map((r) => (
-            <tr key={r.receipt_id} className="border-t border-slate-100">
-              <td className="px-2 py-1 text-center">
-                <input type="checkbox" checked={picked.has(r.receipt_id)} onChange={() => setPicked((cur) => {
-                  const s = new Set(cur); if (s.has(r.receipt_id)) s.delete(r.receipt_id); else s.add(r.receipt_id); return s;
-                })} />
-              </td>
-              <td className="px-2 py-1 font-mono">{r.receipt_no}</td><td className="px-2 py-1">{fmtDate(r.receipt_date)}</td>
-              <td className="px-2 py-1 font-mono">{r.challan_no}</td>
-              <td className="px-2 py-1">{r.stage_name}{r.operations && <span className="block text-[11px] text-slate-400">{r.operations}</span>}</td>
-              <td className="px-2 py-1">{r.io_list ?? '—'}</td>
-              <td className="px-2 py-1 text-right">{fmtNumber(r.received_qty)}</td>
-              <td className="px-2 py-1 text-right">{num(r.rejected_qty) ? <>{fmtNumber(r.rejected_qty)}{num(r.bill_include_mistake) ? '' : <span className="text-slate-400"> (not paid)</span>}</> : '—'}</td>
-              <td className="px-2 py-1 text-right font-semibold">{fmtNumber(r.billed_qty)}</td>
-              <td className={`px-2 py-1 text-right ${num(r.rate) ? '' : 'text-amber-700'}`}>{num(r.rate).toFixed(2)}</td>
-              <td className="px-2 py-1 text-right font-semibold">{money(r.amount)}</td>
-            </tr>
-          ))}
+          {!f.vendor_id && <tr><td colSpan={10} className="py-6 text-center text-slate-400">Choose the contractor to see inwards not billed yet.</td></tr>}
+          {f.vendor_id && !rows.length && <tr><td colSpan={10} className="py-6 text-center text-slate-400">No unbilled inwards for this contractor.</td></tr>}
+          {rows.map((r) => {
+            const p = priced.find((x) => x.receipt_id === r.receipt_id);
+            const inp = billRates[r.receipt_id] ?? { bill_rate: '', action: 'NONE' };
+            return (
+              <tr key={r.receipt_id} className={`border-t border-slate-100 ${p?.over && p.action === 'NONE' ? 'bg-red-50' : p?.over ? 'bg-amber-50/60' : ''}`}>
+                <td className="px-2 py-1 text-center">
+                  <input type="checkbox" checked={picked.has(r.receipt_id)} onChange={() => setPicked((cur) => {
+                    const s2 = new Set(cur); if (s2.has(r.receipt_id)) s2.delete(r.receipt_id); else s2.add(r.receipt_id); return s2;
+                  })} />
+                </td>
+                <td className="px-2 py-1"><span className="font-mono">{r.receipt_no}</span><span className="block text-[11px] text-slate-400">{fmtDate(r.receipt_date)}</span></td>
+                <td className="px-2 py-1"><span className="font-mono">{r.challan_no}</span> · {r.stage_name}{r.operations && <span className="block text-[11px] text-slate-400">{r.operations}</span>}</td>
+                <td className="px-2 py-1">{(r.jobs || []).map((j: any) => <span key={j.io_no} className="block">{j.io_no}: {fmtNumber(j.qty)} × ₹{num(j.rate).toFixed(2)}</span>)}{!(r.jobs || []).length && (r.io_list ?? '—')}</td>
+                <td className="px-2 py-1 text-right font-semibold">{fmtNumber(r.billed_qty)}</td>
+                <td className="px-2 py-1 text-right">{num(r.our_rate).toFixed(2)}</td>
+                <td className="px-2 py-1 text-right">
+                  <input type="number" min={0} step="0.01" className="input h-6 w-20 text-right text-[11px]" placeholder={num(r.our_rate).toFixed(2)}
+                    value={inp.bill_rate} onChange={(e) => setBillRates((cur) => ({ ...cur, [r.receipt_id]: { ...inp, bill_rate: e.target.value } }))} />
+                </td>
+                <td className="px-2 py-1">
+                  {p?.over ? (
+                    <select className="input h-6 w-48 text-[11px]" value={inp.action}
+                      onChange={(e) => setBillRates((cur) => ({ ...cur, [r.receipt_id]: { ...inp, action: e.target.value } }))}>
+                      {Object.entries(VARIANCE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    </select>
+                  ) : <span className="text-slate-400">—</span>}
+                  {p?.over && <span className="block text-[10px] text-amber-700">excess {money(p.excess)}</span>}
+                </td>
+                <td className="px-2 py-1 text-right">{p ? p.payRate.toFixed(2) : '—'}</td>
+                <td className="px-2 py-1 text-right font-semibold">{p ? money(p.pay) : '—'}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
-      <div className="mt-3 ml-auto w-72 space-y-1 text-sm">
-        <div className="flex justify-between"><span>Gross</span><span>{money(gross)}</span></div>
-        {gst > 0 && (f.is_interstate
-          ? <div className="flex justify-between"><span>IGST ({num(f.gst_pct)}%)</span><span>+ {money(gst)}</span></div>
-          : <><div className="flex justify-between"><span>CGST ({num(f.gst_pct) / 2}%)</span><span>+ {money(gst / 2)}</span></div>
-              <div className="flex justify-between"><span>SGST ({num(f.gst_pct) / 2}%)</span><span>+ {money(gst / 2)}</span></div></>)}
+      {dns.length > 0 && (
+        <div className="mt-3 rounded-lg border border-slate-200 p-2 text-xs">
+          <p className="mb-1 font-semibold text-slate-700">Debit notes to deduct</p>
+          {dns.map((d) => (
+            <label key={d.id} className="flex items-center gap-2 py-0.5">
+              <input type="checkbox" checked={dnSel.has(Number(d.id))} onChange={() => setDnSel((cur) => { const s2 = new Set(cur); s2.has(Number(d.id)) ? s2.delete(Number(d.id)) : s2.add(Number(d.id)); return s2; })} />
+              <span className="font-mono">{d.dn_no}</span> {fmtDate(d.dn_date)} · {d.reason}{d.io_no ? ` · ${d.io_no}` : ''} · <b>{money(d.amount)}</b>
+            </label>
+          ))}
+        </div>
+      )}
+      <div className="mt-3 ml-auto w-80 space-y-1 text-sm">
+        <div className="flex justify-between"><span>Gross (pay rate × PCS)</span><span>{money(gross)}</span></div>
+        {gst > 0 && <div className="flex justify-between"><span>{f.is_interstate ? 'IGST' : 'CGST + SGST'} ({num(f.gst_pct)}%)</span><span>+ {money(gst)}</span></div>}
         <div className="flex justify-between text-red-600"><span>TDS ({num(f.tds_pct)}%)</span><span>− {money(tds)}</span></div>
+        {pctDed > 0 && <div className="flex justify-between text-red-600"><span>{f.deduction_label || 'Deduction'} ({num(f.deduction_pct)}%)</span><span>− {money(pctDed)}</span></div>}
         {num(f.other_deduction) > 0 && <div className="flex justify-between text-red-600"><span>{f.other_deduction_label || 'Other deduction'}</span><span>− {money(f.other_deduction)}</span></div>}
+        {num(f.advance_adjust) > 0 && <div className="flex justify-between text-red-600"><span>Advance adjusted</span><span>− {money(f.advance_adjust)}</span></div>}
+        {dnAmt > 0 && <div className="flex justify-between text-red-600"><span>Debit notes</span><span>− {money(dnAmt)}</span></div>}
         <div className="flex justify-between border-t border-slate-200 pt-1 font-bold"><span>Net payable</span><span>{money(net)}</span></div>
       </div>
       <Textarea label="Remarks" value={f.remarks} onChange={(e) => setF({ ...f, remarks: e.target.value })} rows={2} className="mt-3" />
@@ -400,7 +490,7 @@ function NewBillModal({ onClose, onSaved }: { onClose: () => void; onSaved: (id:
   );
 }
 
-function BillDetail({ id, onClose, onChanged }: { id: number; onClose: () => void; onChanged: () => void }) {
+function BillDetail({ id, onClose, onChanged, onRevise }: { id: number; onClose: () => void; onChanged: () => void; onRevise: (id: number) => void }) {
   const toast = useToast();
   const [b, setB] = useState<any>(null);
   const [cancelling, setCancelling] = useState(false);
@@ -421,6 +511,7 @@ function BillDetail({ id, onClose, onChanged }: { id: number; onClose: () => voi
       footer={<>
         {b.status !== 'CANCELLED' && <Button variant="danger" className="mr-auto" disabled={busy} onClick={() => { setReason(''); setCancelling(true); }}><Ban size={13} className="inline mr-1" />Cancel bill</Button>}
         <Button variant="secondary" onClick={() => printBill(b)}><Printer size={13} className="inline mr-1" />Print</Button>
+        {b.status === 'DRAFT' && <Button variant="secondary" disabled={busy} onClick={() => onRevise(b.id)}><Pencil size={13} className="inline mr-1" />Revise</Button>}
         {b.status === 'DRAFT' && <Button loading={busy} onClick={() => act('approve', {}, 'Bill approved')}><CheckCircle2 size={13} className="inline mr-1" />Approve</Button>}
       </>}>
       <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
@@ -435,7 +526,8 @@ function BillDetail({ id, onClose, onChanged }: { id: number; onClose: () => voi
           <th className="px-2 py-1.5 text-left">Inward</th><th className="px-2 py-1.5 text-left">Date</th><th className="px-2 py-1.5 text-left">DC</th>
           <th className="px-2 py-1.5 text-left">Process / operations</th><th className="px-2 py-1.5 text-left">Jobs</th>
           <th className="px-2 py-1.5 text-right">Good</th><th className="px-2 py-1.5 text-right">Mistake</th><th className="px-2 py-1.5 text-right">Billed</th>
-          <th className="px-2 py-1.5 text-right">Rate</th><th className="px-2 py-1.5 text-right">Amount</th>
+          <th className="px-2 py-1.5 text-right">Our rate</th><th className="px-2 py-1.5 text-right">Contractor rate</th>
+          <th className="px-2 py-1.5 text-right">Pay rate</th><th className="px-2 py-1.5 text-right">Amount</th>
         </tr></thead>
         <tbody>
           {b.lines.map((l: any) => (
@@ -446,6 +538,11 @@ function BillDetail({ id, onClose, onChanged }: { id: number; onClose: () => voi
               <td className="px-2 py-1">{l.io_list ?? '—'}</td>
               <td className="px-2 py-1 text-right">{fmtNumber(l.good_qty)}</td><td className="px-2 py-1 text-right">{fmtNumber(l.mistake_qty)}</td>
               <td className="px-2 py-1 text-right font-semibold">{fmtNumber(l.billed_qty)}</td>
+              <td className="px-2 py-1 text-right">{l.our_rate != null ? num(l.our_rate).toFixed(2) : '—'}</td>
+              <td className={`px-2 py-1 text-right ${num(l.bill_rate) > num(l.our_rate) + 0.00005 ? 'font-semibold text-amber-700' : ''}`}>
+                {l.bill_rate != null ? num(l.bill_rate).toFixed(2) : '—'}
+                {l.variance_action && l.variance_action !== 'NONE' && <span className="block text-[10px]">{VARIANCE_LABEL[l.variance_action]}</span>}
+              </td>
               <td className="px-2 py-1 text-right">{num(l.rate).toFixed(2)}</td><td className="px-2 py-1 text-right font-semibold">{money(l.amount)}</td>
             </tr>
           ))}
@@ -455,7 +552,11 @@ function BillDetail({ id, onClose, onChanged }: { id: number; onClose: () => voi
         <div className="flex justify-between"><span>Gross ({fmtNumber(b.billed_qty)} PCS)</span><span>{money(b.gross_amount)}</span></div>
         {num(b.gst_amount) > 0 && <div className="flex justify-between"><span>{b.is_interstate ? 'IGST' : 'CGST + SGST'} ({num(b.gst_pct)}%)</span><span>+ {money(b.gst_amount)}</span></div>}
         <div className="flex justify-between text-red-600"><span>TDS ({num(b.tds_pct)}%)</span><span>− {money(b.tds_amount)}</span></div>
+        {num(b.deduction_amount) > 0 && <div className="flex justify-between text-red-600"><span>{b.deduction_label || 'Deduction'} ({num(b.deduction_pct)}%)</span><span>− {money(b.deduction_amount)}</span></div>}
         {num(b.other_deduction) > 0 && <div className="flex justify-between text-red-600"><span>{b.other_deduction_label || 'Other deduction'}</span><span>− {money(b.other_deduction)}</span></div>}
+        {num(b.advance_adjusted) > 0 && <div className="flex justify-between text-red-600"><span>Advance adjusted</span><span>− {money(b.advance_adjusted)}</span></div>}
+        {num(b.debit_note_amount) > 0 && <div className="flex justify-between text-red-600"><span>Debit notes ({(b.debit_notes || []).map((d: any) => d.dn_no).join(', ')})</span><span>− {money(b.debit_note_amount)}</span></div>}
+        {num(b.excess_as_advance) > 0 && <div className="flex justify-between text-amber-700"><span>Excess kept as advance (recoverable)</span><span>{money(b.excess_as_advance)}</span></div>}
         <div className="flex justify-between text-slate-500"><span>Round off</span><span>{num(b.round_off).toFixed(2)}</span></div>
         <div className="flex justify-between border-t border-slate-200 pt-1 font-bold"><span>Net payable</span><span>{money(b.net_amount)}</span></div>
       </div>
@@ -497,7 +598,10 @@ function printBill(b: any) {
         ? `<tr><td>IGST (${num(b.gst_pct)}%)</td><td class="r">${num(b.gst_amount).toFixed(2)}</td></tr>`
         : `<tr><td>CGST (${num(b.gst_pct) / 2}%)</td><td class="r">${(num(b.gst_amount) / 2).toFixed(2)}</td></tr><tr><td>SGST (${num(b.gst_pct) / 2}%)</td><td class="r">${(num(b.gst_amount) / 2).toFixed(2)}</td></tr>`) : ''}
       <tr><td>TDS (${num(b.tds_pct)}%)</td><td class="r">- ${num(b.tds_amount).toFixed(2)}</td></tr>
+      ${num(b.deduction_amount) ? `<tr><td>${esc(b.deduction_label || 'Deduction')} (${num(b.deduction_pct)}%)</td><td class="r">- ${num(b.deduction_amount).toFixed(2)}</td></tr>` : ''}
       ${num(b.other_deduction) ? `<tr><td>${esc(b.other_deduction_label || 'Other deduction')}</td><td class="r">- ${num(b.other_deduction).toFixed(2)}</td></tr>` : ''}
+      ${num(b.advance_adjusted) ? `<tr><td>Advance adjusted</td><td class="r">- ${num(b.advance_adjusted).toFixed(2)}</td></tr>` : ''}
+      ${num(b.debit_note_amount) ? `<tr><td>Debit notes</td><td class="r">- ${num(b.debit_note_amount).toFixed(2)}</td></tr>` : ''}
       <tr><td>Round off</td><td class="r">${num(b.round_off).toFixed(2)}</td></tr>
       <tr><td><b>Net payable</b></td><td class="r"><b>${num(b.net_amount).toFixed(2)}</b></td></tr></table>
     <div class="sign"><div>Prepared by</div><div>Approved by</div><div>Contractor's signature</div></div>

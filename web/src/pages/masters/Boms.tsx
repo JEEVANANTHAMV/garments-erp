@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, ArrowLeft, Save, Trash2, Layers, FileText, Zap, Sparkles, Grid } from 'lucide-react';
+import { Plus, ArrowLeft, Save, Trash2, Layers, FileText, Zap, Sparkles, Grid, Printer } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { http, ApiError } from '../../lib/api';
 import { useList, useListState } from '../../hooks/useResource';
-import { useLookup, toOptions, useStatuses, toPlainOptions } from '../../hooks/useLookup';
+import { useLookup, toOptions, useStatuses, toPlainOptions, useStyleSkus } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
 import { DataTable } from '../../components/DataTable';
 import {
@@ -22,6 +22,8 @@ interface BomLine {
   fabric_id: number | '';
   trim_id: number | '';
   item_description: string;
+  /** Free-text spec next to the material (poly bag size, care label text …) — printed on the BOM. */
+  specification: string;
   color_id: number | '';
   size_id: number | '';
   consumption_basis: string;
@@ -40,6 +42,7 @@ const emptyLine = (type: BomLine['material_type'] = 'TRIM'): BomLine => ({
   fabric_id: '',
   trim_id: '',
   item_description: '',
+  specification: '',
   color_id: '',
   size_id: '',
   consumption_basis: 'PER_PIECE',
@@ -58,6 +61,8 @@ interface TrimMatrixModalProps {
   materialName: string;
   sizes: any[];
   colors: any[];
+  /** Where the sizes / colours came from — shown when there are none. */
+  scopeNote: string;
   onClose: () => void;
   onApply: (newLines: BomLine[]) => void;
 }
@@ -69,6 +74,7 @@ function TrimMatrixModal({
   materialName,
   sizes,
   colors,
+  scopeNote,
   onClose,
   onApply,
 }: TrimMatrixModalProps) {
@@ -76,25 +82,14 @@ function TrimMatrixModal({
   const [defaultCons, setDefaultCons] = useState<number>(Number(line?.consumption) || 1);
   const [defaultWaste, setDefaultWaste] = useState<number>(Number(line?.wastage_pct) || 2);
 
-  const activeSizes = useMemo(
-    () => (sizes && sizes.length > 0 ? sizes : [
-      { id: 1, label: 'S', code: 'S' },
-      { id: 2, label: 'M', code: 'M' },
-      { id: 3, label: 'L', code: 'L' },
-      { id: 4, label: 'XL', code: 'XL' },
-      { id: 5, label: 'XXL', code: 'XXL' },
-    ]),
-    [sizes]
-  );
-
-  const activeColors = useMemo(
-    () => (colors && colors.length > 0 ? colors : [
-      { id: 1, label: 'Black', code: 'BLK' },
-      { id: 2, label: 'White', code: 'WHT' },
-      { id: 3, label: 'Navy', code: 'NVY' },
-    ]),
-    [colors]
-  );
+  // Only the sizes / colours of the BOM's sales order (or its style's SKUs)
+  // are passed in — never the whole master, and never placeholder rows.
+  const activeSizes = sizes;
+  const activeColors = colors;
+  const missing =
+    currentMode === 'SIZE_WISE' ? (activeSizes.length ? null : 'sizes')
+    : currentMode === 'COLOUR_WISE' ? (activeColors.length ? null : 'colours')
+    : (activeSizes.length && activeColors.length ? null : 'sizes / colours');
 
   const [sizeMap, setSizeMap] = useState<Record<number, { active: boolean; consumption: number; wastage_pct: number; additional_qty: number }>>({});
   const [colorMap, setColorMap] = useState<Record<number, { active: boolean; consumption: number; wastage_pct: number; additional_qty: number }>>({});
@@ -158,7 +153,7 @@ function TrimMatrixModal({
   };
 
   const handleApply = () => {
-    if (!line) return;
+    if (!line || missing) return;
     const newLines: BomLine[] = [];
 
     if (currentMode === 'SIZE_WISE') {
@@ -243,7 +238,7 @@ function TrimMatrixModal({
             <Button variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button onClick={handleApply} className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5">
+            <Button onClick={handleApply} disabled={!!missing} className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5">
               <Sparkles size={14} />
               <span>Apply Matrix to BOM</span>
             </Button>
@@ -252,6 +247,11 @@ function TrimMatrixModal({
       }
     >
       <div className="space-y-4">
+        {missing && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            No {missing} to break down. {scopeNote}
+          </div>
+        )}
         {/* Mode Selector & Quick Fill Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
           <div className="flex items-center gap-1">
@@ -618,8 +618,6 @@ export function BomDetailPage() {
   const yarns = useLookup('yarns');
   const fabrics = useLookup('fabrics');
   const trims = useLookup('trims');
-  const colors = useLookup('colors');
-  const sizes = useLookup('sizes');
   const uoms = useLookup('uoms');
   const statuses = useStatuses('BOM');
 
@@ -628,6 +626,50 @@ export function BomDetailPage() {
     queryFn: async () => (await http.get<{ data: any }>(`/boms/${id}`)).data,
     enabled: !isNew,
   });
+
+  // Colours / sizes a line may use: only those on the BOM's sales order (for
+  // its style); a master BOM (no SO) uses the style's own SKUs. The full
+  // colour / size masters are never offered.
+  const soId = head.so_id ? Number(head.so_id) : null;
+  const styleId = head.style_id ? Number(head.style_id) : null;
+  const soScope = useQuery({
+    queryKey: ['lookup', 'so-size-colors', soId, styleId],
+    queryFn: async () => (await http.get<{ data: { colors: any[]; sizes: any[] } }>(
+      `/lookups/so-size-colors/${soId}${styleId ? `?style_id=${styleId}` : ''}`)).data,
+    enabled: !!soId,
+    staleTime: 60 * 1000,
+  });
+  const styleSkus = useStyleSkus(!soId ? styleId : null);
+  const scope = useMemo(() => {
+    if (soId) {
+      return {
+        colors: soScope.data?.colors ?? [],
+        sizes: soScope.data?.sizes ?? [],
+        note: 'Only the colours and sizes entered on the selected sales order (for this style) are offered — add them to the order first.',
+      };
+    }
+    if (styleId) {
+      const all = styleSkus.data ?? [];
+      const colors = [...new Map(all.map((k) => [k.color_id, { id: k.color_id, label: k.color_name, hex_value: k.hex_value }])).values()]
+        .sort((a, b) => a.label.localeCompare(b.label));
+      const sizes = [...new Map(all.map((k) => [k.size_id, { id: k.size_id, code: k.size_code, label: k.size_label || k.size_code, sort_order: k.sort_order }])).values()]
+        .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id);
+      return { colors, sizes, note: 'Master BOM: the colours and sizes of the style\'s SKUs are offered — generate SKUs on the style first.' };
+    }
+    return { colors: [] as any[], sizes: [] as any[], note: 'Select a style (and optionally a sales order) first.' };
+  }, [soId, styleId, soScope.data, styleSkus.data]);
+
+  // Labels for colours / sizes already saved on lines but no longer on the
+  // order, so an existing BOM still shows what it holds.
+  const savedLabels = useMemo(() => {
+    const colors = new Map<number, string>();
+    const sizes = new Map<number, string>();
+    for (const l of detail.data?.lines ?? []) {
+      if (l.color_id) colors.set(Number(l.color_id), l.color_name ?? `#${l.color_id}`);
+      if (l.size_id) sizes.set(Number(l.size_id), l.size_code ?? `#${l.size_id}`);
+    }
+    return { colors, sizes };
+  }, [detail.data]);
 
   // Query latest approved CAD requirement for this Style
   const { data: latestCad, refetch: refetchCad } = useQuery({
@@ -651,6 +693,7 @@ export function BomDetailPage() {
       fabric_id: l.fabric_id ?? '',
       trim_id: l.trim_id ?? '',
       item_description: l.item_description ?? '',
+      specification: l.specification ?? '',
       color_id: l.color_id ?? '',
       size_id: l.size_id ?? '',
       consumption_basis: l.consumption_basis || 'PER_PIECE',
@@ -697,6 +740,7 @@ export function BomDetailPage() {
           yarn_id: '',
           trim_id: '',
           item_description: '',
+          specification: '',
           color_id: '',
           size_id: '',
           consumption_basis: 'PER_PIECE',
@@ -715,6 +759,7 @@ export function BomDetailPage() {
           fabric_id: '',
           trim_id: '',
           item_description: '',
+          specification: '',
           color_id: '',
           size_id: '',
           consumption_basis: 'PER_PIECE',
@@ -813,6 +858,7 @@ export function BomDetailPage() {
           fabric_id: l.material_type === 'FABRIC' ? Number(l.fabric_id) : null,
           trim_id: ['TRIM','ACCESSORY','PACKING','GENERAL'].includes(l.material_type) && l.trim_id ? Number(l.trim_id) : null,
           item_description: l.item_description || null,
+          specification: l.specification.trim() || null,
           color_id: l.color_id ? Number(l.color_id) : null,
           size_id: l.size_id ? Number(l.size_id) : null,
           consumption_basis: l.consumption_basis || 'PER_PIECE',
@@ -851,6 +897,12 @@ export function BomDetailPage() {
           <button className="btn-secondary" onClick={() => nav('/masters/boms')}>
             <ArrowLeft size={15} /> Back
           </button>
+          {!isNew && id && (
+            <button className="btn-secondary" onClick={() => nav(`/masters/boms/${id}/print`)}
+              title="Print the saved BOM (save changes first)">
+              <Printer size={15} /> Print
+            </button>
+          )}
           {!isNew && head.approval_state === 'APPROVED' && (
             <button className="btn-secondary text-indigo-700 bg-indigo-50 border-indigo-200 hover:bg-indigo-100" onClick={handleCreateRevision}>
               <Sparkles size={14} /> Create Revision v{(Number(head.version) || 1) + 1}
@@ -1036,6 +1088,7 @@ export function BomDetailPage() {
             <thead><tr>
               <th className="th w-[95px]">Type</th>
               <th className="th min-w-[200px]">Material / Description</th>
+              <th className="th min-w-[170px]">Specification</th>
               <th className="th w-[110px]">Applicability</th>
               <th className="th w-[110px]">Colour</th>
               <th className="th w-[100px]">Size</th>
@@ -1105,6 +1158,18 @@ export function BomDetailPage() {
                         </select>
                       )}
                     </td>
+                    {/* Specification — e.g. poly bag 12x16", care label "100% Cotton" */}
+                    <td className="td p-1.5">
+                      <input
+                        type="text"
+                        className="input py-1 text-[11.5px]"
+                        maxLength={255}
+                        placeholder={l.material_type === 'FABRIC' || l.material_type === 'YARN' ? 'Spec (optional)' : 'e.g. 12 x 16 in / 100% Cotton'}
+                        value={l.specification}
+                        disabled={!editable}
+                        onChange={(e) => setLine(l._key, { specification: e.target.value })}
+                      />
+                    </td>
                     {/* Applicability */}
                     <td className="td p-1.5">
                       <div className="flex items-center gap-1">
@@ -1166,7 +1231,10 @@ export function BomDetailPage() {
                       <select className="input py-1 text-[11px]" value={l.color_id} disabled={!editable}
                         onChange={(e) => setLine(l._key, { color_id: e.target.value ? Number(e.target.value) : '' })}>
                         <option value="">All Colours</option>
-                        {(colors.data ?? []).map((c: any) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                        {scope.colors.map((c: any) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                        {l.color_id !== '' && !scope.colors.some((c: any) => Number(c.id) === Number(l.color_id)) && (
+                          <option value={l.color_id}>{savedLabels.colors.get(Number(l.color_id)) ?? `#${l.color_id}`} (not on order)</option>
+                        )}
                       </select>
                     </td>
                     {/* Size */}
@@ -1174,7 +1242,10 @@ export function BomDetailPage() {
                       <select className="input py-1 text-[11px]" value={l.size_id} disabled={!editable}
                         onChange={(e) => setLine(l._key, { size_id: e.target.value ? Number(e.target.value) : '' })}>
                         <option value="">All Sizes</option>
-                        {(sizes.data ?? []).map((s: any) => <option key={s.id} value={s.id}>{s.label}</option>)}
+                        {scope.sizes.map((s: any) => <option key={s.id} value={s.id}>{s.label}</option>)}
+                        {l.size_id !== '' && !scope.sizes.some((s: any) => Number(s.id) === Number(l.size_id)) && (
+                          <option value={l.size_id}>{savedLabels.sizes.get(Number(l.size_id)) ?? `#${l.size_id}`} (not on order)</option>
+                        )}
                       </select>
                     </td>
                     {/* Consumption Basis */}
@@ -1302,8 +1373,9 @@ export function BomDetailPage() {
           line={matrixModal.line}
           mode={matrixModal.mode}
           materialName={matrixModal.materialName}
-          sizes={sizes.data || []}
-          colors={colors.data || []}
+          sizes={scope.sizes}
+          colors={scope.colors}
+          scopeNote={scope.note}
           onClose={() => setMatrixModal({ open: false, line: null, mode: 'SIZE_WISE', materialName: '' })}
           onApply={(newLines) => {
             setLines((prev) => {

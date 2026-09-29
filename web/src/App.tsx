@@ -15,6 +15,7 @@ import {
 import { SizeGroupsPage, SizeGroupDetailPage } from './pages/masters/SizeGroups';
 import { StylesPage, StyleDetailPage } from './pages/masters/Styles';
 import { BomsPage, BomDetailPage } from './pages/masters/Boms';
+import BomPrintPage from './pages/masters/BomPrint';
 import { DivisionsPage } from './pages/masters/Divisions';
 
 /* Sales */
@@ -64,6 +65,7 @@ import KnittingPage from './pages/production/KnittingPage';
 import KnittingProgramPage from './pages/production/KnittingProgramPage';
 import ProcessRoutePage from './pages/production/ProcessRoutePage';
 import { ProcessMasterPage, ContractorBillsPage } from './pages/production/ProcessMasterPage';
+import { JobRateCardPage, ContractorAdvancesPage, ContractorDebitNotesPage } from './pages/production/ContractorPages';
 import YarnProcessPage from './pages/production/YarnProcessPage';
 import CollarKnittingPage from './pages/production/CollarKnittingPage';
 import ProcessReportsPage from './pages/production/ProcessReportsPage';
@@ -187,6 +189,7 @@ export default function App() {
                   <Route path="styles/:id" element={<StyleDetailPage />} />
                   <Route path="boms" element={<BomsPage />} />
                   <Route path="boms/:id" element={<BomDetailPage />} />
+                  <Route path="boms/:id/print" element={<BomPrintPage />} />
                 </Route>
 
                 {/* Sales */}
@@ -313,6 +316,9 @@ export default function App() {
                   <Route path="jobwork-receipts" element={<JobWorkReceiptsPage />} />
                   <Route path="process-master" element={<ProcessMasterPage />} />
                   <Route path="contractor-bills" element={<ContractorBillsPage />} />
+                  <Route path="job-rate-cards" element={<JobRateCardPage />} />
+                  <Route path="contractor-advances" element={<ContractorAdvancesPage />} />
+                  <Route path="contractor-debit-notes" element={<ContractorDebitNotesPage />} />
                   <Route path="jobwork-ins" element={<JobWorkInsPage />} />
                   <Route path="jobwork-invoices" element={<JobWorkInvoicesPage />} />
                   <Route path="fg-receipts" element={<FgReceiptsPage />} />

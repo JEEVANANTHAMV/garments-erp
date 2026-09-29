@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { query, queryOne, transaction, txQuery, txQueryOne, txExecute } from '../../config/db.js';
+import { query, queryOne, transaction, txQuery, txQueryOne, txExecute, type Tx } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
 import { NotFound, BadRequest } from '../../core/errors.js';
-import { requirePermission } from '../../middleware/auth.js';
+import { requirePermission, requireAny } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { computeInvoice, chargesFromRow, invoiceSummaryColumns } from '../../core/invoiceCalc.js';
@@ -11,128 +11,322 @@ import { computeInvoice, chargesFromRow, invoiceSummaryColumns } from '../../cor
 export const fabricYarnProcurementRouter = Router();
 
 /* ==============================================================================
+   SHARED: JOB (IO) LIST + QUOTATION → PO HELPERS
+   (the helpers are also used by POST /trim-pos/convert-from-quotation)
+   ============================================================================== */
+
+/**
+ * GET /api/procurement/jobs?q=
+ * Jobs (sales orders) for the "IO No" selector on Fabric / Yarn / Trims POs and purchase
+ * quotations: id, so_no, io_no, buyer, the job's styles (from trx_sales_order_line) and
+ * plan-cut qty. Cancelled / rejected orders are left out.
+ */
+fabricYarnProcurementRouter.get('/procurement/jobs',
+  requireAny('PURCHASE.VIEW', 'PROCUREMENT.VIEW', 'QUOTATION.VIEW', 'BOM.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const q = z.object({
+    q: z.string().trim().max(60).optional(),
+    limit: z.coerce.number().int().min(1).max(1000).default(500),
+  }).parse(req.query);
+
+  const where = ['so.company_id = ?', 'so.is_deleted = 0', "COALESCE(so.approval_state, 'DRAFT') NOT IN ('CANCELLED', 'REJECTED')"];
+  const params: unknown[] = [cid];
+  if (q.q) {
+    where.push(`(so.io_no LIKE ? OR so.so_no LIKE ? OR so.buyer_po_no LIKE ? OR b.party_name LIKE ?
+                 OR EXISTS (SELECT 1 FROM trx_sales_order_line x JOIN mst_style xs ON xs.id = x.style_id
+                             WHERE x.so_id = so.id AND xs.style_code LIKE ?))`);
+    params.push(`%${q.q}%`, `%${q.q}%`, `%${q.q}%`, `%${q.q}%`, `%${q.q}%`);
+  }
+  const jobs = await query<any>(
+    `SELECT so.id, so.so_no, so.io_no, so.buyer_po_no, so.so_date, so.ship_date, so.buyer_id,
+            b.party_name AS buyer_name
+       FROM trx_sales_order so
+       LEFT JOIN mst_party b ON b.id = so.buyer_id
+      WHERE ${where.join(' AND ')}
+      ORDER BY so.so_date DESC, so.id DESC
+      LIMIT ${q.limit}`, params);
+
+  const styleRows = jobs.length ? await query<any>(
+    `SELECT sol.so_id, sol.style_id, st.style_code, st.style_name,
+            SUM(COALESCE(sol.plan_cut_qty, 0)) AS plan_cut_qty, SUM(COALESCE(sol.order_qty, 0)) AS order_qty
+       FROM trx_sales_order_line sol
+       JOIN mst_style st ON st.id = sol.style_id
+      WHERE sol.so_id IN (?)
+      GROUP BY sol.so_id, sol.style_id, st.style_code, st.style_name
+      ORDER BY st.style_code`, [jobs.map((j) => j.id)]) : [];
+
+  const data = jobs.map((j) => {
+    const styles = styleRows.filter((r) => Number(r.so_id) === Number(j.id)).map((r) => ({
+      style_id: Number(r.style_id), style_code: r.style_code, style_name: r.style_name,
+      plan_cut_qty: Number(r.plan_cut_qty) || 0, order_qty: Number(r.order_qty) || 0,
+    }));
+    const planCut = styles.reduce((t, s) => t + s.plan_cut_qty, 0);
+    const ordered = styles.reduce((t, s) => t + s.order_qty, 0);
+    const jobNo = j.io_no || j.so_no;
+    return {
+      ...j,
+      job_no: jobNo,
+      styles,
+      style_ids: styles.map((s) => s.style_id),
+      style_codes: styles.map((s) => s.style_code).join(', '),
+      plan_cut_qty: planCut > 0 ? planCut : ordered,
+      order_qty: ordered,
+      label: [jobNo, j.buyer_name, styles.map((s) => s.style_code).join(', ')].filter(Boolean).join(' — '),
+    };
+  });
+  res.json({ data });
+}));
+
+export type QuotationPoKind = 'FABRIC' | 'YARN' | 'TRIMS';
+
+export interface QuotationForPo {
+  quote: any;
+  /** Quotation lines of this material; `material_id`, `so_id`, `rate` resolved. */
+  lines: any[];
+  /** Job the PO is for (all lines on one job), else null. */
+  soId: number | null;
+  /** IO no for the PO header: the job's io_no (else so_no), else the quotation's job no. */
+  ioNo: string | null;
+  /** Lines whose material master could not be resolved. */
+  unresolved: number;
+  /** One style for all lines, else null. */
+  styleId: number | null;
+  isInterstate: boolean;
+}
+
+const QUOTE_MATERIAL: Record<QuotationPoKind, { idCol: string; table: string; nameCol: string; codeCol: string; label: string; types: string[] }> = {
+  FABRIC: { idCol: 'fabric_id', table: 'mst_fabric', nameCol: 'fabric_name', codeCol: 'fabric_code', label: 'Fabric', types: ['FABRIC'] },
+  YARN:   { idCol: 'yarn_id',   table: 'mst_yarn',   nameCol: 'yarn_name',   codeCol: 'yarn_code',   label: 'Yarn',   types: ['YARN'] },
+  TRIMS:  { idCol: 'trim_id',   table: 'mst_trim',   nameCol: 'trim_name',   codeCol: 'trim_code',   label: 'Trims',  types: ['TRIM', 'ACCESSORY', 'PACKING'] },
+};
+
+/** Confirm rate wins, then quotation rate, then unit price. */
+export const quoteLineRate = (ql: any) =>
+  Number(ql.confirm_rate) > 0 ? Number(ql.confirm_rate)
+    : Number(ql.quotation_rate) > 0 ? Number(ql.quotation_rate)
+      : Number(ql.unit_price) || 0;
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Line amount + GST split (IGST when the PO is inter-state, else CGST/SGST halves). */
+export function quoteLineTax(ql: any, isInterstate: boolean) {
+  const qty = Number(ql.qty) || 0;
+  const rate = quoteLineRate(ql);
+  const amount = round2(qty * rate);
+  const gstRate = isInterstate ? (Number(ql.igst_rate) || Number(ql.gst_rate) || 0) : (Number(ql.gst_rate) || Number(ql.igst_rate) || 0);
+  const igst = isInterstate ? round2(amount * gstRate / 100) : 0;
+  const cgst = isInterstate ? 0 : round2(amount * gstRate / 200);
+  const sgst = cgst;
+  const tax = round2(igst + cgst + sgst);
+  return {
+    qty, rate, amount, gstRate, tax,
+    igstRate: isInterstate ? gstRate : 0, igst,
+    cgstRate: isInterstate ? 0 : gstRate / 2, cgst,
+    sgstRate: isInterstate ? 0 : gstRate / 2, sgst,
+    net: round2(amount + tax),
+  };
+}
+
+/**
+ * Loads a purchase quotation for conversion into a Fabric / Yarn / Trims PO and resolves
+ * each line's material (explicit fabric_id / yarn_id / trim_id, else an exact master name /
+ * code match on the description) and the job (line so_id, else the quotation's job no).
+ */
+export async function loadQuotationForPo(companyId: number, quotationId: number, kind: QuotationPoKind): Promise<QuotationForPo> {
+  const m = QUOTE_MATERIAL[kind];
+  const quote = await queryOne<any>(
+    'SELECT q.* FROM trx_quotation q WHERE q.id = ? AND q.company_id = ? AND q.is_deleted = 0', [quotationId, companyId]);
+  if (!quote) throw NotFound('Quotation not found');
+  if (quote.quotation_type !== kind) {
+    throw BadRequest(`Quotation ${quote.quotation_no} is a ${quote.quotation_type} quotation — select a ${m.label} quotation`);
+  }
+  if (quote.quotation_category === 'PROCESS') {
+    throw BadRequest(`Quotation ${quote.quotation_no} is a process / job-work quotation and cannot become a material PO`);
+  }
+  if (!quote.supplier_id) throw BadRequest(`Quotation ${quote.quotation_no} has no supplier — set the supplier on the quotation first`);
+
+  const rows = await query<any>(
+    `SELECT ql.*, so.so_no AS line_so_no, so.io_no AS line_io_no,
+            c.color_name AS line_color_name, sz.size_code AS line_size_code
+       FROM trx_quotation_line ql
+       LEFT JOIN trx_sales_order so ON so.id = ql.so_id AND so.company_id = ?
+       LEFT JOIN mst_color c ON c.id = ql.color_id
+       LEFT JOIN mst_size sz ON sz.id = ql.size_id
+      WHERE ql.quotation_id = ?
+      ORDER BY ql.sort_order, ql.id`, [companyId, quotationId]);
+  // Legacy lines carry no material_type: they belong to the quotation's own type
+  const lines = rows.filter((l) => !l.material_type || m.types.includes(String(l.material_type).toUpperCase()));
+  if (!lines.length) throw BadRequest(`Quotation ${quote.quotation_no} has no ${m.label.toLowerCase()} lines`);
+
+  let unresolved = 0;
+  for (const l of lines) {
+    if (!(Number(l.qty) > 0)) throw BadRequest(`Quotation line "${l.description || `#${l.id}`}" has no quantity`);
+    if (!(quoteLineRate(l) > 0)) throw BadRequest(`Quotation line "${l.description || `#${l.id}`}" has no rate`);
+    let materialId = l[m.idCol] ? Number(l[m.idCol]) : null;
+    const desc = String(l.description || '').trim();
+    if (!materialId && desc) {
+      const hit = await queryOne<{ id: number }>(
+        `SELECT id FROM ${m.table}
+          WHERE company_id = ? AND is_deleted = 0 AND (${m.nameCol} = ? OR ${m.codeCol} = ?)
+          ORDER BY is_active DESC, id LIMIT 1`, [companyId, desc, desc]);
+      if (hit) materialId = Number(hit.id);
+    }
+    l.material_id = materialId;
+    if (!materialId) unresolved++;
+  }
+
+  // Job: the lines' job; else the quotation's job no matched to a sales order
+  const soIds = [...new Set(lines.map((l) => Number(l.so_id)).filter((v) => v > 0))];
+  let soId: number | null = soIds.length === 1 ? soIds[0] : null;
+  let ioNo: string | null = null;
+  if (soId) {
+    const l = lines.find((x) => Number(x.so_id) === soId);
+    ioNo = l.line_io_no || l.line_so_no || null;
+  } else if (soIds.length > 1) {
+    ioNo = [...new Set(lines.map((l) => l.line_io_no || l.line_so_no).filter(Boolean))].join(', ').slice(0, 60) || null;
+  } else {
+    const jobNo = String(quote.job_no || lines.find((l) => l.job_no)?.job_no || '').trim();
+    if (jobNo) {
+      const so = await queryOne<any>(
+        `SELECT id, so_no, io_no FROM trx_sales_order
+          WHERE company_id = ? AND is_deleted = 0 AND (io_no = ? OR so_no = ?)
+          ORDER BY (io_no = ?) DESC, id DESC LIMIT 1`, [companyId, jobNo, jobNo, jobNo]);
+      if (so) { soId = Number(so.id); ioNo = so.io_no || so.so_no; } else ioNo = jobNo;
+    }
+  }
+  for (const l of lines) if (!l.so_id && soId) l.so_id = soId;
+
+  const styleIds = [...new Set(lines.map((l) => Number(l.style_id)).filter((v) => v > 0))];
+  // IGST on any line → inter-state supplier (the quotation page keys IGST per line)
+  const isInterstate = lines.some((l) => Number(l.igst_rate) > 0);
+  return { quote, lines, soId, ioNo, unresolved, styleId: styleIds.length === 1 ? styleIds[0] : null, isInterstate };
+}
+
+const convertQuotationSchema = z.object({
+  quotation_id: z.coerce.number().int().positive(),
+  required_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish(),
+  remarks: z.string().max(2000).nullish(),
+  billing_address: z.string().max(5000).nullish(),
+  shipping_address: z.string().max(5000).nullish(),
+  shipping_to_party_id: z.coerce.number().int().positive().nullish(),
+});
+
+/** Blocks converting the same quotation twice (a cancelled PO frees it again). */
+async function assertQuotationNotConverted(companyId: number, quotationId: number) {
+  const po = await queryOne<{ po_no: string }>(
+    `SELECT po_no FROM trx_purchase_order
+      WHERE company_id = ? AND quotation_id = ? AND is_deleted = 0 AND COALESCE(approval_state, 'DRAFT') <> 'CANCELLED'
+      LIMIT 1`, [companyId, quotationId]);
+  if (po) throw BadRequest(`This quotation is already converted to PO ${po.po_no}`);
+}
+
+/**
+ * Inserts the trx_purchase_order header of a quotation conversion and returns its id.
+ * Totals are summed from the already-computed line taxes.
+ */
+async function insertPoFromQuotation(tx: Tx, req: any, info: QuotationForPo, poNo: string,
+  body: z.infer<typeof convertQuotationSchema>, sums: { amount: number; cgst: number; sgst: number; igst: number }, kindLabel: string) {
+  const { quote } = info;
+  const tax = round2(sums.cgst + sums.sgst + sums.igst);
+  const r = await txExecute(tx, `
+    INSERT INTO trx_purchase_order (
+      company_id, branch_id, po_no, internal_ir_no, po_date, supplier_id,
+      po_type, order_type, quotation_id, so_id, style_id, currency_id,
+      exchange_rate, delivery_date, payment_terms, is_interstate,
+      total_amount, taxable_amount, tax_amount, cgst_amount, sgst_amount, igst_amount, grand_total,
+      approval_state, remarks, billing_address, shipping_address, shipping_to_party_id, created_by
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [
+    req.user.companyId, quote.branch_id ?? null, poNo, info.ioNo, new Date().toISOString().slice(0, 10), quote.supplier_id,
+    'MATERIAL', 'PRODUCTION', quote.id, info.soId, info.styleId, quote.currency_id,
+    Number(quote.exchange_rate) || 1, body.required_date || null, quote.payment_terms ?? null, info.isInterstate ? 1 : 0,
+    round2(sums.amount), round2(sums.amount), tax, round2(sums.cgst), round2(sums.sgst), round2(sums.igst), round2(sums.amount + tax),
+    // A line without a material master stays DRAFT until someone picks the material on the PO
+    info.unresolved ? 'DRAFT' : 'APPROVED',
+    body.remarks || `Converted from ${kindLabel} Quotation ${quote.quotation_no}`,
+    body.billing_address || null, body.shipping_address || null, body.shipping_to_party_id ?? null, req.user.id,
+  ]);
+  return r.insertId;
+}
+
+/** Notes the PO on the quotation remarks (the quotation keeps its own status). */
+export async function markQuotationConverted(tx: Tx, quotationId: number, poNo: string) {
+  await txExecute(tx,
+    `UPDATE trx_quotation SET remarks = CONCAT(COALESCE(remarks, ''), ' [Converted to PO: ', ?, ']') WHERE id = ?`,
+    [poNo, quotationId]);
+}
+
+const FABRIC_TYPE_LABEL: Record<string, string> = { KNIT: 'Knitted', WOVEN: 'Woven', NONWOVEN: 'Non-Woven' };
+const titleCase = (v: unknown) => {
+  const t = String(v ?? '').trim();
+  return t ? t.charAt(0).toUpperCase() + t.slice(1).toLowerCase() : null;
+};
+
+/* ==============================================================================
    PART A: FABRIC PURCHASE & ROLL-LEVEL GRN
    ============================================================================== */
 
 /**
  * 1. POST /api/fabric-purchase-orders/convert-from-quotation
- * Converts an approved fabric quotation to a Fabric PO
+ * Converts a Fabric quotation into a Fabric PO: supplier, currency, payment terms, job (IO)
+ * and every fabric line (fabric master, colour, dia / GSM, qty, confirm rate, GST) are carried
+ * over. Specs missing on the quotation line come from the fabric master.
  */
 fabricYarnProcurementRouter.post('/fabric-purchase-orders/convert-from-quotation', requirePermission('PURCHASE.CREATE'), ah(async (req, res) => {
   const companyId = req.user!.companyId;
-  const userId = req.user!.id;
-  const { quotation_id, required_date, remarks, billing_address, shipping_address, shipping_to_party_id } = req.body;
+  const body = convertQuotationSchema.parse(req.body);
+  await assertQuotationNotConverted(companyId, body.quotation_id);
+  const info = await loadQuotationForPo(companyId, body.quotation_id, 'FABRIC');
 
-  if (!quotation_id) throw BadRequest('Quotation ID is required');
+  const ids = info.lines.map((l) => l.material_id).filter(Boolean);
+  const masters = ids.length ? await query<any>(
+    `SELECT fb.id, fb.fabric_name, fb.fabric_type, fb.dia_inch, fb.base_uom, fb.hsn_code,
+            g.gsm_value, comp.description AS composition
+       FROM mst_fabric fb
+       LEFT JOIN mst_gsm g ON g.id = fb.gsm_id
+       LEFT JOIN mst_composition comp ON comp.id = fb.composition_id
+      WHERE fb.id IN (?)`, [ids]) : [];
+  const master = new Map(masters.map((f) => [Number(f.id), f]));
 
-  const quote = await queryOne<any>(`
-    SELECT q.*, cur.id AS currency_id
-      FROM trx_quotation q
-      LEFT JOIN cfg_currency cur ON cur.id = q.currency_id
-     WHERE q.id = ? AND q.company_id = ?
-  `, [quotation_id, companyId]);
+  const prepared = info.lines.map((ql) => {
+    const fb = ql.material_id ? master.get(Number(ql.material_id)) : null;
+    const uomId = ql.uom_id || fb?.base_uom || null;
+    if (!uomId) throw BadRequest(`Quotation line "${ql.description || `#${ql.id}`}" has no UOM`);
+    const colorName = ql.line_color_name || null;
+    return { ql, fb, uomId, colorName, t: quoteLineTax(ql, info.isInterstate) };
+  });
+  const sums = prepared.reduce((a, p) => ({
+    amount: a.amount + p.t.amount, cgst: a.cgst + p.t.cgst, sgst: a.sgst + p.t.sgst, igst: a.igst + p.t.igst,
+  }), { amount: 0, cgst: 0, sgst: 0, igst: 0 });
 
-  if (!quote) throw NotFound('Quotation not found');
-
-  const quoteLines = await query<any>(`
-    SELECT ql.*, fb.fabric_name, fb.fabric_type AS master_fabric_type, comp.description AS construction
-      FROM trx_quotation_line ql
-      LEFT JOIN mst_fabric fb ON fb.id = ql.fabric_id
-      LEFT JOIN mst_composition comp ON comp.id = fb.composition_id
-     WHERE ql.quotation_id = ?
-  `, [quotation_id]);
-
-  if (quoteLines.length === 0) throw BadRequest('Quotation has no fabric lines');
-
-  let finalPoNo = '';
-
+  let poNo = '';
   const poId = await transaction(async (tx) => {
-    finalPoNo = await nextDocNumber(tx, companyId, 'PURCHASE_ORDER');
-
-    const poRes = await txQueryOne<{ insertId: number }>(tx, `
-      INSERT INTO trx_purchase_order (
-        company_id, po_no, internal_ir_no, po_date, supplier_id,
-        po_type, order_type, quotation_id, style_id, currency_id,
-        exchange_rate, delivery_date, payment_terms, total_amount,
-        tax_amount, grand_total, approval_state, remarks,
-        billing_address, shipping_address, shipping_to_party_id, created_by
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    `, [
-      companyId,
-      finalPoNo,
-      quote.job_no || 'IR-2026-0001',
-      new Date().toISOString().slice(0, 10),
-      quote.supplier_id || quote.buyer_id, // supplier
-      'MATERIAL',
-      'PRODUCTION',
-      quotation_id,
-      quoteLines[0]?.style_id || null,
-      quote.currency_id || 1,
-      quote.exchange_rate || 1.0,
-      required_date || null,
-      quote.payment_terms || null,
-      quote.taxable_value || quote.total_amount || 0,
-      quote.igst_amount || 0,
-      quote.total_amount || 0,
-      'APPROVED',
-      remarks || `Converted from Fabric Quotation ${quote.quotation_no}`,
-      billing_address || null,
-      shipping_address || null,
-      shipping_to_party_id ? Number(shipping_to_party_id) : null,
-      userId,
-    ]);
-
-    const newPoId = poRes!.insertId;
-
-    for (const ql of quoteLines) {
-      const isDyed = ql.fabric_category === 'Dyed Fabric' || Boolean(ql.color_name || ql.shade_code);
-      const category = ql.fabric_category || (isDyed ? 'Dyed Fabric' : 'Grey Fabric');
-
+    poNo = await nextDocNumber(tx, companyId, 'PURCHASE_ORDER');
+    const newPoId = await insertPoFromQuotation(tx, req, info, poNo, body, sums, 'Fabric');
+    for (const { ql, fb, uomId, colorName, t } of prepared) {
       await txExecute(tx, `
         INSERT INTO trx_purchase_order_line (
-          po_id, material_type, fabric_id, description,
-          fabric_type, fabric_category, pantone_spec, color_name,
-          dia, gsm, composition, shade_code,
-          print_flag, print_color, finish,
-          qty, uom_id, rate, amount, gst_rate, received_qty
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-      `, [
-        newPoId,
-        'FABRIC',
-        ql.fabric_id,
-        ql.description || ql.fabric_name || 'Fabric Purchase Item',
-        ql.fabric_type || ql.master_fabric_type || 'Knitted',
-        category,
-        ql.pantone_spec || null,
-        ql.color_name || null,
-        ql.dia || '30"',
-        ql.gsm || '180',
-        ql.composition || ql.construction || '100% Cotton',
-        ql.shade_code || (isDyed ? (ql.color_name || 'NVY-01') : null),
-        0,
-        null,
-        'Compact',
-        Number(ql.qty),
-        ql.uom_id || 9, // MTR or KG
-        Number(ql.unit_price || ql.quotation_rate || 100),
-        Number(ql.amount),
-        Number(ql.gst_rate || 5.0),
-        0,
+          po_id, so_id, style_id, material_type, fabric_id, color_id, color_name, description, hsn_code,
+          fabric_type, fabric_category, dia, gsm, composition,
+          qty, uom_id, rate, amount, taxable_amount, gst_rate,
+          cgst_rate, cgst_amount, sgst_rate, sgst_amount, igst_rate, igst_amount, tax_amount, net_amount, received_qty
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`, [
+        newPoId, ql.so_id ?? null, ql.style_id ?? null, 'FABRIC', ql.material_id ?? null, ql.color_id ?? null, colorName,
+        (ql.description || fb?.fabric_name || '').slice(0, 255) || null, fb?.hsn_code ?? null,
+        fb ? (FABRIC_TYPE_LABEL[fb.fabric_type] ?? fb.fabric_type) : null,
+        colorName ? 'Dyed Fabric' : 'Grey Fabric',
+        ql.dia || (fb?.dia_inch ? `${Number(fb.dia_inch)}"` : null),
+        ql.gsm || (fb?.gsm_value ? String(fb.gsm_value) : null),
+        fb?.composition ?? null,
+        t.qty, uomId, t.rate, t.amount, t.amount, t.gstRate,
+        t.cgstRate, t.cgst, t.sgstRate, t.sgst, t.igstRate, t.igst, t.tax, t.net,
       ]);
     }
-
-    // Update Quotation status
-    await txExecute(tx, `
-      UPDATE trx_quotation SET remarks = CONCAT(COALESCE(remarks, ''), ' [Converted to PO: ', ?)
-       WHERE id = ?
-    `, [finalPoNo, quotation_id]);
-
+    await markQuotationConverted(tx, info.quote.id, poNo);
     return newPoId;
   });
 
-  await audit(req, 'trx_purchase_order', poId, 'INSERT', null, { po_no: finalPoNo, quotation_id });
-
-  res.json({ data: { id: poId, po_no: finalPoNo } });
+  await audit(req, 'trx_purchase_order', poId, 'INSERT', null, { po_no: poNo, quotation_id: body.quotation_id });
+  res.json({ data: { id: poId, po_no: poNo, unresolved_lines: info.unresolved } });
 }));
 
 /**
@@ -972,108 +1166,63 @@ fabricYarnProcurementRouter.post('/yarn-stock/:id/bin', requirePermission('INVEN
 
 /**
  * 5. POST /api/yarn-purchase-orders/convert-from-quotation
- * Converts an approved yarn quotation to a Yarn PO
+ * Converts a Yarn quotation into a Yarn PO (supplier, currency, job / IO, yarn master, count,
+ * colour, qty, confirm rate, GST). Count / category / composition missing on the quotation
+ * line come from the yarn master.
  */
 fabricYarnProcurementRouter.post('/yarn-purchase-orders/convert-from-quotation', requirePermission('PURCHASE.CREATE'), ah(async (req, res) => {
   const companyId = req.user!.companyId;
-  const userId = req.user!.id;
-  const { quotation_id, required_date, remarks, billing_address, shipping_address, shipping_to_party_id } = req.body;
+  const body = convertQuotationSchema.parse(req.body);
+  await assertQuotationNotConverted(companyId, body.quotation_id);
+  const info = await loadQuotationForPo(companyId, body.quotation_id, 'YARN');
 
-  if (!quotation_id) throw BadRequest('Quotation ID is required');
+  const ids = info.lines.map((l) => l.material_id).filter(Boolean);
+  const masters = ids.length ? await query<any>(
+    `SELECT y.id, y.yarn_name, y.count_value, y.count_type, y.yarn_type, y.base_uom, y.hsn_code,
+            comp.description AS composition
+       FROM mst_yarn y
+       LEFT JOIN mst_composition comp ON comp.id = y.composition_id
+      WHERE y.id IN (?)`, [ids]) : [];
+  const master = new Map(masters.map((y) => [Number(y.id), y]));
 
-  const quote = await queryOne<any>(`
-    SELECT q.*, cur.id AS currency_id
-      FROM trx_quotation q
-      LEFT JOIN cfg_currency cur ON cur.id = q.currency_id
-     WHERE q.id = ? AND q.company_id = ?
-  `, [quotation_id, companyId]);
+  const prepared = info.lines.map((ql) => {
+    const y = ql.material_id ? master.get(Number(ql.material_id)) : null;
+    const uomId = ql.uom_id || y?.base_uom || null;
+    if (!uomId) throw BadRequest(`Quotation line "${ql.description || `#${ql.id}`}" has no UOM`);
+    const colorName = ql.line_color_name || null;
+    const count = ql.yarn_count || (y?.count_value ? `${y.count_value}${y.count_type && y.count_type !== 'Ne' ? ` ${y.count_type}` : ''}` : null);
+    return { ql, y, uomId, colorName, count, t: quoteLineTax(ql, info.isInterstate) };
+  });
+  const sums = prepared.reduce((a, p) => ({
+    amount: a.amount + p.t.amount, cgst: a.cgst + p.t.cgst, sgst: a.sgst + p.t.sgst, igst: a.igst + p.t.igst,
+  }), { amount: 0, cgst: 0, sgst: 0, igst: 0 });
 
-  if (!quote) throw NotFound('Quotation not found');
-
-  const quoteLines = await query<any>(`
-    SELECT ql.*, y.yarn_name, y.yarn_type AS master_yarn_type, comp.description AS composition
-      FROM trx_quotation_line ql
-      LEFT JOIN mst_yarn y ON y.id = ql.yarn_id
-      LEFT JOIN mst_composition comp ON comp.id = y.composition_id
-     WHERE ql.quotation_id = ?
-  `, [quotation_id]);
-
-  if (quoteLines.length === 0) throw BadRequest('Quotation has no yarn lines');
-
-  let finalPoNo = '';
-
+  let poNo = '';
   const poId = await transaction(async (tx) => {
-    finalPoNo = await nextDocNumber(tx, companyId, 'PURCHASE_ORDER');
-
-    const poRes = await txQueryOne<{ insertId: number }>(tx, `
-      INSERT INTO trx_purchase_order (
-        company_id, po_no, internal_ir_no, po_date, supplier_id,
-        po_type, order_type, quotation_id, style_id, currency_id,
-        exchange_rate, delivery_date, payment_terms, total_amount,
-        tax_amount, grand_total, approval_state, remarks,
-        billing_address, shipping_address, shipping_to_party_id, created_by
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    `, [
-      companyId,
-      finalPoNo,
-      quote.job_no || 'IR-2026-0001',
-      new Date().toISOString().slice(0, 10),
-      quote.supplier_id || quote.buyer_id,
-      'MATERIAL',
-      'PRODUCTION',
-      quotation_id,
-      quoteLines[0]?.style_id || null,
-      quote.currency_id || 1,
-      quote.exchange_rate || 1.0,
-      required_date || null,
-      quote.payment_terms || null,
-      quote.taxable_value || quote.total_amount || 0,
-      quote.igst_amount || 0,
-      quote.total_amount || 0,
-      'APPROVED',
-      remarks || `Converted from Yarn Quotation ${quote.quotation_no}`,
-      billing_address || null,
-      shipping_address || null,
-      shipping_to_party_id ? Number(shipping_to_party_id) : null,
-      userId,
-    ]);
-
-    const newPoId = poRes!.insertId;
-
-    for (const ql of quoteLines) {
-      const isDyed = ql.yarn_type?.toLowerCase().includes('dyed');
+    poNo = await nextDocNumber(tx, companyId, 'PURCHASE_ORDER');
+    const newPoId = await insertPoFromQuotation(tx, req, info, poNo, body, sums, 'Yarn');
+    for (const { ql, y, uomId, colorName, count, t } of prepared) {
       await txExecute(tx, `
         INSERT INTO trx_purchase_order_line (
-          po_id, material_type, yarn_id, description,
+          po_id, so_id, style_id, material_type, yarn_id, color_id, color_name, description, hsn_code,
           yarn_type, purchase_basis, yarn_count_str, yarn_category, composition, shade_code,
-          qty, uom_id, rate, amount, gst_rate, received_qty
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-      `, [
-        newPoId,
-        'YARN',
-        ql.yarn_id,
-        ql.description || ql.yarn_name || 'Yarn Purchase Item',
-        isDyed ? 'Dyed Yarn' : 'Grey Yarn',
-        'DIRECT_KG',
-        ql.yarn_count || '30s',
-        'Ring Spun',
-        ql.composition || '100% Cotton',
-        isDyed ? (ql.yarn_count || 'NB045') : null,
-        Number(ql.qty),
-        5, // KG
-        Number(ql.unit_price || ql.quotation_rate || 185),
-        Number(ql.amount),
-        Number(ql.gst_rate || 5.0),
-        0,
+          qty, uom_id, rate, amount, taxable_amount, gst_rate,
+          cgst_rate, cgst_amount, sgst_rate, sgst_amount, igst_rate, igst_amount, tax_amount, net_amount, received_qty
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`, [
+        newPoId, ql.so_id ?? null, ql.style_id ?? null, 'YARN', ql.material_id ?? null, ql.color_id ?? null, colorName,
+        (ql.description || y?.yarn_name || '').slice(0, 255) || null, y?.hsn_code ?? null,
+        colorName ? 'Dyed Yarn' : 'Grey Yarn', 'DIRECT_KG', count,
+        titleCase(ql.yarn_type || y?.yarn_type), y?.composition ?? null, colorName,
+        t.qty, uomId, t.rate, t.amount, t.amount, t.gstRate,
+        t.cgstRate, t.cgst, t.sgstRate, t.sgst, t.igstRate, t.igst, t.tax, t.net,
       ]);
     }
-
+    await markQuotationConverted(tx, info.quote.id, poNo);
     return newPoId;
   });
 
-  await audit(req, 'trx_purchase_order', poId, 'INSERT', null, { po_no: finalPoNo, quotation_id });
-
-  res.json({ data: { id: poId, po_no: finalPoNo } });
+  await audit(req, 'trx_purchase_order', poId, 'INSERT', null, { po_no: poNo, quotation_id: body.quotation_id });
+  res.json({ data: { id: poId, po_no: poNo, unresolved_lines: info.unresolved } });
 }));
 
 /**

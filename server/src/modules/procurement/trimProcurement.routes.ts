@@ -8,6 +8,7 @@ import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { computeInvoice, chargesFromRow, invoiceSummaryColumns } from '../../core/invoiceCalc.js';
 import { s } from '../resources/schemas.js';
+import { loadQuotationForPo, quoteLineTax, markQuotationConverted } from './fabricYarnProcurement.routes.js';
 
 export const trimProcurementRouter = Router();
 
@@ -290,6 +291,100 @@ trimProcurementRouter.put('/trim-pos/:id', requirePermission('PROCUREMENT.UPDATE
 
   await audit(req, 'trx_trim_po', Number(req.params.id), 'UPDATE', existing, body);
   res.json({ success: true, message: 'Trim PO updated' });
+}));
+
+/**
+ * POST /trim-pos/convert-from-quotation — Trims Quotation → Trim PO.
+ * Mirrors the Fabric / Yarn conversions: supplier, currency, payment terms, job (IO No) and
+ * every trim / accessory / packing line (trim master, colour, size, qty, confirm rate, GST).
+ * A Trim PO needs an IO No and a trim master on every line, so conversion stops with a clear
+ * message when the quotation has neither (io_no / so_id in the body override the job).
+ */
+trimProcurementRouter.post('/trim-pos/convert-from-quotation', requirePermission('PROCUREMENT.CREATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const body = z.object({
+    quotation_id: z.coerce.number().int().positive(),
+    required_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish(),
+    remarks: z.string().max(2000).nullish(),
+    so_id: z.coerce.number().int().positive().nullish(),
+    io_no: z.string().trim().max(60).nullish(),
+  }).parse(req.body);
+
+  const done = await queryOne<{ po_no: string }>(
+    `SELECT po_no FROM trx_trim_po WHERE company_id = ? AND quotation_id = ? AND status <> 'CANCELLED' LIMIT 1`,
+    [cid, body.quotation_id]);
+  if (done) throw BadRequest(`This quotation is already converted to Trim PO ${done.po_no}`);
+
+  const info = await loadQuotationForPo(cid, body.quotation_id, 'TRIMS');
+  const missing = info.lines.filter((l) => !l.material_id);
+  if (missing.length) {
+    throw BadRequest(`Select the trim item on quotation line(s): ${missing.map((l) => l.description || `#${l.id}`).join(', ')} — then convert again`);
+  }
+
+  // Job: explicit override, else the quotation's job
+  let soId = info.soId;
+  let ioNo = info.ioNo;
+  if (body.so_id) {
+    const so = await queryOne<any>('SELECT id, so_no, io_no FROM trx_sales_order WHERE id = ? AND company_id = ? AND is_deleted = 0', [body.so_id, cid]);
+    if (!so) throw NotFound('Job / sales order not found');
+    soId = Number(so.id); ioNo = so.io_no || so.so_no;
+  } else if (body.io_no) {
+    ioNo = body.io_no;
+  }
+  if (!ioNo) throw BadRequest('The quotation is not linked to a job — choose the IO No on the quotation (Load from BOM) before converting');
+
+  const ids = info.lines.map((l) => Number(l.material_id));
+  const masters = await query<any>('SELECT id, trim_name, specification, base_uom FROM mst_trim WHERE id IN (?)', [ids]);
+  const master = new Map(masters.map((t) => [Number(t.id), t]));
+
+  const prepared = info.lines.map((ql) => {
+    const tr = master.get(Number(ql.material_id));
+    const uomId = ql.uom_id || tr?.base_uom || null;
+    if (!uomId) throw BadRequest(`Quotation line "${ql.description || `#${ql.id}`}" has no UOM`);
+    return { ql, tr, uomId, t: quoteLineTax(ql, info.isInterstate) };
+  });
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  const totalAmount = r2(prepared.reduce((a, p) => a + p.t.amount, 0));
+  const cgst = r2(prepared.reduce((a, p) => a + p.t.cgst, 0));
+  const sgst = r2(prepared.reduce((a, p) => a + p.t.sgst, 0));
+  const igst = r2(prepared.reduce((a, p) => a + p.t.igst, 0));
+  const taxAmount = r2(cgst + sgst + igst);
+  const { quote } = info;
+
+  const result = await transaction(async (tx) => {
+    const poNo = await nextDocNumber(tx, cid, 'TPO');
+    const resPo = await txExecute(tx,
+      `INSERT INTO trx_trim_po
+         (company_id, po_no, po_date, quotation_id, io_no, style_id, supplier_id, currency_id, exchange_rate, delivery_date,
+          payment_terms, is_interstate, total_amount, tax_amount, cgst_amount, sgst_amount, igst_amount, grand_total, status, remarks, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        cid, poNo, new Date().toISOString().slice(0, 10), quote.id, ioNo, info.styleId, quote.supplier_id,
+        quote.currency_id, Number(quote.exchange_rate) || 1, body.required_date || null,
+        quote.payment_terms ?? null, info.isInterstate ? 1 : 0, totalAmount, taxAmount, cgst, sgst, igst,
+        r2(totalAmount + taxAmount), 'APPROVED', body.remarks || `Converted from Trims Quotation ${quote.quotation_no}`, req.user!.id,
+      ]);
+    const poId = resPo.insertId;
+
+    for (const { ql, tr, uomId, t } of prepared) {
+      await txExecute(tx,
+        `INSERT INTO trx_trim_po_line
+           (po_id, so_id, style_id, trim_id, specification, color_name, trim_size, order_qty, uom_id,
+            rate, amount, gst_rate, igst_rate, igst_amount, tax_amount, net_amount)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          poId, ql.so_id || soId || null, ql.style_id || info.styleId || null, Number(ql.material_id),
+          (ql.description || tr?.specification || '').slice(0, 255) || null, ql.line_color_name || null,
+          ql.trim_size || ql.line_size_code || null, t.qty, uomId,
+          t.rate, t.amount, t.gstRate, t.igstRate, t.igst, t.tax, t.net,
+        ]);
+    }
+    await markQuotationConverted(tx, quote.id, poNo);
+    return { id: poId, po_no: poNo };
+  });
+
+  await audit(req, 'trx_trim_po', result.id, 'INSERT', undefined, { ...result, quotation_id: body.quotation_id });
+  res.status(201).json({ success: true, data: result });
 }));
 
 // ============================================================

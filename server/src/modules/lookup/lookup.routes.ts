@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { query } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
-import { BadRequest } from '../../core/errors.js';
+import { BadRequest, NotFound } from '../../core/errors.js';
 
 export const lookupRouter = Router();
 
@@ -31,8 +31,9 @@ const LOOKUPS: Record<string, LookupDef> = {
   agents:      { sql: `SELECT id, party_code AS code, party_name AS label FROM mst_party WHERE company_id=? AND is_agent=1 AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },
   merchandisers: { sql: `SELECT id, party_code AS code, party_name AS label, group_code FROM mst_party WHERE company_id=? AND is_merchandiser=1 AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },
   parties:     { sql: `SELECT p.id, p.party_code AS code, p.party_name AS label, p.is_buyer, p.is_supplier, p.is_vendor, p.is_agent, p.is_merchandiser, p.gstin,
-       (SELECT CONCAT_WS(', ', pa.address_line1, pa.address_line2, pa.city, pa.state, pa.pincode)
+       (SELECT CONCAT_WS(', ', pa.address_line1, pa.address_line2, pa.city, pa.state, pa.pincode, pc.name)
           FROM mst_party_address pa
+          LEFT JOIN cfg_country pc ON pc.id = pa.country_id
          WHERE pa.party_id = p.id AND pa.is_active = 1
          ORDER BY pa.is_default DESC, pa.id ASC LIMIT 1) AS default_address
   FROM mst_party p WHERE p.company_id=? AND p.is_active=1 AND p.is_deleted=0 ORDER BY p.party_name`, scoped: true },
@@ -161,6 +162,49 @@ lookupRouter.get('/style-colors/:styleId', ah(async (req, res) => {
     `SELECT c.id, c.color_code AS code, c.color_name AS label, c.hex_value
        FROM map_style_color sc JOIN mst_color c ON c.id = sc.color_id
       WHERE sc.style_id = ? ORDER BY c.color_name`, [styleId]) });
+}));
+
+/**
+ * Colours and sizes actually ordered on one sales order (optionally one style
+ * of it) — drives size-/colour-wise BOM lines so only the order's own sizes
+ * and colours are offered, never the whole master.
+ */
+lookupRouter.get('/so-size-colors/:soId', ah(async (req, res) => {
+  const soId = z.coerce.number().int().positive().parse(req.params.soId);
+  const styleId = req.query.style_id ? z.coerce.number().int().positive().parse(req.query.style_id) : null;
+  const so = await query<{ id: number }>(
+    `SELECT id FROM trx_sales_order WHERE id = ? AND company_id = ? AND is_deleted = 0`,
+    [soId, req.user!.companyId]);
+  if (!so.length) throw NotFound('Sales order not found');
+
+  const styleSql = styleId ? ' AND l.style_id = ?' : '';
+  const p = styleId ? [soId, styleId] : [soId];
+  const [colors, sizes] = await Promise.all([
+    query(
+      `SELECT c.id, c.color_code AS code, c.color_name AS label, c.hex_value
+         FROM mst_color c
+        WHERE c.id IN (
+                SELECT k.color_id
+                  FROM trx_sales_order_sku ss
+                  JOIN trx_sales_order_line l ON l.id = ss.so_line_id
+                  JOIN mst_style_sku k ON k.id = ss.sku_id
+                 WHERE l.so_id = ?${styleSql} AND ss.qty > 0
+                UNION
+                SELECT l.color_id FROM trx_sales_order_line l
+                 WHERE l.so_id = ?${styleSql} AND l.color_id IS NOT NULL)
+        ORDER BY c.color_name`, [...p, ...p]),
+    query(
+      `SELECT sz.id, sz.size_code AS code, sz.size_label AS label, sz.sort_order
+         FROM mst_size sz
+        WHERE sz.id IN (
+                SELECT k.size_id
+                  FROM trx_sales_order_sku ss
+                  JOIN trx_sales_order_line l ON l.id = ss.so_line_id
+                  JOIN mst_style_sku k ON k.id = ss.sku_id
+                 WHERE l.so_id = ?${styleSql} AND ss.qty > 0)
+        ORDER BY sz.sort_order, sz.id`, p),
+  ]);
+  res.json({ data: { colors, sizes } });
 }));
 
 /** Open PO lines for multiple POs or single PO via query parameter ?poIds=1,2,3 */

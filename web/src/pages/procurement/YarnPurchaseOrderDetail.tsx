@@ -54,31 +54,73 @@ const emptyYarnLine = (): YarnLine => ({
   yarn_id: '',
   yarn_type: 'Grey Yarn',
   purchase_basis: 'DIRECT_KG',
-  yarn_count_str: '30s',
-  yarn_category: 'Combed',
-  composition: '100% Cotton',
+  yarn_count_str: '',
+  yarn_category: '',
+  composition: '',
   shade_code: '',
   dyeing_mill_id: '',
   hsn_code: '5205',
-  packs: 50,
-  pack_weight_kg: 45.36,
-  qty: 2268,
+  packs: 0,
+  pack_weight_kg: 0,
+  qty: 0,
   uom_id: 5, // KG
-  rate: 220.0,
-  amount: 498960,
+  rate: 0,
+  amount: 0,
   discount_amount: 0,
   freight_amount: 0,
   other_charges: 0,
-  taxable_amount: 498960,
+  taxable_amount: 0,
   gst_rate: 5.0,
   cgst_rate: 2.5,
-  cgst_amount: 12474,
+  cgst_amount: 0,
   sgst_rate: 2.5,
-  sgst_amount: 12474,
+  sgst_amount: 0,
   igst_rate: 0,
   igst_amount: 0,
-  net_amount: 523908,
+  net_amount: 0,
 });
+
+/** A job (sales order) from GET /procurement/jobs — the "IO No" selector. */
+interface JobOption {
+  id: number;
+  so_no: string;
+  io_no: string | null;
+  job_no: string;
+  buyer_name?: string | null;
+  label: string;
+  plan_cut_qty: number;
+  styles: { style_id: number; style_code: string; style_name: string; plan_cut_qty: number }[];
+}
+
+/** Amount / taxable / GST split of a yarn line (IGST when inter-state, else CGST + SGST). */
+function withYarnTotals(cur: YarnLine, isInterstate: boolean): YarnLine {
+  const l = { ...cur };
+  if (l.purchase_basis === 'PACK_BAG') {
+    l.qty = Math.round((Number(l.packs || 0) * Number(l.pack_weight_kg || 0)) * 100) / 100;
+  }
+  l.amount = Math.round((Number(l.qty) || 0) * (Number(l.rate) || 0) * 100) / 100;
+  const taxable = Math.max(0, l.amount - (Number(l.discount_amount) || 0) + (Number(l.freight_amount) || 0) + (Number(l.other_charges) || 0));
+  l.taxable_amount = taxable;
+  const gstRate = Number(l.gst_rate) || 0;
+  if (isInterstate) {
+    l.igst_rate = gstRate;
+    l.igst_amount = Math.round((taxable * (gstRate / 100)) * 100) / 100;
+    l.cgst_rate = 0; l.cgst_amount = 0; l.sgst_rate = 0; l.sgst_amount = 0;
+  } else {
+    l.cgst_rate = gstRate / 2;
+    l.cgst_amount = Math.round((taxable * (gstRate / 200)) * 100) / 100;
+    l.sgst_rate = gstRate / 2;
+    l.sgst_amount = l.cgst_amount;
+    l.igst_rate = 0; l.igst_amount = 0;
+  }
+  l.net_amount = Math.round((taxable + l.cgst_amount + l.sgst_amount + l.igst_amount) * 100) / 100;
+  return l;
+}
+
+const titleCase = (v: unknown) => {
+  const t = String(v ?? '').trim();
+  return t ? t.charAt(0).toUpperCase() + t.slice(1).toLowerCase() : '';
+};
 
 export default function YarnPurchaseOrderDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -90,7 +132,6 @@ export default function YarnPurchaseOrderDetailPage() {
   const suppliers = useLookup('suppliers');
   const yarns = useLookup('yarns');
   const styles = useLookup('styles');
-  const salesOrders = useLookup('sales-orders');
   const parties = useLookup('parties');
   const currencies = useLookup('currencies');
 
@@ -106,7 +147,8 @@ export default function YarnPurchaseOrderDetailPage() {
     po_no: '',
     po_date: today(),
     delivery_date: '',
-    internal_ir_no: 'IR-2026-0001',
+    internal_ir_no: '',
+    so_id: '',
     supplier_id: '',
     style_id: '',
     currency_id: '1',
@@ -134,66 +176,76 @@ export default function YarnPurchaseOrderDetailPage() {
   const currCode = selectedCurrency?.code || 'INR';
   const isForeignCurrency = currCode !== 'INR' && Number(header.exchange_rate) > 0 && Number(header.exchange_rate) !== 1.0;
 
-  // BOM Integration Query when Style is selected (Clip 4)
-  const { data: bomData } = useQuery({
-    queryKey: ['bom-for-job-yarn', header.style_id],
-    queryFn: async () => {
-      if (!header.style_id) return null;
-      const res = await http.get<{ data: any }>(`/boms/for-job?style_id=${header.style_id}`);
-      return res.data;
-    },
-    enabled: Boolean(header.style_id),
+  // Jobs (sales orders) for the IO No selector
+  const { data: jobs = [] } = useQuery({
+    queryKey: ['procurement-jobs'],
+    queryFn: async () => (await http.get<{ data: JobOption[] }>('/procurement/jobs')).data || [],
+    staleTime: 60 * 1000,
   });
+  const selectedJob = jobs.find((j) => String(j.id) === String(header.so_id));
+  const jobOptions = jobs.map((j) => ({ value: j.id, label: j.label }));
+  const styleOptions = selectedJob
+    ? selectedJob.styles.map((st) => ({ value: st.style_id, label: `${st.style_code} — ${st.style_name}` }))
+    : toOptions(styles.data);
 
-  const bomYarns = bomData?.yarns || [];
+  // Last BOM loaded for the selected job (banner + "BOM items only" filter)
+  const [bomData, setBomData] = useState<any>(null);
+  const [bomLoading, setBomLoading] = useState(false);
+  const bomYarns: any[] = bomData?.yarns || [];
 
-  const handleLoadFromBOM = () => {
-    if (!bomYarns.length) {
-      toast('No yarn items found in active BOM for this style', 'warning');
-      return;
+  /** Yarn PO line from a BOM line: qty = BOM requirement for the job, rate = yarn std rate. */
+  const bomToYarnLine = (by: any, isInterstate: boolean): YarnLine => withYarnTotals({
+    ...emptyYarnLine(),
+    so_id: by.so_id ? String(by.so_id) : '',
+    style_id: by.style_id ? String(by.style_id) : '',
+    yarn_id: by.yarn_id ? String(by.yarn_id) : '',
+    yarn_name: by.yarn_name || by.material_name || '',
+    yarn_type: by.color_id ? 'Dyed Yarn' : 'Grey Yarn',
+    yarn_count_str: by.yarn_count || '',
+    yarn_category: titleCase(by.yarn_master_type),
+    composition: by.yarn_composition || '',
+    shade_code: by.color_name || '',
+    color_name: by.color_name || '',
+    qty: Number(by.final_requirement ?? by.order_required_qty) || 0,
+    uom_id: Number(by.uom_id) || 5,
+    rate: Number(by.std_rate) || 0,
+  }, isInterstate);
+
+  /** Loads the job's BOM yarn lines into the PO (asks before replacing entered lines). */
+  const loadBomForJob = async (soId: string, styleId?: string) => {
+    if (!soId) return;
+    setBomLoading(true);
+    try {
+      const qs = new URLSearchParams({ so_id: soId });
+      if (styleId) qs.set('style_id', styleId);
+      const res = await http.get<{ data: any }>(`/boms/for-job?${qs.toString()}`);
+      const data = res.data;
+      setBomData(data);
+      (data?.warnings || []).forEach((w: string) => toast(w, 'warning'));
+      const yarnsInBom: any[] = data?.yarns || [];
+      if (!yarnsInBom.length) {
+        toast(`BOM ${data?.bom?.bom_no || ''} of this job has no yarn items`, 'warning');
+        return;
+      }
+      const hasEntered = lines.some((l) => l.yarn_id || Number(l.qty) > 0);
+      if (hasEntered && !window.confirm(`Replace the ${lines.length} existing line(s) with ${yarnsInBom.length} yarn item(s) from the job's BOM?`)) return;
+      setLines(yarnsInBom.map((by) => bomToYarnLine(by, header.is_interstate)));
+      toast(`Loaded ${yarnsInBom.length} yarn item(s) from BOM ${data.bom?.bom_no || ''}`, 'success');
+    } catch (err: any) {
+      setBomData(null);
+      toast(err instanceof ApiError ? err.message : 'Failed to load the BOM of this job', 'error');
+    } finally {
+      setBomLoading(false);
     }
-    const newLines: YarnLine[] = bomYarns.map((by: any) => {
-      const reqKg = Number(by.total_required_qty || by.consumption_per_pc || 100);
-      const rate = Number(by.rate || 220);
-      const taxable = Math.round(reqKg * rate * 100) / 100;
-      const gstRate = 5.0;
-      const tax = Math.round((taxable * (gstRate / 100)) * 100) / 100;
-      return {
-        _key: `yl_${++yseq}`,
-        so_id: '',
-        style_id: header.style_id,
-        yarn_id: by.yarn_id ? String(by.yarn_id) : '',
-        yarn_name: by.yarn_name || by.item_name || '',
-        yarn_type: (by.yarn_type || 'Grey Yarn') as any,
-        purchase_basis: 'DIRECT_KG',
-        yarn_count_str: by.yarn_count_str || '30s',
-        yarn_category: by.yarn_category || 'Combed',
-        composition: by.composition || '100% Cotton',
-        shade_code: by.shade_code || '',
-        dyeing_mill_id: '',
-        hsn_code: '5205',
-        packs: 0,
-        pack_weight_kg: 0,
-        qty: reqKg,
-        uom_id: 5,
-        rate,
-        amount: taxable,
-        discount_amount: 0,
-        freight_amount: 0,
-        other_charges: 0,
-        taxable_amount: taxable,
-        gst_rate: gstRate,
-        cgst_rate: header.is_interstate ? 0 : 2.5,
-        cgst_amount: header.is_interstate ? 0 : tax / 2,
-        sgst_rate: header.is_interstate ? 0 : 2.5,
-        sgst_amount: header.is_interstate ? 0 : tax / 2,
-        igst_rate: header.is_interstate ? gstRate : 0,
-        igst_amount: header.is_interstate ? tax : 0,
-        net_amount: taxable + tax,
-      };
-    });
-    setLines(newLines);
-    toast(`Loaded ${newLines.length} yarn items from BOM!`, 'success');
+  };
+
+  /** IO No picked: link the job, default its style, auto-load its BOM yarns. */
+  const handleJobChange = (soId: string) => {
+    const job = jobs.find((j) => String(j.id) === soId);
+    const styleId = job && job.styles.length === 1 ? String(job.styles[0].style_id) : '';
+    setHeader((h) => ({ ...h, so_id: soId, internal_ir_no: job?.job_no || '', style_id: styleId }));
+    setBomData(null);
+    if (soId) void loadBomForJob(soId);
   };
 
   // Load existing PO
@@ -211,7 +263,7 @@ export default function YarnPurchaseOrderDetailPage() {
   const { data: approvedQuotes = [] } = useQuery({
     queryKey: ['yarn-quotations-approved'],
     queryFn: async () => {
-      const res = await http.get<{ data: any[] }>('/quotations');
+      const res = await http.get<{ data: any[] }>('/quotations?quotation_type=YARN&quotation_category=PURCHASE&pageSize=200');
       return res.data || [];
     },
     enabled: isNew && quoteModalOpen,
@@ -224,6 +276,7 @@ export default function YarnPurchaseOrderDetailPage() {
         po_date: existingPo.po_date?.slice(0, 10) || today(),
         delivery_date: existingPo.delivery_date?.slice(0, 10) || '',
         internal_ir_no: existingPo.internal_ir_no || '',
+        so_id: existingPo.so_id ? String(existingPo.so_id) : '',
         supplier_id: existingPo.supplier_id ? String(existingPo.supplier_id) : '',
         style_id: existingPo.style_id ? String(existingPo.style_id) : '',
         currency_id: String(existingPo.currency_id || '1'),
@@ -319,39 +372,7 @@ export default function YarnPurchaseOrderDetailPage() {
   const updateLine = (idx: number, updates: Partial<YarnLine>) => {
     setLines((prev) => {
       const copy = [...prev];
-      const cur = { ...copy[idx], ...updates };
-
-      // Calculate Qty if PACK_BAG
-      if (cur.purchase_basis === 'PACK_BAG') {
-        cur.qty = Math.round((Number(cur.packs || 0) * Number(cur.pack_weight_kg || 0)) * 100) / 100;
-      }
-
-      // Financials
-      const baseAmt = (Number(cur.qty) || 0) * (Number(cur.rate) || 0);
-      cur.amount = Math.round(baseAmt * 100) / 100;
-      const taxable = Math.max(0, cur.amount - (Number(cur.discount_amount) || 0) + (Number(cur.freight_amount) || 0) + (Number(cur.other_charges) || 0));
-      cur.taxable_amount = taxable;
-
-      const gstRate = Number(cur.gst_rate) || 5.0;
-      if (header.is_interstate) {
-        cur.igst_rate = gstRate;
-        cur.igst_amount = Math.round((taxable * (gstRate / 100)) * 100) / 100;
-        cur.cgst_rate = 0;
-        cur.cgst_amount = 0;
-        cur.sgst_rate = 0;
-        cur.sgst_amount = 0;
-      } else {
-        cur.cgst_rate = gstRate / 2;
-        cur.cgst_amount = Math.round((taxable * (gstRate / 200)) * 100) / 100;
-        cur.sgst_rate = gstRate / 2;
-        cur.sgst_amount = Math.round((taxable * (gstRate / 200)) * 100) / 100;
-        cur.igst_rate = 0;
-        cur.igst_amount = 0;
-      }
-      const totalTax = cur.cgst_amount + cur.sgst_amount + cur.igst_amount;
-      cur.net_amount = Math.round((taxable + totalTax) * 100) / 100;
-
-      copy[idx] = cur;
+      copy[idx] = withYarnTotals({ ...copy[idx], ...updates }, header.is_interstate);
       return copy;
     });
   };
@@ -464,7 +485,10 @@ export default function YarnPurchaseOrderDetailPage() {
           shipping_to_party_id: header.shipping_to_party_id ? Number(header.shipping_to_party_id) : undefined,
         }
       );
-      toast(`Successfully converted to PO ${res.data.po_no}!`, 'success');
+      toast(`Converted to PO ${res.data.po_no}`, 'success');
+      if ((res.data as any).unresolved_lines) {
+        toast(`${(res.data as any).unresolved_lines} line(s) have no yarn master — pick the yarn on the PO and approve it`, 'warning');
+      }
       setQuoteModalOpen(false);
       nav(`/procurement/yarn/orders/${res.data.id}`);
     } catch (err: any) {
@@ -479,13 +503,18 @@ export default function YarnPurchaseOrderDetailPage() {
       toast('Please select a spinning mill or supplier', 'error');
       return;
     }
+    if (lines.some((l) => !l.yarn_id || !(Number(l.qty) > 0))) {
+      toast('Every line needs a yarn and a quantity greater than zero', 'error');
+      return;
+    }
 
     setSaving(true);
     try {
       const payload = {
         po_type: 'MATERIAL',
         order_type: 'PRODUCTION',
-        internal_ir_no: header.internal_ir_no,
+        internal_ir_no: header.internal_ir_no || null,
+        so_id: header.so_id ? Number(header.so_id) : null,
         supplier_id: Number(header.supplier_id),
         style_id: header.style_id ? Number(header.style_id) : null,
         po_date: header.po_date,
@@ -684,19 +713,24 @@ export default function YarnPurchaseOrderDetailPage() {
             placeholder="Select Mill"
           />
 
-          <Input
-            label="Internal / IR No"
-            value={header.internal_ir_no}
-            onChange={(e) => setHeader((p) => ({ ...p, internal_ir_no: e.target.value }))}
-            placeholder="e.g. IR-2026-0001"
-          />
+          <Select
+            label="IO No (Internal Order)"
+            value={header.so_id || (header.internal_ir_no ? '__unlinked' : '')}
+            onChange={(e) => e.target.value !== '__unlinked' && handleJobChange(e.target.value)}
+            options={jobOptions}
+            placeholder="Select Job / IO No"
+          >
+            {!header.so_id && header.internal_ir_no && (
+              <option value="__unlinked">{header.internal_ir_no} (not linked to a job)</option>
+            )}
+          </Select>
 
           <Select
-            label="Style No (Optional)"
+            label="Style No"
             value={header.style_id}
             onChange={(e) => setHeader((p) => ({ ...p, style_id: e.target.value }))}
-            options={toOptions(styles.data)}
-            placeholder="Select Style"
+            options={styleOptions}
+            placeholder={selectedJob ? 'All styles of the job' : 'Select Style'}
           />
 
           <Input
@@ -755,7 +789,7 @@ export default function YarnPurchaseOrderDetailPage() {
       </div>
 
       {/* BOM Linkage & Auto-Fill Banner (Clip 4) */}
-      {header.style_id && (
+      {header.so_id && (
         <div className="rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50/80 via-white to-amber-50/50 p-4 shadow-xs">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-start gap-3">
@@ -774,14 +808,16 @@ export default function YarnPurchaseOrderDetailPage() {
                   )}
                 </div>
                 <p className="text-[11px] text-slate-600 mt-0.5">
-                  {bomYarns.length > 0
-                    ? `Found ${bomYarns.length} planned yarn specification(s) in BOM for this Style/Job.`
-                    : 'No yarn items explicitly defined in BOM for this style.'}
+                  {bomLoading
+                    ? 'Loading the BOM of this job…'
+                    : bomData
+                      ? `${bomYarns.length} yarn item(s) in the BOM of job ${bomData.job_no || header.internal_ir_no} (plan-cut ${fmtDecimal(bomData.order_qty, 0)} pcs).`
+                      : `Load the yarn items of job ${header.internal_ir_no || ''} from its Bill of Materials.`}
                 </p>
               </div>
             </div>
-            {bomYarns.length > 0 && (
-              <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3">
+              {bomYarns.length > 0 && (
                 <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
                   <input
                     type="checkbox"
@@ -791,15 +827,16 @@ export default function YarnPurchaseOrderDetailPage() {
                   />
                   <span>Show BOM Items Only</span>
                 </label>
-                <button
-                  type="button"
-                  onClick={handleLoadFromBOM}
-                  className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1 bg-amber-600 hover:bg-amber-700 border-amber-600 shadow-xs text-white"
-                >
-                  <Sparkles size={13} /> Load Yarn from BOM
-                </button>
-              </div>
-            )}
+              )}
+              <button
+                type="button"
+                disabled={bomLoading}
+                onClick={() => void loadBomForJob(header.so_id, header.style_id)}
+                className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1 bg-amber-600 hover:bg-amber-700 border-amber-600 shadow-xs text-white disabled:opacity-50"
+              >
+                <Sparkles size={13} /> {bomData ? 'Reload Yarn from BOM' : 'Load Yarn from BOM'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -903,7 +940,7 @@ export default function YarnPurchaseOrderDetailPage() {
             <thead>
               <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 text-[11px] uppercase tracking-wider">
                 <th className="py-2.5 px-2 w-8 text-center">#</th>
-                <th className="py-2.5 px-2 min-w-[130px]">I/O Num</th>
+                <th className="py-2.5 px-2 min-w-[130px]">IO No</th>
                 <th className="py-2.5 px-2 min-w-[110px]">Style</th>
                 <th className="py-2.5 px-2 min-w-[150px]">Yarn</th>
                 <th className="py-2.5 px-2 w-24">Grey / Dyed</th>
@@ -949,9 +986,9 @@ export default function YarnPurchaseOrderDetailPage() {
                         className="w-full text-xs rounded border border-slate-300 py-1 px-1 bg-white"
                       >
                         <option value="">Stock / General</option>
-                        {toOptions(salesOrders.data).map((so) => (
-                          <option key={so.value} value={so.value}>
-                            {so.label}
+                        {jobs.map((j) => (
+                          <option key={j.id} value={j.id}>
+                            {j.job_no}
                           </option>
                         ))}
                       </select>
@@ -982,9 +1019,10 @@ export default function YarnPurchaseOrderDetailPage() {
                           const opt: any = (yarns.data || []).find((y: any) => String(y.id) === val);
                           updateLine(idx, {
                             yarn_id: val,
-                            yarn_name: opt?.yarn_name || '',
-                            yarn_count_str: String(opt?.yarn_count || l.yarn_count_str),
-                            composition: String(opt?.composition || l.composition),
+                            yarn_name: opt?.label || opt?.yarn_name || '',
+                            yarn_count_str: String(opt?.count_value || opt?.yarn_count || l.yarn_count_str || ''),
+                            composition: String(opt?.composition || l.composition || ''),
+                            rate: Number(l.rate) > 0 ? l.rate : (Number(opt?.std_rate) || 0),
                           });
                         }}
                         className="w-full text-xs rounded border border-slate-300 py-1 px-1.5 focus:border-amber-500 bg-white"

@@ -117,7 +117,7 @@ export default function YarnGRNsPage() {
           <Search size={16} className="absolute left-3 top-2.5 text-slate-400" />
           <input
             type="text"
-            placeholder="Search GRN, PO, Gate Entry, Mill, Style, IR..."
+            placeholder="Search GRN, PO, Gate Entry, Mill, Style, IO No..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
@@ -154,7 +154,7 @@ export default function YarnGRNsPage() {
             <thead>
               <tr className="bg-slate-50/80 text-slate-600 font-semibold border-b border-slate-200">
                 <th className="py-3 px-4">GRN No & Date</th>
-                <th className="py-3 px-3">PO & IR No</th>
+                <th className="py-3 px-3">PO & IO No</th>
                 <th className="py-3 px-3">Gate Entry</th>
                 <th className="py-3 px-3">Spinning Mill / Supplier</th>
                 <th className="py-3 px-3">Style</th>

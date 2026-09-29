@@ -109,7 +109,7 @@ export default function FabricPurchaseOrdersPage() {
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Search PO no, IR no, Supplier, Style..."
+            placeholder="Search PO no, IO no, Supplier, Style..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="input pl-9 text-xs w-full py-1.5"
@@ -139,7 +139,7 @@ export default function FabricPurchaseOrdersPage() {
               <tr>
                 <th className="py-3 px-4">PO Number</th>
                 <th className="py-3 px-4">Date</th>
-                <th className="py-3 px-4">Internal / IR No</th>
+                <th className="py-3 px-4">IO No (Internal Order)</th>
                 <th className="py-3 px-4">Style</th>
                 <th className="py-3 px-4">Supplier</th>
                 <th className="py-3 px-4">Order Type</th>

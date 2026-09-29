@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { jobPieceRates } from '../production/processMaster.routes.js';
 import { z } from 'zod';
 import { query, queryOne, transaction, txQuery, txQueryOne, txExecute } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
@@ -207,7 +208,7 @@ export async function buildOrderData(companyId: number, prodOrderId: number) {
 
   // G. Job work: process inwards on DCs of the job × DC rate
   const jw = await query<any>(`
-    SELECT jc.id, jc.challan_no, jc.rate, ps.stage_code, ps.stage_name, ps.bill_include_mistake, v.party_name AS vendor_name,
+    SELECT jc.id, jc.challan_no, jc.rate, jc.stage_id, ps.stage_code, ps.stage_name, ps.bill_include_mistake, v.party_name AS vendor_name,
            COALESCE(SUM(rl.received_qty),0) AS good, COALESCE(SUM(rl.rejected_qty),0) AS rej, COUNT(DISTINCT r.id) AS receipts
       FROM trx_jobwork_receipt r
       JOIN trx_jobwork_receipt_line rl ON rl.receipt_id = r.id
@@ -219,10 +220,18 @@ export async function buildOrderData(companyId: number, prodOrderId: number) {
      GROUP BY jc.id ORDER BY jc.challan_date, jc.id
   `, [companyId, ioNo, ioNo, styleId, styleId, prodOrderId]);
   let unpricedDcs = 0;
+  // The job's rate card (operations picked for this job × its rates) prices job work
+  // where it exists; other DCs keep their own rate (client voice note 29-Sep-2026).
+  const cardStages = ioNo
+    ? new Set((await query<any>(`SELECT DISTINCT stage_id FROM trx_job_op_rate WHERE company_id = ? AND io_no = ?`, [companyId, ioNo])).map((r) => Number(r.stage_id)))
+    : new Set<number>();
+  const jobRates = ioNo && cardStages.size ? await jobPieceRates(companyId, jw.map((d) => Number(d.id)), [ioNo]) : new Map<string, number>();
   const dcLine = (d: any) => {
     const billed = numv(d.good) + (numv(d.bill_include_mistake) ? numv(d.rej) : 0);
-    if (d.rate == null) unpricedDcs++;
-    return { ...d, billed, amount: r2(billed * numv(d.rate)) };
+    const cardRate = ioNo && cardStages.has(Number(d.stage_id)) ? jobRates.get(`${d.id}|${ioNo}`) : undefined;
+    const rate = cardRate ?? d.rate;
+    if (rate == null) unpricedDcs++;
+    return { ...d, rate, rate_basis: cardRate != null ? 'JOB_RATE_CARD' : 'DC_RATE', billed, amount: r2(billed * numv(rate)) };
   };
   const dcs = jw.map(dcLine);
   const code = (d: any) => String(d.stage_code ?? '').toUpperCase();

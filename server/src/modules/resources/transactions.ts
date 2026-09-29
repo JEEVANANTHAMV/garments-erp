@@ -159,6 +159,11 @@ export const transactionResources: ResourceConfig[] = [
         orderBy: 'sort_order, id',
         fields: [
           f('job_no', s.nullableStr(60)),
+          // Job + material + source BOM line (purchase quotations loaded from a job's BOM
+          // convert into Fabric / Yarn / Trims POs through these ids)
+          f('so_id', s.id()), f('bom_line_id', s.id()),
+          f('material_type', s.enum(['FABRIC','YARN','TRIM','ACCESSORY','PACKING','GENERAL'])),
+          f('fabric_id', s.id()), f('yarn_id', s.id()), f('trim_id', s.id()),
           f('style_id', s.id()), f('costing_id', s.id()),
           f('color_id', s.id()), f('size_id', s.id()),
           f('dia', s.nullableStr(40)),

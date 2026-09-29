@@ -59,37 +59,73 @@ const emptyFabricLine = (): FabricLine => ({
   fabric_id: '',
   fabric_category: 'Grey Fabric',
   fabric_type: 'Knitted',
-  dia: '30"',
-  gsm: '180',
-  composition: '100% Cotton',
+  dia: '',
+  gsm: '',
+  composition: '',
   color_name: '',
   yarn_count_str: '',
   shade_code: '',
   pantone_spec: '',
   print_flag: false,
   print_color: '',
-  finish: 'Compact',
+  finish: '',
   mill_id: '',
   hsn_code: '5208',
-  uom_id: 9, // MTR
-  qty: 1000,
-  weight_kg: 250,
-  no_of_rolls: 10,
-  rate: 65.0,
-  amount: 65000,
+  uom_id: 5, // KG
+  qty: 0,
+  weight_kg: 0,
+  no_of_rolls: 0,
+  rate: 0,
+  amount: 0,
   discount_amount: 0,
   freight_amount: 0,
   other_charges: 0,
-  taxable_amount: 65000,
+  taxable_amount: 0,
   gst_rate: 5.0,
   cgst_rate: 2.5,
-  cgst_amount: 1625,
+  cgst_amount: 0,
   sgst_rate: 2.5,
-  sgst_amount: 1625,
+  sgst_amount: 0,
   igst_rate: 0,
   igst_amount: 0,
-  net_amount: 68250,
+  net_amount: 0,
 });
+
+/** A job (sales order) from GET /procurement/jobs — the "IO No" selector. */
+interface JobOption {
+  id: number;
+  so_no: string;
+  io_no: string | null;
+  job_no: string;
+  buyer_name?: string | null;
+  label: string;
+  plan_cut_qty: number;
+  styles: { style_id: number; style_code: string; style_name: string; plan_cut_qty: number }[];
+}
+
+/** Amount / taxable / GST split of a fabric line (IGST when inter-state, else CGST + SGST). */
+function withFabricTotals(cur: FabricLine, isInterstate: boolean): FabricLine {
+  const l = { ...cur };
+  l.amount = Math.round((Number(l.qty) || 0) * (Number(l.rate) || 0) * 100) / 100;
+  const taxable = Math.max(0, l.amount - (Number(l.discount_amount) || 0) + (Number(l.freight_amount) || 0) + (Number(l.other_charges) || 0));
+  l.taxable_amount = taxable;
+  const gstRate = Number(l.gst_rate) || 0;
+  if (isInterstate) {
+    l.igst_rate = gstRate;
+    l.igst_amount = Math.round((taxable * (gstRate / 100)) * 100) / 100;
+    l.cgst_rate = 0; l.cgst_amount = 0; l.sgst_rate = 0; l.sgst_amount = 0;
+  } else {
+    l.cgst_rate = gstRate / 2;
+    l.cgst_amount = Math.round((taxable * (gstRate / 200)) * 100) / 100;
+    l.sgst_rate = gstRate / 2;
+    l.sgst_amount = l.cgst_amount;
+    l.igst_rate = 0; l.igst_amount = 0;
+  }
+  l.net_amount = Math.round((taxable + l.cgst_amount + l.sgst_amount + l.igst_amount) * 100) / 100;
+  return l;
+}
+
+const FABRIC_TYPE_LABEL: Record<string, string> = { KNIT: 'Knitted', WOVEN: 'Woven', NONWOVEN: 'Non-Woven' };
 
 export default function FabricPurchaseOrderDetailPage() {
   const { id } = useParams();
@@ -104,8 +140,8 @@ export default function FabricPurchaseOrderDetailPage() {
   // Lookups
   const suppliers = useLookup('suppliers');
   const styles = useLookup('styles');
-  const salesOrders = useLookup('sales-orders');
   const fabrics = useLookup('fabrics');
+  const uoms = useLookup('uoms');
   const parties = useLookup('parties');
   const currencies = useLookup('currencies');
 
@@ -115,7 +151,8 @@ export default function FabricPurchaseOrderDetailPage() {
   const [head, setHead] = useState({
     id: isNew ? undefined : Number(id),
     po_no: '',
-    internal_ir_no: 'IR-2026-000125',
+    internal_ir_no: '',
+    so_id: '',
     po_date: today(),
     supplier_id: '',
     style_id: '',
@@ -147,69 +184,81 @@ export default function FabricPurchaseOrderDetailPage() {
   const currCode = selectedCurrency?.code || 'INR';
   const isForeignCurrency = currCode !== 'INR' && Number(head.exchange_rate) > 0 && Number(head.exchange_rate) !== 1.0;
 
-  // BOM Integration Query when Style is selected (Clip 4)
-  const { data: bomData } = useQuery({
-    queryKey: ['bom-for-job-fabric', head.style_id],
-    queryFn: async () => {
-      if (!head.style_id) return null;
-      const res = await http.get<{ data: any }>(`/boms/for-job?style_id=${head.style_id}`);
-      return res.data;
-    },
-    enabled: Boolean(head.style_id),
+  // Jobs (sales orders) for the IO No selector
+  const { data: jobs = [] } = useQuery({
+    queryKey: ['procurement-jobs'],
+    queryFn: async () => (await http.get<{ data: JobOption[] }>('/procurement/jobs')).data || [],
+    staleTime: 60 * 1000,
   });
+  const selectedJob = jobs.find((j) => String(j.id) === String(head.so_id));
+  const jobOptions = jobs.map((j) => ({ value: j.id, label: j.label }));
+  const styleOptions = selectedJob
+    ? selectedJob.styles.map((st) => ({ value: st.style_id, label: `${st.style_code} — ${st.style_name}` }))
+    : toOptions(styles.data);
 
-  const bomFabrics = bomData?.fabrics || [];
+  // Last BOM loaded for the selected job (banner + "BOM items only" filter)
+  const [bomData, setBomData] = useState<any>(null);
+  const [bomLoading, setBomLoading] = useState(false);
+  const bomFabrics: any[] = bomData?.fabrics || [];
 
-  const handleLoadFromBOM = () => {
-    if (!bomFabrics.length) {
-      toast('No fabric items found in active BOM for this style', 'warning');
-      return;
+  /** Fabric PO line from a BOM line: qty = BOM requirement for the job, rate = fabric std rate. */
+  const bomToFabricLine = (bf: any, isInterstate: boolean): FabricLine => {
+    const qty = Number(bf.final_requirement ?? bf.order_required_qty) || 0;
+    const isKg = String(bf.uom_code || '').toUpperCase() === 'KG';
+    return withFabricTotals({
+      ...emptyFabricLine(),
+      so_id: bf.so_id ? String(bf.so_id) : '',
+      style_id: bf.style_id ? String(bf.style_id) : '',
+      fabric_id: bf.fabric_id ? String(bf.fabric_id) : '',
+      fabric_name: bf.fabric_name || bf.material_name || '',
+      fabric_category: bf.color_id ? 'Dyed Fabric' : 'Grey Fabric',
+      fabric_type: FABRIC_TYPE_LABEL[bf.fabric_master_type] || bf.fabric_master_type || 'Knitted',
+      dia: bf.fabric_dia ? `${Number(bf.fabric_dia)}"` : '',
+      gsm: bf.fabric_gsm ? String(bf.fabric_gsm) : '',
+      composition: bf.fabric_composition || '',
+      color_name: bf.color_name || '',
+      uom_id: Number(bf.uom_id) || 5,
+      qty,
+      weight_kg: isKg ? qty : 0,
+      rate: Number(bf.std_rate) || 0,
+    }, isInterstate);
+  };
+
+  /** Loads the job's BOM fabric lines into the PO (asks before replacing entered lines). */
+  const loadBomForJob = async (soId: string, styleId?: string) => {
+    if (!soId) return;
+    setBomLoading(true);
+    try {
+      const qs = new URLSearchParams({ so_id: soId });
+      if (styleId) qs.set('style_id', styleId);
+      const res = await http.get<{ data: any }>(`/boms/for-job?${qs.toString()}`);
+      const data = res.data;
+      setBomData(data);
+      (data?.warnings || []).forEach((w: string) => toast(w, 'warning'));
+      const fabricsInBom: any[] = data?.fabrics || [];
+      if (!fabricsInBom.length) {
+        toast(`BOM ${data?.bom?.bom_no || ''} of this job has no fabric items`, 'warning');
+        return;
+      }
+      const hasEntered = lines.some((l) => l.fabric_id || Number(l.qty) > 0);
+      if (hasEntered && !window.confirm(`Replace the ${lines.length} existing line(s) with ${fabricsInBom.length} fabric item(s) from the job's BOM?`)) return;
+      setLines(fabricsInBom.map((bf) => bomToFabricLine(bf, head.is_interstate)));
+      toast(`Loaded ${fabricsInBom.length} fabric item(s) from BOM ${data.bom?.bom_no || ''}`, 'success');
+    } catch (err: any) {
+      setBomData(null);
+      toast(err instanceof ApiError ? err.message : 'Failed to load the BOM of this job', 'error');
+    } finally {
+      setBomLoading(false);
     }
-    const newLines: FabricLine[] = bomFabrics.map((bf: any) => {
-      const reqKg = Number(bf.total_required_qty || bf.consumption_per_pc || 100);
-      const rate = Number(bf.rate || 65);
-      const taxable = Math.round(reqKg * rate * 100) / 100;
-      const gstRate = 5.0;
-      const tax = Math.round((taxable * (gstRate / 100)) * 100) / 100;
-      return {
-        _key: `fl_${++fseq}`,
-        fabric_id: bf.fabric_id ? String(bf.fabric_id) : '',
-        fabric_category: (bf.fabric_category || 'Grey Fabric') as any,
-        fabric_type: bf.fabric_type || 'Knitted',
-        dia: bf.dia || '30"',
-        gsm: bf.gsm ? String(bf.gsm) : '180',
-        composition: bf.composition || '100% Cotton',
-        color_name: bf.color_name || '',
-        yarn_count_str: bf.yarn_count_str || '',
-        shade_code: bf.shade_code || '',
-        pantone_spec: bf.pantone_spec || '',
-        print_flag: false,
-        print_color: '',
-        finish: 'Compact',
-        mill_id: '',
-        hsn_code: '5208',
-        uom_id: 9,
-        qty: reqKg,
-        weight_kg: reqKg,
-        no_of_rolls: Math.ceil(reqKg / 25),
-        rate,
-        amount: taxable,
-        discount_amount: 0,
-        freight_amount: 0,
-        other_charges: 0,
-        taxable_amount: taxable,
-        gst_rate: gstRate,
-        cgst_rate: head.is_interstate ? 0 : 2.5,
-        cgst_amount: head.is_interstate ? 0 : tax / 2,
-        sgst_rate: head.is_interstate ? 0 : 2.5,
-        sgst_amount: head.is_interstate ? 0 : tax / 2,
-        igst_rate: head.is_interstate ? gstRate : 0,
-        igst_amount: head.is_interstate ? tax : 0,
-        net_amount: taxable + tax,
-      };
-    });
-    setLines(newLines);
-    toast(`Loaded ${newLines.length} fabric items from BOM!`, 'success');
+  };
+
+  /** IO No picked: link the job, default its style, auto-load its BOM fabrics. */
+  const handleJobChange = (soId: string) => {
+    const job = jobs.find((j) => String(j.id) === soId);
+    const styleId = job && job.styles.length === 1 ? String(job.styles[0].style_id) : '';
+    setHead((h) => ({ ...h, so_id: soId, internal_ir_no: job?.job_no || '', style_id: styleId }));
+    setBomData(null);
+    if (soId) void loadBomForJob(soId);
   };
 
   // Load existing PO
@@ -229,7 +278,8 @@ export default function FabricPurchaseOrderDetailPage() {
       setHead({
         id: d.id,
         po_no: d.po_no || '',
-        internal_ir_no: d.internal_ir_no || 'IR-2026-000125',
+        internal_ir_no: d.internal_ir_no || '',
+        so_id: d.so_id ? String(d.so_id) : '',
         po_date: d.po_date?.slice(0, 10) || today(),
         supplier_id: String(d.supplier_id || ''),
         style_id: String(d.style_id || ''),
@@ -335,36 +385,7 @@ export default function FabricPurchaseOrderDetailPage() {
   const updateLine = (idx: number, patch: Partial<FabricLine>) => {
     setLines((prev) => {
       const next = [...prev];
-      const cur = { ...next[idx], ...patch };
-      const qty = Number(cur.qty) || 0;
-      const rate = Number(cur.rate) || 0;
-      const basicAmt = Math.round(qty * rate * 100) / 100;
-      const disc = Number(cur.discount_amount) || 0;
-      const freight = Number(cur.freight_amount) || 0;
-      const other = Number(cur.other_charges) || 0;
-      const taxable = Math.max(0, basicAmt - disc + freight + other);
-      cur.amount = basicAmt;
-      cur.taxable_amount = taxable;
-
-      const gstRate = Number(cur.gst_rate) || 5.0;
-      if (head.is_interstate) {
-        cur.igst_rate = gstRate;
-        cur.igst_amount = Math.round((taxable * (gstRate / 100)) * 100) / 100;
-        cur.cgst_rate = 0;
-        cur.cgst_amount = 0;
-        cur.sgst_rate = 0;
-        cur.sgst_amount = 0;
-      } else {
-        cur.cgst_rate = gstRate / 2;
-        cur.cgst_amount = Math.round((taxable * (gstRate / 200)) * 100) / 100;
-        cur.sgst_rate = gstRate / 2;
-        cur.sgst_amount = Math.round((taxable * (gstRate / 200)) * 100) / 100;
-        cur.igst_rate = 0;
-        cur.igst_amount = 0;
-      }
-      const totalTax = cur.cgst_amount + cur.sgst_amount + cur.igst_amount;
-      cur.net_amount = Math.round((taxable + totalTax) * 100) / 100;
-      next[idx] = cur;
+      next[idx] = withFabricTotals({ ...next[idx], ...patch }, head.is_interstate);
       return next;
     });
   };
@@ -445,8 +466,8 @@ export default function FabricPurchaseOrderDetailPage() {
       toast('Please select a Supplier', 'warning');
       return;
     }
-    if (lines.length === 0 || !lines[0].fabric_id) {
-      toast('Please add at least one Fabric line', 'warning');
+    if (lines.length === 0 || lines.some((l) => !l.fabric_id || !(Number(l.qty) > 0))) {
+      toast('Every line needs a fabric and a quantity greater than zero', 'warning');
       return;
     }
 
@@ -454,7 +475,8 @@ export default function FabricPurchaseOrderDetailPage() {
     try {
       const payload = {
         po_no: head.po_no || undefined,
-        internal_ir_no: head.internal_ir_no,
+        internal_ir_no: head.internal_ir_no || null,
+        so_id: head.so_id ? Number(head.so_id) : null,
         po_date: head.po_date,
         supplier_id: Number(head.supplier_id),
         style_id: head.style_id ? Number(head.style_id) : undefined,
@@ -553,7 +575,7 @@ export default function FabricPurchaseOrderDetailPage() {
   const { data: fabricQuotes = [] } = useQuery({
     queryKey: ['approved-fabric-quotations'],
     queryFn: async () => {
-      const res = await http.get<{ data: any[] }>('/quotations?quotation_type=FABRIC');
+      const res = await http.get<{ data: any[] }>('/quotations?quotation_type=FABRIC&quotation_category=PURCHASE&pageSize=200');
       return res.data || [];
     },
     enabled: showQuoteModal,
@@ -569,6 +591,9 @@ export default function FabricPurchaseOrderDetailPage() {
         shipping_to_party_id: head.shipping_to_party_id ? Number(head.shipping_to_party_id) : undefined,
       });
       toast(`Converted into Fabric PO ${res.data.po_no}`, 'success');
+      if (res.data.unresolved_lines) {
+        toast(`${res.data.unresolved_lines} line(s) have no fabric master — pick the fabric on the PO and approve it`, 'warning');
+      }
       setShowQuoteModal(false);
       qc.invalidateQueries({ queryKey: ['fabric-purchase-orders'] });
       nav(`/procurement/fabric/orders/${res.data.id}`);
@@ -652,10 +677,13 @@ export default function FabricPurchaseOrderDetailPage() {
         </div>
       </div>
 
-      {/* Main Header Fields */}
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-        <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
-          <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Order Parameters</h2>
+      {/* Header Fields Card — same layout as the Yarn PO */}
+      <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm space-y-4">
+        <div className="text-xs font-semibold text-slate-900 uppercase tracking-wider flex items-center justify-between pb-2 border-b border-slate-100">
+          <div className="flex items-center gap-1.5">
+            <Layers size={14} className="text-sky-600" />
+            <span>Purchase Order Details</span>
+          </div>
           <label className="flex items-center gap-2 cursor-pointer font-normal text-xs text-slate-700 bg-sky-50 px-2.5 py-1 rounded-md border border-sky-200">
             <input
               type="checkbox"
@@ -666,53 +694,65 @@ export default function FabricPurchaseOrderDetailPage() {
             <span className="font-semibold text-slate-800">Inter-state PO (IGST Calculation)</span>
           </label>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
           <Input
-            label="Internal / IR No."
-            required
-            value={head.internal_ir_no}
-            onChange={(e) => setHead({ ...head, internal_ir_no: e.target.value })}
-            placeholder="e.g. IR-2026-000125"
+            label="PO Number"
+            value={head.po_no}
+            onChange={(e) => setHead((p) => ({ ...p, po_no: e.target.value }))}
+            placeholder="Auto-generated if blank"
+            disabled={!isNew}
           />
+
           <Input
             label="PO Date"
             type="date"
-            required
             value={head.po_date}
-            onChange={(e) => setHead({ ...head, po_date: e.target.value })}
+            onChange={(e) => setHead((p) => ({ ...p, po_date: e.target.value }))}
           />
-          <Select
-            label="Supplier"
-            required
-            placeholder="Select Supplier"
-            options={toOptions(suppliers.data)}
-            value={head.supplier_id}
-            onChange={(e) => setHead({ ...head, supplier_id: e.target.value })}
-          />
-          <Select
-            label="Style No"
-            placeholder="Optional Style Link"
-            options={toOptions(styles.data)}
-            value={head.style_id}
-            onChange={(e) => setHead({ ...head, style_id: e.target.value })}
-          />
-          <Select
-            label="Order Type"
-            options={[
-              { value: 'PRODUCTION', label: 'Production' },
-              { value: 'SAMPLE', label: 'Sample' },
-              { value: 'STOCK', label: 'Stock' },
-              { value: 'JOB_WORK', label: 'Job Work' },
-            ]}
-            value={head.order_type}
-            onChange={(e) => setHead({ ...head, order_type: e.target.value })}
-          />
+
           <Input
             label="Required Delivery Date"
             type="date"
             value={head.delivery_date}
-            onChange={(e) => setHead({ ...head, delivery_date: e.target.value })}
+            onChange={(e) => setHead((p) => ({ ...p, delivery_date: e.target.value }))}
           />
+
+          <Select
+            label="Fabric Mill / Supplier *"
+            value={head.supplier_id}
+            onChange={(e) => setHead((p) => ({ ...p, supplier_id: e.target.value }))}
+            options={toOptions(suppliers.data)}
+            placeholder="Select Supplier"
+          />
+
+          <Select
+            label="IO No (Internal Order)"
+            value={head.so_id || (head.internal_ir_no ? '__unlinked' : '')}
+            onChange={(e) => e.target.value !== '__unlinked' && handleJobChange(e.target.value)}
+            options={jobOptions}
+            placeholder="Select Job / IO No"
+          >
+            {!head.so_id && head.internal_ir_no && (
+              <option value="__unlinked">{head.internal_ir_no} (not linked to a job)</option>
+            )}
+          </Select>
+
+          <Select
+            label="Style No"
+            value={head.style_id}
+            onChange={(e) => setHead((p) => ({ ...p, style_id: e.target.value }))}
+            options={styleOptions}
+            placeholder={selectedJob ? 'All styles of the job' : 'Select Style'}
+          />
+
+          <Input
+            label="Payment Terms"
+            value={head.payment_terms}
+            onChange={(e) => setHead((p) => ({ ...p, payment_terms: e.target.value }))}
+            placeholder="e.g. 30 Days Net"
+          />
+
           <Select
             label="Currency *"
             options={toOptions(currencies.data)}
@@ -739,22 +779,37 @@ export default function FabricPurchaseOrderDetailPage() {
           />
 
           <Input
-            label="Payment Terms"
-            value={head.payment_terms}
-            onChange={(e) => setHead({ ...head, payment_terms: e.target.value })}
-            placeholder="e.g. 30 Days Net"
+            label="Approval State"
+            value={head.approval_state === 'APPROVED' ? 'Approved & Active' : head.approval_state === 'DRAFT' ? 'Draft' : head.approval_state}
+            disabled
+            hint="Use Save Draft / Approve PO"
           />
-          <Input
-            label="Remarks"
-            value={head.remarks}
-            onChange={(e) => setHead({ ...head, remarks: e.target.value })}
-            placeholder="Special instructions..."
+
+          <Select
+            label="Order Type"
+            options={[
+              { value: 'PRODUCTION', label: 'Production' },
+              { value: 'SAMPLE', label: 'Sample' },
+              { value: 'STOCK', label: 'Stock' },
+              { value: 'JOB_WORK', label: 'Job Work' },
+            ]}
+            value={head.order_type}
+            onChange={(e) => setHead((p) => ({ ...p, order_type: e.target.value }))}
           />
+
+          <div className="sm:col-span-4">
+            <Input
+              label="Remarks / Contract Specifications"
+              value={head.remarks}
+              onChange={(e) => setHead((p) => ({ ...p, remarks: e.target.value }))}
+              placeholder="Special instructions..."
+            />
+          </div>
         </div>
       </div>
 
       {/* BOM Linkage & Auto-Fill Banner (Clip 4) */}
-      {head.style_id && (
+      {head.so_id && (
         <div className="rounded-xl border border-sky-200 bg-gradient-to-r from-sky-50/80 via-white to-sky-50/50 p-4 shadow-xs">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-start gap-3">
@@ -773,14 +828,16 @@ export default function FabricPurchaseOrderDetailPage() {
                   )}
                 </div>
                 <p className="text-[11px] text-slate-600 mt-0.5">
-                  {bomFabrics.length > 0
-                    ? `Found ${bomFabrics.length} planned fabric specification(s) in BOM for this Style/Job.`
-                    : 'No fabric items explicitly defined in BOM for this style.'}
+                  {bomLoading
+                    ? 'Loading the BOM of this job…'
+                    : bomData
+                      ? `${bomFabrics.length} fabric item(s) in the BOM of job ${bomData.job_no || head.internal_ir_no} (plan-cut ${fmtDecimal(bomData.order_qty, 0)} pcs).`
+                      : `Load the fabric items of job ${head.internal_ir_no || ''} from its Bill of Materials.`}
                 </p>
               </div>
             </div>
-            {bomFabrics.length > 0 && (
-              <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3">
+              {bomFabrics.length > 0 && (
                 <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
                   <input
                     type="checkbox"
@@ -790,15 +847,16 @@ export default function FabricPurchaseOrderDetailPage() {
                   />
                   <span>Show BOM Items Only</span>
                 </label>
-                <button
-                  type="button"
-                  onClick={handleLoadFromBOM}
-                  className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1 bg-sky-600 hover:bg-sky-700 border-sky-600 shadow-xs text-white"
-                >
-                  <Sparkles size={13} /> Load Fabric from BOM
-                </button>
-              </div>
-            )}
+              )}
+              <button
+                type="button"
+                disabled={bomLoading}
+                onClick={() => void loadBomForJob(head.so_id, head.style_id)}
+                className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1 bg-sky-600 hover:bg-sky-700 border-sky-600 shadow-xs text-white disabled:opacity-50"
+              >
+                <Sparkles size={13} /> {bomData ? 'Reload Fabric from BOM' : 'Load Fabric from BOM'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -902,7 +960,7 @@ export default function FabricPurchaseOrderDetailPage() {
             <thead className="bg-slate-100/70 border-b border-slate-200 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
               <tr>
                 <th className="py-2.5 px-2 w-8 text-center">#</th>
-                <th className="py-2.5 px-2 min-w-[130px]">I/O Num</th>
+                <th className="py-2.5 px-2 min-w-[130px]">IO No</th>
                 <th className="py-2.5 px-2 min-w-[110px]">Style</th>
                 <th className="py-2.5 px-2 min-w-[150px]">Fabric</th>
                 <th className="py-2.5 px-2 w-24">Grey / Dyed</th>
@@ -945,8 +1003,8 @@ export default function FabricPurchaseOrderDetailPage() {
                       className="input py-1 text-xs w-full bg-white"
                     >
                       <option value="">Stock / General</option>
-                      {toOptions(salesOrders.data).map((so) => (
-                        <option key={so.value} value={so.value}>{so.label}</option>
+                      {jobs.map((j) => (
+                        <option key={j.id} value={j.id}>{j.job_no}</option>
                       ))}
                     </select>
                   </td>
@@ -971,10 +1029,10 @@ export default function FabricPurchaseOrderDetailPage() {
                         const fab: any = (fabrics.data || []).find((x: any) => String(x.id) === e.target.value);
                         updateLine(idx, {
                           fabric_id: e.target.value,
-                          fabric_name: fab?.fabric_name || '',
-                          gsm: String(fab?.gsm || l.gsm),
-                          composition: String(fab?.composition || l.composition),
-                          fabric_type: String(fab?.fabric_type || l.fabric_type),
+                          fabric_name: fab?.label || fab?.fabric_name || '',
+                          dia: fab?.dia_inch ? `${Number(fab.dia_inch)}"` : l.dia,
+                          uom_id: Number(fab?.base_uom) || l.uom_id,
+                          rate: Number(l.rate) > 0 ? l.rate : (Number(fab?.std_rate) || 0),
                         });
                       }}
                       className="input py-1 text-xs w-full bg-white"
@@ -1084,9 +1142,9 @@ export default function FabricPurchaseOrderDetailPage() {
                       onChange={(e) => updateLine(idx, { uom_id: Number(e.target.value) })}
                       className="input py-1 text-xs w-full bg-white"
                     >
-                      <option value={5}>KG</option>
-                      <option value={9}>MTR</option>
-                      <option value={1}>PCS</option>
+                      {(uoms.data || []).map((u) => (
+                        <option key={u.id} value={u.id}>{u.code || u.label}</option>
+                      ))}
                     </select>
                   </td>
                   {/* Rate */}

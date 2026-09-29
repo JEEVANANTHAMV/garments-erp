@@ -2,12 +2,13 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowLeft, Save, Plus, Trash2, Scissors, Printer, Layers, Sparkles, RefreshCw
+  ArrowLeft, Save, Plus, Trash2, Scissors, Printer, Layers, Sparkles, RefreshCw, FileSpreadsheet
 } from 'lucide-react';
-import { http } from '../../lib/api';
+import { http, ApiError } from '../../lib/api';
 import { fmtDecimal, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
-import { Badge } from '../../components/ui';
+import { useLookup } from '../../hooks/useLookup';
+import { Badge, Input, Select, Modal } from '../../components/ui';
 
 interface TrimLine {
   id?: number;
@@ -38,17 +39,52 @@ const emptyTrimLine = (): TrimLine => ({
   so_id: '',
   style_id: '',
   trim_id: '',
-  specification: '4 Hole, 15L',
-  color_name: 'Navy',
-  trim_size: '15L',
-  order_qty: 5000,
+  specification: '',
+  color_name: '',
+  trim_size: '',
+  order_qty: 0,
   uom_id: 1, // PCS
-  rate: 0.85,
-  amount: 4250,
-  gst_rate: 18,
-  tax_amount: 765,
-  net_amount: 5015,
+  rate: 0,
+  amount: 0,
+  gst_rate: 12,
+  tax_amount: 0,
+  net_amount: 0,
 });
+
+/** A job (sales order) from GET /procurement/jobs — the "IO No" selector. */
+interface JobOption {
+  id: number;
+  so_no: string;
+  io_no: string | null;
+  job_no: string;
+  buyer_name?: string | null;
+  label: string;
+  plan_cut_qty: number;
+  styles: { style_id: number; style_code: string; style_name: string; plan_cut_qty: number }[];
+}
+
+/** Amount / GST split of a trim line (IGST when inter-state, else CGST + SGST). */
+function withTrimTotals(cur: TrimLine, isInterstate: boolean): TrimLine {
+  const l = { ...cur };
+  const gst = Number(l.gst_rate) || 0;
+  const amt = Math.round((Number(l.order_qty) || 0) * (Number(l.rate) || 0) * 100) / 100;
+  let cgst = 0;
+  let sgst = 0;
+  let igst = 0;
+  if (isInterstate) igst = Math.round(((amt * gst) / 100) * 100) / 100;
+  else {
+    cgst = Math.round(((amt * (gst / 2)) / 100) * 100) / 100;
+    sgst = cgst;
+  }
+  l.amount = amt;
+  l.cgst_amount = cgst;
+  l.sgst_amount = sgst;
+  l.igst_amount = igst;
+  l.igst_rate = isInterstate ? gst : 0;
+  l.tax_amount = cgst + sgst + igst;
+  l.net_amount = amt + l.tax_amount;
+  return l;
+}
 
 export default function TrimPurchaseOrderDetailPage() {
   const { id } = useParams();
@@ -59,6 +95,8 @@ export default function TrimPurchaseOrderDetailPage() {
 
   const [saving, setSaving] = useState(false);
   const [showPrintPO, setShowPrintPO] = useState(false);
+  const [showQuoteModal, setShowQuoteModal] = useState(false);
+  const uoms = useLookup('uoms');
 
   // Lookups
   const { data: suppliers = [] } = useQuery({
@@ -76,9 +114,11 @@ export default function TrimPurchaseOrderDetailPage() {
     queryFn: async () => (await http.get<{ data: any[] }>('/lookups/trims')).data || [],
   });
 
-  const { data: salesOrders = [] } = useQuery({
-    queryKey: ['lookups', 'sales-orders'],
-    queryFn: async () => (await http.get<{ data: any[] }>('/lookups/sales-orders')).data || [],
+  // Jobs (sales orders) for the IO No selector
+  const { data: jobs = [] } = useQuery({
+    queryKey: ['procurement-jobs'],
+    queryFn: async () => (await http.get<{ data: JobOption[] }>('/procurement/jobs')).data || [],
+    staleTime: 60 * 1000,
   });
 
   const { data: currencies = [] } = useQuery({
@@ -90,7 +130,7 @@ export default function TrimPurchaseOrderDetailPage() {
   const [head, setHead] = useState({
     id: isNew ? undefined : Number(id),
     po_no: '',
-    io_no: 'IO-2026-001',
+    io_no: '',
     po_date: today(),
     supplier_id: '',
     style_id: '',
@@ -105,19 +145,20 @@ export default function TrimPurchaseOrderDetailPage() {
 
   const [filterBomOnly, setFilterBomOnly] = useState(true);
 
-  // Active BOM query for this style/job
-  const activeStyleId = head.style_id;
-  const { data: bomData } = useQuery({
-    queryKey: ['bom-for-job-trim', activeStyleId, head.io_no],
-    queryFn: async () => {
-      if (!activeStyleId) return null;
-      const res = await http.get<{ data: any }>(`/boms/for-job?style_id=${activeStyleId}&io_no=${head.io_no}`);
-      return res.data;
-    },
-    enabled: Boolean(activeStyleId),
-  });
+  // The header job is kept as io_no on trx_trim_po; resolve it back to the job record
+  const selectedJob = jobs.find((j) => j.job_no === head.io_no || j.io_no === head.io_no || j.so_no === head.io_no);
+  const jobOptions = jobs.map((j) => ({ value: j.job_no, label: j.label }));
+  const styleOptions = selectedJob
+    ? selectedJob.styles.map((st) => ({ value: st.style_id, label: `${st.style_code} — ${st.style_name}` }))
+    : styles.map((st: any) => ({ value: st.id, label: st.code ? `${st.code} — ${st.label}` : st.label }));
 
-  const bomTrims = bomData?.trims || [];
+  // Last BOM loaded for the selected job (banner + "BOM items only" filter)
+  const [bomData, setBomData] = useState<any>(null);
+  const [bomLoading, setBomLoading] = useState(false);
+  // Trims PO buys trims, accessories and packing material (any BOM line with a trim master)
+  const bomTrims: any[] = bomData
+    ? [...(bomData.trims || []), ...(bomData.accessories || []), ...(bomData.packings || [])].filter((bt: any) => bt.trim_id)
+    : [];
 
   const [lines, setLines] = useState<TrimLine[]>([emptyTrimLine()]);
 
@@ -177,75 +218,88 @@ export default function TrimPurchaseOrderDetailPage() {
     }
   }, [existingPo]);
 
-  const handleLoadFromBOM = () => {
-    if (!bomTrims.length) {
-      toast('No trims defined in this BOM', 'warning');
-      return;
+  /** Trim PO line from a BOM line: qty = BOM requirement for the job, rate = trim std rate. */
+  const bomToTrimLine = (bt: any, isInterstate: boolean): TrimLine => withTrimTotals({
+    ...emptyTrimLine(),
+    so_id: bt.so_id ? String(bt.so_id) : '',
+    style_id: bt.style_id ? String(bt.style_id) : '',
+    trim_id: String(bt.trim_id),
+    trim_name: bt.trim_name || bt.material_name,
+    specification: bt.trim_specification || bt.item_description || '',
+    color_name: bt.color_name || '',
+    trim_size: bt.size_code || '',
+    order_qty: Number(bt.final_requirement ?? bt.order_required_qty) || 0,
+    uom_id: Number(bt.uom_id) || 1,
+    rate: Number(bt.std_rate) || 0,
+  }, isInterstate);
+
+  /** Loads the job's BOM trims into the PO (asks before replacing entered lines). */
+  const loadBomForJob = async (soId: number | string, styleId?: string) => {
+    if (!soId) return;
+    setBomLoading(true);
+    try {
+      const qs = new URLSearchParams({ so_id: String(soId) });
+      if (styleId) qs.set('style_id', styleId);
+      const res = await http.get<{ data: any }>(`/boms/for-job?${qs.toString()}`);
+      const data = res.data;
+      setBomData(data);
+      (data?.warnings || []).forEach((w: string) => toast(w, 'warning'));
+      const trimsInBom = [...(data?.trims || []), ...(data?.accessories || []), ...(data?.packings || [])].filter((bt: any) => bt.trim_id);
+      if (!trimsInBom.length) {
+        toast(`BOM ${data?.bom?.bom_no || ''} of this job has no trims / accessories`, 'warning');
+        return;
+      }
+      const hasEntered = lines.some((l) => l.trim_id || Number(l.order_qty) > 0);
+      if (hasEntered && !window.confirm(`Replace the ${lines.length} existing line(s) with ${trimsInBom.length} trim item(s) from the job's BOM?`)) return;
+      setLines(trimsInBom.map((bt) => bomToTrimLine(bt, head.is_interstate)));
+      toast(`Loaded ${trimsInBom.length} trim item(s) from BOM ${data.bom?.bom_no || ''}`, 'success');
+    } catch (err: any) {
+      setBomData(null);
+      toast(err instanceof ApiError ? err.message : 'Failed to load the BOM of this job', 'error');
+    } finally {
+      setBomLoading(false);
     }
-    const newLines = bomTrims.map((bt: any) => {
-      const trimMaster = trims.find((t: any) => t.id === bt.trim_id);
-      const reqQty = bt.order_required_qty || Math.round(Number(bt.consumption || 1) * 1000);
-      const rate = Number(bt.std_rate || trimMaster?.std_rate || 10);
-      const amt = reqQty * rate;
-      const gst = 12;
-      const tax = (amt * gst) / 100;
-      return {
-        _key: `tl_${++tseq}`,
-        so_id: '',
-        style_id: head.style_id,
-        trim_id: String(bt.trim_id),
-        trim_name: bt.trim_name || trimMaster?.trim_name,
-        specification: bt.remarks || trimMaster?.specification || '',
-        color_name: bt.color_name || '',
-        trim_size: bt.size_code || '',
-        order_qty: reqQty,
-        uom_id: bt.uom_id || trimMaster?.base_uom || 1,
-        rate: rate,
-        amount: amt,
-        gst_rate: gst,
-        igst_rate: head.is_interstate ? gst : 0,
-        igst_amount: head.is_interstate ? tax : 0,
-        tax_amount: tax,
-        net_amount: amt + tax,
-      };
-    });
-    setLines(newLines);
-    toast(`Loaded ${newLines.length} trim items from Style BOM ${bomData.bom.bom_no}`, 'success');
+  };
+
+  /** IO No picked: link the job, default its style, auto-load its BOM trims. */
+  const handleJobChange = (jobNo: string) => {
+    const job = jobs.find((j) => j.job_no === jobNo);
+    const styleId = job && job.styles.length === 1 ? String(job.styles[0].style_id) : '';
+    setHead((h) => ({ ...h, io_no: jobNo, style_id: styleId }));
+    setBomData(null);
+    if (job) void loadBomForJob(job.id);
+  };
+
+  // Trims quotations → Trim PO
+  const { data: trimQuotes = [] } = useQuery({
+    queryKey: ['approved-trim-quotations'],
+    queryFn: async () => (await http.get<{ data: any[] }>('/quotations?quotation_type=TRIMS&quotation_category=PURCHASE&pageSize=200')).data || [],
+    enabled: showQuoteModal,
+  });
+
+  const handleConvertQuotation = async (quoteId: number) => {
+    setSaving(true);
+    try {
+      const res = await http.post<{ data: { id: number; po_no: string } }>('/trim-pos/convert-from-quotation', {
+        quotation_id: quoteId,
+        required_date: head.delivery_date || undefined,
+      });
+      toast(`Converted into Trim PO ${res.data.po_no}`, 'success');
+      setShowQuoteModal(false);
+      qc.invalidateQueries({ queryKey: ['trim-purchase-orders'] });
+      nav(`/procurement/trim/orders/${res.data.id}`);
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'Failed to convert quotation', 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Update line calculations
   const updateLine = (idx: number, patch: Partial<TrimLine>) => {
     setLines((prev) => {
       const copy = [...prev];
-      const cur = { ...copy[idx], ...patch };
-
-      const qty = Number(cur.order_qty) || 0;
-      const rate = Number(cur.rate) || 0;
-      const gst = Number(cur.gst_rate) || 0;
-
-      const amt = Math.round(qty * rate * 100) / 100;
-      let cgst = 0;
-      let sgst = 0;
-      let igst = 0;
-
-      if (head.is_interstate) {
-        igst = Math.round(((amt * gst) / 100) * 100) / 100;
-      } else {
-        cgst = Math.round(((amt * (gst / 2)) / 100) * 100) / 100;
-        sgst = Math.round(((amt * (gst / 2)) / 100) * 100) / 100;
-      }
-      const tax = cgst + sgst + igst;
-      const net = amt + tax;
-
-      cur.amount = amt;
-      cur.cgst_amount = cgst;
-      cur.sgst_amount = sgst;
-      cur.igst_amount = igst;
-      cur.igst_rate = head.is_interstate ? gst : 0;
-      cur.tax_amount = tax;
-      cur.net_amount = net;
-
-      copy[idx] = cur;
+      copy[idx] = withTrimTotals({ ...copy[idx], ...patch }, head.is_interstate);
       return copy;
     });
   };
@@ -283,7 +337,7 @@ export default function TrimPurchaseOrderDetailPage() {
 
   const handleSave = async () => {
     if (!head.io_no) {
-      toast('Please enter I/O No', 'error');
+      toast('Please select the IO No (Internal Order)', 'error');
       return;
     }
     if (!head.supplier_id) {
@@ -343,7 +397,7 @@ export default function TrimPurchaseOrderDetailPage() {
         nav('/procurement/trim/orders');
       }
     } catch (err: any) {
-      toast(err?.response?.data?.error?.message || 'Failed to save Trim PO', 'error');
+      toast(err instanceof ApiError ? err.message : 'Failed to save Trim PO', 'error');
     } finally {
       setSaving(false);
     }
@@ -388,6 +442,15 @@ export default function TrimPurchaseOrderDetailPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          {isNew && (
+            <button
+              type="button"
+              onClick={() => setShowQuoteModal(true)}
+              className="btn-secondary text-xs flex items-center gap-1.5 shadow-sm border border-slate-300 hover:bg-slate-50"
+            >
+              <FileSpreadsheet size={15} /> Create from Quotation
+            </button>
+          )}
           {!isNew && (
             <button
               type="button"
@@ -441,152 +504,132 @@ export default function TrimPurchaseOrderDetailPage() {
         )}
       </div>
 
-      {/* Header Form */}
-      <div className="card p-5 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-2 gap-2">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-            Order Information & Linkage
-          </h3>
-
-          {/* Inter-State IGST Toggle */}
-          <label className="flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-1 rounded-lg text-xs transition">
+      {/* Header Fields Card — same layout as the Yarn PO */}
+      <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm space-y-4">
+        <div className="text-xs font-semibold text-slate-900 uppercase tracking-wider flex items-center justify-between pb-2 border-b border-slate-100">
+          <div className="flex items-center gap-1.5">
+            <Scissors size={14} className="text-emerald-600" />
+            <span>Purchase Order Details</span>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer font-normal text-xs text-slate-700 bg-emerald-50/60 px-2.5 py-1 rounded-md border border-emerald-200">
             <input
               type="checkbox"
               checked={head.is_interstate}
               onChange={(e) => setHead({ ...head, is_interstate: e.target.checked })}
-              className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+              className="h-3.5 w-3.5 rounded text-emerald-600 focus:ring-emerald-500"
             />
-            <span className="font-semibold text-slate-700">Inter-State Supply (IGST Applicable)</span>
-            <span className="text-[10px] text-slate-400 font-normal">
-              {head.is_interstate ? 'Single IGST tax rate applied' : 'Split CGST + SGST applied'}
-            </span>
+            <span className="font-semibold text-slate-800">Inter-state PO (IGST Calculation)</span>
           </label>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-          <div>
-            <label className="label">I/O No (Internal Order) *</label>
-            <input
-              type="text"
-              required
-              value={head.io_no}
-              onChange={(e) => setHead({ ...head, io_no: e.target.value })}
-              placeholder="e.g. IO-2026-001"
-              className="input text-xs font-semibold text-slate-900"
-            />
-          </div>
-          <div>
-            <label className="label">Style Reference (Default)</label>
-            <select
-              value={head.style_id}
-              onChange={(e) => setHead({ ...head, style_id: e.target.value })}
-              className="input text-xs"
-            >
-              <option value="">-- Select Style --</option>
-              {styles.map((s: any) => (
-                <option key={s.id} value={s.id}>
-                  {s.style_code} - {s.style_name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="label">Supplier / Vendor *</label>
-            <select
-              required
-              value={head.supplier_id}
-              onChange={(e) => setHead({ ...head, supplier_id: e.target.value })}
-              className="input text-xs font-medium"
-            >
-              <option value="">-- Choose Supplier --</option>
-              {suppliers.map((s: any) => (
-                <option key={s.id} value={s.id}>{s.party_name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="label">PO Date *</label>
-            <input
-              type="date"
-              required
-              value={head.po_date}
-              onChange={(e) => setHead({ ...head, po_date: e.target.value })}
-              className="input text-xs"
-            />
-          </div>
-        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+          <Input
+            label="PO Number"
+            value={head.po_no}
+            onChange={(e) => setHead({ ...head, po_no: e.target.value })}
+            placeholder="Auto-generated if blank"
+            disabled={!isNew}
+          />
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 text-xs">
-          <div>
-            <label className="label">Expected Delivery Date</label>
-            <input
-              type="date"
-              value={head.delivery_date}
-              onChange={(e) => setHead({ ...head, delivery_date: e.target.value })}
-              className="input text-xs"
+          <Input
+            label="PO Date"
+            type="date"
+            value={head.po_date}
+            onChange={(e) => setHead({ ...head, po_date: e.target.value })}
+          />
+
+          <Input
+            label="Expected Delivery Date"
+            type="date"
+            value={head.delivery_date}
+            onChange={(e) => setHead({ ...head, delivery_date: e.target.value })}
+          />
+
+          <Select
+            label="Supplier / Vendor *"
+            value={head.supplier_id}
+            onChange={(e) => setHead({ ...head, supplier_id: e.target.value })}
+            options={suppliers.map((sp: any) => ({ value: sp.id, label: sp.code ? `${sp.code} — ${sp.label}` : sp.label }))}
+            placeholder="Select Supplier"
+          />
+
+          <Select
+            label="IO No (Internal Order) *"
+            value={head.io_no}
+            onChange={(e) => handleJobChange(e.target.value)}
+            options={jobOptions}
+            placeholder="Select Job / IO No"
+          >
+            {head.io_no && !jobOptions.some((o) => o.value === head.io_no) && (
+              <option value={head.io_no}>{head.io_no} (not linked to a job)</option>
+            )}
+          </Select>
+
+          <Select
+            label="Style No"
+            value={head.style_id}
+            onChange={(e) => setHead({ ...head, style_id: e.target.value })}
+            options={styleOptions}
+            placeholder={selectedJob ? 'All styles of the job' : 'Select Style'}
+          />
+
+          <Input
+            label="Payment Terms"
+            value={head.payment_terms}
+            onChange={(e) => setHead({ ...head, payment_terms: e.target.value })}
+            placeholder="e.g. 30 Days Net"
+          />
+
+          <Select
+            label="Currency *"
+            value={head.currency_id}
+            options={(currencies as any[]).map((c: any) => ({ value: c.id, label: `${c.code} — ${c.label || c.name}` }))}
+            onChange={(e) => {
+              const cid = e.target.value;
+              const cur = (currencies as any[]).find((c: any) => String(c.id) === cid);
+              setHead({
+                ...head,
+                currency_id: cid,
+                exchange_rate: cur?.code === 'INR' ? 1.0 : (head.exchange_rate && head.exchange_rate !== 1.0 ? head.exchange_rate : (cur?.code === 'USD' ? 84.50 : cur?.code === 'EUR' ? 91.20 : 1.0)),
+              });
+            }}
+          />
+
+          <Input
+            label="Exchange Rate (to INR)"
+            type="number"
+            step="0.0001"
+            value={head.exchange_rate}
+            disabled={!isForeignCurrency}
+            onChange={(e) => setHead({ ...head, exchange_rate: Number(e.target.value) })}
+            placeholder="1.0000"
+          />
+
+          <Select
+            label="Order Status"
+            value={head.status}
+            onChange={(e) => setHead({ ...head, status: e.target.value })}
+            options={[
+              { value: 'DRAFT', label: 'Draft' },
+              { value: 'APPROVED', label: 'Approved' },
+              { value: 'PARTIAL', label: 'Partial' },
+              { value: 'CLOSED', label: 'Closed' },
+            ]}
+          />
+
+          <div className="sm:col-span-4">
+            <Input
+              label="Remarks / Contract Specifications"
+              value={head.remarks}
+              onChange={(e) => setHead({ ...head, remarks: e.target.value })}
+              placeholder="Special instructions..."
             />
-          </div>
-          <div>
-            <label className="label">Payment Terms</label>
-            <input
-              type="text"
-              value={head.payment_terms}
-              onChange={(e) => setHead({ ...head, payment_terms: e.target.value })}
-              placeholder="30 Days Net"
-              className="input text-xs"
-            />
-          </div>
-          <div>
-            <label className="label font-semibold text-emerald-800">Currency *</label>
-            <select
-              value={head.currency_id}
-              onChange={(e) => {
-                const cid = e.target.value;
-                const cur = (currencies as any[]).find((c: any) => String(c.id) === cid);
-                setHead({
-                  ...head,
-                  currency_id: cid,
-                  exchange_rate: cur?.code === 'INR' ? 1.0 : (head.exchange_rate && head.exchange_rate !== 1.0 ? head.exchange_rate : (cur?.code === 'USD' ? 84.50 : cur?.code === 'EUR' ? 91.20 : 1.0)),
-                });
-              }}
-              className="input text-xs font-semibold bg-emerald-50/40 border-emerald-300"
-            >
-              {(currencies as any[]).map((c: any) => (
-                <option key={c.id} value={c.id}>
-                  {c.code} ({c.symbol || ''}) - {c.label || c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="label">Exchange Rate (to INR)</label>
-            <input
-              type="number"
-              step="0.0001"
-              value={head.exchange_rate}
-              disabled={!isForeignCurrency}
-              onChange={(e) => setHead({ ...head, exchange_rate: Number(e.target.value) })}
-              className={`input text-xs ${isForeignCurrency ? 'font-semibold border-amber-300 bg-amber-50/50' : 'bg-slate-50 text-slate-500'}`}
-            />
-          </div>
-          <div>
-            <label className="label">Order Status</label>
-            <select
-              value={head.status}
-              onChange={(e) => setHead({ ...head, status: e.target.value })}
-              className="input text-xs"
-            >
-              <option value="DRAFT">Draft</option>
-              <option value="APPROVED">Approved</option>
-              <option value="PARTIAL">Partial</option>
-              <option value="CLOSED">Closed</option>
-            </select>
           </div>
         </div>
       </div>
 
       {/* BOM Linkage & Auto-Fill Banner */}
-      {head.style_id && (
+      {selectedJob && (
         <div className="rounded-xl border border-indigo-200 bg-gradient-to-r from-indigo-50/80 via-white to-indigo-50/50 p-4 shadow-xs">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-start gap-3">
@@ -596,7 +639,7 @@ export default function TrimPurchaseOrderDetailPage() {
               <div>
                 <div className="flex items-center gap-2">
                   <h4 className="text-xs font-bold text-indigo-950 uppercase tracking-wide">
-                    Bill of Materials (BOM) Integration
+                    Bill of Materials (BOM) Trims Integration
                   </h4>
                   {bomData?.bom && (
                     <span className="bg-indigo-100 text-indigo-800 text-[10.5px] font-bold px-2 py-0.5 rounded border border-indigo-300">
@@ -605,15 +648,17 @@ export default function TrimPurchaseOrderDetailPage() {
                   )}
                 </div>
                 <p className="text-xs text-indigo-800 mt-0.5">
-                  {bomData?.bom
-                    ? `Style "${bomData.bom.style_code}" has ${bomTrims.length} trim component(s) defined in active BOM. Only planned BOM trims are populated/suggested.`
-                    : 'No active BOM found for this style. Showing all Master trim catalog items.'}
+                  {bomLoading
+                    ? 'Loading the BOM of this job…'
+                    : bomData
+                      ? `${bomTrims.length} trim / accessory item(s) in the BOM of job ${bomData.job_no || head.io_no} (plan-cut ${fmtDecimal(bomData.order_qty, 0)} pcs).`
+                      : `Load the trims of job ${head.io_no} from its Bill of Materials.`}
                 </p>
               </div>
             </div>
 
-            {bomTrims.length > 0 && (
-              <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-3 shrink-0">
+              {bomTrims.length > 0 && (
                 <label className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-indigo-900">
                   <input
                     type="checkbox"
@@ -623,16 +668,17 @@ export default function TrimPurchaseOrderDetailPage() {
                   />
                   <span>Show BOM Items Only</span>
                 </label>
-                <button
-                  type="button"
-                  onClick={handleLoadFromBOM}
-                  className="btn-primary bg-indigo-600 hover:bg-indigo-700 text-white text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-sm"
-                >
-                  <RefreshCw size={13} />
-                  <span>Load Trims from BOM ({bomTrims.length})</span>
-                </button>
-              </div>
-            )}
+              )}
+              <button
+                type="button"
+                disabled={bomLoading}
+                onClick={() => void loadBomForJob(selectedJob.id, head.style_id)}
+                className="btn-primary bg-indigo-600 hover:bg-indigo-700 text-white text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+              >
+                <RefreshCw size={13} />
+                <span>{bomData ? 'Reload Trims from BOM' : 'Load Trims from BOM'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -646,7 +692,7 @@ export default function TrimPurchaseOrderDetailPage() {
               <span>Trim Order Lines & Job Allocation ({lines.length})</span>
             </h3>
             <p className="text-[11px] text-slate-500">
-              Arranged as: S.No → I/O (Job) → Style → Trim Item → Specifications & Rates
+              Arranged as: S.No → IO No (Job) → Style → Trim Item → Specifications & Rates
             </p>
           </div>
           <button
@@ -663,7 +709,7 @@ export default function TrimPurchaseOrderDetailPage() {
             <thead className="bg-slate-50 text-slate-600 uppercase font-semibold border-b border-slate-200">
               <tr>
                 <th className="py-2.5 px-2 text-center w-10">#</th>
-                <th className="py-2.5 px-2 text-left min-w-[140px]">I/O (Job No) *</th>
+                <th className="py-2.5 px-2 text-left min-w-[140px]">IO No (Job)</th>
                 <th className="py-2.5 px-2 text-left min-w-[130px]">Style No *</th>
                 <th className="py-2.5 px-3 text-left min-w-[150px]">Trim Item *</th>
                 <th className="py-2.5 px-2 text-left w-28">Specification</th>
@@ -700,9 +746,9 @@ export default function TrimPurchaseOrderDetailPage() {
                         className="input text-xs py-1 bg-white"
                       >
                         <option value="">{head.io_no ? `${head.io_no} (Default)` : 'Stock / General'}</option>
-                        {salesOrders.map((so: any) => (
-                          <option key={so.id} value={so.id}>
-                            {so.so_no} {so.style_name ? `(${so.style_name})` : ''}
+                        {jobs.map((j) => (
+                          <option key={j.id} value={j.id}>
+                            {j.job_no}
                           </option>
                         ))}
                       </select>
@@ -716,9 +762,9 @@ export default function TrimPurchaseOrderDetailPage() {
                         className="input text-xs py-1"
                       >
                         <option value="">-- Style --</option>
-                        {styles.map((s: any) => (
-                          <option key={s.id} value={s.id}>
-                            {s.style_code}
+                        {styles.map((st: any) => (
+                          <option key={st.id} value={st.id}>
+                            {st.code}
                           </option>
                         ))}
                       </select>
@@ -732,7 +778,9 @@ export default function TrimPurchaseOrderDetailPage() {
                           const sel = trims.find((t: any) => String(t.id) === e.target.value);
                           updateLine(idx, {
                             trim_id: e.target.value,
-                            specification: sel?.specification || line.specification,
+                            trim_name: sel?.label,
+                            uom_id: Number(sel?.base_uom) || line.uom_id,
+                            rate: Number(line.rate) > 0 ? line.rate : (Number(sel?.std_rate) || 0),
                           });
                         }}
                         className="input text-xs py-1"
@@ -740,7 +788,7 @@ export default function TrimPurchaseOrderDetailPage() {
                         <option value="">-- Select Trim --</option>
                         {availableTrims.map((t: any) => (
                           <option key={t.id} value={t.id}>
-                            {t.trim_name} ({t.trim_type || t.trim_code})
+                            {t.label} ({t.trim_type || t.code})
                           </option>
                         ))}
                       </select>
@@ -783,7 +831,7 @@ export default function TrimPurchaseOrderDetailPage() {
                     <td className="py-2 px-2">
                       <input
                         type="number"
-                        step="1"
+                        step="any"
                         value={line.order_qty}
                         onChange={(e) => updateLine(idx, { order_qty: Number(e.target.value) })}
                         className="input text-xs py-1 text-right font-semibold text-slate-900"
@@ -797,11 +845,9 @@ export default function TrimPurchaseOrderDetailPage() {
                         onChange={(e) => updateLine(idx, { uom_id: Number(e.target.value) })}
                         className="input text-xs py-1"
                       >
-                        <option value={1}>PCS</option>
-                        <option value={9}>MTR</option>
-                        <option value={10}>KG</option>
-                        <option value={11}>BOX</option>
-                        <option value={12}>ROLL</option>
+                        {(uoms.data || []).map((u) => (
+                          <option key={u.id} value={u.id}>{u.code || u.label}</option>
+                        ))}
                       </select>
                     </td>
 
@@ -913,6 +959,63 @@ export default function TrimPurchaseOrderDetailPage() {
         </div>
       </div>
 
+      {/* Create from Trims Quotation */}
+      <Modal
+        open={showQuoteModal}
+        onClose={() => setShowQuoteModal(false)}
+        title="Create Trim PO from Trims Quotation"
+        size="lg"
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-slate-600">
+            Pick a Trims quotation: supplier, IO No, trim items, quantities, confirmed rates and GST are carried into a new Trim PO.
+          </p>
+          <div className="rounded-lg border border-slate-200 overflow-hidden">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                <tr>
+                  <th className="py-2.5 px-3">Quotation No</th>
+                  <th className="py-2.5 px-3">Date</th>
+                  <th className="py-2.5 px-3">IO No</th>
+                  <th className="py-2.5 px-3">Supplier</th>
+                  <th className="py-2.5 px-3 text-right">Amount (₹)</th>
+                  <th className="py-2.5 px-3 text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {trimQuotes.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-6 text-center text-slate-400">
+                      No Trims quotations available.
+                    </td>
+                  </tr>
+                ) : (
+                  trimQuotes.map((q: any) => (
+                    <tr key={q.id} className="hover:bg-slate-50">
+                      <td className="py-2.5 px-3 font-mono font-bold text-brand-700">{q.quotation_no}</td>
+                      <td className="py-2.5 px-3">{q.quotation_date?.slice(0, 10)}</td>
+                      <td className="py-2.5 px-3">{q.job_no || '—'}</td>
+                      <td className="py-2.5 px-3">{q.supplier_name || '—'}</td>
+                      <td className="py-2.5 px-3 text-right font-mono font-bold">₹{fmtDecimal(q.total_amount, 2)}</td>
+                      <td className="py-2.5 px-3 text-center">
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={() => handleConvertQuotation(q.id)}
+                          className="btn-primary btn-xs"
+                        >
+                          Create PO
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </Modal>
+
       {/* PRINTABLE PURCHASE ORDER VOUCHER MODAL */}
       {showPrintPO && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
@@ -957,9 +1060,9 @@ export default function TrimPurchaseOrderDetailPage() {
                   <div><span className="text-slate-500 font-medium">Payment Terms:</span> <span className="font-semibold text-slate-800">{head.payment_terms || '-'}</span></div>
                 </div>
                 <div className="space-y-1.5 border-l border-slate-200 pl-4">
-                  <div><span className="text-slate-500 font-medium">Supplier / Vendor:</span> <span className="font-bold text-slate-900">{suppliers.find((s: any) => String(s.id) === String(head.supplier_id))?.party_name || '-'}</span></div>
-                  <div><span className="text-slate-500 font-medium">Internal Order (I/O No):</span> <span className="font-bold text-sky-800 font-mono">{head.io_no}</span></div>
-                  <div><span className="text-slate-500 font-medium">Style:</span> <span className="font-semibold text-slate-800">{styles.find((s: any) => String(s.id) === String(head.style_id))?.style_code || '-'}</span></div>
+                  <div><span className="text-slate-500 font-medium">Supplier / Vendor:</span> <span className="font-bold text-slate-900">{suppliers.find((sp: any) => String(sp.id) === String(head.supplier_id))?.label || '-'}</span></div>
+                  <div><span className="text-slate-500 font-medium">IO No (Internal Order):</span> <span className="font-bold text-sky-800 font-mono">{head.io_no}</span></div>
+                  <div><span className="text-slate-500 font-medium">Style:</span> <span className="font-semibold text-slate-800">{styles.find((st: any) => String(st.id) === String(head.style_id))?.code || '-'}</span></div>
                   <div><span className="text-slate-500 font-medium">Taxation:</span> <span className="font-bold text-emerald-700">{head.is_interstate ? 'Inter-State (IGST)' : 'Intra-State (CGST + SGST)'}</span></div>
                 </div>
               </div>
@@ -971,7 +1074,7 @@ export default function TrimPurchaseOrderDetailPage() {
                     <tr className="bg-slate-100 text-slate-700">
                       <th className="border border-slate-300 py-1.5 px-2 text-left">#</th>
                       <th className="border border-slate-300 py-1.5 px-2 text-left">Trim Item</th>
-                      <th className="border border-slate-300 py-1.5 px-2 text-left">I/O (Internal Order) / Job</th>
+                      <th className="border border-slate-300 py-1.5 px-2 text-left">IO No (Internal Order)</th>
                       <th className="border border-slate-300 py-1.5 px-2 text-left">Specification</th>
                       <th className="border border-slate-300 py-1.5 px-2 text-center">Color / Size</th>
                       <th className="border border-slate-300 py-1.5 px-2 text-right">Order Qty</th>
@@ -983,12 +1086,12 @@ export default function TrimPurchaseOrderDetailPage() {
                   <tbody>
                     {lines.map((l: any, idx: number) => {
                       const trimObj = trims.find((t: any) => String(t.id) === String(l.trim_id));
-                      const soObj = salesOrders.find((so: any) => String(so.id) === String(l.so_id));
+                      const jobObj = jobs.find((j) => String(j.id) === String(l.so_id));
                       return (
                         <tr key={l._key || idx}>
                           <td className="border border-slate-300 py-1 px-2 text-center text-slate-500">{idx + 1}</td>
-                          <td className="border border-slate-300 py-1 px-2 font-semibold text-slate-900">{trimObj?.trim_name || l.trim_name || 'Trim'}</td>
-                          <td className="border border-slate-300 py-1 px-2 text-slate-600">{soObj?.so_no || 'General'}</td>
+                          <td className="border border-slate-300 py-1 px-2 font-semibold text-slate-900">{trimObj?.label || l.trim_name || 'Trim'}</td>
+                          <td className="border border-slate-300 py-1 px-2 text-slate-600">{jobObj?.job_no || head.io_no || 'General'}</td>
                           <td className="border border-slate-300 py-1 px-2 text-slate-600">{l.specification || '-'}</td>
                           <td className="border border-slate-300 py-1 px-2 text-center">{l.color_name || '-'} / {l.trim_size || '-'}</td>
                           <td className="border border-slate-300 py-1 px-2 text-right font-bold">{fmtDecimal(l.order_qty)}</td>

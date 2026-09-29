@@ -170,7 +170,7 @@ export default function FabricGRNsPage() {
             <thead>
               <tr className="bg-slate-50/80 text-slate-600 font-semibold border-b border-slate-200">
                 <th className="py-3 px-4">GRN No & Date</th>
-                <th className="py-3 px-3">PO & IR No</th>
+                <th className="py-3 px-3">PO & IO No</th>
                 <th className="py-3 px-3">Gate Entry</th>
                 <th className="py-3 px-3">Supplier / Mill</th>
                 <th className="py-3 px-3">Style</th>

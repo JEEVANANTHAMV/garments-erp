@@ -1,6 +1,7 @@
 import type { ResourceConfig } from '../../core/crud.js';
 import { z } from 'zod';
 import { s, f } from './schemas.js';
+import { BadRequest } from '../../core/errors.js';
 
 /**
  * Declarative registry of master-data resources.
@@ -83,6 +84,18 @@ export const masterResources: ResourceConfig[] = [
     filters: ['is_customer', 'is_buyer', 'is_supplier', 'is_vendor', 'is_agent', 'is_contractor', 'party_type', 'country_id'],
     selectExtra: 'c.name AS country_name, cur.code AS currency_code',
     joins: 'LEFT JOIN cfg_country c ON c.id = t.country_id LEFT JOIN cfg_currency cur ON cur.id = t.currency_id',
+    // Every address of a completed (non-draft) partner must name its country —
+    // buyers abroad have no Indian state/pincode, so country is what identifies it.
+    beforeWrite: (req, data) => {
+      if (data.is_draft) return;
+      const addrs = req.body?.addresses;
+      if (!Array.isArray(addrs)) return;
+      addrs.forEach((a: any, i: number) => {
+        if (!a || !(Number(a.country_id) > 0)) {
+          throw BadRequest(`Address ${i + 1}${a?.address_name ? ` (${a.address_name})` : ''}: country is required`);
+        }
+      });
+    },
     children: [
       { key: 'addresses', table: 'mst_party_address', fk: 'party_id', fields: [
         f('address_name', s.nullableStr(100)),

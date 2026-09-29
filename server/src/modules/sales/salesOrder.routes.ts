@@ -26,6 +26,12 @@ const groupCode = () => z.union([
 const skuLineSchema = z.object({
   sku_id: s.idReq(),
   qty: z.coerce.number().int().min(0),
+  /**
+   * Size-wise excess (cutting buffer) %. Null/absent = inherit the line's
+   * excess %, which itself falls back to the order header's.
+   */
+  excess_pct: z.coerce.number().min(0, 'Size excess % cannot be negative')
+    .max(100, 'Size excess % cannot exceed 100').nullish(),
 });
 
 const lineSchema = z.object({
@@ -91,7 +97,7 @@ async function loadLines(id: number) {
 
   for (const l of lines) {
     l.skus = await query(
-      `SELECT ss.*, k.sku_code, k.barcode, c.color_name, sz.size_code, sz.size_label, sz.sort_order
+      `SELECT ss.*, k.sku_code, k.barcode, k.color_id, k.size_id, c.color_name, sz.size_code, sz.size_label, sz.sort_order
          FROM trx_sales_order_sku ss
          JOIN mst_style_sku k ON k.id = ss.sku_id
          JOIN mst_color c     ON c.id = k.color_id
@@ -136,9 +142,20 @@ async function writeLines(tx: Tx, soId: number, lines: z.infer<typeof lineSchema
     if (qty <= 0) throw BadRequest('Each order line needs a quantity greater than zero');
     const amount = Number((qty * l.unit_price).toFixed(4));
     const excessPct = Number(l.excess_pct !== undefined && l.excess_pct !== null ? l.excess_pct : headerExcessPct);
-    const planCutQty = l.plan_cut_qty && l.plan_cut_qty > 0
-      ? l.plan_cut_qty
-      : Math.round(qty * (1 + (excessPct || 0) / 100));
+
+    // Per-size plan cut: size % → line % → header %. When any size carries its
+    // own %, the line plan cut is the sum of the size plan cuts; otherwise the
+    // line keeps its original behaviour (explicit plan_cut_qty or qty × line %).
+    const sizeRows = l.skus.filter((sk) => sk.qty > 0).map((sk) => {
+      const pct = sk.excess_pct !== undefined && sk.excess_pct !== null ? Number(sk.excess_pct) : (excessPct || 0);
+      return { ...sk, planCut: Math.round(sk.qty * (1 + pct / 100)) };
+    });
+    const hasSizeExcess = sizeRows.some((sk) => sk.excess_pct !== undefined && sk.excess_pct !== null);
+    const planCutQty = hasSizeExcess
+      ? sizeRows.reduce((a, sk) => a + sk.planCut, 0)
+      : l.plan_cut_qty && l.plan_cut_qty > 0
+        ? l.plan_cut_qty
+        : Math.round(qty * (1 + (excessPct || 0) / 100));
 
     const r = await txExecute(tx,
       `INSERT INTO trx_sales_order_line
@@ -147,11 +164,10 @@ async function writeLines(tx: Tx, soId: number, lines: z.infer<typeof lineSchema
       [soId, l.style_id, l.color_id ?? null, l.assort_color ?? null, l.part_name ?? null, l.description ?? null, qty, excessPct, planCutQty, l.unit_price, amount,
        l.ship_date ?? null]);
 
-    for (const sk of l.skus) {
-      if (sk.qty <= 0) continue;   // skip empty cells in the size grid
+    for (const sk of sizeRows) {   // empty cells in the size grid are skipped
       await txExecute(tx,
-        `INSERT INTO trx_sales_order_sku (so_line_id, sku_id, qty) VALUES (?,?,?)`,
-        [r.insertId, sk.sku_id, sk.qty]);
+        `INSERT INTO trx_sales_order_sku (so_line_id, sku_id, qty, excess_pct, plan_cut_qty) VALUES (?,?,?,?,?)`,
+        [r.insertId, sk.sku_id, sk.qty, sk.excess_pct ?? null, sk.planCut]);
     }
   }
 }
@@ -545,7 +561,8 @@ salesOrderRouter.get('/:id/size-summary', requirePermission('SALES_ORDER.VIEW'),
   const id = Number(req.params.id);
   const rows = await query(
     `SELECT sz.id AS size_id, sz.size_code, sz.size_label, sz.sort_order,
-            c.id AS color_id, c.color_name, SUM(ss.qty) AS qty
+            c.id AS color_id, c.color_name, SUM(ss.qty) AS qty,
+            SUM(COALESCE(ss.plan_cut_qty, ss.qty)) AS plan_cut_qty
        FROM trx_sales_order_sku ss
        JOIN trx_sales_order_line l ON l.id = ss.so_line_id
        JOIN mst_style_sku k ON k.id = ss.sku_id

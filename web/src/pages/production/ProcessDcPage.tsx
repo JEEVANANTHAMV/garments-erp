@@ -27,10 +27,22 @@ type Avail = {
   buyer_name: string | null; buyer_po_no: string | null; assort_color?: string | null;
   /** Open in-house line allocation of the bundle for this process (stitching / ironing / packing DC). */
   line_alloc?: { allocation_no: string; line_code: string; open_qty: number } | null;
+  /** DC "from line": PCS of the bundle still open on that line's allocation. */
+  from_line_open_qty?: number | null;
 };
+
+/** Line process whose output a DC of this stage moves on (checking / washing ← sewing, ironing ← checking, packing ← ironing). */
+function sourceProcOf(stage?: Stage | null): 'sewing' | 'checking' | 'ironing' | null {
+  if (!stage) return null;
+  const code = String(stage.stage_code).toUpperCase();
+  if (['CHECK', 'CHECKING', 'WASH', 'WASHING'].includes(code)) return 'sewing';
+  if (stage.kind === 'FINISHING') return 'checking';
+  if (['PACK', 'PACKING'].includes(code)) return 'ironing';
+  return null;
+}
 type Line = Avail & { issue_qty: number; weight_kg: string; remarks: string; operation_id: string; operator_line: string };
 type Job = { key: string; io_no: string | null; buyer_name: string | null; buyer_po_no: string | null; style_codes: string[]; order_type?: string | null };
-type Op = { id: number; op_code: string; op_name: string; default_rate: number; contractor_rate: number | null; rate: number };
+type Op = { id: number; op_code: string; op_name: string; default_rate: number; contractor_rate: number | null; rate: number; in_job_card?: boolean };
 
 /** Every active operation (any process) — for the per-bundle "process completed". */
 function useAllOperations() {
@@ -302,9 +314,12 @@ function DcEditor({ id, stages, onClose, onSaved }: {
   const [head, setHead] = useState<any>({
     challan_no: '', challan_date: today(), stage_id: '', vendor_id: '', from_warehouse_id: '', to_warehouse_id: '',
     ref_no: '', expected_return: '', rate: '', vehicle_no: '', driver_name: '', transporter: '', remarks: '',
-    release_line_allocation: false,
+    release_line_allocation: false, from_line_id: '',
   });
   const [lines, setLines] = useState<Line[]>([]);
+  const sewLines = useLookup('sewing-lines');
+  const chkLines = useLookup('checking-lines');
+  const irnLines = useLookup('ironing-lines');
   const [jobMeta, setJobMeta] = useState<Record<string, Job>>({});
   const [checked, setChecked] = useState<Set<number>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -327,7 +342,7 @@ function DcEditor({ id, stages, onClose, onSaved }: {
         from_warehouse_id: d.from_warehouse_id ?? '', to_warehouse_id: d.to_warehouse_id ?? '', ref_no: d.ref_no ?? '',
         expected_return: d.expected_return ? String(d.expected_return).slice(0, 10) : '', rate: d.rate ?? '',
         vehicle_no: d.vehicle_no ?? '', driver_name: d.driver_name ?? '', transporter: d.transporter ?? '', remarks: d.remarks ?? '',
-        release_line_allocation: !!d.release_line_alloc,
+        release_line_allocation: !!d.release_line_alloc, from_line_id: d.from_line_id ?? '',
       });
       setOpSel(Object.fromEntries((d.operations || []).map((o: any) => [o.operation_id, String(Number(o.rate))])));
       setRateTouched(d.rate != null && !(d.operations || []).length);
@@ -346,11 +361,18 @@ function DcEditor({ id, stages, onClose, onSaved }: {
   }, [id]);
 
   // Operations of the process with this contractor's rates.
+  // One job on the DC → its job rate card decides the operations and rates (client voice note 29-Sep-2026).
+  const singleIo = lines.length && lines.every((l) => l.io_no && l.io_no === lines[0].io_no) ? lines[0].io_no : null;
   useEffect(() => {
     if (!head.stage_id) { setOps([]); return; }
-    api.get('/process-master/operations', { params: { stage_id: head.stage_id, vendor_id: head.vendor_id || undefined } })
-      .then((r) => setOps(r.data.data || [])).catch(() => setOps([]));
-  }, [head.stage_id, head.vendor_id]);
+    api.get('/process-master/operations', { params: { stage_id: head.stage_id, vendor_id: head.vendor_id || undefined, io_no: singleIo || undefined } })
+      .then((r) => {
+        const rows: Op[] = r.data.data || [];
+        setOps(rows);
+        const card = rows.filter((o) => o.in_job_card);
+        if (card.length && !id) setOpSel((cur) => (Object.keys(cur).length ? cur : Object.fromEntries(card.map((o) => [o.id, String(o.rate)]))));
+      }).catch(() => setOps([]));
+  }, [head.stage_id, head.vendor_id, singleIo]);
   const opsTotal = Object.values(opSel).reduce((a, v) => a + num(v), 0);
   useEffect(() => {
     if (!rateTouched && Object.keys(opSel).length) setHead((h: any) => ({ ...h, rate: String(Math.round(opsTotal * 10000) / 10000) }));
@@ -362,6 +384,16 @@ function DcEditor({ id, stages, onClose, onSaved }: {
   });
 
   const inLines = new Set(lines.map((l) => l.id));
+  const srcProc = sourceProcOf(stage);
+  const srcLineOpts = toOptions((srcProc === 'sewing' ? sewLines : srcProc === 'checking' ? chkLines : irnLines).data);
+  const loadFromLine = async () => {
+    if (!head.from_line_id || !stage) { toast('Choose the line the bundles come from', 'error'); return; }
+    try {
+      const r = await api.get('/bundle-stock/available', { params: { stage_id: stage.id, from_line_id: head.from_line_id, limit: 2000 } });
+      const n = addBundles(r.data.data || []);
+      toast(n ? `${n} bundle(s) loaded from the line` : 'Nothing left on that line for this process', n ? 'success' : 'warning');
+    } catch (e) { toast(errMsg(e), 'error'); }
+  };
 
   const addBundles = (bs: Avail[]) => {
     const ok = bs.filter((b) => !b.open_dc_no && !inLines.has(b.id) && b.available_qty > 0);
@@ -426,6 +458,7 @@ function DcEditor({ id, stages, onClose, onSaved }: {
         operation_id: l.operation_id ? Number(l.operation_id) : null, operator_line: l.operator_line || null,
       })),
       issue,
+      from_line_id: srcProc && head.from_line_id ? Number(head.from_line_id) : null,
     };
     try {
       const r = id ? await api.put(`/process-dcs/${id}`, body) : await api.post('/process-dcs', body);
@@ -483,6 +516,17 @@ function DcEditor({ id, stages, onClose, onSaved }: {
             </span>
           </label>
         )}
+        {srcProc && (
+          <div className="flex flex-wrap items-end gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">
+            <Select label={`From ${srcProc} line`} className="w-56" value={head.from_line_id} placeholder="— not from a line —"
+              options={srcLineOpts} onChange={(e) => setHead({ ...head, from_line_id: e.target.value })} />
+            <Button size="sm" variant="secondary" onClick={loadFromLine} disabled={!head.from_line_id}>Load line bundles</Button>
+            <span className="max-w-xl pb-1">
+              Bundles are picked from this line's allocation, and issuing the DC <b>is the line's output</b>
+              (allocation completed, daily plan achieved{srcProc !== 'ironing' ? `; PCS not yet entered in ${srcProc === 'sewing' ? 'Daily Output' : 'Checking Entry'} are posted as good` : ''}) — no second entry.
+            </span>
+          </div>
+        )}
         <ScanCard value={scan} onChange={setScan} onSubmit={onScan} disabled={!head.stage_id} inputRef={scanRef}
           placeholder={head.stage_id ? 'Scan bundle barcode + Enter' : 'Choose the To process first'}
           last={last ? { ...last, qty: last.available_qty } : null} />
@@ -506,7 +550,7 @@ function DcEditor({ id, stages, onClose, onSaved }: {
               return (
                 <label key={o.id} className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs ${on ? 'border-brand-300 bg-brand-50' : 'border-slate-200 bg-white'}`}>
                   <input type="checkbox" checked={on} onChange={() => toggleOp(o)} />
-                  <span className="flex-1 font-medium text-slate-700">{o.op_name}</span>
+                  <span className="flex-1 font-medium text-slate-700">{o.op_name}{o.in_job_card && <span className="ml-1 rounded bg-violet-100 px-1 text-[10px] font-semibold text-violet-700" title="On this job's rate card">job</span>}</span>
                   {on ? (
                     <input type="number" min={0} step="0.01" value={opSel[o.id]} title="₹ / PCS"
                       onChange={(e) => setOpSel((cur) => ({ ...cur, [o.id]: e.target.value }))}
@@ -677,7 +721,7 @@ function DcEditor({ id, stages, onClose, onSaved }: {
           onAdd={(bs) => { const n = addBundles(bs); if (n) toast(`${n} bundles added`); setPicker(null); }} />
       )}
       {picker === 'bundles' && stage && (
-        <BundlePicker stage={stage} excluded={inLines} onClose={() => setPicker(null)}
+        <BundlePicker stage={stage} excluded={inLines} fromLineId={srcProc ? head.from_line_id : ''} onClose={() => setPicker(null)}
           onAdd={(bs) => { const n = addBundles(bs); if (n) toast(`${n} bundles added`); setPicker(null); }} />
       )}
       {picker === 'import' && stage && (
@@ -825,7 +869,7 @@ function ImportBundlesModal({ stage, excludeChallanId, onClose, onAdd }: {
 }
 
 /** "Load pending bundles" — filterable bundle list grouped job → colour → size. */
-function BundlePicker({ stage, excluded, onClose, onAdd }: { stage: Stage; excluded: Set<number>; onClose: () => void; onAdd: (bs: Avail[]) => void }) {
+function BundlePicker({ stage, excluded, fromLineId, onClose, onAdd }: { stage: Stage; excluded: Set<number>; fromLineId?: string | number; onClose: () => void; onAdd: (bs: Avail[]) => void }) {
   const toast = useToast();
   const styles = useLookup('styles');
   const colors = useLookup('colors');
@@ -841,11 +885,12 @@ function BundlePicker({ stage, excluded, onClose, onAdd }: { stage: Stage; exclu
       params: {
         stage_id: stage.id, io_no: dFilters.io_no || undefined, style_id: dFilters.style_id || undefined,
         color_id: dFilters.color_id || undefined, q: dFilters.q || undefined,
+        from_line_id: fromLineId || undefined,
       },
     }).then((r) => setAvail(r.data.data || []))
       .catch((e) => toast(errMsg(e), 'error'))
       .finally(() => setLoading(false));
-  }, [stage.id, dFilters.io_no, dFilters.style_id, dFilters.color_id, dFilters.q]);
+  }, [stage.id, dFilters.io_no, dFilters.style_id, dFilters.color_id, dFilters.q, fromLineId]);
 
   const shown = avail.filter((b) => !excluded.has(b.id) && (!filters.size || b.size_code === filters.size));
   const sizesShown = [...new Set(avail.map((b) => b.size_code))];

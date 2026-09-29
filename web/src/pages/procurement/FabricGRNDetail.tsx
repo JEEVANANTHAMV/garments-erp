@@ -136,7 +136,7 @@ export default function FabricGRNDetailPage() {
     grn_date: today(),
     po_id: '',
     gate_inward_id: '',
-    internal_ir_no: 'IR-2026-0001',
+    internal_ir_no: '',
     supplier_id: '',
     warehouse_id: '1',
     style_id: '',
@@ -755,6 +755,14 @@ export default function FabricGRNDetailPage() {
             className="font-mono font-bold text-emerald-800 bg-emerald-50/40"
           />
 
+          <Input
+            label="GRN Date"
+            type="date"
+            value={header.grn_date}
+            onChange={(e) => setHeader((p) => ({ ...p, grn_date: e.target.value }))}
+            disabled={!isNew}
+          />
+
           {isNew ? (
             <div>
               <div className="flex items-center justify-between mb-1">
@@ -847,14 +855,6 @@ export default function FabricGRNDetailPage() {
             />
           )}
 
-          <Input
-            label="GRN Date"
-            type="date"
-            value={header.grn_date}
-            onChange={(e) => setHeader((p) => ({ ...p, grn_date: e.target.value }))}
-            disabled={!isNew}
-          />
-
           <Select
             label="Supplier / Mill *"
             value={header.supplier_id}
@@ -873,15 +873,14 @@ export default function FabricGRNDetailPage() {
           />
 
           <Input
-            label="Internal / IR No"
+            label="IO No (Internal Order)"
             value={header.internal_ir_no}
             onChange={(e) => setHeader((p) => ({ ...p, internal_ir_no: e.target.value }))}
-            placeholder="e.g. IR-2026-0001"
             disabled={!isNew}
           />
 
           <Select
-            label="Default Style No"
+            label="Style No (Default)"
             value={header.style_id}
             onChange={(e) => setHeader((p) => ({ ...p, style_id: e.target.value }))}
             options={toOptions(styles.data)}
@@ -973,7 +972,7 @@ export default function FabricGRNDetailPage() {
               <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                 <th className="py-2.5 px-2 w-8 text-center">#</th>
                 <th className="py-2.5 px-2 min-w-[100px]">PO Ref</th>
-                <th className="py-2.5 px-2 min-w-[130px]">I/O Num</th>
+                <th className="py-2.5 px-2 min-w-[130px]">IO No</th>
                 <th className="py-2.5 px-2 min-w-[110px]">Style</th>
                 <th className="py-2.5 px-3 min-w-[140px]">Fabric Name</th>
                 <th className="py-2.5 px-2">Type</th>

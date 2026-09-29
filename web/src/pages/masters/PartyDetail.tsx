@@ -115,7 +115,7 @@ export function PartyDetailPage() {
     is_agent: 0,
     is_contractor: 0,
     party_type: 'EXPORT',
-    country_id: 101, // India default or null
+    country_id: null, // defaulted to India once the countries lookup loads (new partners only)
     currency_id: 1,
     gstin: '',
     pan: '',
@@ -191,6 +191,21 @@ export function PartyDetailPage() {
     contacts: [] as ContactItem[],
     banks: [] as BankItem[],
   });
+
+  // India's id comes from the countries master (iso2 = IN) — never a hard-coded id.
+  const indiaCountryId: number | null =
+    (countries || []).find((c: any) => c.iso2 === 'IN')?.id ?? null;
+  const countryLabel = (cid: any) => {
+    const c = (countries || []).find((x: any) => Number(x.id) === Number(cid));
+    return c ? c.label : '';
+  };
+
+  useEffect(() => {
+    if (isNew && indiaCountryId && !form.country_id) {
+      setForm((prev: any) => (prev.country_id ? prev : { ...prev, country_id: indiaCountryId }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNew, indiaCountryId]);
 
   useEffect(() => {
     if (itemQuery.data?.data) {
@@ -268,10 +283,8 @@ export function PartyDetailPage() {
         nature_of_business,
       } = gstData;
 
-      const indiaId =
-        (countries || []).find(
-          (c: any) => c.iso2 === 'IN' || /india/i.test(c.country_name || c.name || '')
-        )?.id || form.country_id || 101;
+      // A GSTIN is only issued in India, so GST-fetched addresses are Indian.
+      const indiaId = indiaCountryId ?? (form.country_id ? Number(form.country_id) : null);
 
       setForm((prev: any) => {
         const newAddresses = [...(prev.addresses || [])];
@@ -286,7 +299,7 @@ export function PartyDetailPage() {
             city: principal_address.city || '',
             district: principal_address.district || '',
             state: principal_address.state || '',
-            country_id: indiaId,
+            country_id: indiaId ?? undefined,
             pincode: principal_address.pincode || '',
             is_default: 1,
             is_active: 1,
@@ -313,7 +326,7 @@ export function PartyDetailPage() {
               city: ad.city || '',
               district: ad.district || '',
               state: ad.state || '',
-              country_id: indiaId,
+              country_id: indiaId ?? undefined,
               pincode: ad.pincode || '',
               is_default: 0,
               is_active: 1,
@@ -418,6 +431,25 @@ export function PartyDetailPage() {
         setTab('jobwork');
         return;
       }
+
+      // Address checks. State and pincode are mandatory only for Indian
+      // addresses (GST place-of-supply / e-way bill); foreign buyers often
+      // have neither in the Indian sense.
+      for (let i = 0; i < (form.addresses || []).length; i++) {
+        const a: AddressItem = form.addresses[i];
+        const nm = a.address_name || `Address ${i + 1}`;
+        const fail = (msg: string) => {
+          toast(`${nm}: ${msg}`, 'error');
+          setTab('address');
+          setSelectedAddressIdx(i);
+        };
+        if (!a.address_line1?.trim()) { fail('Address Line 1 is required'); return; }
+        if (!a.country_id) { fail('Country is required'); return; }
+        if (!a.city?.trim()) { fail('City is required'); return; }
+        const isIndian = indiaCountryId != null && Number(a.country_id) === indiaCountryId;
+        if (isIndian && !a.state?.trim()) { fail('State is required for an Indian address'); return; }
+        if (isIndian && !/^\d{6}$/.test((a.pincode || '').trim())) { fail('Pincode must be 6 digits for an Indian address'); return; }
+      }
     }
 
     try {
@@ -437,6 +469,10 @@ export function PartyDetailPage() {
         default_aql: isMerchandiserOnly ? null : (form.default_aql || null),
         country_id: form.country_id ? Number(form.country_id) : null,
         currency_id: form.currency_id ? Number(form.currency_id) : null,
+        addresses: (form.addresses || []).map((a: AddressItem) => ({
+          ...a,
+          country_id: a.country_id ? Number(a.country_id) : null,
+        })),
         // Role-specific numerics — only meaningful for the roles that own them.
         lead_time_days: Number(form.lead_time_days) || 0,
         min_order_qty: Number(form.min_order_qty) || 0,
@@ -465,6 +501,7 @@ export function PartyDetailPage() {
           is_buyer: 1,
           is_customer: 1,
           party_type: 'EXPORT',
+          country_id: indiaCountryId,
           is_draft: 0,
           is_active: 1,
           addresses: [],
@@ -488,8 +525,9 @@ export function PartyDetailPage() {
       address_type: 'SHIPPING',
       address_line1: '',
       city: '',
-      state: 'Tamil Nadu',
-      country_id: form.country_id,
+      state: '',
+      // New addresses start in the partner's country; editable per address.
+      country_id: form.country_id ? Number(form.country_id) : undefined,
       pincode: '',
       is_default: form.addresses.length === 0 ? 1 : 0,
       is_active: 1,
@@ -953,7 +991,7 @@ export function PartyDetailPage() {
                 >
                   <option value="">Select Country</option>
                   {(countries || []).map((c: any) => (
-                    <option key={c.id} value={c.id}>{c.name} ({c.iso2})</option>
+                    <option key={c.id} value={c.id}>{c.label} ({c.iso2})</option>
                   ))}
                 </select>
               </div>
@@ -1099,7 +1137,14 @@ export function PartyDetailPage() {
                   >
                     <div className="flex items-center gap-2 truncate">
                       <MapPin size={14} className={selectedAddressIdx === i ? 'text-brand-600' : 'text-slate-400'} />
-                      <span className="truncate">{addr.address_name || `${addr.address_type} Address`}</span>
+                      <div className="min-w-0">
+                        <div className="truncate">{addr.address_name || `${addr.address_type} Address`}</div>
+                        {(addr.city || addr.country_id) ? (
+                          <div className="truncate text-[10px] font-normal text-slate-500">
+                            {[addr.city, countryLabel(addr.country_id)].filter(Boolean).join(', ')}
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                     {addr.is_default ? (
                       <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">Primary</span>
@@ -1198,14 +1243,30 @@ export function PartyDetailPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                {(() => {
+                  const addrIndian = indiaCountryId != null && Number(currentAddress.country_id) === indiaCountryId;
+                  return (
+                <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
+                  <div>
+                    <label className="label">Country *</label>
+                    <select
+                      className="input"
+                      value={currentAddress.country_id || ''}
+                      onChange={(e) => updateAddress('country_id', e.target.value ? Number(e.target.value) : undefined)}
+                    >
+                      <option value="">Select Country</option>
+                      {(countries || []).map((c: any) => (
+                        <option key={c.id} value={c.id}>{c.label} ({c.iso2})</option>
+                      ))}
+                    </select>
+                  </div>
                   <div>
                     <label className="label">City *</label>
                     <input
                       className="input"
                       value={currentAddress.city || ''}
                       onChange={(e) => updateAddress('city', e.target.value)}
-                      placeholder="City (e.g. Tiruppur)"
+                      placeholder={addrIndian ? 'City (e.g. Tiruppur)' : 'City'}
                     />
                   </div>
                   <div>
@@ -1218,24 +1279,26 @@ export function PartyDetailPage() {
                     />
                   </div>
                   <div>
-                    <label className="label">State *</label>
+                    <label className="label">{addrIndian ? 'State *' : 'State / Province'}</label>
                     <input
                       className="input"
                       value={currentAddress.state || ''}
                       onChange={(e) => updateAddress('state', e.target.value)}
-                      placeholder="State (e.g. Tamil Nadu)"
+                      placeholder={addrIndian ? 'State (e.g. Tamil Nadu)' : 'State / Province / Region'}
                     />
                   </div>
                   <div>
-                    <label className="label">Pincode / Postal Code *</label>
+                    <label className="label">{addrIndian ? 'Pincode *' : 'Postal / ZIP Code'}</label>
                     <input
                       className="input"
                       value={currentAddress.pincode || ''}
                       onChange={(e) => updateAddress('pincode', e.target.value)}
-                      placeholder="Pincode (e.g. 641602)"
+                      placeholder={addrIndian ? 'Pincode (e.g. 641602)' : 'Postal code'}
                     />
                   </div>
                 </div>
+                  );
+                })()}
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
