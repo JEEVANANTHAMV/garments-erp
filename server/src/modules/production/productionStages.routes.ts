@@ -117,13 +117,14 @@ productionStagesRouter.get('/cutting-plans/:id/issuable-rolls', requirePermissio
     `SELECT fr.id, fr.roll_no, fr.lot_no, fr.shade, fr.gsm, fr.dia, fr.meters, fr.weight_kg, fr.issued_kg,
             ROUND(COALESCE(fr.weight_kg,0) - fr.issued_kg, 3) AS available_kg,
             fr.stock_status, fr.qc_status, fr.fabric_id, fb.fabric_name, fr.warehouse_id, wh.warehouse_name,
-            fr.location_bin, g.grn_no, g.grn_date, 'KG' AS uom
+            fr.location_bin, g.grn_no, g.grn_date, 'KG' AS uom,
+            fr.process_state, fr.color_name
        FROM trx_fabric_roll fr
        LEFT JOIN trx_grn g ON g.id = fr.grn_id
        LEFT JOIN mst_fabric fb ON fb.id = fr.fabric_id
        LEFT JOIN mst_warehouse wh ON wh.id = fr.warehouse_id
       WHERE ${where}
-      ORDER BY fr.lot_no, fr.roll_no LIMIT 1000`, params);
+      ORDER BY (fr.process_state = 'GREY'), fr.lot_no, fr.roll_no LIMIT 1000`, params);
   res.json({ data: rows, meta: { fabric_id: plan.fabric_id, plan_no: plan.plan_no } });
 }));
 

@@ -100,7 +100,15 @@ export function BomDocument({ d }: { d: any }) {
                 <tr key={l.id}>
                   <td className={num}>{i + 1}</td>
                   <td className={cell}>{materialName(l) || '—'}</td>
-                  <td className={cell + ' whitespace-pre-wrap'}>{l.specification || ''}</td>
+                  <td className={cell + ' whitespace-pre-wrap'}>
+                    {[
+                      l.specification,
+                      // Fabric: Dia / GSM · Yarn: count · Grey / Dyed (+ colour)
+                      l.material_type === 'FABRIC' && (l.dia || l.gsm) ? [l.dia ? `${String(l.dia).replace(/"$/, '')}" Dia` : '', l.gsm ? `${l.gsm} GSM` : ''].filter(Boolean).join(' · ') : '',
+                      l.material_type === 'YARN' && l.yarn_count_value ? `Count ${l.yarn_count_value}${l.yarn_count_type && l.yarn_count_type !== 'Ne' ? ` ${l.yarn_count_type}` : ''}` : '',
+                      l.dye_type ? (l.dye_type === 'DYED' ? `Dyed${l.material_color_name ? ` — ${l.material_color_name}` : ''}` : 'Grey') : '',
+                    ].filter(Boolean).join('\n')}
+                  </td>
                   <td className={cell}>{l.color_name || 'All'}</td>
                   <td className={cell}>{l.size_code || 'All'}</td>
                   <td className={cell}>{BASIS_LABEL[l.consumption_basis] ?? humanize(l.consumption_basis || 'PER_PIECE')}</td>

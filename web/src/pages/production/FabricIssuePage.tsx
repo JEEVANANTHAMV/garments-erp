@@ -112,7 +112,7 @@ function NewDcModal({ plans, onClose, onSaved }: { plans: any[]; onClose: () => 
     .filter(r => !lines.some(l => l.fabric_roll_id === r.id))
     .map(r => ({
       value: r.id,
-      label: `${r.roll_no} · Lot ${r.lot_no || '—'} · ${r.shade || ''}`,
+      label: `${r.roll_no} · Lot ${r.lot_no || '—'} · ${r.process_state && r.process_state !== 'GREY' ? `${r.process_state}${r.color_name ? ` ${r.color_name}` : ''}` : 'GREY'}${r.shade ? ` · ${r.shade}` : ''}`,
       sub: `${r.fabric_name || ''} · GSM ${r.gsm ?? '—'} · Dia ${r.dia ?? '—'} · GRN ${r.grn_no || '—'} · ${r.warehouse_name || ''} ${r.location_bin || ''}`,
       right: `${fmtNumber(r.available_kg, 3)} KG avail.`,
     })), [stock, lines]);
@@ -262,7 +262,11 @@ function DcDetailModal({ dc, onClose, onChanged }: { dc: any; onClose: () => voi
               {dc.rolls.map((r: any) => (
                 <tr key={r.id} className="border-b">
                   <td className="p-2 font-mono font-semibold">{r.roll_no}{r.is_legacy ? <span className="ml-1 text-[10px] text-amber-600">(free-text)</span> : null}</td>
-                  <td className="p-2">{r.lot_no} / {r.shade}</td>
+                  <td className="p-2">{r.lot_no} / {r.shade}
+                    <span className={`ml-1 rounded px-1 py-0.5 text-[10px] font-bold ${!r.process_state || r.process_state === 'GREY' ? 'bg-slate-100 text-slate-600' : 'bg-purple-100 text-purple-800'}`}>
+                      {r.process_state || 'GREY'}{r.color_name ? ` · ${r.color_name}` : ''}
+                    </span>
+                  </td>
                   <td className="p-2">{r.grn_no || '—'}</td>
                   <td className="p-2 text-right"><Qty v={r.issue_kg} uom="KG" dp={3} /></td>
                   <td className="p-2 text-right"><Qty v={r.consumed_kg} uom="KG" dp={3} /></td>
