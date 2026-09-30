@@ -794,9 +794,10 @@ cadRouter.post('/cad-requirements/:id/calculate', requirePermission('PRODUCTION.
   Object.values(fabricMap).forEach((fab: any) => {
     Object.entries(fab.colorways).forEach(([colorName, data]: [string, any]) => {
       const net = Math.round(data.net_qty * 10) / 10;
-      // Safety procurement buffer ~2%
-      const buffer = Math.round(net * 0.02 * 10) / 10;
-      const grand = Math.round(net + buffer);
+      // Safety procurement buffer: 2% of the net rounded up to whole units, at least 1 (same as the CAD screen)
+      const roundedNet = Math.ceil(net);
+      const buffer = Math.max(1, Math.round(roundedNet * 0.02));
+      const grand = roundedNet + buffer;
 
       grandTotalFabric += grand;
 
