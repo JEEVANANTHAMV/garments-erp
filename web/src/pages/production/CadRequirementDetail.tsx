@@ -845,16 +845,20 @@ export default function CadRequirementDetailPage() {
 
   // Grand KPI Metrics
   const summaryKpis = useMemo(() => {
-    // Order qty in garments: per colour the largest marker quantity, summed over colours.
-    // Body + rib / collar markers of the same garment must not add up (4900 + 4900 is not 9800);
-    // additional fabrics are accessories of the same order quantity (client call 29-Sep-2026).
-    const colourPcs: Record<string, number> = {};
-    markers.forEach((m) => (m.colorways || []).forEach((cw) => {
+    // Order qty in garments, from the main fabric only (the first marker's fabric): per colour × size
+    // the largest marker quantity, summed. Body + rib / collar markers of the same garment must not add
+    // up (4900 + 4900 is not 9800) — a rib often carries its own colour name, so other fabrics are
+    // accessories of the same order quantity (client call 29-Sep-2026). Body markers split by size add.
+    const mainFabric = (markers[0]?.fabric_type || '').trim().toUpperCase();
+    const cellPcs: Record<string, number> = {};
+    markers.filter((m) => (m.fabric_type || '').trim().toUpperCase() === mainFabric).forEach((m) => (m.colorways || []).forEach((cw) => {
       const c = (cw.color_name || 'Solid').trim().toUpperCase();
-      const pcs = Number(cw.total_order_pcs) || (cw.quantities || []).reduce((a, b) => a + (Number(b) || 0), 0);
-      colourPcs[c] = Math.max(colourPcs[c] || 0, pcs);
+      (cw.quantities || []).forEach((q, i) => {
+        const k = `${c}|${String(m.sizes?.[i] ?? i).trim().toUpperCase()}`;
+        cellPcs[k] = Math.max(cellPcs[k] || 0, Number(q) || 0);
+      });
     }));
-    const totalOrderPcs = Object.values(colourPcs).reduce((a, b) => a + b, 0) || header.order_qty;
+    const totalOrderPcs = Object.values(cellPcs).reduce((a, b) => a + b, 0) || header.order_qty;
 
     const grandFabric = fabricProgram.length > 0
       ? fabricProgram.reduce((sum, f) => sum + Number(f.grand_total_qty || 0), 0)

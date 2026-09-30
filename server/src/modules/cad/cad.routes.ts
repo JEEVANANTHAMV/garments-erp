@@ -781,8 +781,15 @@ cadRouter.post('/cad-requirements/:id/calculate', requirePermission('PRODUCTION.
   const fabricProgramLines: any[] = [];
   const cuttingLayLines: any[] = [];
   let grandTotalFabric = 0;
-  // Garment order qty: per colour the largest fabric row (body + rib of the same garment are not added).
-  const colourPcs: Record<string, number> = {};
+  // Garment order qty from the main fabric (first marker's fabric): per colour × size the largest
+  // marker qty. Rib / collar markers are not added — they often carry their own colour name.
+  const mainFabric = String(calculatedMarkers[0]?.fabric_type || '').trim().toUpperCase();
+  const cellPcs: Record<string, number> = {};
+  calculatedMarkers.filter((m: any) => String(m.fabric_type || '').trim().toUpperCase() === mainFabric).forEach((m: any) =>
+    (m.colorways || []).forEach((cw: any) => (cw.quantities || []).forEach((q: any, i: number) => {
+      const k = `${String(cw.color_name || 'Solid').trim().toUpperCase()}|${String(m.sizes?.[i] ?? i).trim().toUpperCase()}`;
+      cellPcs[k] = Math.max(cellPcs[k] ?? 0, Number(q) || 0);
+    })));
 
   Object.values(fabricMap).forEach((fab: any) => {
     Object.entries(fab.colorways).forEach(([colorName, data]: [string, any]) => {
@@ -792,8 +799,6 @@ cadRouter.post('/cad-requirements/:id/calculate', requirePermission('PRODUCTION.
       const grand = Math.round(net + buffer);
 
       grandTotalFabric += grand;
-      const ck = String(colorName).trim().toUpperCase();
-      colourPcs[ck] = Math.max(colourPcs[ck] ?? 0, Number(data.order_pcs) || 0);
 
       fabricProgramLines.push({
         fabric_type: fab.fabric_type,
@@ -825,7 +830,7 @@ cadRouter.post('/cad-requirements/:id/calculate', requirePermission('PRODUCTION.
     });
   });
 
-  const totalOrderPcs = Object.values(colourPcs).reduce((a, b) => a + b, 0);
+  const totalOrderPcs = Object.values(cellPcs).reduce((a, b) => a + b, 0);
   const avgWtPerGarment = totalOrderPcs > 0 ? (grandTotalFabric / totalOrderPcs) : 0;
   // Actual piece weight = average less the document's fabric loss % (client call 29-Sep-2026).
   const actWtPerGarment = avgWtPerGarment * (1 - (fabricAllowancePct / 100.0));
