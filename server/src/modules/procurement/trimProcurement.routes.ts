@@ -603,8 +603,9 @@ trimProcurementRouter.post('/trim-grns', requireAny('GRN.CREATE', 'PROCUREMENT.C
       if (line.po_line_id) {
         await txExecute(
           tx,
+          // Accepted qty counts against the PO (rejected goods go back and are still owed), as on fabric / yarn GRNs
           `UPDATE trx_trim_po_line SET received_qty = received_qty + ? WHERE id = ?`,
-          [line.received_qty, line.po_line_id]
+          [line.accepted_qty, line.po_line_id]
         );
       }
 
