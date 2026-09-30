@@ -7,6 +7,7 @@ import {
   Globe, Sparkles
 } from 'lucide-react';
 import { http, ApiError } from '../../lib/api';
+import { useJobBoms, bomItemLabel, type JobBomItem } from '../../lib/jobBom';
 import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
 import { Input, Select, StatusBadge, Modal } from '../../components/ui';
@@ -18,6 +19,8 @@ interface FabricLine {
   so_id?: string | number;
   style_id?: string | number;
   fabric_id: string | number;
+  /** BOM line picked on this row (UI only — selects the BOM option). */
+  _bom?: number;
   fabric_name?: string;
   fabric_category: 'Grey Fabric' | 'Dyed Fabric';
   fabric_type: string;
@@ -222,6 +225,15 @@ export default function FabricPurchaseOrderDetailPage() {
       weight_kg: isKg ? qty : 0,
       rate: Number(bf.std_rate) || 0,
     }, isInterstate);
+  };
+
+  // Line-level pick: the row's job + style → that job's BOM fabrics with their requirement
+  const lineStyle = (l: FabricLine) => l.style_id || head.style_id || '';
+  const jobBoms = useJobBoms(lines.map((l) => ({ so_id: l.so_id, style_id: lineStyle(l) })));
+  const pickBomFabric = (idx: number, l: FabricLine, it: JobBomItem) => {
+    const next = bomToFabricLine(it, head.is_interstate);
+    updateLine(idx, { ...next, _key: l._key, id: l.id, _bom: it.bom_line_id,
+      rate: Number(l.rate) > 0 ? l.rate : next.rate, gst_rate: l.gst_rate });
   };
 
   /** Loads the job's BOM fabric lines into the PO (asks before replacing entered lines). */
@@ -991,6 +1003,7 @@ export default function FabricPurchaseOrderDetailPage() {
             <tbody className="divide-y divide-slate-100">
               {lines.map((l, idx) => {
                 const isDyed = l.fabric_category === 'Dyed Fabric';
+                const lineBom = jobBoms.itemsFor(l.so_id, lineStyle(l), ['FABRIC']).filter((it) => it.fabric_id);
                 return (
                 <tr key={l._key} className="hover:bg-slate-50/50">
                   {/* # S NO */}
@@ -999,7 +1012,7 @@ export default function FabricPurchaseOrderDetailPage() {
                   <td className="py-2 px-2">
                     <select
                       value={l.so_id || ''}
-                      onChange={(e) => updateLine(idx, { so_id: e.target.value })}
+                      onChange={(e) => updateLine(idx, { so_id: e.target.value, _bom: undefined })}
                       className="input py-1 text-xs w-full bg-white"
                     >
                       <option value="">Stock / General</option>
@@ -1012,22 +1025,35 @@ export default function FabricPurchaseOrderDetailPage() {
                   <td className="py-2 px-2">
                     <select
                       value={l.style_id || ''}
-                      onChange={(e) => updateLine(idx, { style_id: e.target.value })}
+                      onChange={(e) => updateLine(idx, { style_id: e.target.value, _bom: undefined })}
                       className="input py-1 text-xs w-full bg-white"
                     >
                       <option value="">—</option>
-                      {toOptions(styles.data).map((st) => (
-                        <option key={st.value} value={st.value}>{st.label}</option>
-                      ))}
+                      {(() => {
+                        const job = jobs.find((j) => String(j.id) === String(l.so_id));
+                        return job
+                          ? job.styles.map((st) => <option key={st.style_id} value={st.style_id}>{st.style_code} — {st.style_name}</option>)
+                          : toOptions(styles.data).map((st) => <option key={st.value} value={st.value}>{st.label}</option>);
+                      })()}
                     </select>
                   </td>
                   {/* Fabric */}
                   <td className="py-2 px-2">
                     <select
-                      value={l.fabric_id}
+                      value={l._bom && lineBom.some((it) => it.bom_line_id === l._bom) ? `bom:${l._bom}` : l.fabric_id}
                       onChange={(e) => {
+                        if (e.target.value.startsWith('bom:')) {
+                          const it = lineBom.find((x) => `bom:${x.bom_line_id}` === e.target.value);
+                          if (it) pickBomFabric(idx, l, it);
+                          return;
+                        }
+                        // A fabric that is on this job's BOM once fills from the BOM (qty, colour, dia, GSM)
+                        const inBom = lineBom.filter((x) => String(x.fabric_id) === e.target.value);
+                        if (inBom.length === 1) { pickBomFabric(idx, l, inBom[0]); return; }
+                        if (inBom.length > 1) toast(`${inBom.length} BOM lines use this fabric (colour wise) — pick the line from the BOM group to load its qty`, 'info');
                         const fab: any = (fabrics.data || []).find((x: any) => String(x.id) === e.target.value);
                         updateLine(idx, {
+                          _bom: undefined,
                           fabric_id: e.target.value,
                           fabric_name: fab?.label || fab?.fabric_name || '',
                           dia: fab?.dia_inch ? `${Number(fab.dia_inch)}"` : l.dia,
@@ -1037,13 +1063,20 @@ export default function FabricPurchaseOrderDetailPage() {
                       }}
                       className="input py-1 text-xs w-full bg-white"
                     >
-                      <option value="">— Select Fabric —</option>
-                      {((filterBomOnly && bomFabrics.length > 0)
-                        ? (fabrics.data || []).filter((f: any) => bomFabrics.some((bf: any) => Number(bf.fabric_id) === Number(f.id)))
-                        : (fabrics.data || [])
-                      ).map((o: any) => (
-                        <option key={o.id} value={o.id}>{o.fabric_name || o.fabric_code || o.label}</option>
-                      ))}
+                      <option value="">{jobBoms.statusFor(l.so_id, lineStyle(l)) === 'loading' ? 'Loading BOM…' : '— Select Fabric —'}</option>
+                      {lineBom.length > 0 && (
+                        <optgroup label="BOM of this job (qty = requirement)">
+                          {lineBom.map((it) => <option key={it.bom_line_id} value={`bom:${it.bom_line_id}`}>{bomItemLabel(it)}</option>)}
+                        </optgroup>
+                      )}
+                      <optgroup label="All fabrics">
+                        {((filterBomOnly && bomFabrics.length > 0)
+                          ? (fabrics.data || []).filter((f: any) => bomFabrics.some((bf: any) => Number(bf.fabric_id) === Number(f.id)))
+                          : (fabrics.data || [])
+                        ).map((o: any) => (
+                          <option key={o.id} value={o.id}>{o.fabric_name || o.fabric_code || o.label}</option>
+                        ))}
+                      </optgroup>
                     </select>
                   </td>
                   {/* Grey / Dyed Fabric Category */}

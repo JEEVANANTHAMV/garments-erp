@@ -7,6 +7,7 @@ import {
   Globe, Sparkles
 } from 'lucide-react';
 import { http, ApiError } from '../../lib/api';
+import { useJobBoms, bomItemLabel, type JobBomItem } from '../../lib/jobBom';
 import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
 import { Input, Select, StatusBadge, Modal } from '../../components/ui';
@@ -18,6 +19,8 @@ interface YarnLine {
   so_id?: string | number;
   style_id?: string | number;
   yarn_id: string | number;
+  /** BOM line picked on this row (UI only — selects the BOM option). */
+  _bom?: number;
   yarn_name?: string;
   yarn_type: 'Grey Yarn' | 'Dyed Yarn';
   purchase_basis: 'DIRECT_KG' | 'PACK_BAG';
@@ -210,6 +213,15 @@ export default function YarnPurchaseOrderDetailPage() {
     uom_id: Number(by.uom_id) || 5,
     rate: Number(by.std_rate) || 0,
   }, isInterstate);
+
+  // Line-level pick: the row's job + style → that job's BOM yarns with their requirement
+  const lineStyle = (l: YarnLine) => l.style_id || header.style_id || '';
+  const jobBoms = useJobBoms(lines.map((l) => ({ so_id: l.so_id, style_id: lineStyle(l) })));
+  const pickBomYarn = (idx: number, l: YarnLine, it: JobBomItem) => {
+    const next = bomToYarnLine(it, header.is_interstate);
+    updateLine(idx, { ...next, _key: l._key, id: l.id, _bom: it.bom_line_id,
+      rate: Number(l.rate) > 0 ? l.rate : next.rate, gst_rate: l.gst_rate });
+  };
 
   /** Loads the job's BOM yarn lines into the PO (asks before replacing entered lines). */
   const loadBomForJob = async (soId: string, styleId?: string) => {
@@ -972,6 +984,7 @@ export default function YarnPurchaseOrderDetailPage() {
               {lines.map((l, idx) => {
                 const isDyed = l.yarn_type === 'Dyed Yarn';
                 const isPack = l.purchase_basis === 'PACK_BAG';
+                const lineBom = jobBoms.itemsFor(l.so_id, lineStyle(l), ['YARN']).filter((it) => it.yarn_id);
 
                 return (
                   <tr key={l._key || idx} className="hover:bg-slate-50/70 transition">
@@ -982,7 +995,7 @@ export default function YarnPurchaseOrderDetailPage() {
                     <td className="py-2.5 px-2 min-w-[130px]">
                       <select
                         value={l.so_id || ''}
-                        onChange={(e) => updateLine(idx, { so_id: e.target.value })}
+                        onChange={(e) => updateLine(idx, { so_id: e.target.value, _bom: undefined })}
                         className="w-full text-xs rounded border border-slate-300 py-1 px-1 bg-white"
                       >
                         <option value="">Stock / General</option>
@@ -998,26 +1011,37 @@ export default function YarnPurchaseOrderDetailPage() {
                     <td className="py-2.5 px-2">
                       <select
                         value={l.style_id || ''}
-                        onChange={(e) => updateLine(idx, { style_id: e.target.value })}
+                        onChange={(e) => updateLine(idx, { style_id: e.target.value, _bom: undefined })}
                         className="w-full text-xs rounded border border-slate-300 py-1 px-1 bg-white"
                       >
                         <option value="">—</option>
-                        {toOptions(styles.data).map((st) => (
-                          <option key={st.value} value={st.value}>
-                            {st.label}
-                          </option>
-                        ))}
+                        {(() => {
+                          const job = jobs.find((j) => String(j.id) === String(l.so_id));
+                          return job
+                            ? job.styles.map((st) => <option key={st.style_id} value={st.style_id}>{st.style_code} — {st.style_name}</option>)
+                            : toOptions(styles.data).map((st) => <option key={st.value} value={st.value}>{st.label}</option>);
+                        })()}
                       </select>
                     </td>
 
                     {/* Yarn Master Selection */}
                     <td className="py-2.5 px-2 min-w-[140px]">
                       <select
-                        value={l.yarn_id}
+                        value={l._bom && lineBom.some((it) => it.bom_line_id === l._bom) ? `bom:${l._bom}` : l.yarn_id}
                         onChange={(e) => {
                           const val = e.target.value;
+                          if (val.startsWith('bom:')) {
+                            const it = lineBom.find((x) => `bom:${x.bom_line_id}` === val);
+                            if (it) pickBomYarn(idx, l, it);
+                            return;
+                          }
+                          // A yarn that is on this job's BOM once fills from the BOM (qty, count, colour)
+                          const inBom = lineBom.filter((x) => String(x.yarn_id) === val);
+                          if (inBom.length === 1) { pickBomYarn(idx, l, inBom[0]); return; }
+                          if (inBom.length > 1) toast(`${inBom.length} BOM lines use this yarn (colour wise) — pick the line from the BOM group to load its qty`, 'info');
                           const opt: any = (yarns.data || []).find((y: any) => String(y.id) === val);
                           updateLine(idx, {
+                            _bom: undefined,
                             yarn_id: val,
                             yarn_name: opt?.label || opt?.yarn_name || '',
                             yarn_count_str: String(opt?.count_value || opt?.yarn_count || l.yarn_count_str || ''),
@@ -1027,15 +1051,22 @@ export default function YarnPurchaseOrderDetailPage() {
                         }}
                         className="w-full text-xs rounded border border-slate-300 py-1 px-1.5 focus:border-amber-500 bg-white"
                       >
-                        <option value="">Select Yarn</option>
-                        {((filterBomOnly && bomYarns.length > 0)
-                          ? (yarns.data || []).filter((y: any) => bomYarns.some((by: any) => Number(by.yarn_id) === Number(y.id)))
-                          : (yarns.data || [])
-                        ).map((o: any) => (
-                          <option key={o.id} value={o.id}>
-                            {o.yarn_name || o.yarn_code || o.label}
-                          </option>
-                        ))}
+                        <option value="">{jobBoms.statusFor(l.so_id, lineStyle(l)) === 'loading' ? 'Loading BOM…' : 'Select Yarn'}</option>
+                        {lineBom.length > 0 && (
+                          <optgroup label="BOM of this job (qty = requirement)">
+                            {lineBom.map((it) => <option key={it.bom_line_id} value={`bom:${it.bom_line_id}`}>{bomItemLabel(it)}</option>)}
+                          </optgroup>
+                        )}
+                        <optgroup label="All yarns">
+                          {((filterBomOnly && bomYarns.length > 0)
+                            ? (yarns.data || []).filter((y: any) => bomYarns.some((by: any) => Number(by.yarn_id) === Number(y.id)))
+                            : (yarns.data || [])
+                          ).map((o: any) => (
+                            <option key={o.id} value={o.id}>
+                              {o.yarn_name || o.yarn_code || o.label}
+                            </option>
+                          ))}
+                        </optgroup>
                       </select>
                     </td>
 
