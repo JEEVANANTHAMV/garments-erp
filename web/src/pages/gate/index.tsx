@@ -2,6 +2,13 @@ import { CrudPage } from '../../components/CrudPage';
 import { Badge } from '../../components/ui';
 import { fmtDecimal, fmtDate, humanize } from '../../lib/format';
 
+/** Local system date (YYYY-MM-DD) and time (HH:MM) for gate entries. */
+const nowStamp = () => {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  return { date: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`, time: `${p(d.getHours())}:${p(d.getMinutes())}` };
+};
+
 const ENTRY_TYPES = [
   { value: 'PURCHASE_INWARD', label: 'Purchase Inward (Mill / Supplier)' },
   { value: 'JOBWORK_RETURN', label: 'Job-work Return (Printer / Dyeing / Wash)' },
@@ -144,8 +151,9 @@ export function GateInwardsPage() {
         { name: 'party_id', label: 'Supplier', lookup: 'parties' },
       ]}
       fields={[
-        { name: 'entry_date', label: 'Entry Date', type: 'date', required: true },
-        { name: 'entry_time', label: 'Entry Time', placeholder: 'HH:MM (e.g. 10:30)', required: true },
+        // Stamped from the system clock when the entry is opened (and by the server on save)
+        { name: 'entry_date', label: 'Entry Date', type: 'date', readOnly: true, defaultValue: () => nowStamp().date, hint: 'System date' },
+        { name: 'entry_time', label: 'Entry Time', type: 'time', readOnly: true, defaultValue: () => nowStamp().time, hint: 'System time' },
         { name: 'entry_type', label: 'Entry Type', required: true, options: ENTRY_TYPES, defaultValue: 'PURCHASE_INWARD' },
         { name: 'party_id', label: 'Supplier / Vendor', required: true, lookup: 'parties' },
         { name: 'vehicle_no', label: 'Vehicle Number', required: true, placeholder: 'e.g. TN 38 BJ 1234' },
@@ -269,8 +277,8 @@ export function GateOutwardsPage() {
         { name: 'party_id', label: 'Recipient Vendor', lookup: 'parties' },
       ]}
       fields={[
-        { name: 'pass_date', label: 'Pass Date', type: 'date', required: true },
-        { name: 'pass_time', label: 'Pass Time', placeholder: 'HH:MM (e.g. 14:45)', required: true },
+        { name: 'pass_date', label: 'Pass Date', type: 'date', readOnly: true, defaultValue: () => nowStamp().date, hint: 'System date' },
+        { name: 'pass_time', label: 'Pass Time', type: 'time', readOnly: true, defaultValue: () => nowStamp().time, hint: 'System time' },
         { name: 'pass_type', label: 'Pass Type', required: true, options: PASS_TYPES, defaultValue: 'RETURNABLE_JOBWORK' },
         { name: 'party_id', label: 'Recipient Vendor / Subcontractor', lookup: 'parties' },
         { name: 'to_unit_id', label: 'Or Internal Destination Unit', lookup: 'units' },

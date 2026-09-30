@@ -5,6 +5,7 @@ import {
   ArrowLeft, Save, Plus, Trash2, Scissors, Printer, Layers, Sparkles, RefreshCw, FileSpreadsheet
 } from 'lucide-react';
 import { http, ApiError } from '../../lib/api';
+import { useQuotedRates, matchQuote } from '../../lib/quotedRates';
 import { useJobBoms, bomItemLabel, type JobBomItem } from '../../lib/jobBom';
 import { fmtDecimal, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
@@ -226,6 +227,7 @@ export default function TrimPurchaseOrderDetailPage() {
     ...emptyTrimLine(),
     so_id: bt.so_id ? String(bt.so_id) : '',
     style_id: bt.style_id ? String(bt.style_id) : '',
+    _bom: bt.bom_line_id ? Number(bt.bom_line_id) : undefined,
     trim_id: String(bt.trim_id),
     trim_name: bt.trim_name || bt.material_name,
     specification: bt.trim_specification || bt.item_description || '',
@@ -236,16 +238,38 @@ export default function TrimPurchaseOrderDetailPage() {
     rate: Number(bt.std_rate) || 0,
   }, isInterstate);
 
+  // Supplier's quotation: the PO takes its CONFIRMED rate and GST % for the same material / BOM line
+  const quoted = useQuotedRates('TRIMS', head.supplier_id);
+  const quoteArgs = (it: any) => ({ bom_line_id: it.bom_line_id ?? it._bom, material_id: it.trim_id, color_id: it.color_id, size_id: it.size_id, so_id: it.so_id });
+  const withQuote = (l: TrimLine, it: any): TrimLine => {
+    const q = matchQuote(quoted.data, quoteArgs(it));
+    return q ? withTrimTotals({ ...l, rate: q.rate, gst_rate: q.gst_rate }, head.is_interstate) : l;
+  };
+  // Supplier chosen / changed on a new PO: re-price the lines this supplier has quoted
+  useEffect(() => {
+    if (!isNew || !quoted.data?.length) return;
+    let n = 0; let qno = '';
+    const next = lines.map((l) => {
+      const q = matchQuote(quoted.data, quoteArgs(l));
+      if (!q || (Number(l.rate) === q.rate && Number(l.gst_rate) === q.gst_rate)) return l;
+      n++; qno = q.quotation_no;
+      return withTrimTotals({ ...l, rate: q.rate, gst_rate: q.gst_rate }, head.is_interstate);
+    });
+    if (n) { setLines(next); toast(`${n} line(s) priced from quotation ${qno} (confirmed rate + GST)`, 'info'); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quoted.data]);
+
   // Line-level pick: the row's job (or the header job) + style → that job's BOM trims with their requirement
   const TRIM_TYPES = ['TRIM', 'ACCESSORY', 'PACKING'];
   const lineJob = (l: TrimLine) => l.so_id || selectedJob?.id || '';
   const lineStyle = (l: TrimLine) => l.style_id || head.style_id || '';
   const jobBoms = useJobBoms(lines.map((l) => ({ so_id: lineJob(l), style_id: lineStyle(l) })));
   const pickBomTrim = (idx: number, l: TrimLine, it: JobBomItem) => {
-    const next = bomToTrimLine(it, head.is_interstate);
+    const next = withQuote(bomToTrimLine(it, head.is_interstate), it);
+    const quotedLine = !!matchQuote(quoted.data, quoteArgs(it));
     updateLine(idx, { ...next, _key: l._key, id: l.id, _bom: it.bom_line_id, so_id: l.so_id || next.so_id,
       specification: it.specification || next.specification,
-      rate: Number(l.rate) > 0 ? l.rate : next.rate, gst_rate: l.gst_rate });
+      rate: quotedLine || !(Number(l.rate) > 0) ? next.rate : l.rate, gst_rate: quotedLine ? next.gst_rate : l.gst_rate });
   };
 
   /** Loads the job's BOM trims into the PO (asks before replacing entered lines). */
@@ -266,7 +290,7 @@ export default function TrimPurchaseOrderDetailPage() {
       }
       const hasEntered = lines.some((l) => l.trim_id || Number(l.order_qty) > 0);
       if (hasEntered && !window.confirm(`Replace the ${lines.length} existing line(s) with ${trimsInBom.length} trim item(s) from the job's BOM?`)) return;
-      setLines(trimsInBom.map((bt) => bomToTrimLine(bt, head.is_interstate)));
+      setLines(trimsInBom.map((bt) => withQuote(bomToTrimLine(bt, head.is_interstate), bt)));
       toast(`Loaded ${trimsInBom.length} trim item(s) from BOM ${data.bom?.bom_no || ''}`, 'success');
     } catch (err: any) {
       setBomData(null);
@@ -731,7 +755,7 @@ export default function TrimPurchaseOrderDetailPage() {
                 <th className="py-2.5 px-2 text-left w-20">Color</th>
                 <th className="py-2.5 px-2 text-left w-16">Size</th>
                 <th className="py-2.5 px-2 text-right w-20">Order Qty *</th>
-                <th className="py-2.5 px-2 text-left w-16">UOM</th>
+                <th className="py-2.5 px-2 text-left min-w-[84px] whitespace-nowrap">UOM</th>
                 <th className="py-2.5 px-2 text-right w-20">Rate ({currSymbol})</th>
                 <th className="py-2.5 px-2 text-right w-24">Taxable ({currSymbol})</th>
                 <th className="py-2.5 px-2 text-center w-16">{head.is_interstate ? 'IGST %' : 'GST %'}</th>
@@ -807,7 +831,10 @@ export default function TrimPurchaseOrderDetailPage() {
                             trim_id: e.target.value,
                             trim_name: sel?.label,
                             uom_id: Number(sel?.base_uom) || line.uom_id,
-                            rate: Number(line.rate) > 0 ? line.rate : (Number(sel?.std_rate) || 0),
+                            ...(() => {
+                              const q = matchQuote(quoted.data, { material_id: e.target.value, so_id: lineJob(line) });
+                              return q ? { rate: q.rate, gst_rate: q.gst_rate } : { rate: Number(line.rate) > 0 ? line.rate : (Number(sel?.std_rate) || 0) };
+                            })(),
                           });
                         }}
                         className="input text-xs py-1"
@@ -877,7 +904,7 @@ export default function TrimPurchaseOrderDetailPage() {
                       <select
                         value={line.uom_id}
                         onChange={(e) => updateLine(idx, { uom_id: Number(e.target.value) })}
-                        className="input text-xs py-1"
+                        className="input text-xs py-1 !px-1.5 w-full min-w-[76px] font-semibold"
                       >
                         {(uoms.data || []).map((u) => (
                           <option key={u.id} value={u.id}>{u.code || u.label}</option>

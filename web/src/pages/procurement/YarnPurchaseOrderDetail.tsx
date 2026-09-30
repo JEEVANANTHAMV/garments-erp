@@ -7,6 +7,7 @@ import {
   Globe, Sparkles
 } from 'lucide-react';
 import { http, ApiError } from '../../lib/api';
+import { useQuotedRates, matchQuote } from '../../lib/quotedRates';
 import { useJobBoms, bomItemLabel, type JobBomItem } from '../../lib/jobBom';
 import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
@@ -203,24 +204,48 @@ export default function YarnPurchaseOrderDetailPage() {
     style_id: by.style_id ? String(by.style_id) : '',
     yarn_id: by.yarn_id ? String(by.yarn_id) : '',
     yarn_name: by.yarn_name || by.material_name || '',
-    yarn_type: by.color_id ? 'Dyed Yarn' : 'Grey Yarn',
+    _bom: by.bom_line_id ? Number(by.bom_line_id) : undefined,
+    // Grey / Dyed and the dyed colour come from the BOM line (else a colour-wise line is dyed)
+    yarn_type: by.dye_type === 'DYED' ? 'Dyed Yarn' : by.dye_type === 'GREY' ? 'Grey Yarn' : (by.color_id ? 'Dyed Yarn' : 'Grey Yarn'),
     yarn_count_str: by.yarn_count || '',
     yarn_category: titleCase(by.yarn_master_type),
     composition: by.yarn_composition || '',
-    shade_code: by.color_name || '',
-    color_name: by.color_name || '',
+    shade_code: by.purchase_color_name ?? by.color_name ?? '',
+    color_name: by.purchase_color_name ?? by.color_name ?? '',
     qty: Number(by.final_requirement ?? by.order_required_qty) || 0,
     uom_id: Number(by.uom_id) || 5,
     rate: Number(by.std_rate) || 0,
   }, isInterstate);
 
+  // Supplier's quotation: the PO takes its CONFIRMED rate and GST % for the same material / BOM line
+  const quoted = useQuotedRates('YARN', header.supplier_id);
+  const quoteArgs = (it: any) => ({ bom_line_id: it.bom_line_id ?? it._bom, material_id: it.yarn_id, color_id: it.color_id, size_id: it.size_id, so_id: it.so_id });
+  const withQuote = (l: YarnLine, it: any): YarnLine => {
+    const q = matchQuote(quoted.data, quoteArgs(it));
+    return q ? withYarnTotals({ ...l, rate: q.rate, gst_rate: q.gst_rate }, header.is_interstate) : l;
+  };
+  // Supplier chosen / changed on a new PO: re-price the lines this supplier has quoted
+  useEffect(() => {
+    if (!isNew || !quoted.data?.length) return;
+    let n = 0; let qno = '';
+    const next = lines.map((l) => {
+      const q = matchQuote(quoted.data, quoteArgs(l));
+      if (!q || (Number(l.rate) === q.rate && Number(l.gst_rate) === q.gst_rate)) return l;
+      n++; qno = q.quotation_no;
+      return withYarnTotals({ ...l, rate: q.rate, gst_rate: q.gst_rate }, header.is_interstate);
+    });
+    if (n) { setLines(next); toast(`${n} line(s) priced from quotation ${qno} (confirmed rate + GST)`, 'info'); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quoted.data]);
+
   // Line-level pick: the row's job + style → that job's BOM yarns with their requirement
   const lineStyle = (l: YarnLine) => l.style_id || header.style_id || '';
   const jobBoms = useJobBoms(lines.map((l) => ({ so_id: l.so_id, style_id: lineStyle(l) })));
   const pickBomYarn = (idx: number, l: YarnLine, it: JobBomItem) => {
-    const next = bomToYarnLine(it, header.is_interstate);
+    const next = withQuote(bomToYarnLine(it, header.is_interstate), it);
+    const quotedLine = !!matchQuote(quoted.data, quoteArgs(it));
     updateLine(idx, { ...next, _key: l._key, id: l.id, _bom: it.bom_line_id,
-      rate: Number(l.rate) > 0 ? l.rate : next.rate, gst_rate: l.gst_rate });
+      rate: quotedLine || !(Number(l.rate) > 0) ? next.rate : l.rate, gst_rate: quotedLine ? next.gst_rate : l.gst_rate });
   };
 
   /** Loads the job's BOM yarn lines into the PO (asks before replacing entered lines). */
@@ -241,7 +266,7 @@ export default function YarnPurchaseOrderDetailPage() {
       }
       const hasEntered = lines.some((l) => l.yarn_id || Number(l.qty) > 0);
       if (hasEntered && !window.confirm(`Replace the ${lines.length} existing line(s) with ${yarnsInBom.length} yarn item(s) from the job's BOM?`)) return;
-      setLines(yarnsInBom.map((by) => bomToYarnLine(by, header.is_interstate)));
+      setLines(yarnsInBom.map((by) => withQuote(bomToYarnLine(by, header.is_interstate), by)));
       toast(`Loaded ${yarnsInBom.length} yarn item(s) from BOM ${data.bom?.bom_no || ''}`, 'success');
     } catch (err: any) {
       setBomData(null);
@@ -1046,7 +1071,10 @@ export default function YarnPurchaseOrderDetailPage() {
                             yarn_name: opt?.label || opt?.yarn_name || '',
                             yarn_count_str: String(opt?.count_value || opt?.yarn_count || l.yarn_count_str || ''),
                             composition: String(opt?.composition || l.composition || ''),
-                            rate: Number(l.rate) > 0 ? l.rate : (Number(opt?.std_rate) || 0),
+                            ...(() => {
+                              const q = matchQuote(quoted.data, { material_id: val, so_id: l.so_id });
+                              return q ? { rate: q.rate, gst_rate: q.gst_rate } : { rate: Number(l.rate) > 0 ? l.rate : (Number(opt?.std_rate) || 0) };
+                            })(),
                           });
                         }}
                         className="w-full text-xs rounded border border-slate-300 py-1 px-1.5 focus:border-amber-500 bg-white"

@@ -45,8 +45,13 @@ interface GrnLineItem {
   shade_code: string;
   pantone_spec: string;
   lot_no: string;
+  /** Pending on the PO line when loaded (PO UOM). */
   po_qty: number;
-  received_qty: number; // in meters
+  /** Ordered on the PO line and received on earlier GRNs (PO UOM) — shown on the 2nd+ receipt. */
+  ordered_qty?: number;
+  prev_received?: number;
+  /** In the line's (= PO's) UOM: KG lines count roll weight, metre lines roll metres. */
+  received_qty: number;
   received_weight: number; // in kg
   no_of_rolls: number;
   accepted_qty: number;
@@ -102,6 +107,30 @@ export default function FabricGRNDetailPage() {
   const styles = useLookup('styles');
   const salesOrders = useLookup('sales-orders');
   const gateInwards = useLookup('gate-inwards');
+  const uoms = useLookup('uoms');
+  const uomCode = (id: unknown) => String((uoms.data ?? []).find((u: any) => u.id === Number(id))?.code ?? '').toUpperCase();
+  const isKgLine = (l: { uom_id: unknown }) => ['KG', 'KGS'].includes(uomCode(l.uom_id));
+  /**
+   * Line quantities from its rolls in the PO's UOM — a KG PO is received and billed by roll
+   * WEIGHT, a metre PO by roll METRES — and taxable = accepted × rate (same rule as the server).
+   */
+  const recalcLine = (cur: GrnLineItem): GrnLineItem => {
+    const l = { ...cur };
+    const kg = isKgLine(l);
+    const q = (r: PhysicalRoll) => Number(kg ? r.weight_kg : r.meters) || 0;
+    const sum = (st?: string) => l.rolls.filter((r) => !st || r.qc_status === st).reduce((a, r) => a + q(r), 0);
+    l.received_qty = Math.round(sum() * 1000) / 1000;
+    l.received_weight = Math.round(l.rolls.reduce((a, r) => a + (Number(r.weight_kg) || 0), 0) * 1000) / 1000;
+    l.no_of_rolls = l.rolls.length;
+    l.accepted_qty = Math.round(sum('ACCEPTED') * 1000) / 1000;
+    l.rejected_qty = Math.round(sum('REJECTED') * 1000) / 1000;
+    l.hold_qty = Math.round(sum('CONDITIONAL') * 1000) / 1000;
+    l.balance_qty = Math.max(0, (Number(l.po_qty) || 0) - l.accepted_qty);
+    const taxable = Math.round(l.accepted_qty * (Number(l.rate) || 0) * 100) / 100;
+    l.taxable_amount = taxable;
+    l.total_amount = Math.round((taxable + taxable * ((Number(l.gst_rate) || 0) / 100)) * 100) / 100;
+    return l;
+  };
 
   // Load PO options for linking
   const { data: poList = [] } = useQuery({
@@ -303,9 +332,11 @@ export default function FabricGRNDetailPage() {
               // Receive what is still open on the PO line; rate and GST come from the PO.
               // Rolls are entered (or auto-generated) from the delivery, never invented here.
               const qty = Math.max(Number(pl.qty || 0) - Number(pl.received_qty || 0), 0);
-              const weight = Number(pl.weight_kg) || 0;
+              // Pending qty is in the PO's UOM: a KG PO splits it as roll weight, a metre PO as metres
+              const kgPo = ['KG', 'KGS'].includes(uomCode(pl.uom_id));
+              const weight = kgPo ? qty : (Number(pl.weight_kg) || 0);
               const rollsCount = Number(pl.no_of_rolls) || 0;
-              const mPerRoll = qty / (rollsCount || 1);
+              const mPerRoll = kgPo ? 0 : qty / (rollsCount || 1);
               const wPerRoll = weight / (rollsCount || 1);
               const rate = Number(pl.rate) || 0;
               const gstRate = Number(pl.gst_rate ?? 0) || 0;
@@ -344,6 +375,8 @@ export default function FabricGRNDetailPage() {
                 pantone_spec: pl.pantone_spec || '',
                 lot_no: '',
                 po_qty: qty,
+                ordered_qty: Number(pl.qty) || 0,
+                prev_received: Number(pl.received_qty) || 0,
                 received_qty: qty,
                 received_weight: weight,
                 no_of_rolls: rollsCount,
@@ -405,27 +438,8 @@ export default function FabricGRNDetailPage() {
       curRolls[rollIdx] = { ...curRolls[rollIdx], [field]: val };
       curLine.rolls = curRolls;
 
-      // Recalculate line meters & weight from rolls
-      const totalMeters = curRolls.reduce((s, r) => s + (Number(r.meters) || 0), 0);
-      const totalWeight = curRolls.reduce((s, r) => s + (Number(r.weight_kg) || 0), 0);
-      curLine.received_qty = totalMeters;
-      curLine.received_weight = totalWeight;
-      curLine.no_of_rolls = curRolls.length;
-      curLine.accepted_qty = curRolls
-        .filter((r) => r.qc_status === 'ACCEPTED')
-        .reduce((s, r) => s + (Number(r.meters) || 0), 0);
-      curLine.rejected_qty = curRolls
-        .filter((r) => r.qc_status === 'REJECTED')
-        .reduce((s, r) => s + (Number(r.meters) || 0), 0);
-      curLine.hold_qty = curRolls
-        .filter((r) => r.qc_status === 'CONDITIONAL')
-        .reduce((s, r) => s + (Number(r.meters) || 0), 0);
-      curLine.balance_qty = Math.max(0, curLine.po_qty - curLine.accepted_qty);
-
-      const taxable = Math.round(curLine.accepted_qty * (Number(curLine.rate) || 0) * 100) / 100;
-      const taxAmt = Math.round((taxable * ((Number(curLine.gst_rate) || 5.0) / 100)) * 100) / 100;
-      curLine.taxable_amount = taxable;
-      curLine.total_amount = taxable + taxAmt;
+      // Line qty / weight / amount from the rolls, in the PO's UOM
+      Object.assign(curLine, recalcLine(curLine));
 
       copy[selectedLineIdx] = curLine;
       return copy;
@@ -453,8 +467,7 @@ export default function FabricGRNDetailPage() {
       const copy = [...prev];
       const curLine = { ...copy[selectedLineIdx] };
       curLine.rolls = curLine.rolls.filter((_, i) => i !== rollIdx);
-      curLine.no_of_rolls = curLine.rolls.length;
-      copy[selectedLineIdx] = curLine;
+      copy[selectedLineIdx] = recalcLine(curLine);
       return copy;
     });
   };
@@ -467,17 +480,16 @@ export default function FabricGRNDetailPage() {
       const newRoll: PhysicalRoll = {
         roll_no: `R-${nextNum < 10 ? '0' + nextNum : nextNum}`,
         lot_no: curLine.lot_no || '',
-        meters: 100,
-        weight_kg: 25,
-        gsm: 180,
-        dia: '30"',
+        meters: 0,
+        weight_kg: 0,
+        gsm: Number(curLine.rolls[curLine.rolls.length - 1]?.gsm) || 0,
+        dia: curLine.rolls[curLine.rolls.length - 1]?.dia || '',
         shade: curLine.shade_code || '',
-        location_bin: 'A-01',
+        location_bin: '',
         qc_status: 'ACCEPTED',
       };
       curLine.rolls = [...curLine.rolls, newRoll];
-      curLine.no_of_rolls = curLine.rolls.length;
-      copy[selectedLineIdx] = curLine;
+      copy[selectedLineIdx] = recalcLine(curLine);
       return copy;
     });
   };
@@ -491,8 +503,8 @@ export default function FabricGRNDetailPage() {
         lot_no: activeLine.lot_no || '',
         meters: Number(genMetersPerRoll),
         weight_kg: Number(genWeightPerRoll),
-        gsm: 180,
-        dia: '30"',
+        gsm: Number(activeLine.rolls[0]?.gsm) || 0,
+        dia: activeLine.rolls[0]?.dia || '',
         shade: activeLine.shade_code || '',
         location_bin: `BIN-${i}`,
         qc_status: 'ACCEPTED',
@@ -503,16 +515,7 @@ export default function FabricGRNDetailPage() {
       const copy = [...prev];
       const curLine = { ...copy[selectedLineIdx] };
       curLine.rolls = newRolls;
-      curLine.no_of_rolls = newRolls.length;
-      curLine.received_qty = genRollCount * genMetersPerRoll;
-      curLine.received_weight = genRollCount * genWeightPerRoll;
-      curLine.accepted_qty = curLine.received_qty;
-      curLine.balance_qty = Math.max(0, curLine.po_qty - curLine.accepted_qty);
-      const taxable = Math.round(curLine.accepted_qty * (Number(curLine.rate) || 0) * 100) / 100;
-      const taxAmt = Math.round((taxable * ((Number(curLine.gst_rate) || 5.0) / 100)) * 100) / 100;
-      curLine.taxable_amount = taxable;
-      curLine.total_amount = taxable + taxAmt;
-      copy[selectedLineIdx] = curLine;
+      copy[selectedLineIdx] = recalcLine(curLine);
       return copy;
     });
 
@@ -973,8 +976,8 @@ export default function FabricGRNDetailPage() {
                 <th className="py-2.5 px-3 min-w-[140px]">Fabric Name</th>
                 <th className="py-2.5 px-2">Type</th>
                 <th className="py-2.5 px-2">Shade / Lot</th>
-                <th className="py-2.5 px-2 text-right">PO Qty</th>
-                <th className="py-2.5 px-2 text-right">Rec Qty (Mtrs)</th>
+                <th className="py-2.5 px-2 text-right whitespace-nowrap" title="Ordered / received on earlier GRNs / pending">PO Qty · Recd · Pending</th>
+                <th className="py-2.5 px-2 text-right">Rec Qty</th>
                 <th className="py-2.5 px-2 text-right">Gross Wt (KG)</th>
                 <th className="py-2.5 px-2 text-center">Rolls</th>
                 <th className="py-2.5 px-2 text-right">Accepted</th>
@@ -1093,9 +1096,18 @@ export default function FabricGRNDetailPage() {
                       <span className="ml-1 text-[10px] text-purple-600 font-mono">[{l.pantone_spec}]</span>
                     )}
                   </td>
-                  <td className="py-2.5 px-2 text-right">{fmtDecimal(l.po_qty)}</td>
-                  <td className="py-2.5 px-2 text-right font-semibold text-emerald-700">
-                    {fmtDecimal(l.received_qty)} m
+                  <td className="py-2.5 px-2 text-right whitespace-nowrap">
+                    {l.ordered_qty != null ? (
+                      <div className="leading-tight">
+                        <div>{fmtDecimal(l.ordered_qty)} <span className="text-[10px] text-slate-400">ordered</span></div>
+                        {Number(l.prev_received) > 0 && <div className="text-slate-500">{fmtDecimal(l.prev_received)} <span className="text-[10px]">recd earlier</span></div>}
+                        <div className="font-semibold text-amber-700">{fmtDecimal(l.po_qty)} <span className="text-[10px] font-normal">pending</span></div>
+                      </div>
+                    ) : fmtDecimal(l.po_qty)}
+                  </td>
+                  <td className={`py-2.5 px-2 text-right font-semibold ${l.ordered_qty != null && Number(l.received_qty) > Number(l.po_qty) + 0.001 ? 'text-red-600' : 'text-emerald-700'}`}
+                    title={l.ordered_qty != null && Number(l.received_qty) > Number(l.po_qty) + 0.001 ? 'More than pending on the PO' : undefined}>
+                    {fmtDecimal(l.received_qty)} {uomCode(l.uom_id).toLowerCase() || 'm'}
                   </td>
                   <td className="py-2.5 px-2 text-right font-medium text-slate-800">
                     {fmtDecimal(l.received_weight)} kg

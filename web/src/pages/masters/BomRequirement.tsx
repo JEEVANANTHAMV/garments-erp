@@ -72,6 +72,7 @@ export function BomOrderStrip({ info }: { info: OrderInfo }) {
 
 interface ReqLine {
   material_type: string; yarn_id: unknown; fabric_id: unknown; trim_id: unknown; item_description: string; specification: string;
+  yarn_base_id?: unknown; yarn_count_id?: unknown;
   color_id: unknown; size_id: unknown; consumption_basis: string; consumption: unknown; additional_qty: unknown; uom_id: unknown; wastage_pct: unknown;
 }
 
@@ -88,7 +89,7 @@ export function BomRequirementTable({ lines, info, materialName, uomCode }: {
     const groups = new Map<string, ReqLine[]>();
     for (const l of lines) {
       if (!(Number(l.consumption) > 0) && !(Number(l.additional_qty) > 0)) continue;
-      const mat = l.yarn_id || l.fabric_id || l.trim_id || l.item_description;
+      const mat = (l.yarn_base_id && l.yarn_count_id ? `yb${l.yarn_base_id}c${l.yarn_count_id}` : l.yarn_id) || l.fabric_id || l.trim_id || l.item_description;
       if (!mat) continue;
       const k = [l.material_type, mat, l.color_id || '', (l.specification || '').trim(), l.consumption_basis, l.uom_id].join('|');
       groups.set(k, [...(groups.get(k) ?? []), l]);

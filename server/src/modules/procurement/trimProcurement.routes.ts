@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { query, queryOne, transaction, txQueryOne, txExecute } from '../../config/db.js';
+import { query, queryOne, transaction, txQuery, txQueryOne, txExecute } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
 import { NotFound, BadRequest } from '../../core/errors.js';
-import { requirePermission } from '../../middleware/auth.js';
+import { requirePermission, requireAny } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { computeInvoice, chargesFromRow, invoiceSummaryColumns } from '../../core/invoiceCalc.js';
@@ -38,7 +38,7 @@ const trimPoLineSchema = z.object({
 const trimPoSchema = z.object({
   po_no: s.nullableStr(50),
   po_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  io_no: s.strReq(60),
+  io_no: s.nullableStr(60),
   style_id: s.id(),
   supplier_id: s.idReq(),
   currency_id: s.id().default(1),
@@ -69,7 +69,8 @@ const trimGrnLineSchema = z.object({
   trim_size: s.nullableStr(50),
   uom_id: s.idReq(),
   po_qty: z.coerce.number().min(0).default(0),
-  received_qty: z.coerce.number().positive(),
+  // 0 = not received on this delivery (the line is skipped); a partial delivery keeps its PO lines
+  received_qty: z.coerce.number().min(0),
   accepted_qty: z.coerce.number().min(0),
   rejected_qty: z.coerce.number().min(0).default(0),
   hold_qty: z.coerce.number().min(0).default(0),
@@ -392,7 +393,7 @@ trimProcurementRouter.post('/trim-pos/convert-from-quotation', requirePermission
 // ============================================================
 
 /** GET /trim-grns — List Trim GRNs */
-trimProcurementRouter.get('/trim-grns', requirePermission('PROCUREMENT.VIEW'), ah(async (req, res) => {
+trimProcurementRouter.get('/trim-grns', requireAny('GRN.VIEW', 'PROCUREMENT.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const { io_no, style_id, supplier_id, po_id } = req.query;
 
@@ -444,7 +445,7 @@ trimProcurementRouter.get('/trim-grns', requirePermission('PROCUREMENT.VIEW'), a
 }));
 
 /** GET /trim-grns/:id — Detail with lines */
-trimProcurementRouter.get('/trim-grns/:id', requirePermission('PROCUREMENT.VIEW'), ah(async (req, res) => {
+trimProcurementRouter.get('/trim-grns/:id', requireAny('GRN.VIEW', 'PROCUREMENT.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const grn = await queryOne(
     `SELECT tg.*,
@@ -483,10 +484,19 @@ trimProcurementRouter.get('/trim-grns/:id', requirePermission('PROCUREMENT.VIEW'
 }));
 
 /** POST /trim-grns — Create Trim GRN (Only accepted_qty increases unrestricted stock) */
-trimProcurementRouter.post('/trim-grns', requirePermission('PROCUREMENT.CREATE'), ah(async (req, res) => {
+trimProcurementRouter.post('/trim-grns', requireAny('GRN.CREATE', 'PROCUREMENT.CREATE'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const uid = req.user!.id;
   const body = trimGrnSchema.parse(req.body);
+  // Lines not received on this delivery are skipped (partial receipt of a PO)
+  body.lines = body.lines.filter((l) => l.received_qty > 0);
+  if (!body.lines.length) throw BadRequest('Enter the received qty of at least one line');
+  // A PO whose lines carry different jobs has no header IO No — take the lines' job, else STOCK
+  if (!body.io_no) {
+    const soIds = [...new Set(body.lines.map((l) => l.so_id).filter(Boolean))];
+    const jobs = soIds.length ? await query<any>('SELECT COALESCE(io_no, so_no) AS job FROM trx_sales_order WHERE id IN (?) AND company_id = ?', [soIds, cid]) : [];
+    body.io_no = jobs.length === 1 ? String(jobs[0].job) : jobs.length > 1 ? 'MULTI' : 'STOCK';
+  }
 
   // Validate line quantities: accepted + rejected + hold <= received
   for (const line of body.lines) {
@@ -507,7 +517,8 @@ trimProcurementRouter.post('/trim-grns', requirePermission('PROCUREMENT.CREATE')
 
     const calculatedLines = body.lines.map((line: any) => {
       const rate = Number(line.rate) || 0;
-      const taxable = Number(line.taxable_amount !== undefined ? line.taxable_amount : (line.accepted_qty * rate));
+      // Priced on the server: accepted qty × rate (the client's amount is not trusted)
+      const taxable = Math.round(Number(line.accepted_qty) * rate * 100) / 100;
       const gstRate = Number(line.gst_rate !== undefined ? line.gst_rate : 5);
       const tax = Number(((taxable * gstRate) / 100).toFixed(4));
       const total = taxable + tax;
@@ -618,7 +629,8 @@ trimProcurementRouter.post('/trim-grns', requirePermission('PROCUREMENT.CREATE')
     // Check if POs are fully received
     const checkPoIds = poIds.length > 0 ? poIds : (body.po_id ? [body.po_id] : []);
     for (const pId of checkPoIds) {
-      const pols = await query('SELECT order_qty, received_qty FROM trx_trim_po_line WHERE po_id = ?', [pId]);
+      // Inside the transaction, so this GRN's received qty is already counted
+      const pols = await txQuery<any>(tx, 'SELECT order_qty, received_qty FROM trx_trim_po_line WHERE po_id = ?', [pId]);
       const allReceived = pols.length > 0 && pols.every((p: any) => Number(p.received_qty) >= Number(p.order_qty));
       const anyReceived = pols.some((p: any) => Number(p.received_qty) > 0);
       const newStatus = allReceived ? 'CLOSED' : (anyReceived ? 'PARTIAL' : 'APPROVED');

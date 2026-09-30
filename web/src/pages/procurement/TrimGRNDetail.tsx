@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Save, Plus, Trash2, PackageCheck, Layers, Disc, Globe
 } from 'lucide-react';
-import { http } from '../../lib/api';
+import { http, ApiError } from '../../lib/api';
 import { fmtDecimal, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
 import { Badge } from '../../components/ui';
@@ -26,6 +26,8 @@ interface GrnLine {
   trim_size: string;
   uom_id: number;
   po_qty: number;
+  /** Received on earlier GRNs of this PO line (shown on the 2nd+ receipt). */
+  prev_received?: number;
   received_qty: number;
   accepted_qty: number;
   rejected_qty: number;
@@ -312,6 +314,7 @@ export default function TrimGRNDetailPage() {
               trim_size: l.trim_size || '',
               uom_id: l.uom_id,
               po_qty: Number(l.order_qty),
+              prev_received: Number(l.received_qty) || 0,
               received_qty: pending,
               accepted_qty: pending,
               rejected_qty: 0,
@@ -421,7 +424,8 @@ export default function TrimGRNDetailPage() {
   }, [lines, head.is_interstate, head.exchange_rate, charges]);
 
   const handleSave = async () => {
-    if (!head.io_no) {
+    // Against a PO the IO No may stay blank (a PO can carry several jobs — the server takes the lines' job)
+    if (!head.io_no && !lines.some((l) => l.po_id)) {
       toast('Please enter the IO No (Internal Order)', 'error');
       return;
     }
@@ -435,9 +439,14 @@ export default function TrimGRNDetailPage() {
     }
 
     // Validation: accepted + rejected + hold <= received
-    for (const l of lines) {
-      if (!l.trim_id || l.received_qty <= 0) {
-        toast('Each line must have a Trim item and Received Qty > 0', 'error');
+    // Lines with 0 received are not on this delivery (partial receipt) — they are skipped
+    if (!lines.some((l) => l.trim_id && Number(l.received_qty) > 0)) {
+      toast('Enter the received qty of at least one line', 'error');
+      return;
+    }
+    for (const l of lines.filter((x) => Number(x.received_qty) > 0)) {
+      if (!l.trim_id) {
+        toast('Each received line must have a Trim item', 'error');
         return;
       }
       if (Number(l.accepted_qty) + Number(l.rejected_qty) + Number(l.hold_qty) > Number(l.received_qty) + 0.0001) {
@@ -463,7 +472,7 @@ export default function TrimGRNDetailPage() {
         tax_amount: totals.taxAmount,
         net_amount: totals.grandTotal,
         ...chargesPayload(charges, totals.inv),
-        lines: lines.map((l) => ({
+        lines: lines.filter((l) => Number(l.received_qty) > 0).map((l) => ({
           po_id: l.po_id || (selectedPoIds[0] ? Number(selectedPoIds[0]) : undefined),
           po_line_id: l.po_line_id || null,
           so_id: l.so_id ? Number(l.so_id) : undefined,
@@ -497,7 +506,10 @@ export default function TrimGRNDetailPage() {
       qc.invalidateQueries({ queryKey: ['trim-stock'] });
       nav('/procurement/trim/grn');
     } catch (err: any) {
-      toast(err?.response?.data?.error?.message || 'Failed to post Trim GRN', 'error');
+      // Show the server's reason (and the failing fields) instead of a generic message
+      const det = err instanceof ApiError && Array.isArray(err.details)
+        ? (err.details as any[]).map((d) => `${d.field}: ${d.message}`).join('; ') : '';
+      toast(err instanceof ApiError ? `${err.message}${det ? ` — ${det}` : ''}` : (err?.message || 'Failed to post Trim GRN'), 'error');
     } finally {
       setSaving(false);
     }
@@ -1068,6 +1080,11 @@ export default function TrimGRNDetailPage() {
                   {/* PO Qty */}
                   <td className="py-2 px-2 text-right">
                     <span className="font-mono text-slate-500">{fmtDecimal(line.po_qty)}</span>
+                    {Number(line.prev_received) > 0 && (
+                      <div className="text-[10px] text-slate-500">
+                        {fmtDecimal(line.prev_received)} recd earlier · <b className="text-amber-700">{fmtDecimal(Math.max(0, line.po_qty - Number(line.prev_received)))} pending</b>
+                      </div>
+                    )}
                   </td>
 
                   {/* Received Qty */}

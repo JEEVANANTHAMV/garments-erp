@@ -25,6 +25,15 @@ interface BomLine {
   item_description: string;
   /** Free-text spec next to the material (poly bag size, care label text …) — printed on the BOM. */
   specification: string;
+  /** Fabric: Dia (Dia master value) and GSM (GSM master value). */
+  dia?: string;
+  gsm?: number | '';
+  /** Yarn: base + count; the base + count yarn variant is resolved by the server on save. */
+  yarn_base_id?: number | '';
+  yarn_count_id?: number | '';
+  /** Fabric / yarn bought grey or dyed — the colour applies only when dyed. */
+  dye_type?: '' | 'GREY' | 'DYED';
+  material_color_id?: number | '';
   color_id: number | '';
   size_id: number | '';
   consumption_basis: string;
@@ -44,6 +53,12 @@ const emptyLine = (type: BomLine['material_type'] = 'TRIM'): BomLine => ({
   trim_id: '',
   item_description: '',
   specification: '',
+  dia: '',
+  gsm: '',
+  yarn_base_id: '',
+  yarn_count_id: '',
+  dye_type: '',
+  material_color_id: '',
   color_id: '',
   size_id: '',
   consumption_basis: 'PER_PIECE',
@@ -620,6 +635,21 @@ export function BomDetailPage() {
   const fabrics = useLookup('fabrics');
   const trims = useLookup('trims');
   const uoms = useLookup('uoms');
+  const gsms = useLookup('gsm');
+  const dias = useLookup('dias');
+  const yarnCounts = useLookup('yarn-counts');
+  const yarnBases = useLookup('yarn-bases');
+  const allColors = useLookup('colors');
+  // A yarn line is picked as yarn base + count (Yarn master / Yarn Count master); saved lines
+  // carry yarn_id — their base / count come from the yarn variant.
+  const yarnOf = (l: BomLine) => (yarns.data ?? []).find((y: any) => y.id === Number(l.yarn_id)) as any;
+  const yarnBaseOf = (l: BomLine) => l.yarn_base_id || yarnOf(l)?.yarn_base_id || '';
+  const yarnCountOf = (l: BomLine) => {
+    if (l.yarn_count_id) return l.yarn_count_id;
+    const y = yarnOf(l); if (!y) return '';
+    if (y.count_id) return y.count_id;
+    return (yarnCounts.data ?? []).find((c: any) => String(c.count_value) === String(y.count_value) && String(c.count_type || 'Ne') === String(y.count_type || 'Ne'))?.id ?? '';
+  };
   const statuses = useStatuses('BOM');
 
   const detail = useQuery({
@@ -662,7 +692,13 @@ export function BomDetailPage() {
   // Job strip + one-line-per-material requirement grid (needs the order's colour × size cells)
   const orderInfo = useOrderInfo(soId, styleId);
   const materialName = (l: any) => {
-    const src = l.material_type === 'YARN' ? yarns.data : l.material_type === 'FABRIC' ? fabrics.data : trims.data;
+    if (l.material_type === 'YARN') {
+      const y = yarnOf(l);
+      const base = (yarnBases.data ?? []).find((b: any) => b.id === Number(yarnBaseOf(l)))?.label;
+      const cnt = (yarnCounts.data ?? []).find((c: any) => c.id === Number(yarnCountOf(l)))?.label;
+      return (l.yarn_base_id || !y) && base ? [base, cnt].filter(Boolean).join(' ') : y?.label || base || '—';
+    }
+    const src = l.material_type === 'FABRIC' ? fabrics.data : trims.data;
     const mid = l.material_type === 'YARN' ? l.yarn_id : l.material_type === 'FABRIC' ? l.fabric_id : l.trim_id;
     return (src ?? []).find((x: any) => x.id === Number(mid))?.label || l.item_description || '—';
   };
@@ -703,6 +739,12 @@ export function BomDetailPage() {
       trim_id: l.trim_id ?? '',
       item_description: l.item_description ?? '',
       specification: l.specification ?? '',
+      dia: l.dia ?? '',
+      gsm: l.gsm ?? '',
+      yarn_base_id: l.yarn_base_id ?? '',
+      yarn_count_id: l.yarn_count_id ?? '',
+      dye_type: l.dye_type ?? '',
+      material_color_id: l.material_color_id ?? '',
       color_id: l.color_id ?? '',
       size_id: l.size_id ?? '',
       consumption_basis: l.consumption_basis || 'PER_PIECE',
@@ -861,9 +903,15 @@ export function BomDetailPage() {
         approval_state: head.approval_state || (asDraft ? 'DRAFT' : 'SUBMITTED'),
         remarks: head.remarks || null,
         is_active: asDraft ? 0 : (head.is_active ?? 1),
-        lines: lines.filter((l) => l.consumption && (l.yarn_id || l.fabric_id || l.trim_id || l.item_description)).map((l) => ({
+        lines: lines.filter((l) => l.consumption && (l.yarn_id || yarnBaseOf(l) || l.fabric_id || l.trim_id || l.item_description)).map((l) => ({
           material_type: l.material_type,
-          yarn_id: l.material_type === 'YARN' ? Number(l.yarn_id) : null,
+          yarn_id: l.material_type === 'YARN' && l.yarn_id ? Number(l.yarn_id) : null,
+          ...(l.material_type === 'YARN' && yarnBaseOf(l) && yarnCountOf(l)
+            ? { yarn_base_id: Number(yarnBaseOf(l)), yarn_count_id: Number(yarnCountOf(l)) } : {}),
+          dia: l.material_type === 'FABRIC' ? (l.dia || null) : null,
+          gsm: l.material_type === 'FABRIC' && l.gsm ? Number(l.gsm) : null,
+          dye_type: ['FABRIC', 'YARN'].includes(l.material_type) && l.dye_type ? l.dye_type : null,
+          material_color_id: l.dye_type === 'DYED' && l.material_color_id ? Number(l.material_color_id) : null,
           fabric_id: l.material_type === 'FABRIC' ? Number(l.fabric_id) : null,
           trim_id: ['TRIM','ACCESSORY','PACKING','GENERAL'].includes(l.material_type) && l.trim_id ? Number(l.trim_id) : null,
           item_description: l.item_description || null,
@@ -1100,6 +1148,10 @@ export function BomDetailPage() {
               <th className="th w-[95px]">Type</th>
               <th className="th min-w-[200px]">Material / Description</th>
               <th className="th min-w-[170px]">Specification</th>
+              <th className="th w-[95px]">Dia / Count</th>
+              <th className="th w-[90px]">GSM</th>
+              <th className="th w-[90px]">Grey / Dyed</th>
+              <th className="th w-[120px]">Dyed colour</th>
               <th className="th w-[110px]">Applicability</th>
               <th className="th w-[110px]">Colour</th>
               <th className="th w-[100px]">Size</th>
@@ -1117,11 +1169,15 @@ export function BomDetailPage() {
                 const cons = Number(l.consumption) || 0;
                 const lineCost = cons * (1 + (Number(l.wastage_pct) || 0) / 100) * rate;
                 const isGeneralOrPacking = ['ACCESSORY', 'PACKING', 'GENERAL'].includes(l.material_type);
-                const matOptions = l.material_type === 'YARN' ? toOptions(yarns.data)
+                const isYarnLine = l.material_type === 'YARN';
+                const matOptions = isYarnLine ? toOptions(yarnBases.data)
                                  : l.material_type === 'FABRIC' ? toOptions(fabrics.data)
                                  : toOptions(trims.data);
-                const matValue = l.material_type === 'YARN' ? l.yarn_id
+                // A saved yarn without a yarn base (old data) stays selectable as itself
+                const orphanYarn = isYarnLine && l.yarn_id && !yarnBaseOf(l) ? yarnOf(l) : null;
+                const matValue = isYarnLine ? (yarnBaseOf(l) || (orphanYarn ? `y:${l.yarn_id}` : ''))
                                : l.material_type === 'FABRIC' ? l.fabric_id : l.trim_id;
+                const fabricOrYarn = l.material_type === 'FABRIC' || isYarnLine;
                 const tone = TYPE_TONE[l.material_type] ?? TYPE_TONE.GENERAL;
                 return (
                   <tr key={l._key} className={`${tone.row} hover:brightness-[0.98]`}>
@@ -1130,6 +1186,7 @@ export function BomDetailPage() {
                         onChange={(e) => setLine(l._key, {
                           material_type: e.target.value as BomLine['material_type'],
                           yarn_id: '', fabric_id: '', trim_id: '', item_description: '',
+                          yarn_base_id: '', yarn_count_id: '', dia: '', gsm: '', dye_type: '', material_color_id: '',
                         })}>
                         {MATERIALS.map((m) => <option key={m} value={m}>{m}</option>)}
                       </select>
@@ -1154,18 +1211,32 @@ export function BomDetailPage() {
                       ) : (
                         <select className="input py-1 text-[11.5px]" value={matValue} disabled={!editable}
                           onChange={(e) => {
+                            if (isYarnLine) {
+                              if (e.target.value.startsWith('y:')) return;
+                              // Yarn base from the Yarn master; the count is picked next to it
+                              const base: any = (yarnBases.data ?? []).find((x: any) => x.id === Number(e.target.value));
+                              setLine(l._key, { yarn_base_id: base ? base.id : '', yarn_count_id: yarnCountOf(l), yarn_id: '',
+                                uom_id: (base?.base_uom as number) ?? l.uom_id });
+                              return;
+                            }
                             const val = e.target.value ? Number(e.target.value) : '';
-                            const src = l.material_type === 'YARN' ? yarns.data
-                                      : l.material_type === 'FABRIC' ? fabrics.data : trims.data;
-                            const picked = (src ?? []).find((x: any) => x.id === Number(val));
+                            const src = l.material_type === 'FABRIC' ? fabrics.data : trims.data;
+                            const picked: any = (src ?? []).find((x: any) => x.id === Number(val));
+                            // Fabric: Dia / GSM default from the fabric master (the CAD / BOM value can override)
+                            const fabDia = l.material_type === 'FABRIC' && picked?.dia_inch ? String(Number(picked.dia_inch)) : undefined;
+                            const fabGsm = l.material_type === 'FABRIC' && picked?.gsm_id
+                              ? Number((gsms.data ?? []).find((g: any) => g.id === Number(picked.gsm_id))?.code) || undefined : undefined;
                             setLine(l._key, {
+                              ...(fabDia && !l.dia ? { dia: fabDia } : {}),
+                              ...(fabGsm && !l.gsm ? { gsm: fabGsm } : {}),
                               yarn_id: l.material_type === 'YARN' ? val : '',
                               fabric_id: l.material_type === 'FABRIC' ? val : '',
                               trim_id: ['TRIM','ACCESSORY','PACKING','GENERAL'].includes(l.material_type) ? val : '',
                               uom_id: (picked?.base_uom as number) ?? l.uom_id,
                             });
                           }}>
-                          <option value="">— Select Material —</option>
+                          <option value="">{isYarnLine ? '— Select Yarn —' : '— Select Material —'}</option>
+                          {orphanYarn && <option value={`y:${l.yarn_id}`}>{orphanYarn.label}</option>}
                           {matOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </select>
                       )}
@@ -1181,6 +1252,59 @@ export function BomDetailPage() {
                         disabled={!editable}
                         onChange={(e) => setLine(l._key, { specification: e.target.value })}
                       />
+                    </td>
+                    {/* Dia (fabric) / Count (yarn) — from the Dia and Yarn Count masters */}
+                    <td className="td p-1.5">
+                      {l.material_type === 'FABRIC' ? (
+                        <select className="input py-1 text-[11px]" value={l.dia || ''} disabled={!editable} title="Dia (Dia master)"
+                          onChange={(e) => setLine(l._key, { dia: e.target.value })}>
+                          <option value="">Dia —</option>
+                          {l.dia && !(dias.data ?? []).some((d: any) => Number(d.code) === Number(l.dia)) && <option value={l.dia}>{l.dia}"</option>}
+                          {(dias.data ?? []).map((d: any) => <option key={d.id} value={String(Number(d.code))}>{Number(d.code)}"</option>)}
+                        </select>
+                      ) : isYarnLine ? (
+                        <select className="input py-1 text-[11px]" value={yarnCountOf(l)} disabled={!editable} title="Count (Yarn Count master)"
+                          onChange={(e) => setLine(l._key, { yarn_count_id: e.target.value ? Number(e.target.value) : '', yarn_base_id: yarnBaseOf(l), yarn_id: '' })}>
+                          <option value="">Count —</option>
+                          {(yarnCounts.data ?? []).map((c: any) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                        </select>
+                      ) : <span className="text-slate-300">—</span>}
+                    </td>
+                    {/* GSM (fabric) — GSM master */}
+                    <td className="td p-1.5">
+                      {l.material_type === 'FABRIC' ? (
+                        <select className="input py-1 text-[11px]" value={l.gsm || ''} disabled={!editable} title="GSM (GSM master)"
+                          onChange={(e) => setLine(l._key, { gsm: e.target.value ? Number(e.target.value) : '' })}>
+                          <option value="">GSM —</option>
+                          {l.gsm && !(gsms.data ?? []).some((g: any) => Number(g.code) === Number(l.gsm)) && <option value={l.gsm}>{l.gsm}</option>}
+                          {(gsms.data ?? []).map((g: any) => <option key={g.id} value={Number(g.code)}>{Number(g.code)}</option>)}
+                        </select>
+                      ) : <span className="text-slate-300">—</span>}
+                    </td>
+                    {/* Grey / Dyed (fabric + yarn) */}
+                    <td className="td p-1.5">
+                      {fabricOrYarn ? (
+                        <select className={`input py-1 text-[11px] font-semibold ${l.dye_type === 'DYED' ? 'text-purple-700' : l.dye_type === 'GREY' ? 'text-slate-600' : ''}`}
+                          value={l.dye_type || ''} disabled={!editable}
+                          onChange={(e) => {
+                            const v = e.target.value as BomLine['dye_type'];
+                            setLine(l._key, { dye_type: v, material_color_id: v === 'DYED' ? (l.material_color_id || l.color_id || '') : '' });
+                          }}>
+                          <option value="">—</option>
+                          <option value="GREY">Grey</option>
+                          <option value="DYED">Dyed</option>
+                        </select>
+                      ) : <span className="text-slate-300">—</span>}
+                    </td>
+                    {/* Colour of the dyed fabric / yarn — only when Dyed */}
+                    <td className="td p-1.5">
+                      {fabricOrYarn && l.dye_type === 'DYED' ? (
+                        <select className="input py-1 text-[11px]" value={l.material_color_id || ''} disabled={!editable}
+                          onChange={(e) => setLine(l._key, { material_color_id: e.target.value ? Number(e.target.value) : '' })}>
+                          <option value="">— Colour —</option>
+                          {(allColors.data ?? []).map((c: any) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                        </select>
+                      ) : <span className="text-slate-300">{fabricOrYarn && l.dye_type === 'GREY' ? 'Grey — no colour' : '—'}</span>}
                     </td>
                     {/* Applicability */}
                     <td className="td p-1.5">

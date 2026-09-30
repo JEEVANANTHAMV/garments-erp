@@ -7,6 +7,7 @@ import {
   Globe, Sparkles
 } from 'lucide-react';
 import { http, ApiError } from '../../lib/api';
+import { useQuotedRates, matchQuote } from '../../lib/quotedRates';
 import { useJobBoms, bomItemLabel, type JobBomItem } from '../../lib/jobBom';
 import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
@@ -214,12 +215,14 @@ export default function FabricPurchaseOrderDetailPage() {
       style_id: bf.style_id ? String(bf.style_id) : '',
       fabric_id: bf.fabric_id ? String(bf.fabric_id) : '',
       fabric_name: bf.fabric_name || bf.material_name || '',
-      fabric_category: bf.color_id ? 'Dyed Fabric' : 'Grey Fabric',
+      _bom: bf.bom_line_id ? Number(bf.bom_line_id) : undefined,
+      // Grey / Dyed and the dyed colour come from the BOM line (else a colour-wise line is dyed)
+      fabric_category: bf.dye_type === 'DYED' ? 'Dyed Fabric' : bf.dye_type === 'GREY' ? 'Grey Fabric' : (bf.color_id ? 'Dyed Fabric' : 'Grey Fabric'),
       fabric_type: FABRIC_TYPE_LABEL[bf.fabric_master_type] || bf.fabric_master_type || 'Knitted',
       dia: bf.fabric_dia ? `${Number(bf.fabric_dia)}"` : '',
       gsm: bf.fabric_gsm ? String(bf.fabric_gsm) : '',
       composition: bf.fabric_composition || '',
-      color_name: bf.color_name || '',
+      color_name: bf.purchase_color_name ?? bf.color_name ?? '',
       uom_id: Number(bf.uom_id) || 5,
       qty,
       weight_kg: isKg ? qty : 0,
@@ -227,13 +230,35 @@ export default function FabricPurchaseOrderDetailPage() {
     }, isInterstate);
   };
 
+  // Supplier's quotation: the PO takes its CONFIRMED rate and GST % for the same material / BOM line
+  const quoted = useQuotedRates('FABRIC', head.supplier_id);
+  const quoteArgs = (it: any) => ({ bom_line_id: it.bom_line_id ?? it._bom, material_id: it.fabric_id, color_id: it.color_id, size_id: it.size_id, so_id: it.so_id });
+  const withQuote = (l: FabricLine, it: any): FabricLine => {
+    const q = matchQuote(quoted.data, quoteArgs(it));
+    return q ? withFabricTotals({ ...l, rate: q.rate, gst_rate: q.gst_rate }, head.is_interstate) : l;
+  };
+  // Supplier chosen / changed on a new PO: re-price the lines this supplier has quoted
+  useEffect(() => {
+    if (!isNew || !quoted.data?.length) return;
+    let n = 0; let qno = '';
+    const next = lines.map((l) => {
+      const q = matchQuote(quoted.data, quoteArgs({ ...l, _bom: l._bom }));
+      if (!q || (Number(l.rate) === q.rate && Number(l.gst_rate) === q.gst_rate)) return l;
+      n++; qno = q.quotation_no;
+      return withFabricTotals({ ...l, rate: q.rate, gst_rate: q.gst_rate }, head.is_interstate);
+    });
+    if (n) { setLines(next); toast(`${n} line(s) priced from quotation ${qno} (confirmed rate + GST)`, 'info'); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quoted.data]);
+
   // Line-level pick: the row's job + style → that job's BOM fabrics with their requirement
   const lineStyle = (l: FabricLine) => l.style_id || head.style_id || '';
   const jobBoms = useJobBoms(lines.map((l) => ({ so_id: l.so_id, style_id: lineStyle(l) })));
   const pickBomFabric = (idx: number, l: FabricLine, it: JobBomItem) => {
-    const next = bomToFabricLine(it, head.is_interstate);
+    const next = withQuote(bomToFabricLine(it, head.is_interstate), it);
+    const quotedLine = !!matchQuote(quoted.data, quoteArgs(it));
     updateLine(idx, { ...next, _key: l._key, id: l.id, _bom: it.bom_line_id,
-      rate: Number(l.rate) > 0 ? l.rate : next.rate, gst_rate: l.gst_rate });
+      rate: quotedLine || !(Number(l.rate) > 0) ? next.rate : l.rate, gst_rate: quotedLine ? next.gst_rate : l.gst_rate });
   };
 
   /** Loads the job's BOM fabric lines into the PO (asks before replacing entered lines). */
@@ -254,7 +279,7 @@ export default function FabricPurchaseOrderDetailPage() {
       }
       const hasEntered = lines.some((l) => l.fabric_id || Number(l.qty) > 0);
       if (hasEntered && !window.confirm(`Replace the ${lines.length} existing line(s) with ${fabricsInBom.length} fabric item(s) from the job's BOM?`)) return;
-      setLines(fabricsInBom.map((bf) => bomToFabricLine(bf, head.is_interstate)));
+      setLines(fabricsInBom.map((bf) => withQuote(bomToFabricLine(bf, head.is_interstate), bf)));
       toast(`Loaded ${fabricsInBom.length} fabric item(s) from BOM ${data.bom?.bom_no || ''}`, 'success');
     } catch (err: any) {
       setBomData(null);
@@ -983,7 +1008,7 @@ export default function FabricPurchaseOrderDetailPage() {
                 <th className="py-2.5 px-2 w-16">GSM</th>
                 <th className="py-2.5 px-2 w-16">Dia</th>
                 <th className="py-2.5 px-2 w-20 text-right">Qty</th>
-                <th className="py-2.5 px-2 w-16">UOM</th>
+                <th className="py-2.5 px-2 min-w-[84px] whitespace-nowrap">UOM</th>
                 <th className="py-2.5 px-2 w-20 text-right">Rate (₹)</th>
                 {head.is_interstate ? (
                   <>
@@ -1058,7 +1083,10 @@ export default function FabricPurchaseOrderDetailPage() {
                           fabric_name: fab?.label || fab?.fabric_name || '',
                           dia: fab?.dia_inch ? `${Number(fab.dia_inch)}"` : l.dia,
                           uom_id: Number(fab?.base_uom) || l.uom_id,
-                          rate: Number(l.rate) > 0 ? l.rate : (Number(fab?.std_rate) || 0),
+                          ...(() => {
+                            const q = matchQuote(quoted.data, { material_id: e.target.value, so_id: l.so_id });
+                            return q ? { rate: q.rate, gst_rate: q.gst_rate } : { rate: Number(l.rate) > 0 ? l.rate : (Number(fab?.std_rate) || 0) };
+                          })(),
                         });
                       }}
                       className="input py-1 text-xs w-full bg-white"
@@ -1173,7 +1201,7 @@ export default function FabricPurchaseOrderDetailPage() {
                     <select
                       value={l.uom_id}
                       onChange={(e) => updateLine(idx, { uom_id: Number(e.target.value) })}
-                      className="input py-1 text-xs w-full bg-white"
+                      className="input py-1 !px-1.5 text-xs w-full min-w-[76px] bg-white font-semibold"
                     >
                       {(uoms.data || []).map((u) => (
                         <option key={u.id} value={u.id}>{u.code || u.label}</option>

@@ -605,6 +605,7 @@ export function FabricDetailPage() {
   const categories = useLookup('material-categories');
   const uoms = useLookup('uoms');
   const gsmList = useLookup('gsm');
+  const diaList = useLookup('dias');
 
   // Base Form State
   const [head, setHead] = useState<Record<string, any>>({
@@ -637,45 +638,24 @@ export function FabricDetailPage() {
   ]);
 
   // GSM Variants List
+  // GSM / Dia variants — GSM from the GSM master, Dia from the Dia master (chosen per row)
   const [variants, setVariants] = useState<FabricVariantLine[]>([
     {
       _key: 'var_1',
       fabric_code: '',
-      fabric_name: 'Single Jersey 160 GSM 32" Dia',
+      fabric_name: '',
       gsm_id: '',
-      gsm_value: 160,
-      min_gsm: 155,
-      max_gsm: 165,
-      width_cm: 160,
-      grey_width: 76,
-      finished_width: 72,
-      usable_width: 70,
+      gsm_value: '',
+      min_gsm: '',
+      max_gsm: '',
+      width_cm: '',
       width_uom: 'INCH',
       width_form: 'TUBULAR',
-      dia_inch: 32,
+      dia_inch: '',
       gauge: '24 GG',
-      std_rate: 405,
+      std_rate: '',
       is_active: 1,
-    },
-    {
-      _key: 'var_2',
-      fabric_code: '',
-      fabric_name: 'Single Jersey 180 GSM 34" Dia',
-      gsm_id: '',
-      gsm_value: 180,
-      min_gsm: 175,
-      max_gsm: 185,
-      width_cm: 170,
-      grey_width: 78,
-      finished_width: 74,
-      usable_width: 72,
-      width_uom: 'INCH',
-      width_form: 'TUBULAR',
-      dia_inch: 34,
-      gauge: '24 GG',
-      std_rate: 420,
-      is_active: 1,
-    },
+    } as FabricVariantLine,
   ]);
 
   // Load existing Base & Variants
@@ -823,25 +803,23 @@ export function FabricDetailPage() {
 
   // Variant handlers
   const handleAddVariant = (presetGsm?: number, dia?: number, rate?: number) => {
-    const baseCode = (head.base_code || 'FB-01').toUpperCase().replace(/[^A-Z0-9]/g, '');
-    const gsmVal = presetGsm || 180;
-    const diaVal = dia || 34;
-    const gsmMatch = (gsmList.data || []).find((g: any) => Number(g.code) === gsmVal);
-
+    const gsmMatch = presetGsm ? (gsmList.data || []).find((g: any) => Number(g.code) === presetGsm) : null;
     setVariants((s) => [
       ...s,
       {
         _key: `var_${++variantLineSeq}`,
-        fabric_code: `FAB-${baseCode}-${gsmVal}-${diaVal}D`,
-        fabric_name: `${head.base_name || 'Fabric'} ${gsmVal} GSM ${diaVal}" Dia`,
+        fabric_code: '',
+        fabric_name: '',
         gsm_id: gsmMatch?.id || '',
-        gsm_value: gsmVal,
-        width_cm: Math.round(diaVal * 5),
-        dia_inch: diaVal,
+        gsm_value: gsmMatch ? Number(gsmMatch.code) : '',
+        min_gsm: gsmMatch ? Math.max(0, Number(gsmMatch.code) - 5) : '',
+        max_gsm: gsmMatch ? Number(gsmMatch.code) + 5 : '',
+        width_cm: dia ? Math.round(dia * 5) : '',
+        dia_inch: dia || '',
         gauge: '24 GG',
-        std_rate: rate || 420,
+        std_rate: rate || '',
         is_active: 1,
-      },
+      } as FabricVariantLine,
     ]);
   };
 
@@ -855,6 +833,8 @@ export function FabricDetailPage() {
           const matchedGsm = (gsmList.data || []).find((g: any) => String(g.id) === String(val));
           if (matchedGsm) {
             updated.gsm_value = Number(matchedGsm.code) || matchedGsm.code;
+            updated.min_gsm = Math.max(0, Number(matchedGsm.code) - 5);
+            updated.max_gsm = Number(matchedGsm.code) + 5;
             updated.fabric_name = `${head.base_name || 'Fabric'} ${matchedGsm.code} GSM ${v.dia_inch ? `${v.dia_inch}" Dia` : ''}`;
           }
         }
@@ -926,6 +906,26 @@ export function FabricDetailPage() {
       toast('Please add at least one GSM variant', 'info');
       return;
     }
+    // Every row needs GSM (GSM master) and Dia (Dia master) — checked before anything is saved,
+    // so a half-filled form never leaves a fabric base without variants behind.
+    const missing = variants.findIndex((v) => !v.gsm_id || !(Number(v.dia_inch) > 0));
+    if (missing >= 0) {
+      toast(`Row ${missing + 1}: choose the GSM and the Dia`, 'info');
+      return;
+    }
+    // Blank item codes / names are generated (FAB-<base>-<gsm>-<dia>D)
+    const baseSlug = head.base_code.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const rows = variants.map((v) => ({
+      ...v,
+      fabric_code: (v.fabric_code || '').trim() || `FAB-${baseSlug}-${v.gsm_value}-${Number(v.dia_inch)}D`,
+      fabric_name: (v.fabric_name || '').trim() || `${head.base_name.trim()} ${v.gsm_value} GSM ${Number(v.dia_inch)}" Dia`,
+    }));
+    const dup = rows.find((v, i) => rows.findIndex((x) => x.fabric_code.toUpperCase() === v.fabric_code.toUpperCase()) !== i);
+    if (dup) {
+      toast(`Two rows have the same item code ${dup.fabric_code} — change the GSM / Dia or the code`, 'info');
+      return;
+    }
+    setVariants(rows);
 
     setSaving(true);
     try {
@@ -934,7 +934,7 @@ export function FabricDetailPage() {
       if (autoCompositionString) {
         try {
           const compRes = await http.post<any>('/compositions', {
-            code: `COMP-${Date.now().toString().slice(-6)}`,
+            composition_code: `COMP-${Date.now().toString().slice(-6)}`,
             description: autoCompositionString,
             is_active: 1,
           });
@@ -978,7 +978,7 @@ export function FabricDetailPage() {
       }
 
       // 3. Save / Synchronize Child Variants
-      for (const v of variants) {
+      for (const v of rows) {
         const vPayload = {
           fabric_base_id: baseId,
           fabric_code: v.fabric_code.trim().toUpperCase(),
@@ -1023,7 +1023,10 @@ export function FabricDetailPage() {
         nav(`/masters/fabrics/${baseId}`);
       }
     } catch (err: any) {
-      toast(err instanceof ApiError ? err.message : (err?.message || 'Failed to save fabric base'), 'info');
+      // Name the failing fields ("fabric_code: This field is required") instead of only "data is invalid"
+      const det = err instanceof ApiError && Array.isArray(err.details)
+        ? (err.details as any[]).map((d) => `${d.field}: ${d.message}`).join('; ') : '';
+      toast(err instanceof ApiError ? `${err.message}${det ? ` — ${det}` : ''}` : (err?.message || 'Failed to save fabric base'), 'error');
     } finally {
       setSaving(false);
     }
@@ -1546,7 +1549,7 @@ export function FabricDetailPage() {
           <span className="text-xs font-bold text-slate-700 flex items-center gap-1 mr-2">
             <Tag size={13} className="text-brand-600" /> Quick Add GSM Presets:
           </span>
-          {STANDARD_GSM_PRESETS.map((p) => {
+          {(gsmList.data || []).slice(0, 10).map((g: any) => ({ gsm: Number(g.code), defaultDia: undefined as number | undefined, rate: undefined as number | undefined })).map((p) => {
             const added = variants.some((v) => Number(v.gsm_value) === p.gsm);
             return (
               <button
@@ -1611,19 +1614,16 @@ export function FabricDetailPage() {
                     />
                   </td>
                   <td className="py-1 px-1">
-                    <input
-                      type="number"
-                      placeholder="160"
-                      value={v.gsm_value}
+                    <select
+                      value={v.gsm_id || ''}
                       disabled={!editable}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        handleUpdateVariant(v._key, 'gsm_value', val);
-                        if (val && !v.min_gsm) handleUpdateVariant(v._key, 'min_gsm', Math.max(0, Number(val) - 5));
-                        if (val && !v.max_gsm) handleUpdateVariant(v._key, 'max_gsm', Number(val) + 5);
-                      }}
-                      className="input py-1 px-2 font-mono font-bold text-xs w-full"
-                    />
+                      title="GSM (GSM master)"
+                      onChange={(e) => handleUpdateVariant(v._key, 'gsm_id', e.target.value ? Number(e.target.value) : '')}
+                      className="input py-1 px-1 font-mono font-bold text-xs w-full min-w-[72px]"
+                    >
+                      <option value="">GSM</option>
+                      {(gsmList.data || []).map((g: any) => <option key={g.id} value={g.id}>{Number(g.code)}</option>)}
+                    </select>
                   </td>
                   <td className="py-1 px-1">
                     <div className="flex items-center gap-1">
@@ -1691,14 +1691,19 @@ export function FabricDetailPage() {
                     </select>
                   </td>
                   <td className="py-1 px-1">
-                    <input
-                      type="number"
-                      placeholder="32"
-                      value={v.dia_inch}
+                    <select
+                      value={Number(v.dia_inch) > 0 ? String(Number(v.dia_inch)) : ''}
                       disabled={!editable}
-                      onChange={(e) => handleUpdateVariant(v._key, 'dia_inch', e.target.value)}
-                      className="input py-1 px-1 font-mono text-center text-xs w-full"
-                    />
+                      title="Dia (Dia master)"
+                      onChange={(e) => handleUpdateVariant(v._key, 'dia_inch', e.target.value ? Number(e.target.value) : '')}
+                      className="input py-1 px-1 font-mono text-xs w-full min-w-[64px]"
+                    >
+                      <option value="">Dia</option>
+                      {Number(v.dia_inch) > 0 && !(diaList.data || []).some((d: any) => Number(d.code) === Number(v.dia_inch)) && (
+                        <option value={String(Number(v.dia_inch))}>{Number(v.dia_inch)}"</option>
+                      )}
+                      {(diaList.data || []).map((d: any) => <option key={d.id} value={String(Number(d.code))}>{Number(d.code)}"</option>)}
+                    </select>
                   </td>
                   <td className="py-1 px-1">
                     <input

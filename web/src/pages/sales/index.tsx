@@ -138,7 +138,13 @@ export function QuotationsPage() {
         onRowClick={(r: any) => nav(`/sales/quotations/${r.id}`)}
     columns={[
       { key: 'quotation_no', header: 'Quotation no', sortable: true,
-        render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.quotation_no}</span> },
+        render: (r: any) => (
+          <span className="font-mono text-[12px] font-medium text-brand-700">
+            {r.quotation_no}
+            <span className={`ml-1.5 rounded px-1.5 py-0.5 text-[10px] font-bold ${Number(r.version) > 1 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-500'}`}
+              title={Number(r.version) > 1 ? `Edited — ${Number(r.version) - 1} earlier version(s)` : 'First version'}>V{Number(r.version) || 1}</span>
+          </span>
+        ) },
       { key: 'quotation_type', header: 'Type / Purpose',
         render: (r: any) => {
           let badgeTone: any = 'sky';

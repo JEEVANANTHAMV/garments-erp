@@ -24,9 +24,17 @@ const lineSchema = z.object({
   wastage_pct: z.coerce.number().min(0).max(100).default(0),
   /** Free-text spec typed next to the material (e.g. poly bag 12x16 in, care label "100% Cotton"); printed on the BOM. */
   specification: s.nullableStr(255),
+  /** Fabric: Dia (Dia master) and GSM (GSM master). */
+  dia: s.nullableStr(20),
+  gsm: z.coerce.number().int().min(0).max(2000).nullish(),
+  /** Yarn: base + count (Yarn Count master) — the base + count variant is resolved on save. */
+  yarn_base_id: s.id(), yarn_count_id: s.id(),
+  /** Fabric / yarn bought grey or dyed; the colour applies only when dyed. */
+  dye_type: z.enum(['GREY', 'DYED']).nullish(),
+  material_color_id: s.id(),
   remarks: s.nullableStr(255),
 }).refine(
-  (l) => (l.material_type === 'YARN' && l.yarn_id) ||
+  (l) => (l.material_type === 'YARN' && (l.yarn_id || (l.yarn_base_id && l.yarn_count_id))) ||
          (l.material_type === 'FABRIC' && l.fabric_id) ||
          (l.material_type === 'TRIM' && l.trim_id) ||
          (['ACCESSORY', 'PACKING', 'GENERAL'].includes(l.material_type) && (l.trim_id || l.item_description)),
@@ -49,6 +57,7 @@ const bomSchema = z.object({
 const LINE_SELECT = `
   SELECT l.*, y.yarn_name, y.yarn_code, fb.fabric_name, fb.fabric_code,
          tr.trim_name, tr.trim_code, c.color_name, sz.size_code, u.code AS uom_code,
+         mc.color_name AS material_color_name, yc.count_value AS yarn_count_value, yc.count_type AS yarn_count_type,
          COALESCE(y.std_rate, fb.std_rate, tr.std_rate, 0) AS std_rate
     FROM trx_bom_line l
     LEFT JOIN mst_yarn y   ON y.id  = l.yarn_id
@@ -57,6 +66,8 @@ const LINE_SELECT = `
     LEFT JOIN mst_color c  ON c.id  = l.color_id
     LEFT JOIN mst_size sz  ON sz.id = l.size_id
     LEFT JOIN cfg_uom u    ON u.id  = l.uom_id
+    LEFT JOIN mst_color mc ON mc.id = l.material_color_id
+    LEFT JOIN mst_yarn_count yc ON yc.id = l.yarn_count_id
    WHERE l.bom_id = ? ORDER BY l.material_type, l.id`;
 
 bomRouter.get('/', requirePermission('BOM.VIEW'), ah(async (req, res) => {
@@ -249,7 +260,14 @@ bomRouter.get('/for-job', requireAny('BOM.VIEW', 'PURCHASE.VIEW', 'PROCUREMENT.V
         so_id: so ? Number(so.id) : null,
         job_no: jobNo,
         material_name: l.fabric_name || l.yarn_name || l.trim_name || l.item_description || '',
-        yarn_count: sp.count_value ? `${sp.count_value}${sp.count_type && sp.count_type !== 'Ne' ? ` ${sp.count_type}` : ''}` : null,
+        yarn_count: l.yarn_count_value
+          ? `${l.yarn_count_value}${l.yarn_count_type && l.yarn_count_type !== 'Ne' ? ` ${l.yarn_count_type}` : ''}`
+          : sp.count_value ? `${sp.count_value}${sp.count_type && sp.count_type !== 'Ne' ? ` ${sp.count_type}` : ''}` : null,
+        // Dia / GSM entered on the BOM line win over the fabric master's
+        fabric_dia: l.dia ? (parseFloat(String(l.dia)) || sp.fabric_dia) : sp.fabric_dia,
+        fabric_gsm: l.gsm || sp.fabric_gsm,
+        // Colour to buy: the dyed colour of the fabric / yarn, else the garment colour of the line
+        purchase_color_name: l.dye_type === 'DYED' ? (l.material_color_name || l.color_name || null) : (l.dye_type === 'GREY' ? null : l.color_name || null),
         consumption: cons,
         additional_qty: addl,
         wastage_pct: waste,
@@ -394,19 +412,59 @@ bomRouter.get('/:id/print', requirePermission('BOM.VIEW'), ah(async (req, res) =
   res.json({ data: { company, bom, order_qty: orderQty, plan_cut_qty: planCutQty, lines: items } });
 }));
 
-async function writeLines(tx: any, bomId: number, lines: z.infer<typeof lineSchema>[]) {
+/**
+ * Yarn variant (mst_yarn) of a yarn base + count: the existing one, else created from the
+ * base (composition, type, HSN, UOM) — a base created in the Yarn master is usable on the
+ * BOM without generating count variants first. POs / quotations / MRP keep using yarn_id.
+ */
+async function resolveYarnVariant(tx: any, cid: number, userId: number, baseId: number, countId: number): Promise<number> {
+  const cnt = await txQueryOne<any>(tx, 'SELECT id, count_value, count_type FROM mst_yarn_count WHERE id = ? AND company_id = ?', [countId, cid]);
+  if (!cnt) throw BadRequest('Yarn count not found');
+  const base = await txQueryOne<any>(tx, 'SELECT * FROM mst_yarn_base WHERE id = ? AND company_id = ? AND is_deleted = 0', [baseId, cid]);
+  if (!base) throw BadRequest('Yarn base not found');
+  const hit = await txQueryOne<any>(tx,
+    `SELECT id FROM mst_yarn
+      WHERE company_id = ? AND yarn_base_id = ? AND is_deleted = 0
+        AND (count_id = ? OR (count_id IS NULL AND count_value = ? AND COALESCE(count_type, 'Ne') = ?))
+      ORDER BY (count_id = ?) DESC, is_active DESC, id LIMIT 1`,
+    [cid, baseId, countId, cnt.count_value, cnt.count_type || 'Ne', countId]);
+  if (hit) return Number(hit.id);
+  const slug = String(cnt.count_value).replace(/[^A-Za-z0-9]+/g, '').toUpperCase().slice(0, 12);
+  let code = `${base.base_code}-${slug}`.slice(0, 40);
+  if (await txQueryOne(tx, 'SELECT id FROM mst_yarn WHERE company_id = ? AND yarn_code = ?', [cid, code])) code = `${code.slice(0, 33)}-${countId}`;
+  const r = await txExecute(tx,
+    `INSERT INTO mst_yarn (company_id, yarn_code, yarn_name, category_id, yarn_base_id, count_value, count_type, count_id,
+                           composition_id, ply, yarn_type, hsn_code, base_uom, std_rate, is_active, created_by)
+     VALUES (?,?,?,?,?,?,?,?,?,1,?,?,?,0,1,?)`,
+    [cid, code, `${base.base_name} ${cnt.count_value}${cnt.count_type && cnt.count_type !== 'Ne' ? ` ${cnt.count_type}` : ' Ne'}`.slice(0, 150),
+     base.category_id ?? null, baseId, cnt.count_value, cnt.count_type || 'Ne', countId, base.composition_id ?? null,
+     base.yarn_type || 'COMBED', base.hsn_code || null, base.base_uom, userId]);
+  return Number(r.insertId);
+}
+
+async function writeLines(tx: any, bomId: number, lines: z.infer<typeof lineSchema>[], cid: number, userId: number) {
   for (const l of lines) {
+    const isYarn = l.material_type === 'YARN';
+    const isFabric = l.material_type === 'FABRIC';
+    const yarnId = isYarn && l.yarn_base_id && l.yarn_count_id
+      ? await resolveYarnVariant(tx, cid, userId, l.yarn_base_id, l.yarn_count_id)
+      : l.yarn_id ?? null;
+    const dyed = (isYarn || isFabric) && l.dye_type === 'DYED';
     await txExecute(tx,
       `INSERT INTO trx_bom_line
          (bom_id, material_type, yarn_id, fabric_id, trim_id, item_description,
           color_id, size_id, consumption_basis, applicability, consumption, additional_qty,
-          uom_id, wastage_pct, specification, remarks)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [bomId, l.material_type, l.yarn_id ?? null, l.fabric_id ?? null, l.trim_id ?? null,
+          uom_id, wastage_pct, specification, dia, gsm, yarn_base_id, yarn_count_id, dye_type, material_color_id, remarks)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [bomId, l.material_type, yarnId, l.fabric_id ?? null, l.trim_id ?? null,
        l.item_description ?? null, l.color_id ?? null, l.size_id ?? null,
        l.consumption_basis || 'PER_PIECE', l.applicability || 'ALL',
        l.consumption, l.additional_qty || 0, l.uom_id, l.wastage_pct ?? 0,
-       l.specification ?? null, l.remarks ?? null]);
+       l.specification ?? null,
+       isFabric ? l.dia ?? null : null, isFabric ? l.gsm ?? null : null,
+       isYarn ? l.yarn_base_id ?? null : null, isYarn ? l.yarn_count_id ?? null : null,
+       isYarn || isFabric ? l.dye_type ?? null : null, dyed ? l.material_color_id ?? null : null,
+       l.remarks ?? null]);
   }
 }
 
@@ -420,7 +478,7 @@ bomRouter.post('/', requirePermission('BOM.CREATE'), ah(async (req, res) => {
        VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
       [req.user!.companyId, body.style_id, body.so_id ?? null, bomNo, body.version, body.effective_date ?? null,
        body.status_id ?? null, body.approval_state || 'DRAFT', body.remarks ?? null, body.is_active ?? 1, req.user!.id]);
-    await writeLines(tx, r.insertId, body.lines);
+    await writeLines(tx, r.insertId, body.lines, req.user!.companyId, req.user!.id);
     return txQueryOne(tx, `SELECT * FROM trx_bom WHERE id = ?`, [r.insertId]);
   });
   await audit(req, 'trx_bom', (created as any).id, 'INSERT', undefined, created);
@@ -445,7 +503,7 @@ bomRouter.put('/:id', requirePermission('BOM.UPDATE'), ah(async (req, res) => {
     }
     if (lines) {
       await txExecute(tx, `DELETE FROM trx_bom_line WHERE bom_id = ?`, [id]);
-      await writeLines(tx, id, lines);
+      await writeLines(tx, id, lines, req.user!.companyId, req.user!.id);
     }
     return txQueryOne(tx, `SELECT * FROM trx_bom WHERE id = ?`, [id]);
   });
@@ -625,11 +683,14 @@ bomRouter.post('/:id/revision', requirePermission('BOM.CREATE'), ah(async (req, 
       await txExecute(tx, `
         INSERT INTO trx_bom_line (bom_id, material_type, yarn_id, fabric_id, trim_id, item_description,
                                   color_id, size_id, consumption_basis, applicability, consumption,
-                                  additional_qty, uom_id, wastage_pct, specification, remarks)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                  additional_qty, uom_id, wastage_pct, specification, dia, gsm,
+                                  yarn_base_id, yarn_count_id, dye_type, material_color_id, remarks)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [newId, l.material_type, l.yarn_id, l.fabric_id, l.trim_id, l.item_description,
           l.color_id, l.size_id, l.consumption_basis || 'PER_PIECE', l.applicability || 'ALL',
-          l.consumption, l.additional_qty || 0, l.uom_id, l.wastage_pct || 0, l.specification ?? null, l.remarks]);
+          l.consumption, l.additional_qty || 0, l.uom_id, l.wastage_pct || 0, l.specification ?? null,
+          l.dia ?? null, l.gsm ?? null, l.yarn_base_id ?? null, l.yarn_count_id ?? null, l.dye_type ?? null,
+          l.material_color_id ?? null, l.remarks]);
     }
 
     return txQueryOne(tx, `SELECT * FROM trx_bom WHERE id = ?`, [newId]);

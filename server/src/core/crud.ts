@@ -68,6 +68,8 @@ export interface ResourceConfig {
   beforeCreate?: (req: Request, data: Record<string, unknown>, tx: Tx) => Promise<void>;
   /** Adjust the parsed header data before INSERT/UPDATE (e.g. recompute totals). `before` is the stored row on update. */
   beforeWrite?: (req: Request, data: Record<string, unknown>, before?: any) => Promise<void> | void;
+  /** Runs inside the UPDATE transaction before the row is written (e.g. snapshot a version); may adjust `data`. */
+  beforeUpdateTx?: (req: Request, id: number, before: any, data: Record<string, unknown>, tx: Tx) => Promise<void>;
 }
 
 export interface ChildConfig {
@@ -121,7 +123,7 @@ export function buildResourceRouter(cfg: ResourceConfig): Router {
     defaultSort = 't.id',
     children = [],
     autoNumber,
-    readOnly, cancelFlag, beforeDelete, beforeUpdate, beforeCreate, beforeWrite,
+    readOnly, cancelFlag, beforeDelete, beforeUpdate, beforeCreate, beforeWrite, beforeUpdateTx,
   } = cfg;
 
   const scope = (req: Request) => (companyScoped ? req.user!.companyId : null);
@@ -290,6 +292,7 @@ export function buildResourceRouter(cfg: ResourceConfig): Router {
     if (hasAuditCols) data.updated_by = req.user!.id;
 
     const after = await transaction(async (tx) => {
+      if (beforeUpdateTx) await beforeUpdateTx(req, id, before, data, tx);
       const cols = Object.keys(data);
       if (cols.length) {
         await txExecute(

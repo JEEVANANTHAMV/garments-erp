@@ -28,6 +28,9 @@ interface YarnGrnLine {
   composition?: string;
   lot_no: string;
   po_qty: number;
+  /** Ordered on the PO line and received on earlier GRNs (shown on the 2nd+ receipt). */
+  ordered_qty?: number;
+  prev_received?: number;
   received_qty: number; // in KG
   packs: number; // in bags/packs
   accepted_qty: number;
@@ -266,6 +269,8 @@ export default function YarnGRNDetailPage() {
                 composition: pl.composition,
                 lot_no: '',
                 po_qty: qty,
+                ordered_qty: Number(pl.qty) || 0,
+                prev_received: Number(pl.received_qty) || 0,
                 received_qty: qty,
                 packs: bags,
                 accepted_qty: qty,
@@ -910,7 +915,15 @@ export default function YarnGRNDetailPage() {
                         <span className="font-mono text-slate-700">{l.lot_no}</span>
                       )}
                     </td>
-                    <td className="py-2.5 px-2 text-right text-slate-500">{fmtDecimal(l.po_qty)}</td>
+                    <td className="py-2.5 px-2 text-right text-slate-500 whitespace-nowrap">
+                      {l.ordered_qty != null ? (
+                        <div className="leading-tight">
+                          <div>{fmtDecimal(l.ordered_qty)} <span className="text-[10px] text-slate-400">ordered</span></div>
+                          {Number(l.prev_received) > 0 && <div>{fmtDecimal(l.prev_received)} <span className="text-[10px]">recd earlier</span></div>}
+                          <div className="font-semibold text-amber-700">{fmtDecimal(l.po_qty)} <span className="text-[10px] font-normal">pending</span></div>
+                        </div>
+                      ) : fmtDecimal(l.po_qty)}
+                    </td>
                     <td className="py-2.5 px-2 text-right">
                       {isNew ? (
                         <input

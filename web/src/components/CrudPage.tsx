@@ -15,7 +15,7 @@ import { toDateInput } from '../lib/format';
 export interface FormField {
   name: string;
   label: string;
-  type?: 'text' | 'number' | 'date' | 'textarea' | 'select' | 'checkbox' | 'email' | 'color';
+  type?: 'text' | 'number' | 'date' | 'time' | 'textarea' | 'select' | 'checkbox' | 'email' | 'color';
   required?: boolean;
   /** Static options for a select. */
   options?: { value: string | number; label: string }[];
@@ -28,8 +28,10 @@ export interface FormField {
   hint?: string;
   placeholder?: string;
   step?: string;
-  /** Default applied when creating a new record. */
-  defaultValue?: string | number | boolean;
+  /** Default applied when creating a new record — a function is evaluated when the form opens (e.g. now). */
+  defaultValue?: string | number | boolean | (() => string | number | boolean);
+  /** Shown but not editable (e.g. a system-stamped date / time). */
+  readOnly?: boolean;
 }
 
 /** A filter control rendered above the table. */
@@ -94,7 +96,9 @@ export function CrudPage<T extends { id: number }>(cfg: CrudConfig<T>) {
 
   const openNew = () => {
     const init: Record<string, unknown> = {};
-    for (const f of cfg.fields) if (f.defaultValue !== undefined) init[f.name] = f.defaultValue;
+    for (const f of cfg.fields) {
+      if (f.defaultValue !== undefined) init[f.name] = typeof f.defaultValue === 'function' ? f.defaultValue() : f.defaultValue;
+    }
     setValues(init); setErrors({}); setEditing(null);
   };
 
@@ -277,7 +281,7 @@ function FormControl({ field, value, error, onChange }: {
   }
 
   return <Input className={span} label={field.label} error={error} required={field.required}
-    hint={field.hint} placeholder={field.placeholder}
+    hint={field.hint} placeholder={field.placeholder} disabled={field.readOnly} readOnly={field.readOnly}
     type={field.type === 'color' ? 'color' : field.type ?? 'text'}
     step={field.step ?? (field.type === 'number' ? 'any' : undefined)}
     value={(value as string) ?? ''}

@@ -2,6 +2,7 @@ import type { ResourceConfig } from '../../core/crud.js';
 import { s, f } from './schemas.js';
 import { queryOne } from '../../config/db.js';
 import { BadRequest } from '../../core/errors.js';
+import { quotationBeforeUpdateTx } from '../quotation/quotationVersions.js';
 import { computeInvoice, chargesFromRow, writeInvoiceTotals, type GstMode } from '../../core/invoiceCalc.js';
 
 /** Common invoice-summary header fields (TDS / TCS / other charges / landed heads / round off). */
@@ -56,6 +57,17 @@ async function cuttingDownstream(id: number) {
 const INCOTERM = ['FOB','CIF','CFR','EXW','DDP','DAP','FCA'] as const;
 
 /** Transactional documents: headers with their detail lines. */
+
+/** Gate entries: date / time are the system's (India time) when the page does not send them. */
+function stampGateNow(data: Record<string, unknown>, before: unknown, dateCol: string, timeCol: string) {
+  if (before) return;
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
+    .formatToParts(now).reduce<Record<string, string>>((a, p) => { a[p.type] = p.value; return a; }, {});
+  if (!data[dateCol]) data[dateCol] = `${parts.year}-${parts.month}-${parts.day}`;
+  if (!data[timeCol]) data[timeCol] = `${parts.hour === '24' ? '00' : parts.hour}:${parts.minute}`;
+}
+
 export const transactionResources: ResourceConfig[] = [
   // ------------------------------------------------ Pre-sales
   {
@@ -147,6 +159,8 @@ export const transactionResources: ResourceConfig[] = [
     defaultSort: 't.quotation_date', hasIsActive: false,
     filters: ['buyer_id', 'supplier_id', 'quotation_type', 'quotation_category', 'agent_id', 'status_id', 'enquiry_id', 'branch_id'],
     autoNumber: { column: 'quotation_no', docType: 'QUOTATION' },
+    // Editing a saved quotation keeps the previous content as V1, V2 … (trx_quotation_version)
+    beforeUpdateTx: quotationBeforeUpdateTx,
     // Purchase quotations (fabric / yarn / trims / general) come from a supplier; buyer quotations go to a buyer.
     beforeWrite: (_req, data, before) => {
       const type = String(data.quotation_type ?? before?.quotation_type ?? '');
@@ -804,10 +818,11 @@ export const transactionResources: ResourceConfig[] = [
     hasIsActive: false, softDelete: false, hasAuditCols: false,
     filters: ['entry_type', 'party_id', 'material_type', 'status', 'warehouse_id'],
     autoNumber: { column: 'entry_no', docType: 'GATE_INWARD' },
+    beforeWrite: (_req, data, before) => stampGateNow(data, before, 'entry_date', 'entry_time'),
     selectExtra: 'p.party_name, w.warehouse_name',
     joins: 'LEFT JOIN mst_party p ON p.id = t.party_id LEFT JOIN mst_warehouse w ON w.id = t.warehouse_id',
     fields: [
-      f('entry_no', s.nullableStr(40)), f('entry_date', s.date()), f('entry_time', s.strReq(10)),
+      f('entry_no', s.nullableStr(40)), f('entry_date', s.date()), f('entry_time', s.nullableStr(10)),
       f('entry_type', s.enum(['PURCHASE_INWARD','JOBWORK_RETURN','SAMPLE_INWARD','SALES_RETURN','GENERAL_INWARD'])),
       f('party_id', s.idReq()), f('supplier_dc_no', s.nullableStr(60)), f('supplier_dc_date', s.date()),
       f('supplier_inv_no', s.nullableStr(60)), f('supplier_inv_date', s.date()),
@@ -827,10 +842,11 @@ export const transactionResources: ResourceConfig[] = [
     hasIsActive: false, softDelete: false, hasAuditCols: false,
     filters: ['pass_type', 'party_id', 'to_unit_id', 'status', 'is_returned'],
     autoNumber: { column: 'pass_no', docType: 'GATE_OUTWARD' },
+    beforeWrite: (_req, data, before) => stampGateNow(data, before, 'pass_date', 'pass_time'),
     selectExtra: 'p.party_name, u.unit_name AS to_unit_name, um.code AS uom_code',
     joins: 'LEFT JOIN mst_party p ON p.id = t.party_id LEFT JOIN mst_unit u ON u.id = t.to_unit_id LEFT JOIN cfg_uom um ON um.id = t.uom_id',
     fields: [
-      f('pass_no', s.nullableStr(40)), f('pass_date', s.date()), f('pass_time', s.strReq(10)),
+      f('pass_no', s.nullableStr(40)), f('pass_date', s.date()), f('pass_time', s.nullableStr(10)),
       f('pass_type', s.enum(['RETURNABLE_JOBWORK','RETURNABLE_GENERAL','NON_RETURNABLE_DISPATCH','NON_RETURNABLE_SCRAP','NON_RETURNABLE_SAMPLE'])),
       f('party_id', s.id()), f('to_unit_id', s.id()),
       f('vehicle_no', s.strReq(30)), f('driver_name', s.nullableStr(80)), f('driver_phone', s.nullableStr(30)),

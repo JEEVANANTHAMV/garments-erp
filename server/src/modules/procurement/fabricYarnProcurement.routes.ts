@@ -128,6 +128,48 @@ export function quoteLineTax(ql: any, isInterstate: boolean) {
 }
 
 /**
+ * GET /procurement/quoted-rates?kind=FABRIC|YARN|TRIMS&supplier_id=&so_id=
+ * Rates a supplier quoted for this kind of material — used by the Fabric / Yarn / Trims PO
+ * pages when lines are filled from the job's BOM or picked by hand, so the PO takes the
+ * CONFIRMED rate and the GST % of the quotation (not the BOM standard rate / a default GST).
+ * Latest quotation first; lines of the same job win over lines without a job. Cancelled /
+ * rejected quotations are ignored.
+ */
+fabricYarnProcurementRouter.get('/procurement/quoted-rates',
+  requireAny('PURCHASE.VIEW', 'PROCUREMENT.VIEW', 'QUOTATION.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const q = z.object({
+    kind: z.enum(['FABRIC', 'YARN', 'TRIMS']),
+    supplier_id: z.coerce.number().int().positive(),
+    so_id: z.coerce.number().int().positive().optional(),
+  }).parse(req.query);
+  const m = QUOTE_MATERIAL[q.kind];
+  const rows = await query<any>(
+    `SELECT ql.id, ql.bom_line_id, ql.${m.idCol} AS material_id, ql.color_id, ql.size_id, ql.so_id, ql.job_no,
+            ql.quotation_rate, ql.confirm_rate, ql.unit_price, ql.gst_rate, ql.igst_rate,
+            qt.id AS quotation_id, qt.quotation_no, qt.quotation_date
+       FROM trx_quotation_line ql
+       JOIN trx_quotation qt ON qt.id = ql.quotation_id
+       LEFT JOIN cfg_status cs ON cs.id = qt.status_id
+      WHERE qt.company_id = ? AND qt.is_deleted = 0 AND qt.quotation_type = ? AND qt.supplier_id = ?
+        AND COALESCE(cs.code, '') NOT IN ('CANCELLED', 'REJECTED')
+        AND ql.${m.idCol} IS NOT NULL
+        AND (? IS NULL OR ql.so_id IS NULL OR ql.so_id = ?)
+      ORDER BY (ql.so_id <=> ?) DESC, qt.quotation_date DESC, qt.id DESC, ql.id`,
+    [cid, q.kind, q.supplier_id, q.so_id ?? null, q.so_id ?? null, q.so_id ?? null]);
+  res.json({
+    data: rows.map((r) => ({
+      quotation_id: Number(r.quotation_id), quotation_no: r.quotation_no, quotation_line_id: Number(r.id),
+      bom_line_id: r.bom_line_id ? Number(r.bom_line_id) : null, material_id: Number(r.material_id),
+      color_id: r.color_id ? Number(r.color_id) : null, size_id: r.size_id ? Number(r.size_id) : null,
+      so_id: r.so_id ? Number(r.so_id) : null,
+      rate: quoteLineRate(r), confirm_rate: Number(r.confirm_rate) || 0, quotation_rate: Number(r.quotation_rate) || 0,
+      gst_rate: Number(r.gst_rate) || Number(r.igst_rate) || 0,
+    })),
+  });
+}));
+
+/**
  * Loads a purchase quotation for conversion into a Fabric / Yarn / Trims PO and resolves
  * each line's material (explicit fabric_id / yarn_id / trim_id, else an exact master name /
  * code match on the description) and the job (line so_id, else the quotation's job no).
@@ -353,15 +395,29 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
     let totIgst = 0;
     const isInterstate = Boolean(body.is_interstate);
 
+    // Quantities are in the line's (= PO's) UOM: a KG line is received / billed by roll WEIGHT,
+    // a metre line by roll METRES. With rolls entered, the server derives the quantities from
+    // them and always prices taxable = accepted qty × rate (the client's amount is not trusted).
+    const uomIds = [...new Set(lines.map((l: any) => Number(l.uom_id)).filter(Boolean))];
+    const uomCodes = new Map<number, string>(uomIds.length
+      ? (await txQuery<any>(tx, 'SELECT id, code FROM cfg_uom WHERE id IN (?)', [uomIds])).map((u) => [Number(u.id), String(u.code || '').toUpperCase()])
+      : []);
     const calculatedLines = lines.map((line: any) => {
-      const recQty = Number(line.received_qty) || 0;
-      const accQty = Number(line.accepted_qty !== undefined ? line.accepted_qty : recQty);
-      const rejQty = Number(line.rejected_qty) || 0;
-      const holdQty = Number(line.hold_qty) || 0;
+      const isKg = ['KG', 'KGS'].includes(uomCodes.get(Number(line.uom_id)) ?? '');
+      const rolls: any[] = Array.isArray(line.rolls) ? line.rolls : [];
+      const rq = (r: any) => Number(isKg ? r.weight_kg : r.meters) || 0;
+      const sumBy = (st?: string) => rolls.filter((r) => !st || (r.qc_status || 'ACCEPTED') === st).reduce((a, r) => a + rq(r), 0);
+      const fromRolls = rolls.length > 0 && rolls.some((r) => rq(r) > 0);
+      const recQty = fromRolls ? sumBy() : Number(line.received_qty) || 0;
+      const accQty = fromRolls ? sumBy('ACCEPTED') : Number(line.accepted_qty !== undefined ? line.accepted_qty : recQty);
+      const rejQty = fromRolls ? sumBy('REJECTED') : Number(line.rejected_qty) || 0;
+      const holdQty = fromRolls ? sumBy('CONDITIONAL') : Number(line.hold_qty) || 0;
+      const rollWeight = rolls.reduce((a, r) => a + (Number(r.weight_kg) || 0), 0);
+      line.received_weight = Number(line.received_weight) || rollWeight || (isKg ? recQty : 0);
       const poQty = Number(line.po_qty) || recQty;
       const balanceQty = Math.max(0, poQty - accQty);
       const rate = Number(line.rate) || 0;
-      const taxable = Number(line.taxable_amount !== undefined ? line.taxable_amount : (accQty * rate));
+      const taxable = Math.round(accQty * rate * 100) / 100;
       const gstRate = Number(line.gst_rate !== undefined ? line.gst_rate : 5);
 
       let cgst = 0;
@@ -512,7 +568,7 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
         line.color_name || null,
         line.shade_code || null,
         line.recQty,
-        Number(line.received_weight || line.recQty * 0.25),
+        Number(line.received_weight) || 0,
         Number(line.no_of_rolls || 1),
         line.accQty,
         line.rejQty,
@@ -549,14 +605,14 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
           grnLineId,
           Number(line.fabric_id),
           rNo,
-          r.lot_no || line.lot_no || 'LOT-1',
-          Number(r.meters || r.qty || 250),
-          Number(r.weight_kg || 62.5),
-          Number(r.gsm || 180),
-          r.dia || '30"',
-          r.shade || 'NVY-01',
+          r.lot_no || line.lot_no || null,
+          Number(r.meters || r.qty) || 0,
+          Number(r.weight_kg) || 0,
+          Number(r.gsm) || null,
+          r.dia || null,
+          r.shade || line.shade_code || null,
           Number(body.warehouse_id),
-          r.location_bin || 'A-01',
+          r.location_bin || null,
           r.qc_status || 'ACCEPTED',
           r.qc_status === 'ACCEPTED' ? 'AVAILABLE' : 'RESERVED',
           r.remarks || null,

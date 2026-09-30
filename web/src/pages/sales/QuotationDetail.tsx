@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useJobBoms, bomItemLabel, type JobBomItem } from '../../lib/jobBom';
+import { QuotationVersionsButton } from './QuotationVersions';
 import {
   ArrowLeft, Plus, Trash2, Save, FileText, Printer, Layers, Sparkles,
 } from 'lucide-react';
@@ -591,7 +592,7 @@ export default function QuotationDetailPage() {
         await http.put(`/quotations/${id}`, payload);
         toast(asDraft ? 'Quotation saved as Draft' : 'Quotation saved', 'success');
         qc.invalidateQueries({ queryKey: ['quotations', 'item', id] });
-        qc.invalidateQueries({ queryKey: ['quotations'] });
+        qc.invalidateQueries({ queryKey: ['quotations'] });   // incl. the versions list (V1, V2 …)
       }
     } catch (e: any) {
       toast(e?.message ?? 'Save failed', 'error');
@@ -639,6 +640,7 @@ export default function QuotationDetailPage() {
             <button className="btn-secondary" onClick={() => nav('/sales/quotations')}>
               <ArrowLeft size={15} /> Back
             </button>
+            {!isNew && <QuotationVersionsButton quotationId={Number(id)} currentLines={lines} />}
             {!isNew && (
               <button className="btn-secondary" onClick={() => window.print()}>
                 <Printer size={15} /> Print
