@@ -38,7 +38,7 @@ const trimPoLineSchema = z.object({
 const trimPoSchema = z.object({
   po_no: s.nullableStr(50),
   po_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  io_no: s.nullableStr(60),
+  io_no: s.strReq(60),
   style_id: s.id(),
   supplier_id: s.idReq(),
   currency_id: s.id().default(1),
@@ -92,7 +92,7 @@ const trimGrnSchema = z.object({
   po_id: s.id(),
   po_ids: z.array(z.coerce.number().int().positive()).optional(),
   gate_inward_id: s.id(),
-  io_no: s.strReq(60),
+  io_no: s.nullableStr(60),
   style_id: s.id(),
   supplier_id: s.idReq(),
   currency_id: s.id().default(1),

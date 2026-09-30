@@ -36,3 +36,8 @@ PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_fabric_process_roll_out' AND COLUMN_NAME='fabric_roll_id');
 SET @s = IF(@x=0, 'ALTER TABLE trx_fabric_process_roll_out ADD COLUMN fabric_roll_id BIGINT UNSIGNED NULL COMMENT ''Store roll created on receipt'', ADD COLUMN grn_id BIGINT UNSIGNED NULL COMMENT ''Processed-fabric GRN'', ADD COLUMN party_dc_no VARCHAR(60) NULL', 'SELECT 1');
 PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+
+-- customer_po_no is in the original DDL (25) but missing on databases where the table pre-existed
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_fabric_process_order' AND COLUMN_NAME='customer_po_no');
+SET @s = IF(@x=0, 'ALTER TABLE trx_fabric_process_order ADD COLUMN customer_po_no VARCHAR(60) NULL AFTER io_no', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
