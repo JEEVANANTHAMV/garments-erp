@@ -167,20 +167,32 @@ function DailyOutputPage({ proc }: { proc: OutProc }) {
       const wb = XLSX.read(await file.arrayBuffer());
       const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]], { defval: '' });
       const norm = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k.toLowerCase().replace(/[^a-z]/g, ''), v]));
+      // First non-blank cell: sheet_to_json fills missing cells with '' so `??` would stop at an empty column.
+      const pick = (r: Record<string, unknown>, ...keys: string[]) => String(keys.map((k) => r[k]).find((v) => String(v ?? '').trim() !== '') ?? '').trim();
       let hit = 0; const miss: string[] = [];
       const next = [...rows];
       for (const raw of data) {
         const r = norm(raw);
-        const code = String(r.bundleid ?? r.bundleno ?? r.bundle ?? r.barcode ?? '').trim();
+        const code = pick(r, 'bundleid', 'bundleno', 'bundle', 'barcode');
         if (!code) continue;
         const k = next.findIndex((x) => x.bundle_no === code || x.barcode === code);
         const p = planRows.find((x) => x.bundle_no === code || x.barcode === code);
-        const defect = String(r.defectreason ?? r.defect ?? '').trim().toLowerCase();
-        const patch = {
-          input_qty: n(r.inputqty ?? r.input), rework_qty: n(r.reworkqty ?? r.rework), reject_qty: n(r.rejectqty ?? r.reject),
-          operator_name: String(r.operator ?? ''), start_time: String(r.starttime ?? '').slice(0, 5), end_time: String(r.endtime ?? '').slice(0, 5),
-          defect_id: String(defects.data?.find((d: any) => String(d.label).toLowerCase() === defect)?.id ?? ''),
+        // Only cells that are filled in overwrite the row (a blank input keeps the planned qty).
+        const patch: Partial<Row> = {};
+        const num = (key: keyof Row, ...keys: string[]) => { const v = pick(r, ...keys); if (v !== '') (patch as any)[key] = n(v); };
+        const txt = (key: keyof Row, ...keys: string[]) => { const v = pick(r, ...keys); if (v !== '') (patch as any)[key] = v; };
+        num('input_qty', 'inputqty', 'input'); num('rework_qty', 'reworkqty', 'rework'); num('reject_qty', 'rejectqty', 'reject');
+        txt('operator_name', 'operator', 'operatorname');
+        // Excel keeps a typed 09:00 as the day fraction 0.375.
+        const time = (key: keyof Row, cell: string) => {
+          const v = pick(r, cell); if (v === '') return;
+          const f = Number(v);
+          if (Number.isFinite(f) && f >= 0 && f < 1) { const m = Math.round(f * 1440); (patch as any)[key] = `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; }
+          else (patch as any)[key] = v.padStart(5, '0').slice(0, 5);
         };
+        time('start_time', 'starttime'); time('end_time', 'endtime');
+        const defect = pick(r, 'defectreason', 'defect').toLowerCase();
+        if (defect) patch.defect_id = String(defects.data?.find((d: any) => String(d.label).toLowerCase() === defect)?.id ?? '');
         if (k >= 0) { next[k] = { ...next[k], ...patch }; hit++; }
         else if (p) { next.push({ ...fromPlanRow(p), ...patch }); hit++; }
         else miss.push(code);

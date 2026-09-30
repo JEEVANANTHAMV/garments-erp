@@ -227,19 +227,21 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
       const wb = XLSX.read(await file.arrayBuffer());
       const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]], { defval: '' });
       const norm = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k.toLowerCase().replace(/[^a-z]/g, ''), v]));
+      // First non-blank cell: sheet_to_json fills missing cells with '' so `??` would stop at an empty column.
+      const pick = (r: Record<string, unknown>, ...keys: string[]) => String(keys.map((k) => r[k]).find((v) => String(v ?? '').trim() !== '') ?? '').trim();
       const items: (Pending & { free_qty: number })[] = [];
       const q = new Map<number, number>();
       const missing: string[] = [];
       for (const raw of data) {
         const r = norm(raw);
-        const code = String(r.bundleid ?? r.bundleno ?? r.bundle ?? r.barcode ?? '').trim();
+        const code = pick(r, 'bundleid', 'bundleno', 'bundle', 'barcode');
         if (!code) continue;
-        const lineCode = String(r.linecode ?? r.line ?? '').trim();
+        const lineCode = pick(r, 'linecode', 'line');
         const hit = freePending.find((p) => (p.bundle_no === code || p.barcode === code)
           && (!lineCode || lines.find((l) => l.id === p.line_id)?.line_code === lineCode));
         if (!hit) { missing.push(code); continue; }
         items.push(hit);
-        q.set(hit.allocation_detail_id, n(r.plannedqty ?? r.qty) || hit.free_qty);
+        q.set(hit.allocation_detail_id, n(pick(r, 'plannedqty', 'qty')) || hit.free_qty);
       }
       addRows(items, (p) => q.get(p.allocation_detail_id) ?? p.free_qty);
       toast(`Imported ${items.length} row(s)${missing.length ? ` — not pending: ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? '…' : ''}` : ''}`, missing.length ? 'warning' : 'success');
