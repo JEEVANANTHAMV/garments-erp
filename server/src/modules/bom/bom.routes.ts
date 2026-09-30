@@ -291,6 +291,44 @@ bomRouter.get('/for-job', requireAny('BOM.VIEW', 'PURCHASE.VIEW', 'PROCUREMENT.V
   });
 }));
 
+/**
+ * GET /order-cells?so_id=&style_id= — the job strip and requirement grid of the BOM screen:
+ * job / buyer / style and the order's colour × size quantities (plan cut incl. size-wise excess),
+ * the same cells MRP, for-job and the BOM print multiply BOM lines by.
+ */
+bomRouter.get('/order-cells', requirePermission('BOM.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const q = z.object({ so_id: z.coerce.number().int().positive(), style_id: z.coerce.number().int().positive() }).parse(req.query);
+  const so = await queryOne<any>(
+    `SELECT so.id, so.so_no, so.io_no, so.buyer_po_no, b.party_name AS buyer_name, st.style_code, st.style_name
+       FROM trx_sales_order so
+       LEFT JOIN mst_party b ON b.id = so.buyer_id
+       LEFT JOIN mst_style st ON st.id = ? AND st.company_id = so.company_id
+      WHERE so.id = ? AND so.company_id = ? AND so.is_deleted = 0`, [q.style_id, q.so_id, cid]);
+  if (!so) throw NotFound('Sales order not found');
+  const cells = await orderCells(null, q.so_id, q.style_id);
+  const ids = (k: 'color_id' | 'size_id') => [...new Set(cells.map((c) => c[k]).filter((v): v is number => v != null))];
+  const [colors, sizes] = await Promise.all([
+    ids('color_id').length ? query<any>('SELECT id, color_name AS name FROM mst_color WHERE id IN (?)', [ids('color_id')]) : [],
+    ids('size_id').length ? query<any>('SELECT id, size_code AS code, sort_order FROM mst_size WHERE id IN (?) ORDER BY sort_order, id', [ids('size_id')]) : [],
+  ]);
+  const sum = (f: (c: OrderCell) => boolean) => {
+    const xs = cells.filter(f);
+    return { qty: cellsOrderQty(xs), plan_cut: cellsPlanCut(xs) };
+  };
+  res.json({
+    data: {
+      so_id: so.id, job_no: so.io_no || so.so_no, so_no: so.so_no, buyer_name: so.buyer_name, buyer_po_no: so.buyer_po_no,
+      style_code: so.style_code, style_name: so.style_name,
+      sizes: sizes.map((z: any) => ({ size_id: Number(z.id), code: z.code, ...sum((c) => c.size_id === Number(z.id)) })),
+      colors: colors.map((c: any) => ({ color_id: Number(c.id), name: c.name, ...sum((x) => x.color_id === Number(c.id)) }))
+        .sort((a: any, b: any) => a.name.localeCompare(b.name)),
+      totals: { qty: cellsOrderQty(cells), plan_cut: cellsPlanCut(cells) },
+      cells,
+    },
+  });
+}));
+
 bomRouter.get('/:id', requirePermission('BOM.VIEW'), ah(async (req, res) => {
   const id = Number(req.params.id);
   const bom = await queryOne(

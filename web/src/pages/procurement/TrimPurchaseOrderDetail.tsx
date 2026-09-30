@@ -5,6 +5,7 @@ import {
   ArrowLeft, Save, Plus, Trash2, Scissors, Printer, Layers, Sparkles, RefreshCw, FileSpreadsheet
 } from 'lucide-react';
 import { http, ApiError } from '../../lib/api';
+import { useJobBoms, bomItemLabel, type JobBomItem } from '../../lib/jobBom';
 import { fmtDecimal, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
 import { useLookup } from '../../hooks/useLookup';
@@ -17,6 +18,8 @@ interface TrimLine {
   style_id?: string | number;
   trim_id: string | number;
   trim_name?: string;
+  /** BOM line picked on this row (UI only — selects the BOM option). */
+  _bom?: number;
   specification: string;
   color_name: string;
   trim_size: string;
@@ -232,6 +235,18 @@ export default function TrimPurchaseOrderDetailPage() {
     uom_id: Number(bt.uom_id) || 1,
     rate: Number(bt.std_rate) || 0,
   }, isInterstate);
+
+  // Line-level pick: the row's job (or the header job) + style → that job's BOM trims with their requirement
+  const TRIM_TYPES = ['TRIM', 'ACCESSORY', 'PACKING'];
+  const lineJob = (l: TrimLine) => l.so_id || selectedJob?.id || '';
+  const lineStyle = (l: TrimLine) => l.style_id || head.style_id || '';
+  const jobBoms = useJobBoms(lines.map((l) => ({ so_id: lineJob(l), style_id: lineStyle(l) })));
+  const pickBomTrim = (idx: number, l: TrimLine, it: JobBomItem) => {
+    const next = bomToTrimLine(it, head.is_interstate);
+    updateLine(idx, { ...next, _key: l._key, id: l.id, _bom: it.bom_line_id, so_id: l.so_id || next.so_id,
+      specification: it.specification || next.specification,
+      rate: Number(l.rate) > 0 ? l.rate : next.rate, gst_rate: l.gst_rate });
+  };
 
   /** Loads the job's BOM trims into the PO (asks before replacing entered lines). */
   const loadBomForJob = async (soId: number | string, styleId?: string) => {
@@ -727,6 +742,7 @@ export default function TrimPurchaseOrderDetailPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {lines.map((line, idx) => {
+                const lineBom = jobBoms.itemsFor(lineJob(line), lineStyle(line), TRIM_TYPES).filter((it) => it.trim_id);
                 const availableTrims = (filterBomOnly && bomTrims.length > 0)
                   ? trims.filter((t: any) => bomTrims.some((bt: any) => Number(bt.trim_id) === Number(t.id)))
                   : trims;
@@ -742,7 +758,7 @@ export default function TrimPurchaseOrderDetailPage() {
                     <td className="py-2 px-2">
                       <select
                         value={line.so_id || ''}
-                        onChange={(e) => updateLine(idx, { so_id: e.target.value })}
+                        onChange={(e) => updateLine(idx, { so_id: e.target.value, _bom: undefined })}
                         className="input text-xs py-1 bg-white"
                       >
                         <option value="">{head.io_no ? `${head.io_no} (Default)` : 'Stock / General'}</option>
@@ -758,25 +774,36 @@ export default function TrimPurchaseOrderDetailPage() {
                     <td className="py-2 px-2">
                       <select
                         value={line.style_id || head.style_id || ''}
-                        onChange={(e) => updateLine(idx, { style_id: e.target.value })}
+                        onChange={(e) => updateLine(idx, { style_id: e.target.value, _bom: undefined })}
                         className="input text-xs py-1"
                       >
                         <option value="">-- Style --</option>
-                        {styles.map((st: any) => (
-                          <option key={st.id} value={st.id}>
-                            {st.code}
-                          </option>
-                        ))}
+                        {(() => {
+                          const job = jobs.find((j) => String(j.id) === String(lineJob(line)));
+                          return job
+                            ? job.styles.map((st) => <option key={st.style_id} value={st.style_id}>{st.style_code}</option>)
+                            : styles.map((st: any) => <option key={st.id} value={st.id}>{st.code}</option>);
+                        })()}
                       </select>
                     </td>
 
                     {/* 4. Trim Item */}
                     <td className="py-2 px-3">
                       <select
-                        value={line.trim_id}
+                        value={line._bom && lineBom.some((it) => it.bom_line_id === line._bom) ? `bom:${line._bom}` : line.trim_id}
                         onChange={(e) => {
+                          if (e.target.value.startsWith('bom:')) {
+                            const it = lineBom.find((x) => `bom:${x.bom_line_id}` === e.target.value);
+                            if (it) pickBomTrim(idx, line, it);
+                            return;
+                          }
+                          // A trim that is on this job's BOM once fills from the BOM (qty, colour, size, spec)
+                          const inBom = lineBom.filter((x) => String(x.trim_id) === e.target.value);
+                          if (inBom.length === 1) { pickBomTrim(idx, line, inBom[0]); return; }
+                          if (inBom.length > 1) toast(`${inBom.length} BOM lines use this trim (colour / size wise) — pick the line from the BOM group to load its qty`, 'info');
                           const sel = trims.find((t: any) => String(t.id) === e.target.value);
                           updateLine(idx, {
+                            _bom: undefined,
                             trim_id: e.target.value,
                             trim_name: sel?.label,
                             uom_id: Number(sel?.base_uom) || line.uom_id,
@@ -785,12 +812,19 @@ export default function TrimPurchaseOrderDetailPage() {
                         }}
                         className="input text-xs py-1"
                       >
-                        <option value="">-- Select Trim --</option>
-                        {availableTrims.map((t: any) => (
-                          <option key={t.id} value={t.id}>
-                            {t.label} ({t.trim_type || t.code})
-                          </option>
-                        ))}
+                        <option value="">{jobBoms.statusFor(lineJob(line), lineStyle(line)) === 'loading' ? 'Loading BOM…' : '-- Select Trim --'}</option>
+                        {lineBom.length > 0 && (
+                          <optgroup label="BOM of this job (qty = requirement)">
+                            {lineBom.map((it) => <option key={it.bom_line_id} value={`bom:${it.bom_line_id}`}>{bomItemLabel(it)}</option>)}
+                          </optgroup>
+                        )}
+                        <optgroup label="All trims">
+                          {availableTrims.map((t: any) => (
+                            <option key={t.id} value={t.id}>
+                              {t.label} ({t.trim_type || t.code})
+                            </option>
+                          ))}
+                        </optgroup>
                       </select>
                     </td>
 

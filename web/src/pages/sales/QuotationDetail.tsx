@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useJobBoms, bomItemLabel, type JobBomItem } from '../../lib/jobBom';
 import {
   ArrowLeft, Plus, Trash2, Save, FileText, Printer, Layers, Sparkles,
 } from 'lucide-react';
@@ -214,6 +215,14 @@ export default function QuotationDetailPage() {
   const [bomStyleId, setBomStyleId] = useState('');
   const [bomLoading, setBomLoading] = useState(false);
   const bomJob = (jobs.data ?? []).find(j => String(j.id) === bomJobId);
+  // Line-level pick: each line's own IO + style → that job's BOM items of this quotation's material
+  const jobBoms = useJobBoms(bomMaterial ? lines.map(l => ({ so_id: l.so_id, style_id: l.style_id })) : []);
+  const jobById = (id: unknown) => (jobs.data ?? []).find(j => j.id === Number(id));
+  /** Fills a line from the picked BOM item, keeping its row key and any rate already entered. */
+  const pickBomItem = (l: QLine, it: JobBomItem) => {
+    const next = bomItemToLine(it, it.job_no, l.sort_order, { _key: l._key, id: l.id, sort_order: l.sort_order } as Partial<QLine>);
+    setLine(l._key, { ...next, quotation_rate: Number(l.quotation_rate) > 0 ? l.quotation_rate : next.quotation_rate, confirm_rate: l.confirm_rate });
+  };
 
   const inrCurrency = currencies.data?.find((c: any) => c.code === 'INR');
   const usdCurrency = currencies.data?.find((c: any) => c.code === 'USD');
@@ -424,6 +433,40 @@ export default function QuotationDetailPage() {
   const setLine = (key: string, patch: Partial<QLine>) =>
     setLines(ls => ls.map(l => l._key === key ? { ...l, ...patch } : l));
 
+  /** Quotation line from a BOM item of a job (qty = BOM requirement, rate = std rate). */
+  function bomItemToLine(it: any, jobNo: string | null | undefined, i: number, keep?: Partial<QLine>): QLine {
+    if (!bomMaterial) return { ...newLine(i), ...(keep ?? {}) };
+    const rate = Number(it.std_rate) || 0;
+    const base: QLine = {
+      ...newLine(i), ...(keep ?? {}),
+      job_no: it.job_no || jobNo || '',
+      so_id: it.so_id ?? '',
+      bom_line_id: it.bom_line_id ?? '',
+      material_type: it.material_type,
+      style_id: it.style_id ?? '',
+      color_id: it.color_id ?? '',
+      size_id: it.size_id ?? '',
+      qty: Number(it.final_requirement ?? it.order_required_qty) || '',
+      uom_id: it.uom_id ?? '',
+      quotation_rate: rate > 0 ? rate : '',
+    };
+    if (bomMaterial.key === 'fabric_id') {
+      return { ...base, fabric_id: it.fabric_id,
+        description: [it.fabric_name, it.item_description].filter(Boolean).join(' — '),
+        dia: it.fabric_dia ? `${Number(it.fabric_dia)}"` : '',
+        gsm: it.fabric_gsm ? String(it.fabric_gsm) : '' };
+    }
+    if (bomMaterial.key === 'yarn_id') {
+      return { ...base, yarn_id: it.yarn_id,
+        description: [it.yarn_name, it.item_description].filter(Boolean).join(' — '),
+        yarn_type: titleCase(it.yarn_master_type),
+        yarn_count: it.yarn_count || '' };
+    }
+    return { ...base, trim_id: it.trim_id,
+      description: [it.trim_name, it.specification || it.trim_specification || it.item_description].filter(Boolean).join(' — '),
+      trim_size: it.size_code || '' };
+  }
+
   /** Fills the line items from the selected job's BOM (only this quotation's material type). */
   async function loadFromBom() {
     if (!bomMaterial) return;
@@ -443,37 +486,7 @@ export default function QuotationDetailPage() {
       const hasEntered = lines.some(l => l.description || l.qty || l.fabric_id || l.yarn_id || l.trim_id);
       if (hasEntered && !window.confirm(`Replace the ${lines.length} existing line(s) with ${items.length} ${bomMaterial.label.toLowerCase()} item(s) from the BOM?`)) return;
 
-      setLines(items.map((it, i): QLine => {
-        const rate = Number(it.std_rate) || 0;
-        const base: QLine = {
-          ...newLine(i),
-          job_no: it.job_no || data.job_no || '',
-          so_id: it.so_id ?? '',
-          bom_line_id: it.bom_line_id ?? '',
-          material_type: it.material_type,
-          style_id: it.style_id ?? '',
-          color_id: it.color_id ?? '',
-          size_id: it.size_id ?? '',
-          qty: Number(it.final_requirement ?? it.order_required_qty) || '',
-          uom_id: it.uom_id ?? '',
-          quotation_rate: rate > 0 ? rate : '',
-        };
-        if (bomMaterial.key === 'fabric_id') {
-          return { ...base, fabric_id: it.fabric_id,
-            description: [it.fabric_name, it.item_description].filter(Boolean).join(' — '),
-            dia: it.fabric_dia ? `${Number(it.fabric_dia)}"` : '',
-            gsm: it.fabric_gsm ? String(it.fabric_gsm) : '' };
-        }
-        if (bomMaterial.key === 'yarn_id') {
-          return { ...base, yarn_id: it.yarn_id,
-            description: [it.yarn_name, it.item_description].filter(Boolean).join(' — '),
-            yarn_type: titleCase(it.yarn_master_type),
-            yarn_count: it.yarn_count || '' };
-        }
-        return { ...base, trim_id: it.trim_id,
-          description: [it.trim_name, it.trim_specification || it.item_description].filter(Boolean).join(' — '),
-          trim_size: it.size_code || '' };
-      }));
+      setLines(items.map((it, i) => bomItemToLine(it, data.job_no, i)));
       setHead(h => ({
         ...h,
         job_no: data.job_no || h.job_no,
@@ -1266,13 +1279,31 @@ export default function QuotationDetailPage() {
                         {/* I/O Num / Job No */}
                         {showJobAndStyle && (
                           <td className="px-1.5 py-1">
-                            <input
-                              type="text"
-                              placeholder="I/O #"
-                              value={l.job_no}
-                              onChange={e => setLine(l._key, { job_no: e.target.value })}
-                              className="w-full rounded border border-surface-border px-2 py-1 text-xs focus:border-brand-500 focus:outline-none"
-                            />
+                            {bomMaterial ? (
+                              <select
+                                value={l.so_id}
+                                onChange={e => {
+                                  const job = jobById(e.target.value);
+                                  const keepStyle = job?.styles.some(st => st.style_id === Number(l.style_id));
+                                  setLine(l._key, {
+                                    so_id: job ? job.id : '', job_no: job?.job_no ?? '', bom_line_id: '',
+                                    style_id: keepStyle ? l.style_id : (job && job.styles.length === 1 ? job.styles[0].style_id : ''),
+                                  });
+                                }}
+                                className="w-full rounded border border-surface-border bg-white px-2 py-1 text-xs focus:border-brand-500 focus:outline-none"
+                              >
+                                <option value="">{l.job_no && !l.so_id ? l.job_no : '— I/O —'}</option>
+                                {(jobs.data ?? []).map(j => <option key={j.id} value={j.id}>{j.job_no}</option>)}
+                              </select>
+                            ) : (
+                              <input
+                                type="text"
+                                placeholder="I/O #"
+                                value={l.job_no}
+                                onChange={e => setLine(l._key, { job_no: e.target.value })}
+                                className="w-full rounded border border-surface-border px-2 py-1 text-xs focus:border-brand-500 focus:outline-none"
+                              />
+                            )}
                           </td>
                         )}
 
@@ -1281,13 +1312,15 @@ export default function QuotationDetailPage() {
                           <td className="px-1.5 py-1">
                             <select
                               value={l.style_id}
-                              onChange={e => setLine(l._key, { style_id: Number(e.target.value) || '' })}
+                              onChange={e => setLine(l._key, { style_id: Number(e.target.value) || '', ...(bomMaterial ? { bom_line_id: '' as const } : {}) })}
                               className="w-full rounded border border-surface-border bg-white px-2 py-1 text-xs focus:border-brand-500 focus:outline-none"
                             >
                               <option value="">— Style —</option>
-                              {(styles.data ?? []).map((s: any) => (
-                                <option key={s.id} value={s.id}>{s.code}</option>
-                              ))}
+                              {bomMaterial && jobById(l.so_id)
+                                ? jobById(l.so_id)!.styles.map(st => <option key={st.style_id} value={st.style_id}>{st.style_code}</option>)
+                                : (styles.data ?? []).map((s: any) => (
+                                  <option key={s.id} value={s.id}>{s.code}</option>
+                                ))}
                             </select>
                           </td>
                         )}
@@ -1295,11 +1328,26 @@ export default function QuotationDetailPage() {
                         {/* Material master */}
                         {bomMaterial && (
                           <td className="px-1.5 py-1">
+                            {(() => {
+                              const bomItems = jobBoms.itemsFor(l.so_id, l.style_id, bomMaterial.types).filter(it => it[bomMaterial.key]);
+                              const st = jobBoms.statusFor(l.so_id, l.style_id);
+                              return (
                             <select
-                              value={l[bomMaterial.key]}
+                              value={l.bom_line_id && bomItems.some(it => it.bom_line_id === Number(l.bom_line_id)) ? `bom:${l.bom_line_id}` : l[bomMaterial.key]}
+                              title={st === 'empty' ? `No ${bomMaterial.label.toLowerCase()} in this job's BOM` : undefined}
                               onChange={e => {
+                                if (e.target.value.startsWith('bom:')) {
+                                  const it = bomItems.find(x => `bom:${x.bom_line_id}` === e.target.value);
+                                  if (it) pickBomItem(l, it);
+                                  return;
+                                }
+                                // A master item that is on this job's BOM fills from the BOM too (qty, colour, size, spec)
+                                const inBom = bomItems.filter(x => Number(x[bomMaterial.key]) === Number(e.target.value));
+                                if (inBom.length === 1) { pickBomItem(l, inBom[0]); return; }
+                                if (inBom.length > 1) toast(`${inBom.length} BOM lines use this item (colour / size wise) — pick the line from "BOM of ${l.job_no}" to load its qty`, 'info');
                                 const m: any = (materials.data ?? []).find((x: any) => String(x.id) === e.target.value);
                                 setLine(l._key, {
+                                  bom_line_id: '',
                                   [bomMaterial.key]: Number(e.target.value) || '',
                                   material_type: l.material_type || bomMaterial.types[0],
                                   description: l.description || m?.label || '',
@@ -1308,11 +1356,20 @@ export default function QuotationDetailPage() {
                               }}
                               className="w-full rounded border border-surface-border bg-white px-2 py-1 text-xs focus:border-brand-500 focus:outline-none"
                             >
-                              <option value="">— {bomMaterial.label} —</option>
-                              {(materials.data ?? []).map((m: any) => (
-                                <option key={m.id} value={m.id}>{m.code ? `${m.code} — ${m.label}` : m.label}</option>
-                              ))}
+                              <option value="">{st === 'loading' ? 'Loading BOM…' : `— ${bomMaterial.label} —`}</option>
+                              {bomItems.length > 0 && (
+                                <optgroup label={`BOM of ${l.job_no || 'job'} (qty = requirement)`}>
+                                  {bomItems.map(it => <option key={it.bom_line_id} value={`bom:${it.bom_line_id}`}>{bomItemLabel(it)}</option>)}
+                                </optgroup>
+                              )}
+                              <optgroup label={`All ${bomMaterial.label.toLowerCase()}s`}>
+                                {(materials.data ?? []).map((m: any) => (
+                                  <option key={m.id} value={m.id}>{m.code ? `${m.code} — ${m.label}` : m.label}</option>
+                                ))}
+                              </optgroup>
                             </select>
+                              );
+                            })()}
                           </td>
                         )}
 

@@ -12,6 +12,7 @@ import {
   PageHeader, SearchInput, Input, Select, Spinner, Badge, StatusBadge, LoadingBlock, ErrorState, useDebounced, Modal, Button
 } from '../../components/ui';
 import { fmtDate, fmtDecimal, today, toDateInput, humanize } from '../../lib/format';
+import { BomOrderStrip, BomRequirementTable, TYPE_TONE, useOrderInfo } from './BomRequirement';
 
 const MATERIALS = ['FABRIC', 'YARN', 'TRIM', 'ACCESSORY', 'PACKING', 'GENERAL'] as const;
 
@@ -658,6 +659,14 @@ export function BomDetailPage() {
     }
     return { colors: [] as any[], sizes: [] as any[], note: 'Select a style (and optionally a sales order) first.' };
   }, [soId, styleId, soScope.data, styleSkus.data]);
+  // Job strip + one-line-per-material requirement grid (needs the order's colour × size cells)
+  const orderInfo = useOrderInfo(soId, styleId);
+  const materialName = (l: any) => {
+    const src = l.material_type === 'YARN' ? yarns.data : l.material_type === 'FABRIC' ? fabrics.data : trims.data;
+    const mid = l.material_type === 'YARN' ? l.yarn_id : l.material_type === 'FABRIC' ? l.fabric_id : l.trim_id;
+    return (src ?? []).find((x: any) => x.id === Number(mid))?.label || l.item_description || '—';
+  };
+  const uomCode = (id: unknown) => (uoms.data ?? []).find((u: any) => u.id === Number(id))?.code ?? '';
 
   // Labels for colours / sizes already saved on lines but no longer on the
   // order, so an existing BOM still shows what it holds.
@@ -1006,6 +1015,8 @@ export function BomDetailPage() {
         </div>
       </div>
 
+      {orderInfo.data && <BomOrderStrip info={orderInfo.data} />}
+
       {/* Components Section with Tabs & Tech Pack Trim Support */}
       <div className="card mb-4 overflow-hidden">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-surface-border px-4 py-3 gap-2">
@@ -1111,10 +1122,11 @@ export function BomDetailPage() {
                                  : toOptions(trims.data);
                 const matValue = l.material_type === 'YARN' ? l.yarn_id
                                : l.material_type === 'FABRIC' ? l.fabric_id : l.trim_id;
+                const tone = TYPE_TONE[l.material_type] ?? TYPE_TONE.GENERAL;
                 return (
-                  <tr key={l._key} className="hover:bg-slate-50/50">
-                    <td className="td p-1.5">
-                      <select className="input py-1 text-[11px] font-semibold" value={l.material_type} disabled={!editable}
+                  <tr key={l._key} className={`${tone.row} hover:brightness-[0.98]`}>
+                    <td className={`td border-l-4 p-1.5 ${tone.bar}`}>
+                      <select className={`input py-1 text-[11px] font-bold ${tone.badge}`} value={l.material_type} disabled={!editable}
                         onChange={(e) => setLine(l._key, {
                           material_type: e.target.value as BomLine['material_type'],
                           yarn_id: '', fabric_id: '', trim_id: '', item_description: '',
@@ -1341,6 +1353,12 @@ export function BomDetailPage() {
           </div>
         )}
       </div>
+
+      {orderInfo.data ? (
+        <BomRequirementTable lines={lines} info={orderInfo.data} materialName={materialName} uomCode={uomCode} />
+      ) : (
+        <p className="mb-4 text-[11.5px] text-slate-500">Select the sales order to see the size-wise order qty and the total requirement of every material.</p>
+      )}
 
       {/* Cost roll-up */}
       <div className="card p-4">
