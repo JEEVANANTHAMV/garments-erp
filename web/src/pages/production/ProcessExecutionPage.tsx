@@ -26,6 +26,9 @@ const SRC_TYPES = [
 ] as const;
 
 type SrcType = (typeof SRC_TYPES)[number]['value'];
+/** Knitting programs and yarn processes have their own DC / GRN screens (Knitting DC & Grey Inward, Yarn Process),
+ *  so this screen only serves collar programs — one way per process. */
+const SELECTABLE = SRC_TYPES.filter((t) => t.value === 'COLLAR_PROGRAM');
 type Tab = 'issue' | 'receipt' | 'qc' | 'revisions';
 
 /** Where to list documents of each type, and how to label them. */
@@ -46,7 +49,7 @@ const QC_TYPE_FOR: Record<SrcType, string> = {
 export default function ProcessExecutionPage() {
   const qc = useQueryClient();
 
-  const [srcType, setSrcType] = useState<SrcType>('YARN_PROCESS');
+  const [srcType, setSrcType] = useState<SrcType>('COLLAR_PROGRAM');
   const [srcId, setSrcId] = useState<number | ''>('');
   const [tab, setTab] = useState<Tab>('issue');
 
@@ -103,14 +106,14 @@ export default function ProcessExecutionPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Process Execution"
-        subtitle="Issue material, receive output, record QC and raise revisions across every process"
+        title="Collar — Yarn Issue / Output / QC"
+        subtitle="Issue yarn, receive output, record QC and raise revisions for collar programs (knitting and yarn processes use their own DC / GRN screens)"
       />
 
       <div className="card grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
         <Select label="Document Type" value={srcType}
           onChange={(e) => setSrcType(e.target.value as SrcType)} id="ex-srctype">
-          {SRC_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+          {SELECTABLE.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
         </Select>
         <Select label="Document" value={srcId} placeholder="— Select a document —"
           onChange={(e) => setSrcId(e.target.value ? Number(e.target.value) : '')} id="ex-doc">

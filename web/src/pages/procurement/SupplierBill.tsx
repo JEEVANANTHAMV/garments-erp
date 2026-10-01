@@ -23,6 +23,10 @@ export const BILL_TYPES = [
   { value: 'IMPORT_PROCESS', label: 'Import Process / Service', icon: '🌐', tone: 'teal', material: 'SERVICE' },
   { value: 'GENERAL', label: 'General Bill', icon: '📦', tone: 'slate', material: 'SERVICE' },
 ] as const;
+/** Yarn / fabric process bills are booked in their own Bills Inward tabs (from the process GRNs);
+ *  the old categories stay only to show bills booked earlier. */
+const OWN_TAB_TYPES = ['YARN_PROCESS', 'FABRIC_PROCESS'];
+const NEW_BILL_TYPES = BILL_TYPES.filter((b) => !OWN_TAB_TYPES.includes(b.value));
 
 interface BillLineItem {
   id?: number;
@@ -630,7 +634,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
         <div className="space-y-4">
           {/* Bill Category Selector Tabs */}
           <div className="p-2 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center gap-1.5 overflow-x-auto">
-            {BILL_TYPES.map((bt) => {
+            {BILL_TYPES.filter((bt) => !OWN_TAB_TYPES.includes(bt.value) || billType === bt.value).map((bt) => {
               const active = billType === bt.value;
               return (
                 <button
@@ -1276,7 +1280,7 @@ export function SupplierBillsPage() {
         >
           All Bills Inward
         </button>
-        {BILL_TYPES.map((bt) => (
+        {NEW_BILL_TYPES.map((bt) => (
           <button
             key={bt.value}
             type="button"
