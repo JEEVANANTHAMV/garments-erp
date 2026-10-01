@@ -20,9 +20,11 @@ const money = (v: unknown) => `₹${fmtDecimal(n(v), 2)}`;
 export default function FabricProcessBillPage() {
   const [params, setParams] = useSearchParams();
   const id = params.get('id');
-  if (id === 'new') return <BillEditor onBack={() => setParams({})} onDone={(x) => setParams({ id: String(x) })} />;
-  if (id) return <BillView id={Number(id)} onBack={() => setParams({})} />;
-  return <BillList onOpen={(x) => setParams({ id: String(x) })} />;
+  // keep the other params (Bills Inward tab) when opening / closing a bill
+  const setId = (v: string | null) => setParams((p) => { const q = new URLSearchParams(p); if (v) q.set('id', v); else q.delete('id'); return q; });
+  if (id === 'new') return <BillEditor onBack={() => setId(null)} onDone={(x) => setId(String(x))} />;
+  if (id) return <BillView id={Number(id)} onBack={() => setId(null)} />;
+  return <BillList onOpen={(x) => setId(String(x))} />;
 }
 
 function BillList({ onOpen }: { onOpen: (id: number | 'new') => void }) {

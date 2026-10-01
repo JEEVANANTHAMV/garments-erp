@@ -40,7 +40,7 @@ import { GateInwardsPage, GateOutwardsPage } from './pages/gate';
 /* Procurement */
 import {
   MrpPage, PurchaseOrdersPage, GrnPage, MaterialIssuePage,
-  PurchaseReturnsPage, PurchaseReturnDetailPage, SupplierBillsPage,
+  PurchaseReturnsPage, PurchaseReturnDetailPage,
   GeneralPurchasesPage, GeneralPurchaseDetailPage,
 } from './pages/procurement';
 
@@ -84,6 +84,8 @@ import YarnProcessInwardPage from './pages/production/yarnProcess/InwardPage';
 import { YarnProcessReturnPage, YarnProcessReprocessPage } from './pages/production/yarnProcess/ReturnReprocessPages';
 import { YarnProcessBillPage, YarnConeTrackingPage, YarnProcessReportsPage, YarnProcessTypesPage } from './pages/production/yarnProcess/BillTrackingPages';
 import JobTransferPage from './pages/inventory/JobTransferPage';
+import BillsInwardHub from './pages/procurement/BillsInwardHub';
+import YarnSubstitutionPage from './pages/production/YarnSubstitutionPage';
 import MaterialTracePage from './pages/production/MaterialTracePage';
 
 import CadRequirementsPage from './pages/production/CadRequirements';
@@ -241,7 +243,7 @@ export default function App() {
                   <Route path="returns" element={<PurchaseReturnsPage />} />
                   <Route path="returns/new" element={<PurchaseReturnDetailPage />} />
                   <Route path="returns/:id" element={<PurchaseReturnDetailPage />} />
-                  <Route path="supplier-bills" element={<SupplierBillsPage />} />
+                  <Route path="supplier-bills" element={<BillsInwardHub />} />
                   <Route path="grn-bill-status" element={<GrnBillStatusPage />} />
 
                   {/* Fabric Procurement */}
@@ -349,6 +351,7 @@ export default function App() {
                   <Route path="jobwork-receipts" element={<JobWorkReceiptsPage />} />
                   <Route path="process-master" element={<ProcessMasterPage />} />
                   <Route path="contractor-bills" element={<ContractorBillsPage />} />
+                  <Route path="yarn-substitution" element={<YarnSubstitutionPage />} />
                   <Route path="job-rate-cards" element={<JobRateCardPage />} />
                   <Route path="contractor-advances" element={<ContractorAdvancesPage />} />
                   <Route path="contractor-debit-notes" element={<ContractorDebitNotesPage />} />

@@ -12,9 +12,10 @@ import { fmtDate, fmtDecimal } from '../../lib/format';
  * general), trims and fabric / yarn process (contractor) — has the bill been received?
  * Pending / partly billed / received, days since the GRN, overdue after BILL_PENDING_ALERT_DAYS.
  */
-const SOURCES = [['PURCHASE', 'Supplier GRN (yarn / fabric / general)'], ['TRIM', 'Trims GRN'], ['FABRIC_PROCESS', 'Fabric process GRN (contractor)'], ['YARN_PROCESS', 'Yarn process GRN (contractor)']] as const;
-const SRC_LABEL: Record<string, string> = { PURCHASE: 'Supplier', TRIM: 'Trims', FABRIC_PROCESS: 'Fabric process', YARN_PROCESS: 'Yarn process' };
-const BOOK: Record<string, string> = { PURCHASE: '/procurement/supplier-bills', TRIM: '/procurement/supplier-bills', FABRIC_PROCESS: '/production/fabric-process/bills?id=new', YARN_PROCESS: '/production/yarn-process/bills?id=new' };
+const SOURCES = [['PURCHASE', 'Supplier GRN (yarn / fabric / general)'], ['TRIM', 'Trims GRN'], ['FABRIC_PROCESS', 'Fabric process GRN (contractor)'], ['YARN_PROCESS', 'Yarn process GRN (contractor)'], ['KNITTING', 'Knitting GRN (job-work knitter)']] as const;
+const SRC_LABEL: Record<string, string> = { PURCHASE: 'Supplier', TRIM: 'Trims', FABRIC_PROCESS: 'Fabric process', YARN_PROCESS: 'Yarn process', KNITTING: 'Knitting' };
+const BOOK: Record<string, string> = { PURCHASE: '/procurement/supplier-bills?tab=SUPPLIER', TRIM: '/procurement/supplier-bills?tab=SUPPLIER', FABRIC_PROCESS: '/procurement/supplier-bills?tab=FABRIC_PROCESS&id=new',
+  YARN_PROCESS: '/procurement/supplier-bills?tab=YARN_PROCESS&id=new', KNITTING: '/procurement/supplier-bills?tab=KNITTING' };
 
 export default function GrnBillStatusPage() {
   const [params] = useSearchParams();
