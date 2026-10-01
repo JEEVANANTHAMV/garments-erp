@@ -9,7 +9,7 @@ import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
 import { assertEditable } from '../../core/processEngine.js';
 import { assertIssuable, insertProcessIssue } from './processFlow.routes.js';
-import { assertJobLots } from '../stock/jobStock.routes.js';
+import { assertJobLots, resolveSoId } from '../stock/jobStock.routes.js';
 
 /**
  * Yarn process DC — outward to the dyer / winder / twister and inward back
@@ -67,6 +67,7 @@ yarnProcessDcRouter.post('/yarn-process-dcs', requirePermission('PROCESS.ISSUE')
     if (!proc) throw NotFound('Yarn process not found');
     assertEditable(proc.status, 'yarn process');
     if (proc.status === 'DRAFT') throw BadRequest(`Release process ${proc.process_no} before giving the outward DC`);
+    proc.so_id = await resolveSoId(cid, proc.so_id, proc.io_no);
     procs.set(j.process_id, proc);
   }
   const first = procs.get(jobs[0].process_id);

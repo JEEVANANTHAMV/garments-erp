@@ -9,7 +9,7 @@ import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
 import { assertEditable, postLedger, UOM_KG } from '../../core/processEngine.js';
 import { assertIssuable, insertProcessIssue } from './processFlow.routes.js';
-import { assertJobLots } from '../stock/jobStock.routes.js';
+import { assertJobLots, resolveSoId } from '../stock/jobStock.routes.js';
 
 /**
  * Knitting DC (yarn outward to the knitter) and grey fabric inward against it.
@@ -140,6 +140,7 @@ knittingDcRouter.post('/knitting-dcs', requirePermission('PROCESS.ISSUE'), ah(as
     if (!DC_READY.includes(prog.status)) {
       throw BadRequest(`Release program ${prog.program_no} before giving the knitting DC (it is ${prog.status.replace(/_/g, ' ').toLowerCase()})`);
     }
+    prog.so_id = await resolveSoId(cid, prog.so_id, prog.io_no);
     progs.set(j.program_id, prog);
   }
   const vendorId = body.vendor_id ?? progs.get(jobs[0].program_id)?.vendor_id;

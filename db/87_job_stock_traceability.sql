@@ -83,3 +83,9 @@ UPDATE trx_trim_stock ts
          GROUP BY gl.trim_id, gl.internal_lot_no) x ON x.trim_id = ts.trim_id AND x.internal_lot_no = ts.internal_lot_no
    SET ts.so_id = x.so_id, ts.style_id = x.style_id, ts.so_key = COALESCE(x.so_id, 0)
  WHERE ts.so_id IS NULL AND x.so_id IS NOT NULL;
+
+-- programs / yarn processes that carry only the IO no: link the job
+UPDATE trx_knitting_program kp JOIN trx_sales_order so ON so.company_id = kp.company_id AND (so.io_no = kp.io_no OR so.so_no = kp.io_no)
+   SET kp.so_id = so.id WHERE kp.so_id IS NULL AND kp.io_no IS NOT NULL AND kp.io_no <> '';
+UPDATE trx_yarn_process yp JOIN trx_sales_order so ON so.company_id = yp.company_id AND (so.io_no = yp.io_no OR so.so_no = yp.io_no)
+   SET yp.so_id = so.id WHERE yp.so_id IS NULL AND yp.io_no IS NOT NULL AND yp.io_no <> '';

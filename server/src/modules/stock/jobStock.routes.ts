@@ -93,6 +93,14 @@ export async function assertJobLots(cid: number, lines: { grn_line_id?: number |
   }
 }
 
+/** Job id of a program / process / DC line: its so_id, else the sales order of its IO no. */
+export async function resolveSoId(cid: number, soId: unknown, ioNo: unknown): Promise<number | null> {
+  if (Number(soId)) return Number(soId);
+  if (!ioNo) return null;
+  const so = await queryOne<any>('SELECT id FROM trx_sales_order WHERE company_id = ? AND (io_no = ? OR so_no = ?) ORDER BY (io_no = ?) DESC LIMIT 1', [cid, ioNo, ioNo, ioNo]);
+  return so ? Number(so.id) : null;
+}
+
 /** GET /yarn-stock/job-lots?so_id=&yarn_id=&warehouse_id= — the job's yarn lots (bought for it or transferred to it) + general stock. */
 jobStockRouter.get('/yarn-stock/job-lots', requireAny('PRODUCTION.VIEW', 'INVENTORY.VIEW'), ah(async (req, res) => {
   const q = z.object({ so_id: z.coerce.number().int().positive().optional(), yarn_id: z.coerce.number().int().positive().optional(),
