@@ -170,7 +170,13 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
   const [addId, setAddId] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const loadJob = async (pid: number): Promise<DcJob> => {
+  // KG of each lot already taken by the lines on this DC (so a second job does not pick the same KG)
+  const usedKg = (js: DcJob[]) => {
+    const m = new Map<string, number>();
+    js.forEach((j) => j.lines.forEach((l) => { if (l.grn_line_id) m.set(l.grn_line_id, (m.get(l.grn_line_id) ?? 0) + (Number(l.issued_qty_kg) || 0)); }));
+    return m;
+  };
+  const loadJob = async (pid: number, used: Map<string, number> = new Map()): Promise<DcJob> => {
     const prog = (await http.get<{ data: any }>(`/knitting/programs/${pid}`)).data;
     const qs = new URLSearchParams(prog.so_id ? { so_id: String(prog.so_id) } : { io_no: prog.io_no ?? '' });
     const lots: any[] = (await http.get<{ data: any[] }>(`/yarn-stock/job-lots?${qs}`)).data ?? [];
@@ -178,11 +184,14 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
       const pending = Math.max(0, Number(y.planned_qty_kg) - Number(y.issued_qty_kg));
       // job's own lots first (oldest first), then general stock
       const options = lots.filter((l) => Number(l.yarn_id) === Number(y.yarn_id)).sort((a, b) => Number(b.own_lot && !!b.holder_so_id) - Number(a.own_lot && !!a.holder_so_id));
-      const pick = options[0];
+      const left = (o: any) => o.available_kg - (used.get(String(o.grn_line_id)) ?? 0);
+      const pick = options.find((o: any) => left(o) > 0.0005);
+      const qty = pending && pick ? Math.min(pending, left(pick)) : 0;
+      if (pick) used.set(String(pick.grn_line_id), (used.get(String(pick.grn_line_id)) ?? 0) + qty);
       return {
         program_yarn_id: y.id, yarn_id: y.yarn_id, yarn: `${y.yarn_code ?? ''} — ${y.yarn_name ?? ''}`, colour: y.colour, count: y.count_value, pending, options,
         grn_line_id: pick ? String(pick.grn_line_id) : '',
-        issued_qty_kg: pending && pick ? String(Math.round(Math.min(pending, pick.available_kg) * 1000) / 1000) : '', no_of_cones: '',
+        issued_qty_kg: qty ? String(Math.round(qty * 1000) / 1000) : '', no_of_cones: '',
       };
     });
     return { program_id: pid, program_no: prog.program_no, io_no: prog.io_no, style: prog.style_code, fabric: prog.fabric_name ?? prog.fabric_type, vendor_id: prog.vendor_id, lines };
@@ -199,7 +208,7 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
   const addJob = async () => {
     if (!addId) return;
     if (jobs.some((j) => String(j.program_id) === addId)) { toast('That job is already on the DC', 'warning'); return; }
-    try { const j = await loadJob(Number(addId)); setJobs((js) => [...js, j]); setAddId(''); } catch (e: any) { toast(e?.message || 'Could not load the program', 'error'); }
+    try { const j = await loadJob(Number(addId), usedKg(jobs)); setJobs((js) => [...js, j]); setAddId(''); } catch (e: any) { toast(e?.message || 'Could not load the program', 'error'); }
   };
   const setLine = (ji: number, li: number, patch: any) =>
     setJobs((js) => js.map((j, a) => (a !== ji ? j : { ...j, lines: j.lines.map((l, b) => (b === li ? { ...l, ...patch } : l)) })));
