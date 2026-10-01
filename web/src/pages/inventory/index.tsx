@@ -179,6 +179,7 @@ export function StockLedgerPage() {
           { key: 'txn_type', header: 'Type', render: (r: any) => <Badge tone="violet">{humanize(r.txn_type)}</Badge> },
           { key: 'item_name', header: 'Item', render: (r: any) => <span className="font-medium">{r.item_name}</span> },
           { key: 'warehouse_name', header: 'Warehouse' },
+          { key: 'job_no', header: 'Job', render: (r: any) => r.job_no ? <span className="font-semibold">{r.job_no}</span> : <span className="text-slate-400">{r.txn_type?.startsWith('TRANSFER') ? 'General' : '—'}</span> },
           { key: 'location', header: 'Rack / Bin',
             render: (r: any) => r.bin_code
               ? <span className="font-mono text-xs text-slate-700">{r.rack ? `R-${r.rack} / ` : ''}{r.bin_code}</span>

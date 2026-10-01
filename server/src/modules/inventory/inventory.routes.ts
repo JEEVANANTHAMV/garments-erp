@@ -418,11 +418,13 @@ inventoryRouter.get('/ledger', requirePermission('INVENTORY.VIEW'), ah(async (re
     trim_id: z.coerce.number().int().optional(),
     sku_id: z.coerce.number().int().optional(),
     batch_id: z.coerce.number().int().optional(),
+    so_id: z.coerce.number().int().optional(),
+    ref_type: z.string().max(40).optional(), ref_id: z.coerce.number().int().optional(),
     dateFrom: z.string().optional(), dateTo: z.string().optional(),
   }).parse(req.query);
 
   const where = ['sl.company_id = ?']; const params: unknown[] = [req.user!.companyId];
-  for (const k of ['warehouse_id','bin_id','material_type','yarn_id','fabric_id','trim_id','sku_id','batch_id'] as const) {
+  for (const k of ['warehouse_id','bin_id','material_type','yarn_id','fabric_id','trim_id','sku_id','batch_id','so_id','ref_type','ref_id'] as const) {
     if ((q as any)[k]) { where.push(`sl.${k} = ?`); params.push((q as any)[k]); }
   }
   if (q.dateFrom) { where.push('sl.txn_date >= ?'); params.push(q.dateFrom); }
@@ -433,8 +435,9 @@ inventoryRouter.get('/ledger', requirePermission('INVENTORY.VIEW'), ah(async (re
   const [rows, total] = await Promise.all([
     query(`SELECT sl.*, w.warehouse_name, bn.bin_code, bn.rack, u.code AS uom_code, b.batch_no, b.shade_lot,
                   COALESCE(y.yarn_name, fb.fabric_name, tr.trim_name, k.sku_code) AS item_name,
-                  usr.full_name AS created_by_name
+                  usr.full_name AS created_by_name, COALESCE(so.io_no, so.so_no) AS job_no
              FROM trx_stock_ledger sl
+             LEFT JOIN trx_sales_order so ON so.id = sl.so_id
              LEFT JOIN mst_warehouse w ON w.id = sl.warehouse_id
              LEFT JOIN mst_warehouse_bin bn ON bn.id = sl.bin_id
              LEFT JOIN cfg_uom u ON u.id = sl.uom_id
