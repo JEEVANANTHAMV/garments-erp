@@ -96,7 +96,7 @@ function InwardEditor({ editId, ypoId: ypoParam, onBack, onDone, onPickDc }: { e
   useEffect(() => { if (user && !head.received_by) setHead((h) => ({ ...h, received_by: user.full_name || user.username || '' })); }, [user]);
   useEffect(() => {
     const whs = warehouses.data ?? [];
-    if (whs.length && !head.warehouse_id) setHead((h) => ({ ...h, warehouse_id: String((whs.find((w: any) => /yarn/i.test(w.label)) ?? whs[0]).id), reject_warehouse_id: String((whs.find((w: any) => /reject/i.test(w.label)) ?? whs[0]).id) }));
+    if (whs.length && !head.warehouse_id) setHead((h) => ({ ...h, warehouse_id: String((whs.find((w: any) => /yarn/i.test(w.label)) ?? whs.find((w: any) => /raw/i.test(w.label)) ?? whs.find((w: any) => !/finish|reject|fg/i.test(w.label)) ?? whs[0]).id), reject_warehouse_id: String((whs.find((w: any) => /reject/i.test(w.label)) ?? whs[0]).id) }));
   }, [warehouses.data]);
   useEffect(() => {
     if (!d) return;
