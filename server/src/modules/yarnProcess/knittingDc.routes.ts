@@ -400,7 +400,7 @@ export async function allowedFabrics(cid: number, prog: any) {
         AND ((? IS NOT NULL AND b.so_id = ?) OR (b.so_id IS NULL AND b.style_id = ?))`, [cid, soId, soId, prog.style_id ?? 0]);
   bom.forEach((o) => { if (!ids.has(Number(o.fabric_id))) ids.set(Number(o.fabric_id), 'Job BOM / CAD'); });
   if (!ids.size) return [];
-  const rows = await query<any>(`SELECT id, fabric_code, fabric_name, gsm, dia FROM mst_fabric WHERE id IN (?)`, [[...ids.keys()]]);
+  const rows = await query<any>(`SELECT id, fabric_code, fabric_name, min_gsm, max_gsm, dia_inch FROM mst_fabric WHERE id IN (?)`, [[...ids.keys()]]);
   return rows.map((r) => ({ ...r, source: ids.get(Number(r.id)) })).sort((a, b) => (a.source === 'Program' ? -1 : b.source === 'Program' ? 1 : 0));
 }
 
