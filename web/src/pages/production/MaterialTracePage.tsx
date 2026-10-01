@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 import { http, ApiError } from '../../lib/api';
@@ -52,10 +52,10 @@ export default function MaterialTracePage() {
                   </div>
                   {c.yarn?.length > 0 && (
                     <table className="mt-2 w-full">
-                      <thead className="bg-slate-50 text-slate-500"><tr>{['Yarn', 'Lot', 'DC', 'KG', 'GRN', 'PO', 'Supplier', 'Invoice', 'Link'].map((h) => <th key={h} className="px-2 py-1 text-left">{h}</th>)}</tr></thead>
+                      <thead className="bg-slate-50 text-slate-500"><tr>{['Yarn', 'Lot', 'DC', 'KG', 'GRN', 'PO', 'Supplier', 'Invoice', 'Link', 'Lot origin'].map((h) => <th key={h} className="px-2 py-1 text-left">{h}</th>)}</tr></thead>
                       <tbody>{c.yarn.map((y: any, k: number) => <tr key={k} className="border-t border-slate-100"><td className="px-2 py-1">{y.yarn_name}</td><td className="px-2 py-1">{y.lot_no}</td><td className="px-2 py-1 font-mono">{y.dc_no}</td><td className="px-2 py-1">{kg(y.issued_qty_kg)}</td>
                         <td className="px-2 py-1 font-mono">{y.grn_no || '—'}</td><td className="px-2 py-1">{y.po_no || '—'}</td><td className="px-2 py-1">{y.supplier || '—'}</td><td className="px-2 py-1">{y.supplier_inv_no || '—'}</td>
-                        <td className="px-2 py-1">{y.link === 'exact' ? 'exact lot' : <span className="text-amber-700">lot no match</span>}</td></tr>)}</tbody>
+                        <td className="px-2 py-1">{y.link === 'exact' ? 'exact lot' : <span className="text-amber-700">lot no match</span>}</td><td className="px-2 py-1"><Origin o={y.origin} /></td></tr>)}</tbody>
                     </table>
                   )}
                 </div>
@@ -74,8 +74,8 @@ export default function MaterialTracePage() {
           {jt.isLoading && <LoadingBlock />}
           {jt.data && (
             <div className="space-y-3 text-xs">
-              <Section title={`Yarn lots held (${jt.data.yarn_lots.length})`} cols={['Yarn', 'Lot', 'GRN', 'PO', 'Supplier', 'Available KG']}
-                rows={jt.data.yarn_lots.map((y: any) => [y.yarn_name, y.lot_no, y.grn_no, y.po_no, y.supplier_name, kg(y.available_kg)])} />
+              <Section title={`Yarn lots held (${jt.data.yarn_lots.length})`} cols={['Yarn', 'Lot', 'GRN', 'PO', 'Supplier', 'Available KG', 'Lot origin']}
+                rows={jt.data.yarn_lots.map((y: any) => [y.yarn_name, y.lot_no, y.grn_no, y.po_no, y.supplier_name, kg(y.available_kg), <Origin key="o" o={y.origin} />])} />
               <Section title={`Yarn sent on DCs (${jt.data.yarn_issued.length})`} cols={['DC', 'Date', 'For', 'Yarn', 'Lot', 'KG', 'GRN', 'PO', 'Supplier', 'Invoice', 'To']}
                 rows={jt.data.yarn_issued.map((y: any) => [y.dc_no, fmtDate(y.issue_date), y.src_type === 'KNITTING_PROGRAM' ? 'Knitting' : 'Yarn process', y.yarn_name, y.lot_no, kg(y.issued_qty_kg), y.grn_no, y.po_no, y.supplier, y.supplier_inv_no, y.vendor])} />
               <Section title={`Fabric rolls (${jt.data.fabric_rolls.length})`} cols={['Roll', 'Fabric', 'State', 'Colour', 'KG', 'In store', 'GRN', 'PO', 'Supplier', 'Invoice', 'Cut orders']}
@@ -90,13 +90,25 @@ export default function MaterialTracePage() {
   );
 }
 
+/** Where a yarn lot came from: purchased (PO / GRN / supplier) or made by yarn dyeing / winding / twisting from earlier lots. */
+function Origin({ o }: { o: any }) {
+  if (!o) return <span className="text-slate-400">—</span>;
+  if (o.kind !== 'PROCESSED') return <span>Purchased · {o.po_no ? `PO ${o.po_no} · ` : ''}GRN {o.grn_no}{o.supplier ? ` · ${o.supplier}` : ''}</span>;
+  return (
+    <span>
+      <span className="rounded bg-purple-100 px-1 text-[10.5px] font-bold text-purple-800">{o.process.process_type}</span> by {o.process.vendor || '—'} on {o.process.process_no} (receipt {o.process.receipt_no}{o.process.ref_dc_no ? `, DC ${o.process.ref_dc_no}` : ''})
+      {(o.from ?? []).map((f: any, i: number) => <span key={i} className="block pl-3 text-slate-600">← lot {f.lot_no} · {kg(f.issued_qty_kg)} KG on {f.dc_no}: <Origin o={f.origin} /></span>)}
+    </span>
+  );
+}
+
 function Section({ title, cols, rows }: { title: string; cols: string[]; rows: unknown[][] }) {
   return (
     <div className="card overflow-x-auto">
       <h3 className="px-4 pt-3 text-[13px] font-semibold text-slate-800">{title}</h3>
       <table className="mt-2 w-full">
         <thead className="bg-slate-50 text-slate-500"><tr>{cols.map((c) => <th key={c} className="px-2 py-1.5 text-left">{c}</th>)}</tr></thead>
-        <tbody>{rows.map((r, i) => <tr key={i} className="border-t border-slate-100">{r.map((c, k) => <td key={k} className="px-2 py-1">{String(c ?? '—') || '—'}</td>)}</tr>)}
+        <tbody>{rows.map((r, i) => <tr key={i} className="border-t border-slate-100">{r.map((c, k) => <td key={k} className="px-2 py-1">{c !== null && typeof c === 'object' ? (c as ReactNode) : String(c ?? '—') || '—'}</td>)}</tr>)}
           {!rows.length && <tr><td colSpan={cols.length} className="px-3 py-4 text-center text-slate-400">None</td></tr>}</tbody>
       </table>
     </div>

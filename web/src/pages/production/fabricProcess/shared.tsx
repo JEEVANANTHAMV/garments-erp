@@ -16,7 +16,7 @@ export const errText = (e: unknown) => {
 };
 export const esc = (v: unknown) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 
-export interface ProcessType { id: number; code: string; name: string; output_state: string; changes_colour: number; is_reprocess: number; allow_split: number }
+export interface ProcessType { id: number; code: string; name: string; output_state: string; changes_colour: number; is_reprocess: number; allow_split: number; requires_qc?: number }
 export interface Reason { id: number; code: string; reason: string; kind: string; default_billing: string | null }
 export interface Job { id: number; job_no: string; buyer_name?: string; buyer_po_no?: string; styles: { style_id: number; style_code: string; style_name: string }[] }
 export interface StoreRoll {
@@ -44,6 +44,8 @@ const STATUS_LABEL: Record<string, [string, string]> = {
   PENDING: ['Pending', 'bg-amber-100 text-amber-800'], APPROVED: ['Approved', 'bg-emerald-100 text-emerald-800'], BILLED: ['Billed', 'bg-indigo-100 text-indigo-800'],
   EXCLUDED: ['Excluded', 'bg-slate-100 text-slate-600'], REVERSED: ['Reversed', 'bg-red-100 text-red-700'], PARTIAL: ['Partial', 'bg-amber-100 text-amber-800'],
   AT_VENDOR: ['At vendor', 'bg-sky-100 text-sky-800'], RECEIVED: ['Received', 'bg-emerald-100 text-emerald-800'],
+  QC_PENDING: ['QC pending', 'bg-orange-100 text-orange-800'], ACCEPTED: ['QC accepted', 'bg-teal-100 text-teal-800'], REJECTED: ['QC rejected', 'bg-red-100 text-red-700'],
+  HOLD: ['Hold', 'bg-orange-100 text-orange-800'],
 };
 export function FpStatus({ value }: { value: string }) {
   const [label, cls] = STATUS_LABEL[value] ?? [value, 'bg-slate-100 text-slate-700'];

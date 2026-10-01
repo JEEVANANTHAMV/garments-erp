@@ -30,6 +30,38 @@ const SRC_TABLE: Record<SrcType, { table: string; label: string }> = {
   COLLAR_PROGRAM: { table: 'trx_collar_program', label: 'collar program' },
 };
 
+/**
+ * Processed yarn (dyed / wound / twisted) into stock as its own yarn GRN lot: the job of the
+ * process, the dyed colour, the output lot no. Yarn stock, the job lot picker and the material
+ * trace then see it (and trace it back through the yarn-process DC to the purchased lot).
+ */
+export async function createProcessedYarnLot(tx: Tx, cid: number, uid: number, rc: {
+  id: number; receipt_no: string; receipt_date: string; ref_dc_no: string | null; src_id: number; output_qty: number; output_lot_no: string; warehouse_id: number; party_dc_no?: string | null; vehicle_no?: string | null;
+}, src: any) {
+  const so = src.so_id ? Number(src.so_id) : src.io_no
+    ? Number((await txQueryOne<any>(tx, 'SELECT id FROM trx_sales_order WHERE company_id = ? AND (io_no = ? OR so_no = ?) LIMIT 1', [cid, src.io_no, src.io_no]))?.id) || null : null;
+  const dye = src.process_type === 'YARN_DYEING'
+    ? await txQueryOne<any>(tx, 'SELECT colour_name, colour_code, shade_code FROM trx_yarn_process_dyeing WHERE process_id = ?', [src.id]) : null;
+  const vendor = rc.ref_dc_no
+    ? Number((await txQueryOne<any>(tx, `SELECT MAX(vendor_id) v FROM trx_process_issue WHERE company_id = ? AND dc_no = ? AND src_type = 'YARN_PROCESS'`, [cid, rc.ref_dc_no]))?.v) || src.vendor_id
+    : src.vendor_id;
+  const g = await txExecute(tx,
+    `INSERT INTO trx_grn (company_id, grn_no, internal_ir_no, grn_date, style_id, supplier_id, warehouse_id, supplier_dc_no, vehicle_no, qc_status, remarks, created_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [cid, rc.receipt_no, src.io_no ?? null, rc.receipt_date, src.style_id ?? null, vendor ?? null, rc.warehouse_id, rc.party_dc_no ?? null, rc.vehicle_no ?? null,
+     'ACCEPTED', `${src.process_type} output of ${src.process_no}${rc.ref_dc_no ? ` (DC ${rc.ref_dc_no})` : ''}`, uid]);
+  const grnId = Number(g.insertId);
+  await txExecute(tx,
+    `INSERT INTO trx_grn_line (grn_id, so_id, style_id, material_type, yarn_id, yarn_type, shade_code, color_name, lot_no, qc_status,
+       received_qty, received_weight, accepted_qty, rejected_qty, balance_qty, uom_id)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,?)`,
+    [grnId, so, src.style_id ?? null, 'YARN', src.yarn_id ?? null, src.process_type === 'YARN_DYEING' ? 'Dyed Yarn' : 'Grey Yarn',
+     dye?.shade_code ?? dye?.colour_code ?? null, dye?.colour_name ?? null, rc.output_lot_no, 'ACCEPTED',
+     rc.output_qty, rc.output_qty, rc.output_qty, UOM_KG]);
+  await txExecute(tx, 'UPDATE trx_process_receipt SET grn_id = ? WHERE id = ?', [grnId, rc.id]);
+  return grnId;
+}
+
 export async function loadSrc(srcType: SrcType, srcId: number, cid: number) {
   const { table, label } = SRC_TABLE[srcType];
   const row = await queryOne<any>(
@@ -283,6 +315,10 @@ processFlowRouter.post('/process-receipts', requirePermission('PROCESS.PRODUCTIO
       });
     }
 
+    if (body.post_stock && body.src_type === 'YARN_PROCESS' && body.output_qty > 0) {
+      await createProcessedYarnLot(tx, cid, uid, { id: Number(receiptId), receipt_no: receiptNo, receipt_date: body.receipt_date, ref_dc_no: body.ref_dc_no ?? null,
+        src_id: body.src_id, output_qty: body.output_qty, output_lot_no: lotNo, warehouse_id: body.warehouse_id, party_dc_no: body.party_dc_no ?? null, vehicle_no: body.vehicle_no ?? null }, src);
+    }
     const { table } = SRC_TABLE[body.src_type];
     await txExecute(tx,
       `UPDATE ${table} SET status = ?
@@ -335,6 +371,10 @@ processFlowRouter.post('/process-receipts/:id/post-stock', requirePermission('PR
       qtyIn: Number(rc.output_qty), uomId: rc.output_uom_id ?? UOM_KG, createdBy: req.user!.id,
     });
     await txExecute(tx, `UPDATE trx_process_receipt SET is_stock_posted = 1 WHERE id = ?`, [id]);
+    if (rc.src_type === 'YARN_PROCESS' && Number(rc.output_qty) > 0 && !rc.grn_id) {
+      await createProcessedYarnLot(tx, cid, req.user!.id, { id, receipt_no: rc.receipt_no, receipt_date: String(rc.receipt_date).slice(0, 10), ref_dc_no: rc.ref_dc_no ?? null,
+        src_id: Number(rc.src_id), output_qty: Number(rc.output_qty), output_lot_no: rc.output_lot_no, warehouse_id: Number(rc.warehouse_id), party_dc_no: rc.party_dc_no, vehicle_no: rc.vehicle_no }, src);
+    }
     const { table } = SRC_TABLE[rc.src_type as SrcType];
     await txExecute(tx,
       `UPDATE ${table} SET status = 'STOCK_POSTED'

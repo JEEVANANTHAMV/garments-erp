@@ -206,6 +206,20 @@ export function buildPermissions(): [string, string, string][] {
     ['PURCHASE_RETURN.RETURN_DC','Generate Return DC','PURCHASE'],
     ['PURCHASE_RETURN.CREDIT_NOTE','Raise Return Credit Note','PURCHASE'],
     ['PURCHASE_RETURN.CANCEL','Cancel Purchase Returns','PURCHASE'],
+    // Fabric process (dyeing / compacting …) role split — developer doc §17 / §32.
+    ['FABRIC_PROCESS.VIEW','View Fabric Process DCs / GRNs / reports','PRODUCTION'],
+    ['FABRIC_PROCESS.CREATE','Create Fabric Process DC / GRN drafts','PRODUCTION'],
+    ['FABRIC_PROCESS.EDIT_DRAFT','Edit Fabric Process drafts','PRODUCTION'],
+    ['FABRIC_PROCESS.CONFIRM','Confirm Fabric Process DCs / post GRNs','PRODUCTION'],
+    ['FABRIC_PROCESS.QC','Record Fabric Process GRN QC','PRODUCTION'],
+    ['FABRIC_PROCESS.RETURN','Create Fabric Process returns','PRODUCTION'],
+    ['FABRIC_PROCESS.REPROCESS','Create reprocess / request billing','PRODUCTION'],
+    ['FABRIC_PROCESS.BILLING_APPROVE','Approve reprocess billing','PRODUCTION'],
+    ['FABRIC_PROCESS.BILLING_CHANGE','Change reprocess billing type','PRODUCTION'],
+    ['FABRIC_PROCESS.BILL','Create fabric process contractor bills','PRODUCTION'],
+    ['FABRIC_PROCESS.BILL_CANCEL','Cancel fabric process contractor bills','PRODUCTION'],
+    ['FABRIC_PROCESS.CANCEL','Cancel confirmed Fabric Process DCs','PRODUCTION'],
+    ['FABRIC_PROCESS.MASTER','Manage process types / QC parameters / reasons','PRODUCTION'],
   ];
   out.push(...extras);
   return out;
@@ -230,7 +244,7 @@ export const ROLES: {
       'MATERIAL.*','PRODUCT.*','STYLE.*','BOM.*','FINYEAR.*','ENQUIRY.*','SAMPLE.*','COSTING.*',
       'QUOTATION.*','SALES_ORDER.*','MRP.*','PURCHASE.*','GRN.*','INVENTORY.*','ISSUE.*',
       'PRODUCTION.*','QC.*','PACKING.*','DISPATCH.*','EXPORT.*','FINANCE.*','REPORT.*',
-      'AUDIT.*','USER.*','ROLE.*','SETTINGS.*',
+      'AUDIT.*','USER.*','ROLE.*','SETTINGS.*','FABRIC_PROCESS.*',
     ],
   },
   {
@@ -252,6 +266,7 @@ export const ROLES: {
       'DASHBOARD.VIEW','STYLE.VIEW','BOM.VIEW','MATERIAL.VIEW','PRODUCT.VIEW','UNIT.VIEW',
       'SALES_ORDER.VIEW','PRODUCTION.*','QC.VIEW','QC.CREATE','ISSUE.VIEW','ISSUE.CREATE',
       'INVENTORY.VIEW','PACKING.VIEW','PACKING.CREATE','REPORT.VIEW','WAREHOUSE.VIEW','PARTY.VIEW',
+      'FABRIC_PROCESS.VIEW','FABRIC_PROCESS.CREATE','FABRIC_PROCESS.EDIT_DRAFT','FABRIC_PROCESS.CONFIRM','FABRIC_PROCESS.QC','FABRIC_PROCESS.RETURN','FABRIC_PROCESS.REPROCESS','FABRIC_PROCESS.BILLING_APPROVE','FABRIC_PROCESS.BILLING_CHANGE','FABRIC_PROCESS.BILL',
     ],
   },
   {
@@ -259,7 +274,7 @@ export const ROLES: {
     description: 'Records inline and final inspections and defect data',
     permissions: [
       'DASHBOARD.VIEW','QC.*','PRODUCTION.VIEW','STYLE.VIEW','SALES_ORDER.VIEW',
-      'PACKING.VIEW','REPORT.VIEW',
+      'PACKING.VIEW','REPORT.VIEW','FABRIC_PROCESS.VIEW','FABRIC_PROCESS.QC',
       // §29: QC may approve quality-rejection based returns.
       'PURCHASE_RETURN.APPROVE',
     ],
@@ -270,6 +285,7 @@ export const ROLES: {
     permissions: [
       'DASHBOARD.VIEW','INVENTORY.*','ISSUE.*','GRN.*','WAREHOUSE.VIEW','MATERIAL.VIEW',
       'PURCHASE.VIEW','PRODUCTION.VIEW','PARTY.VIEW','REPORT.VIEW',
+      'FABRIC_PROCESS.VIEW','FABRIC_PROCESS.CREATE','FABRIC_PROCESS.EDIT_DRAFT',
       // §29: Store posts return stock and raises the Return DC.
       'PURCHASE_RETURN.POST_STOCK','PURCHASE_RETURN.RETURN_DC',
     ],
@@ -308,7 +324,7 @@ export const ROLES: {
       'DASHBOARD.VIEW','PARTY.VIEW','STYLE.VIEW','BOM.VIEW','MATERIAL.VIEW','PRODUCT.VIEW',
       'ENQUIRY.VIEW','SAMPLE.VIEW','QUOTATION.VIEW','SALES_ORDER.VIEW','PURCHASE.VIEW',
       'INVENTORY.VIEW','PRODUCTION.VIEW','QC.VIEW','PACKING.VIEW','DISPATCH.VIEW',
-      'EXPORT.VIEW','REPORT.VIEW',
+      'EXPORT.VIEW','REPORT.VIEW','FABRIC_PROCESS.VIEW',
     ],
   },
   // Cutting roles (traceability doc §21) — also created by db/55_cutting_core.sql.
@@ -326,6 +342,7 @@ export const ROLES: {
     permissions: [
       'DASHBOARD.VIEW','PRODUCTION.VIEW','PRODUCTION.CREATE','PRODUCTION.UPDATE','PRODUCTION.APPROVE',
       'STYLE.VIEW','SIZE.VIEW','COLOR.VIEW','MATERIAL.VIEW','INVENTORY.VIEW','QC.VIEW','REPORT.VIEW',
+      'FABRIC_PROCESS.VIEW',
     ],
   },
   {
@@ -334,6 +351,7 @@ export const ROLES: {
     permissions: [
       'DASHBOARD.VIEW','PRODUCTION.VIEW','PRODUCTION.CREATE','PRODUCTION.UPDATE','INVENTORY.VIEW',
       'ISSUE.VIEW','ISSUE.CREATE','GRN.VIEW','WAREHOUSE.VIEW','MATERIAL.VIEW','STYLE.VIEW','REPORT.VIEW',
+      'FABRIC_PROCESS.VIEW','FABRIC_PROCESS.CREATE','FABRIC_PROCESS.EDIT_DRAFT',
     ],
   },
   {
@@ -341,7 +359,25 @@ export const ROLES: {
     description: 'Views cut / production traceability and records quality checks',
     permissions: [
       'DASHBOARD.VIEW','PRODUCTION.VIEW','QC.VIEW','QC.CREATE','STYLE.VIEW','SALES_ORDER.VIEW',
-      'PACKING.VIEW','DISPATCH.VIEW','REPORT.VIEW',
+      'PACKING.VIEW','DISPATCH.VIEW','REPORT.VIEW','FABRIC_PROCESS.VIEW','FABRIC_PROCESS.QC',
+    ],
+  },
+  // Fabric process roles (developer doc §17 / §32)
+  {
+    code: 'PRODUCTION_USER', name: 'Production User',
+    description: 'Fabric process: creates DC / GRN drafts, records QC, returns and reprocess requests — cannot approve billing',
+    permissions: [
+      'DASHBOARD.VIEW','PRODUCTION.VIEW','INVENTORY.VIEW','STYLE.VIEW','SALES_ORDER.VIEW','PARTY.VIEW','REPORT.VIEW',
+      'FABRIC_PROCESS.VIEW','FABRIC_PROCESS.CREATE','FABRIC_PROCESS.EDIT_DRAFT','FABRIC_PROCESS.QC',
+      'FABRIC_PROCESS.RETURN','FABRIC_PROCESS.REPROCESS',
+    ],
+  },
+  {
+    code: 'PROCESS_MANAGER', name: 'Process Manager',
+    description: 'Fabric process: confirms DCs, posts GRNs, approves / changes reprocess billing and raises contractor bills',
+    permissions: [
+      'DASHBOARD.VIEW','PRODUCTION.VIEW','INVENTORY.VIEW','STYLE.VIEW','SALES_ORDER.VIEW','PARTY.VIEW','REPORT.VIEW',
+      'FABRIC_PROCESS.VIEW','FABRIC_PROCESS.CREATE','FABRIC_PROCESS.EDIT_DRAFT','FABRIC_PROCESS.CONFIRM','FABRIC_PROCESS.QC','FABRIC_PROCESS.RETURN','FABRIC_PROCESS.REPROCESS','FABRIC_PROCESS.BILLING_APPROVE','FABRIC_PROCESS.BILLING_CHANGE','FABRIC_PROCESS.BILL',
     ],
   },
 ];

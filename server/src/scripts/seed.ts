@@ -688,6 +688,31 @@ async function main() {
   }
   log(`${ROLES.length} roles with permission mappings`);
 
+  // One time: custom (non-seeded) roles that ran fabric processing under PRODUCTION.* keep that
+  // access under the new FABRIC_PROCESS.* codes (they can be trimmed on the Roles screen after).
+  const fpDone = await q<{ c: number }>(`SELECT COUNT(*) c FROM cfg_system_setting WHERE company_id=? AND setting_key='FABRIC_PROCESS_PERMS_MAPPED'`, [companyId]);
+  if (!Number(fpDone[0]?.c)) {
+    const seeded = ROLES.map((r) => r.code);
+    const map: [string, string[]][] = [
+      ['PRODUCTION.VIEW', ['FABRIC_PROCESS.VIEW']],
+      ['PRODUCTION.CREATE', ['FABRIC_PROCESS.CREATE', 'FABRIC_PROCESS.EDIT_DRAFT', 'FABRIC_PROCESS.QC', 'FABRIC_PROCESS.RETURN', 'FABRIC_PROCESS.REPROCESS']],
+      ['PRODUCTION.UPDATE', ['FABRIC_PROCESS.CONFIRM', 'FABRIC_PROCESS.BILL']],
+      ['PRODUCTION.APPROVE', ['FABRIC_PROCESS.BILLING_APPROVE', 'FABRIC_PROCESS.BILLING_CHANGE']],
+      ['PRODUCTION.DELETE', ['FABRIC_PROCESS.CANCEL', 'FABRIC_PROCESS.BILL_CANCEL']],
+    ];
+    for (const [from, to] of map) {
+      await exec(
+        `INSERT IGNORE INTO map_role_permission (role_id, permission_id)
+         SELECT rp.role_id, np.id FROM map_role_permission rp
+           JOIN mst_permission op ON op.id = rp.permission_id AND op.permission_code = ?
+           JOIN mst_role r ON r.id = rp.role_id AND r.company_id = ? AND r.role_code NOT IN (${seeded.map(() => '?').join(',')})
+           JOIN mst_permission np ON np.permission_code IN (${to.map(() => '?').join(',')})`,
+        [from, companyId, ...seeded, ...to]);
+    }
+    await exec(`INSERT IGNORE INTO cfg_system_setting (company_id, setting_key, setting_value, description) VALUES (?, 'FABRIC_PROCESS_PERMS_MAPPED', '1', 'Custom roles given FABRIC_PROCESS.* from PRODUCTION.* (one time)')`, [companyId]);
+    log('custom roles mapped to FABRIC_PROCESS.* permissions');
+  }
+
   // Users — admin plus one per functional role, all sharing the demo password.
   const demoHash = await bcrypt.hash(env.seed.adminPassword, env.bcryptRounds);
   const USERS: [string, string, string, string][] = [
@@ -699,6 +724,8 @@ async function main() {
     ['purchase', 'Sundar Ramasamy',   'purchase@ckexports.in', 'PURCHASE_OFFICER'],
     ['export',   'Priya Venkatesan',  'export@ckexports.in',   'EXPORT_EXECUTIVE'],
     ['accounts', 'Ganesh Subramani',  'accounts@ckexports.in', 'ACCOUNTANT'],
+    ['fpuser',   'Karthik Process',   'fpuser@ckexports.in',   'PRODUCTION_USER'],
+    ['fpmgr',    'Saravanan Process', 'fpmgr@ckexports.in',    'PROCESS_MANAGER'],
   ];
   for (const [username, fullName, email, roleCode] of USERS) {
     await exec(`INSERT INTO mst_user (company_id,username,password_hash,full_name,email,default_branch)

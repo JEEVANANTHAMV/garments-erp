@@ -7,6 +7,7 @@ import { requirePermission, requireAny } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { refreshFabricRollStatus } from '../production/cuttingEngine.js';
+import { postLedger, UOM_KG } from '../../core/processEngine.js';
 import { yarnStockRows, yarnStockQuery } from '../procurement/fabricYarnProcurement.routes.js';
 
 /**
@@ -150,6 +151,15 @@ const transferSchema = z.object({
   lines: z.array(z.object({ ref_id: z.coerce.number().int().positive(), qty: z.coerce.number().positive() })).min(1, 'Pick what to transfer'),
 });
 
+/** Job transfer in the stock ledger: same store, out of the old job and into the new one. */
+async function transferLedger(tx: Tx, req: Request, m: { warehouseId: number | null; material: 'YARN' | 'FABRIC' | 'TRIM'; itemId: number | null; qty: number; uomId: number; tid: number; from: number; to: number }) {
+  if (!m.warehouseId) return;
+  const base = { companyId: req.user!.companyId, warehouseId: m.warehouseId, materialType: m.material, refType: 'JOB_TRANSFER', refId: m.tid, uomId: m.uomId, createdBy: req.user!.id,
+    yarnId: m.material === 'YARN' ? m.itemId : null, fabricId: m.material === 'FABRIC' ? m.itemId : null, trimId: m.material === 'TRIM' ? m.itemId : null } as const;
+  await postLedger(tx, { ...base, txnType: 'TRANSFER_OUT', qtyOut: m.qty, soId: m.from || null });
+  await postLedger(tx, { ...base, txnType: 'TRANSFER_IN', qtyIn: m.qty, soId: m.to || null });
+}
+
 async function fabricHistory(tx: Tx, req: Request, h: { roll_id: number; roll_no: string; ref_id: number; ref_no: string; qty: number; so_id: number | null; related: number | null; remarks: string }) {
   await txExecute(tx,
     `INSERT INTO trx_fabric_roll_history (company_id, roll_id, roll_no, event, ref_type, ref_id, ref_no, qty_kg, so_id, related_roll_id, remarks, user_id)
@@ -180,6 +190,7 @@ jobStockRouter.post('/job-transfers', requireAny('INVENTORY.ADJUST', 'INVENTORY.
         if (l.qty > h.available_kg + 1e-6) throw BadRequest(`Lot ${h.lot_no}: only ${h.available_kg} KG held by ${fromJob}`);
         await txExecute(tx, 'INSERT INTO trx_job_transfer_line (transfer_id, grn_line_id, item_label, lot_no, qty) VALUES (?,?,?,?,?)',
           [tid, l.ref_id, `${h.yarn_name}${h.count_str ? ` ${h.count_str}` : ''} · ${h.grn_no}`, h.lot_no, r4(l.qty)]);
+        await transferLedger(tx, req, { warehouseId: h.warehouse_id ? Number(h.warehouse_id) : null, material: 'YARN', itemId: Number(h.yarn_id) || null, qty: r4(l.qty), uomId: UOM_KG, tid, from: b.from_so_id, to: b.to_so_id });
         total += l.qty;
       }
     } else if (b.material_type === 'FABRIC') {
@@ -210,6 +221,7 @@ jobStockRouter.post('/job-transfers', requireAny('INVENTORY.ADJUST', 'INVENTORY.
         }
         await txExecute(tx, 'INSERT INTO trx_job_transfer_line (transfer_id, fabric_roll_id, new_roll_id, item_label, lot_no, qty) VALUES (?,?,?,?,?,?)',
           [tid, fr.id, newRoll, `Roll ${fr.roll_no}`, fr.lot_no, r4(l.qty)]);
+        await transferLedger(tx, req, { warehouseId: fr.warehouse_id ? Number(fr.warehouse_id) : null, material: 'FABRIC', itemId: Number(fr.fabric_id) || null, qty: r4(l.qty), uomId: UOM_KG, tid, from: b.from_so_id, to: b.to_so_id });
         total += l.qty;
       }
     } else {
@@ -228,6 +240,7 @@ jobStockRouter.post('/job-transfers', requireAny('INVENTORY.ADJUST', 'INVENTORY.
           [cid, ts.warehouse_id, ts.trim_id, ts.internal_lot_no, b.to_so_id]);
         await txExecute(tx, 'INSERT INTO trx_job_transfer_line (transfer_id, trim_stock_id, to_trim_stock_id, item_label, lot_no, qty, uom_id) VALUES (?,?,?,?,?,?,?)',
           [tid, ts.id, to?.id ?? null, ts.trim_name, ts.internal_lot_no, r4(l.qty), ts.uom_id]);
+        await transferLedger(tx, req, { warehouseId: Number(ts.warehouse_id), material: 'TRIM', itemId: Number(ts.trim_id), qty: r4(l.qty), uomId: Number(ts.uom_id), tid, from: b.from_so_id, to: b.to_so_id });
         total += l.qty;
       }
     }
@@ -293,6 +306,40 @@ async function yarnForProgram(cid: number, programId: number, dcNo: string | nul
       ORDER BY pi.id`, dcNo ? [cid, programId, dcNo] : [cid, programId]);
 }
 
+/**
+ * Origin of a yarn lot (GRN line), recursively: a purchased lot gives its PO / GRN / supplier invoice;
+ * a processed lot (dyed / wound / twisted) gives its yarn-process receipt and the lots that went in.
+ */
+export async function yarnLotOrigin(cid: number, grnLineId: number, depth = 0): Promise<any> {
+  const l = await queryOne<any>(
+    `SELECT gl.id grn_line_id, gl.lot_no, gl.color_name, gl.accepted_qty, y.yarn_name, g.id grn_id, g.grn_no, g.grn_date, g.supplier_inv_no, g.supplier_dc_no,
+            p.party_name supplier, po.po_no, po.po_date
+       FROM trx_grn_line gl JOIN trx_grn g ON g.id = gl.grn_id LEFT JOIN mst_yarn y ON y.id = gl.yarn_id
+       LEFT JOIN trx_purchase_order po ON po.id = COALESCE(gl.po_id, g.po_id) LEFT JOIN mst_party p ON p.id = g.supplier_id
+      WHERE gl.id = ? AND g.company_id = ?`, [grnLineId, cid]);
+  if (!l) return null;
+  const pr = await queryOne<any>(
+    `SELECT pr.id, pr.receipt_no, pr.receipt_date, pr.ref_dc_no, pr.src_id, pr.input_qty, pr.output_qty, pr.loss_qty, yp.process_no, yp.process_type, v.party_name vendor
+       FROM trx_process_receipt pr JOIN trx_yarn_process yp ON yp.id = pr.src_id LEFT JOIN mst_party v ON v.id = yp.vendor_id
+      WHERE pr.grn_id = ? AND pr.src_type = 'YARN_PROCESS' LIMIT 1`, [l.grn_id]);
+  if (!pr || depth > 6) return { ...l, kind: 'PURCHASED' };
+  const inputs = await query<any>(
+    `SELECT pi.dc_no, pi.issue_date, pi.lot_no, pi.issued_qty_kg, pi.grn_line_id FROM trx_process_issue pi
+      WHERE pi.company_id = ? AND pi.src_type = 'YARN_PROCESS' AND pi.src_id = ? ${pr.ref_dc_no ? 'AND pi.dc_no = ?' : ''} ORDER BY pi.id`,
+    pr.ref_dc_no ? [cid, pr.src_id, pr.ref_dc_no] : [cid, pr.src_id]);
+  const from = [];
+  for (const i of inputs) from.push({ ...i, origin: i.grn_line_id ? await yarnLotOrigin(cid, Number(i.grn_line_id), depth + 1) : null });
+  return { ...l, kind: 'PROCESSED', process: pr, from };
+}
+
+/** GET /traceability/yarn-lot/:grnLineId — where a yarn lot came from (PO / GRN, or through yarn processing). */
+jobStockRouter.get('/traceability/yarn-lot/:grnLineId', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  const id = z.coerce.number().int().positive().parse(req.params.grnLineId);
+  const o = await yarnLotOrigin(req.user!.companyId, id);
+  if (!o) throw NotFound('Yarn lot not found');
+  res.json({ data: o });
+}));
+
 /** GET /traceability/fabric-roll?roll_no= | ?roll_id= — upward chain to yarn / fabric PO, GRN, supplier invoice and bills; forward use in cutting. */
 jobStockRouter.get('/traceability/fabric-roll', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId;
@@ -323,6 +370,8 @@ jobStockRouter.get('/traceability/fabric-roll', requirePermission('PRODUCTION.VI
       if (r.src_type === 'KNITTING_PROGRAM' && r.src_id) {
         step.knitting = await queryOne<any>('SELECT program_no, io_no, p.party_name knitter FROM trx_knitting_program kp LEFT JOIN mst_party p ON p.id = kp.vendor_id WHERE kp.id = ?', [r.src_id]);
         step.yarn = await yarnForProgram(cid, Number(r.src_id), r.ref_dc_no ?? null);
+        // a dyed / wound / twisted lot: show what it was made from
+        for (const y of step.yarn) if (y.grn_line_id) y.origin = await yarnLotOrigin(cid, Number(y.grn_line_id));
       }
       if (!r.parent_roll_id && !r.source_fpo_id) step.bills = await billsForGrn([Number(r.grn_id)]);
       if (step.process) step.process_bill = await queryOne<any>(`SELECT b.bill_no, b.bill_date, b.net_amount FROM trx_fabric_process_bill b JOIN trx_fabric_process_inward i ON i.bill_id = b.id WHERE i.grn_id = ? AND b.status = 'POSTED' LIMIT 1`, [r.grn_id]);
@@ -343,6 +392,7 @@ jobStockRouter.get('/traceability/job/:soId', requirePermission('PRODUCTION.VIEW
   const so = await queryOne<any>('SELECT id, so_no, io_no, buyer_po_no FROM trx_sales_order WHERE id = ? AND company_id = ?', [soId, cid]);
   if (!so) throw NotFound('Job not found');
   const yarn = await yarnJobLots(cid, { so_id: soId, includeGeneral: false });
+  for (const y of yarn) y.origin = await yarnLotOrigin(cid, Number(y.grn_line_id));
   const yarnIssued = await query<any>(
     `SELECT pi.dc_no, pi.issue_date, pi.src_type, pi.lot_no, pi.issued_qty_kg, y.yarn_name, g.grn_no, po.po_no, g.supplier_inv_no, p.party_name supplier, v.party_name vendor
        FROM trx_process_issue pi LEFT JOIN mst_yarn y ON y.id = pi.yarn_id LEFT JOIN trx_grn_line gl ON gl.id = pi.grn_line_id LEFT JOIN trx_grn g ON g.id = gl.grn_id

@@ -31,10 +31,11 @@ export default function FabricProcessReprocessPage() {
 }
 
 function ReprocessList({ onOpen }: { onOpen: (id: number | 'new') => void }) {
+  const { can } = useAuth();
   const list = useQuery({ queryKey: ['fabric-process', 'reprocess'], queryFn: async () => (await http.get<{ data: any[] }>('/fabric-process/reprocess')).data ?? [] });
   return (
     <div>
-      <FpTitle no={4} title="Reprocess" sub="Re-dye / re-wash / re-compact — billable or non-billable" actions={<Button onClick={() => onOpen('new')}><Plus size={14} className="mr-1" /> New Reprocess</Button>} />
+      <FpTitle no={4} title="Reprocess" sub="Re-dye / re-wash / re-compact — billable or non-billable" actions={can('FABRIC_PROCESS.REPROCESS') ? <Button onClick={() => onOpen('new')}><Plus size={14} className="mr-1" /> New Reprocess</Button> : null} />
       <div className="card overflow-x-auto">
         {list.isLoading ? <LoadingBlock /> : (
           <table className="w-full text-xs">
@@ -86,6 +87,7 @@ const billingPayload = (b: any) => ({
 });
 
 function ReprocessEditor({ returnId, onBack, onDone }: { returnId: number | null; onBack: () => void; onDone: (id: number) => void }) {
+  const { can } = useAuth();
   const toast = useToast();
   const qc = useQueryClient();
   const types = useProcessTypes();
@@ -162,8 +164,9 @@ function ReprocessEditor({ returnId, onBack, onDone }: { returnId: number | null
       </div>
       <div className="flex justify-end gap-2">
         <Button variant="secondary" loading={busy} onClick={() => save(false)}><Save size={14} className="mr-1" /> Save Draft</Button>
-        <Button loading={busy} onClick={() => save(true)}><CheckCircle2 size={14} className="mr-1" /> Confirm Reprocess</Button>
+        {can('FABRIC_PROCESS.CONFIRM') && <Button loading={busy} onClick={() => save(true)}><CheckCircle2 size={14} className="mr-1" /> Confirm Reprocess</Button>}
       </div>
+      {!can('FABRIC_PROCESS.BILLING_APPROVE') && <p className="mt-2 text-right text-[11.5px] text-slate-500">The billing treatment is saved as a request — a Process Manager approves it.</p>}
     </div>
   );
 }
@@ -172,7 +175,7 @@ function ReprocessView({ id, onBack }: { id: number; onBack: () => void }) {
   const toast = useToast();
   const qc = useQueryClient();
   const nav = useNavigate();
-  const { can } = useAuth() as any;
+  const { can } = useAuth();
   const reasons = useReasons();
   const q = useQuery({ queryKey: ['fabric-process', 'reprocess', id], queryFn: async () => (await http.get<{ data: any }>(`/fabric-process/reprocess/${id}`)).data });
   const [busy, setBusy] = useState(false);
@@ -183,7 +186,8 @@ function ReprocessView({ id, onBack }: { id: number; onBack: () => void }) {
   if (!r) return <LoadingBlock />;
   const act = async (fn: () => Promise<any>) => { setBusy(true); try { const x = await fn(); toast(x?.message ?? 'Done', 'success'); void qc.invalidateQueries({ queryKey: ['fabric-process'] }); } catch (e) { toast(errText(e), 'error'); } finally { setBusy(false); } };
   const openEdit = () => { setBState({ billing_type: r.billing_type, bill_required: r.bill_required ? 'YES' : 'NO', billing_reason_id: r.billing_reason_id ? String(r.billing_reason_id) : '', cost_treatment: r.cost_treatment ?? 'INTERNAL_COST', rate_per_kg: n(r.rate_per_kg), bill_amount: n(r.bill_amount) || '', internal_cost: n(r.internal_cost), billing_remarks: '' }); setWhy(''); setEdit(true); };
-  const isManager = typeof can === 'function' ? can('PRODUCTION.APPROVE') : true;
+  const canApprove = can('FABRIC_PROCESS.BILLING_APPROVE');
+  const canChange = can('FABRIC_PROCESS.BILLING_CHANGE');
   return (
     <div>
       <FpTitle no={4} title={`Reprocess — ${r.reprocess_no}`} sub={`${r.process_name} · ${r.vendor_name} · ${r.source_type === 'RETURN' ? `from return ${r.return_no}` : 'from stock'} · ${r.reason}`}
@@ -200,10 +204,10 @@ function ReprocessView({ id, onBack }: { id: number; onBack: () => void }) {
           <tbody>{r.lines.map((l: any) => <tr key={l.id} className="border-t border-slate-100"><td className="px-2 py-1 font-semibold">{l.io_no || '—'}</td><td className="px-2 py-1 font-mono">{l.roll_no}</td><td className="px-2 py-1">{l.color_name || '—'}</td><td className="px-2 py-1 text-right">{kg(l.qty_kg)}</td></tr>)}</tbody></table>
       </div>
       <div className="flex flex-wrap justify-end gap-2">
-        {r.status === 'DRAFT' && <Button loading={busy} onClick={() => act(() => http.post(`/fabric-process/reprocess/${id}/confirm`, {}))}><CheckCircle2 size={14} className="mr-1" /> Confirm Reprocess</Button>}
-        {['BILLABLE', 'RECOVERY'].includes(r.billing_type) && r.billing_status === 'PENDING' && isManager && <Button variant="secondary" loading={busy} onClick={() => act(() => http.post(`/fabric-process/reprocess/${id}/approve-billing`, {}))}><BadgeCheck size={14} className="mr-1" /> Approve billing</Button>}
-        {isManager && r.status !== 'CANCELLED' && <Button variant="secondary" onClick={openEdit}><Pencil size={14} className="mr-1" /> Change billing</Button>}
-        {r.fpo_id && ['IN_PROCESS'].includes(r.status) && <Button onClick={() => nav(`/production/fabric-process/inward?fpo=${r.fpo_id}`)}>Receive reprocess (GRN)</Button>}
+        {r.status === 'DRAFT' && can('FABRIC_PROCESS.CONFIRM') && <Button loading={busy} onClick={() => act(() => http.post(`/fabric-process/reprocess/${id}/confirm`, {}))}><CheckCircle2 size={14} className="mr-1" /> Confirm Reprocess</Button>}
+        {r.billing_status === 'PENDING' && canApprove && <Button variant="secondary" loading={busy} onClick={() => act(() => http.post(`/fabric-process/reprocess/${id}/approve-billing`, {}))}><BadgeCheck size={14} className="mr-1" /> Approve billing</Button>}
+        {canChange && r.status !== 'CANCELLED' && <Button variant="secondary" onClick={openEdit}><Pencil size={14} className="mr-1" /> Change billing</Button>}
+        {r.fpo_id && ['IN_PROCESS'].includes(r.status) && can('FABRIC_PROCESS.CREATE') && <Button onClick={() => nav(`/production/fabric-process/inward?fpo=${r.fpo_id}`)}>Receive reprocess (GRN)</Button>}
       </div>
       {edit && b && (
         <Modal open onClose={() => setEdit(false)} size="xl" title={`Change billing — ${r.reprocess_no}`}

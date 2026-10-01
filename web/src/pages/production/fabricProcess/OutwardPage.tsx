@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Plus, ScanLine, Download, Save, CheckCircle2, Printer, Trash2, Ban, PackageCheck } from 'lucide-react';
+import { useAuth } from '../../../lib/auth';
 import { http } from '../../../lib/api';
 import { useLookup, toOptions } from '../../../hooks/useLookup';
 import { useToast } from '../../../hooks/useToast';
@@ -28,6 +29,7 @@ export default function FabricProcessOutwardPage() {
 }
 
 function OutwardList({ onOpen }: { onOpen: (id: number | 'new') => void }) {
+  const { can } = useAuth();
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
   const list = useQuery({ queryKey: ['fabric-process', 'outward'], queryFn: async () => (await http.get<{ data: any[] }>('/fabric-process/outward')).data ?? [] });
@@ -36,7 +38,7 @@ function OutwardList({ onOpen }: { onOpen: (id: number | 'new') => void }) {
   return (
     <div>
       <FpTitle no={1} title="Process Outward DC" sub="Fabric to dyeing / washing / compacting / printing … — multiple jobs and rolls per DC"
-        actions={<Button onClick={() => onOpen('new')}><Plus size={14} className="mr-1" /> New Outward DC</Button>} />
+        actions={can('FABRIC_PROCESS.CREATE') ? <Button onClick={() => onOpen('new')}><Plus size={14} className="mr-1" /> New Outward DC</Button> : null} />
       <div className="card overflow-hidden">
         <div className="flex flex-wrap gap-2 border-b border-surface-border p-3">
           <SearchInput value={q} onChange={setQ} placeholder="DC no, supplier / vendor, job, colour…" className="w-72" />
@@ -79,6 +81,7 @@ function OutwardList({ onOpen }: { onOpen: (id: number | 'new') => void }) {
 }
 
 function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () => void; onOpen: (id: number) => void }) {
+  const { can } = useAuth();
   const toast = useToast();
   const qc = useQueryClient();
   const nav = useNavigate();
@@ -238,10 +241,10 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
       )}
 
       <div className="mt-3 flex flex-wrap justify-end gap-2">
-        {editable && <Button variant="secondary" loading={busy} onClick={() => save(false)}><Save size={14} className="mr-1" /> Save Draft</Button>}
-        {editable && <Button loading={busy} onClick={() => save(true)}><CheckCircle2 size={14} className="mr-1" /> Confirm DC</Button>}
-        {d && ['DRAFT', 'DISPATCHED'].includes(d.status) && !d.inwards?.length && <Button variant="danger" loading={busy} onClick={cancel}><Ban size={14} className="mr-1" /> Cancel DC</Button>}
-        {d && ['DISPATCHED', 'PARTIALLY_RECEIVED', 'IN_PROCESS'].includes(d.status) && <Button onClick={() => nav(`/production/fabric-process/inward?fpo=${id}`)}><PackageCheck size={14} className="mr-1" /> Receive (GRN)</Button>}
+        {editable && can(id ? 'FABRIC_PROCESS.EDIT_DRAFT' : 'FABRIC_PROCESS.CREATE') && <Button variant="secondary" loading={busy} onClick={() => save(false)}><Save size={14} className="mr-1" /> Save Draft</Button>}
+        {editable && can('FABRIC_PROCESS.CONFIRM') && <Button loading={busy} onClick={() => save(true)}><CheckCircle2 size={14} className="mr-1" /> Confirm DC</Button>}
+        {d && ['DRAFT', 'DISPATCHED'].includes(d.status) && !d.inwards?.length && can(d.status === 'DRAFT' ? 'FABRIC_PROCESS.EDIT_DRAFT' : 'FABRIC_PROCESS.CANCEL') && <Button variant="danger" loading={busy} onClick={cancel}><Ban size={14} className="mr-1" /> Cancel DC</Button>}
+        {d && ['DISPATCHED', 'PARTIALLY_RECEIVED', 'IN_PROCESS'].includes(d.status) && can('FABRIC_PROCESS.CREATE') && <Button onClick={() => nav(`/production/fabric-process/inward?fpo=${id}`)}><PackageCheck size={14} className="mr-1" /> Receive (GRN)</Button>}
         <Button variant="secondary" disabled={!rows.length} onClick={print}><Printer size={14} className="mr-1" /> Print DC</Button>
       </div>
 

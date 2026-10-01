@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Plus, CheckCircle2, Search, Ban } from 'lucide-react';
+import { useAuth } from '../../../lib/auth';
 import { http } from '../../../lib/api';
 import { useLookup, toOptions } from '../../../hooks/useLookup';
 import { useToast } from '../../../hooks/useToast';
@@ -25,10 +26,11 @@ export default function FabricProcessBillPage() {
 }
 
 function BillList({ onOpen }: { onOpen: (id: number | 'new') => void }) {
+  const { can } = useAuth();
   const list = useQuery({ queryKey: ['fabric-process', 'bills'], queryFn: async () => (await http.get<{ data: any[] }>('/fabric-process/bills')).data ?? [] });
   return (
     <div>
-      <FpTitle no={6} title="Contractor Bill (Fabric Process)" sub="GRN charges + billable reprocess − recovery" actions={<Button onClick={() => onOpen('new')}><Plus size={14} className="mr-1" /> New Bill</Button>} />
+      <FpTitle no={6} title="Contractor Bill (Fabric Process)" sub="GRN charges + billable reprocess − recovery" actions={can('FABRIC_PROCESS.BILL') ? <Button onClick={() => onOpen('new')}><Plus size={14} className="mr-1" /> New Bill</Button> : null} />
       <div className="card overflow-x-auto">
         {list.isLoading ? <LoadingBlock /> : (
           <table className="w-full text-xs">
@@ -152,6 +154,7 @@ function BillEditor({ onBack, onDone }: { onBack: () => void; onDone: (id: numbe
 }
 
 function BillView({ id, onBack }: { id: number; onBack: () => void }) {
+  const { can } = useAuth();
   const toast = useToast();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['fabric-process', 'bills', id], queryFn: async () => (await http.get<{ data: any }>(`/fabric-process/bills/${id}`)).data });
@@ -165,7 +168,7 @@ function BillView({ id, onBack }: { id: number; onBack: () => void }) {
   return (
     <div>
       <FpTitle no={6} title={`Contractor Bill — ${b.bill_no}`} sub={`${b.vendor_name} · ${fmtDate(b.bill_date)}${b.party_bill_no ? ` · party bill ${b.party_bill_no}` : ''}`}
-        actions={<><FpStatus value={b.status} />{b.status === 'POSTED' && <Button variant="danger" onClick={cancel}><Ban size={14} className="mr-1" /> Cancel bill</Button>}<Button variant="secondary" onClick={onBack}><ArrowLeft size={14} className="mr-1" /> Back</Button></>} />
+        actions={<><FpStatus value={b.status} />{b.status === 'POSTED' && can('FABRIC_PROCESS.BILL_CANCEL') && <Button variant="danger" onClick={cancel}><Ban size={14} className="mr-1" /> Cancel bill</Button>}<Button variant="secondary" onClick={onBack}><ArrowLeft size={14} className="mr-1" /> Back</Button></>} />
       <div className="card overflow-x-auto">
         <table className="w-full text-xs">
           <thead className="bg-slate-50 text-slate-500"><tr>{['Type', 'Doc no', 'Date', 'Job', 'Process', 'Qty KG', 'Rate', 'Amount'].map((h) => <th key={h} className={`px-2 py-2 ${/KG|Rate|Amount/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>

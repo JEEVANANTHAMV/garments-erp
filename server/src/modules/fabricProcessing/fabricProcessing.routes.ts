@@ -4,7 +4,7 @@ import { query, queryOne, transaction, txQuery, txQueryOne, txExecute, type Tx }
 import { postLedger, UOM_KG } from '../../core/processEngine.js';
 import { refreshFabricRollStatus } from '../production/cuttingEngine.js';
 import { ah } from '../../core/asyncHandler.js';
-import { NotFound, BadRequest } from '../../core/errors.js';
+import { NotFound, BadRequest, Forbidden } from '../../core/errors.js';
 import { requirePermission } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
@@ -25,6 +25,18 @@ import { s } from '../resources/schemas.js';
  *   Every roll movement is written to trx_fabric_roll_history (roll tracking).
  */
 export const fabricProcessingRouter = Router();
+
+/**
+ * Fabric process permissions (doc §17 / §32) — granted per role in Admin › Roles
+ * (seeded: Store User, Production User, Process Manager, ERP Admin).
+ */
+export const FP = {
+  VIEW: 'FABRIC_PROCESS.VIEW', CREATE: 'FABRIC_PROCESS.CREATE', EDIT_DRAFT: 'FABRIC_PROCESS.EDIT_DRAFT', CONFIRM: 'FABRIC_PROCESS.CONFIRM',
+  QC: 'FABRIC_PROCESS.QC', RETURN: 'FABRIC_PROCESS.RETURN', REPROCESS: 'FABRIC_PROCESS.REPROCESS', BILLING_APPROVE: 'FABRIC_PROCESS.BILLING_APPROVE',
+  BILLING_CHANGE: 'FABRIC_PROCESS.BILLING_CHANGE', BILL: 'FABRIC_PROCESS.BILL', BILL_CANCEL: 'FABRIC_PROCESS.BILL_CANCEL', CANCEL: 'FABRIC_PROCESS.CANCEL',
+  MASTER: 'FABRIC_PROCESS.MASTER',
+} as const;
+const can = (req: Request, code: string) => !!req.user?.isSuperAdmin || !!req.user?.permissions.has(code);
 
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -60,11 +72,11 @@ const partyName = async (tx: Tx, id: number | null) =>
 // =====================================================================================
 // Masters / lookups
 // =====================================================================================
-fabricProcessingRouter.get('/fabric-process/types', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+fabricProcessingRouter.get('/fabric-process/types', requirePermission(FP.VIEW), ah(async (req, res) => {
   const rows = await query<any>('SELECT * FROM mst_fabric_process_type WHERE company_id = ? AND is_active = 1 ORDER BY sort_order, name', [req.user!.companyId]);
   res.json({ data: rows });
 }));
-fabricProcessingRouter.get('/fabric-process/reasons', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+fabricProcessingRouter.get('/fabric-process/reasons', requirePermission(FP.VIEW), ah(async (req, res) => {
   const rows = await query<any>('SELECT * FROM mst_fabric_process_reason WHERE company_id = ? AND is_active = 1 ORDER BY code', [req.user!.companyId]);
   res.json({ data: rows });
 }));
@@ -89,7 +101,7 @@ const STORE_ROLL_SQL = `
     LEFT JOIN mst_warehouse w ON w.id = fr.warehouse_id
     LEFT JOIN trx_sales_order so ON so.id = fr.so_id`;
 
-fabricProcessingRouter.get(['/fabric-process/store-rolls', '/fabric-processing/store-rolls'], requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+fabricProcessingRouter.get(['/fabric-process/store-rolls', '/fabric-processing/store-rolls'], requirePermission(FP.VIEW), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const q = z.object({
     so_id: z.coerce.number().int().positive().optional(),
@@ -219,7 +231,7 @@ async function insertOutwardHeader(tx: Tx, req: Request, b: OutwardBody, extra: 
 }
 
 /** GET /fabric-process/outward — DC register with job count and reconciliation totals. */
-fabricProcessingRouter.get(['/fabric-process/outward', '/fabric-processing/orders'], requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+fabricProcessingRouter.get(['/fabric-process/outward', '/fabric-processing/orders'], requirePermission(FP.VIEW), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const q = z.object({ status: z.string().optional(), vendor_id: z.coerce.number().int().optional(), sub_process: z.string().optional(),
     reprocess: z.coerce.number().int().optional(), open: z.coerce.number().int().optional() }).parse(req.query);
@@ -267,7 +279,7 @@ async function reconciliation(fpoId: number) {
   return { jobs, total: { outward_kg: sum('outward_kg'), good_kg: sum('good_kg'), reject_kg: sum('reject_kg'), loss_kg: sum('loss_kg'), balance_kg: sum('balance_kg') } };
 }
 
-fabricProcessingRouter.get(['/fabric-process/outward/:id', '/fabric-processing/orders/:id'], requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+fabricProcessingRouter.get(['/fabric-process/outward/:id', '/fabric-processing/orders/:id'], requirePermission(FP.VIEW), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = z.coerce.number().int().positive().parse(req.params.id);
   const o = await queryOne<any>(
@@ -292,9 +304,10 @@ fabricProcessingRouter.get(['/fabric-process/outward/:id', '/fabric-processing/o
 }));
 
 /** POST /fabric-process/outward — Save Draft (no stock moved) or Confirm DC (stock issued). */
-fabricProcessingRouter.post('/fabric-process/outward', requirePermission('PRODUCTION.CREATE'), ah(async (req, res) => {
+fabricProcessingRouter.post('/fabric-process/outward', requirePermission(FP.CREATE), ah(async (req, res) => {
   const body = outwardSchema.parse(req.body);
   const confirm = Boolean(req.body?.confirm);
+  if (confirm && !can(req, FP.CONFIRM)) throw Forbidden('You can save the DC as draft; confirming needs the confirm right');
   const out = await transaction(async (tx) => {
     const h = await insertOutwardHeader(tx, req, body, { status: confirm ? 'DISPATCHED' : 'DRAFT' });
     const kg = await writeOutwardRolls(tx, req, h.id, h, body.rolls, confirm);
@@ -305,7 +318,7 @@ fabricProcessingRouter.post('/fabric-process/outward', requirePermission('PRODUC
 }));
 
 /** PUT /fabric-process/outward/:id — edit a DRAFT DC (header + rolls replaced). */
-fabricProcessingRouter.put('/fabric-process/outward/:id', requirePermission('PRODUCTION.UPDATE'), ah(async (req, res) => {
+fabricProcessingRouter.put('/fabric-process/outward/:id', requirePermission(FP.EDIT_DRAFT), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = z.coerce.number().int().positive().parse(req.params.id);
   const body = outwardSchema.parse(req.body);
@@ -328,7 +341,7 @@ fabricProcessingRouter.put('/fabric-process/outward/:id', requirePermission('PRO
 }));
 
 /** POST /fabric-process/outward/:id/confirm — Confirm DC: issues every roll from the store. */
-fabricProcessingRouter.post('/fabric-process/outward/:id/confirm', requirePermission('PRODUCTION.UPDATE'), ah(async (req, res) => {
+fabricProcessingRouter.post('/fabric-process/outward/:id/confirm', requirePermission(FP.CONFIRM), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = z.coerce.number().int().positive().parse(req.params.id);
   const out = await transaction(async (tx) => {
@@ -348,7 +361,7 @@ fabricProcessingRouter.post('/fabric-process/outward/:id/confirm', requirePermis
 }));
 
 /** POST /fabric-process/outward/:id/cancel — draft: cancelled; confirmed with nothing received: rolls back to store. */
-fabricProcessingRouter.post(['/fabric-process/outward/:id/cancel', '/fabric-processing/orders/:id/cancel'], requirePermission('PRODUCTION.UPDATE'), ah(async (req, res) => {
+fabricProcessingRouter.post(['/fabric-process/outward/:id/cancel', '/fabric-processing/orders/:id/cancel'], requirePermission(FP.CANCEL), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = z.coerce.number().int().positive().parse(req.params.id);
   const reason = z.string().trim().max(255).optional().parse(req.body?.reason);
@@ -414,13 +427,14 @@ const inwardSchema = z.object({
   })).min(1, 'Enter the received rolls'),
 });
 
-fabricProcessingRouter.get('/fabric-process/inward', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+fabricProcessingRouter.get('/fabric-process/inward', requirePermission(FP.VIEW), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const q = z.object({ fpo_id: z.coerce.number().int().optional(), vendor_id: z.coerce.number().int().optional(), unbilled: z.coerce.number().int().optional() }).parse(req.query);
   const where = ['i.company_id = ?']; const p: unknown[] = [cid];
   if (q.fpo_id) { where.push('i.fpo_id = ?'); p.push(q.fpo_id); }
   if (q.vendor_id) { where.push('i.vendor_id = ?'); p.push(q.vendor_id); }
-  if (q.unbilled) where.push('i.bill_id IS NULL AND i.is_reprocess = 0');
+  if (q.unbilled) where.push(`i.bill_id IS NULL AND i.is_reprocess = 0 AND i.status = 'POSTED'`);
+  if (req.query.posted) where.push(`i.status = 'POSTED'`);
   const rows = await query<any>(
     `SELECT i.*, o.fpo_no, v.party_name AS vendor_name, pt.name AS process_name, w.warehouse_name,
             (SELECT GROUP_CONCAT(DISTINCT ri.io_no SEPARATOR ', ') FROM trx_fabric_process_roll_out ro JOIN trx_fabric_process_roll_in ri ON ri.id = ro.roll_in_id WHERE ro.inward_id = i.id) AS jobs,
@@ -431,10 +445,12 @@ fabricProcessingRouter.get('/fabric-process/inward', requirePermission('PRODUCTI
        LEFT JOIN mst_fabric_process_type pt ON pt.company_id = i.company_id AND pt.code = i.sub_process
        LEFT JOIN mst_warehouse w ON w.id = i.warehouse_id
       WHERE ${where.join(' AND ')} ORDER BY i.id DESC LIMIT 1000`, p);
+  // drafts carry their line count in draft_json
+  rows.forEach((r: any) => { if (r.status !== 'POSTED' && r.draft_json) { const d = parseDraft(r.draft_json); r.roll_count = d.lines.length; } delete r.draft_json; });
   res.json({ data: rows });
 }));
 
-fabricProcessingRouter.get('/fabric-process/inward/:id', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+fabricProcessingRouter.get('/fabric-process/inward/:id', requirePermission(FP.VIEW), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = z.coerce.number().int().positive().parse(req.params.id);
   const i = await queryOne<any>(
@@ -453,7 +469,18 @@ fabricProcessingRouter.get('/fabric-process/inward/:id', requirePermission('PROD
        LEFT JOIN mst_style st ON st.id = ri.style_id
        LEFT JOIN trx_fabric_roll fr ON fr.id = ro.fabric_roll_id
       WHERE ro.inward_id = ? ORDER BY ri.io_no, ro.id`, [id]);
-  res.json({ data: { ...i, lines, reconciliation: await reconciliation(Number(i.fpo_id)) } });
+  // not posted yet: the draft lines (with their input roll) + QC parameters and results
+  let draft: any = null;
+  if (i.status !== 'POSTED' && i.draft_json) {
+    const d = parseDraft(i.draft_json);
+    const rins = await query<any>(`SELECT ri.*, st.style_code, ROUND(ri.weight_kg - ri.good_kg - ri.reject_kg - ri.loss_kg, 3) AS open_kg
+                                     FROM trx_fabric_process_roll_in ri LEFT JOIN mst_style st ON st.id = ri.style_id WHERE ri.fpo_id = ?`, [i.fpo_id]);
+    draft = { ...d, lines: d.lines.map((l, k) => { const ri = rins.find((x) => Number(x.id) === Number(l.roll_in_id)); return { ...l, line_index: k, input_roll_no: ri?.roll_no, io_no: ri?.io_no, buyer_po_no: ri?.buyer_po_no, style_code: ri?.style_code, open_kg: n(ri?.open_kg), input_roll_kg: n(ri?.weight_kg) }; }) };
+  }
+  const qcParams = await query<any>('SELECT * FROM mst_fabric_process_qc_param WHERE company_id = ? AND process_code = ? AND is_active = 1 ORDER BY sort_order, id', [cid, i.sub_process]);
+  const qcResults = await query<any>('SELECT * FROM trx_fabric_process_qc WHERE inward_id = ? ORDER BY line_index, id', [id]);
+  const pt = await queryOne<any>('SELECT requires_qc FROM mst_fabric_process_type WHERE company_id = ? AND code = ?', [cid, i.sub_process]);
+  res.json({ data: { ...i, draft_json: undefined, lines, draft, qc_params: qcParams, qc_results: qcResults, requires_qc: !!Number(pt?.requires_qc), reconciliation: await reconciliation(Number(i.fpo_id)) } });
 }));
 
 /**
@@ -461,160 +488,353 @@ fabricProcessingRouter.get('/fabric-process/inward/:id', requirePermission('PROD
  * with good / reject / loss KG (good + reject + loss ≤ input). Good rolls go to the processed store
  * (state from the process type, colour, the input roll's job); reject KG to the reject store.
  */
-fabricProcessingRouter.post('/fabric-process/inward', requirePermission('PRODUCTION.CREATE'), ah(async (req, res) => {
+type InwardBody = z.infer<typeof inwardSchema>;
+
+/** Loads the DC + process type and validates GRN lines (good + reject + loss ≤ what is still open per input roll). */
+async function checkInward(tx: Tx, req: Request, body: InwardBody) {
+  const cid = req.user!.companyId;
+  const o = await txQueryOne<any>(tx, 'SELECT * FROM trx_fabric_process_order WHERE id = ? AND company_id = ? FOR UPDATE', [body.fpo_id, cid]);
+  if (!o) throw NotFound('Process DC not found');
+  if (!['DISPATCHED', 'IN_PROCESS', 'PARTIALLY_RECEIVED'].includes(o.status)) throw BadRequest(`${o.fpo_no} is ${o.status} — nothing to receive`);
+  const pt = await processType(cid, o.sub_process, tx);
+  const rollIns = await txQuery<any>(tx, 'SELECT * FROM trx_fabric_process_roll_in WHERE fpo_id = ? FOR UPDATE', [o.id]);
+  const byId = new Map(rollIns.map((r) => [Number(r.id), r]));
+
+  // validate per input roll: good + reject + loss (this GRN + earlier) ≤ input KG; reject needs a reason
+  const add = new Map<number, { g: number; rj: number; l: number }>();
+  for (const l of body.lines) {
+    const ri = byId.get(l.roll_in_id);
+    if (!ri) throw BadRequest('A line is not a roll of this DC');
+    if (l.good_kg + l.reject_kg + l.loss_kg <= 0) throw BadRequest(`Roll ${ri.roll_no}: enter good, reject or loss KG`);
+    if (l.reject_kg > 0 && !l.reject_reason) throw BadRequest(`Roll ${ri.roll_no}: reject KG needs a reason`);
+    const a = add.get(l.roll_in_id) ?? { g: 0, rj: 0, l: 0 };
+    a.g += l.good_kg; a.rj += l.reject_kg; a.l += l.loss_kg; add.set(l.roll_in_id, a);
+  }
+  if (!pt.allow_split) {
+    const counts = new Map<number, number>();
+    body.lines.filter((l) => l.good_kg > 0).forEach((l) => counts.set(l.roll_in_id, (counts.get(l.roll_in_id) ?? 0) + 1));
+    if ([...counts.values()].some((c) => c > 1)) throw BadRequest(`${pt.name} does not allow splitting a roll into several output rolls`);
+  }
+  for (const [rid, a] of add) {
+    const ri = byId.get(rid)!;
+    const done = n(ri.good_kg) + n(ri.reject_kg) + n(ri.loss_kg);
+    if (done + a.g + a.rj + a.l > n(ri.weight_kg) + EPS) {
+      throw BadRequest(`Roll ${ri.roll_no}: good + reject + loss ${r3(done + a.g + a.rj + a.l)} KG is more than the ${r3(n(ri.weight_kg))} KG sent`);
+    }
+  }
+
+  return { o, pt, byId, add, rollIns };
+}
+
+/** Posts a process GRN (stock, rolls, ledger, DC status) — directly, or a draft that passed QC (`existing`). */
+async function postInward(tx: Tx, req: Request, body: InwardBody, existing?: { id: number; inward_no: string }) {
   const cid = req.user!.companyId;
   const uid = req.user!.id;
-  const body = inwardSchema.parse(req.body);
-  const out = await transaction(async (tx) => {
-    const o = await txQueryOne<any>(tx, 'SELECT * FROM trx_fabric_process_order WHERE id = ? AND company_id = ? FOR UPDATE', [body.fpo_id, cid]);
-    if (!o) throw NotFound('Process DC not found');
-    if (!['DISPATCHED', 'IN_PROCESS', 'PARTIALLY_RECEIVED'].includes(o.status)) throw BadRequest(`${o.fpo_no} is ${o.status} — nothing to receive`);
-    const pt = await processType(cid, o.sub_process, tx);
-    const rollIns = await txQuery<any>(tx, 'SELECT * FROM trx_fabric_process_roll_in WHERE fpo_id = ? FOR UPDATE', [o.id]);
-    const byId = new Map(rollIns.map((r) => [Number(r.id), r]));
-
-    // validate per input roll: good + reject + loss (this GRN + earlier) ≤ input KG; reject needs a reason
-    const add = new Map<number, { g: number; rj: number; l: number }>();
-    for (const l of body.lines) {
-      const ri = byId.get(l.roll_in_id);
-      if (!ri) throw BadRequest('A line is not a roll of this DC');
-      if (l.good_kg + l.reject_kg + l.loss_kg <= 0) throw BadRequest(`Roll ${ri.roll_no}: enter good, reject or loss KG`);
-      if (l.reject_kg > 0 && !l.reject_reason) throw BadRequest(`Roll ${ri.roll_no}: reject KG needs a reason`);
-      const a = add.get(l.roll_in_id) ?? { g: 0, rj: 0, l: 0 };
-      a.g += l.good_kg; a.rj += l.reject_kg; a.l += l.loss_kg; add.set(l.roll_in_id, a);
-    }
-    if (!pt.allow_split) {
-      const counts = new Map<number, number>();
-      body.lines.filter((l) => l.good_kg > 0).forEach((l) => counts.set(l.roll_in_id, (counts.get(l.roll_in_id) ?? 0) + 1));
-      if ([...counts.values()].some((c) => c > 1)) throw BadRequest(`${pt.name} does not allow splitting a roll into several output rolls`);
-    }
-    for (const [rid, a] of add) {
-      const ri = byId.get(rid)!;
-      const done = n(ri.good_kg) + n(ri.reject_kg) + n(ri.loss_kg);
-      if (done + a.g + a.rj + a.l > n(ri.weight_kg) + EPS) {
-        throw BadRequest(`Roll ${ri.roll_no}: good + reject + loss ${r3(done + a.g + a.rj + a.l)} KG is more than the ${r3(n(ri.weight_kg))} KG sent`);
-      }
-    }
-
-    const inwardNo = await nextDocNumber(tx, cid, 'FP_INWARD');
-    const totG = r3(body.lines.reduce((s, l) => s + l.good_kg, 0));
-    const totR = r3(body.lines.reduce((s, l) => s + l.reject_kg, 0));
-    const totL = r3(body.lines.reduce((s, l) => s + l.loss_kg, 0));
-    const rejectWh = body.reject_warehouse_id ?? body.warehouse_id;
-    // Stock GRN the rolls hang off (fabric roll stock / cutting read trx_fabric_roll via trx_grn)
-    const g = await txExecute(tx,
-      `INSERT INTO trx_grn (company_id, grn_no, internal_ir_no, grn_date, supplier_id, warehouse_id, supplier_dc_no, vehicle_no, qc_status, remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-      [cid, inwardNo, o.io_no ?? null, body.inward_date, o.vendor_id ?? null, body.warehouse_id, body.challan_no ?? null, body.vehicle_no ?? null,
-       totR > 0 ? 'PARTIAL_ACCEPTED' : 'ACCEPTED', `${pt.name} inward on ${o.fpo_no}`, uid]);
-    const grnId = Number(g.insertId);
+  const { o, pt, byId, add, rollIns } = await checkInward(tx, req, body);
+  const inwardNo = existing?.inward_no ?? await nextDocNumber(tx, cid, 'FP_INWARD');
+  const totG = r3(body.lines.reduce((s, l) => s + l.good_kg, 0));
+  const totR = r3(body.lines.reduce((s, l) => s + l.reject_kg, 0));
+  const totL = r3(body.lines.reduce((s, l) => s + l.loss_kg, 0));
+  const rejectWh = body.reject_warehouse_id ?? body.warehouse_id;
+  // Stock GRN the rolls hang off (fabric roll stock / cutting read trx_fabric_roll via trx_grn)
+  const g = await txExecute(tx,
+    `INSERT INTO trx_grn (company_id, grn_no, internal_ir_no, grn_date, supplier_id, warehouse_id, supplier_dc_no, vehicle_no, qc_status, remarks, created_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+    [cid, inwardNo, o.io_no ?? null, body.inward_date, o.vendor_id ?? null, body.warehouse_id, body.challan_no ?? null, body.vehicle_no ?? null,
+     totR > 0 ? 'PARTIAL_ACCEPTED' : 'ACCEPTED', `${pt.name} inward on ${o.fpo_no}`, uid]);
+  const grnId = Number(g.insertId);
+  let inwardId: number;
+  if (existing) {
+    await txExecute(tx,
+      `UPDATE trx_fabric_process_inward SET inward_date = ?, challan_no = ?, vehicle_no = ?, received_by = ?, warehouse_id = ?, reject_warehouse_id = ?, grn_id = ?,
+              input_kg = ?, good_kg = ?, reject_kg = ?, loss_kg = ?, remarks = ?, status = 'POSTED', posted_by = ?, posted_at = NOW() WHERE id = ?`,
+      [body.inward_date, body.challan_no ?? null, body.vehicle_no ?? null, body.received_by, body.warehouse_id, rejectWh, grnId,
+       r3(totG + totR + totL), totG, totR, totL, body.remarks ?? null, uid, existing.id]);
+    inwardId = existing.id;
+  } else {
     const ins = await txExecute(tx,
       `INSERT INTO trx_fabric_process_inward (company_id, inward_no, inward_date, fpo_id, vendor_id, sub_process, challan_no, vehicle_no, received_by,
-         warehouse_id, reject_warehouse_id, grn_id, input_kg, good_kg, reject_kg, loss_kg, is_reprocess, remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         warehouse_id, reject_warehouse_id, grn_id, input_kg, good_kg, reject_kg, loss_kg, is_reprocess, remarks, created_by, status, posted_by, posted_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'POSTED',?,NOW())`,
       [cid, inwardNo, body.inward_date, o.id, o.vendor_id ?? null, o.sub_process, body.challan_no ?? null, body.vehicle_no ?? null, body.received_by,
-       body.warehouse_id, rejectWh, grnId, r3(totG + totR + totL), totG, totR, totL, o.is_reprocess ? 1 : 0, body.remarks ?? null, uid]);
-    const inwardId = Number(ins.insertId);
+       body.warehouse_id, rejectWh, grnId, r3(totG + totR + totL), totG, totR, totL, o.is_reprocess ? 1 : 0, body.remarks ?? null, uid, uid]);
+    inwardId = Number(ins.insertId);
+  }
 
-    // one GRN line per job + fabric (stock grouping), created on demand
-    const grnLines = new Map<string, number>();
-    const grnLineFor = async (ri: any, colour: string | null) => {
-      const k = `${ri.so_id ?? 0}|${ri.fabric_id ?? 0}|${colour ?? ''}`;
-      if (grnLines.has(k)) return grnLines.get(k)!;
-      const gl = await txExecute(tx,
-        `INSERT INTO trx_grn_line (grn_id, so_id, style_id, material_type, fabric_id, fabric_category, color_name, lot_no, qc_status,
-           received_qty, received_weight, no_of_rolls, accepted_qty, rejected_qty, balance_qty, uom_id)
-         VALUES (?,?,?,?,?,?,?,?,?,0,0,0,0,0,0,?)`,
-        [grnId, ri.so_id ?? null, ri.style_id ?? null, 'FABRIC', ri.fabric_id ?? null, pt.output_state === 'DYED' ? 'Dyed Fabric' : 'Grey Fabric', colour,
-         `${o.fpo_no}-${inwardNo}`, 'ACCEPTED', UOM_KG]);
-      grnLines.set(k, Number(gl.insertId));
-      return Number(gl.insertId);
-    };
+  // one GRN line per job + fabric (stock grouping), created on demand
+  const grnLines = new Map<string, number>();
+  const grnLineFor = async (ri: any, colour: string | null) => {
+    const k = `${ri.so_id ?? 0}|${ri.fabric_id ?? 0}|${colour ?? ''}`;
+    if (grnLines.has(k)) return grnLines.get(k)!;
+    const gl = await txExecute(tx,
+      `INSERT INTO trx_grn_line (grn_id, so_id, style_id, material_type, fabric_id, fabric_category, color_name, lot_no, qc_status,
+         received_qty, received_weight, no_of_rolls, accepted_qty, rejected_qty, balance_qty, uom_id)
+       VALUES (?,?,?,?,?,?,?,?,?,0,0,0,0,0,0,?)`,
+      [grnId, ri.so_id ?? null, ri.style_id ?? null, 'FABRIC', ri.fabric_id ?? null, pt.output_state === 'DYED' ? 'Dyed Fabric' : 'Grey Fabric', colour,
+       `${o.fpo_no}-${inwardNo}`, 'ACCEPTED', UOM_KG]);
+    grnLines.set(k, Number(gl.insertId));
+    return Number(gl.insertId);
+  };
 
-    const vendor = await partyName(tx, o.vendor_id);
-    const goodStore = await whName(tx, body.warehouse_id);
-    const rejStore = await whName(tx, rejectWh);
-    let seq = 0;
-    const created: any[] = [];
-    for (const l of body.lines) {
-      const ri = byId.get(l.roll_in_id)!;
-      const colour = l.color_name || ri.color_name || o.color_name || null;
-      const glId = await grnLineFor(ri, colour);
-      const src = ri.fabric_roll_id ? await txQueryOne<any>(tx, 'SELECT * FROM trx_fabric_roll WHERE id = ?', [ri.fabric_roll_id]) : null;
-      let goodRollId: number | null = null;
-      let rejectRollId: number | null = null;
-      const outNo = l.output_roll_no || `${inwardNo}-${String(++seq).padStart(2, '0')}`;
-      if (l.good_kg > 0) {
-        const fr = await txExecute(tx,
-          `INSERT INTO trx_fabric_roll (company_id, grn_id, grn_line_id, fabric_id, roll_no, lot_no, meters, weight_kg, gsm, dia, shade,
-             warehouse_id, qc_status, stock_status, remarks, process_state, color_name, source_fpo_id, so_id, parent_roll_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-          [cid, grnId, glId, ri.fabric_id ?? src?.fabric_id ?? null, outNo, src?.lot_no ?? null, l.meters || null, r3(l.good_kg),
-           Number.parseInt(String(l.gsm ?? ri.gsm ?? ''), 10) || null, l.dia ?? ri.dia ?? null, l.shade_no ?? o.shade_code ?? colour,
-           body.warehouse_id, l.qc_status, l.qc_status === 'ACCEPTED' ? 'AVAILABLE' : 'RESERVED', `${pt.name} on ${o.fpo_no}`,
-           pt.output_state, colour, o.id, ri.so_id ?? null, ri.fabric_roll_id ?? null]);
-        goodRollId = Number(fr.insertId);
-        await history(tx, req, { roll_id: goodRollId, roll_no: outNo, event: o.is_reprocess ? 'REPROCESS_INWARD' : 'PROCESS_INWARD', ref_type: 'FPI', ref_id: inwardId,
-          ref_no: inwardNo, sub_process: o.sub_process, from: vendor, to: goodStore, qty: l.good_kg, so_id: ri.so_id, related_roll_id: ri.fabric_roll_id,
-          remarks: `${pt.output_state}${colour ? ` — ${colour}` : ''} from ${ri.roll_no}` });
-      }
-      if (l.reject_kg > 0) {
-        const rr = await txExecute(tx,
-          `INSERT INTO trx_fabric_roll (company_id, grn_id, grn_line_id, fabric_id, roll_no, lot_no, meters, weight_kg, gsm, dia, shade,
-             warehouse_id, qc_status, stock_status, remarks, process_state, color_name, source_fpo_id, so_id, parent_roll_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'REJECTED','RESERVED',?,'RETURNED',?,?,?,?)`,
-          [cid, grnId, glId, ri.fabric_id ?? null, `${outNo}-RJ`, src?.lot_no ?? null, null, r3(l.reject_kg),
-           Number.parseInt(String(l.gsm ?? ri.gsm ?? ''), 10) || null, l.dia ?? ri.dia ?? null, colour,
-           rejectWh, `Reject: ${l.reject_reason}`, colour, o.id, ri.so_id ?? null, ri.fabric_roll_id ?? null]);
-        rejectRollId = Number(rr.insertId);
-        await history(tx, req, { roll_id: rejectRollId, roll_no: `${outNo}-RJ`, event: 'REJECT', ref_type: 'FPI', ref_id: inwardId, ref_no: inwardNo,
-          sub_process: o.sub_process, from: vendor, to: rejStore, qty: l.reject_kg, so_id: ri.so_id, related_roll_id: ri.fabric_roll_id, remarks: l.reject_reason });
-      }
-      if (l.loss_kg > 0 && ri.fabric_roll_id) {
-        await history(tx, req, { roll_id: ri.fabric_roll_id, roll_no: ri.roll_no, event: 'PROCESS_LOSS', ref_type: 'FPI', ref_id: inwardId, ref_no: inwardNo,
-          sub_process: o.sub_process, from: vendor, qty: l.loss_kg, so_id: ri.so_id, remarks: 'Process loss' });
-      }
-      await txExecute(tx,
-        `INSERT INTO trx_fabric_process_roll_out (company_id, fpo_id, inward_id, roll_in_id, so_id, roll_no, lot_no, io_no, style_id, fabric_id, finish_date,
-           dia, gsm, meters, weight_kg, input_kg, reject_kg, loss_kg, color_name, shade_no, reject_reason, qc_status, fabric_roll_id, reject_roll_id, grn_id, party_dc_no)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [cid, o.id, inwardId, ri.id, ri.so_id ?? null, outNo, src?.lot_no ?? outNo, ri.io_no || 'STOCK', ri.style_id ?? null, ri.fabric_id ?? null, body.inward_date,
-         l.dia ?? ri.dia ?? null, l.gsm ?? ri.gsm ?? null, l.meters, r3(l.good_kg), r3(l.good_kg + l.reject_kg + l.loss_kg), r3(l.reject_kg), r3(l.loss_kg),
-         colour, l.shade_no ?? null, l.reject_reason ?? null, l.qc_status, goodRollId, rejectRollId, grnId, body.challan_no ?? null]);
-      // GRN line totals
-      await txExecute(tx,
-        `UPDATE trx_grn_line SET received_qty = received_qty + ?, received_weight = received_weight + ?, accepted_qty = accepted_qty + ?,
-                rejected_qty = rejected_qty + ?, no_of_rolls = no_of_rolls + ? WHERE id = ?`,
-        [r3(l.good_kg + l.reject_kg), r3(l.good_kg + l.reject_kg), r3(l.good_kg), r3(l.reject_kg), l.good_kg > 0 ? 1 : 0, glId]);
-      created.push({ input_roll: ri.roll_no, output_roll: outNo, good_kg: l.good_kg, reject_kg: l.reject_kg, loss_kg: l.loss_kg, roll_id: goodRollId, reject_roll_id: rejectRollId });
+  const vendor = await partyName(tx, o.vendor_id);
+  const goodStore = await whName(tx, body.warehouse_id);
+  const rejStore = await whName(tx, rejectWh);
+  let seq = 0;
+  const created: any[] = [];
+  for (const l of body.lines) {
+    const ri = byId.get(l.roll_in_id)!;
+    const colour = l.color_name || ri.color_name || o.color_name || null;
+    const glId = await grnLineFor(ri, colour);
+    const src = ri.fabric_roll_id ? await txQueryOne<any>(tx, 'SELECT * FROM trx_fabric_roll WHERE id = ?', [ri.fabric_roll_id]) : null;
+    let goodRollId: number | null = null;
+    let rejectRollId: number | null = null;
+    const outNo = l.output_roll_no || `${inwardNo}-${String(++seq).padStart(2, '0')}`;
+    if (l.good_kg > 0) {
+      const fr = await txExecute(tx,
+        `INSERT INTO trx_fabric_roll (company_id, grn_id, grn_line_id, fabric_id, roll_no, lot_no, meters, weight_kg, gsm, dia, shade,
+           warehouse_id, qc_status, stock_status, remarks, process_state, color_name, source_fpo_id, so_id, parent_roll_id)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [cid, grnId, glId, ri.fabric_id ?? src?.fabric_id ?? null, outNo, src?.lot_no ?? null, l.meters || null, r3(l.good_kg),
+         Number.parseInt(String(l.gsm ?? ri.gsm ?? ''), 10) || null, l.dia ?? ri.dia ?? null, l.shade_no ?? o.shade_code ?? colour,
+         body.warehouse_id, l.qc_status, l.qc_status === 'ACCEPTED' ? 'AVAILABLE' : 'RESERVED', `${pt.name} on ${o.fpo_no}`,
+         pt.output_state, colour, o.id, ri.so_id ?? null, ri.fabric_roll_id ?? null]);
+      goodRollId = Number(fr.insertId);
+      await history(tx, req, { roll_id: goodRollId, roll_no: outNo, event: o.is_reprocess ? 'REPROCESS_INWARD' : 'PROCESS_INWARD', ref_type: 'FPI', ref_id: inwardId,
+        ref_no: inwardNo, sub_process: o.sub_process, from: vendor, to: goodStore, qty: l.good_kg, so_id: ri.so_id, related_roll_id: ri.fabric_roll_id,
+        remarks: `${pt.output_state}${colour ? ` — ${colour}` : ''} from ${ri.roll_no}` });
     }
-
-    // input rolls: accounted KG + status
-    for (const [rid, a] of add) {
-      const ri = byId.get(rid)!;
-      const done = n(ri.good_kg) + n(ri.reject_kg) + n(ri.loss_kg) + a.g + a.rj + a.l;
-      await txExecute(tx,
-        `UPDATE trx_fabric_process_roll_in SET good_kg = good_kg + ?, reject_kg = reject_kg + ?, loss_kg = loss_kg + ?, status = ? WHERE id = ?`,
-        [r3(a.g), r3(a.rj), r3(a.l), done + EPS >= n(ri.weight_kg) ? 'RECEIVED' : 'PARTIAL', rid]);
+    if (l.reject_kg > 0) {
+      const rr = await txExecute(tx,
+        `INSERT INTO trx_fabric_roll (company_id, grn_id, grn_line_id, fabric_id, roll_no, lot_no, meters, weight_kg, gsm, dia, shade,
+           warehouse_id, qc_status, stock_status, remarks, process_state, color_name, source_fpo_id, so_id, parent_roll_id)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'REJECTED','RESERVED',?,'RETURNED',?,?,?,?)`,
+        [cid, grnId, glId, ri.fabric_id ?? null, `${outNo}-RJ`, src?.lot_no ?? null, null, r3(l.reject_kg),
+         Number.parseInt(String(l.gsm ?? ri.gsm ?? ''), 10) || null, l.dia ?? ri.dia ?? null, colour,
+         rejectWh, `Reject: ${l.reject_reason}`, colour, o.id, ri.so_id ?? null, ri.fabric_roll_id ?? null]);
+      rejectRollId = Number(rr.insertId);
+      await history(tx, req, { roll_id: rejectRollId, roll_no: `${outNo}-RJ`, event: 'REJECT', ref_type: 'FPI', ref_id: inwardId, ref_no: inwardNo,
+        sub_process: o.sub_process, from: vendor, to: rejStore, qty: l.reject_kg, so_id: ri.so_id, related_roll_id: ri.fabric_roll_id, remarks: l.reject_reason });
     }
+    if (l.loss_kg > 0 && ri.fabric_roll_id) {
+      await history(tx, req, { roll_id: ri.fabric_roll_id, roll_no: ri.roll_no, event: 'PROCESS_LOSS', ref_type: 'FPI', ref_id: inwardId, ref_no: inwardNo,
+        sub_process: o.sub_process, from: vendor, qty: l.loss_kg, so_id: ri.so_id, remarks: 'Process loss' });
+    }
+    await txExecute(tx,
+      `INSERT INTO trx_fabric_process_roll_out (company_id, fpo_id, inward_id, roll_in_id, so_id, roll_no, lot_no, io_no, style_id, fabric_id, finish_date,
+         dia, gsm, meters, weight_kg, input_kg, reject_kg, loss_kg, color_name, shade_no, reject_reason, qc_status, fabric_roll_id, reject_roll_id, grn_id, party_dc_no)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [cid, o.id, inwardId, ri.id, ri.so_id ?? null, outNo, src?.lot_no ?? outNo, ri.io_no || 'STOCK', ri.style_id ?? null, ri.fabric_id ?? null, body.inward_date,
+       l.dia ?? ri.dia ?? null, l.gsm ?? ri.gsm ?? null, l.meters, r3(l.good_kg), r3(l.good_kg + l.reject_kg + l.loss_kg), r3(l.reject_kg), r3(l.loss_kg),
+       colour, l.shade_no ?? null, l.reject_reason ?? null, l.qc_status, goodRollId, rejectRollId, grnId, body.challan_no ?? null]);
+    // GRN line totals
+    await txExecute(tx,
+      `UPDATE trx_grn_line SET received_qty = received_qty + ?, received_weight = received_weight + ?, accepted_qty = accepted_qty + ?,
+              rejected_qty = rejected_qty + ?, no_of_rolls = no_of_rolls + ? WHERE id = ?`,
+      [r3(l.good_kg + l.reject_kg), r3(l.good_kg + l.reject_kg), r3(l.good_kg), r3(l.reject_kg), l.good_kg > 0 ? 1 : 0, glId]);
+    created.push({ input_roll: ri.roll_no, output_roll: outNo, good_kg: l.good_kg, reject_kg: l.reject_kg, loss_kg: l.loss_kg, roll_id: goodRollId, reject_roll_id: rejectRollId });
+  }
 
-    // stock ledger: good into the processed store, reject into the reject store
-    const fabricId = Number(rollIns[0]?.fabric_id) || null;
-    if (totG > 0) await postLedger(tx, { companyId: cid, warehouseId: body.warehouse_id, materialType: 'FABRIC', fabricId, txnType: 'PRODUCTION_IN', refType: 'FAB_PROC_GRN', refId: inwardId, qtyIn: totG, uomId: UOM_KG, createdBy: uid });
-    if (totR > 0) await postLedger(tx, { companyId: cid, warehouseId: rejectWh, materialType: 'FABRIC', fabricId, txnType: 'PRODUCTION_IN', refType: 'FAB_PROC_REJECT', refId: inwardId, qtyIn: totR, uomId: UOM_KG, createdBy: uid });
+  // input rolls: accounted KG + status
+  for (const [rid, a] of add) {
+    const ri = byId.get(rid)!;
+    const done = n(ri.good_kg) + n(ri.reject_kg) + n(ri.loss_kg) + a.g + a.rj + a.l;
+    await txExecute(tx,
+      `UPDATE trx_fabric_process_roll_in SET good_kg = good_kg + ?, reject_kg = reject_kg + ?, loss_kg = loss_kg + ?, status = ? WHERE id = ?`,
+      [r3(a.g), r3(a.rj), r3(a.l), done + EPS >= n(ri.weight_kg) ? 'RECEIVED' : 'PARTIAL', rid]);
+  }
 
-    // DC status: fully received when every roll is accounted
-    const left = await txQueryOne<any>(tx, `SELECT COUNT(*) AS c FROM trx_fabric_process_roll_in WHERE fpo_id = ? AND status <> 'RECEIVED'`, [o.id]);
-    const fpoStatus = Number(left?.c) === 0 ? 'COMPLETED' : 'PARTIALLY_RECEIVED';
-    const agg = await txQueryOne<any>(tx, 'SELECT SUM(weight_kg) w, SUM(good_kg) g, SUM(reject_kg) r, SUM(loss_kg) l FROM trx_fabric_process_roll_in WHERE fpo_id = ?', [o.id]);
-    await txExecute(tx, `UPDATE trx_fabric_process_order SET status = ?, output_weight_kg = ?, process_loss_kg = ?, process_loss_pct = ? WHERE id = ?`,
-      [fpoStatus, r3(n(agg?.g)), r3(n(agg?.l)), n(agg?.w) > 0 ? r2((n(agg?.l) / n(agg?.w)) * 100) : 0, o.id]);
-    if (o.reprocess_id) await txExecute(tx, `UPDATE trx_fabric_reprocess SET status = ? WHERE id = ?`, [fpoStatus === 'COMPLETED' ? 'COMPLETED' : 'IN_PROCESS', o.reprocess_id]);
+  // stock ledger: good into the processed store, reject into the reject store
+  const fabricId = Number(rollIns[0]?.fabric_id) || null;
+  if (totG > 0) await postLedger(tx, { companyId: cid, warehouseId: body.warehouse_id, materialType: 'FABRIC', fabricId, txnType: 'PRODUCTION_IN', refType: 'FAB_PROC_GRN', refId: inwardId, qtyIn: totG, uomId: UOM_KG, createdBy: uid });
+  if (totR > 0) await postLedger(tx, { companyId: cid, warehouseId: rejectWh, materialType: 'FABRIC', fabricId, txnType: 'PRODUCTION_IN', refType: 'FAB_PROC_REJECT', refId: inwardId, qtyIn: totR, uomId: UOM_KG, createdBy: uid });
 
-    return { id: inwardId, inward_no: inwardNo, fpo_no: o.fpo_no, fpo_status: fpoStatus, good_kg: totG, reject_kg: totR, loss_kg: totL, rolls: created };
+  // DC status: fully received when every roll is accounted
+  const left = await txQueryOne<any>(tx, `SELECT COUNT(*) AS c FROM trx_fabric_process_roll_in WHERE fpo_id = ? AND status <> 'RECEIVED'`, [o.id]);
+  const fpoStatus = Number(left?.c) === 0 ? 'COMPLETED' : 'PARTIALLY_RECEIVED';
+  const agg = await txQueryOne<any>(tx, 'SELECT SUM(weight_kg) w, SUM(good_kg) g, SUM(reject_kg) r, SUM(loss_kg) l FROM trx_fabric_process_roll_in WHERE fpo_id = ?', [o.id]);
+  await txExecute(tx, `UPDATE trx_fabric_process_order SET status = ?, output_weight_kg = ?, process_loss_kg = ?, process_loss_pct = ? WHERE id = ?`,
+    [fpoStatus, r3(n(agg?.g)), r3(n(agg?.l)), n(agg?.w) > 0 ? r2((n(agg?.l) / n(agg?.w)) * 100) : 0, o.id]);
+  if (o.reprocess_id) await txExecute(tx, `UPDATE trx_fabric_reprocess SET status = ? WHERE id = ?`, [fpoStatus === 'COMPLETED' ? 'COMPLETED' : 'IN_PROCESS', o.reprocess_id]);
+
+  return { id: inwardId, inward_no: inwardNo, fpo_no: o.fpo_no, fpo_status: fpoStatus, good_kg: totG, reject_kg: totR, loss_kg: totL, rolls: created };
+}
+
+/**
+ * POST /fabric-process/inward — Process GRN (doc §6, §16). action:
+ *   POST (default)  post now (not allowed for a process type that requires QC);
+ *   DRAFT / QC      save as Draft / send for QC — no stock moves until it is posted.
+ */
+fabricProcessingRouter.post('/fabric-process/inward', requirePermission(FP.CREATE), ah(async (req, res) => {
+  const body = inwardSchema.parse(req.body);
+  const action = String(req.body?.action ?? 'POST').toUpperCase();
+  if (action === 'DRAFT' || action === 'QC') {
+    const out = await transaction(async (tx) => {
+      const { o } = await checkInward(tx, req, body);
+      return saveInwardDraft(tx, req, body, o, action === 'QC' ? 'QC_PENDING' : 'DRAFT');
+    });
+    await audit(req, 'trx_fabric_process_inward', out.id, 'INSERT', undefined, out);
+    res.status(201).json({ data: out, message: `${out.inward_no} ${out.status === 'QC_PENDING' ? 'sent for QC' : 'saved as draft'}` });
+    return;
+  }
+  if (!can(req, FP.CONFIRM)) throw Forbidden('You can save the GRN as draft; posting needs the confirm right');
+  const out = await transaction(async (tx) => {
+    const { pt } = await checkInward(tx, req, body);
+    if (pt.requires_qc) throw BadRequest(`${pt.name} requires QC — save the GRN and send it for QC before posting`);
+    return postInward(tx, req, body);
   });
   await audit(req, 'trx_fabric_process_inward', out.id, 'INSERT', undefined, out);
   res.status(201).json({ data: out, message: `${out.inward_no} posted — good ${out.good_kg} KG, reject ${out.reject_kg} KG, loss ${out.loss_kg} KG` });
+}));
+
+/** Saves / replaces a GRN draft (lines kept in draft_json, totals for the register). */
+async function saveInwardDraft(tx: Tx, req: Request, body: InwardBody, o: any, status: 'DRAFT' | 'QC_PENDING', existingId?: number) {
+  const cid = req.user!.companyId;
+  const tot = (k: 'good_kg' | 'reject_kg' | 'loss_kg') => r3(body.lines.reduce((a, l) => a + n(l[k]), 0));
+  const json = JSON.stringify({ ...body, lines: body.lines.map((l) => ({ ...l, qc: null })) });
+  if (existingId) {
+    await txExecute(tx,
+      `UPDATE trx_fabric_process_inward SET inward_date = ?, challan_no = ?, vehicle_no = ?, received_by = ?, warehouse_id = ?, reject_warehouse_id = ?,
+              input_kg = ?, good_kg = ?, reject_kg = ?, loss_kg = ?, remarks = ?, draft_json = ?, status = ?, qc_by = NULL, qc_at = NULL WHERE id = ?`,
+      [body.inward_date, body.challan_no ?? null, body.vehicle_no ?? null, body.received_by, body.warehouse_id, body.reject_warehouse_id ?? body.warehouse_id,
+       r3(tot('good_kg') + tot('reject_kg') + tot('loss_kg')), tot('good_kg'), tot('reject_kg'), tot('loss_kg'), body.remarks ?? null, json, status, existingId]);
+    await txExecute(tx, 'DELETE FROM trx_fabric_process_qc WHERE inward_id = ?', [existingId]);
+    const r = await txQueryOne<any>(tx, 'SELECT inward_no FROM trx_fabric_process_inward WHERE id = ?', [existingId]);
+    return { id: existingId, inward_no: r.inward_no, status };
+  }
+  const no = await nextDocNumber(tx, cid, 'FP_INWARD');
+  const ins = await txExecute(tx,
+    `INSERT INTO trx_fabric_process_inward (company_id, inward_no, inward_date, fpo_id, vendor_id, sub_process, challan_no, vehicle_no, received_by,
+       warehouse_id, reject_warehouse_id, input_kg, good_kg, reject_kg, loss_kg, is_reprocess, remarks, created_by, status, draft_json)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [cid, no, body.inward_date, o.id, o.vendor_id ?? null, o.sub_process, body.challan_no ?? null, body.vehicle_no ?? null, body.received_by,
+     body.warehouse_id, body.reject_warehouse_id ?? body.warehouse_id, r3(tot('good_kg') + tot('reject_kg') + tot('loss_kg')), tot('good_kg'), tot('reject_kg'), tot('loss_kg'),
+     o.is_reprocess ? 1 : 0, body.remarks ?? null, req.user!.id, status, json]);
+  return { id: Number(ins.insertId), inward_no: no, status };
+}
+
+type DraftLine = InwardBody['lines'][number] & { qc?: any };
+const parseDraft = (x: any) => (typeof x === 'string' ? JSON.parse(x) : x) as Omit<InwardBody, 'lines'> & { lines: DraftLine[] };
+const DRAFT_STATES = ['DRAFT', 'QC_PENDING', 'ACCEPTED', 'PARTIAL', 'REJECTED'];
+
+/** PUT /fabric-process/inward/:id — edit a GRN that is not posted yet (QC starts again). */
+fabricProcessingRouter.put('/fabric-process/inward/:id', requirePermission(FP.EDIT_DRAFT), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = z.coerce.number().int().positive().parse(req.params.id);
+  const body = inwardSchema.parse(req.body);
+  const out = await transaction(async (tx) => {
+    const i = await txQueryOne<any>(tx, 'SELECT * FROM trx_fabric_process_inward WHERE id = ? AND company_id = ? FOR UPDATE', [id, cid]);
+    if (!i) throw NotFound('Process GRN not found');
+    if (!DRAFT_STATES.includes(i.status)) throw BadRequest(`${i.inward_no} is ${i.status} — posted GRNs cannot be edited`);
+    if (Number(body.fpo_id) !== Number(i.fpo_id)) throw BadRequest('The outward DC of a GRN cannot change');
+    const { o } = await checkInward(tx, req, body);
+    return saveInwardDraft(tx, req, body, o, String(req.body?.action ?? '').toUpperCase() === 'QC' ? 'QC_PENDING' : 'DRAFT', id);
+  });
+  await audit(req, 'trx_fabric_process_inward', id, 'UPDATE', undefined, out);
+  res.json({ data: out, message: `${out.inward_no} saved` });
+}));
+
+/** POST /fabric-process/inward/:id/submit-qc — Draft → QC Pending. */
+fabricProcessingRouter.post('/fabric-process/inward/:id/submit-qc', requirePermission(FP.CREATE), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = z.coerce.number().int().positive().parse(req.params.id);
+  const i = await queryOne<any>('SELECT * FROM trx_fabric_process_inward WHERE id = ? AND company_id = ?', [id, cid]);
+  if (!i) throw NotFound('Process GRN not found');
+  if (i.status !== 'DRAFT') throw BadRequest(`${i.inward_no} is ${i.status}`);
+  await query(`UPDATE trx_fabric_process_inward SET status = 'QC_PENDING' WHERE id = ?`, [id]);
+  await audit(req, 'trx_fabric_process_inward', id, 'UPDATE', { status: 'DRAFT' }, { status: 'QC_PENDING' });
+  res.json({ message: `${i.inward_no} sent for QC` });
+}));
+
+/**
+ * POST /fabric-process/inward/:id/qc — QC result per output roll: the process type's QC parameters
+ * (value vs min / max → PASS / FAIL) and the roll's status (Accepted / Hold / Rejected).
+ * A roll with a failed parameter cannot be accepted. GRN → Accepted / Partial / Rejected.
+ */
+fabricProcessingRouter.post('/fabric-process/inward/:id/qc', requirePermission(FP.QC), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = z.coerce.number().int().positive().parse(req.params.id);
+  const b = z.object({
+    remarks: s.nullableStr(255),
+    results: z.array(z.object({
+      line_index: z.coerce.number().int().min(0),
+      qc_status: z.enum(['ACCEPTED', 'HOLD', 'REJECTED']).optional(),
+      values: z.record(z.string(), z.union([z.number(), z.string(), z.null()])).default({}),
+      remarks: s.nullableStr(255),
+    })).min(1),
+  }).parse(req.body);
+  const out = await transaction(async (tx) => {
+    const i = await txQueryOne<any>(tx, 'SELECT * FROM trx_fabric_process_inward WHERE id = ? AND company_id = ? FOR UPDATE', [id, cid]);
+    if (!i) throw NotFound('Process GRN not found');
+    if (!['QC_PENDING', 'ACCEPTED', 'PARTIAL', 'REJECTED'].includes(i.status)) throw BadRequest(`${i.inward_no} is ${i.status} — send it for QC first`);
+    const d = parseDraft(i.draft_json);
+    const params = await txQuery<any>(tx, 'SELECT * FROM mst_fabric_process_qc_param WHERE company_id = ? AND process_code = ? AND is_active = 1 ORDER BY sort_order, id', [cid, i.sub_process]);
+    await txExecute(tx, 'DELETE FROM trx_fabric_process_qc WHERE inward_id = ?', [id]);
+    const good = d.lines.map((l, k) => ({ k, l })).filter((x) => n(x.l.good_kg) > 0);
+    for (const x of good) {
+      const r = b.results.find((y) => y.line_index === x.k);
+      if (!r) throw BadRequest(`Output roll ${x.l.output_roll_no || `#${x.k + 1}`}: enter its QC result`);
+      const fails: string[] = [];
+      for (const p of params) {
+        const raw = r.values[String(p.id)];
+        const v = raw === null || raw === undefined || raw === '' ? null : Number(raw);
+        if (v === null && p.is_mandatory) throw BadRequest(`Output roll ${x.l.output_roll_no || `#${x.k + 1}`}: ${p.param_name} is required`);
+        const fail = v !== null && ((p.min_value !== null && v < Number(p.min_value)) || (p.max_value !== null && v > Number(p.max_value)));
+        if (fail) fails.push(p.param_name);
+        await txExecute(tx,
+          `INSERT INTO trx_fabric_process_qc (inward_id, line_index, output_roll_no, param_id, param_name, value, min_value, max_value, result, created_by) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+          [id, x.k, x.l.output_roll_no ?? null, p.id, p.param_name, v, p.min_value, p.max_value, v === null ? 'NA' : fail ? 'FAIL' : 'PASS', req.user!.id]);
+      }
+      const status = r.qc_status ?? (fails.length ? 'REJECTED' : 'ACCEPTED');
+      if (status === 'ACCEPTED' && fails.length) throw BadRequest(`Output roll ${x.l.output_roll_no || `#${x.k + 1}`}: ${fails.join(', ')} out of range — mark it Hold or Rejected`);
+      d.lines[x.k].qc = { status, fails, remarks: r.remarks ?? null, values: r.values };
+    }
+    const st = good.map((x) => d.lines[x.k].qc.status);
+    const head = st.every((x) => x === 'ACCEPTED') ? 'ACCEPTED' : st.every((x) => x === 'REJECTED') ? 'REJECTED' : 'PARTIAL';
+    await txExecute(tx, 'UPDATE trx_fabric_process_inward SET draft_json = ?, status = ?, qc_by = ?, qc_at = NOW(), qc_remarks = ? WHERE id = ?',
+      [JSON.stringify(d), head, req.user!.id, b.remarks ?? null, id]);
+    return { inward_no: i.inward_no, status: head, accepted: st.filter((x) => x === 'ACCEPTED').length, hold: st.filter((x) => x === 'HOLD').length, rejected: st.filter((x) => x === 'REJECTED').length };
+  });
+  await audit(req, 'trx_fabric_process_inward', id, 'UPDATE', undefined, { qc: out });
+  res.json({ data: out, message: `${out.inward_no} QC: ${out.status.toLowerCase()} (${out.accepted} accepted, ${out.hold} hold, ${out.rejected} rejected)` });
+}));
+
+/** POST /fabric-process/inward/:id/post — post a draft / QC'd GRN: QC-rejected rolls go to the reject store, hold rolls stay on hold. */
+fabricProcessingRouter.post('/fabric-process/inward/:id/post', requirePermission(FP.CONFIRM), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = z.coerce.number().int().positive().parse(req.params.id);
+  const out = await transaction(async (tx) => {
+    const i = await txQueryOne<any>(tx, 'SELECT * FROM trx_fabric_process_inward WHERE id = ? AND company_id = ? FOR UPDATE', [id, cid]);
+    if (!i) throw NotFound('Process GRN not found');
+    if (i.status === 'POSTED') throw BadRequest(`${i.inward_no} is already posted`);
+    if (i.status === 'QC_PENDING') throw BadRequest(`${i.inward_no} is waiting for QC`);
+    if (!DRAFT_STATES.includes(i.status)) throw BadRequest(`${i.inward_no} is ${i.status}`);
+    const pt = await processType(cid, i.sub_process, tx);
+    if (pt.requires_qc && i.status === 'DRAFT') throw BadRequest(`${pt.name} requires QC — send the GRN for QC first`);
+    const d = parseDraft(i.draft_json);
+    const lines = d.lines.map((l) => {
+      const qc = l.qc;
+      if (qc?.status === 'REJECTED' && n(l.good_kg) > 0) {
+        return { ...l, reject_kg: r3(n(l.reject_kg) + n(l.good_kg)), good_kg: 0, reject_reason: l.reject_reason || `QC rejected${qc.fails?.length ? `: ${qc.fails.join(', ')}` : ''}`, qc_status: 'ACCEPTED' as const };
+      }
+      return { ...l, qc_status: qc?.status === 'HOLD' ? 'HOLD' as const : 'ACCEPTED' as const };
+    });
+    const body = inwardSchema.parse({ ...d, lines });
+    return postInward(tx, req, body, { id, inward_no: i.inward_no });
+  });
+  await audit(req, 'trx_fabric_process_inward', id, 'UPDATE', undefined, { post: out });
+  res.json({ data: out, message: `${out.inward_no} posted — good ${out.good_kg} KG, reject ${out.reject_kg} KG, loss ${out.loss_kg} KG` });
+}));
+
+/** POST /fabric-process/inward/:id/cancel — drop a GRN that is not posted. */
+fabricProcessingRouter.post('/fabric-process/inward/:id/cancel', requirePermission(FP.EDIT_DRAFT), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = z.coerce.number().int().positive().parse(req.params.id);
+  const i = await queryOne<any>('SELECT * FROM trx_fabric_process_inward WHERE id = ? AND company_id = ?', [id, cid]);
+  if (!i) throw NotFound('Process GRN not found');
+  if (!DRAFT_STATES.includes(i.status)) throw BadRequest(`${i.inward_no} is ${i.status} — posted GRNs cannot be cancelled`);
+  await query(`UPDATE trx_fabric_process_inward SET status = 'CANCELLED' WHERE id = ?`, [id]);
+  await audit(req, 'trx_fabric_process_inward', id, 'UPDATE', { status: i.status }, { status: 'CANCELLED' });
+  res.json({ message: `${i.inward_no} cancelled` });
 }));
 
 // =====================================================================================
@@ -634,7 +854,7 @@ const returnSchema = z.object({
   })).min(1, 'Pick the rolls to return'),
 });
 
-fabricProcessingRouter.get('/fabric-process/returns', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+fabricProcessingRouter.get('/fabric-process/returns', requirePermission(FP.VIEW), ah(async (req, res) => {
   const rows = await query<any>(
     `SELECT r.*, i.inward_no, o.fpo_no, v.party_name AS vendor_name, rs.reason, w.warehouse_name,
             (SELECT GROUP_CONCAT(DISTINCT COALESCE(so.io_no, so.so_no) SEPARATOR ', ') FROM trx_fabric_process_return_line rl LEFT JOIN trx_sales_order so ON so.id = rl.so_id WHERE rl.return_id = r.id) AS jobs
@@ -648,7 +868,7 @@ fabricProcessingRouter.get('/fabric-process/returns', requirePermission('PRODUCT
   res.json({ data: rows });
 }));
 
-fabricProcessingRouter.get('/fabric-process/returns/:id', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+fabricProcessingRouter.get('/fabric-process/returns/:id', requirePermission(FP.VIEW), ah(async (req, res) => {
   const id = z.coerce.number().int().positive().parse(req.params.id);
   const r = await queryOne<any>(
     `SELECT r.*, i.inward_no, o.fpo_no, v.party_name AS vendor_name, rs.reason, w.warehouse_name
@@ -670,12 +890,13 @@ fabricProcessingRouter.get('/fabric-process/returns/:id', requirePermission('PRO
  * POST /fabric-process/returns — quality issue on processed rolls (against a GRN): the returned KG
  * leaves the processed roll and goes to the return store as a RETURNED roll (eligible for reprocess).
  */
-fabricProcessingRouter.post('/fabric-process/returns', requirePermission('PRODUCTION.CREATE'), ah(async (req, res) => {
+fabricProcessingRouter.post('/fabric-process/returns', requirePermission(FP.RETURN), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const body = returnSchema.parse(req.body);
   const out = await transaction(async (tx) => {
     const inw = body.inward_id ? await txQueryOne<any>(tx, 'SELECT * FROM trx_fabric_process_inward WHERE id = ? AND company_id = ?', [body.inward_id, cid]) : null;
     if (body.inward_id && !inw) throw BadRequest('Original GRN not found');
+    if (inw && inw.status !== 'POSTED') throw BadRequest(`GRN ${inw.inward_no} is not posted yet`);
     const returnNo = await nextDocNumber(tx, cid, 'FP_RETURN');
     const toStore = await whName(tx, body.warehouse_id);
     const r = await txExecute(tx,
@@ -767,7 +988,7 @@ function billingFields(b: z.infer<typeof billingSchema>, qty: number) {
   }
 }
 
-fabricProcessingRouter.get('/fabric-process/reprocess', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+fabricProcessingRouter.get('/fabric-process/reprocess', requirePermission(FP.VIEW), ah(async (req, res) => {
   const rows = await query<any>(
     `SELECT rp.*, v.party_name AS vendor_name, pt.name AS process_name, rs.reason, br.reason AS billing_reason, rt.return_no, o.fpo_no, o.status AS dc_status,
             (SELECT GROUP_CONCAT(DISTINCT COALESCE(so.io_no, so.so_no) SEPARATOR ', ') FROM trx_fabric_reprocess_line l LEFT JOIN trx_sales_order so ON so.id = l.so_id WHERE l.reprocess_id = rp.id) AS jobs,
@@ -784,7 +1005,7 @@ fabricProcessingRouter.get('/fabric-process/reprocess', requirePermission('PRODU
   res.json({ data: rows });
 }));
 
-fabricProcessingRouter.get('/fabric-process/reprocess/:id', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+fabricProcessingRouter.get('/fabric-process/reprocess/:id', requirePermission(FP.VIEW), ah(async (req, res) => {
   const id = z.coerce.number().int().positive().parse(req.params.id);
   const rp = await queryOne<any>(
     `SELECT rp.*, v.party_name AS vendor_name, pt.name AS process_name, rs.reason, br.reason AS billing_reason, rt.return_no, o.fpo_no, o.status AS dc_status, b.bill_no
@@ -825,7 +1046,7 @@ async function confirmReprocess(tx: Tx, req: Request, rp: any) {
 }
 
 /** POST /fabric-process/reprocess — reprocess entry (draft, or confirm = reprocess DC issued). */
-fabricProcessingRouter.post('/fabric-process/reprocess', requirePermission('PRODUCTION.CREATE'), ah(async (req, res) => {
+fabricProcessingRouter.post('/fabric-process/reprocess', requirePermission(FP.REPROCESS), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const body = reprocessSchema.parse(req.body);
   const confirm = Boolean(req.body?.confirm);
@@ -850,7 +1071,11 @@ fabricProcessingRouter.post('/fabric-process/reprocess', requirePermission('PROD
       } else rows.push({ ...l, fr });
       total += l.qty_kg;
     }
+    if (confirm && !can(req, FP.CONFIRM)) throw Forbidden('You can save the reprocess as draft; confirming needs the confirm right');
     const bf = billingFields(body, total);
+    // doc §32: a Process Manager / Admin selecting the billing type decides it; other users only request it
+    if (can(req, FP.BILLING_APPROVE)) { if (bf.billing_status === 'PENDING') bf.billing_status = 'APPROVED'; }
+    else bf.billing_status = 'PENDING';
     const no = await nextDocNumber(tx, cid, 'FP_REPROCESS');
     const r = await txExecute(tx,
       `INSERT INTO trx_fabric_reprocess (company_id, reprocess_no, reprocess_date, source_type, return_id, original_inward_id, sub_process, vendor_id, color_name,
@@ -873,7 +1098,7 @@ fabricProcessingRouter.post('/fabric-process/reprocess', requirePermission('PROD
   res.status(201).json({ data: out, message: `${out.reprocess_no} ${out.status === 'DRAFT' ? 'saved as draft' : `confirmed — reprocess DC ${out.fpo_no} issued`}` });
 }));
 
-fabricProcessingRouter.post('/fabric-process/reprocess/:id/confirm', requirePermission('PRODUCTION.UPDATE'), ah(async (req, res) => {
+fabricProcessingRouter.post('/fabric-process/reprocess/:id/confirm', requirePermission(FP.CONFIRM), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = z.coerce.number().int().positive().parse(req.params.id);
   const out = await transaction(async (tx) => {
@@ -888,23 +1113,24 @@ fabricProcessingRouter.post('/fabric-process/reprocess/:id/confirm', requirePerm
 }));
 
 /** POST /fabric-process/reprocess/:id/approve-billing — Process Manager approves the billing treatment. */
-fabricProcessingRouter.post('/fabric-process/reprocess/:id/approve-billing', requirePermission('PRODUCTION.APPROVE'), ah(async (req, res) => {
+fabricProcessingRouter.post('/fabric-process/reprocess/:id/approve-billing', requirePermission(FP.BILLING_APPROVE), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = z.coerce.number().int().positive().parse(req.params.id);
   const rp = await queryOne<any>('SELECT * FROM trx_fabric_reprocess WHERE id = ? AND company_id = ?', [id, cid]);
   if (!rp) throw NotFound('Reprocess not found');
-  if (!['BILLABLE', 'RECOVERY'].includes(rp.billing_type)) throw BadRequest('Only billable / recovery reprocess needs billing approval');
   if (rp.billing_status !== 'PENDING') throw BadRequest(`Billing is already ${rp.billing_status}`);
-  await query(`UPDATE trx_fabric_reprocess SET billing_status = 'APPROVED', billing_approved_by = ?, billing_approved_at = NOW() WHERE id = ?`, [req.user!.id, id]);
-  await audit(req, 'trx_fabric_reprocess', id, 'UPDATE', { billing_status: rp.billing_status }, { billing_status: 'APPROVED' });
-  res.json({ message: `${rp.reprocess_no} billing approved` });
+  // billable / recovery → can go on a contractor bill; non-billable / internal / free → excluded
+  const to = ['BILLABLE', 'RECOVERY'].includes(rp.billing_type) ? 'APPROVED' : 'EXCLUDED';
+  await query(`UPDATE trx_fabric_reprocess SET billing_status = ?, billing_approved_by = ?, billing_approved_at = NOW() WHERE id = ?`, [to, req.user!.id, id]);
+  await audit(req, 'trx_fabric_reprocess', id, 'UPDATE', { billing_status: rp.billing_status }, { billing_status: to });
+  res.json({ message: `${rp.reprocess_no} billing approved (${rp.billing_type.replace('_', '-').toLowerCase()})` });
 }));
 
 /**
  * POST /fabric-process/reprocess/:id/billing — change the billing treatment (doc §26 / §35):
  * needs approval rights and a reason; a billed reprocess must have its bill cancelled first.
  */
-fabricProcessingRouter.post('/fabric-process/reprocess/:id/billing', requirePermission('PRODUCTION.APPROVE'), ah(async (req, res) => {
+fabricProcessingRouter.post('/fabric-process/reprocess/:id/billing', requirePermission(FP.BILLING_CHANGE), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = z.coerce.number().int().positive().parse(req.params.id);
   const b = billingSchema.extend({ change_reason: z.string().trim().min(3, 'Reason for the change is mandatory').max(255) }).parse(req.body);
@@ -930,7 +1156,7 @@ fabricProcessingRouter.post('/fabric-process/reprocess/:id/billing', requirePerm
 // Contractor bill (fabric process)
 // =====================================================================================
 /** GET /fabric-process/bill-sources?vendor_id= — unbilled GRNs, approved billable reprocess, pending recovery. */
-fabricProcessingRouter.get('/fabric-process/bill-sources', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+fabricProcessingRouter.get('/fabric-process/bill-sources', requirePermission(FP.VIEW), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const q = z.object({ vendor_id: z.coerce.number().int().positive(), from: date.optional(), to: date.optional() }).parse(req.query);
   const dp = (col: string) => `${q.from ? ` AND ${col} >= ?` : ''}${q.to ? ` AND ${col} <= ?` : ''}`;
@@ -976,13 +1202,13 @@ const billSchema = z.object({
   lines: z.array(z.object({ line_type: z.enum(['GRN', 'REPROCESS', 'RECOVERY']), ref_id: s.idReq(), rate: z.coerce.number().min(0).default(0) })).min(1, 'Add at least one GRN / reprocess'),
 });
 
-fabricProcessingRouter.get('/fabric-process/bills', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+fabricProcessingRouter.get('/fabric-process/bills', requirePermission(FP.VIEW), ah(async (req, res) => {
   const rows = await query<any>(
     `SELECT b.*, v.party_name AS vendor_name, (SELECT COUNT(*) FROM trx_fabric_process_bill_line l WHERE l.bill_id = b.id) AS line_count
        FROM trx_fabric_process_bill b LEFT JOIN mst_party v ON v.id = b.vendor_id WHERE b.company_id = ? ORDER BY b.id DESC LIMIT 500`, [req.user!.companyId]);
   res.json({ data: rows });
 }));
-fabricProcessingRouter.get('/fabric-process/bills/:id', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+fabricProcessingRouter.get('/fabric-process/bills/:id', requirePermission(FP.VIEW), ah(async (req, res) => {
   const id = z.coerce.number().int().positive().parse(req.params.id);
   const b = await queryOne<any>('SELECT b.*, v.party_name AS vendor_name FROM trx_fabric_process_bill b LEFT JOIN mst_party v ON v.id = b.vendor_id WHERE b.id = ? AND b.company_id = ?', [id, req.user!.companyId]);
   if (!b) throw NotFound('Bill not found');
@@ -991,7 +1217,7 @@ fabricProcessingRouter.get('/fabric-process/bills/:id', requirePermission('PRODU
 }));
 
 /** POST /fabric-process/bills — contractor bill: GRN good KG × rate + billable reprocess − recovery. */
-fabricProcessingRouter.post('/fabric-process/bills', requirePermission('PRODUCTION.CREATE'), ah(async (req, res) => {
+fabricProcessingRouter.post('/fabric-process/bills', requirePermission(FP.BILL), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const body = billSchema.parse(req.body);
   const out = await transaction(async (tx) => {
@@ -1007,6 +1233,7 @@ fabricProcessingRouter.post('/fabric-process/bills', requirePermission('PRODUCTI
         const i = await txQueryOne<any>(tx, 'SELECT * FROM trx_fabric_process_inward WHERE id = ? AND company_id = ? FOR UPDATE', [l.ref_id, cid]);
         if (!i || Number(i.vendor_id) !== body.vendor_id) throw BadRequest('A GRN is not of this contractor');
         if (i.bill_id) throw BadRequest(`${i.inward_no} is already billed`);
+        if (i.status !== 'POSTED') throw BadRequest(`${i.inward_no} is not posted yet`);
         if (i.is_reprocess) throw BadRequest(`${i.inward_no} is a reprocess GRN — its charge comes from the reprocess billing`);
         if (!(l.rate > 0)) throw BadRequest(`${i.inward_no}: enter the rate per KG`);
         const amt = r2(n(i.good_kg) * l.rate);
@@ -1041,7 +1268,7 @@ fabricProcessingRouter.post('/fabric-process/bills', requirePermission('PRODUCTI
 }));
 
 /** POST /fabric-process/bills/:id/cancel — reversal: GRNs and reprocess become billable again. */
-fabricProcessingRouter.post('/fabric-process/bills/:id/cancel', requirePermission('PRODUCTION.APPROVE'), ah(async (req, res) => {
+fabricProcessingRouter.post('/fabric-process/bills/:id/cancel', requirePermission(FP.BILL_CANCEL), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = z.coerce.number().int().positive().parse(req.params.id);
   const reason = z.string().trim().min(3, 'Reason is mandatory').max(255).parse(req.body?.reason);
@@ -1062,7 +1289,7 @@ fabricProcessingRouter.post('/fabric-process/bills/:id/cancel', requirePermissio
 // Roll tracking, ledger / summary, job-wise status
 // =====================================================================================
 /** GET /fabric-process/roll-history?roll_no= — the roll, its ancestors and descendants, with every movement. */
-fabricProcessingRouter.get('/fabric-process/roll-history', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+fabricProcessingRouter.get('/fabric-process/roll-history', requirePermission(FP.VIEW), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const q = z.object({ roll_no: z.string().trim().min(1).max(60).optional(), roll_id: z.coerce.number().int().positive().optional() }).parse(req.query);
   const roll = q.roll_id
@@ -1112,7 +1339,7 @@ fabricProcessingRouter.get('/fabric-process/roll-history', requirePermission('PR
 }));
 
 /** GET /fabric-process/summary — per process: outward / good / reject / loss / return / reprocess / balance. */
-fabricProcessingRouter.get('/fabric-process/summary', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+fabricProcessingRouter.get('/fabric-process/summary', requirePermission(FP.VIEW), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const q = z.object({ from: date.optional(), to: date.optional(), vendor_id: z.coerce.number().int().optional() }).parse(req.query);
   const where = [`o.company_id = ?`, `o.status NOT IN ('DRAFT','CANCELLED')`]; const p: unknown[] = [cid];
@@ -1140,7 +1367,7 @@ fabricProcessingRouter.get('/fabric-process/summary', requirePermission('PRODUCT
 }));
 
 /** GET /fabric-process/job-status — job-wise process status (outward / good / reject / loss / pending). */
-fabricProcessingRouter.get('/fabric-process/job-status', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+fabricProcessingRouter.get('/fabric-process/job-status', requirePermission(FP.VIEW), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const q = z.object({ from: date.optional(), to: date.optional(), sub_process: z.string().optional() }).parse(req.query);
   const where = [`o.company_id = ?`, `o.status NOT IN ('DRAFT','CANCELLED')`]; const p: unknown[] = [cid];
@@ -1162,7 +1389,7 @@ fabricProcessingRouter.get('/fabric-process/job-status', requirePermission('PROD
 }));
 
 /** GET /fabric-process/ledger — date-wise movement (DC out, GRN in, return, reprocess). */
-fabricProcessingRouter.get('/fabric-process/ledger', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+fabricProcessingRouter.get('/fabric-process/ledger', requirePermission(FP.VIEW), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const q = z.object({ from: date.optional(), to: date.optional(), vendor_id: z.coerce.number().int().optional(), sub_process: z.string().optional() }).parse(req.query);
   const f = (alias: string, dcol: string) => {
@@ -1185,7 +1412,7 @@ fabricProcessingRouter.get('/fabric-process/ledger', requirePermission('PRODUCTI
               (SELECT GROUP_CONCAT(DISTINCT ri.io_no SEPARATOR ', ') FROM trx_fabric_process_roll_out ro JOIN trx_fabric_process_roll_in ri ON ri.id = ro.roll_in_id WHERE ro.inward_id = i.id),
               0, i.good_kg, i.reject_kg, i.loss_kg, i.status, i.id
          FROM trx_fabric_process_inward i LEFT JOIN mst_party v ON v.id = i.vendor_id
-        WHERE i.company_id = ?${b.w}
+        WHERE i.company_id = ? AND i.status = 'POSTED'${b.w}
        UNION ALL
        SELECT r.return_date, r.return_no, 'RETURN', r.sub_process, v.party_name, NULL, 0, 0, r.total_kg, 0, r.status, r.id
          FROM trx_fabric_process_return r LEFT JOIN mst_party v ON v.id = r.vendor_id
@@ -1199,3 +1426,177 @@ fabricProcessingRouter.get('/fabric-process/ledger', requirePermission('PRODUCTI
   }) });
 }));
 
+// =====================================================================================
+// Masters: process types (with QC parameters) and reasons — the configurable engine (doc §22)
+// =====================================================================================
+const typeSchema = z.object({
+  code: z.string().trim().min(2).max(40).regex(/^[A-Z0-9_]+$/, 'Use capitals, digits and _'),
+  name: s.strReq(80),
+  output_state: z.enum(['DYED', 'WASHED', 'PRINTED', 'COMPACTED', 'FINISHED']).default('FINISHED'),
+  changes_colour: z.coerce.boolean().default(false),
+  allow_reprocess: z.coerce.boolean().default(true),
+  allow_split: z.coerce.boolean().default(true),
+  is_reprocess: z.coerce.boolean().default(false),
+  requires_qc: z.coerce.boolean().default(false),
+  sort_order: z.coerce.number().int().default(0),
+  is_active: z.coerce.boolean().default(true),
+});
+fabricProcessingRouter.get('/fabric-process/types/all', requirePermission(FP.VIEW), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const types = await query<any>('SELECT * FROM mst_fabric_process_type WHERE company_id = ? ORDER BY sort_order, name', [cid]);
+  const params = await query<any>('SELECT * FROM mst_fabric_process_qc_param WHERE company_id = ? ORDER BY process_code, sort_order, id', [cid]);
+  res.json({ data: types.map((t) => ({ ...t, qc_params: params.filter((p) => p.process_code === t.code) })) });
+}));
+fabricProcessingRouter.post('/fabric-process/types', requirePermission(FP.MASTER), ah(async (req, res) => {
+  const b = typeSchema.parse(req.body);
+  const dup = await queryOne('SELECT id FROM mst_fabric_process_type WHERE company_id = ? AND code = ?', [req.user!.companyId, b.code]);
+  if (dup) throw BadRequest(`Process ${b.code} already exists`);
+  const r = await query<any>(`INSERT INTO mst_fabric_process_type (company_id, code, name, output_state, changes_colour, allow_reprocess, allow_split, is_reprocess, requires_qc, sort_order, is_active)
+                         VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+    [req.user!.companyId, b.code, b.name, b.output_state, b.changes_colour ? 1 : 0, b.allow_reprocess ? 1 : 0, b.allow_split ? 1 : 0, b.is_reprocess ? 1 : 0, b.requires_qc ? 1 : 0, b.sort_order, b.is_active ? 1 : 0]);
+  await audit(req, 'mst_fabric_process_type', Number((r as any).insertId), 'INSERT', undefined, b);
+  res.status(201).json({ message: `Process ${b.name} added` });
+}));
+fabricProcessingRouter.put('/fabric-process/types/:id', requirePermission(FP.MASTER), ah(async (req, res) => {
+  const id = z.coerce.number().int().positive().parse(req.params.id);
+  const before = await queryOne<any>('SELECT * FROM mst_fabric_process_type WHERE id = ? AND company_id = ?', [id, req.user!.companyId]);
+  if (!before) throw NotFound('Process type not found');
+  const b = typeSchema.omit({ code: true }).parse(req.body);
+  await query(`UPDATE mst_fabric_process_type SET name = ?, output_state = ?, changes_colour = ?, allow_reprocess = ?, allow_split = ?, is_reprocess = ?, requires_qc = ?, sort_order = ?, is_active = ? WHERE id = ?`,
+    [b.name, b.output_state, b.changes_colour ? 1 : 0, b.allow_reprocess ? 1 : 0, b.allow_split ? 1 : 0, b.is_reprocess ? 1 : 0, b.requires_qc ? 1 : 0, b.sort_order, b.is_active ? 1 : 0, id]);
+  await audit(req, 'mst_fabric_process_type', id, 'UPDATE', before, b);
+  res.json({ message: `${b.name} saved` });
+}));
+const paramSchema = z.object({
+  process_code: z.string().trim().min(2).max(40),
+  param_name: s.strReq(80),
+  uom: s.nullableStr(20),
+  min_value: z.coerce.number().nullish(),
+  max_value: z.coerce.number().nullish(),
+  target_value: z.coerce.number().nullish(),
+  is_mandatory: z.coerce.boolean().default(true),
+  sort_order: z.coerce.number().int().default(0),
+  is_active: z.coerce.boolean().default(true),
+}).refine((p) => p.min_value == null || p.max_value == null || p.min_value <= p.max_value, { message: 'Min cannot be more than max' });
+fabricProcessingRouter.post('/fabric-process/qc-params', requirePermission(FP.MASTER), ah(async (req, res) => {
+  const b = paramSchema.parse(req.body);
+  await query(`INSERT INTO mst_fabric_process_qc_param (company_id, process_code, param_name, uom, min_value, max_value, target_value, is_mandatory, sort_order, is_active)
+               VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    [req.user!.companyId, b.process_code, b.param_name, b.uom ?? null, b.min_value ?? null, b.max_value ?? null, b.target_value ?? null, b.is_mandatory ? 1 : 0, b.sort_order, b.is_active ? 1 : 0]);
+  await audit(req, 'mst_fabric_process_qc_param', 0, 'INSERT', undefined, b);
+  res.status(201).json({ message: `${b.param_name} added to ${b.process_code}` });
+}));
+fabricProcessingRouter.put('/fabric-process/qc-params/:id', requirePermission(FP.MASTER), ah(async (req, res) => {
+  const id = z.coerce.number().int().positive().parse(req.params.id);
+  const before = await queryOne<any>('SELECT * FROM mst_fabric_process_qc_param WHERE id = ? AND company_id = ?', [id, req.user!.companyId]);
+  if (!before) throw NotFound('QC parameter not found');
+  const b = paramSchema.parse({ ...req.body, process_code: before.process_code });
+  await query(`UPDATE mst_fabric_process_qc_param SET param_name = ?, uom = ?, min_value = ?, max_value = ?, target_value = ?, is_mandatory = ?, sort_order = ?, is_active = ? WHERE id = ?`,
+    [b.param_name, b.uom ?? null, b.min_value ?? null, b.max_value ?? null, b.target_value ?? null, b.is_mandatory ? 1 : 0, b.sort_order, b.is_active ? 1 : 0, id]);
+  await audit(req, 'mst_fabric_process_qc_param', id, 'UPDATE', before, b);
+  res.json({ message: `${b.param_name} saved` });
+}));
+const reasonSchema = z.object({ code: z.string().trim().min(2).max(20), reason: s.strReq(120), kind: z.enum(['RETURN', 'BILLING', 'BOTH']).default('BOTH'),
+  default_billing: z.enum(['BILLABLE', 'NON_BILLABLE', 'INTERNAL_COST', 'FREE', 'RECOVERY']).nullish(), is_active: z.coerce.boolean().default(true) });
+fabricProcessingRouter.post('/fabric-process/reasons', requirePermission(FP.MASTER), ah(async (req, res) => {
+  const b = reasonSchema.parse(req.body);
+  if (await queryOne('SELECT id FROM mst_fabric_process_reason WHERE company_id = ? AND code = ?', [req.user!.companyId, b.code])) throw BadRequest(`Reason ${b.code} already exists`);
+  await query('INSERT INTO mst_fabric_process_reason (company_id, code, reason, kind, default_billing, is_active) VALUES (?,?,?,?,?,?)',
+    [req.user!.companyId, b.code, b.reason, b.kind, b.default_billing ?? null, b.is_active ? 1 : 0]);
+  res.status(201).json({ message: `Reason ${b.code} added` });
+}));
+fabricProcessingRouter.put('/fabric-process/reasons/:id', requirePermission(FP.MASTER), ah(async (req, res) => {
+  const id = z.coerce.number().int().positive().parse(req.params.id);
+  const b = reasonSchema.omit({ code: true }).parse(req.body);
+  await query('UPDATE mst_fabric_process_reason SET reason = ?, kind = ?, default_billing = ?, is_active = ? WHERE id = ? AND company_id = ?',
+    [b.reason, b.kind, b.default_billing ?? null, b.is_active ? 1 : 0, id, req.user!.companyId]);
+  res.json({ message: 'Reason saved' });
+}));
+fabricProcessingRouter.get('/fabric-process/reasons/all', requirePermission(FP.VIEW), ah(async (req, res) => {
+  res.json({ data: await query<any>('SELECT * FROM mst_fabric_process_reason WHERE company_id = ? ORDER BY code', [req.user!.companyId]) });
+}));
+
+// =====================================================================================
+// Reports (doc §18, §34)
+// =====================================================================================
+const repQ = z.object({ from: date.optional(), to: date.optional(), vendor_id: z.coerce.number().int().optional(), sub_process: z.string().optional() });
+const dateWhere = (alias: string, col: string, q: z.infer<typeof repQ>, vendor = true) => {
+  const w: string[] = []; const p: unknown[] = [];
+  if (q.from) { w.push(`${alias}.${col} >= ?`); p.push(q.from); }
+  if (q.to) { w.push(`${alias}.${col} <= ?`); p.push(q.to); }
+  if (vendor && q.vendor_id) { w.push(`${alias}.vendor_id = ?`); p.push(q.vendor_id); }
+  if (q.sub_process) { w.push(`${alias}.sub_process = ?`); p.push(q.sub_process); }
+  return { w: w.length ? ` AND ${w.join(' AND ')}` : '', p };
+};
+
+/** Process unit (contractor) wise pending KG with the oldest open DC. */
+fabricProcessingRouter.get('/fabric-process/reports/unit-pending', requirePermission(FP.VIEW), ah(async (req, res) => {
+  const q = repQ.parse(req.query); const f = dateWhere('o', 'fpo_date', q);
+  const rows = await query<any>(
+    `SELECT o.vendor_id, v.party_name vendor, o.sub_process, COUNT(DISTINCT o.id) open_dcs, MIN(o.fpo_date) oldest_dc_date,
+            DATEDIFF(CURDATE(), MIN(o.fpo_date)) oldest_days, SUM(ri.weight_kg) outward_kg, SUM(ri.good_kg + ri.reject_kg + ri.loss_kg) received_kg,
+            SUM(ri.weight_kg - ri.good_kg - ri.reject_kg - ri.loss_kg) pending_kg, GROUP_CONCAT(DISTINCT o.fpo_no ORDER BY o.fpo_no SEPARATOR ', ') dcs
+       FROM trx_fabric_process_order o JOIN trx_fabric_process_roll_in ri ON ri.fpo_id = o.id LEFT JOIN mst_party v ON v.id = o.vendor_id
+      WHERE o.company_id = ? AND o.status IN ('DISPATCHED','IN_PROCESS','PARTIALLY_RECEIVED')${f.w}
+      GROUP BY o.vendor_id, v.party_name, o.sub_process HAVING pending_kg > 0.0005 ORDER BY pending_kg DESC`, [req.user!.companyId, ...f.p]);
+  res.json({ data: rows.map((r) => ({ ...r, outward_kg: r3(n(r.outward_kg)), received_kg: r3(n(r.received_kg)), pending_kg: r3(n(r.pending_kg)) })) });
+}));
+
+/** Reject / return report: GRN rejects and quality returns with reasons. */
+fabricProcessingRouter.get('/fabric-process/reports/reject-return', requirePermission(FP.VIEW), ah(async (req, res) => {
+  const q = repQ.parse(req.query); const cid = req.user!.companyId;
+  const a = dateWhere('i', 'inward_date', q), b = dateWhere('r', 'return_date', q);
+  const rejects = await query<any>(
+    `SELECT 'GRN REJECT' kind, i.inward_date doc_date, i.inward_no doc_no, o.fpo_no, v.party_name vendor, i.sub_process, ri.io_no, ri.roll_no input_roll, ro.roll_no output_roll,
+            ro.reject_kg qty_kg, ro.reject_reason reason
+       FROM trx_fabric_process_roll_out ro JOIN trx_fabric_process_inward i ON i.id = ro.inward_id JOIN trx_fabric_process_order o ON o.id = i.fpo_id
+       LEFT JOIN trx_fabric_process_roll_in ri ON ri.id = ro.roll_in_id LEFT JOIN mst_party v ON v.id = i.vendor_id
+      WHERE i.company_id = ? AND i.status = 'POSTED' AND ro.reject_kg > 0${a.w} ORDER BY i.inward_date`, [cid, ...a.p]);
+  const returns = await query<any>(
+    `SELECT 'RETURN' kind, r.return_date doc_date, r.return_no doc_no, o.fpo_no, v.party_name vendor, r.sub_process, COALESCE(so.io_no, so.so_no) io_no, rl.roll_no input_roll, NULL output_roll,
+            rl.qty_kg, CONCAT(COALESCE(rs.reason, ''), IF(rl.defect_reason IS NULL, '', CONCAT(' — ', rl.defect_reason))) reason, r.return_type, rl.reprocessed_kg
+       FROM trx_fabric_process_return_line rl JOIN trx_fabric_process_return r ON r.id = rl.return_id LEFT JOIN trx_fabric_process_order o ON o.id = r.fpo_id
+       LEFT JOIN mst_party v ON v.id = r.vendor_id LEFT JOIN mst_fabric_process_reason rs ON rs.id = r.reason_id LEFT JOIN trx_sales_order so ON so.id = rl.so_id
+      WHERE r.company_id = ? AND r.status <> 'CANCELLED'${b.w} ORDER BY r.return_date`, [cid, ...b.p]);
+  res.json({ data: [...rejects, ...returns].map((x) => ({ ...x, qty_kg: r3(n(x.qty_kg)) })) });
+}));
+
+/** Reprocess pending: not yet received back, and billable reprocess still to be billed. */
+fabricProcessingRouter.get('/fabric-process/reports/reprocess-pending', requirePermission(FP.VIEW), ah(async (req, res) => {
+  const q = repQ.parse(req.query); const f = dateWhere('rp', 'reprocess_date', q);
+  const rows = await query<any>(
+    `SELECT rp.reprocess_no, rp.reprocess_date, rp.sub_process, v.party_name vendor, rp.status, rp.total_kg, rp.billing_type, rp.billing_status, rp.bill_amount,
+            o.fpo_no, COALESCE(SUM(ri.good_kg + ri.reject_kg + ri.loss_kg), 0) received_kg, DATEDIFF(CURDATE(), rp.reprocess_date) days
+       FROM trx_fabric_reprocess rp LEFT JOIN mst_party v ON v.id = rp.vendor_id LEFT JOIN trx_fabric_process_order o ON o.id = rp.fpo_id
+       LEFT JOIN trx_fabric_process_roll_in ri ON ri.fpo_id = rp.fpo_id
+      WHERE rp.company_id = ? AND rp.status <> 'CANCELLED'${f.w}
+        AND (rp.status IN ('DRAFT','IN_PROCESS') OR (rp.billing_type IN ('BILLABLE','RECOVERY') AND rp.billing_status IN ('PENDING','APPROVED')) OR rp.billing_status = 'PENDING')
+      GROUP BY rp.id ORDER BY rp.reprocess_date`, [req.user!.companyId, ...f.p]);
+  res.json({ data: rows.map((r) => ({ ...r, pending_kg: r3(Math.max(0, n(r.total_kg) - n(r.received_kg))),
+    pending_for: r.status === 'DRAFT' ? 'Confirmation' : r.status === 'IN_PROCESS' ? 'Receipt from processor' : r.billing_status === 'PENDING' ? 'Billing approval' : 'Contractor bill' })) });
+}));
+
+/** Reprocess by billing reason / treatment: qty, billable amount, internal cost (non-billable never disappears). */
+fabricProcessingRouter.get('/fabric-process/reports/billing-reasons', requirePermission(FP.VIEW), ah(async (req, res) => {
+  const q = repQ.parse(req.query); const f = dateWhere('rp', 'reprocess_date', q);
+  const rows = await query<any>(
+    `SELECT COALESCE(br.reason, rs.reason, '—') reason, rp.billing_type, v.party_name vendor, COUNT(*) entries, SUM(rp.total_kg) kg, SUM(rp.bill_amount) bill_amount, SUM(rp.internal_cost) internal_cost
+       FROM trx_fabric_reprocess rp LEFT JOIN mst_fabric_process_reason br ON br.id = rp.billing_reason_id LEFT JOIN mst_fabric_process_reason rs ON rs.id = rp.reason_id
+       LEFT JOIN mst_party v ON v.id = rp.vendor_id
+      WHERE rp.company_id = ? AND rp.status <> 'CANCELLED'${f.w}
+      GROUP BY COALESCE(br.reason, rs.reason, '—'), rp.billing_type, v.party_name ORDER BY rp.billing_type, kg DESC`, [req.user!.companyId, ...f.p]);
+  res.json({ data: rows.map((r) => ({ ...r, kg: r3(n(r.kg)), bill_amount: r2(n(r.bill_amount)), internal_cost: r2(n(r.internal_cost)) })) });
+}));
+
+/** Process loss report per DC / job. */
+fabricProcessingRouter.get('/fabric-process/reports/process-loss', requirePermission(FP.VIEW), ah(async (req, res) => {
+  const q = repQ.parse(req.query); const f = dateWhere('o', 'fpo_date', q);
+  const rows = await query<any>(
+    `SELECT o.fpo_no, o.fpo_date, o.sub_process, v.party_name vendor, COALESCE(ri.io_no, 'STOCK') io_no, SUM(ri.weight_kg) outward_kg, SUM(ri.good_kg) good_kg,
+            SUM(ri.reject_kg) reject_kg, SUM(ri.loss_kg) loss_kg
+       FROM trx_fabric_process_order o JOIN trx_fabric_process_roll_in ri ON ri.fpo_id = o.id LEFT JOIN mst_party v ON v.id = o.vendor_id
+      WHERE o.company_id = ? AND o.status NOT IN ('DRAFT','CANCELLED')${f.w}
+      GROUP BY o.id, ri.io_no HAVING SUM(ri.good_kg + ri.reject_kg + ri.loss_kg) > 0 ORDER BY o.fpo_date, o.id`, [req.user!.companyId, ...f.p]);
+  res.json({ data: rows.map((r) => { const o = n(r.outward_kg), acc = n(r.good_kg) + n(r.reject_kg) + n(r.loss_kg);
+    return { ...r, outward_kg: r3(o), good_kg: r3(n(r.good_kg)), reject_kg: r3(n(r.reject_kg)), loss_kg: r3(n(r.loss_kg)), loss_pct: acc > 0 ? r2(n(r.loss_kg) / acc * 100) : 0, reject_pct: acc > 0 ? r2(n(r.reject_kg) / acc * 100) : 0 }; }) });
+}));

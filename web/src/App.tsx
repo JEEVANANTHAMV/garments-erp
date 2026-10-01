@@ -77,6 +77,7 @@ import FabricProcessReturnPage from './pages/production/fabricProcess/ReturnPage
 import FabricProcessReprocessPage from './pages/production/fabricProcess/ReprocessPage';
 import FabricProcessBillPage from './pages/production/fabricProcess/BillPage';
 import { FabricRollTrackingPage, FabricProcessLedgerPage } from './pages/production/fabricProcess/TrackingLedgerPages';
+import { FabricProcessMastersPage, FabricProcessReportsPage } from './pages/production/fabricProcess/MastersReportsPages';
 import JobTransferPage from './pages/inventory/JobTransferPage';
 import MaterialTracePage from './pages/production/MaterialTracePage';
 
@@ -293,6 +294,8 @@ export default function App() {
                   <Route path="fabric-process/bills" element={<FabricProcessBillPage />} />
                   <Route path="fabric-process/tracking" element={<FabricRollTrackingPage />} />
                   <Route path="fabric-process/ledger" element={<FabricProcessLedgerPage />} />
+                  <Route path="fabric-process/reports" element={<FabricProcessReportsPage />} />
+                  <Route path="fabric-process/masters" element={<FabricProcessMastersPage />} />
                   <Route path="material-trace" element={<MaterialTracePage />} />
                   <Route path="fabric-issues" element={<FabricIssuePage />} />
                   <Route path="lay-spreading" element={<LaySpreadingPage />} />

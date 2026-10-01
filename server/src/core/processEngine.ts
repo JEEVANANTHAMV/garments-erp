@@ -117,9 +117,12 @@ export async function postLedger(tx: Tx, m: {
   materialType: 'YARN' | 'FABRIC' | 'TRIM' | 'FINISHED' | 'WIP';
   yarnId?: number | null;
   fabricId?: number | null;
+  trimId?: number | null;
   skuId?: number | null;
   batchId?: number | null;
-  txnType: 'ISSUE' | 'PRODUCTION_IN' | 'PRODUCTION_OUT' | 'ADJUST' | 'RETURN';
+  /** Job of the movement (job-wise stock / job transfers). */
+  soId?: number | null;
+  txnType: 'ISSUE' | 'PRODUCTION_IN' | 'PRODUCTION_OUT' | 'ADJUST' | 'RETURN' | 'TRANSFER_IN' | 'TRANSFER_OUT';
   refType: string;
   refId: number;
   qtyIn?: number;
@@ -131,14 +134,14 @@ export async function postLedger(tx: Tx, m: {
   await txExecute(
     tx,
     `INSERT INTO trx_stock_ledger
-       (company_id, warehouse_id, material_type, yarn_id, fabric_id, sku_id, batch_id,
-        txn_type, ref_type, ref_id, qty_in, qty_out, uom_id, rate, created_by)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       (company_id, warehouse_id, material_type, yarn_id, fabric_id, trim_id, sku_id, batch_id,
+        txn_type, ref_type, ref_id, qty_in, qty_out, uom_id, rate, created_by, so_id)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [
       m.companyId, m.warehouseId, m.materialType,
-      m.yarnId ?? null, m.fabricId ?? null, m.skuId ?? null, m.batchId ?? null,
+      m.yarnId ?? null, m.fabricId ?? null, m.trimId ?? null, m.skuId ?? null, m.batchId ?? null,
       m.txnType, m.refType, m.refId,
-      m.qtyIn ?? 0, m.qtyOut ?? 0, m.uomId, m.rate ?? 0, m.createdBy ?? null,
+      m.qtyIn ?? 0, m.qtyOut ?? 0, m.uomId, m.rate ?? 0, m.createdBy ?? null, m.soId ?? null,
     ],
   );
 }

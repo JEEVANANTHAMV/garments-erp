@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Plus, CheckCircle2, RefreshCcw, Trash2 } from 'lucide-react';
+import { useAuth } from '../../../lib/auth';
 import { http } from '../../../lib/api';
 import { useLookup, toOptions } from '../../../hooks/useLookup';
 import { useToast } from '../../../hooks/useToast';
@@ -19,10 +20,11 @@ export default function FabricProcessReturnPage() {
 }
 
 function ReturnList({ onOpen }: { onOpen: (id: number | 'new') => void }) {
+  const { can } = useAuth();
   const list = useQuery({ queryKey: ['fabric-process', 'returns'], queryFn: async () => (await http.get<{ data: any[] }>('/fabric-process/returns')).data ?? [] });
   return (
     <div>
-      <FpTitle no={3} title="Process Return" sub="Reject / quality issue against a process GRN" actions={<Button onClick={() => onOpen('new')}><Plus size={14} className="mr-1" /> New Return</Button>} />
+      <FpTitle no={3} title="Process Return" sub="Reject / quality issue against a process GRN" actions={can('FABRIC_PROCESS.RETURN') ? <Button onClick={() => onOpen('new')}><Plus size={14} className="mr-1" /> New Return</Button> : null} />
       <div className="card overflow-x-auto">
         {list.isLoading ? <LoadingBlock /> : (
           <table className="w-full text-xs">
@@ -81,7 +83,7 @@ function ReturnEditor({ onBack, onDone }: { onBack: () => void; onDone: (id: num
       <div className="card mb-3 grid grid-cols-2 gap-3 p-4 md:grid-cols-6">
         <Input label="Return date *" type="date" value={head.return_date} onChange={(e) => setHead({ ...head, return_date: e.target.value })} />
         <Select label="Original GRN *" value={head.inward_id} placeholder="— Process GRN —" onChange={(e) => { setHead({ ...head, inward_id: e.target.value }); setSel({}); }}
-          options={(grns.data ?? []).map((g) => ({ value: g.id, label: `${g.inward_no} · ${g.fpo_no} · ${g.vendor_name}` }))} />
+          options={(grns.data ?? []).filter((g) => g.status === 'POSTED').map((g) => ({ value: g.id, label: `${g.inward_no} · ${g.fpo_no} · ${g.vendor_name}` }))} />
         <Input label="Process" value={grn.data?.process_name ?? ''} disabled />
         <Select label="Return type *" value={head.return_type} onChange={(e) => setHead({ ...head, return_type: e.target.value })}
           options={[{ value: 'QUALITY_REJECT', label: 'Quality reject' }, { value: 'REPROCESS', label: 'For reprocess' }, { value: 'OTHER', label: 'Other' }]} />
@@ -118,6 +120,7 @@ function ReturnEditor({ onBack, onDone }: { onBack: () => void; onDone: (id: num
 }
 
 function ReturnView({ id, onBack }: { id: number; onBack: () => void }) {
+  const { can } = useAuth();
   const nav = useNavigate();
   const q = useQuery({ queryKey: ['fabric-process', 'returns', id], queryFn: async () => (await http.get<{ data: any }>(`/fabric-process/returns/${id}`)).data });
   const r = q.data;
@@ -127,7 +130,7 @@ function ReturnView({ id, onBack }: { id: number; onBack: () => void }) {
     <div>
       <FpTitle no={3} title={`Process Return — ${r.return_no}`} sub={`GRN ${r.inward_no ?? '—'} · ${r.vendor_name ?? ''} · ${r.reason}`}
         actions={<><FpStatus value={r.status} />
-          {open > 0.0005 && <Button onClick={() => nav(`/production/fabric-process/reprocess?id=new&return=${id}`)}><RefreshCcw size={14} className="mr-1" /> Send to Reprocess</Button>}
+          {open > 0.0005 && can('FABRIC_PROCESS.REPROCESS') && <Button onClick={() => nav(`/production/fabric-process/reprocess?id=new&return=${id}`)}><RefreshCcw size={14} className="mr-1" /> Send to Reprocess</Button>}
           <Button variant="secondary" onClick={onBack}><ArrowLeft size={14} className="mr-1" /> Back</Button></>} />
       <div className="card overflow-x-auto">
         <table className="w-full text-xs">
