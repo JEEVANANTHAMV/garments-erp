@@ -613,15 +613,17 @@ trimProcurementRouter.post('/trim-grns', requireAny('GRN.CREATE', 'PROCUREMENT.C
       if (line.accepted_qty > 0 && body.status === 'POSTED') {
         await txExecute(
           tx,
+          // Stock belongs to the line's job (job-wise trims stock; transferable job → job)
           `INSERT INTO trx_trim_stock
-             (company_id, warehouse_id, trim_id, color_name, trim_size, internal_lot_no, bin_location, stock_qty, uom_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+             (company_id, warehouse_id, trim_id, color_name, trim_size, internal_lot_no, bin_location, stock_qty, uom_id, so_id, style_id, so_key)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE
              stock_qty = stock_qty + VALUES(stock_qty),
              bin_location = COALESCE(VALUES(bin_location), bin_location)`,
           [
             cid, body.warehouse_id, line.trim_id, line.color_name || null, line.trim_size || null,
-            line.internal_lot_no, line.bin_location || null, line.accepted_qty, line.uom_id
+            line.internal_lot_no, line.bin_location || null, line.accepted_qty, line.uom_id,
+            line.so_id ?? null, line.style_id ?? body.style_id ?? null, line.so_id ?? 0
           ]
         );
       }

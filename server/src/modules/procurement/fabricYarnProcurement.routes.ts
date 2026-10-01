@@ -494,7 +494,7 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
     `, [
       companyId,
       finalGrnNo,
-      body.internal_ir_no || 'IR-2026-0001',
+      body.internal_ir_no || null,   // no fake IO — the job comes from the PO / GRN line
       body.grn_date || new Date().toISOString().slice(0, 10),
       primaryPoId,
       poIdsJson,
@@ -597,8 +597,8 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
           INSERT INTO trx_fabric_roll (
             company_id, grn_id, grn_line_id, fabric_id,
             roll_no, lot_no, meters, weight_kg, gsm, dia, shade,
-            warehouse_id, location_bin, qc_status, stock_status, remarks
-          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            warehouse_id, location_bin, qc_status, stock_status, remarks, so_id
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         `, [
           companyId,
           newGrnId,
@@ -616,6 +616,8 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
           r.qc_status || 'ACCEPTED',
           r.qc_status === 'ACCEPTED' ? 'AVAILABLE' : 'RESERVED',
           r.remarks || null,
+          // the roll belongs to the job it was bought for (job-wise stock / transfers)
+          line.so_id ? Number(line.so_id) : (body.so_id ? Number(body.so_id) : null),
         ]);
       }
 
@@ -941,7 +943,7 @@ fabricYarnProcurementRouter.post('/fabric-rolls/:id/status', requirePermission('
    PART A-5: YARN STOCK LIST (batch/lot level)
    ============================================================================== */
 
-const yarnStockQuery = z.object({
+export const yarnStockQuery = z.object({
   yarn_id: z.coerce.number().int().positive().optional(),
   grn_id: z.coerce.number().int().positive().optional(),
   warehouse_id: z.coerce.number().int().positive().optional(),
@@ -974,8 +976,9 @@ async function yarnLotIssueSql(companyId: number): Promise<{ sql: string; params
     params.push(companyId);
   }
   if (await tableExists('trx_process_issue')) {
+    // Issues that name their GRN lot are counted on that lot directly (direct_issued_qty)
     parts.push(`SELECT yarn_id, lot_no, issued_qty_kg AS qty
-                  FROM trx_process_issue WHERE company_id = ?`);
+                  FROM trx_process_issue WHERE company_id = ? AND grn_line_id IS NULL`);
     params.push(companyId);
   }
   if (!parts.length) {
@@ -1000,9 +1003,8 @@ async function yarnLotIssueSql(companyId: number): Promise<{ sql: string; params
  * trx_grn_line.balance_qty is the PO quantity still to be received, NOT stock,
  * so it is exposed as po_pending_qty and never used as the stock balance.
  */
-fabricYarnProcurementRouter.get('/yarn-stock', requirePermission('INVENTORY.VIEW'), ah(async (req, res) => {
-  const companyId = req.user!.companyId;
-  const q = yarnStockQuery.parse(req.query);
+/** Yarn stock per GRN lot line (shared by /yarn-stock, the job-wise lot picker and job transfers). */
+export async function yarnStockRows(companyId: number, q: z.infer<typeof yarnStockQuery>) {
 
   const lotIssue = await yarnLotIssueSql(companyId);
   const hasReturns = await tableExists('trx_purchase_return_line') && await tableExists('trx_purchase_return');
@@ -1075,6 +1077,8 @@ fabricYarnProcurementRouter.get('/yarn-stock', requirePermission('INVENTORY.VIEW
         ${TRACE_IO_NO}                       AS internal_ir_no,
         ${TRACE_STYLE_ID}                    AS style_id,
         st.style_code, st.style_name,
+        COALESCE(so_l.id, so_h.id)           AS owner_so_id,
+        COALESCE((SELECT SUM(dpi.issued_qty_kg) FROM trx_process_issue dpi WHERE dpi.grn_line_id = gl.id), 0) AS direct_issued_qty,
         (gl.accepted_qty - ${returnedSql})   AS net_in_qty,
         ${returnedSql}                       AS returned_qty,
         ${matIssueSql}                       AS batch_issued_qty
@@ -1104,7 +1108,7 @@ fabricYarnProcurementRouter.get('/yarn-stock', requirePermission('INVENTORY.VIEW
     calc AS (
       SELECT f.*,
              (LEAST(GREATEST(f.net_in_qty, 0), GREATEST(f.lot_issued_qty - f.lot_in_before, 0))
-               + f.batch_issued_qty) AS issued_qty
+               + f.batch_issued_qty + f.direct_issued_qty) AS issued_qty
         FROM fifo f
     ),
     s AS (
@@ -1125,6 +1129,13 @@ fabricYarnProcurementRouter.get('/yarn-stock', requirePermission('INVENTORY.VIEW
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
      ORDER BY s.grn_date DESC, s.id DESC
   `, [companyId, ...lotIssue.params, ...filterParams]);
+  return rows;
+}
+
+fabricYarnProcurementRouter.get('/yarn-stock', requirePermission('INVENTORY.VIEW'), ah(async (req, res) => {
+  const companyId = req.user!.companyId;
+  const q = yarnStockQuery.parse(req.query);
+  const rows = await yarnStockRows(companyId, q);
 
   // Dropdown options come from the whole company's yarn stock so choosing one
   // filter never makes the other choices disappear.
@@ -1389,7 +1400,7 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
     `, [
       companyId,
       finalGrnNo,
-      body.internal_ir_no || 'IR-2026-0001',
+      body.internal_ir_no || null,   // no fake IO — the job comes from the PO / GRN line
       body.grn_date || new Date().toISOString().slice(0, 10),
       primaryPoId,
       poIdsJson,
@@ -1474,7 +1485,8 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
         line.sgst,
         line.igst,
         line.lineTotal,
-        line.lot_no || 'LOT-YARN-DEFAULT',
+        // a blank lot gets a GRN-unique lot no (a shared default lot broke lot traceability)
+        line.lot_no || `${finalGrnNo}-Y${Number(line.yarn_id)}`,
         line.qc_status || body.qc_status || 'ACCEPTED',
         5, // KG
       ]);

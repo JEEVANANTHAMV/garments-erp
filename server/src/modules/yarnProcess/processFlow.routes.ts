@@ -118,6 +118,8 @@ export async function assertIssuable(user: NonNullable<Express.Request['user']>,
 export async function insertProcessIssue(tx: Tx, cid: number, uid: number,
   body: z.infer<typeof issueSchema> & {
     dc_no?: string | null; vendor_id?: number | null; vehicle_no?: string | null; no_of_cones?: number;
+    /** Exact yarn GRN lot and the job of the DC line (multi-job DCs, traceability). */
+    grn_line_id?: number | null; so_id?: number | null; io_no?: string | null;
   },
   exceeds: boolean,
 ) {
@@ -126,14 +128,14 @@ export async function insertProcessIssue(tx: Tx, cid: number, uid: number,
     `INSERT INTO trx_process_issue
        (company_id, issue_no, dc_no, vendor_id, vehicle_no, issue_date, src_type, src_id,
         src_line_id, reservation_id, yarn_id, batch_id, lot_no, yarn_po_no, warehouse_id,
-        issued_qty_kg, no_of_cones, is_override, override_reason, remarks, created_by)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        issued_qty_kg, no_of_cones, is_override, override_reason, remarks, created_by, grn_line_id, so_id, io_no)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [cid, issueNo, body.dc_no ?? null, body.vendor_id ?? null, body.vehicle_no ?? null,
      body.issue_date, body.src_type, body.src_id, body.src_line_id ?? null,
      body.reservation_id ?? null, body.yarn_id, body.batch_id ?? null, body.lot_no ?? null,
      body.yarn_po_no ?? null, body.warehouse_id, body.issued_qty_kg, body.no_of_cones ?? 0,
      exceeds ? 1 : 0, exceeds ? body.override_reason ?? null : null,
-     body.remarks ?? null, uid]);
+     body.remarks ?? null, uid, body.grn_line_id ?? null, body.so_id ?? null, body.io_no ?? null]);
   const issueId = r.insertId;
 
   // Issue is the step that actually moves stock (doc §5).
