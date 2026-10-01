@@ -9,6 +9,7 @@ import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
 import { assertJobLots } from '../stock/jobStock.routes.js';
+import { checkDcQuotation, useGateEntry } from '../../core/inwardControls.js';
 import { YP, can, r3, r2, n, EPS, date, processType, whName, partyName, coneHistory, lotRow, lotOut, lotGrn, lotIn } from './yarnEngine.common.js';
 
 /**
@@ -98,6 +99,10 @@ const outwardSchema = z.object({
   target_shade: s.nullableStr(80),
   expected_return_date: date.nullish(),
   remarks: s.text(),
+  /** Approved process quotation of the process unit (job-work rate). */
+  quotation_id: s.id(),
+  quotation_line_id: s.id(),
+  rate_per_kg: z.coerce.number().min(0).nullish(),
   lines: z.array(z.object({
     so_id: s.id(),
     process_id: s.id(),
@@ -187,15 +192,17 @@ export async function writeOutwardLines(tx: Tx, req: Request, ypo: any, lines: O
 export async function insertOutwardHeader(tx: Tx, req: Request, b: Omit<OutwardBody, 'lines'>, extra: { status: string; is_reprocess?: boolean; reprocess_id?: number | null }) {
   const cid = req.user!.companyId;
   const pt = await processType(cid, b.process_code, tx);
-  const no = await nextDocNumber(tx, cid, 'YP_OUTWARD');
   const confirmed = extra.status === 'CONFIRMED';
+  const quote = await checkDcQuotation(cid, { vendor_id: Number(b.vendor_id), quotation_id: b.quotation_id ?? null, quotation_line_id: b.quotation_line_id ?? null, rate: b.rate_per_kg ?? null,
+    label: `${pt.name} DC`, required: confirmed && !extra.is_reprocess ? undefined : false });
+  const no = await nextDocNumber(tx, cid, 'YP_OUTWARD');
   const r = await txExecute(tx,
     `INSERT INTO trx_yarn_process_order (company_id, ypo_no, ypo_date, process_code, vendor_id, from_warehouse_id, to_location, vehicle_no, challan_no,
-       target_shade, expected_return_date, status, is_reprocess, reprocess_id, remarks, created_by, confirmed_by, confirmed_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       target_shade, expected_return_date, status, is_reprocess, reprocess_id, remarks, created_by, confirmed_by, confirmed_at, quotation_id, quotation_line_id, rate_per_kg)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [cid, no, b.ypo_date, pt.code, b.vendor_id, b.from_warehouse_id ?? null, b.to_location ?? null, b.vehicle_no ?? null, b.challan_no ?? null,
      b.target_shade ?? null, b.expected_return_date ?? null, extra.status, extra.is_reprocess ? 1 : 0, extra.reprocess_id ?? null, b.remarks ?? null,
-     req.user!.id, confirmed ? req.user!.id : null, confirmed ? new Date() : null]);
+     req.user!.id, confirmed ? req.user!.id : null, confirmed ? new Date() : null, quote.quotation_id, quote.quotation_line_id, quote.rate]);
   return { id: Number(r.insertId), ypo_no: no, ypo_date: b.ypo_date, process_code: pt.code, vendor_id: b.vendor_id, vehicle_no: b.vehicle_no ?? null,
     target_shade: b.target_shade ?? null, is_reprocess: !!extra.is_reprocess };
 }
@@ -288,9 +295,9 @@ yarnEngineRouter.put('/yarn-process/outward/:id', requirePermission(YP.EDIT_DRAF
     const pt = await processType(cid, body.process_code, tx);
     await txExecute(tx,
       `UPDATE trx_yarn_process_order SET ypo_date = ?, process_code = ?, vendor_id = ?, from_warehouse_id = ?, to_location = ?, vehicle_no = ?, challan_no = ?,
-              target_shade = ?, expected_return_date = ?, remarks = ? WHERE id = ?`,
+              target_shade = ?, expected_return_date = ?, remarks = ?, quotation_id = ?, quotation_line_id = ?, rate_per_kg = ? WHERE id = ?`,
       [body.ypo_date, pt.code, body.vendor_id, body.from_warehouse_id ?? null, body.to_location ?? null, body.vehicle_no ?? null, body.challan_no ?? null,
-       body.target_shade ?? null, body.expected_return_date ?? null, body.remarks ?? null, id]);
+       body.target_shade ?? null, body.expected_return_date ?? null, body.remarks ?? null, body.quotation_id ?? null, body.quotation_line_id ?? null, body.rate_per_kg ?? null, id]);
     await txExecute(tx, 'DELETE FROM trx_yarn_process_order_line WHERE ypo_id = ?', [id]);
     const kg = await writeOutwardLines(tx, req, { ...o, ...body, process_code: pt.code }, body.lines, false);
     return { id, ypo_no: o.ypo_no, outward_kg: kg };
@@ -313,6 +320,10 @@ yarnEngineRouter.post('/yarn-process/outward/:id/confirm', requirePermission(YP.
     const lines = await linesOf(tx, id);
     if (!lines.length) throw BadRequest('The DC has no lines');
     await txExecute(tx, 'DELETE FROM trx_yarn_process_order_line WHERE ypo_id = ?', [id]);
+    if (!o.is_reprocess) {
+      const quote = await checkDcQuotation(cid, { vendor_id: Number(o.vendor_id), quotation_id: o.quotation_id, quotation_line_id: o.quotation_line_id, rate: o.rate_per_kg != null ? Number(o.rate_per_kg) : null, label: o.ypo_no });
+      await txExecute(tx, 'UPDATE trx_yarn_process_order SET rate_per_kg = ? WHERE id = ?', [quote.rate, id]);
+    }
     const kg = await writeOutwardLines(tx, req, o, lines, true);
     await txExecute(tx, `UPDATE trx_yarn_process_order SET status = 'CONFIRMED', confirmed_by = ?, confirmed_at = NOW() WHERE id = ?`, [req.user!.id, id]);
     return { id, ypo_no: o.ypo_no, outward_kg: kg };
@@ -390,6 +401,7 @@ const inwardSchema = z.object({
   received_by: s.strReq(80),
   warehouse_id: s.idReq(),
   reject_warehouse_id: s.id(),
+  gate_inward_id: s.id(),
   loss_override_reason: s.nullableStr(255),
   remarks: s.text(),
   outputs: z.array(z.object({
@@ -465,6 +477,7 @@ async function postInward(tx: Tx, req: Request, body: InwardBody, existing?: { i
     ? { ...op, reject_kg: r3(op.reject_kg + op.good_kg), good_kg: 0, reject_reason: op.reject_reason || 'QC rejected' } : op);
   const totG = r3(outs.reduce((a, x) => a + x.good_kg, 0)), totR = r3(outs.reduce((a, x) => a + x.reject_kg, 0)), totL = r3(outs.reduce((a, x) => a + x.loss_kg, 0));
   const rejectWh = body.reject_warehouse_id ?? body.warehouse_id;
+  const gate = await useGateEntry(tx, cid, { gate_inward_id: body.gate_inward_id, party_id: o.vendor_id, label: `GRN on ${o.ypo_no}` });
   const vendor = await partyName(tx, o.vendor_id);
   const goodStore = await whName(tx, body.warehouse_id), rejStore = await whName(tx, rejectWh);
   const ioNos = [...new Set(outs.flatMap((op) => op.inputs.map((i) => byId.get(i.ypo_line_id)!.io_no).filter(Boolean)))];
@@ -487,6 +500,7 @@ async function postInward(tx: Tx, req: Request, body: InwardBody, existing?: { i
       [...head, cid, no, o.id, o.vendor_id, o.process_code, o.is_reprocess ? 1 : 0, uid, uid]);
     inwardId = Number(r.insertId);
   }
+  if (gate) await txExecute(tx, 'UPDATE trx_yarn_process_inward SET gate_inward_id = ? WHERE id = ?', [gate.id, inwardId]);
   const acc = new Map<number, { g: number; rj: number; l: number }>();
   const created: any[] = [];
   let seq = 0;

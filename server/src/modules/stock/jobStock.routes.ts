@@ -1,8 +1,9 @@
 import { Router, type Request } from 'express';
+import { settingFlag } from '../../core/inwardControls.js';
 import { z } from 'zod';
-import { query, queryOne, transaction, txQueryOne, txExecute, type Tx } from '../../config/db.js';
+import { query, queryOne, transaction, txQuery, txQueryOne, txExecute, type Tx } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
-import { NotFound, BadRequest } from '../../core/errors.js';
+import { NotFound, BadRequest, Forbidden } from '../../core/errors.js';
 import { requirePermission, requireAny } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
@@ -184,88 +185,153 @@ async function fabricHistory(tx: Tx, req: Request, h: { roll_id: number; roll_no
     [req.user!.companyId, h.roll_id, h.roll_no, h.ref_id, h.ref_no, h.qty, h.so_id, h.related, h.remarks, req.user!.id]);
 }
 
-/** POST /job-transfers — move yarn lots / fabric rolls / trim stock from one job (or general) to another. */
+type TransferBody = z.infer<typeof transferSchema>;
+const canApproveTransfer = (req: Request) => !!req.user?.isSuperAdmin || !!req.user?.permissions.has('JOB_TRANSFER.APPROVE');
+export async function approvalHistory(tx: Tx, req: Request, h: { doc_type: string; doc_id: number; action: string; from?: string | null; to: string; remarks?: string | null }) {
+  await txExecute(tx, 'INSERT INTO trx_yarn_approval_history (company_id, doc_type, doc_id, action, from_status, to_status, remarks, user_id) VALUES (?,?,?,?,?,?,?,?)',
+    [req.user!.companyId, h.doc_type, h.doc_id, h.action, h.from ?? null, h.to, h.remarks ?? null, req.user!.id]);
+}
+
+/** Moves the stock of a transfer (yarn lots / fabric rolls / trim stock) — on posting. Returns the total qty. */
+export async function postTransferLines(tx: Tx, req: Request, tid: number, no: string, b: TransferBody, fromJob: string, toJob: string) {
+  const cid = req.user!.companyId;
+  let total = 0;
+  if (b.material_type === 'YARN') {
+    const lots = await yarnJobLots(cid, { grn_line_ids: b.lines.map((l) => l.ref_id) });
+    for (const l of b.lines) {
+      const h = lots.find((x) => x.grn_line_id === l.ref_id && key(x.holder_so_id) === b.from_so_id);
+      if (!h) throw BadRequest(`Yarn lot ${l.ref_id} is not held by ${fromJob}`);
+      if (l.qty > h.available_kg + 1e-6) throw BadRequest(`Lot ${h.lot_no}: only ${h.available_kg} KG held by ${fromJob}`);
+      await txExecute(tx, 'INSERT INTO trx_job_transfer_line (transfer_id, grn_line_id, item_label, lot_no, qty) VALUES (?,?,?,?,?)',
+        [tid, l.ref_id, `${h.yarn_name}${h.count_str ? ` ${h.count_str}` : ''} · ${h.grn_no}`, h.lot_no, r4(l.qty)]);
+      await transferLedger(tx, req, { warehouseId: h.warehouse_id ? Number(h.warehouse_id) : null, material: 'YARN', itemId: Number(h.yarn_id) || null, qty: r4(l.qty), uomId: UOM_KG, tid, from: b.from_so_id, to: b.to_so_id });
+      total += l.qty;
+    }
+  } else if (b.material_type === 'FABRIC') {
+    for (const l of b.lines) {
+      const fr = await txQueryOne<any>(tx, 'SELECT * FROM trx_fabric_roll WHERE id = ? AND company_id = ? FOR UPDATE', [l.ref_id, cid]);
+      if (!fr) throw BadRequest('Roll not found');
+      if (key(fr.so_id) !== b.from_so_id) throw BadRequest(`Roll ${fr.roll_no} is not in ${fromJob}`);
+      const bal = n(fr.weight_kg) - n(fr.issued_kg);
+      if (l.qty > bal + 1e-6) throw BadRequest(`Roll ${fr.roll_no} has only ${bal.toFixed(3)} KG`);
+      let newRoll: number | null = null;
+      if (l.qty >= bal - 0.0005 && n(fr.issued_kg) <= 0.0005) {
+        // whole roll: it simply changes job
+        await txExecute(tx, 'UPDATE trx_fabric_roll SET so_id = ? WHERE id = ?', [b.to_so_id || null, fr.id]);
+        await fabricHistory(tx, req, { roll_id: fr.id, roll_no: fr.roll_no, ref_id: tid, ref_no: no, qty: l.qty, so_id: b.to_so_id || null, related: null, remarks: `${fromJob} → ${toJob}: ${b.reason}` });
+      } else {
+        // part of a roll: split — the moved KG becomes a child roll of the new job (same GRN, traceable)
+        await txExecute(tx, 'UPDATE trx_fabric_roll SET issued_kg = COALESCE(issued_kg, 0) + ? WHERE id = ?', [l.qty, fr.id]);
+        await refreshFabricRollStatus(tx, fr.id);
+        const ins = await txExecute(tx,
+          `INSERT INTO trx_fabric_roll (company_id, grn_id, grn_line_id, fabric_id, roll_no, lot_no, meters, weight_kg, gsm, dia, shade, warehouse_id, location_bin,
+             qc_status, stock_status, remarks, process_state, color_name, source_fpo_id, so_id, parent_roll_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'ACCEPTED','AVAILABLE',?,?,?,?,?,?)`,
+          [cid, fr.grn_id, fr.grn_line_id, fr.fabric_id, `${fr.roll_no}-T${tid}`, fr.lot_no, n(fr.weight_kg) > 0 ? Math.round(n(fr.meters) * l.qty / n(fr.weight_kg) * 100) / 100 : null,
+           r4(l.qty), fr.gsm, fr.dia, fr.shade, fr.warehouse_id, fr.location_bin, `Transferred ${fromJob} → ${toJob} (${no})`, fr.process_state, fr.color_name, fr.source_fpo_id, b.to_so_id || null, fr.id]);
+        newRoll = Number(ins.insertId);
+        await fabricHistory(tx, req, { roll_id: fr.id, roll_no: fr.roll_no, ref_id: tid, ref_no: no, qty: l.qty, so_id: b.from_so_id || null, related: newRoll, remarks: `${l.qty} KG to ${toJob}: ${b.reason}` });
+        await fabricHistory(tx, req, { roll_id: newRoll, roll_no: `${fr.roll_no}-T${tid}`, ref_id: tid, ref_no: no, qty: l.qty, so_id: b.to_so_id || null, related: fr.id, remarks: `From ${fromJob} roll ${fr.roll_no}` });
+      }
+      await txExecute(tx, 'INSERT INTO trx_job_transfer_line (transfer_id, fabric_roll_id, new_roll_id, item_label, lot_no, qty) VALUES (?,?,?,?,?,?)',
+        [tid, fr.id, newRoll, `Roll ${fr.roll_no}`, fr.lot_no, r4(l.qty)]);
+      await transferLedger(tx, req, { warehouseId: fr.warehouse_id ? Number(fr.warehouse_id) : null, material: 'FABRIC', itemId: Number(fr.fabric_id) || null, qty: r4(l.qty), uomId: UOM_KG, tid, from: b.from_so_id, to: b.to_so_id });
+      total += l.qty;
+    }
+  } else {
+    for (const l of b.lines) {
+      const ts = await txQueryOne<any>(tx, 'SELECT ts.*, t.trim_name FROM trx_trim_stock ts JOIN mst_trim t ON t.id = ts.trim_id WHERE ts.id = ? AND ts.company_id = ? FOR UPDATE', [l.ref_id, cid]);
+      if (!ts) throw BadRequest('Trim stock not found');
+      if (Number(ts.so_key) !== b.from_so_id) throw BadRequest(`${ts.trim_name} lot ${ts.internal_lot_no} is not in ${fromJob}`);
+      const bal = n(ts.stock_qty) - n(ts.allocated_qty);
+      if (l.qty > bal + 1e-6) throw BadRequest(`${ts.trim_name} lot ${ts.internal_lot_no}: only ${bal} free`);
+      await txExecute(tx, 'UPDATE trx_trim_stock SET stock_qty = stock_qty - ? WHERE id = ?', [l.qty, ts.id]);
+      await txExecute(tx,
+        `INSERT INTO trx_trim_stock (company_id, warehouse_id, trim_id, color_name, trim_size, internal_lot_no, bin_location, stock_qty, uom_id, so_id, style_id, so_key)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE stock_qty = stock_qty + VALUES(stock_qty)`,
+        [cid, ts.warehouse_id, ts.trim_id, ts.color_name, ts.trim_size, ts.internal_lot_no, ts.bin_location, l.qty, ts.uom_id, b.to_so_id || null, b.to_style_id ?? null, b.to_so_id]);
+      const to = await txQueryOne<any>(tx, 'SELECT id FROM trx_trim_stock WHERE company_id = ? AND warehouse_id = ? AND trim_id = ? AND internal_lot_no = ? AND so_key = ?',
+        [cid, ts.warehouse_id, ts.trim_id, ts.internal_lot_no, b.to_so_id]);
+      await txExecute(tx, 'INSERT INTO trx_job_transfer_line (transfer_id, trim_stock_id, to_trim_stock_id, item_label, lot_no, qty, uom_id) VALUES (?,?,?,?,?,?,?)',
+        [tid, ts.id, to?.id ?? null, ts.trim_name, ts.internal_lot_no, r4(l.qty), ts.uom_id]);
+      await transferLedger(tx, req, { warehouseId: Number(ts.warehouse_id), material: 'TRIM', itemId: Number(ts.trim_id), qty: r4(l.qty), uomId: Number(ts.uom_id), tid, from: b.from_so_id, to: b.to_so_id });
+      total += l.qty;
+    }
+  }
+  await txExecute(tx, 'UPDATE trx_job_transfer SET total_qty = ? WHERE id = ?', [r4(total), tid]);
+  return r4(total);
+}
+
+const jobNameOf = async (cid: number, id: number) => id ? (await queryOne<any>('SELECT COALESCE(io_no, so_no) j FROM trx_sales_order WHERE id = ? AND company_id = ?', [id, cid]))?.j : 'GENERAL';
+
+/**
+ * POST /job-transfers — move yarn lots / fabric rolls / trim stock from one job (or general) to another.
+ * With JOB_TRANSFER_APPROVAL on, a user without the approve right only raises the request
+ * (PENDING_APPROVAL, nothing moves); the Production Manager approves and it posts (doc §16, §19).
+ */
 jobStockRouter.post('/job-transfers', requireAny('INVENTORY.ADJUST', 'INVENTORY.CREATE', 'PRODUCTION.CREATE'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const b = transferSchema.parse(req.body);
   if (b.from_so_id === b.to_so_id) throw BadRequest('From and to job are the same');
-  const jobName = async (id: number) => id ? (await queryOne<any>('SELECT COALESCE(io_no, so_no) j FROM trx_sales_order WHERE id = ? AND company_id = ?', [id, cid]))?.j : 'GENERAL';
-  const fromJob = await jobName(b.from_so_id), toJob = await jobName(b.to_so_id);
+  const fromJob = await jobNameOf(cid, b.from_so_id), toJob = await jobNameOf(cid, b.to_so_id);
   if (!fromJob || !toJob) throw BadRequest('Job not found');
+  const needsApproval = (await settingFlag(cid, 'JOB_TRANSFER_APPROVAL', false)) && !canApproveTransfer(req);
+  const priority = z.enum(['NORMAL', 'URGENT', 'EMERGENCY']).default('NORMAL').parse(req.body?.priority ?? undefined);
   const out = await transaction(async (tx) => {
     const no = await nextDocNumber(tx, cid, 'JOB_TRANSFER');
     const t = await txExecute(tx,
-      `INSERT INTO trx_job_transfer (company_id, transfer_no, transfer_date, material_type, from_so_id, to_so_id, to_style_id, reason, created_by) VALUES (?,?,?,?,?,?,?,?,?)`,
-      [cid, no, b.transfer_date, b.material_type, b.from_so_id || null, b.to_so_id || null, b.to_style_id ?? null, b.reason, req.user!.id]);
+      `INSERT INTO trx_job_transfer (company_id, transfer_no, transfer_date, material_type, from_so_id, to_so_id, to_style_id, reason, created_by, status, priority, lines_json)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [cid, no, b.transfer_date, b.material_type, b.from_so_id || null, b.to_so_id || null, b.to_style_id ?? null, b.reason, req.user!.id,
+       needsApproval ? 'PENDING_APPROVAL' : 'POSTED', priority, JSON.stringify(b.lines)]);
     const tid = Number(t.insertId);
-    let total = 0;
-    if (b.material_type === 'YARN') {
-      const lots = await yarnJobLots(cid, { grn_line_ids: b.lines.map((l) => l.ref_id) });
-      for (const l of b.lines) {
-        const h = lots.find((x) => x.grn_line_id === l.ref_id && key(x.holder_so_id) === b.from_so_id);
-        if (!h) throw BadRequest(`Yarn lot ${l.ref_id} is not held by ${fromJob}`);
-        if (l.qty > h.available_kg + 1e-6) throw BadRequest(`Lot ${h.lot_no}: only ${h.available_kg} KG held by ${fromJob}`);
-        await txExecute(tx, 'INSERT INTO trx_job_transfer_line (transfer_id, grn_line_id, item_label, lot_no, qty) VALUES (?,?,?,?,?)',
-          [tid, l.ref_id, `${h.yarn_name}${h.count_str ? ` ${h.count_str}` : ''} · ${h.grn_no}`, h.lot_no, r4(l.qty)]);
-        await transferLedger(tx, req, { warehouseId: h.warehouse_id ? Number(h.warehouse_id) : null, material: 'YARN', itemId: Number(h.yarn_id) || null, qty: r4(l.qty), uomId: UOM_KG, tid, from: b.from_so_id, to: b.to_so_id });
-        total += l.qty;
-      }
-    } else if (b.material_type === 'FABRIC') {
-      for (const l of b.lines) {
-        const fr = await txQueryOne<any>(tx, 'SELECT * FROM trx_fabric_roll WHERE id = ? AND company_id = ? FOR UPDATE', [l.ref_id, cid]);
-        if (!fr) throw BadRequest('Roll not found');
-        if (key(fr.so_id) !== b.from_so_id) throw BadRequest(`Roll ${fr.roll_no} is not in ${fromJob}`);
-        const bal = n(fr.weight_kg) - n(fr.issued_kg);
-        if (l.qty > bal + 1e-6) throw BadRequest(`Roll ${fr.roll_no} has only ${bal.toFixed(3)} KG`);
-        let newRoll: number | null = null;
-        if (l.qty >= bal - 0.0005 && n(fr.issued_kg) <= 0.0005) {
-          // whole roll: it simply changes job
-          await txExecute(tx, 'UPDATE trx_fabric_roll SET so_id = ? WHERE id = ?', [b.to_so_id || null, fr.id]);
-          await fabricHistory(tx, req, { roll_id: fr.id, roll_no: fr.roll_no, ref_id: tid, ref_no: no, qty: l.qty, so_id: b.to_so_id || null, related: null, remarks: `${fromJob} → ${toJob}: ${b.reason}` });
-        } else {
-          // part of a roll: split — the moved KG becomes a child roll of the new job (same GRN, traceable)
-          await txExecute(tx, 'UPDATE trx_fabric_roll SET issued_kg = COALESCE(issued_kg, 0) + ? WHERE id = ?', [l.qty, fr.id]);
-          await refreshFabricRollStatus(tx, fr.id);
-          const ins = await txExecute(tx,
-            `INSERT INTO trx_fabric_roll (company_id, grn_id, grn_line_id, fabric_id, roll_no, lot_no, meters, weight_kg, gsm, dia, shade, warehouse_id, location_bin,
-               qc_status, stock_status, remarks, process_state, color_name, source_fpo_id, so_id, parent_roll_id)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'ACCEPTED','AVAILABLE',?,?,?,?,?,?)`,
-            [cid, fr.grn_id, fr.grn_line_id, fr.fabric_id, `${fr.roll_no}-T${tid}`, fr.lot_no, n(fr.weight_kg) > 0 ? Math.round(n(fr.meters) * l.qty / n(fr.weight_kg) * 100) / 100 : null,
-             r4(l.qty), fr.gsm, fr.dia, fr.shade, fr.warehouse_id, fr.location_bin, `Transferred ${fromJob} → ${toJob} (${no})`, fr.process_state, fr.color_name, fr.source_fpo_id, b.to_so_id || null, fr.id]);
-          newRoll = Number(ins.insertId);
-          await fabricHistory(tx, req, { roll_id: fr.id, roll_no: fr.roll_no, ref_id: tid, ref_no: no, qty: l.qty, so_id: b.from_so_id || null, related: newRoll, remarks: `${l.qty} KG to ${toJob}: ${b.reason}` });
-          await fabricHistory(tx, req, { roll_id: newRoll, roll_no: `${fr.roll_no}-T${tid}`, ref_id: tid, ref_no: no, qty: l.qty, so_id: b.to_so_id || null, related: fr.id, remarks: `From ${fromJob} roll ${fr.roll_no}` });
-        }
-        await txExecute(tx, 'INSERT INTO trx_job_transfer_line (transfer_id, fabric_roll_id, new_roll_id, item_label, lot_no, qty) VALUES (?,?,?,?,?,?)',
-          [tid, fr.id, newRoll, `Roll ${fr.roll_no}`, fr.lot_no, r4(l.qty)]);
-        await transferLedger(tx, req, { warehouseId: fr.warehouse_id ? Number(fr.warehouse_id) : null, material: 'FABRIC', itemId: Number(fr.fabric_id) || null, qty: r4(l.qty), uomId: UOM_KG, tid, from: b.from_so_id, to: b.to_so_id });
-        total += l.qty;
-      }
-    } else {
-      for (const l of b.lines) {
-        const ts = await txQueryOne<any>(tx, 'SELECT ts.*, t.trim_name FROM trx_trim_stock ts JOIN mst_trim t ON t.id = ts.trim_id WHERE ts.id = ? AND ts.company_id = ? FOR UPDATE', [l.ref_id, cid]);
-        if (!ts) throw BadRequest('Trim stock not found');
-        if (Number(ts.so_key) !== b.from_so_id) throw BadRequest(`${ts.trim_name} lot ${ts.internal_lot_no} is not in ${fromJob}`);
-        const bal = n(ts.stock_qty) - n(ts.allocated_qty);
-        if (l.qty > bal + 1e-6) throw BadRequest(`${ts.trim_name} lot ${ts.internal_lot_no}: only ${bal} free`);
-        await txExecute(tx, 'UPDATE trx_trim_stock SET stock_qty = stock_qty - ? WHERE id = ?', [l.qty, ts.id]);
-        await txExecute(tx,
-          `INSERT INTO trx_trim_stock (company_id, warehouse_id, trim_id, color_name, trim_size, internal_lot_no, bin_location, stock_qty, uom_id, so_id, style_id, so_key)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE stock_qty = stock_qty + VALUES(stock_qty)`,
-          [cid, ts.warehouse_id, ts.trim_id, ts.color_name, ts.trim_size, ts.internal_lot_no, ts.bin_location, l.qty, ts.uom_id, b.to_so_id || null, b.to_style_id ?? null, b.to_so_id]);
-        const to = await txQueryOne<any>(tx, 'SELECT id FROM trx_trim_stock WHERE company_id = ? AND warehouse_id = ? AND trim_id = ? AND internal_lot_no = ? AND so_key = ?',
-          [cid, ts.warehouse_id, ts.trim_id, ts.internal_lot_no, b.to_so_id]);
-        await txExecute(tx, 'INSERT INTO trx_job_transfer_line (transfer_id, trim_stock_id, to_trim_stock_id, item_label, lot_no, qty, uom_id) VALUES (?,?,?,?,?,?,?)',
-          [tid, ts.id, to?.id ?? null, ts.trim_name, ts.internal_lot_no, r4(l.qty), ts.uom_id]);
-        await transferLedger(tx, req, { warehouseId: Number(ts.warehouse_id), material: 'TRIM', itemId: Number(ts.trim_id), qty: r4(l.qty), uomId: Number(ts.uom_id), tid, from: b.from_so_id, to: b.to_so_id });
-        total += l.qty;
-      }
+    if (needsApproval) {
+      // check the stock now (dry run inside a savepoint), so a request that cannot post is refused up front
+      await txQuery(tx, 'SAVEPOINT jt_check');
+      await postTransferLines(tx, req, tid, no, b, fromJob, toJob);
+      await txQuery(tx, 'ROLLBACK TO SAVEPOINT jt_check');
+      await txExecute(tx, 'UPDATE trx_job_transfer SET total_qty = ? WHERE id = ?', [r4(b.lines.reduce((a, l) => a + l.qty, 0)), tid]);
+      await approvalHistory(tx, req, { doc_type: 'JOB_TRANSFER', doc_id: tid, action: 'SUBMIT', to: 'PENDING_APPROVAL', remarks: b.reason });
+      return { id: tid, transfer_no: no, total_qty: r4(b.lines.reduce((a, l) => a + l.qty, 0)), from: fromJob, to: toJob, status: 'PENDING_APPROVAL' };
     }
-    await txExecute(tx, 'UPDATE trx_job_transfer SET total_qty = ? WHERE id = ?', [r4(total), tid]);
-    return { id: tid, transfer_no: no, total_qty: r4(total), from: fromJob, to: toJob };
+    const total = await postTransferLines(tx, req, tid, no, b, fromJob, toJob);
+    await txExecute(tx, 'UPDATE trx_job_transfer SET approved_by = ?, approved_at = NOW(), posted_at = NOW() WHERE id = ?', [req.user!.id, tid]);
+    await approvalHistory(tx, req, { doc_type: 'JOB_TRANSFER', doc_id: tid, action: 'POST', to: 'POSTED', remarks: b.reason });
+    return { id: tid, transfer_no: no, total_qty: total, from: fromJob, to: toJob, status: 'POSTED' };
   });
   await audit(req, 'trx_job_transfer', out.id, 'INSERT', undefined, out);
-  res.status(201).json({ data: out, message: `${out.transfer_no}: ${out.total_qty} moved ${out.from} → ${out.to}` });
+  res.status(201).json({ data: out, message: out.status === 'POSTED' ? `${out.transfer_no}: ${out.total_qty} moved ${out.from} → ${out.to}` : `${out.transfer_no} sent for approval (${out.from} → ${out.to})` });
+}));
+
+/** POST /job-transfers/:id/approve | reject | send-back | cancel — the approval workflow. */
+jobStockRouter.post('/job-transfers/:id/:action', requireAny('INVENTORY.ADJUST', 'INVENTORY.CREATE', 'PRODUCTION.CREATE', 'JOB_TRANSFER.APPROVE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = z.coerce.number().int().positive().parse(req.params.id);
+  const action = z.enum(['approve', 'reject', 'send-back', 'cancel']).parse(req.params.action);
+  const remarks = z.string().trim().max(255).optional().parse(req.body?.remarks);
+  if (action !== 'cancel' && !canApproveTransfer(req)) throw Forbidden('Only the approver (Production Manager) can approve / reject job transfers');
+  const out = await transaction(async (tx) => {
+    const t = await txQueryOne<any>(tx, 'SELECT * FROM trx_job_transfer WHERE id = ? AND company_id = ? FOR UPDATE', [id, cid]);
+    if (!t) throw NotFound('Transfer not found');
+    if (!['PENDING_APPROVAL', 'SEND_BACK'].includes(t.status)) throw BadRequest(`${t.transfer_no} is ${String(t.status).toLowerCase().replace('_', ' ')}`);
+    if (action === 'cancel' && Number(t.created_by) !== req.user!.id && !canApproveTransfer(req)) throw Forbidden('Only the requester can cancel the request');
+    if ((action === 'reject' || action === 'send-back') && (!remarks || remarks.length < 3)) throw BadRequest('Give the reason');
+    if (action === 'approve') {
+      if (t.status !== 'PENDING_APPROVAL') throw BadRequest(`${t.transfer_no} was sent back to the requester`);
+      const b: TransferBody = { material_type: t.material_type, transfer_date: String(t.transfer_date).slice(0, 10), from_so_id: Number(t.from_so_id) || 0, to_so_id: Number(t.to_so_id) || 0,
+        to_style_id: t.to_style_id ? Number(t.to_style_id) : null, reason: t.reason, lines: typeof t.lines_json === 'string' ? JSON.parse(t.lines_json) : t.lines_json };
+      const total = await postTransferLines(tx, req, id, t.transfer_no, b, await jobNameOf(cid, b.from_so_id), await jobNameOf(cid, b.to_so_id));
+      await txExecute(tx, `UPDATE trx_job_transfer SET status = 'POSTED', approved_by = ?, approved_at = NOW(), posted_at = NOW(), decision_remarks = ? WHERE id = ?`, [req.user!.id, remarks ?? null, id]);
+      await approvalHistory(tx, req, { doc_type: 'JOB_TRANSFER', doc_id: id, action: 'APPROVE', from: t.status, to: 'POSTED', remarks });
+      return { transfer_no: t.transfer_no, status: 'POSTED', total };
+    }
+    const to = action === 'reject' ? 'REJECTED' : action === 'send-back' ? 'SEND_BACK' : 'CANCELLED';
+    await txExecute(tx, 'UPDATE trx_job_transfer SET status = ?, decision_remarks = ? WHERE id = ?', [to, remarks ?? null, id]);
+    await approvalHistory(tx, req, { doc_type: 'JOB_TRANSFER', doc_id: id, action: action.toUpperCase().replace('-', '_'), from: t.status, to, remarks });
+    return { transfer_no: t.transfer_no, status: to };
+  });
+  await audit(req, 'trx_job_transfer', id, 'UPDATE', undefined, out);
+  res.json({ data: out, message: `${out.transfer_no} ${out.status.toLowerCase().replace('_', ' ')}` });
 }));
 
 jobStockRouter.get('/job-transfers', requireAny('INVENTORY.VIEW', 'PRODUCTION.VIEW'), ah(async (req, res) => {

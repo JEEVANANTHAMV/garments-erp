@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { GateEntryPicker } from '../../../components/ProcessPickers';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Plus, CheckCircle2, Printer, Trash2, Split, Save, Send, Pencil, XCircle, ClipboardCheck } from 'lucide-react';
@@ -86,7 +87,7 @@ function InwardEditor({ editId, fpoId: fpoParam, onBack, onDone, onPickDc }: { e
   const open = useQuery({ queryKey: ['fabric-process', 'outward', 'open'], queryFn: async () => (await http.get<{ data: any[] }>('/fabric-process/outward?open=1')).data ?? [] });
   const dc = useQuery({ queryKey: ['fabric-process', 'outward', fpoId], queryFn: async () => (await http.get<{ data: any }>(`/fabric-process/outward/${fpoId}`)).data, enabled: !!fpoId });
   const d = dc.data;
-  const [head, setHead] = useState({ inward_date: today(), challan_no: '', vehicle_no: '', received_by: '', warehouse_id: '', reject_warehouse_id: '', remarks: '' });
+  const [head, setHead] = useState({ inward_date: today(), challan_no: '', vehicle_no: '', received_by: '', warehouse_id: '', reject_warehouse_id: '', remarks: '', gate_inward_id: '' });
   const [lines, setLines] = useState<Line[]>([]);
   const [tab, setTab] = useState('entry');
   const [busy, setBusy] = useState(false);
@@ -102,7 +103,7 @@ function InwardEditor({ editId, fpoId: fpoParam, onBack, onDone, onPickDc }: { e
     if (!x?.draft) return;
     const dr = x.draft;
     setHead({ inward_date: String(dr.inward_date ?? '').slice(0, 10), challan_no: dr.challan_no ?? '', vehicle_no: dr.vehicle_no ?? '', received_by: dr.received_by ?? '',
-      warehouse_id: String(dr.warehouse_id ?? ''), reject_warehouse_id: dr.reject_warehouse_id ? String(dr.reject_warehouse_id) : '', remarks: dr.remarks ?? '' });
+      warehouse_id: String(dr.warehouse_id ?? ''), reject_warehouse_id: dr.reject_warehouse_id ? String(dr.reject_warehouse_id) : '', remarks: dr.remarks ?? '', gate_inward_id: dr.gate_inward_id ? String(dr.gate_inward_id) : '' });
   }, [existing.data]);
   useEffect(() => {
     if (!d) return;
@@ -155,7 +156,7 @@ function InwardEditor({ editId, fpoId: fpoParam, onBack, onDone, onPickDc }: { e
     setBusy(true);
     try {
       const payload = {
-        action, fpo_id: d.id, ...head, warehouse_id: Number(head.warehouse_id), reject_warehouse_id: head.reject_warehouse_id ? Number(head.reject_warehouse_id) : null,
+        action, fpo_id: d.id, ...head, gate_inward_id: head.gate_inward_id ? Number(head.gate_inward_id) : null, warehouse_id: Number(head.warehouse_id), reject_warehouse_id: head.reject_warehouse_id ? Number(head.reject_warehouse_id) : null,
         lines: used.map((l) => ({ roll_in_id: l.roll_in_id, output_roll_no: l.output_roll_no || null, good_kg: n(l.good_kg), reject_kg: n(l.reject_kg), loss_kg: n(l.loss_kg), meters: n(l.meters),
           gsm: l.gsm || null, dia: l.dia || null, color_name: l.color_name || null, shade_no: l.shade_no || null, reject_reason: l.reject_reason || null })),
       };
@@ -178,6 +179,9 @@ function InwardEditor({ editId, fpoId: fpoParam, onBack, onDone, onPickDc }: { e
         <Input label="Process unit (Supplier / Vendor)" value={d?.vendor_name ?? ''} disabled />
         <Input label="Process unit challan no" value={head.challan_no} onChange={(e) => setHead({ ...head, challan_no: e.target.value })} />
         <Input label="Vehicle no" value={head.vehicle_no} onChange={(e) => setHead({ ...head, vehicle_no: e.target.value })} />
+        <div className="col-span-2"><GateEntryPicker partyId={d?.vendor_id} value={head.gate_inward_id} idPrefix="pin"
+          onChange={(v) => setHead((x) => ({ ...x, gate_inward_id: v }))}
+          onPick={(g) => setHead((x) => ({ ...x, gate_inward_id: String(g.id), vehicle_no: x.vehicle_no || g.vehicle_no || '', challan_no: x.challan_no || g.supplier_dc_no || '' }))} /></div>
         <Input label="Received by *" value={head.received_by} onChange={(e) => setHead({ ...head, received_by: e.target.value })} />
         <Select label="Processed fabric store *" value={head.warehouse_id} onChange={(e) => setHead({ ...head, warehouse_id: e.target.value })} options={toOptions(warehouses.data)} />
         <Select label="Reject store" value={head.reject_warehouse_id} onChange={(e) => setHead({ ...head, reject_warehouse_id: e.target.value })} options={toOptions(warehouses.data)} />

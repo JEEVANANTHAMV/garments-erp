@@ -57,7 +57,7 @@ function BillEditor({ onBack, onDone }: { onBack: () => void; onDone: (id: numbe
   const toast = useToast();
   const qc = useQueryClient();
   const suppliers = useLookup('suppliers');
-  const [head, setHead] = useState({ vendor_id: '', bill_date: today(), party_bill_no: '', from_date: '', to_date: '', discount_amount: 0, other_charges: 0, gst_pct: 5, remarks: '' });
+  const [head, setHead] = useState({ vendor_id: '', bill_date: today(), party_bill_no: '', from_date: '', to_date: '', discount_amount: 0, other_charges: 0, gst_pct: 5, remarks: '', rate_change_reason: '' });
   const [loaded, setLoaded] = useState<any>(null);
   const [pick, setPick] = useState<Record<string, { on: boolean; rate: number }>>({});
   const [busy, setBusy] = useState(false);
@@ -70,7 +70,7 @@ function BillEditor({ onBack, onDone }: { onBack: () => void; onDone: (id: numbe
       const r = (await http.get<{ data: any }>(`/fabric-process/bill-sources?${p}`)).data;
       setLoaded(r);
       const init: Record<string, { on: boolean; rate: number }> = {};
-      r.grns.forEach((g: any) => { init[`GRN:${g.ref_id}`] = { on: true, rate: n(g.last_rate) }; });
+      r.grns.forEach((g: any) => { init[`GRN:${g.ref_id}`] = { on: true, rate: n(g.quotation_rate ?? g.last_rate) }; });
       r.reprocess.forEach((x: any) => { init[`${x.line_type}:${x.ref_id}`] = { on: true, rate: n(x.rate) }; });
       setPick(init);
     } catch (e) { toast(errText(e), 'error'); }
@@ -84,10 +84,12 @@ function BillEditor({ onBack, onDone }: { onBack: () => void; onDone: (id: numbe
   const recovery = -on.filter((l: any) => l.line_type === 'RECOVERY').reduce((a: number, l: any) => a + l.amount, 0);
   const taxable = gross - recovery - n(head.discount_amount) + n(head.other_charges);
   const gst = taxable * n(head.gst_pct) / 100;
+  const rateChanged = on.filter((l: any) => l.line_type === 'GRN' && l.quotation_rate != null && Math.abs(n(l.quotation_rate) - n(pick[l.key]?.rate)) > 0.005);
   const save = async () => {
     if (!on.length) { toast('Tick the GRNs / reprocess to bill', 'warning'); return; }
     const noRate = on.find((l: any) => l.line_type === 'GRN' && !(n(pick[l.key]?.rate) > 0));
     if (noRate) { toast(`${noRate.doc_no}: enter the rate per KG`, 'warning'); return; }
+    if (rateChanged.length && head.rate_change_reason.trim().length < 3) { toast(`Rate differs from the approved quotation on ${rateChanged.map((l: any) => l.doc_no).join(', ')} — give the reason`, 'warning'); return; }
     setBusy(true);
     try {
       const r = await http.post<{ data: any; message: string }>('/fabric-process/bills', {
@@ -121,7 +123,8 @@ function BillEditor({ onBack, onDone }: { onBack: () => void; onDone: (id: numbe
                     <td className="px-2 py-1 font-mono">{l.doc_no}</td><td className="px-2 py-1">{fmtDate(l.doc_date)}</td><td className="px-2 py-1">{l.io_no || '—'}</td><td className="px-2 py-1">{l.process_name || l.sub_process}</td>
                     <td className="px-2 py-1 text-right">{kg(l.qty_kg)}</td>
                     <td className="px-2 py-1 text-right">{l.line_type === 'GRN'
-                      ? <input type="number" step="0.01" className="input w-24 py-0.5 text-right text-xs" value={pick[l.key]?.rate ?? 0} onChange={(e) => setPick((p) => ({ ...p, [l.key]: { ...p[l.key], rate: Number(e.target.value) } }))} />
+                      ? <><input type="number" step="0.01" className={`input w-24 py-0.5 text-right text-xs ${l.quotation_rate != null && Math.abs(n(l.quotation_rate) - n(pick[l.key]?.rate)) > 0.005 ? 'border-amber-500 bg-amber-50' : ''}`} value={pick[l.key]?.rate ?? 0} onChange={(e) => setPick((p) => ({ ...p, [l.key]: { ...p[l.key], rate: Number(e.target.value) } }))} />
+                        {l.quotation_rate != null && <span className="block text-[10px] text-slate-400">quote {money(l.quotation_rate)}</span>}</>
                       : money(l.rate)}</td>
                     <td className={`px-2 py-1 text-right font-semibold ${l.amount < 0 ? 'text-red-700' : ''}`}>{money(l.amount)}</td>
                   </tr>
@@ -141,6 +144,7 @@ function BillEditor({ onBack, onDone }: { onBack: () => void; onDone: (id: numbe
             <Input label="Add: other charges (₹)" type="number" value={head.other_charges} onChange={(e) => setHead({ ...head, other_charges: Number(e.target.value) })} />
             <Input label="GST %" type="number" value={head.gst_pct} onChange={(e) => setHead({ ...head, gst_pct: Number(e.target.value) })} />
             <Textarea label="Remarks" className="col-span-2 md:col-span-3" rows={1} value={head.remarks} onChange={(e) => setHead({ ...head, remarks: e.target.value })} />
+            {rateChanged.length > 0 && <Input label="Reason for rate change from quotation *" className="col-span-2 md:col-span-6" value={head.rate_change_reason} id="fpb-rate-reason" onChange={(e) => setHead({ ...head, rate_change_reason: e.target.value })} />}
             <div className="col-span-2 md:col-span-6 flex flex-wrap justify-end gap-6 text-sm">
               <span>Gross <b>{money(gross)}</b></span>{recovery > 0 && <span className="text-red-700">Recovery <b>− {money(recovery)}</b></span>}
               <span>Taxable <b>{money(taxable)}</b></span><span>GST <b>{money(gst)}</b></span><span className="text-lg">Net <b>{money(taxable + gst)}</b></span>

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { settingFlag } from '../../core/inwardControls.js';
 import { z } from 'zod';
 import { query, queryOne, transaction, txQuery, txQueryOne, txExecute, type Tx } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
@@ -474,6 +475,8 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
     const tcsAmount = summary.tcs;
     const grandTotal = summary.net;
 
+    // every inward is mapped to its security gate entry (client voice note 02-Oct-2026)
+    if (!body.gate_inward_id && await settingFlag(companyId, 'GATE_ENTRY_REQUIRED_FOR_INWARD', false)) throw BadRequest('Map the gate entry of this GRN (security gate entry is required for every inward)');
     const poIds = Array.isArray(body.po_ids)
       ? body.po_ids.map(Number).filter((n: number) => n > 0)
       : (body.po_id ? [Number(body.po_id)] : []);
@@ -1381,6 +1384,8 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
     const tcsAmount = summary.tcs;
     const grandTotal = summary.net;
 
+    // every inward is mapped to its security gate entry (client voice note 02-Oct-2026)
+    if (!body.gate_inward_id && await settingFlag(companyId, 'GATE_ENTRY_REQUIRED_FOR_INWARD', false)) throw BadRequest('Map the gate entry of this GRN (security gate entry is required for every inward)');
     const poIds = Array.isArray(body.po_ids)
       ? body.po_ids.map(Number).filter((n: number) => n > 0)
       : (body.po_id ? [Number(body.po_id)] : []);

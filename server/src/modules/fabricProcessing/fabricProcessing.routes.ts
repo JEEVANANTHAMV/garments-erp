@@ -9,6 +9,7 @@ import { requirePermission } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
+import { checkDcQuotation, useGateEntry } from '../../core/inwardControls.js';
 
 /**
  * Fabric Process engine (Garment_ERP_Fabric_Process_Developer_Document_v2).
@@ -141,6 +142,10 @@ const outwardSchema = z.object({
   target_gsm: s.nullableStr(40),
   expected_return_date: date.nullish(),
   remarks: s.text(),
+  /** Approved process quotation of the process unit (job-work rate). */
+  quotation_id: s.id(),
+  quotation_line_id: s.id(),
+  rate_per_kg: z.coerce.number().min(0).nullish(),
   rolls: z.array(z.object({
     fabric_roll_id: s.idReq(),
     so_id: s.id(),
@@ -216,17 +221,20 @@ async function writeOutwardRolls(tx: Tx, req: Request, fpoId: number, fpo: any, 
 async function insertOutwardHeader(tx: Tx, req: Request, b: OutwardBody, extra: { status: string; is_reprocess?: boolean; reprocess_id?: number | null }) {
   const cid = req.user!.companyId;
   const pt = await processType(cid, b.sub_process, tx);
+  // the approved quotation of the process unit — required when the DC is confirmed (not for reprocess DCs)
+  const quote = await checkDcQuotation(cid, { vendor_id: Number(b.vendor_id), quotation_id: b.quotation_id, quotation_line_id: b.quotation_line_id, rate: b.rate_per_kg ?? null,
+    label: `${pt.name} DC`, required: extra.status === 'DISPATCHED' && !extra.is_reprocess ? undefined : false });
   const fpoNo = await nextDocNumber(tx, cid, 'FPO');
   const r = await txExecute(tx,
     `INSERT INTO trx_fabric_process_order
        (company_id, fpo_no, fpo_date, io_no, sub_process, vendor_id, from_warehouse_id, to_location, vehicle_no, challan_no,
         shade_code, color_name, target_dia, target_gsm, expected_return_date, status, remarks, created_by,
-        is_reprocess, reprocess_id, confirmed_by, confirmed_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        is_reprocess, reprocess_id, confirmed_by, confirmed_at, quotation_id, quotation_line_id, rate_per_kg)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [cid, fpoNo, b.fpo_date, 'STOCK', pt.code, b.vendor_id, b.from_warehouse_id ?? null, b.to_location ?? null, b.vehicle_no ?? null,
      b.challan_no ?? null, b.shade_code ?? null, b.color_name ?? null, b.target_dia ?? null, b.target_gsm ?? null,
      b.expected_return_date ?? null, extra.status, b.remarks ?? null, req.user!.id, extra.is_reprocess ? 1 : 0, extra.reprocess_id ?? null,
-     extra.status === 'DISPATCHED' ? req.user!.id : null, extra.status === 'DISPATCHED' ? new Date() : null]);
+     extra.status === 'DISPATCHED' ? req.user!.id : null, extra.status === 'DISPATCHED' ? new Date() : null, quote.quotation_id, quote.quotation_line_id, quote.rate]);
   return { id: Number(r.insertId), fpo_no: fpoNo, sub_process: pt.code, vendor_id: b.vendor_id, color_name: b.color_name ?? null, is_reprocess: !!extra.is_reprocess };
 }
 
@@ -329,9 +337,11 @@ fabricProcessingRouter.put('/fabric-process/outward/:id', requirePermission(FP.E
     const pt = await processType(cid, body.sub_process, tx);
     await txExecute(tx,
       `UPDATE trx_fabric_process_order SET fpo_date = ?, sub_process = ?, vendor_id = ?, from_warehouse_id = ?, to_location = ?, vehicle_no = ?,
-              challan_no = ?, shade_code = ?, color_name = ?, target_dia = ?, target_gsm = ?, expected_return_date = ?, remarks = ? WHERE id = ?`,
+              challan_no = ?, shade_code = ?, color_name = ?, target_dia = ?, target_gsm = ?, expected_return_date = ?, remarks = ?,
+              quotation_id = ?, quotation_line_id = ?, rate_per_kg = ? WHERE id = ?`,
       [body.fpo_date, pt.code, body.vendor_id, body.from_warehouse_id ?? null, body.to_location ?? null, body.vehicle_no ?? null, body.challan_no ?? null,
-       body.shade_code ?? null, body.color_name ?? null, body.target_dia ?? null, body.target_gsm ?? null, body.expected_return_date ?? null, body.remarks ?? null, id]);
+       body.shade_code ?? null, body.color_name ?? null, body.target_dia ?? null, body.target_gsm ?? null, body.expected_return_date ?? null, body.remarks ?? null,
+       body.quotation_id ?? null, body.quotation_line_id ?? null, body.rate_per_kg ?? null, id]);
     await txExecute(tx, 'DELETE FROM trx_fabric_process_roll_in WHERE fpo_id = ?', [id]);
     const kg = await writeOutwardRolls(tx, req, id, { ...o, sub_process: pt.code, vendor_id: body.vendor_id, color_name: body.color_name }, body.rolls, false);
     return { id, fpo_no: o.fpo_no, outward_kg: kg };
@@ -353,6 +363,10 @@ fabricProcessingRouter.post('/fabric-process/outward/:id/confirm', requirePermis
     await txExecute(tx, 'DELETE FROM trx_fabric_process_roll_in WHERE fpo_id = ?', [id]);
     const kg = await writeOutwardRolls(tx, req, id, o,
       rolls.map((r) => ({ fabric_roll_id: Number(r.fabric_roll_id), so_id: r.so_id ? Number(r.so_id) : null, weight_kg: n(r.weight_kg), meters: n(r.meters), color_name: r.color_name })), true);
+    if (!o.is_reprocess) {
+      const quote = await checkDcQuotation(cid, { vendor_id: Number(o.vendor_id), quotation_id: o.quotation_id, quotation_line_id: o.quotation_line_id, rate: o.rate_per_kg, label: `${o.fpo_no}` });
+      await txExecute(tx, 'UPDATE trx_fabric_process_order SET rate_per_kg = ? WHERE id = ?', [quote.rate, id]);
+    }
     await txExecute(tx, `UPDATE trx_fabric_process_order SET status = 'DISPATCHED', confirmed_by = ?, confirmed_at = NOW() WHERE id = ?`, [req.user!.id, id]);
     return { id, fpo_no: o.fpo_no, outward_kg: kg };
   });
@@ -410,6 +424,7 @@ const inwardSchema = z.object({
   received_by: s.strReq(80),
   warehouse_id: s.idReq(),
   reject_warehouse_id: s.id(),
+  gate_inward_id: s.id(),
   remarks: s.text(),
   lines: z.array(z.object({
     roll_in_id: s.idReq(),
@@ -536,6 +551,7 @@ async function postInward(tx: Tx, req: Request, body: InwardBody, existing?: { i
   const totR = r3(body.lines.reduce((s, l) => s + l.reject_kg, 0));
   const totL = r3(body.lines.reduce((s, l) => s + l.loss_kg, 0));
   const rejectWh = body.reject_warehouse_id ?? body.warehouse_id;
+  const gate = await useGateEntry(tx, cid, { gate_inward_id: body.gate_inward_id, party_id: o.vendor_id, label: `GRN on ${o.fpo_no}` });
   // Stock GRN the rolls hang off (fabric roll stock / cutting read trx_fabric_roll via trx_grn)
   const g = await txExecute(tx,
     `INSERT INTO trx_grn (company_id, grn_no, internal_ir_no, grn_date, supplier_id, warehouse_id, supplier_dc_no, vehicle_no, qc_status, remarks, created_by)
@@ -560,6 +576,7 @@ async function postInward(tx: Tx, req: Request, body: InwardBody, existing?: { i
        body.warehouse_id, rejectWh, grnId, r3(totG + totR + totL), totG, totR, totL, o.is_reprocess ? 1 : 0, body.remarks ?? null, uid, uid]);
     inwardId = Number(ins.insertId);
   }
+  if (gate) await txExecute(tx, 'UPDATE trx_fabric_process_inward SET gate_inward_id = ? WHERE id = ?', [gate.id, inwardId]);
 
   // one GRN line per job + fabric (stock grouping), created on demand
   const grnLines = new Map<string, number>();
@@ -1165,7 +1182,8 @@ fabricProcessingRouter.get('/fabric-process/bill-sources', requirePermission(FP.
     `SELECT i.id AS ref_id, 'GRN' AS line_type, i.inward_no AS doc_no, i.inward_date AS doc_date, i.sub_process, pt.name AS process_name, i.good_kg AS qty_kg,
             (SELECT GROUP_CONCAT(DISTINCT ri.io_no SEPARATOR ', ') FROM trx_fabric_process_roll_out ro JOIN trx_fabric_process_roll_in ri ON ri.id = ro.roll_in_id WHERE ro.inward_id = i.id) AS io_no,
             (SELECT bl.rate FROM trx_fabric_process_bill_line bl JOIN trx_fabric_process_bill b ON b.id = bl.bill_id
-              WHERE b.vendor_id = i.vendor_id AND bl.sub_process = i.sub_process AND bl.line_type = 'GRN' AND b.status = 'POSTED' ORDER BY bl.id DESC LIMIT 1) AS last_rate
+              WHERE b.vendor_id = i.vendor_id AND bl.sub_process = i.sub_process AND bl.line_type = 'GRN' AND b.status = 'POSTED' ORDER BY bl.id DESC LIMIT 1) AS last_rate,
+            (SELECT o2.rate_per_kg FROM trx_fabric_process_order o2 WHERE o2.id = i.fpo_id) AS quotation_rate
        FROM trx_fabric_process_inward i
        LEFT JOIN mst_fabric_process_type pt ON pt.company_id = i.company_id AND pt.code = i.sub_process
       WHERE i.company_id = ? AND i.vendor_id = ? AND i.bill_id IS NULL AND i.is_reprocess = 0 AND i.status = 'POSTED'${dp('i.inward_date')}
@@ -1199,6 +1217,7 @@ const billSchema = z.object({
   other_charges: z.coerce.number().default(0),
   gst_pct: z.coerce.number().min(0).max(28).default(0),
   remarks: s.text(),
+  rate_change_reason: s.nullableStr(255),
   lines: z.array(z.object({ line_type: z.enum(['GRN', 'REPROCESS', 'RECOVERY']), ref_id: s.idReq(), rate: z.coerce.number().min(0).default(0) })).min(1, 'Add at least one GRN / reprocess'),
 });
 
@@ -1236,6 +1255,11 @@ fabricProcessingRouter.post('/fabric-process/bills', requirePermission(FP.BILL),
         if (i.status !== 'POSTED') throw BadRequest(`${i.inward_no} is not posted yet`);
         if (i.is_reprocess) throw BadRequest(`${i.inward_no} is a reprocess GRN — its charge comes from the reprocess billing`);
         if (!(l.rate > 0)) throw BadRequest(`${i.inward_no}: enter the rate per KG`);
+        // the approved quotation rate of the DC is the job-work rate; a different rate needs a reason
+        const qr = await txQueryOne<any>(tx, 'SELECT rate_per_kg FROM trx_fabric_process_order WHERE id = ?', [i.fpo_id]);
+        if (qr?.rate_per_kg != null && Math.abs(n(qr.rate_per_kg) - l.rate) > 0.005 && !(body.rate_change_reason && body.rate_change_reason.length >= 3)) {
+          throw BadRequest(`${i.inward_no}: the rate ₹${l.rate} differs from the approved quotation rate ₹${n(qr.rate_per_kg)} — give the reason for the change`);
+        }
         const amt = r2(n(i.good_kg) * l.rate);
         const jobs = await txQueryOne<any>(tx, 'SELECT GROUP_CONCAT(DISTINCT ri.io_no SEPARATOR \', \') j FROM trx_fabric_process_roll_out ro JOIN trx_fabric_process_roll_in ri ON ri.id = ro.roll_in_id WHERE ro.inward_id = ?', [i.id]);
         await txExecute(tx, 'INSERT INTO trx_fabric_process_bill_line (bill_id, line_type, ref_id, doc_no, doc_date, io_no, sub_process, qty_kg, rate, amount) VALUES (?,?,?,?,?,?,?,?,?,?)',

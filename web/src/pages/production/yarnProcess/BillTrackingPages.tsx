@@ -52,7 +52,7 @@ function BillEditor({ onBack, onDone }: { onBack: () => void; onDone: (id: numbe
   const qc = useQueryClient();
   const suppliers = useLookup('suppliers');
   const types = useYarnTypes();
-  const [h, setH] = useState({ vendor_id: '', bill_date: today(), party_bill_no: '', from_date: '', to_date: '', process_code: '', io_no: '', billing_type: '', gst_pct: '5', discount_amount: '', other_charges: '', remarks: '' });
+  const [h, setH] = useState({ vendor_id: '', bill_date: today(), party_bill_no: '', from_date: '', to_date: '', process_code: '', io_no: '', billing_type: '', gst_pct: '5', discount_amount: '', other_charges: '', remarks: '', rate_change_reason: '' });
   const [src, setSrc] = useState<any>(null);
   const [sel, setSel] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
@@ -60,19 +60,21 @@ function BillEditor({ onBack, onDone }: { onBack: () => void; onDone: (id: numbe
     if (!h.vendor_id) { toast('Choose the contractor', 'warning'); return; }
     const p = new URLSearchParams({ vendor_id: h.vendor_id }); (['from_date', 'to_date'] as const).forEach((k) => h[k] && p.set(k === 'from_date' ? 'from' : 'to', h[k]));
     if (h.process_code) p.set('process_code', h.process_code); if (h.io_no) p.set('io_no', h.io_no); if (h.billing_type) p.set('billing_type', h.billing_type);
-    try { const r = (await http.get<{ data: any }>(`/yarn-process/bill-sources?${p}`)).data; setSrc(r); setSel(Object.fromEntries([...r.grns.map((g: any) => [`GRN-${g.ref_id}`, n(g.last_rate)]), ...r.reprocess.map((x: any) => [`${x.line_type}-${x.ref_id}`, n(x.rate)])])); } catch (e) { toast(errText(e), 'error'); }
+    try { const r = (await http.get<{ data: any }>(`/yarn-process/bill-sources?${p}`)).data; setSrc(r); setSel(Object.fromEntries([...r.grns.map((g: any) => [`GRN-${g.ref_id}`, n(g.quotation_rate ?? g.last_rate)]), ...r.reprocess.map((x: any) => [`${x.line_type}-${x.ref_id}`, n(x.rate)])])); } catch (e) { toast(errText(e), 'error'); }
   };
   const rows = src ? [...src.grns.map((g: any) => ({ ...g, k: `GRN-${g.ref_id}` })), ...src.reprocess.map((x: any) => ({ ...x, k: `${x.line_type}-${x.ref_id}` }))] : [];
   const amt = (r: any) => (r.line_type === 'GRN' ? n(r.qty_kg) * n(sel[r.k]) : n(r.bill_amount) * (r.line_type === 'RECOVERY' ? -1 : 1));
   const picked = rows.filter((r) => sel[r.k] !== undefined);
   const gross = picked.filter((r) => r.line_type !== 'RECOVERY').reduce((a, r) => a + amt(r), 0), rec = -picked.filter((r) => r.line_type === 'RECOVERY').reduce((a, r) => a + amt(r), 0);
   const taxable = gross - rec - n(h.discount_amount) + n(h.other_charges), net = taxable * (1 + n(h.gst_pct) / 100);
+  const rateChanged = picked.filter((r) => r.line_type === 'GRN' && r.quotation_rate != null && Math.abs(n(r.quotation_rate) - n(sel[r.k])) > 0.005);
   const save = async () => {
     if (!picked.length) { toast('Pick the GRNs / reprocess to bill', 'warning'); return; }
+    if (rateChanged.length && h.rate_change_reason.trim().length < 3) { toast(`Rate differs from the approved quotation on ${rateChanged.map((r) => r.doc_no).join(', ')} — give the reason`, 'warning'); return; }
     setBusy(true);
     try {
       const r = await http.post<{ data: any; message: string }>('/yarn-process/bills', { vendor_id: Number(h.vendor_id), bill_date: h.bill_date, party_bill_no: h.party_bill_no || null, from_date: h.from_date || null, to_date: h.to_date || null,
-        gst_pct: n(h.gst_pct), discount_amount: n(h.discount_amount), other_charges: n(h.other_charges), remarks: h.remarks || null, lines: picked.map((r) => ({ line_type: r.line_type, ref_id: r.ref_id, rate: n(sel[r.k]) })) });
+        gst_pct: n(h.gst_pct), discount_amount: n(h.discount_amount), other_charges: n(h.other_charges), remarks: h.remarks || null, rate_change_reason: h.rate_change_reason || null, lines: picked.map((r) => ({ line_type: r.line_type, ref_id: r.ref_id, rate: n(sel[r.k]) })) });
       toast((r as any).message, 'success'); void qc.invalidateQueries({ queryKey: ['yarn-process'] }); onDone(r.data.id);
     } catch (e) { toast(errText(e), 'error'); } finally { setBusy(false); }
   };
@@ -100,10 +102,10 @@ function BillEditor({ onBack, onDone }: { onBack: () => void; onDone: (id: numbe
                   const on = sel[r.k] !== undefined;
                   return (
                     <tr key={r.k} className={`border-t border-slate-100 ${on ? 'bg-emerald-50' : ''}`}>
-                      <td className="px-2 py-1"><input type="checkbox" checked={on} onChange={() => setSel((s) => { const x = { ...s }; if (on) delete x[r.k]; else x[r.k] = n(r.last_rate ?? r.rate); return x; })} /></td>
+                      <td className="px-2 py-1"><input type="checkbox" checked={on} onChange={() => setSel((s) => { const x = { ...s }; if (on) delete x[r.k]; else x[r.k] = n(r.quotation_rate ?? r.last_rate ?? r.rate); return x; })} /></td>
                       <td className="px-2 py-1">{r.line_type}</td><td className="px-2 py-1 font-mono">{r.doc_no}</td><td className="px-2 py-1">{fmtDate(r.doc_date)}</td><td className="px-2 py-1">{r.process_name || r.process_code}</td>
                       <td className="px-2 py-1">{r.io_no || '—'}</td><td className="px-2 py-1 text-right">{kg(r.qty_kg)}</td><td className="px-2 py-1">{r.line_type === 'GRN' ? 'Process charge' : `${r.billing_type} · ${r.cost_treatment}`}</td>
-                      <td className="px-2 py-1 text-right">{r.line_type === 'GRN' && on ? <input type="number" step="0.01" className="input w-20 py-0.5 text-right text-xs" value={sel[r.k]} onChange={(e) => setSel((s) => ({ ...s, [r.k]: Number(e.target.value) }))} /> : fmtDecimal(n(r.rate ?? r.last_rate), 2)}</td>
+                      <td className="px-2 py-1 text-right">{r.line_type === 'GRN' && on ? <><input type="number" step="0.01" className={`input w-20 py-0.5 text-right text-xs ${r.quotation_rate != null && Math.abs(n(r.quotation_rate) - n(sel[r.k])) > 0.005 ? 'border-amber-500 bg-amber-50' : ''}`} value={sel[r.k]} onChange={(e) => setSel((s) => ({ ...s, [r.k]: Number(e.target.value) }))} />{r.quotation_rate != null && <span className="block text-[10px] text-slate-400">quote {fmtDecimal(n(r.quotation_rate), 2)}</span>}</> : fmtDecimal(n(r.rate ?? r.last_rate), 2)}</td>
                       <td className={`px-2 py-1 text-right ${amt(r) < 0 ? 'text-red-700' : ''}`}>₹{fmtDecimal(amt(r), 2)}</td>
                     </tr>
                   );
@@ -122,6 +124,7 @@ function BillEditor({ onBack, onDone }: { onBack: () => void; onDone: (id: numbe
             <Input label="Discount (₹)" type="number" value={h.discount_amount} onChange={(e) => setH({ ...h, discount_amount: e.target.value })} />
             <Input label="Other charges (₹)" type="number" value={h.other_charges} onChange={(e) => setH({ ...h, other_charges: e.target.value })} />
             <Input label="GST %" type="number" value={h.gst_pct} onChange={(e) => setH({ ...h, gst_pct: e.target.value })} />
+            {rateChanged.length > 0 && <Input label="Reason for rate change from quotation *" className="col-span-2" value={h.rate_change_reason} id="ypb-rate-reason" onChange={(e) => setH({ ...h, rate_change_reason: e.target.value })} />}
             <div className="text-xs"><div className="text-slate-500">Gross / recovery</div><div className="font-semibold">₹{fmtDecimal(gross, 2)} / <span className="text-red-700">₹{fmtDecimal(rec, 2)}</span></div></div>
             <div className="text-xs"><div className="text-slate-500">Taxable</div><div className="font-semibold">₹{fmtDecimal(taxable, 2)}</div></div>
             <div className="text-xs"><div className="text-slate-500">Net</div><div className="text-lg font-bold">₹{fmtDecimal(net, 2)}</div></div>

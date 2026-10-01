@@ -234,6 +234,10 @@ export function buildPermissions(): [string, string, string][] {
     ['YARN_PROCESS.BILL_CANCEL','Cancel yarn process contractor bills','PRODUCTION'],
     ['YARN_PROCESS.CANCEL','Cancel confirmed Yarn Process DCs','PRODUCTION'],
     ['YARN_PROCESS.MASTER','Manage yarn process types','PRODUCTION'],
+    // Knitting doc §16–§19: job-to-job transfer and yarn substitution need approval
+    ['JOB_TRANSFER.APPROVE','Approve job-to-job stock transfers','INVENTORY'],
+    ['YARN_SUBSTITUTION.CREATE','Raise yarn substitution requests','PRODUCTION'],
+    ['YARN_SUBSTITUTION.APPROVE','Approve yarn substitution / manage substitution rules','PRODUCTION'],
   ];
   out.push(...extras);
   return out;
@@ -258,7 +262,7 @@ export const ROLES: {
       'MATERIAL.*','PRODUCT.*','STYLE.*','BOM.*','FINYEAR.*','ENQUIRY.*','SAMPLE.*','COSTING.*',
       'QUOTATION.*','SALES_ORDER.*','MRP.*','PURCHASE.*','GRN.*','INVENTORY.*','ISSUE.*',
       'PRODUCTION.*','QC.*','PACKING.*','DISPATCH.*','EXPORT.*','FINANCE.*','REPORT.*',
-      'AUDIT.*','USER.*','ROLE.*','SETTINGS.*','FABRIC_PROCESS.*',
+      'AUDIT.*','USER.*','ROLE.*','SETTINGS.*','FABRIC_PROCESS.*','JOB_TRANSFER.*','YARN_SUBSTITUTION.*',
     ],
   },
   {
@@ -401,6 +405,12 @@ for (const r of ROLES) {
   if (r.permissions === '*') continue;
   const fp = r.permissions.filter((p) => p.startsWith('FABRIC_PROCESS.'));
   r.permissions.push(...fp.map((p) => p.replace('FABRIC_PROCESS.', 'YARN_PROCESS.')).filter((p) => !(r.permissions as string[]).includes(p)));
+}
+
+for (const r of ROLES) {
+  if (r.permissions === '*') continue;
+  if (['PRODUCTION_MANAGER', 'PROCESS_MANAGER'].includes(r.code)) r.permissions.push('JOB_TRANSFER.APPROVE', 'YARN_SUBSTITUTION.CREATE', 'YARN_SUBSTITUTION.APPROVE');
+  if (['STORE_KEEPER', 'PRODUCTION_USER', 'FABRIC_STORE'].includes(r.code)) r.permissions.push('YARN_SUBSTITUTION.CREATE');
 }
 
 /** Expand 'MODULE.*' wildcards against the real permission list. */

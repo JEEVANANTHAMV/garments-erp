@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import { GateEntryPicker } from '../../../components/ProcessPickers';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Plus, CheckCircle2, Printer, Trash2, Split, Save, Send, Pencil, XCircle, ClipboardCheck } from 'lucide-react';
@@ -89,7 +90,7 @@ function InwardEditor({ editId, ypoId: ypoParam, onBack, onDone, onPickDc }: { e
   const d = dc.data;
   const mode: string = d?.process_mode ?? 'CONE_TO_CONE';
   const many = mode === 'MANY_TO_ONE';
-  const [head, setHead] = useState({ inward_date: today(), challan_no: '', vehicle_no: '', received_by: '', warehouse_id: '', reject_warehouse_id: '', loss_override_reason: '', remarks: '' });
+  const [head, setHead] = useState({ inward_date: today(), challan_no: '', vehicle_no: '', received_by: '', warehouse_id: '', reject_warehouse_id: '', loss_override_reason: '', remarks: '', gate_inward_id: '' });
   const [outs, setOuts] = useState<Out[]>([]);
   const [busy, setBusy] = useState(false);
 
@@ -103,7 +104,7 @@ function InwardEditor({ editId, ypoId: ypoParam, onBack, onDone, onPickDc }: { e
     const dr = existing.data?.draft;
     if (editId && dr) {
       setHead({ inward_date: String(dr.inward_date ?? '').slice(0, 10), challan_no: dr.challan_no ?? '', vehicle_no: dr.vehicle_no ?? '', received_by: dr.received_by ?? '', warehouse_id: String(dr.warehouse_id ?? ''),
-        reject_warehouse_id: dr.reject_warehouse_id ? String(dr.reject_warehouse_id) : '', loss_override_reason: dr.loss_override_reason ?? '', remarks: dr.remarks ?? '' });
+        reject_warehouse_id: dr.reject_warehouse_id ? String(dr.reject_warehouse_id) : '', loss_override_reason: dr.loss_override_reason ?? '', remarks: dr.remarks ?? '', gate_inward_id: dr.gate_inward_id ? String(dr.gate_inward_id) : '' });
       setOuts(dr.outputs.map((o: any) => blank({ inputs: o.inputs.map((i: any) => ({ ypo_line_id: String(i.ypo_line_id), input_kg: i.input_kg, cone_no: i.cone_no ?? '' })), output_cone_no: o.output_cone_no ?? '',
         output_lot_no: o.output_lot_no ?? '', shade: o.shade ?? '', ply: o.ply ?? '', no_of_cones: o.no_of_cones || '', yarn_id: o.yarn_id ? String(o.yarn_id) : '', good_kg: o.good_kg, reject_kg: o.reject_kg || '', loss_kg: o.loss_kg || '', reject_reason: o.reject_reason ?? '' })));
       return;
@@ -150,7 +151,7 @@ function InwardEditor({ editId, ypoId: ypoParam, onBack, onDone, onPickDc }: { e
     setBusy(true);
     try {
       const payload = {
-        action, ypo_id: d.id, ...head, warehouse_id: Number(head.warehouse_id), reject_warehouse_id: head.reject_warehouse_id ? Number(head.reject_warehouse_id) : null, loss_override_reason: head.loss_override_reason || null,
+        action, ypo_id: d.id, ...head, gate_inward_id: head.gate_inward_id ? Number(head.gate_inward_id) : null, warehouse_id: Number(head.warehouse_id), reject_warehouse_id: head.reject_warehouse_id ? Number(head.reject_warehouse_id) : null, loss_override_reason: head.loss_override_reason || null,
         outputs: used.map((o) => ({
           inputs: many ? o.inputs.map((i) => ({ ypo_line_id: Number(i.ypo_line_id), input_kg: n(i.input_kg), cone_no: i.cone_no || null })) : [{ ypo_line_id: Number(o.inputs[0].ypo_line_id), input_kg: r3(outIn(o)), cone_no: o.inputs[0].cone_no || null }],
           output_cone_no: o.output_cone_no || null, output_lot_no: o.output_lot_no || null, shade: o.shade || null, ply: many ? Number(o.ply) || null : null, no_of_cones: n(o.no_of_cones),
@@ -176,6 +177,9 @@ function InwardEditor({ editId, ypoId: ypoParam, onBack, onDone, onPickDc }: { e
         <Input label="Process unit" value={d?.vendor_name ?? ''} disabled />
         <Input label="Unit challan no" value={head.challan_no} onChange={(e) => setHead({ ...head, challan_no: e.target.value })} />
         <Input label="Vehicle no" value={head.vehicle_no} onChange={(e) => setHead({ ...head, vehicle_no: e.target.value })} />
+        <div className="col-span-2"><GateEntryPicker partyId={d?.vendor_id} value={head.gate_inward_id} idPrefix="pin"
+          onChange={(v) => setHead((x) => ({ ...x, gate_inward_id: v }))}
+          onPick={(g) => setHead((x) => ({ ...x, gate_inward_id: String(g.id), vehicle_no: x.vehicle_no || g.vehicle_no || '', challan_no: x.challan_no || g.supplier_dc_no || '' }))} /></div>
         <Input label="Received by *" value={head.received_by} onChange={(e) => setHead({ ...head, received_by: e.target.value })} />
         <Select label="Store for good cones *" value={head.warehouse_id} onChange={(e) => setHead({ ...head, warehouse_id: e.target.value })} options={toOptions(warehouses.data)} />
         <Select label="Reject store" value={head.reject_warehouse_id} onChange={(e) => setHead({ ...head, reject_warehouse_id: e.target.value })} options={toOptions(warehouses.data)} />

@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
+import { QuotationPicker, GateEntryPicker, type QuoteValue } from '../../components/ProcessPickers';
 import { barcodeHtml } from '../../lib/printBarcode';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Truck, PackagePlus, Printer, Plus, Trash2, Save, X, Scale, Undo2 } from 'lucide-react';
@@ -35,7 +36,7 @@ const useReconciliation = (programId: number | null) => useQuery({
 });
 
 const invalidateKnitting = (qc: ReturnType<typeof useQueryClient>) => {
-  for (const k of ['knitting-programs', 'knitting-program', 'knit-recon', 'knit-dcs', 'knit-inwards', 'knit-yarn-returns', 'knit-dc-balance']) {
+  for (const k of ['knitting-programs', 'knitting-program', 'knit-recon', 'knit-dcs', 'knit-inwards', 'knit-yarn-returns', 'knit-dc-balance', 'knit-yarn-req']) {
     void qc.invalidateQueries({ queryKey: [k] });
   }
 };
@@ -167,6 +168,7 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
     enabled: open,
   });
   const [h, setH] = useState<any>({});
+  const [quote, setQuote] = useState<QuoteValue>({ quotation_id: '', quotation_line_id: '', rate_per_kg: '' });
   const [jobs, setJobs] = useState<DcJob[]>([]);
   const [addId, setAddId] = useState('');
   const [saving, setSaving] = useState(false);
@@ -181,10 +183,14 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
     const prog = (await http.get<{ data: any }>(`/knitting/programs/${pid}`)).data;
     const qs = new URLSearchParams(prog.so_id ? { so_id: String(prog.so_id) } : { io_no: prog.io_no ?? '' });
     const lots: any[] = (await http.get<{ data: any[] }>(`/yarn-stock/job-lots?${qs}`)).data ?? [];
+    // approved (posted) substitutions of the program: the substitute yarn may go out against the original line
+    const subs: any[] = (await http.get<{ data: any[] }>(`/yarn-substitution-requests?program_id=${pid}&status=POSTED`)).data ?? [];
     const lines = (prog.yarns ?? []).filter((y: any) => y.yarn_id).map((y: any) => {
       const pending = Math.max(0, Number(y.planned_qty_kg) - Number(y.issued_qty_kg));
-      // job's own lots first (oldest first), then general stock
-      const options = lots.filter((l) => Number(l.yarn_id) === Number(y.yarn_id)).sort((a, b) => Number(b.own_lot && !!b.holder_so_id) - Number(a.own_lot && !!a.holder_so_id));
+      const subYarns = subs.filter((x) => Number(x.program_yarn_id) === Number(y.id) && Number(x.qty_kg) > Number(x.issued_kg)).map((x) => Number(x.substitute_yarn_id));
+      // job's own lots first (oldest first), then general stock; then lots of an approved substitute yarn
+      const options = lots.filter((l) => Number(l.yarn_id) === Number(y.yarn_id)).sort((a, b) => Number(b.own_lot && !!b.holder_so_id) - Number(a.own_lot && !!a.holder_so_id))
+        .concat(lots.filter((l) => subYarns.includes(Number(l.yarn_id))).map((l) => ({ ...l, substitute: true })));
       const left = (o: any) => o.available_kg - (used.get(String(o.grn_line_id)) ?? 0);
       const pick = options.find((o: any) => left(o) > 0.0005);
       const qty = pending && pick ? Math.min(pending, left(pick)) : 0;
@@ -201,6 +207,7 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
   useEffect(() => {
     if (!open || !programId) return;
     setH({ dc_date: today(), vendor_id: '', vehicle_no: '', warehouse_id: '', remarks: '', allow_override: false, override_reason: '' });
+    setQuote({ quotation_id: '', quotation_line_id: '', rate_per_kg: '' });
     setJobs([]);
     void loadJob(programId).then((j) => { setJobs([j]); setH((x: any) => ({ ...x, vendor_id: j.vendor_id ? String(j.vendor_id) : '' })); })
       .catch((e) => toast(e?.message || 'Could not load the program', 'error'));
@@ -228,8 +235,10 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
       const r = await http.post<{ data: { dc_no: string } }>('/knitting-dcs', {
         dc_date: h.dc_date, vendor_id: Number(h.vendor_id), vehicle_no: h.vehicle_no || null, warehouse_id: Number(h.warehouse_id),
         allow_override: h.allow_override, override_reason: h.override_reason || null, remarks: h.remarks || null,
+        quotation_id: quote.quotation_id ? Number(quote.quotation_id) : null, quotation_line_id: quote.quotation_line_id ? Number(quote.quotation_line_id) : null,
+        rate_per_kg: quote.rate_per_kg ? Number(quote.rate_per_kg) : null,
         jobs: jobs.map((j) => ({ program_id: j.program_id, lines: j.lines.filter((l) => Number(l.issued_qty_kg) > 0).map((l) => ({
-          program_yarn_id: l.program_yarn_id, yarn_id: l.yarn_id, grn_line_id: l.grn_line_id ? Number(l.grn_line_id) : null,
+          program_yarn_id: l.program_yarn_id, yarn_id: Number(l.options.find((o: any) => String(o.grn_line_id) === l.grn_line_id)?.yarn_id ?? l.yarn_id), grn_line_id: l.grn_line_id ? Number(l.grn_line_id) : null,
           issued_qty_kg: Number(l.issued_qty_kg), no_of_cones: Number(l.no_of_cones) || 0,
         })) })).filter((j) => j.lines.length),
       });
@@ -266,6 +275,7 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
             </Select>
             <Input label="Vehicle No" value={h.vehicle_no ?? ''} onChange={(e) => setH({ ...h, vehicle_no: e.target.value })} id="kdc-vehicle" />
           </div>
+          <QuotationPicker vendorId={h.vendor_id} material="YARN" process="Knitting" value={quote} onChange={setQuote} idPrefix="kdc" />
 
           {jobs.map((j, ji) => (
             <div key={j.program_id} className="overflow-x-auto rounded-lg border border-slate-200">
@@ -293,7 +303,7 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
                             <option value="">{l.options.length ? '— pick lot —' : 'No stock for this job — transfer yarn to the job first'}</option>
                             {l.options.map((o: any) => (
                               <option key={`${o.grn_line_id}-${o.holder_so_id}`} value={o.grn_line_id}>
-                                {o.lot_no} · {o.grn_no}{o.po_no ? ` · PO ${o.po_no}` : ''}{o.supplier_name ? ` · ${o.supplier_name}` : ''} · {fmtDecimal(o.available_kg, 3)} KG ({o.holder_job})
+                                {o.substitute ? `[Approved substitute ${o.yarn_name}] ` : ''}{o.lot_no} · {o.grn_no}{o.po_no ? ` · PO ${o.po_no}` : ''}{o.supplier_name ? ` · ${o.supplier_name}` : ''} · {fmtDecimal(o.available_kg, 3)} KG ({o.holder_job})
                               </option>
                             ))}
                           </select>
@@ -477,7 +487,12 @@ export function KnittingInwardModal({ programId, open, onClose }: {
   const toast = useToast();
   const qc = useQueryClient();
   const { data: warehouses = [] } = useLookup('warehouses');
-  const { data: fabrics = [] } = useLookup('fabrics');
+  // only the job's fabrics (program / job programs / job BOM-CAD) — no wrong fabric can be picked
+  const { data: fabrics = [] } = useQuery({
+    queryKey: ['knit-program-fabrics', programId],
+    queryFn: async () => (await http.get<{ data: any[] }>(`/knitting-programs/${programId}/fabrics`)).data ?? [],
+    enabled: open && !!programId,
+  });
   const { data: recon } = useReconciliation(open ? programId : null);
   const [h, setH] = useState<any>({});
   const [rolls, setRolls] = useState<any[]>([newRoll()]);
@@ -486,9 +501,9 @@ export function KnittingInwardModal({ programId, open, onClose }: {
   useEffect(() => {
     if (!open || !recon) return;
     const p = recon.program;
-    const openDc = recon.dcs.find((d: any) => d.balance_kg > 0);
+    const openDc = recon.dcs.find((d: any) => d.balance_kg > 0 && d.status !== 'CLOSED');
     setH({
-      ref_dc_no: openDc?.dc_no ?? '', party_dc_no: '', receipt_date: today(), vehicle_no: '',
+      dc_nos: openDc ? [openDc.dc_no] : [], receipt_type: 'PARTIAL', gate_inward_id: '', party_dc_no: '', receipt_date: today(), vehicle_no: '',
       warehouse_id: '', fabric_id: p.fabric_id ?? '', lot_no: '', yarn_consumed_kg: '',
       rejected_kg: '', remarks: '',
     });
@@ -503,8 +518,10 @@ export function KnittingInwardModal({ programId, open, onClose }: {
   const consumed = h.yarn_consumed_kg === '' || h.yarn_consumed_kg == null
     ? fabricKg + rejected : Number(h.yarn_consumed_kg);
   const loss = Math.max(0, consumed - fabricKg - rejected);
-  const scope = h.ref_dc_no ? recon?.dcs.find((d: any) => d.dc_no === h.ref_dc_no) : recon?.totals;
-  const openKg = scope ? Number(scope.issued_kg) - Number(scope.consumed_kg) - Number(scope.returned_kg ?? 0) : 0;
+  const picked = (recon?.dcs ?? []).filter((d: any) => (h.dc_nos ?? []).includes(d.dc_no));
+  const openKg = picked.length ? picked.reduce((a: number, d: any) => a + Math.max(0, Number(d.issued_kg) - Number(d.consumed_kg) - Number(d.returned_kg ?? 0)), 0)
+    : recon ? Number(recon.totals.issued_kg) - Number(recon.totals.consumed_kg) - Number(recon.totals.returned_kg ?? 0) : 0;
+  const toggleDc = (no: string) => setH((x: any) => ({ ...x, dc_nos: (x.dc_nos ?? []).includes(no) ? x.dc_nos.filter((d: string) => d !== no) : [...(x.dc_nos ?? []), no] }));
 
   const save = async () => {
     if (!h.party_dc_no) { toast('Enter the knitter DC number', 'error'); return; }
@@ -514,7 +531,7 @@ export function KnittingInwardModal({ programId, open, onClose }: {
     setSaving(true);
     try {
       const r = await http.post<{ data: any }>('/knitting-inwards', {
-        program_id: programId, ref_dc_no: h.ref_dc_no || null, party_dc_no: h.party_dc_no,
+        program_id: programId, dc_nos: h.dc_nos ?? [], receipt_type: h.receipt_type, gate_inward_id: h.gate_inward_id ? Number(h.gate_inward_id) : null, party_dc_no: h.party_dc_no,
         receipt_date: h.receipt_date, vehicle_no: h.vehicle_no || null,
         warehouse_id: Number(h.warehouse_id), fabric_id: h.fabric_id ? Number(h.fabric_id) : null,
         lot_no: h.lot_no || null,
@@ -527,7 +544,7 @@ export function KnittingInwardModal({ programId, open, onClose }: {
           dia: x.dia || null,
         })),
       });
-      toast(`Grey fabric inward ${r.data.receipt_no} saved — ${r.data.rolls.length} roll(s) in roll stock`);
+      toast(`Grey fabric inward ${r.data.receipt_no} saved — ${r.data.rolls.length} roll(s) in roll stock${r.data.receipt_type === 'FINAL' ? ` · DC ${(h.dc_nos ?? []).join(', ')} closed (final receipt)` : ' · partial — more to come'}`);
       invalidateKnitting(qc);
       onClose();
     } catch (e: any) {
@@ -555,15 +572,34 @@ export function KnittingInwardModal({ programId, open, onClose }: {
 
           <KnittingReconciliation programId={recon.program.id} compact />
 
+          <div className="rounded-lg border border-slate-200 p-3">
+            <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">Our knitting DCs on this GRN (one GRN may cover several DCs)</p>
+            <div className="flex flex-wrap gap-2">
+              {recon.dcs.map((d: any) => {
+                const closed = d.status === 'CLOSED';
+                const on = (h.dc_nos ?? []).includes(d.dc_no);
+                return (
+                  <label key={d.dc_no} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[11.5px] ${closed ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400' : on ? 'border-brand-400 bg-brand-50' : 'border-slate-200'}`}>
+                    <input type="checkbox" disabled={closed} checked={on} onChange={() => toggleDc(d.dc_no)} id={`kin-dc-${d.dc_no}`} />
+                    <span className="font-mono font-semibold">{d.dc_no}</span><span>{fmtDate(d.dc_date)}</span>
+                    <span>given {fmtDecimal(d.issued_kg, 3)} · bal <b>{fmtDecimal(d.balance_kg, 3)}</b> kg</span>
+                    <span className={`rounded px-1 text-[10px] font-bold ${closed ? 'bg-slate-200' : d.status === 'PARTIALLY_RECEIVED' ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-sky-800'}`}>{closed ? 'CLOSED' : d.status === 'PARTIALLY_RECEIVED' ? 'PART RECEIVED' : 'OPEN'}</span>
+                  </label>
+                );
+              })}
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-4 text-[12px]">
+              <span className="font-semibold text-slate-700">This receipt is:</span>
+              <label className="flex items-center gap-1.5"><input type="radio" name="kin-type" checked={h.receipt_type === 'PARTIAL'} onChange={() => setH({ ...h, receipt_type: 'PARTIAL' })} id="kin-partial" /> Partial — more fabric to come on these DCs</label>
+              <label className="flex items-center gap-1.5"><input type="radio" name="kin-type" checked={h.receipt_type === 'FINAL'} onChange={() => setH({ ...h, receipt_type: 'FINAL' })} id="kin-final" /> Final — last receipt, close the DC(s)</label>
+              {h.receipt_type === 'FINAL' && <span className="text-amber-700">Yarn left with the knitter after this ({fmtDecimal(Math.max(0, openKg - consumed), 3)} kg) shows as "to be returned".</span>}
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Select label="Our Knitting DC" value={h.ref_dc_no ?? ''} placeholder="— Program level —"
-              onChange={(e) => setH({ ...h, ref_dc_no: e.target.value })} id="kin-ref-dc">
-              {recon.dcs.map((d: any) => (
-                <option key={d.dc_no} value={d.dc_no}>
-                  {d.dc_no} · {fmtDate(d.dc_date)} · bal {fmtDecimal(d.balance_kg, 3)} kg
-                </option>
-              ))}
-            </Select>
+            <div className="col-span-2"><GateEntryPicker partyId={recon.program.vendor_id} value={h.gate_inward_id ?? ''} idPrefix="kin"
+              onChange={(v) => setH((x: any) => ({ ...x, gate_inward_id: v }))}
+              onPick={(g) => setH((x: any) => ({ ...x, gate_inward_id: String(g.id), vehicle_no: x.vehicle_no || g.vehicle_no || '', party_dc_no: x.party_dc_no || g.supplier_dc_no || '' }))} /></div>
             <Input label="Knitter DC No" required value={h.party_dc_no ?? ''}
               onChange={(e) => setH({ ...h, party_dc_no: e.target.value })} id="kin-party-dc" />
             <Input label="Inward Date" type="date" value={h.receipt_date ?? ''}
@@ -574,9 +610,9 @@ export function KnittingInwardModal({ programId, open, onClose }: {
               onChange={(e) => setH({ ...h, warehouse_id: e.target.value })} id="kin-wh">
               {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.label}</option>)}
             </Select>
-            <Select label="Grey Fabric" required value={h.fabric_id ?? ''} placeholder="— Select —"
+            <Select label="Grey Fabric (this job's)" required value={h.fabric_id ?? ''} placeholder={fabrics.length ? '— Select —' : 'No fabric on the program / job BOM'}
               onChange={(e) => setH({ ...h, fabric_id: e.target.value })} id="kin-fabric">
-              {fabrics.map((f: any) => <option key={f.id} value={f.id}>{f.code ? `${f.code} — ` : ''}{f.label}</option>)}
+              {fabrics.map((f: any) => <option key={f.id} value={f.id}>{f.fabric_code ? `${f.fabric_code} — ` : ''}{f.fabric_name} ({f.source})</option>)}
             </Select>
             <Input label="Lot No" value={h.lot_no ?? ''} placeholder="Auto if blank"
               onChange={(e) => setH({ ...h, lot_no: e.target.value })} id="kin-lot" />
@@ -683,7 +719,7 @@ export function KnittingYarnReturnModal({ dcNo, onClose, onPrint }: {
   useEffect(() => {
     if (!open || !bal) return;
     setH({
-      return_date: today(), party_dc_no: '', vehicle_no: '',
+      return_date: today(), party_dc_no: '', vehicle_no: '', gate_inward_id: '',
       warehouse_id: bal.warehouse_id ? String(bal.warehouse_id) : '', remarks: '',
     });
     setLines(bal.lines.map((l: any) => ({ ...l, return_kg: '', no_of_cones: '' })));
@@ -707,7 +743,7 @@ export function KnittingYarnReturnModal({ dcNo, onClose, onPrint }: {
       const r = await http.post<{ data: { return_no: string } }>(
         `/knitting-dcs/${encodeURIComponent(dcNo!)}/yarn-returns`, {
           return_date: h.return_date, party_dc_no: h.party_dc_no, vehicle_no: h.vehicle_no || null,
-          warehouse_id: Number(h.warehouse_id), remarks: h.remarks || null,
+          warehouse_id: Number(h.warehouse_id), remarks: h.remarks || null, gate_inward_id: h.gate_inward_id ? Number(h.gate_inward_id) : null,
           lines: lines.filter((l) => Number(l.return_kg) > 0).map((l) => ({
             yarn_id: l.yarn_id, lot_no: l.lot_no || null,
             return_kg: Number(l.return_kg), no_of_cones: Number(l.no_of_cones) || 0,
@@ -750,6 +786,9 @@ export function KnittingYarnReturnModal({ dcNo, onClose, onPrint }: {
               onChange={(e) => setH({ ...h, warehouse_id: e.target.value })} id="kyr-wh">
               {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.label}</option>)}
             </Select>
+            <div className="col-span-2"><GateEntryPicker partyId={bal.vendor_id} value={h.gate_inward_id ?? ''} idPrefix="kyr"
+              onChange={(v) => setH((x: any) => ({ ...x, gate_inward_id: v }))}
+              onPick={(g) => setH((x: any) => ({ ...x, gate_inward_id: String(g.id), vehicle_no: x.vehicle_no || g.vehicle_no || '', party_dc_no: x.party_dc_no || g.supplier_dc_no || '' }))} /></div>
           </div>
 
           <div className="overflow-x-auto rounded-lg border border-slate-200">
@@ -917,6 +956,19 @@ export function KnittingDcInwardTab({ prog }: { prog: any }) {
     } catch (e: any) { toast(e?.message || 'Cancel failed', 'error'); }
   };
 
+  const closeDc = async (d: any) => {
+    const reason = window.prompt(`Close DC ${d.dc_no}? Reason:`);
+    if (!reason || reason.trim().length < 3) return;
+    const writeOff = Number(d.balance_yarn_kg) > 0 && window.confirm(`${fmtDecimal(d.balance_yarn_kg, 3)} kg yarn is still with the knitter. OK = write it off as process loss; Cancel = keep it as "to be returned".`);
+    try {
+      const r = await http.post<{ message: string }>(`/knitting-dcs/${encodeURIComponent(d.dc_no)}/close`, { reason: reason.trim(), write_off: writeOff });
+      toast((r as any).message ?? `DC ${d.dc_no} closed`); invalidateKnitting(qc);
+    } catch (e: any) { toast(e?.message || 'Close failed', 'error'); }
+  };
+  const { data: reqs = [] } = useQuery({
+    queryKey: ['knit-yarn-req', prog.id],
+    queryFn: async () => (await http.get<{ data: any[] }>(`/knitting-programs/${prog.id}/yarn-requirements`)).data || [],
+  });
   const { data: dcs = [] } = useQuery({
     queryKey: ['knit-dcs', prog.id],
     queryFn: async () => (await http.get<{ data: any[] }>(`/knitting-dcs?program_id=${prog.id}`)).data || [],
@@ -949,6 +1001,29 @@ export function KnittingDcInwardTab({ prog }: { prog: any }) {
 
       <KnittingReconciliation programId={prog.id} />
 
+      {reqs.length > 0 && (
+        <div>
+          <h5 className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">Yarn requirement — required vs issued, transfer in, approved substitution</h5>
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="w-full text-[12px]">
+              <thead className="bg-slate-50"><tr>{['Yarn', 'Required KG', 'Issued KG', 'Transfer in (job)', 'Substitute (approved)', 'Substitute issued', 'Pending approval', 'Pending KG'].map((x) => <th key={x} className={`th ${x === 'Yarn' ? '' : 'text-right'}`}>{x}</th>)}</tr></thead>
+              <tbody>{reqs.map((r: any) => (
+                <tr key={r.program_yarn_id} className="border-t border-slate-100">
+                  <td className="td font-medium">{r.yarn_name}{r.substitute_yarns ? <span className="ml-1 text-[10.5px] text-purple-700">sub: {r.substitute_yarns}</span> : null}</td>
+                  <td className="td text-right tabular-nums">{fmtDecimal(r.required_kg, 3)}</td><td className="td text-right tabular-nums">{fmtDecimal(r.issued_kg, 3)}</td>
+                  <td className="td text-right tabular-nums">{fmtDecimal(r.transfer_in_kg, 3)}</td>
+                  <td className="td text-right tabular-nums text-purple-700">{fmtDecimal(r.substitute_kg, 3)}{Number(r.substitute_eq_kg) !== Number(r.substitute_kg) ? <span className="block text-[10px] text-slate-400">= {fmtDecimal(r.substitute_eq_kg, 3)} req.</span> : null}</td>
+                  <td className="td text-right tabular-nums">{fmtDecimal(r.substitute_issued_kg, 3)}</td>
+                  <td className="td text-right tabular-nums text-amber-700">{fmtDecimal(r.pending_approval_kg, 3)}</td>
+                  <td className={`td text-right tabular-nums font-semibold ${Number(r.pending_kg) > 0 ? 'text-orange-700' : 'text-emerald-700'}`}>{fmtDecimal(r.pending_kg, 3)}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+          <p className="mt-1 text-[11px] text-slate-500">Short of a yarn? Raise a job transfer (Inventory → Job Stock Transfer) or a yarn substitution (Production → Yarn Substitution) — both need approval; the original requirement is never changed.</p>
+        </div>
+      )}
+
       <div>
         <h5 className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">Knitting DCs</h5>
         {dcs.length === 0 ? <p className="py-3 text-center text-[12px] text-slate-400">No knitting DC given yet</p> : (
@@ -960,7 +1035,7 @@ export function KnittingDcInwardTab({ prog }: { prog: any }) {
                   <th className="th">Vehicle</th><th className="th text-right">Lines</th>
                   <th className="th text-right">KG</th><th className="th text-right">Cones</th>
                   <th className="th text-right">Fabric in</th><th className="th text-right">Returned</th>
-                  <th className="th text-right">Balance</th><th className="th" />
+                  <th className="th text-right">Balance</th><th className="th">Status</th><th className="th">Rate</th><th className="th" />
                 </tr>
               </thead>
               <tbody>
@@ -977,6 +1052,12 @@ export function KnittingDcInwardTab({ prog }: { prog: any }) {
                     <td className="td text-right tabular-nums text-sky-700">{fmtDecimal(d.yarn_returned_kg ?? 0, 3)}</td>
                     <td className="td text-right tabular-nums">{fmtDecimal(d.balance_yarn_kg, 3)}</td>
                     <td className="td whitespace-nowrap">
+                      <span className={`rounded px-1.5 py-0.5 text-[10.5px] font-bold ${d.status === 'CLOSED' ? 'bg-slate-200 text-slate-700' : d.status === 'PARTIALLY_RECEIVED' ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-sky-800'}`}>
+                        {d.status === 'CLOSED' ? (d.close_type === 'SHORT_CLOSE' ? 'Closed (short)' : 'Fully received') : d.status === 'PARTIALLY_RECEIVED' ? 'Partially received' : 'Open'}</span>
+                      {Number(d.yarn_to_return_kg) > 0 && <span className="ml-1 text-[10.5px] font-semibold text-rose-700">{fmtDecimal(d.yarn_to_return_kg, 3)} kg yarn to return</span>}
+                    </td>
+                    <td className="td whitespace-nowrap text-[11px]">{d.rate_per_kg != null ? `₹${fmtDecimal(d.rate_per_kg, 2)}` : '—'}{d.quotation_no ? <span className="block text-slate-400">{d.quotation_no}</span> : null}</td>
+                    <td className="td whitespace-nowrap">
                       <button className="rounded p-1 text-slate-400 hover:bg-brand-50 hover:text-brand-600"
                         title="Print DC" onClick={() => setPrintDc(d.dc_no)} id={`btn-print-dc-${d.dc_no}`}>
                         <Printer size={13} />
@@ -986,6 +1067,12 @@ export function KnittingDcInwardTab({ prog }: { prog: any }) {
                         onClick={() => setReturnDc(d.dc_no)} id={`btn-yarn-return-${d.dc_no}`}>
                         <Undo2 size={13} /> Yarn return
                       </button>
+                      {(d.status !== 'CLOSED' || Number(d.yarn_to_return_kg) > 0) && (
+                        <button className="ml-1 inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100"
+                          title="Close the DC; optionally write off the yarn still with the knitter" onClick={() => closeDc(d)} id={`btn-close-dc-${d.dc_no}`}>
+                          <X size={13} /> Close
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -1013,7 +1100,9 @@ export function KnittingDcInwardTab({ prog }: { prog: any }) {
                   <tr key={r.id} className="border-t border-slate-100 align-top">
                     <td className="td font-mono font-semibold text-brand-700">{r.receipt_no}</td>
                     <td className="td text-slate-500">{fmtDate(r.receipt_date)}</td>
-                    <td className="td font-mono">{r.ref_dc_no ?? '—'}</td>
+                    <td className="td font-mono">{r.dc_nos || r.ref_dc_no || '—'}
+                      <span className={`ml-1 rounded px-1 text-[10px] font-bold ${r.receipt_type === 'FINAL' ? 'bg-emerald-100 text-emerald-800' : r.receipt_type === 'ADJUST' ? 'bg-slate-200 text-slate-600' : 'bg-amber-100 text-amber-800'}`}>{r.receipt_type === 'FINAL' ? 'FINAL' : r.receipt_type === 'ADJUST' ? 'WRITE-OFF' : 'PARTIAL'}</span>
+                      {r.gate_entry_no ? <span className="block text-[10px] text-slate-400">Gate {r.gate_entry_no}</span> : null}</td>
                     <td className="td font-mono">{r.party_dc_no ?? '—'}</td>
                     <td className="td">{r.output_lot_no}</td>
                     <td className="td text-right">{r.no_of_rolls}</td>

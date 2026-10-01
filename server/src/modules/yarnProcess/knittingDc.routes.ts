@@ -10,6 +10,8 @@ import { s } from '../resources/schemas.js';
 import { assertEditable, postLedger, UOM_KG } from '../../core/processEngine.js';
 import { assertIssuable, insertProcessIssue } from './processFlow.routes.js';
 import { assertJobLots, resolveSoId } from '../stock/jobStock.routes.js';
+import { checkDcQuotation, useGateEntry } from '../../core/inwardControls.js';
+import { substituteOpen, bookSubstituteIssue } from '../stock/yarnSubstitution.routes.js';
 
 /**
  * Knitting DC (yarn outward to the knitter) and grey fabric inward against it.
@@ -121,6 +123,10 @@ const dcSchema = z.object({
   allow_override: z.coerce.boolean().default(false),
   override_reason: s.nullableStr(255),
   remarks: s.text(),
+  /** Approved process (knitting) quotation of the knitter — its rate is the job-work rate. */
+  quotation_id: s.id(),
+  quotation_line_id: s.id(),
+  rate_per_kg: z.coerce.number().min(0).nullish(),
 });
 
 knittingDcRouter.post('/knitting-dcs', requirePermission('PROCESS.ISSUE'), ah(async (req, res) => {
@@ -145,15 +151,29 @@ knittingDcRouter.post('/knitting-dcs', requirePermission('PROCESS.ISSUE'), ah(as
   }
   const vendorId = body.vendor_id ?? progs.get(jobs[0].program_id)?.vendor_id;
   if (!vendorId) throw BadRequest('Select the knitting vendor (supplier) the yarn is going to');
+  const quote = await checkDcQuotation(cid, { vendor_id: Number(vendorId), quotation_id: body.quotation_id, quotation_line_id: body.quotation_line_id,
+    rate: body.rate_per_kg ?? null, label: 'Knitting DC' });
 
   // lines must belong to their program; yarn lots must belong to the line's job
   const lotChecks: any[] = [];
+  const subUse = new Map<string, number>();
   for (const j of jobs) {
     const prog = progs.get(j.program_id);
     const progLines = await query<any>(`SELECT id, yarn_id FROM trx_knitting_program_yarns WHERE program_id = ?`, [j.program_id]);
     const lineIds = new Set(progLines.map((l) => Number(l.id)));
     for (const l of j.lines) {
       if (l.program_yarn_id && !lineIds.has(Number(l.program_yarn_id))) throw BadRequest(`A yarn line does not belong to program ${prog.program_no}`);
+      // another yarn on the line = approved substitution only (posted, KG still open)
+      const pl = progLines.find((x) => Number(x.id) === Number(l.program_yarn_id));
+      if (pl && pl.yarn_id && Number(pl.yarn_id) !== Number(l.yarn_id)) {
+        const k = `${l.program_yarn_id}|${l.yarn_id}`;
+        const want = (subUse.get(k) ?? 0) + l.issued_qty_kg;
+        const open = await substituteOpen(cid, Number(l.program_yarn_id), Number(l.yarn_id));
+        if (want > open + 0.0005) {
+          throw BadRequest(`${prog.program_no}: this yarn is not the program's yarn — ${open > 0 ? `only ${open} KG is approved as a substitute` : 'raise a yarn substitution request and get it approved first'}`);
+        }
+        subUse.set(k, want);
+      }
       lotChecks.push({ grn_line_id: l.grn_line_id, so_id: prog.so_id, yarn_id: l.yarn_id, issued_qty_kg: l.issued_qty_kg, label: `${prog.program_no} (${prog.io_no ?? 'stock'})` });
     }
   }
@@ -207,7 +227,15 @@ knittingDcRouter.post('/knitting-dcs', requirePermission('PROCESS.ISSUE'), ah(as
         grn_line_id: p.line.grn_line_id ?? null, so_id: p.prog.so_id ?? null, io_no: p.prog.io_no ?? null,
       }, p.exceeds));
     }
-    return { dc_no: dcNo, jobs: jobs.length, issues };
+    for (const [k, kg] of subUse) {
+      const [pyid, yid] = k.split('|').map(Number);
+      await bookSubstituteIssue(tx, cid, pyid, yid, kg);
+    }
+    await txExecute(tx,
+      `INSERT INTO trx_knitting_dc (company_id, dc_no, dc_date, vendor_id, status, quotation_id, quotation_line_id, rate_per_kg) VALUES (?,?,?,?,'OPEN',?,?,?)
+       ON DUPLICATE KEY UPDATE quotation_id = VALUES(quotation_id), quotation_line_id = VALUES(quotation_line_id), rate_per_kg = VALUES(rate_per_kg)`,
+      [cid, dcNo, body.dc_date, vendorId, quote.quotation_id, quote.quotation_line_id, quote.rate]);
+    return { dc_no: dcNo, jobs: jobs.length, issues, rate_per_kg: quote.rate };
   });
 
   await audit(req, 'trx_process_issue', jobs[0].program_id, 'INSERT', undefined,
@@ -231,10 +259,11 @@ knittingDcRouter.get('/knitting-dcs', requirePermission('PRODUCTION.VIEW'), ah(a
             COUNT(DISTINCT i.src_id) AS job_count,
             MAX(i.vehicle_no) AS vehicle_no, MAX(p.party_name) AS vendor_name,
             COUNT(*) AS line_count, SUM(i.issued_qty_kg) AS total_kg, SUM(i.no_of_cones) AS total_cones,
-            (SELECT COALESCE(SUM(r.output_qty), 0) FROM trx_process_receipt r
-              WHERE r.company_id = i.company_id AND r.src_type = 'KNITTING_PROGRAM' AND r.ref_dc_no = i.dc_no) AS fabric_received_kg,
-            (SELECT COALESCE(SUM(r.input_qty), 0) FROM trx_process_receipt r
-              WHERE r.company_id = i.company_id AND r.src_type = 'KNITTING_PROGRAM' AND r.ref_dc_no = i.dc_no) AS yarn_consumed_kg,
+            (SELECT COALESCE(SUM(m.fabric_kg), 0) FROM trx_knitting_inward_dc m JOIN trx_process_receipt r ON r.id = m.receipt_id
+              WHERE r.company_id = i.company_id AND m.dc_no = i.dc_no) AS fabric_received_kg,
+            (SELECT COALESCE(SUM(m.consumed_kg), 0) FROM trx_knitting_inward_dc m JOIN trx_process_receipt r ON r.id = m.receipt_id
+              WHERE r.company_id = i.company_id AND m.dc_no = i.dc_no) AS yarn_consumed_kg,
+            MAX(kd.status) AS dc_status, MAX(kd.rate_per_kg) AS rate_per_kg, MAX(q.quotation_no) AS quotation_no, MAX(kd.close_type) AS close_type,
             (SELECT COALESCE(SUM(yr.total_kg), 0) FROM trx_knitting_yarn_return yr
               WHERE yr.company_id = i.company_id AND yr.dc_no = i.dc_no AND yr.status <> 'CANCELLED') AS yarn_returned_kg,
             (SELECT COALESCE(SUM(yr.total_cones), 0) FROM trx_knitting_yarn_return yr
@@ -242,13 +271,19 @@ knittingDcRouter.get('/knitting-dcs', requirePermission('PRODUCTION.VIEW'), ah(a
        FROM trx_process_issue i
        JOIN trx_knitting_program kp ON kp.id = i.src_id
        LEFT JOIN mst_party p ON p.id = i.vendor_id
+       LEFT JOIN trx_knitting_dc kd ON kd.company_id = i.company_id AND kd.dc_no = i.dc_no
+       LEFT JOIN trx_quotation q ON q.id = kd.quotation_id
        ${where}
       GROUP BY i.dc_no, i.company_id
       ORDER BY MIN(i.id) DESC LIMIT 500`, params);
   for (const r of rows) {
     r.balance_yarn_kg = r3(Number(r.total_kg) - Number(r.yarn_consumed_kg) - Number(r.yarn_returned_kg));
+    r.status = r.dc_status ?? (Number(r.yarn_consumed_kg) > 0 ? 'PARTIALLY_RECEIVED' : 'OPEN');
+    // closed on the final receipt with yarn still at the knitter = to be returned
+    r.yarn_to_return_kg = r.status === 'CLOSED' && r.close_type !== 'SHORT_CLOSE' ? Math.max(0, r.balance_yarn_kg) : 0;
   }
-  res.json({ success: true, data: rows });
+  const open = String(req.query.open ?? '') === '1';
+  res.json({ success: true, data: open ? rows.filter((r) => r.status !== 'CLOSED') : rows });
 }));
 
 /** GET /knitting-dcs/:dcNo — printable DC: supplier / vendor, vehicle and the yarn lines grouped by job. */
@@ -285,9 +320,20 @@ knittingDcRouter.get('/knitting-dcs/:dcNo', requirePermission('PRODUCTION.VIEW')
   const company = await queryOne<any>(
     `SELECT legal_name, trade_name, gstin, address_line1, address_line2, city, state, pincode, phone
        FROM mst_company WHERE id = ?`, [cid]);
+  const hdr = await queryOne<any>(
+    `SELECT kd.*, q.quotation_no, q.process_name FROM trx_knitting_dc kd LEFT JOIN trx_quotation q ON q.id = kd.quotation_id WHERE kd.company_id = ? AND kd.dc_no = ?`, [cid, dcNo]);
+  const got = await queryOne<any>(
+    `SELECT COALESCE(SUM(m.consumed_kg), 0) consumed, COALESCE(SUM(m.fabric_kg), 0) fabric, COUNT(DISTINCT m.receipt_id) grns
+       FROM trx_knitting_inward_dc m JOIN trx_process_receipt r ON r.id = m.receipt_id WHERE r.company_id = ? AND m.dc_no = ?`, [cid, dcNo]);
+  const retd = await queryOne<any>(`SELECT COALESCE(SUM(total_kg), 0) kg FROM trx_knitting_yarn_return WHERE company_id = ? AND dc_no = ? AND status <> 'CANCELLED'`, [cid, dcNo]);
+  const issuedKg = r3(lines.reduce((n, l) => n + Number(l.issued_qty_kg), 0));
   res.json({
     success: true,
     data: {
+      status: hdr?.status ?? 'OPEN', quotation_id: hdr?.quotation_id ?? null, quotation_no: hdr?.quotation_no ?? null, process_name: hdr?.process_name ?? null,
+      rate_per_kg: hdr?.rate_per_kg != null ? Number(hdr.rate_per_kg) : null, close_type: hdr?.close_type ?? null, close_reason: hdr?.close_reason ?? null,
+      consumed_kg: r3(Number(got?.consumed ?? 0)), fabric_received_kg: r3(Number(got?.fabric ?? 0)), grn_count: Number(got?.grns ?? 0), returned_kg: r3(Number(retd?.kg ?? 0)),
+      balance_yarn_kg: r3(issuedKg - Number(got?.consumed ?? 0) - Number(retd?.kg ?? 0)),
       dc_no: dcNo, dc_date: first.issue_date, vehicle_no: first.vehicle_no,
       warehouse_name: first.warehouse_name, remarks: first.remarks,
       // first job kept at the top level for older screens; `jobs` has every job of the DC
@@ -309,11 +355,16 @@ knittingDcRouter.get('/knitting-dcs/:dcNo', requirePermission('PRODUCTION.VIEW')
 
 const inwardSchema = z.object({
   program_id: s.idReq(),
+  /** Our knitting DCs this GRN is against (one GRN may consolidate several DCs of the program). */
+  dc_nos: z.array(z.string().trim().min(1).max(60)).optional(),
   ref_dc_no: s.nullableStr(60),
   party_dc_no: s.strReq(60),
   receipt_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   vehicle_no: s.nullableStr(30),
   warehouse_id: s.idReq(),
+  gate_inward_id: s.id(),
+  /** PARTIAL = more fabric to come on these DCs; FINAL = last receipt — the DCs close (yarn left is to be returned). */
+  receipt_type: z.enum(['PARTIAL', 'FINAL']).default('PARTIAL'),
   fabric_id: s.id(),
   lot_no: s.nullableStr(60),
   // Yarn the knitter used for this fabric; defaults to fabric + rejected (no loss).
@@ -330,6 +381,58 @@ const inwardSchema = z.object({
   })).min(1, 'Add at least one roll'),
 });
 
+/**
+ * Fabrics a knitting GRN of the program may receive: the program's fabric, the fabrics of the job's
+ * other knitting programs and of the job's BOM (CAD → BOM fabric lines). Nothing else, so the store
+ * cannot pick a wrong fabric (client voice note 02-Oct-2026).
+ */
+export async function allowedFabrics(cid: number, prog: any) {
+  const ids = new Map<number, string>();
+  if (prog.fabric_id) ids.set(Number(prog.fabric_id), 'Program');
+  const soId = await resolveSoId(cid, prog.so_id, prog.io_no);
+  const others = await query<any>(
+    `SELECT DISTINCT fabric_id FROM trx_knitting_program WHERE company_id = ? AND fabric_id IS NOT NULL AND status <> 'CANCELLED'
+        AND ((? IS NOT NULL AND so_id = ?) OR (? IS NOT NULL AND io_no = ?))`, [cid, soId, soId, prog.io_no ?? null, prog.io_no ?? null]);
+  others.forEach((o) => { if (!ids.has(Number(o.fabric_id))) ids.set(Number(o.fabric_id), 'Job knitting program'); });
+  const bom = await query<any>(
+    `SELECT DISTINCT bl.fabric_id FROM trx_bom b JOIN trx_bom_line bl ON bl.bom_id = b.id
+      WHERE b.company_id = ? AND b.is_active = 1 AND bl.material_type = 'FABRIC' AND bl.fabric_id IS NOT NULL
+        AND ((? IS NOT NULL AND b.so_id = ?) OR (b.so_id IS NULL AND b.style_id = ?))`, [cid, soId, soId, prog.style_id ?? 0]);
+  bom.forEach((o) => { if (!ids.has(Number(o.fabric_id))) ids.set(Number(o.fabric_id), 'Job BOM / CAD'); });
+  if (!ids.size) return [];
+  const rows = await query<any>(`SELECT id, fabric_code, fabric_name, gsm, dia FROM mst_fabric WHERE id IN (?)`, [[...ids.keys()]]);
+  return rows.map((r) => ({ ...r, source: ids.get(Number(r.id)) })).sort((a, b) => (a.source === 'Program' ? -1 : b.source === 'Program' ? 1 : 0));
+}
+
+knittingDcRouter.get('/knitting-programs/:id/fabrics', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const prog = await loadProgram(Number(req.params.id), cid);
+  res.json({ success: true, data: await allowedFabrics(cid, prog) });
+}));
+
+/** What one program still has at the knitter on each of its DCs (issued − consumed − returned). */
+async function programDcOpen(cid: number, programId: number) {
+  const rows = await query<any>(
+    `SELECT i.dc_no, MIN(i.id) seq, SUM(i.issued_qty_kg) issued,
+            (SELECT COALESCE(SUM(m.consumed_kg), 0) FROM trx_knitting_inward_dc m WHERE m.program_id = i.src_id AND m.dc_no = i.dc_no) consumed,
+            (SELECT COALESCE(SUM(yr.total_kg), 0) FROM trx_knitting_yarn_return yr WHERE yr.company_id = i.company_id AND yr.program_id = i.src_id AND yr.dc_no = i.dc_no AND yr.status <> 'CANCELLED') returned,
+            MAX(kd.status) status
+       FROM trx_process_issue i LEFT JOIN trx_knitting_dc kd ON kd.company_id = i.company_id AND kd.dc_no = i.dc_no
+      WHERE i.company_id = ? AND i.src_type = 'KNITTING_PROGRAM' AND i.src_id = ? AND i.dc_no IS NOT NULL
+      GROUP BY i.dc_no, i.src_id, i.company_id ORDER BY seq`, [cid, programId]);
+  return rows.map((r) => ({ dc_no: r.dc_no, status: r.status ?? 'OPEN', issued: Number(r.issued), consumed: Number(r.consumed), returned: Number(r.returned),
+    open: r3(Number(r.issued) - Number(r.consumed) - Number(r.returned)) }));
+}
+
+/** Re-evaluates DC status after an inward: CLOSED stays closed; any receipt makes it part received. */
+async function refreshDcStatus(tx: any, cid: number, dcNo: string, final: boolean, uid: number) {
+  if (final) {
+    await txExecute(tx, `UPDATE trx_knitting_dc SET status = 'CLOSED', close_type = 'FINAL_RECEIPT', closed_by = ?, closed_at = NOW() WHERE company_id = ? AND dc_no = ? AND status <> 'CLOSED'`, [uid, cid, dcNo]);
+  } else {
+    await txExecute(tx, `UPDATE trx_knitting_dc SET status = 'PARTIALLY_RECEIVED' WHERE company_id = ? AND dc_no = ? AND status = 'OPEN'`, [cid, dcNo]);
+  }
+}
+
 knittingDcRouter.post('/knitting-inwards', requirePermission('PROCESS.PRODUCTION'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const uid = req.user!.id;
@@ -337,17 +440,25 @@ knittingDcRouter.post('/knitting-inwards', requirePermission('PROCESS.PRODUCTION
 
   const prog = await loadProgram(body.program_id, cid);
   assertEditable(prog.status, 'knitting program');
-  const fabricId = body.fabric_id ?? prog.fabric_id;
+  // fabric: only the job's own fabrics (program / job programs / job BOM)
+  const allowed = await allowedFabrics(cid, prog);
+  const fabricId = body.fabric_id ?? prog.fabric_id ?? (allowed.length === 1 ? Number(allowed[0].id) : null);
   if (!fabricId) throw BadRequest('Select the grey fabric being received (the program has no fabric set)');
+  if (allowed.length && !allowed.some((f) => Number(f.id) === Number(fabricId))) {
+    throw BadRequest(`That fabric is not a fabric of job ${prog.io_no ?? prog.program_no} — pick ${allowed.map((f) => f.fabric_name).join(' / ')}`);
+  }
 
+  const dcNos = [...new Set([...(body.dc_nos ?? []), ...(body.ref_dc_no ? [body.ref_dc_no] : [])])];
+  const dcOpen = await programDcOpen(cid, body.program_id);
+  for (const d of dcNos) {
+    const row = dcOpen.find((x) => x.dc_no === d);
+    if (!row) throw BadRequest(`DC ${d} was not given against program ${prog.program_no}`);
+    if (row.status === 'CLOSED') throw BadRequest(`DC ${d} is closed (final receipt done) — nothing more can be received on it`);
+  }
   let vendorId = prog.vendor_id;
-  if (body.ref_dc_no) {
-    const dc = await queryOne<any>(
-      `SELECT MAX(vendor_id) AS vendor_id, COUNT(*) AS n FROM trx_process_issue
-        WHERE company_id = ? AND src_type = 'KNITTING_PROGRAM' AND src_id = ? AND dc_no = ?`,
-      [cid, body.program_id, body.ref_dc_no]);
-    if (!Number(dc?.n)) throw BadRequest(`DC ${body.ref_dc_no} was not given against this program`);
-    vendorId = dc.vendor_id ?? vendorId;
+  if (dcNos.length) {
+    const dc = await queryOne<any>(`SELECT MAX(vendor_id) AS vendor_id FROM trx_process_issue WHERE company_id = ? AND src_type = 'KNITTING_PROGRAM' AND dc_no IN (?)`, [cid, dcNos]);
+    vendorId = dc?.vendor_id ?? vendorId;
   }
   if (!vendorId) throw BadRequest('The program has no knitting vendor to receive from');
 
@@ -356,34 +467,35 @@ knittingDcRouter.post('/knitting-inwards', requirePermission('PROCESS.PRODUCTION
   if (consumed + 1e-9 < fabricKg + body.rejected_kg) {
     throw BadRequest('Yarn consumed cannot be less than the fabric received plus rejected');
   }
-
-  // Fabric cannot come back for more yarn than was given (program or DC level).
+  // Fabric cannot come back for more yarn than was given (on the selected DCs, else on the program).
   const recon = await reconcile(body.program_id, cid);
-  const scope = body.ref_dc_no ? recon.dcs.find((d: any) => d.dc_no === body.ref_dc_no) : recon.totals;
-  const open = r3(Number(scope?.issued_kg ?? 0) - Number(scope?.consumed_kg ?? 0) -
-    Number(scope?.returned_kg ?? 0));
+  const open = dcNos.length ? r3(dcNos.reduce((a, d) => a + Math.max(0, dcOpen.find((x) => x.dc_no === d)!.open), 0))
+    : r3(Number(recon.totals.issued_kg) - Number(recon.totals.consumed_kg) - Number(recon.totals.returned_kg));
   if (consumed > open + 1e-9) {
-    throw BadRequest(
-      `Only ${open} KG of yarn is still with the knitter${body.ref_dc_no ? ` on DC ${body.ref_dc_no}` : ''}; ` +
-      `this inward accounts for ${consumed} KG`);
+    throw BadRequest(`Only ${open} KG of yarn is still with the knitter${dcNos.length ? ` on DC ${dcNos.join(', ')}` : ''}; this inward accounts for ${consumed} KG`);
   }
   const loss = r3(consumed - fabricKg - body.rejected_kg);
+  // yarn used is booked on the DCs in DC order, up to what each still had
+  let left = consumed;
+  const split = dcNos.map((d) => { const o = Math.max(0, dcOpen.find((x) => x.dc_no === d)!.open); const take = r3(Math.min(o, left)); left = r3(left - take); return { dc_no: d, consumed: take }; });
+  if (split.length && left > 1e-9) split[split.length - 1].consumed = r3(split[split.length - 1].consumed + left);
 
   const result = await transaction(async (tx) => {
+    const gate = await useGateEntry(tx, cid, { gate_inward_id: body.gate_inward_id, party_id: vendorId, label: 'Knitting inward' });
     const receiptNo = await nextDocNumber(tx, cid, 'KNIT_INWARD');
     const lotNo = body.lot_no || `${prog.program_no}-${receiptNo}`;
     const note = `Knitting inward — program ${prog.program_no}` +
-      (body.ref_dc_no ? `, our DC ${body.ref_dc_no}` : '') + `, party DC ${body.party_dc_no}`;
+      (dcNos.length ? `, our DC ${dcNos.join(', ')}` : '') + `, party DC ${body.party_dc_no}` + (body.receipt_type === 'FINAL' ? ' (final receipt)' : ' (partial)');
 
     // Grey fabric GRN: the rolls live in trx_fabric_roll, which hangs off a GRN,
     // so roll stock, fabric processing and cutting all see them unchanged.
     const g = await txExecute(tx,
       `INSERT INTO trx_grn
          (company_id, grn_no, internal_ir_no, grn_date, style_id, supplier_id, warehouse_id,
-          supplier_dc_no, vehicle_no, qc_status, remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+          supplier_dc_no, vehicle_no, gate_inward_id, qc_status, remarks, created_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [cid, receiptNo, prog.io_no ?? null, body.receipt_date, prog.style_id ?? null, vendorId,
-       body.warehouse_id, body.party_dc_no, body.vehicle_no ?? null, 'ACCEPTED', note, uid]);
+       body.warehouse_id, body.party_dc_no, body.vehicle_no ?? gate?.vehicle_no ?? null, gate?.id ?? null, 'ACCEPTED', note, uid]);
     const grnId = g.insertId;
 
     const gl = await txExecute(tx,
@@ -416,17 +528,22 @@ knittingDcRouter.post('/knitting-inwards', requirePermission('PROCESS.PRODUCTION
          (company_id, receipt_no, receipt_date, party_dc_no, ref_dc_no, vehicle_no,
           src_type, src_id, input_qty, output_qty, output_uom_id, loss_qty, rejected_qty,
           output_lot_no, warehouse_id, grn_id, no_of_rolls, qc_status, is_stock_posted,
-          remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [cid, receiptNo, body.receipt_date, body.party_dc_no, body.ref_dc_no ?? null,
-       body.vehicle_no ?? null, 'KNITTING_PROGRAM', body.program_id, consumed, fabricKg, UOM_KG,
+          remarks, created_by, receipt_type, gate_inward_id)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [cid, receiptNo, body.receipt_date, body.party_dc_no, dcNos[0] ?? null,
+       body.vehicle_no ?? gate?.vehicle_no ?? null, 'KNITTING_PROGRAM', body.program_id, consumed, fabricKg, UOM_KG,
        loss, body.rejected_kg, lotNo, body.warehouse_id, grnId, body.rolls.length, 'PASSED', 1,
-       body.remarks ?? null, uid]);
+       body.remarks ?? null, uid, body.receipt_type, gate?.id ?? null]);
     const receiptId = rc.insertId;
+    for (const sp of split) {
+      await txExecute(tx, 'INSERT INTO trx_knitting_inward_dc (receipt_id, program_id, dc_no, consumed_kg, fabric_kg) VALUES (?,?,?,?,?)',
+        [receiptId, body.program_id, sp.dc_no, sp.consumed, consumed > 0 ? r3(fabricKg * sp.consumed / consumed) : 0]);
+      await refreshDcStatus(tx, cid, sp.dc_no, body.receipt_type === 'FINAL', uid);
+    }
 
     await postLedger(tx, {
       companyId: cid, warehouseId: body.warehouse_id, materialType: 'FABRIC',
-      fabricId, txnType: 'PRODUCTION_IN', refType: 'PROCESS_RECEIPT', refId: receiptId,
+      fabricId, soId: prog.so_id ?? null, txnType: 'PRODUCTION_IN', refType: 'PROCESS_RECEIPT', refId: receiptId,
       qtyIn: fabricKg, uomId: UOM_KG, createdBy: uid,
     });
 
@@ -434,12 +551,50 @@ knittingDcRouter.post('/knitting-inwards', requirePermission('PROCESS.PRODUCTION
       `UPDATE trx_knitting_program SET status = 'STOCK_POSTED'
         WHERE id = ? AND status NOT IN ('COMPLETED','CANCELLED')`, [body.program_id]);
 
-    return { id: receiptId, receipt_no: receiptNo, grn_id: grnId, lot_no: lotNo,
-             fabric_kg: fabricKg, yarn_consumed_kg: consumed, loss_kg: loss, rolls };
+    return { id: receiptId, receipt_no: receiptNo, grn_id: grnId, lot_no: lotNo, receipt_type: body.receipt_type, dcs: split,
+             fabric_kg: fabricKg, yarn_consumed_kg: consumed, loss_kg: loss, rolls, gate_entry_no: gate?.entry_no ?? null };
   });
 
   await audit(req, 'trx_process_receipt', result.id, 'INSERT', undefined, result);
   res.status(201).json({ success: true, data: result });
+}));
+
+/**
+ * POST /knitting-dcs/:dcNo/close — close a DC: `write_off` books the yarn still at the knitter as
+ * process loss (short close); otherwise it stays as "yarn to return" until the knitter returns it.
+ */
+knittingDcRouter.post('/knitting-dcs/:dcNo/close', requirePermission('PROCESS.PRODUCTION'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const uid = req.user!.id;
+  const dcNo = String(req.params.dcNo);
+  const b = z.object({ reason: z.string().trim().min(3, 'Give the reason').max(255), write_off: z.coerce.boolean().default(false) }).parse(req.body);
+  const progIds = (await query<any>(`SELECT DISTINCT src_id FROM trx_process_issue WHERE company_id = ? AND src_type = 'KNITTING_PROGRAM' AND dc_no = ?`, [cid, dcNo])).map((r) => Number(r.src_id));
+  if (!progIds.length) throw NotFound('Knitting DC not found');
+  const hdr = await queryOne<any>('SELECT * FROM trx_knitting_dc WHERE company_id = ? AND dc_no = ?', [cid, dcNo]);
+  if (hdr?.status === 'CLOSED' && (hdr.close_type === 'SHORT_CLOSE' || !b.write_off)) throw BadRequest(`DC ${dcNo} is already closed`);
+  const out = await transaction(async (tx) => {
+    let written = 0;
+    if (b.write_off) {
+      for (const pid of progIds) {
+        const o = (await programDcOpen(cid, pid)).find((x) => x.dc_no === dcNo);
+        if (!o || o.open <= 0.0005) continue;
+        const no = await nextDocNumber(tx, cid, 'KNIT_INWARD');
+        const rc = await txExecute(tx,
+          `INSERT INTO trx_process_receipt (company_id, receipt_no, receipt_date, party_dc_no, ref_dc_no, src_type, src_id, input_qty, output_qty, output_uom_id, loss_qty,
+             rejected_qty, qc_status, is_stock_posted, remarks, created_by, receipt_type) VALUES (?,?,CURDATE(),?,?, 'KNITTING_PROGRAM', ?, ?, 0, ?, ?, 0, 'PASSED', 1, ?, ?, 'ADJUST')`,
+          [cid, no, 'SHORT-CLOSE', dcNo, pid, o.open, UOM_KG, o.open, `DC ${dcNo} short closed — yarn at the knitter written off: ${b.reason}`, uid]);
+        await txExecute(tx, 'INSERT INTO trx_knitting_inward_dc (receipt_id, program_id, dc_no, consumed_kg, fabric_kg) VALUES (?,?,?,?,0)', [rc.insertId, pid, dcNo, o.open]);
+        written += o.open;
+      }
+    }
+    await txExecute(tx,
+      `INSERT INTO trx_knitting_dc (company_id, dc_no, status, close_type, close_reason, closed_by, closed_at) VALUES (?,?, 'CLOSED', ?, ?, ?, NOW())
+       ON DUPLICATE KEY UPDATE status = 'CLOSED', close_type = VALUES(close_type), close_reason = VALUES(close_reason), closed_by = VALUES(closed_by), closed_at = NOW()`,
+      [cid, dcNo, b.write_off ? 'SHORT_CLOSE' : 'FINAL_RECEIPT', b.reason, uid]);
+    return { dc_no: dcNo, written_off_kg: r3(written) };
+  });
+  await audit(req, 'trx_knitting_dc', 0, 'UPDATE', { status: hdr?.status }, { close: out, reason: b.reason });
+  res.json({ success: true, data: out, message: `DC ${dcNo} closed${out.written_off_kg ? ` — ${out.written_off_kg} KG yarn written off as loss` : ''}` });
 }));
 
 /** GET /knitting-inwards — grey fabric inwards with their rolls. */
@@ -449,8 +604,10 @@ knittingDcRouter.get('/knitting-inwards', requirePermission('PRODUCTION.VIEW'), 
   const params: any[] = [cid];
   if (req.query.program_id) { where += ' AND r.src_id = ?'; params.push(req.query.program_id); }
   const rows = await query<any>(
-    `SELECT r.*, kp.program_no, kp.io_no, w.warehouse_name, g.grn_no
+    `SELECT r.*, kp.program_no, kp.io_no, w.warehouse_name, g.grn_no, gi.entry_no AS gate_entry_no,
+            (SELECT GROUP_CONCAT(DISTINCT m.dc_no ORDER BY m.dc_no SEPARATOR ', ') FROM trx_knitting_inward_dc m WHERE m.receipt_id = r.id) AS dc_nos
        FROM trx_process_receipt r
+       LEFT JOIN trx_gate_inward gi ON gi.id = r.gate_inward_id
        JOIN trx_knitting_program kp ON kp.id = r.src_id
        LEFT JOIN mst_warehouse w ON w.id = r.warehouse_id
        LEFT JOIN trx_grn g ON g.id = r.grn_id
@@ -513,8 +670,8 @@ async function dcYarnBalances(cid: number, dcNo: string) {
   }
 
   const rc = await queryOne<any>(
-    `SELECT COALESCE(SUM(input_qty), 0) AS consumed FROM trx_process_receipt
-      WHERE company_id = ? AND src_type = 'KNITTING_PROGRAM' AND src_id = ? AND ref_dc_no = ?`,
+    `SELECT COALESCE(SUM(m.consumed_kg), 0) AS consumed FROM trx_knitting_inward_dc m JOIN trx_process_receipt r ON r.id = m.receipt_id
+      WHERE r.company_id = ? AND m.program_id = ? AND m.dc_no = ?`,
     [cid, programId, dcNo]);
   const consumed = r3(Number(rc?.consumed ?? 0));
   const lines = [...groups.values()];
@@ -556,6 +713,7 @@ const yarnReturnSchema = z.object({
   party_dc_no: s.strReq(60),
   vehicle_no: s.nullableStr(30),
   warehouse_id: s.idReq(),
+  gate_inward_id: s.id(),
   remarks: s.text(),
   lines: z.array(z.object({
     yarn_id: s.idReq(),
@@ -625,6 +783,7 @@ knittingDcRouter.post('/knitting-dcs/:dcNo/yarn-returns', requirePermission('PRO
   for (const p of plan) p.g.rate = await issueLotRate(cid, p.g.issue_id, p.g.yarn_id, p.g.batch_id);
 
   const result = await transaction(async (tx) => {
+    const gate = await useGateEntry(tx, cid, { gate_inward_id: body.gate_inward_id, party_id: bal.vendor_id ?? prog.vendor_id, label: 'Yarn return' });
     const returnNo = await nextDocNumber(tx, cid, 'KNIT_YARN_RETURN');
     const h = await txExecute(tx,
       `INSERT INTO trx_knitting_yarn_return
@@ -635,6 +794,7 @@ knittingDcRouter.post('/knitting-dcs/:dcNo/yarn-returns', requirePermission('PRO
        bal.vendor_id ?? prog.vendor_id ?? null, body.vehicle_no ?? null, body.warehouse_id,
        totalKg, totalCones, body.remarks ?? null, uid]);
     const returnId = h.insertId;
+    if (gate) await txExecute(tx, 'UPDATE trx_knitting_yarn_return SET gate_inward_id = ? WHERE id = ?', [gate.id, returnId]);
     const lines = [];
     for (const p of plan) {
       const l = await txExecute(tx,
@@ -834,10 +994,11 @@ async function reconcile(programId: number, cid: number) {
       WHERE i.company_id = ? AND i.src_type = 'KNITTING_PROGRAM' AND i.src_id = ? AND i.dc_no IS NOT NULL
       GROUP BY i.dc_no ORDER BY MIN(i.id)`, [cid, programId]);
   const dcRc = await query<any>(
-    `SELECT ref_dc_no, SUM(input_qty) AS consumed, SUM(output_qty) AS fabric
-       FROM trx_process_receipt
-      WHERE company_id = ? AND src_type = 'KNITTING_PROGRAM' AND src_id = ? AND ref_dc_no IS NOT NULL
-      GROUP BY ref_dc_no`, [cid, programId]);
+    `SELECT m.dc_no AS ref_dc_no, SUM(m.consumed_kg) AS consumed, SUM(m.fabric_kg) AS fabric, MAX(kd.status) AS status, MAX(kd.close_type) AS close_type
+       FROM trx_knitting_inward_dc m JOIN trx_process_receipt r ON r.id = m.receipt_id
+       LEFT JOIN trx_knitting_dc kd ON kd.company_id = r.company_id AND kd.dc_no = m.dc_no
+      WHERE r.company_id = ? AND m.program_id = ? GROUP BY m.dc_no`, [cid, programId]);
+  const dcHdr = await query<any>(`SELECT dc_no, status, close_type, rate_per_kg FROM trx_knitting_dc WHERE company_id = ? AND dc_no IN (SELECT DISTINCT dc_no FROM trx_process_issue WHERE company_id = ? AND src_type = 'KNITTING_PROGRAM' AND src_id = ?)`, [cid, cid, programId]);
   const dcRet = await query<any>(
     `SELECT dc_no, SUM(total_kg) AS kg, SUM(total_cones) AS cones
        FROM trx_knitting_yarn_return WHERE company_id = ? AND program_id = ? AND status <> 'CANCELLED' GROUP BY dc_no`,
@@ -853,6 +1014,9 @@ async function reconcile(programId: number, cid: number) {
       consumed_kg: used, fabric_kg: Number(got?.fabric ?? 0),
       returned_kg: returned, cones_returned: Number(ret?.cones ?? 0),
       balance_kg: r3(issued - used - returned),
+      status: dcHdr.find((x) => x.dc_no === d.dc_no)?.status ?? (used > 0 ? 'PARTIALLY_RECEIVED' : 'OPEN'),
+      close_type: dcHdr.find((x) => x.dc_no === d.dc_no)?.close_type ?? null,
+      rate_per_kg: dcHdr.find((x) => x.dc_no === d.dc_no)?.rate_per_kg ?? null,
     };
   });
 

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { QuotationPicker, type QuoteValue } from '../../../components/ProcessPickers';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Plus, ScanLine, Download, Save, CheckCircle2, Printer, Trash2, Ban, PackageCheck } from 'lucide-react';
@@ -97,12 +98,14 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
   const [rows, setRows] = useState<DcRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [picker, setPicker] = useState<null | 'job' | 'scan' | 'import'>(null);
+  const [quote, setQuote] = useState<QuoteValue>({ quotation_id: '', quotation_line_id: '', rate_per_kg: '' });
 
   useEffect(() => {
     if (!d) return;
     setHead({ fpo_date: String(d.fpo_date).slice(0, 10), sub_process: d.sub_process, vendor_id: String(d.vendor_id ?? ''), from_warehouse_id: d.from_warehouse_id ? String(d.from_warehouse_id) : '',
       to_location: d.to_location ?? '', vehicle_no: d.vehicle_no ?? '', challan_no: d.challan_no ?? '', color_name: d.color_name ?? '', shade_code: d.shade_code ?? '',
       target_dia: d.target_dia ?? '', target_gsm: d.target_gsm ?? '', expected_return_date: d.expected_return_date ? String(d.expected_return_date).slice(0, 10) : '', remarks: d.remarks ?? '' });
+    setQuote({ quotation_id: d.quotation_id ? String(d.quotation_id) : '', quotation_line_id: d.quotation_line_id ? String(d.quotation_line_id) : '', rate_per_kg: d.rate_per_kg != null ? String(d.rate_per_kg) : '' });
     setRows((d.rolls ?? []).map((r: any) => ({ fabric_roll_id: Number(r.fabric_roll_id), roll_no: r.roll_no, lot_no: r.lot_no, fabric_name: r.fabric_name, so_id: r.so_id, io_no: r.io_no,
       buyer_po_no: r.buyer_po_no, style_code: r.style_code, color_name: r.color_name ?? '', gsm: r.gsm, dia: r.dia, available_kg: n(r.weight_kg), weight_kg: n(r.weight_kg), meters: n(r.meters) })));
   }, [d]);
@@ -125,6 +128,8 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
 
   const payload = () => ({
     ...head, vendor_id: Number(head.vendor_id), from_warehouse_id: head.from_warehouse_id ? Number(head.from_warehouse_id) : null, expected_return_date: head.expected_return_date || null,
+    quotation_id: quote.quotation_id ? Number(quote.quotation_id) : null, quotation_line_id: quote.quotation_line_id ? Number(quote.quotation_line_id) : null,
+    rate_per_kg: quote.rate_per_kg !== '' ? Number(quote.rate_per_kg) : null,
     rolls: rows.map((r) => ({ fabric_roll_id: r.fabric_roll_id, so_id: r.so_id, weight_kg: n(r.weight_kg), meters: n(r.meters), color_name: r.color_name || null })),
   });
   const save = async (confirm: boolean) => {
@@ -194,6 +199,10 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
         <Input label="Target GSM" value={head.target_gsm} disabled={!editable} onChange={(e) => setHead({ ...head, target_gsm: e.target.value })} />
         <Input label="Expected return" type="date" value={head.expected_return_date} disabled={!editable} onChange={(e) => setHead({ ...head, expected_return_date: e.target.value })} />
         <Textarea label="Remarks" className="col-span-2 md:col-span-6" rows={1} value={head.remarks} disabled={!editable} onChange={(e) => setHead({ ...head, remarks: e.target.value })} />
+        <div className="col-span-2 md:col-span-6">
+          <QuotationPicker vendorId={head.vendor_id} material="FABRIC" process={types.data?.find((t) => t.code === head.sub_process)?.name ?? head.sub_process}
+            value={quote} onChange={setQuote} disabled={!editable} idPrefix="fpo" />
+        </div>
       </div>
 
       <div className="card overflow-hidden">

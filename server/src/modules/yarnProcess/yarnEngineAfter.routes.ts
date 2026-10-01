@@ -376,7 +376,8 @@ yarnEngineAfterRouter.get('/yarn-process/bill-sources', requirePermission(YP.VIE
     `SELECT i.id AS ref_id, 'GRN' AS line_type, i.inward_no AS doc_no, i.inward_date AS doc_date, i.process_code, pt.name AS process_name, i.good_kg AS qty_kg,
             (SELECT GROUP_CONCAT(DISTINCT x.io_no SEPARATOR ', ') FROM trx_yarn_process_inward_out x WHERE x.inward_id = i.id) AS io_no,
             (SELECT bl.rate FROM trx_yarn_process_bill_line bl JOIN trx_yarn_process_bill bb ON bb.id = bl.bill_id
-              WHERE bb.vendor_id = i.vendor_id AND bl.process_code = i.process_code AND bl.line_type = 'GRN' AND bb.status = 'POSTED' ORDER BY bl.id DESC LIMIT 1) AS last_rate
+              WHERE bb.vendor_id = i.vendor_id AND bl.process_code = i.process_code AND bl.line_type = 'GRN' AND bb.status = 'POSTED' ORDER BY bl.id DESC LIMIT 1) AS last_rate,
+            (SELECT o2.rate_per_kg FROM trx_yarn_process_order o2 WHERE o2.id = i.ypo_id) AS quotation_rate
        FROM trx_yarn_process_inward i LEFT JOIN mst_yarn_process_type pt ON pt.company_id = i.company_id AND pt.code = i.process_code
       WHERE i.company_id = ? AND i.vendor_id = ? AND i.bill_id IS NULL AND i.is_reprocess = 0 AND i.status = 'POSTED' AND COALESCE(pt.billable, 1) = 1${a.w}
       ORDER BY i.inward_date, i.id`, [cid, q.vendor_id, ...a.p]);
@@ -402,6 +403,7 @@ yarnEngineAfterRouter.get('/yarn-process/bill-sources', requirePermission(YP.VIE
 const billSchema = z.object({
   vendor_id: s.idReq(), bill_date: date, party_bill_no: s.nullableStr(60), from_date: date.nullish(), to_date: date.nullish(),
   discount_amount: z.coerce.number().min(0).default(0), other_charges: z.coerce.number().default(0), gst_pct: z.coerce.number().min(0).max(28).default(0), remarks: s.text(),
+  rate_change_reason: s.nullableStr(255),
   lines: z.array(z.object({ line_type: z.enum(['GRN', 'REPROCESS', 'RECOVERY']), ref_id: s.idReq(), rate: z.coerce.number().min(0).default(0) })).min(1, 'Add at least one GRN / reprocess'),
 });
 yarnEngineAfterRouter.get('/yarn-process/bills', requirePermission(YP.VIEW), ah(async (req, res) => {
@@ -433,6 +435,11 @@ yarnEngineAfterRouter.post('/yarn-process/bills', requirePermission(YP.BILL), ah
         if (i.status !== 'POSTED') throw BadRequest(`${i.inward_no} is not posted yet`);
         if (i.is_reprocess) throw BadRequest(`${i.inward_no} is a reprocess GRN — its charge comes from the reprocess billing`);
         if (!(l.rate > 0)) throw BadRequest(`${i.inward_no}: enter the rate per KG`);
+        // the approved quotation rate of the DC is the job-work rate; a different rate needs a reason
+        const qr = await txQueryOne<any>(tx, 'SELECT rate_per_kg FROM trx_yarn_process_order WHERE id = ?', [i.ypo_id]);
+        if (qr?.rate_per_kg != null && Math.abs(n(qr.rate_per_kg) - l.rate) > 0.005 && !(body.rate_change_reason && body.rate_change_reason.length >= 3)) {
+          throw BadRequest(`${i.inward_no}: the rate ₹${l.rate} differs from the approved quotation rate ₹${n(qr.rate_per_kg)} — give the reason for the change`);
+        }
         const amt = r2(n(i.good_kg) * l.rate);
         const j = await txQueryOne<any>(tx, `SELECT GROUP_CONCAT(DISTINCT io_no SEPARATOR ', ') j FROM trx_yarn_process_inward_out WHERE inward_id = ?`, [i.id]);
         await txExecute(tx, 'INSERT INTO trx_yarn_process_bill_line (bill_id, line_type, ref_id, doc_no, doc_date, io_no, process_code, qty_kg, rate, amount) VALUES (?,?,?,?,?,?,?,?,?,?)',

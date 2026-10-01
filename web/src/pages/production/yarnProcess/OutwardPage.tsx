@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { QuotationPicker, type QuoteValue } from '../../../components/ProcessPickers';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Plus, ScanLine, Download, Save, CheckCircle2, Printer, Trash2, Ban, PackageCheck, Lock } from 'lucide-react';
@@ -90,6 +91,7 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
   const [rows, setRows] = useState<Row[]>([]);
   const [busy, setBusy] = useState(false);
   const [picker, setPicker] = useState<null | 'job' | 'scan' | 'import'>(null);
+  const [quote, setQuote] = useState<QuoteValue>({ quotation_id: '', quotation_line_id: '', rate_per_kg: '' });
   const pt = (types.data ?? []).find((t) => t.code === head.process_code);
   const programs = useQuery({ queryKey: ['yarn-process', 'programs', pt?.base_process], queryFn: async () => (await http.get<{ data: any[] }>(`/yarn-process/programs?base=${pt?.base_process}`)).data ?? [], enabled: !!pt && editable });
 
@@ -98,6 +100,7 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
     setHead({ ypo_date: String(d.ypo_date).slice(0, 10), process_code: d.process_code, vendor_id: String(d.vendor_id ?? ''), from_warehouse_id: d.from_warehouse_id ? String(d.from_warehouse_id) : '',
       to_location: d.to_location ?? '', vehicle_no: d.vehicle_no ?? '', challan_no: d.challan_no ?? '', target_shade: d.target_shade ?? '',
       expected_return_date: d.expected_return_date ? String(d.expected_return_date).slice(0, 10) : '', remarks: d.remarks ?? '' });
+    setQuote({ quotation_id: d.quotation_id ? String(d.quotation_id) : '', quotation_line_id: d.quotation_line_id ? String(d.quotation_line_id) : '', rate_per_kg: d.rate_per_kg != null ? String(d.rate_per_kg) : '' });
     setRows((d.lines ?? []).map((l: any) => ({ key: `r${++seq}`, grn_line_id: Number(l.grn_line_id), so_id: l.so_id, io_no: l.io_no || 'STOCK', buyer_po_no: l.buyer_po_no, lot_no: l.lot_no,
       yarn_name: l.yarn_name, shade: l.shade ?? '', grn_no: l.grn_no, available_kg: n(l.qty_kg), qty_kg: n(l.qty_kg), cone_no: l.cone_no ?? '', no_of_cones: Number(l.no_of_cones) || 0,
       target_shade: l.target_shade ?? '', process_id: l.process_id ? String(l.process_id) : '' })));
@@ -124,6 +127,8 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
 
   const payload = () => ({
     ...head, vendor_id: Number(head.vendor_id), from_warehouse_id: head.from_warehouse_id ? Number(head.from_warehouse_id) : null, expected_return_date: head.expected_return_date || null,
+    quotation_id: quote.quotation_id ? Number(quote.quotation_id) : null, quotation_line_id: quote.quotation_line_id ? Number(quote.quotation_line_id) : null,
+    rate_per_kg: quote.rate_per_kg !== '' ? Number(quote.rate_per_kg) : null,
     lines: rows.map((r) => ({ grn_line_id: r.grn_line_id, so_id: r.so_id, qty_kg: n(r.qty_kg), cone_no: r.cone_no || null, no_of_cones: n(r.no_of_cones), target_shade: r.target_shade || null,
       process_id: r.process_id ? Number(r.process_id) : null })),
   });
@@ -182,6 +187,9 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
         {pt?.changes_shade ? <Input label="Target shade (all lines)" value={head.target_shade} disabled={!editable} onChange={(e) => setHead({ ...head, target_shade: e.target.value })} /> : null}
         <Input label="Expected return" type="date" value={head.expected_return_date} disabled={!editable} onChange={(e) => setHead({ ...head, expected_return_date: e.target.value })} />
         <Textarea label="Remarks" className="col-span-2 md:col-span-3" rows={1} value={head.remarks} disabled={!editable} onChange={(e) => setHead({ ...head, remarks: e.target.value })} />
+        <div className="col-span-full">
+          <QuotationPicker vendorId={head.vendor_id} material="YARN" process={pt?.name ?? head.process_code} value={quote} onChange={setQuote} disabled={!editable} idPrefix="ypo" />
+        </div>
       </div>
 
       <div className="card overflow-hidden">

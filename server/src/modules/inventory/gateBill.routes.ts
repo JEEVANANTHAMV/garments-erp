@@ -4,6 +4,8 @@ import { query, queryOne } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
 import { NotFound } from '../../core/errors.js';
 import { requireAny } from '../../middleware/auth.js';
+import { processQuotations, openGateEntries, settingFlag } from '../../core/inwardControls.js';
+import { knittingBillSources } from '../yarnProcess/knittingBill.routes.js';
 
 /**
  * Client voice notes 01-Oct-2026:
@@ -113,7 +115,7 @@ gateBillRouter.get('/dc-lookup', requireAny('GATE_OUTWARD.VIEW', 'GATE_INWARD.VI
 // GRN bill tracking
 // =====================================================================================
 export interface BillRow {
-  source: 'PURCHASE' | 'TRIM' | 'FABRIC_PROCESS' | 'YARN_PROCESS'; grn_id: number; grn_no: string; grn_date: string; days: number; supplier_id: number | null; supplier: string | null;
+  source: 'PURCHASE' | 'TRIM' | 'FABRIC_PROCESS' | 'YARN_PROCESS' | 'KNITTING'; grn_id: number; grn_no: string; grn_date: string; days: number; supplier_id: number | null; supplier: string | null;
   po_nos: string | null; material: string; supplier_inv_no: string | null; grn_qty: number; grn_value: number; billed_value: number; bill_nos: string | null; bill_status: string | null;
   status: 'PENDING' | 'PARTIAL' | 'RECEIVED'; overdue: boolean; link: string;
 }
@@ -181,9 +183,17 @@ export async function grnBillRows(cid: number, alertDays: number): Promise<BillR
         bill_status: status === 'RECEIVED' ? i.bill_status : null, status, overdue: status !== 'RECEIVED' && Number(i.days) > alertDays, link: '' });
     }
   }
+  // ---- knitting GRNs (job-work knitters) against knitting bills ----
+  for (const k of await knittingBillSources(cid)) {
+    const billed = !!k.bill_id && k.bill_status !== 'CANCELLED';
+    out.push({ source: 'KNITTING', grn_id: Number(k.receipt_id), grn_no: k.receipt_no, grn_date: k.receipt_date, days: Number(k.days) || 0, supplier_id: k.vendor_id, supplier: k.vendor_name,
+      po_nos: k.dc_nos, material: 'FABRIC', supplier_inv_no: k.party_dc_no, grn_qty: k.fabric_kg, grn_value: k.quotation_rate != null ? r2(k.fabric_kg * k.quotation_rate) : 0,
+      billed_value: 0, bill_nos: billed ? k.bill_no : null, bill_status: billed ? k.bill_status : null, status: billed ? 'RECEIVED' : 'PENDING',
+      overdue: !billed && Number(k.days) > alertDays, link: '' });
+  }
   const LINK: Record<string, (r: BillRow) => string> = {
     PURCHASE: (r) => (r.material.includes('YARN') ? `/procurement/yarn/grn/${r.grn_id}` : r.material.includes('FABRIC') ? `/procurement/fabric/grn/${r.grn_id}` : '/procurement/grns'),
-    TRIM: (r) => `/procurement/trim/grn/${r.grn_id}`, FABRIC_PROCESS: (r) => `/production/fabric-process/inward?id=${r.grn_id}`, YARN_PROCESS: (r) => `/production/yarn-process/inward?id=${r.grn_id}`,
+    TRIM: (r) => `/procurement/trim/grn/${r.grn_id}`, KNITTING: () => '/procurement/supplier-bills?tab=KNITTING', FABRIC_PROCESS: (r) => `/production/fabric-process/inward?id=${r.grn_id}`, YARN_PROCESS: (r) => `/production/yarn-process/inward?id=${r.grn_id}`,
   };
   out.forEach((r) => { r.link = LINK[r.source](r); });
   return out;
@@ -212,12 +222,12 @@ gateBillRouter.get('/procurement/grn-bill-status', requireAny('GRN.VIEW', 'PURCH
 gateBillRouter.get('/alerts', ah(async (req, res) => {
   const cid = req.user!.companyId;
   const items: { key: string; title: string; body: string; count: number; severity: 'info' | 'warning' | 'danger'; link: string }[] = [];
-  const purchase = can(req, 'GRN.VIEW', 'PURCHASE.VIEW'), process = can(req, 'FABRIC_PROCESS.VIEW', 'YARN_PROCESS.VIEW');
+  const purchase = can(req, 'GRN.VIEW', 'PURCHASE.VIEW'), process = can(req, 'FABRIC_PROCESS.VIEW', 'YARN_PROCESS.VIEW', 'PRODUCTION.VIEW');
   if (purchase || process) {
     const days = await alertDaysOf(cid);
     const rows = (await grnBillRows(cid, days)).filter((r) => r.status !== 'RECEIVED');
     const sup = rows.filter((r) => purchase && (r.source === 'PURCHASE' || r.source === 'TRIM'));
-    const pro = rows.filter((r) => process && (r.source === 'FABRIC_PROCESS' || r.source === 'YARN_PROCESS'));
+    const pro = rows.filter((r) => process && (r.source === 'FABRIC_PROCESS' || r.source === 'YARN_PROCESS' || r.source === 'KNITTING'));
     const add = (key: string, label: string, list: BillRow[], status: string) => {
       if (!list.length) return;
       const over = list.filter((r) => r.overdue);
@@ -274,4 +284,19 @@ gateBillRouter.get('/grn-print/:kind/:id', requireAny('GRN.VIEW', 'PURCHASE.VIEW
     `SELECT 'TRIM' material_type, t.trim_name item, l.color_name, l.internal_lot_no lot_no, NULL packs, l.received_qty, l.accepted_qty, l.rejected_qty, u.code uom, l.trim_size
        FROM trx_trim_grn_line l LEFT JOIN mst_trim t ON t.id = l.trim_id LEFT JOIN cfg_uom u ON u.id = l.uom_id WHERE l.grn_id = ? ORDER BY l.id`, [id]);
   res.json({ data: { ...g, company, lines } });
+}));
+
+// =====================================================================================
+// Pickers for the process DCs / inwards
+// =====================================================================================
+/** GET /process-quotations?vendor_id=&material=&process= — the vendor's accepted (approved) process quotations with line rates. */
+gateBillRouter.get('/process-quotations', requireAny('PRODUCTION.VIEW', 'FABRIC_PROCESS.VIEW', 'YARN_PROCESS.VIEW', 'QUOTATION.VIEW'), ah(async (req, res) => {
+  const q = z.object({ vendor_id: z.coerce.number().int().positive(), material: z.string().optional(), process: z.string().optional() }).parse(req.query);
+  res.json({ data: await processQuotations(req.user!.companyId, q), required: await settingFlag(req.user!.companyId, 'PROCESS_QUOTATION_REQUIRED', false) });
+}));
+
+/** GET /gate-entries/open?party_id= — recent gate entries of the party, to map on an inward. */
+gateBillRouter.get('/gate-entries/open', requireAny('GRN.VIEW', 'PRODUCTION.VIEW', 'GATE_INWARD.VIEW', 'FABRIC_PROCESS.VIEW', 'YARN_PROCESS.VIEW', 'PURCHASE.VIEW'), ah(async (req, res) => {
+  const q = z.object({ party_id: z.coerce.number().int().optional() }).parse(req.query);
+  res.json({ data: await openGateEntries(req.user!.companyId, q.party_id ?? null), required: await settingFlag(req.user!.companyId, 'GATE_ENTRY_REQUIRED_FOR_INWARD', false) });
 }));
