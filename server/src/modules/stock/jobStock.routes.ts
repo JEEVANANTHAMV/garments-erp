@@ -329,7 +329,8 @@ export async function yarnLotOrigin(cid: number, grnLineId: number, depth = 0): 
     pr.ref_dc_no ? [cid, pr.src_id, pr.ref_dc_no] : [cid, pr.src_id]);
   const from = [];
   for (const i of inputs) from.push({ ...i, origin: i.grn_line_id ? await yarnLotOrigin(cid, Number(i.grn_line_id), depth + 1) : null });
-  return { ...l, kind: 'PROCESSED', process: pr, from };
+  // the process may carry no vendor — the processed lot's supplier is the DC's processor
+  return { ...l, kind: 'PROCESSED', process: { ...pr, vendor: pr.vendor ?? l.supplier }, from };
 }
 
 /** GET /traceability/yarn-lot/:grnLineId — where a yarn lot came from (PO / GRN, or through yarn processing). */
