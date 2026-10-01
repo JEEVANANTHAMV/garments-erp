@@ -239,10 +239,14 @@ export function buildResourceRouter(cfg: ResourceConfig): Router {
       if (beforeCreate) await beforeCreate(req, data, tx);
 
       if (autoNumber && !data[autoNumber.column]) {
-        data[autoNumber.column] = await nextDocNumber(
-          tx, req.user!.companyId, autoNumber.docType,
-          { branchId: (data.branch_id as number) ?? null },
-        );
+        // skip numbers already used (series behind imported / hand-numbered documents)
+        for (let tries = 0; tries < 200; tries++) {
+          const no = await nextDocNumber(tx, req.user!.companyId, autoNumber.docType, { branchId: (data.branch_id as number) ?? null });
+          const taken = await txQueryOne(tx, `SELECT 1 AS x FROM ${table} WHERE ${autoNumber.column} = ?${companyScoped ? ' AND company_id = ?' : ''} LIMIT 1`,
+            companyScoped ? [no, req.user!.companyId] : [no]);
+          data[autoNumber.column] = no;
+          if (!taken) break;
+        }
       }
 
       const cols = Object.keys(data);

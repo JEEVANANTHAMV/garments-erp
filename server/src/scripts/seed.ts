@@ -2253,6 +2253,8 @@ async function seedDemo(ctx: {
     ['PURCHASE_RET', 'trx_purchase_return'],
     ['PURCHASE_RETURN', 'trx_purchase_return'],
     ['SUPP_BILL', 'trx_supplier_bill'],
+    ['SUPPLIER_BILL', 'trx_supplier_bill'],   // the series supplier-bills actually number from
+    ['STOCK_TRANSFER', 'trx_stock_transfer'],
     ['STOCK_TRF', 'trx_stock_transfer'],
     ['FG_RECEIPT', 'trx_fg_receipt'],
     ['PROD_COST', 'trx_production_cost'],
