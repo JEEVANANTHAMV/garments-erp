@@ -103,6 +103,7 @@ export const NAV: NavSection[] = [
       { label: 'Stock Ledger',    to: '/inventory/ledger', icon: History, perms: ['INVENTORY.VIEW'] },
       { label: 'Material Issue',  to: '/inventory/issues', icon: PackageCheck, perms: ['ISSUE.VIEW'] },
       { label: 'Stock Transfers', to: '/inventory/transfers', icon: Truck, perms: ['INVENTORY.VIEW'] },
+      { label: 'Job Stock Transfer', to: '/inventory/job-transfers', icon: GitBranch, perms: ['INVENTORY.VIEW'] },
       { label: 'Batches',         to: '/inventory/batches', icon: Container, perms: ['INVENTORY.VIEW'] },
     ],
   },
@@ -110,6 +111,7 @@ export const NAV: NavSection[] = [
     label: 'Production',
     items: [
       { label: 'Traceability Search',  to: '/production/traceability', icon: Search, perms: ['PRODUCTION.VIEW'] },
+      { label: 'Material Traceability (Yarn / Fabric)', to: '/production/material-trace', icon: Workflow, perms: ['PRODUCTION.VIEW'] },
       { label: 'Yarn Processing',      to: '/production/knitting', icon: Activity, perms: ['PRODUCTION.VIEW'] },
       { label: 'Knitting Programs',    to: '/production/knitting-programs', icon: Layers, perms: ['PRODUCTION.VIEW'] },
       { label: 'Process Routes',       to: '/production/process-routes', icon: Workflow, perms: ['PRODUCTION.VIEW'], hidden: true },

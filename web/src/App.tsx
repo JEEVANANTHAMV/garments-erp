@@ -77,6 +77,8 @@ import FabricProcessReturnPage from './pages/production/fabricProcess/ReturnPage
 import FabricProcessReprocessPage from './pages/production/fabricProcess/ReprocessPage';
 import FabricProcessBillPage from './pages/production/fabricProcess/BillPage';
 import { FabricRollTrackingPage, FabricProcessLedgerPage } from './pages/production/fabricProcess/TrackingLedgerPages';
+import JobTransferPage from './pages/inventory/JobTransferPage';
+import MaterialTracePage from './pages/production/MaterialTracePage';
 
 import CadRequirementsPage from './pages/production/CadRequirements';
 import CadRequirementDetailPage from './pages/production/CadRequirementDetail';
@@ -268,6 +270,7 @@ export default function App() {
                   <Route path="ledger" element={<StockLedgerPage />} />
                   <Route path="issues" element={<MaterialIssuePage />} />
                   <Route path="transfers" element={<StockTransfersPage />} />
+                  <Route path="job-transfers" element={<JobTransferPage />} />
                   <Route path="batches" element={<BatchesPage />} />
                 </Route>
 
@@ -290,6 +293,7 @@ export default function App() {
                   <Route path="fabric-process/bills" element={<FabricProcessBillPage />} />
                   <Route path="fabric-process/tracking" element={<FabricRollTrackingPage />} />
                   <Route path="fabric-process/ledger" element={<FabricProcessLedgerPage />} />
+                  <Route path="material-trace" element={<MaterialTracePage />} />
                   <Route path="fabric-issues" element={<FabricIssuePage />} />
                   <Route path="lay-spreading" element={<LaySpreadingPage />} />
                   <Route path="cut-qc-bundles" element={<CutQcBundlesPage />} />

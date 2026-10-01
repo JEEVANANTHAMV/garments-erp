@@ -103,9 +103,11 @@ export async function resolveSoId(cid: number, soId: unknown, ioNo: unknown): Pr
 
 /** GET /yarn-stock/job-lots?so_id=&yarn_id=&warehouse_id= — the job's yarn lots (bought for it or transferred to it) + general stock. */
 jobStockRouter.get('/yarn-stock/job-lots', requireAny('PRODUCTION.VIEW', 'INVENTORY.VIEW'), ah(async (req, res) => {
-  const q = z.object({ so_id: z.coerce.number().int().positive().optional(), yarn_id: z.coerce.number().int().positive().optional(),
+  const q = z.object({ so_id: z.coerce.number().int().positive().optional(), io_no: z.string().trim().max(60).optional(), yarn_id: z.coerce.number().int().positive().optional(),
     warehouse_id: z.coerce.number().int().positive().optional(), general: z.coerce.number().int().optional() }).parse(req.query);
-  const rows = await yarnJobLots(req.user!.companyId, { so_id: q.so_id ?? null, yarn_id: q.yarn_id, warehouse_id: q.warehouse_id, includeGeneral: q.general !== 0 });
+  // job by id or IO no; a job-less program / process (io_no given, no sales order) sees general stock only
+  const so = q.so_id || q.io_no !== undefined ? (await resolveSoId(req.user!.companyId, q.so_id, q.io_no)) ?? 0 : null;
+  const rows = await yarnJobLots(req.user!.companyId, { so_id: so, yarn_id: q.yarn_id, warehouse_id: q.warehouse_id, includeGeneral: q.general !== 0 });
   res.json({ data: rows });
 }));
 
@@ -308,17 +310,22 @@ jobStockRouter.get('/traceability/fabric-roll', requirePermission('PRODUCTION.VI
       const r = await rollSource(id);
       if (!r) continue;
       const step: any = { depth, roll: r };
+      // processed roll: the processing DC it came back on (a split / transferred roll shares its parent's DC)
+      const parent = r.parent_roll_id ? await queryOne<any>('SELECT source_fpo_id FROM trx_fabric_roll WHERE id = ?', [r.parent_roll_id]) : null;
+      if (r.source_fpo_id && (!parent || Number(parent.source_fpo_id) !== Number(r.source_fpo_id))) {
+        step.process = await queryOne<any>('SELECT fpo_no, fpo_date, sub_process, p.party_name vendor FROM trx_fabric_process_order o LEFT JOIN mst_party p ON p.id = o.vendor_id WHERE o.id = ?', [r.source_fpo_id]);
+      }
       if (r.parent_roll_id) next.push(Number(r.parent_roll_id));
       else if (r.source_fpo_id) {
         const ins = await query<any>('SELECT DISTINCT fabric_roll_id FROM trx_fabric_process_roll_in WHERE fpo_id = ? AND fabric_roll_id IS NOT NULL', [r.source_fpo_id]);
         next.push(...ins.map((x) => Number(x.fabric_roll_id)));
-        step.process = await queryOne<any>('SELECT fpo_no, fpo_date, sub_process, p.party_name vendor FROM trx_fabric_process_order o LEFT JOIN mst_party p ON p.id = o.vendor_id WHERE o.id = ?', [r.source_fpo_id]);
       }
       if (r.src_type === 'KNITTING_PROGRAM' && r.src_id) {
         step.knitting = await queryOne<any>('SELECT program_no, io_no, p.party_name knitter FROM trx_knitting_program kp LEFT JOIN mst_party p ON p.id = kp.vendor_id WHERE kp.id = ?', [r.src_id]);
         step.yarn = await yarnForProgram(cid, Number(r.src_id), r.ref_dc_no ?? null);
       }
       if (!r.parent_roll_id && !r.source_fpo_id) step.bills = await billsForGrn([Number(r.grn_id)]);
+      if (step.process) step.process_bill = await queryOne<any>(`SELECT b.bill_no, b.bill_date, b.net_amount FROM trx_fabric_process_bill b JOIN trx_fabric_process_inward i ON i.bill_id = b.id WHERE i.grn_id = ? AND b.status = 'POSTED' LIMIT 1`, [r.grn_id]);
       chain.push(step);
     }
     ids = next;

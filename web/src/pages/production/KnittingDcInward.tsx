@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Truck, PackagePlus, Printer, Plus, Trash2, Save, X, Scale, Undo2 } from 'lucide-react';
 import { http } from '../../lib/api';
@@ -157,58 +157,73 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
   const toast = useToast();
   const qc = useQueryClient();
   const { data: warehouses = [] } = useLookup('warehouses');
-  const { data: parties = [] } = useLookup('parties');
-  const { data: prog } = useQuery({
-    queryKey: ['knitting-program', programId],
-    queryFn: async () => (await http.get<{ data: any }>(`/knitting/programs/${programId}`)).data,
-    enabled: open && !!programId,
+  const { data: suppliers = [] } = useLookup('suppliers');
+  // One knitting DC can carry several jobs (programs) to the same knitter
+  const { data: allPrograms = [] } = useQuery({
+    queryKey: ['knitting-programs', 'dc-ready'],
+    queryFn: async () => ((await http.get<{ data: any[] }>('/knitting/programs?pageSize=300')).data ?? [])
+      .filter((p: any) => ['RELEASED', 'MATERIAL_ISSUED', 'IN_PROGRESS', 'PRODUCTION_COMPLETED', 'OUTPUT_RECEIPT', 'QC', 'STOCK_POSTED'].includes(p.status)),
+    enabled: open,
   });
-
   const [h, setH] = useState<any>({});
-  const [lines, setLines] = useState<any[]>([]);
+  const [jobs, setJobs] = useState<DcJob[]>([]);
+  const [addId, setAddId] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // Prefill every yarn line with what is still to go out.
-  useEffect(() => {
-    if (!open || !prog) return;
-    setH({
-      dc_date: today(), vendor_id: prog.vendor_id ?? '', vehicle_no: '', warehouse_id: '',
-      remarks: '', allow_override: false, override_reason: '',
-    });
-    setLines((prog.yarns ?? []).filter((y: any) => y.yarn_id).map((y: any) => {
+  const loadJob = async (pid: number): Promise<DcJob> => {
+    const prog = (await http.get<{ data: any }>(`/knitting/programs/${pid}`)).data;
+    const qs = new URLSearchParams(prog.so_id ? { so_id: String(prog.so_id) } : { io_no: prog.io_no ?? '' });
+    const lots: any[] = (await http.get<{ data: any[] }>(`/yarn-stock/job-lots?${qs}`)).data ?? [];
+    const lines = (prog.yarns ?? []).filter((y: any) => y.yarn_id).map((y: any) => {
       const pending = Math.max(0, Number(y.planned_qty_kg) - Number(y.issued_qty_kg));
+      // job's own lots first (oldest first), then general stock
+      const options = lots.filter((l) => Number(l.yarn_id) === Number(y.yarn_id)).sort((a, b) => Number(b.own_lot && !!b.holder_so_id) - Number(a.own_lot && !!a.holder_so_id));
+      const pick = options[0];
       return {
-        program_yarn_id: y.id, yarn_id: y.yarn_id,
-        yarn: `${y.yarn_code ?? ''} — ${y.yarn_name ?? ''}`, colour: y.colour, count: y.count_value,
-        pending, lot_no: y.yarn_lot_no ?? '', yarn_po_no: y.yarn_po_no ?? '',
-        issued_qty_kg: pending ? String(Math.round(pending * 1000) / 1000) : '', no_of_cones: '',
+        program_yarn_id: y.id, yarn_id: y.yarn_id, yarn: `${y.yarn_code ?? ''} — ${y.yarn_name ?? ''}`, colour: y.colour, count: y.count_value, pending, options,
+        grn_line_id: pick ? String(pick.grn_line_id) : '',
+        issued_qty_kg: pending && pick ? String(Math.round(Math.min(pending, pick.available_kg) * 1000) / 1000) : '', no_of_cones: '',
       };
-    }));
-  }, [open, prog]);
+    });
+    return { program_id: pid, program_no: prog.program_no, io_no: prog.io_no, style: prog.style_code, fabric: prog.fabric_name ?? prog.fabric_type, vendor_id: prog.vendor_id, lines };
+  };
 
-  const setLine = (i: number, patch: any) =>
-    setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
-  const totalKg = lines.reduce((n, l) => n + (Number(l.issued_qty_kg) || 0), 0);
-  const totalCones = lines.reduce((n, l) => n + (Number(l.no_of_cones) || 0), 0);
+  useEffect(() => {
+    if (!open || !programId) return;
+    setH({ dc_date: today(), vendor_id: '', vehicle_no: '', warehouse_id: '', remarks: '', allow_override: false, override_reason: '' });
+    setJobs([]);
+    void loadJob(programId).then((j) => { setJobs([j]); setH((x: any) => ({ ...x, vendor_id: j.vendor_id ? String(j.vendor_id) : '' })); })
+      .catch((e) => toast(e?.message || 'Could not load the program', 'error'));
+  }, [open, programId]);
+
+  const addJob = async () => {
+    if (!addId) return;
+    if (jobs.some((j) => String(j.program_id) === addId)) { toast('That job is already on the DC', 'warning'); return; }
+    try { const j = await loadJob(Number(addId)); setJobs((js) => [...js, j]); setAddId(''); } catch (e: any) { toast(e?.message || 'Could not load the program', 'error'); }
+  };
+  const setLine = (ji: number, li: number, patch: any) =>
+    setJobs((js) => js.map((j, a) => (a !== ji ? j : { ...j, lines: j.lines.map((l, b) => (b === li ? { ...l, ...patch } : l)) })));
+  const all = jobs.flatMap((j) => j.lines);
+  const totalKg = all.reduce((n, l) => n + (Number(l.issued_qty_kg) || 0), 0);
+  const totalCones = all.reduce((n, l) => n + (Number(l.no_of_cones) || 0), 0);
 
   const save = async () => {
     if (!h.warehouse_id) { toast('Select the store the yarn goes out from', 'error'); return; }
-    if (!h.vendor_id) { toast('Select the knitting vendor', 'error'); return; }
+    if (!h.vendor_id) { toast('Select the knitting unit (supplier / vendor)', 'error'); return; }
     if (!(totalKg > 0)) { toast('Enter the KG to send on at least one line', 'error'); return; }
+    const noLot = all.find((l) => Number(l.issued_qty_kg) > 0 && !l.grn_line_id);
+    if (noLot && !h.allow_override) { toast(`${noLot.yarn}: pick the yarn lot (GRN) the KG comes from`, 'error'); return; }
     setSaving(true);
     try {
       const r = await http.post<{ data: { dc_no: string } }>('/knitting-dcs', {
-        program_id: programId, dc_date: h.dc_date, vendor_id: Number(h.vendor_id),
-        vehicle_no: h.vehicle_no || null, warehouse_id: Number(h.warehouse_id),
-        allow_override: h.allow_override, override_reason: h.override_reason || null,
-        remarks: h.remarks || null,
-        lines: lines.filter((l) => Number(l.issued_qty_kg) > 0).map((l) => ({
-          program_yarn_id: l.program_yarn_id, yarn_id: l.yarn_id,
-          lot_no: l.lot_no || null, yarn_po_no: l.yarn_po_no || null,
+        dc_date: h.dc_date, vendor_id: Number(h.vendor_id), vehicle_no: h.vehicle_no || null, warehouse_id: Number(h.warehouse_id),
+        allow_override: h.allow_override, override_reason: h.override_reason || null, remarks: h.remarks || null,
+        jobs: jobs.map((j) => ({ program_id: j.program_id, lines: j.lines.filter((l) => Number(l.issued_qty_kg) > 0).map((l) => ({
+          program_yarn_id: l.program_yarn_id, yarn_id: l.yarn_id, grn_line_id: l.grn_line_id ? Number(l.grn_line_id) : null,
           issued_qty_kg: Number(l.issued_qty_kg), no_of_cones: Number(l.no_of_cones) || 0,
-        })),
+        })) })).filter((j) => j.lines.length),
       });
-      toast(`Knitting DC ${r.data.dc_no} created`);
+      toast(`Knitting DC ${r.data.dc_no} created for ${jobs.length} job(s)`);
       invalidateKnitting(qc);
       onClose();
       onPrint(r.data.dc_no);
@@ -218,83 +233,78 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
   };
 
   return (
-    <Modal open={open} onClose={onClose} size="xl"
-      title={`Knitting DC — Yarn Outward${prog ? ` · ${prog.program_no}` : ''}`}
+    <Modal open={open} onClose={onClose} size="full"
+      title={`Knitting DC — Yarn Outward${jobs.length ? ` · ${jobs.map((j) => j.program_no).join(', ')}` : ''}`}
       footer={<>
+        <span className="mr-auto self-center text-xs text-slate-600"><b>{jobs.length}</b> job(s) · <b>{fmtDecimal(totalKg, 3)}</b> KG · {totalCones} cones</span>
         <button className="btn-secondary" onClick={onClose}><X size={14} /> Cancel</button>
         <button className="btn-primary" onClick={save} disabled={saving} id="btn-save-knit-dc">
           <Truck size={14} /> {saving ? 'Saving…' : 'Save & Print DC'}
         </button>
       </>}>
-      {!prog ? <LoadingBlock rows={4} /> : (
+      {!jobs.length ? <LoadingBlock rows={4} /> : (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-100 bg-slate-50 p-3 text-[12px] sm:grid-cols-4">
-            <Info label="Program" value={prog.program_no} />
-            <Info label="I/O (Job) No" value={prog.io_no ?? '—'} />
-            <Info label="Style" value={prog.style_code ? `${prog.style_code} — ${prog.style_name ?? ''}` : '—'} />
-            <Info label="Fabric / GSM / Dia" value={`${prog.fabric_name ?? prog.fabric_type ?? '—'} · ${prog.gsm ?? '—'} · ${prog.dia ?? '—'}`} />
-          </div>
-
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Input label="DC Date" type="date" value={h.dc_date ?? ''}
-              onChange={(e) => setH({ ...h, dc_date: e.target.value })} id="kdc-date" />
-            <Select label="Knitting Vendor" required value={h.vendor_id ?? ''} placeholder="— Select —"
+            <Input label="DC Date" type="date" value={h.dc_date ?? ''} onChange={(e) => setH({ ...h, dc_date: e.target.value })} id="kdc-date" />
+            <Select label="Knitting unit (Supplier / Vendor)" required value={h.vendor_id ?? ''} placeholder="— Select —"
               onChange={(e) => setH({ ...h, vendor_id: e.target.value })} id="kdc-vendor">
-              {parties.map((p: any) => <option key={p.id} value={p.id}>{p.label}</option>)}
+              {suppliers.map((p: any) => <option key={p.id} value={p.id}>{p.label}</option>)}
             </Select>
             <Select label="From Store" required value={h.warehouse_id ?? ''} placeholder="— Select —"
               onChange={(e) => setH({ ...h, warehouse_id: e.target.value })} id="kdc-wh">
               {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.label}</option>)}
             </Select>
-            <Input label="Vehicle No" value={h.vehicle_no ?? ''}
-              onChange={(e) => setH({ ...h, vehicle_no: e.target.value })} id="kdc-vehicle" />
+            <Input label="Vehicle No" value={h.vehicle_no ?? ''} onChange={(e) => setH({ ...h, vehicle_no: e.target.value })} id="kdc-vehicle" />
           </div>
 
-          <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="w-full text-[12px]">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="th">Yarn</th>
-                  <th className="th">Colour</th>
-                  <th className="th text-right">To give KG</th>
-                  <th className="th">Lot No</th>
-                  <th className="th">Yarn PO</th>
-                  <th className="th text-right">KG</th>
-                  <th className="th text-right">Cones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lines.length === 0 && (
-                  <tr><td colSpan={7} className="td py-6 text-center text-slate-400">
-                    This program has no yarn lines with a yarn selected
-                  </td></tr>
-                )}
-                {lines.map((l, i) => (
-                  <tr key={l.program_yarn_id} className="border-t border-slate-100">
-                    <td className="td font-medium">{l.yarn}{l.count ? <span className="ml-1 text-slate-400">{l.count}</span> : null}</td>
-                    <td className="td">{l.colour || '—'}</td>
-                    <td className="td text-right tabular-nums text-slate-500">{fmtDecimal(l.pending, 3)}</td>
-                    <td className="td"><input className="input w-28" value={l.lot_no}
-                      onChange={(e) => setLine(i, { lot_no: e.target.value })} id={`kdc-lot-${i}`} /></td>
-                    <td className="td"><input className="input w-28" value={l.yarn_po_no}
-                      onChange={(e) => setLine(i, { yarn_po_no: e.target.value })} id={`kdc-po-${i}`} /></td>
-                    <td className="td"><input className="input w-24 text-right" type="number" step="0.001"
-                      value={l.issued_qty_kg} onChange={(e) => setLine(i, { issued_qty_kg: e.target.value })}
-                      id={`kdc-kg-${i}`} /></td>
-                    <td className="td"><input className="input w-20 text-right" type="number" step="1"
-                      value={l.no_of_cones} onChange={(e) => setLine(i, { no_of_cones: e.target.value })}
-                      id={`kdc-cones-${i}`} /></td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot className="border-t-2 border-slate-200 bg-slate-50">
-                <tr>
-                  <td colSpan={5} className="td font-bold">Total</td>
-                  <td className="td text-right font-bold tabular-nums">{fmtDecimal(totalKg, 3)}</td>
-                  <td className="td text-right font-bold tabular-nums">{totalCones}</td>
-                </tr>
-              </tfoot>
-            </table>
+          {jobs.map((j, ji) => (
+            <div key={j.program_id} className="overflow-x-auto rounded-lg border border-slate-200">
+              <div className="flex flex-wrap items-center justify-between gap-2 bg-sky-50 px-3 py-2 text-[12px]">
+                <span className="font-semibold text-sky-900">Job {j.io_no ?? 'stock'} · Program {j.program_no}{j.style ? ` · Style ${j.style}` : ''}{j.fabric ? ` · ${j.fabric}` : ''}</span>
+                {ji > 0 && <button className="text-slate-500 hover:text-red-600" onClick={() => setJobs((js) => js.filter((_, a) => a !== ji))}><Trash2 size={13} /></button>}
+              </div>
+              <table className="w-full text-[12px]">
+                <thead className="bg-slate-50"><tr>
+                  <th className="th">Yarn</th><th className="th">Colour</th><th className="th text-right">To give KG</th>
+                  <th className="th">Yarn lot (GRN / PO / supplier) — this job's yarn first</th><th className="th text-right">KG</th><th className="th text-right">Cones</th>
+                </tr></thead>
+                <tbody>
+                  {!j.lines.length && <tr><td colSpan={6} className="td py-4 text-center text-slate-400">This program has no yarn lines with a yarn selected</td></tr>}
+                  {j.lines.map((l, li) => {
+                    const lot = l.options.find((o: any) => String(o.grn_line_id) === l.grn_line_id);
+                    const over = lot && Number(l.issued_qty_kg) > lot.available_kg + 1e-6;
+                    return (
+                      <tr key={l.program_yarn_id} className="border-t border-slate-100">
+                        <td className="td font-medium">{l.yarn}{l.count ? <span className="ml-1 text-slate-400">{l.count}</span> : null}</td>
+                        <td className="td">{l.colour || '—'}</td>
+                        <td className="td text-right tabular-nums text-slate-500">{fmtDecimal(l.pending, 3)}</td>
+                        <td className="td">
+                          <select className="input min-w-[340px] py-1 text-[11.5px]" value={l.grn_line_id} onChange={(e) => setLine(ji, li, { grn_line_id: e.target.value })} id={`kdc-lot-${ji}-${li}`}>
+                            <option value="">{l.options.length ? '— pick lot —' : 'No stock for this job — transfer yarn to the job first'}</option>
+                            {l.options.map((o: any) => (
+                              <option key={`${o.grn_line_id}-${o.holder_so_id}`} value={o.grn_line_id}>
+                                {o.lot_no} · {o.grn_no}{o.po_no ? ` · PO ${o.po_no}` : ''}{o.supplier_name ? ` · ${o.supplier_name}` : ''} · {fmtDecimal(o.available_kg, 3)} KG ({o.holder_job})
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="td"><input className={`input w-24 text-right ${over ? 'border-red-400 text-red-700' : ''}`} type="number" step="0.001"
+                          value={l.issued_qty_kg} onChange={(e) => setLine(ji, li, { issued_qty_kg: e.target.value })} id={`kdc-kg-${ji}-${li}`} title={over ? 'More than the lot holds' : undefined} /></td>
+                        <td className="td"><input className="input w-20 text-right" type="number" step="1"
+                          value={l.no_of_cones} onChange={(e) => setLine(ji, li, { no_of_cones: e.target.value })} id={`kdc-cones-${ji}-${li}`} /></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ))}
+
+          <div className="flex flex-wrap items-end gap-2">
+            <Select label="Add another job (program) to this DC" className="w-96" value={addId} placeholder="— Released program —" onChange={(e) => setAddId(e.target.value)}>
+              {allPrograms.filter((p: any) => !jobs.some((j) => j.program_id === p.id)).map((p: any) => <option key={p.id} value={p.id}>{p.program_no} · {p.io_no ?? 'stock'}</option>)}
+            </Select>
+            <button className="btn-secondary" onClick={addJob} disabled={!addId}><Plus size={14} /> Add job</button>
           </div>
 
           <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
@@ -308,12 +318,16 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
                 onChange={(e) => setH({ ...h, override_reason: e.target.value })} id="kdc-reason" />
             )}
           </div>
-          <Textarea label="Remarks" value={h.remarks ?? ''}
-            onChange={(e) => setH({ ...h, remarks: e.target.value })} id="kdc-remarks" />
+          <Textarea label="Remarks" value={h.remarks ?? ''} onChange={(e) => setH({ ...h, remarks: e.target.value })} id="kdc-remarks" />
         </div>
       )}
     </Modal>
   );
+}
+
+interface DcJob {
+  program_id: number; program_no: string; io_no: string | null; style: string | null; fabric: string | null; vendor_id: number | null;
+  lines: { program_yarn_id: number; yarn_id: number; yarn: string; colour: string | null; count: string | null; pending: number; options: any[]; grn_line_id: string; issued_qty_kg: string; no_of_cones: string }[];
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -377,7 +391,7 @@ export function KnittingDcPrint({ dcNo, onClose }: { dcNo: string | null; onClos
             <div className="grid">
               <div><span>DC No</span><b>{dc.dc_no}</b></div>
               <div><span>DC Date</span>{fmtDate(dc.dc_date)}</div>
-              <div><span>To (Knitter)</span><b>{dc.vendor_name ?? '—'}</b></div>
+              <div><span>Supplier / Vendor</span><b>{dc.vendor_name ?? '—'}</b></div>
               <div><span>Vendor GSTIN</span>{dc.vendor_gstin ?? '—'}</div>
               <div><span>Program No</span><b>{dc.program_no}</b></div>
               <div><span>I/O (Job) No</span><b>{dc.io_no ?? '—'}</b></div>
@@ -397,17 +411,26 @@ export function KnittingDcPrint({ dcNo, onClose }: { dcNo: string | null; onClos
                 </tr>
               </thead>
               <tbody>
-                {dc.lines.map((l: any, i: number) => (
-                  <tr key={l.id}>
-                    <td>{i + 1}</td>
-                    <td>{l.yarn_code} — {l.yarn_name}</td>
-                    <td>{l.count_value || l.yarn_count || '—'}</td>
-                    <td>{l.colour || '—'}</td>
-                    <td>{l.lot_no || '—'}</td>
-                    <td>{l.yarn_po_no || '—'}</td>
-                    <td className="n">{l.no_of_cones}</td>
-                    <td className="n">{fmtDecimal(l.issued_qty_kg, 3)}</td>
-                  </tr>
+                {(dc.jobs ?? [{ program_no: dc.program_no, io_no: dc.io_no, lines: dc.lines }]).map((jb: any) => (
+                  <Fragment key={jb.program_no}>
+                    {(dc.jobs?.length ?? 1) > 1 && (
+                      <tr><td colSpan={8} style={{ background: '#e8f0f7', fontWeight: 700 }}>
+                        Job {jb.io_no ?? 'stock'} · Program {jb.program_no}{jb.style_code ? ` · Style ${jb.style_code}` : ''}{jb.fabric_name ? ` · ${jb.fabric_name}` : ''} — {fmtDecimal(jb.total_kg, 3)} KG
+                      </td></tr>
+                    )}
+                    {jb.lines.map((l: any, i: number) => (
+                      <tr key={l.id}>
+                        <td>{i + 1}</td>
+                        <td>{l.yarn_code} — {l.yarn_name}</td>
+                        <td>{l.count_value || l.yarn_count || '—'}</td>
+                        <td>{l.colour || '—'}</td>
+                        <td>{l.lot_no || '—'}{l.grn_no ? ` (${l.grn_no})` : ''}</td>
+                        <td>{l.yarn_po_no || '—'}</td>
+                        <td className="n">{l.no_of_cones}</td>
+                        <td className="n">{fmtDecimal(l.issued_qty_kg, 3)}</td>
+                      </tr>
+                    ))}
+                  </Fragment>
                 ))}
               </tbody>
               <tfoot>
