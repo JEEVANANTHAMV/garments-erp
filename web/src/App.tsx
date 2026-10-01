@@ -71,7 +71,12 @@ import CollarKnittingPage from './pages/production/CollarKnittingPage';
 import ProcessReportsPage from './pages/production/ProcessReportsPage';
 import CuttingReportsPage from './pages/production/CuttingReportsPage';
 import ProcessExecutionPage from './pages/production/ProcessExecutionPage';
-import FabricProcessingPage from './pages/production/FabricProcessingPage';
+import FabricProcessOutwardPage from './pages/production/fabricProcess/OutwardPage';
+import FabricProcessInwardPage from './pages/production/fabricProcess/InwardPage';
+import FabricProcessReturnPage from './pages/production/fabricProcess/ReturnPage';
+import FabricProcessReprocessPage from './pages/production/fabricProcess/ReprocessPage';
+import FabricProcessBillPage from './pages/production/fabricProcess/BillPage';
+import { FabricRollTrackingPage, FabricProcessLedgerPage } from './pages/production/fabricProcess/TrackingLedgerPages';
 
 import CadRequirementsPage from './pages/production/CadRequirements';
 import CadRequirementDetailPage from './pages/production/CadRequirementDetail';
@@ -277,7 +282,14 @@ export default function App() {
                   <Route path="process-reports" element={<ProcessReportsPage />} />
                   <Route path="cutting-reports" element={<CuttingReportsPage />} />
                   <Route path="process-execution" element={<ProcessExecutionPage />} />
-                  <Route path="fabric-processing" element={<FabricProcessingPage />} />
+                  <Route path="fabric-processing" element={<Navigate to="/production/fabric-process/outward" replace />} />
+                  <Route path="fabric-process/outward" element={<FabricProcessOutwardPage />} />
+                  <Route path="fabric-process/inward" element={<FabricProcessInwardPage />} />
+                  <Route path="fabric-process/returns" element={<FabricProcessReturnPage />} />
+                  <Route path="fabric-process/reprocess" element={<FabricProcessReprocessPage />} />
+                  <Route path="fabric-process/bills" element={<FabricProcessBillPage />} />
+                  <Route path="fabric-process/tracking" element={<FabricRollTrackingPage />} />
+                  <Route path="fabric-process/ledger" element={<FabricProcessLedgerPage />} />
                   <Route path="fabric-issues" element={<FabricIssuePage />} />
                   <Route path="lay-spreading" element={<LaySpreadingPage />} />
                   <Route path="cut-qc-bundles" element={<CutQcBundlesPage />} />
