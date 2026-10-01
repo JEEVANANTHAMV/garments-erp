@@ -78,6 +78,10 @@ import FabricProcessReprocessPage from './pages/production/fabricProcess/Reproce
 import FabricProcessBillPage from './pages/production/fabricProcess/BillPage';
 import { FabricRollTrackingPage, FabricProcessLedgerPage } from './pages/production/fabricProcess/TrackingLedgerPages';
 import { FabricProcessMastersPage, FabricProcessReportsPage } from './pages/production/fabricProcess/MastersReportsPages';
+import YarnProcessOutwardPage from './pages/production/yarnProcess/OutwardPage';
+import YarnProcessInwardPage from './pages/production/yarnProcess/InwardPage';
+import { YarnProcessReturnPage, YarnProcessReprocessPage } from './pages/production/yarnProcess/ReturnReprocessPages';
+import { YarnProcessBillPage, YarnConeTrackingPage, YarnProcessReportsPage, YarnProcessTypesPage } from './pages/production/yarnProcess/BillTrackingPages';
 import JobTransferPage from './pages/inventory/JobTransferPage';
 import MaterialTracePage from './pages/production/MaterialTracePage';
 
@@ -296,6 +300,14 @@ export default function App() {
                   <Route path="fabric-process/ledger" element={<FabricProcessLedgerPage />} />
                   <Route path="fabric-process/reports" element={<FabricProcessReportsPage />} />
                   <Route path="fabric-process/masters" element={<FabricProcessMastersPage />} />
+                  <Route path="yarn-process/outward" element={<YarnProcessOutwardPage />} />
+                  <Route path="yarn-process/inward" element={<YarnProcessInwardPage />} />
+                  <Route path="yarn-process/returns" element={<YarnProcessReturnPage />} />
+                  <Route path="yarn-process/reprocess" element={<YarnProcessReprocessPage />} />
+                  <Route path="yarn-process/bills" element={<YarnProcessBillPage />} />
+                  <Route path="yarn-process/cone-tracking" element={<YarnConeTrackingPage />} />
+                  <Route path="yarn-process/reports" element={<YarnProcessReportsPage />} />
+                  <Route path="yarn-process/types" element={<YarnProcessTypesPage />} />
                   <Route path="material-trace" element={<MaterialTracePage />} />
                   <Route path="fabric-issues" element={<FabricIssuePage />} />
                   <Route path="lay-spreading" element={<LaySpreadingPage />} />

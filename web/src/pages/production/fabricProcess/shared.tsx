@@ -46,6 +46,7 @@ const STATUS_LABEL: Record<string, [string, string]> = {
   AT_VENDOR: ['At vendor', 'bg-sky-100 text-sky-800'], RECEIVED: ['Received', 'bg-emerald-100 text-emerald-800'],
   QC_PENDING: ['QC pending', 'bg-orange-100 text-orange-800'], ACCEPTED: ['QC accepted', 'bg-teal-100 text-teal-800'], REJECTED: ['QC rejected', 'bg-red-100 text-red-700'],
   HOLD: ['Hold', 'bg-orange-100 text-orange-800'],
+  INWARD_PENDING: ['Inward pending', 'bg-amber-100 text-amber-800'], AT_UNIT: ['At unit', 'bg-sky-100 text-sky-800'], ISSUED: ['Issued', 'bg-sky-100 text-sky-800'],
 };
 export function FpStatus({ value }: { value: string }) {
   const [label, cls] = STATUS_LABEL[value] ?? [value, 'bg-slate-100 text-slate-700'];

@@ -318,6 +318,23 @@ export async function yarnLotOrigin(cid: number, grnLineId: number, depth = 0): 
        LEFT JOIN trx_purchase_order po ON po.id = COALESCE(gl.po_id, g.po_id) LEFT JOIN mst_party p ON p.id = g.supplier_id
       WHERE gl.id = ? AND g.company_id = ?`, [grnLineId, cid]);
   if (!l) return null;
+  // made by the yarn process engine (dyeing / winding / twisting GRN, or a return / reject lot)
+  const eng = await queryOne<any>(
+    `SELECT x.id AS out_id, i.inward_no, i.inward_date, o.ypo_no, o.process_code, pt.name AS process_name, v.party_name AS vendor, gl.parent_grn_line_id
+       FROM trx_grn_line gl LEFT JOIN trx_yarn_process_inward_out x ON x.grn_line_id = gl.id OR x.reject_grn_line_id = gl.id
+       LEFT JOIN trx_yarn_process_inward i ON i.id = x.inward_id LEFT JOIN trx_yarn_process_order o ON o.id = gl.source_ypo_id
+       LEFT JOIN mst_yarn_process_type pt ON pt.company_id = o.company_id AND pt.code = o.process_code LEFT JOIN mst_party v ON v.id = o.vendor_id
+      WHERE gl.id = ? AND gl.source_ypo_id IS NOT NULL LIMIT 1`, [grnLineId]).catch(() => null);
+  if (eng && depth <= 6) {
+    const inputs = eng.out_id
+      ? await query<any>(`SELECT l.ypo_id, o.ypo_no AS dc_no, o.ypo_date AS issue_date, l.lot_no, ii.input_kg AS issued_qty_kg, l.grn_line_id FROM trx_yarn_process_inward_in ii
+                            JOIN trx_yarn_process_order_line l ON l.id = ii.ypo_line_id JOIN trx_yarn_process_order o ON o.id = l.ypo_id WHERE ii.out_id = ?`, [eng.out_id])
+      : eng.parent_grn_line_id ? [{ dc_no: null, lot_no: null, issued_qty_kg: l.accepted_qty, grn_line_id: eng.parent_grn_line_id }] : [];
+    const from = [];
+    for (const i of inputs) from.push({ ...i, origin: i.grn_line_id ? await yarnLotOrigin(cid, Number(i.grn_line_id), depth + 1) : null });
+    return { ...l, kind: 'PROCESSED', process: { process_no: eng.ypo_no, process_type: eng.process_code, process_name: eng.process_name, vendor: eng.vendor ?? l.supplier,
+      receipt_no: eng.inward_no ?? l.grn_no, receipt_date: eng.inward_date, ref_dc_no: eng.ypo_no }, from };
+  }
   const pr = await queryOne<any>(
     `SELECT pr.id, pr.receipt_no, pr.receipt_date, pr.ref_dc_no, pr.src_id, pr.input_qty, pr.output_qty, pr.loss_qty, yp.process_no, yp.process_type, v.party_name vendor
        FROM trx_process_receipt pr JOIN trx_yarn_process yp ON yp.id = pr.src_id LEFT JOIN mst_party v ON v.id = yp.vendor_id

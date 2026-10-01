@@ -220,6 +220,20 @@ export function buildPermissions(): [string, string, string][] {
     ['FABRIC_PROCESS.BILL_CANCEL','Cancel fabric process contractor bills','PRODUCTION'],
     ['FABRIC_PROCESS.CANCEL','Cancel confirmed Fabric Process DCs','PRODUCTION'],
     ['FABRIC_PROCESS.MASTER','Manage process types / QC parameters / reasons','PRODUCTION'],
+    // Yarn process (dyeing / winding / twisting) — same role split (yarn process developer doc §25)
+    ['YARN_PROCESS.VIEW','View Yarn Process DCs / GRNs / reports','PRODUCTION'],
+    ['YARN_PROCESS.CREATE','Create Yarn Process DC / GRN drafts','PRODUCTION'],
+    ['YARN_PROCESS.EDIT_DRAFT','Edit Yarn Process drafts','PRODUCTION'],
+    ['YARN_PROCESS.CONFIRM','Confirm Yarn Process DCs / post GRNs','PRODUCTION'],
+    ['YARN_PROCESS.QC','Record Yarn Process GRN QC','PRODUCTION'],
+    ['YARN_PROCESS.RETURN','Create Yarn Process returns','PRODUCTION'],
+    ['YARN_PROCESS.REPROCESS','Create yarn reprocess / request billing','PRODUCTION'],
+    ['YARN_PROCESS.BILLING_APPROVE','Approve yarn reprocess billing','PRODUCTION'],
+    ['YARN_PROCESS.BILLING_CHANGE','Change yarn reprocess billing type','PRODUCTION'],
+    ['YARN_PROCESS.BILL','Create yarn process contractor bills','PRODUCTION'],
+    ['YARN_PROCESS.BILL_CANCEL','Cancel yarn process contractor bills','PRODUCTION'],
+    ['YARN_PROCESS.CANCEL','Cancel confirmed Yarn Process DCs','PRODUCTION'],
+    ['YARN_PROCESS.MASTER','Manage yarn process types','PRODUCTION'],
   ];
   out.push(...extras);
   return out;
@@ -381,6 +395,13 @@ export const ROLES: {
     ],
   },
 ];
+
+// Yarn process rights follow the fabric process rights role by role (same Store / Production / Process Manager split).
+for (const r of ROLES) {
+  if (r.permissions === '*') continue;
+  const fp = r.permissions.filter((p) => p.startsWith('FABRIC_PROCESS.'));
+  r.permissions.push(...fp.map((p) => p.replace('FABRIC_PROCESS.', 'YARN_PROCESS.')).filter((p) => !(r.permissions as string[]).includes(p)));
+}
 
 /** Expand 'MODULE.*' wildcards against the real permission list. */
 export function expandPermissions(patterns: '*' | string[], all: string[]): string[] {

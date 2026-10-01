@@ -712,6 +712,19 @@ async function main() {
     await exec(`INSERT IGNORE INTO cfg_system_setting (company_id, setting_key, setting_value, description) VALUES (?, 'FABRIC_PROCESS_PERMS_MAPPED', '1', 'Custom roles given FABRIC_PROCESS.* from PRODUCTION.* (one time)')`, [companyId]);
     log('custom roles mapped to FABRIC_PROCESS.* permissions');
   }
+  // One time: custom roles get the YARN_PROCESS.* rights matching their FABRIC_PROCESS.* rights.
+  const ypDone = await q<{ c: number }>(`SELECT COUNT(*) c FROM cfg_system_setting WHERE company_id=? AND setting_key='YARN_PROCESS_PERMS_MAPPED'`, [companyId]);
+  if (!Number(ypDone[0]?.c)) {
+    const seeded = ROLES.map((r) => r.code);
+    await exec(
+      `INSERT IGNORE INTO map_role_permission (role_id, permission_id)
+       SELECT rp.role_id, np.id FROM map_role_permission rp
+         JOIN mst_permission op ON op.id = rp.permission_id AND op.permission_code LIKE 'FABRIC\\_PROCESS.%'
+         JOIN mst_role r ON r.id = rp.role_id AND r.company_id = ? AND r.role_code NOT IN (${seeded.map(() => '?').join(',')})
+         JOIN mst_permission np ON np.permission_code = REPLACE(op.permission_code, 'FABRIC_PROCESS.', 'YARN_PROCESS.')`,
+      [companyId, ...seeded]);
+    await exec(`INSERT IGNORE INTO cfg_system_setting (company_id, setting_key, setting_value, description) VALUES (?, 'YARN_PROCESS_PERMS_MAPPED', '1', 'Custom roles given YARN_PROCESS.* from FABRIC_PROCESS.* (one time)')`, [companyId]);
+  }
 
   // Users — admin plus one per functional role, all sharing the demo password.
   const demoHash = await bcrypt.hash(env.seed.adminPassword, env.bcryptRounds);

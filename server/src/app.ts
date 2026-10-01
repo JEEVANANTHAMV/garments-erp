@@ -47,6 +47,8 @@ import { processRouteRouter } from './modules/yarnProcess/processRoute.routes.js
 import { yarnProcessRouter } from './modules/yarnProcess/yarnProcess.routes.js';
 import { processFlowRouter } from './modules/yarnProcess/processFlow.routes.js';
 import { yarnProcessDcRouter } from './modules/yarnProcess/yarnProcessDc.routes.js';
+import { yarnEngineRouter } from './modules/yarnProcess/yarnEngine.routes.js';
+import { yarnEngineAfterRouter } from './modules/yarnProcess/yarnEngineAfter.routes.js';
 import { collarRouter } from './modules/yarnProcess/collar.routes.js';
 import { knittingProductionRouter } from './modules/yarnProcess/knittingProduction.routes.js';
 import { processReportsRouter } from './modules/yarnProcess/processReports.routes.js';
@@ -130,6 +132,8 @@ export function createApp() {
   api.use('/', processRouteRouter);           // /process-routes
   api.use('/', yarnProcessRouter);            // /yarn-processes (dyeing / winding / twisting)
   api.use('/', yarnProcessDcRouter);           // /yarn-process-dcs (outward DC / pending at processor)
+  api.use('/', yarnEngineRouter);             // /yarn-process/* (yarn process engine: outward / inward / QC)
+  api.use('/', yarnEngineAfterRouter);        // /yarn-process/* (return / reprocess / bill / cone tracking / reports)
   api.use('/', processFlowRouter);            // /process-issues, /process-receipts, /process-qc
   api.use('/', collarRouter);                 // /collars, /collar-programs, /collar-productions
   api.use('/', knittingProductionRouter);     // /knitting-productions, /knitting-rolls
