@@ -33,27 +33,32 @@ export async function yarnJobLots(cid: number, f: { so_id?: number | null; yarn_
   const lots = rows.filter((r: any) => !['REJECTED', 'PENDING'].includes(r.qc_status) && (!f.grn_line_ids || f.grn_line_ids.includes(Number(r.id))));
   if (!lots.length) return [];
   const ids = lots.map((r: any) => Number(r.id));
+  // transfers and lot issues replayed in the order they happened
   const tr = await query<any>(
-    `SELECT l.grn_line_id, t.from_so_id, t.to_so_id, SUM(l.qty) qty FROM trx_job_transfer_line l JOIN trx_job_transfer t ON t.id = l.transfer_id
-      WHERE t.company_id = ? AND t.material_type = 'YARN' AND t.status = 'POSTED' AND l.grn_line_id IN (?) GROUP BY l.grn_line_id, t.from_so_id, t.to_so_id`, [cid, ids]);
-  const di = await query<any>(`SELECT grn_line_id, so_id, SUM(issued_qty_kg) qty FROM trx_process_issue WHERE company_id = ? AND grn_line_id IN (?) GROUP BY grn_line_id, so_id`, [cid, ids]);
+    `SELECT l.grn_line_id, t.from_so_id, t.to_so_id, l.qty, t.created_at at, l.id seq FROM trx_job_transfer_line l JOIN trx_job_transfer t ON t.id = l.transfer_id
+      WHERE t.company_id = ? AND t.material_type = 'YARN' AND t.status = 'POSTED' AND l.grn_line_id IN (?)`, [cid, ids]);
+  const di = await query<any>(`SELECT grn_line_id, so_id, issued_qty_kg qty, created_at at, id seq FROM trx_process_issue WHERE company_id = ? AND grn_line_id IN (?)`, [cid, ids]);
   const out: any[] = [];
   for (const r of lots) {
     const gl = Number(r.id);
     const owner = key(r.owner_so_id);
     const hold = new Map<number, number>();
     hold.set(owner, n(r.net_in_qty) - (n(r.issued_qty) - n(r.direct_issued_qty)));
-    for (const t of tr.filter((x) => Number(x.grn_line_id) === gl)) {
-      hold.set(key(t.from_so_id), (hold.get(key(t.from_so_id)) ?? 0) - n(t.qty));
-      hold.set(key(t.to_so_id), (hold.get(key(t.to_so_id)) ?? 0) + n(t.qty));
-    }
-    for (const d of di.filter((x) => Number(x.grn_line_id) === gl)) {
+    const events = [...tr.filter((x) => Number(x.grn_line_id) === gl).map((t) => ({ kind: 'T' as const, ...t })), ...di.filter((x) => Number(x.grn_line_id) === gl).map((d) => ({ kind: 'I' as const, ...d }))]
+      .sort((x, y) => (new Date(x.at).getTime() - new Date(y.at).getTime()) || (x.kind === y.kind ? Number(x.seq) - Number(y.seq) : x.kind === 'T' ? -1 : 1));
+    for (const ev of events) {
+      if (ev.kind === 'T') {
+        hold.set(key(ev.from_so_id), (hold.get(key(ev.from_so_id)) ?? 0) - n(ev.qty));
+        hold.set(key(ev.to_so_id), (hold.get(key(ev.to_so_id)) ?? 0) + n(ev.qty));
+        continue;
+      }
+      const d = ev;
       // an issue comes out of its own job's part; a general (no job) issue, or a job with no part of its
       // own, out of the general part — never more than that part holds; the rest from the owner's part
       const k = key(d.so_id);
-      const first = hold.has(k) ? k : hold.has(0) ? 0 : owner;
+      const first = hold.has(k) && (hold.get(k) ?? 0) > 0.0005 ? k : hold.has(0) && (hold.get(0) ?? 0) > 0.0005 ? 0 : owner;
       let qty = n(d.qty);
-      if (qty < 0) { hold.set(first, (hold.get(first) ?? 0) - qty); continue; }   // net reversal (DC cancelled)
+      if (qty < 0) { const back = hold.has(k) ? k : hold.has(0) ? 0 : owner; hold.set(back, (hold.get(back) ?? 0) - qty); continue; }   // reversal (DC cancelled)
       for (const h of [first, owner, ...hold.keys()]) {
         if (qty <= 0) break;
         const take = h === owner && h !== first ? qty : Math.min(qty, Math.max(0, hold.get(h) ?? 0));
