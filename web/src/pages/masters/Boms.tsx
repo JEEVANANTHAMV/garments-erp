@@ -13,6 +13,7 @@ import {
 } from '../../components/ui';
 import { fmtDate, fmtDecimal, today, toDateInput, humanize } from '../../lib/format';
 import { BomOrderStrip, BomRequirementTable, TYPE_TONE, useOrderInfo } from './BomRequirement';
+import { cellsFor, cellsPlanCut, lineRequirement } from '../../lib/bomRequirement';
 
 const MATERIALS = ['FABRIC', 'YARN', 'TRIM', 'ACCESSORY', 'PACKING', 'GENERAL'] as const;
 
@@ -864,13 +865,34 @@ export function BomDetailPage() {
     return Number((src ?? []).find((x: any) => x.id === Number(mid))?.std_rate ?? 0);
   };
 
-  const costPerGarment = useMemo(() =>
-    lines.reduce((sum, l) => {
-      const cons = Number(l.consumption) || 0;
-      const withWaste = cons * (1 + (Number(l.wastage_pct) || 0) / 100);
-      return sum + withWaste * rateOf(l);
-    }, 0),
-    [lines, yarns.data, fabrics.data, trims.data]);
+  /*
+   * Material cost per garment — the same rules as the requirement grid / MRP:
+   *   a line costs (requirement for the garments it covers) × rate, where the requirement follows its
+   *   basis (per piece, ÷ 12 per dozen, a FIXED qty for the whole order) + wastage % + additional qty;
+   *   a size / colour line covers only its share of the order (job: plan-cut PCS of its cells; master
+   *   BOM: 1 ÷ the style's sizes / colours). Fixed / additional qty are spread over the order PCS.
+   */
+  const orderCells = orderInfo.data?.cells ?? null;
+  const orderPcs = orderInfo.data?.totals?.plan_cut ?? 0;
+  const costPcs = orderCells && orderPcs > 0 ? orderPcs : Math.max(1, Number(explodeQty) || 1);
+  const lineShare = (l: BomLine) => {
+    if (orderCells && orderPcs > 0) return cellsPlanCut(cellsFor(l, orderCells)) / orderPcs;
+    let share = 1;
+    if (l.size_id) share /= Math.max(1, scope.sizes.length);
+    if (l.color_id) share /= Math.max(1, scope.colors.length);
+    return share;
+  };
+  /** Cost of a line for `pcs` garments of the style. */
+  const lineCostFor = (l: BomLine, pcs: number) => lineRequirement(l, pcs * lineShare(l)).required * rateOf(l);
+  const lineCostPerGmt = (l: BomLine) => lineCostFor(l, costPcs) / costPcs;
+  const costPerGarment = useMemo(() => lines.reduce((sum, l) => sum + lineCostPerGmt(l), 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lines, yarns.data, fabrics.data, trims.data, orderInfo.data, explodeQty, scope]);
+  const explodeTotal = useMemo(() => lines.reduce((sum, l) => sum + lineCostFor(l, Math.max(0, Number(explodeQty) || 0)), 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lines, yarns.data, fabrics.data, trims.data, orderInfo.data, explodeQty, scope]);
+  // explode for the job's plan-cut quantity by default
+  useEffect(() => { if (orderPcs > 0) setExplodeQty(orderPcs); }, [orderPcs]);
 
   const setLine = (key: string, patch: Partial<BomLine>) =>
     setLines((s) => s.map((l) => (l._key === key ? { ...l, ...patch } : l)));
@@ -1167,7 +1189,7 @@ export function BomDetailPage() {
               {filteredLines.map((l) => {
                 const rate = rateOf(l);
                 const cons = Number(l.consumption) || 0;
-                const lineCost = cons * (1 + (Number(l.wastage_pct) || 0) / 100) * rate;
+                const lineCost = lineCostPerGmt(l);
                 const isGeneralOrPacking = ['ACCESSORY', 'PACKING', 'GENERAL'].includes(l.material_type);
                 const isYarnLine = l.material_type === 'YARN';
                 const matOptions = isYarnLine ? toOptions(yarnBases.data)
@@ -1490,7 +1512,7 @@ export function BomDetailPage() {
           <div>
             <p className="label">Material cost per garment</p>
             <p className="text-[24px] font-semibold tabular-nums text-slate-900">₹{fmtDecimal(costPerGarment, 4)}</p>
-            <p className="mt-0.5 text-[11.5px] text-slate-500">Based on standard rates, wastage included</p>
+            <p className="mt-0.5 text-[11.5px] text-slate-500">Standard rates · wastage & additional qty included · fixed-qty items spread over {costPcs.toLocaleString('en-IN')} PCS{orderPcs > 0 ? ' (job plan cut)' : ' (explode qty)'} · size / colour lines by their share</p>
           </div>
           <div className="flex items-end gap-3">
             <div>
@@ -1501,7 +1523,7 @@ export function BomDetailPage() {
             <div className="text-right">
               <p className="label">Total material cost</p>
               <p className="text-[24px] font-semibold tabular-nums text-brand-700">
-                ₹{fmtDecimal(costPerGarment * explodeQty, 2)}
+                ₹{fmtDecimal(explodeTotal, 2)}
               </p>
             </div>
           </div>

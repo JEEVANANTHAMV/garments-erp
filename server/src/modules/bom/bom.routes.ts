@@ -532,9 +532,10 @@ bomRouter.get('/:id/explode', requirePermission('BOM.VIEW'), ah(async (req, res)
 
   const lines = await query<any>(LINE_SELECT, [id]);
   const exploded = lines.map((l) => {
+    // same rules as MRP / the BOM screen: basis (per piece / ÷ 12 per dozen / fixed qty for the order) + wastage + additional qty
     const perGarment = Number(l.consumption);
-    const withWastage = perGarment * (1 + Number(l.wastage_pct ?? 0) / 100);
-    const required = withWastage * qty;
+    const required = lineRequirement(l, qty).required;
+    const withWastage = qty > 0 ? required / qty : 0;
     return {
       ...l,
       per_garment: perGarment,

@@ -398,9 +398,27 @@ export default function PreCostingDetailPage() {
       const newTrims: any[] = [];
       const newYarns: any[] = [];
 
+      // BOM consumption → per garment (like the BOM screen / MRP): ÷ 12 per dozen, fixed + additional qty
+      // spread over the costing order qty, size- / colour-wise lines weighted by their share of the sizes / colours
+      const oq = Math.max(1, Number(head.order_qty) || 1);
+      const groupOf = (l: any) => `${l.material_type}|${l.fabric_id ?? l.yarn_id ?? l.trim_id ?? l.item_description ?? ''}`;
+      const sizesIn = new Map<string, Set<number>>(), colorsIn = new Map<string, Set<number>>();
+      bomLines.forEach((l: any) => {
+        if (l.size_id) { const k = groupOf(l); sizesIn.set(k, (sizesIn.get(k) ?? new Set()).add(Number(l.size_id))); }
+        if (l.color_id) { const k = groupOf(l); colorsIn.set(k, (colorsIn.get(k) ?? new Set()).add(Number(l.color_id))); }
+      });
+      const perGarment = (l: any) => {
+        const c = Number(l.consumption) || 0, addl = Number(l.additional_qty) || 0;
+        const basis = String(l.consumption_basis || 'PER_PIECE');
+        let share = 1;
+        if (l.size_id) share /= Math.max(1, sizesIn.get(groupOf(l))?.size ?? 1);
+        if (l.color_id) share /= Math.max(1, colorsIn.get(groupOf(l))?.size ?? 1);
+        const base = basis === 'PER_DOZEN' ? c / 12 : basis === 'FIXED_QTY' ? c / oq : c;
+        return Number(((base + addl / oq) * share).toFixed(6));
+      };
       bomLines.forEach((l: any, idx: number) => {
         if (l.material_type === 'FABRIC') {
-          const cons = Number(l.consumption) || 0.22;
+          const cons = perGarment(l) || 0.22;
           const wastage = Number(l.wastage_pct) || 5;
           const rate = Number(l.applied_rate) || Number(l.std_rate) || 420;
           newFabrics.push({
@@ -417,7 +435,7 @@ export default function PreCostingDetailPage() {
             rate_source: l.rate_source || 'Style BOM',
           });
         } else if (l.material_type === 'TRIM') {
-          const cons = Number(l.consumption) || 1;
+          const cons = perGarment(l) || 1;
           const wastage = Number(l.wastage_pct) || 3;
           const rate = Number(l.applied_rate) || Number(l.std_rate) || 1.5;
           newTrims.push({
@@ -434,7 +452,7 @@ export default function PreCostingDetailPage() {
             amount: cons * (1 + wastage / 100) * rate,
           });
         } else if (l.material_type === 'YARN') {
-          const cons = Number(l.consumption) || 0.23;
+          const cons = perGarment(l) || 0.23;
           const rate = Number(l.applied_rate) || 285;
           newYarns.push({
             _key: `yrn_${idx}`,
