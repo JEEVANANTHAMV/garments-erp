@@ -202,13 +202,13 @@ export async function insertOutwardHeader(tx: Tx, req: Request, b: Omit<OutwardB
 /** Job-wise reconciliation of a DC (doc §16): outward = good + reject + loss + balance. */
 export async function reconciliation(ypoId: number) {
   const rows = await query<any>(
-    `SELECT l.so_id, COALESCE(l.io_no, 'STOCK') AS io_no, l.buyer_po_no, st.style_code, COUNT(*) AS lines, SUM(l.no_of_cones) AS cones,
+    `SELECT l.so_id, COALESCE(l.io_no, 'STOCK') AS io_no, l.buyer_po_no, st.style_code, COUNT(*) AS line_count, SUM(l.no_of_cones) AS cones,
             SUM(l.qty_kg) AS outward_kg, SUM(l.good_kg) AS good_kg, SUM(l.reject_kg) AS reject_kg, SUM(l.loss_kg) AS loss_kg
        FROM trx_yarn_process_order_line l LEFT JOIN mst_style st ON st.id = l.style_id
       WHERE l.ypo_id = ? GROUP BY l.so_id, l.io_no, l.buyer_po_no, st.style_code ORDER BY l.io_no`, [ypoId]);
   const jobs = rows.map((r) => {
     const o = n(r.outward_kg), g = n(r.good_kg), rj = n(r.reject_kg), l = n(r.loss_kg), bal = Math.max(0, o - g - rj - l);
-    return { so_id: r.so_id, io_no: r.io_no, buyer_po_no: r.buyer_po_no, style_code: r.style_code, lines: Number(r.lines), cones: Number(r.cones),
+    return { so_id: r.so_id, io_no: r.io_no, buyer_po_no: r.buyer_po_no, style_code: r.style_code, lines: Number(r.line_count), cones: Number(r.cones),
       outward_kg: r3(o), good_kg: r3(g), reject_kg: r3(rj), loss_kg: r3(l), balance_kg: r3(bal), status: bal <= EPS ? 'COMPLETED' : 'PENDING' };
   });
   const sum = (k: 'outward_kg' | 'good_kg' | 'reject_kg' | 'loss_kg' | 'balance_kg') => r3(jobs.reduce((a, j) => a + j[k], 0));
