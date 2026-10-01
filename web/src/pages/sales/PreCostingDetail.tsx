@@ -421,7 +421,7 @@ export default function PreCostingDetailPage() {
       bomLines.forEach((l: any, idx: number) => {
         if (l.material_type === 'FABRIC') {
           const cons = perGarment(l) || 0.22;
-          const wastage = Number(l.wastage_pct) || 5;
+          const wastage = l.wastage_pct != null && l.wastage_pct !== '' ? Number(l.wastage_pct) : 5;
           const rate = Number(l.applied_rate) || Number(l.std_rate) || 420;
           newFabrics.push({
             _key: `fab_${idx}`,
@@ -438,7 +438,7 @@ export default function PreCostingDetailPage() {
           });
         } else if (l.material_type === 'TRIM') {
           const cons = perGarment(l) || 1;
-          const wastage = Number(l.wastage_pct) || 3;
+          const wastage = l.wastage_pct != null && l.wastage_pct !== '' ? Number(l.wastage_pct) : 3;
           const rate = Number(l.applied_rate) || Number(l.std_rate) || 1.5;
           newTrims.push({
             _key: `trm_${idx}`,
