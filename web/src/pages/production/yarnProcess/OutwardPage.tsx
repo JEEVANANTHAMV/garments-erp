@@ -106,10 +106,20 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
   const groups = useMemo(() => groupByJob(rows), [rows]);
   const total = rows.reduce((a, r) => a + n(r.qty_kg), 0);
   const cones = rows.reduce((a, r) => a + n(r.no_of_cones), 0);
-  const addLots = (picked: { lot: YarnLot; kg: number; cone_no?: string; cones?: number }[], job: Job | null) => setRows((prev) => [...prev, ...picked.map(({ lot, kg: q, cone_no, cones: c }) => ({
+  const addLots = (picked: { lot: YarnLot; kg: number; cone_no?: string; cones?: number }[], job: Job | null) => setRows((prev) => {
+    // the same lot / cone (e.g. the job's part + the general part of one lot) becomes one DC line
+    const next = [...prev];
+    const fresh: typeof picked = [];
+    for (const p of picked) {
+      const cone = p.cone_no ?? p.lot.cone_no ?? '';
+      const hit = next.find((r) => r.grn_line_id === p.lot.grn_line_id && (r.cone_no || '') === cone);
+      if (hit) { hit.qty_kg = r3(hit.qty_kg + p.kg); hit.available_kg = r3(hit.available_kg + p.lot.available_kg); } else fresh.push(p);
+    }
+    return [...next, ...fresh.map(({ lot, kg: q, cone_no, cones: c }) => ({
     key: `r${++seq}`, grn_line_id: lot.grn_line_id, so_id: job?.id ?? lot.holder_so_id, io_no: job?.job_no ?? (lot.holder_so_id ? lot.holder_job : 'STOCK'), buyer_po_no: job?.buyer_po_no ?? null,
     lot_no: lot.lot_no, yarn_name: `${lot.yarn_name}${lot.count_str ? ` ${lot.count_str}` : ''}`, shade: lot.color_name || lot.shade || '', grn_no: lot.grn_no, available_kg: lot.available_kg,
-    qty_kg: r3(q), cone_no: cone_no ?? lot.cone_no ?? '', no_of_cones: c ?? lot.cones ?? 0, target_shade: head.target_shade, process_id: '' }))]);
+    qty_kg: r3(q), cone_no: cone_no ?? lot.cone_no ?? '', no_of_cones: c ?? lot.cones ?? 0, target_shade: head.target_shade, process_id: '' }))];
+  });
   const set = (k: string, p: Partial<Row>) => setRows((rs) => rs.map((r) => (r.key === k ? { ...r, ...p } : r)));
 
   const payload = () => ({
@@ -265,7 +275,8 @@ function LotPicker({ mode, jobs, taken, onClose, onAdd }: {
   const toast = useToast();
   const [jobId, setJobId] = useState('');
   const [q, setQ] = useState('');
-  const [sel, setSel] = useState<Record<number, { kg: number; cone: string; cones: number }>>({});
+  const [sel, setSel] = useState<Record<string, { kg: number; cone: string; cones: number }>>({});
+  const K = (l: YarnLot) => `${l.grn_line_id}|${l.holder_so_id ?? 0}`;
   const job = jobs.find((j) => String(j.id) === jobId) ?? null;
   const lots = useQuery({
     queryKey: ['yarn-process', 'lots', jobId || 'general'],
@@ -273,8 +284,15 @@ function LotPicker({ mode, jobs, taken, onClose, onAdd }: {
     enabled: mode === 'scan' || !!jobId,
   });
   // KG already on the DC per lot
+  // KG of the lot already on the DC (taken from the job's own part first)
   const used = (gl: number) => taken.filter((t) => t.grn_line_id === gl).reduce((a, t) => a + n(t.qty_kg), 0);
-  const all = (lots.data ?? []).map((l) => ({ ...l, available_kg: r3(l.available_kg - used(l.grn_line_id)) })).filter((l) => l.available_kg > 0.0005);
+  const left = new Map<number, number>();
+  const all = [...(lots.data ?? [])].sort((x, y) => Number(!!y.holder_so_id) - Number(!!x.holder_so_id)).map((l) => {
+    const u = left.has(l.grn_line_id) ? left.get(l.grn_line_id)! : used(l.grn_line_id);
+    const take = Math.min(u, l.available_kg);
+    left.set(l.grn_line_id, u - take);
+    return { ...l, available_kg: r3(l.available_kg - take) };
+  }).filter((l) => l.available_kg > 0.0005);
   const forJob = mode === 'import' ? all.filter((l) => l.holder_so_id === job?.id) : all;
   const shown = forJob.filter((l) => !q || [l.lot_no, l.grn_no, l.yarn_name, l.cone_no, l.po_no, l.supplier_name].some((x) => String(x ?? '').toLowerCase().includes(q.toLowerCase())));
 
@@ -294,14 +312,14 @@ function LotPicker({ mode, jobs, taken, onClose, onAdd }: {
       </Modal>
     );
   }
-  const picked = shown.filter((l) => sel[l.grn_line_id]);
+  const picked = shown.filter((l) => sel[K(l)]);
   return (
     <Modal open onClose={onClose} size="xl" title={mode === 'import' ? 'Import every yarn lot of a job' : 'Add job — pick its yarn lots / cones'}
       footer={<>
-        <span className="mr-auto self-center text-xs text-slate-600">{mode === 'import' ? `${forJob.length} lot(s), ${kg(forJob.reduce((a, l) => a + l.available_kg, 0))} KG` : `${picked.length} selected · ${kg(picked.reduce((a, l) => a + n(sel[l.grn_line_id].kg), 0))} KG`}</span>
+        <span className="mr-auto self-center text-xs text-slate-600">{mode === 'import' ? `${forJob.length} lot(s), ${kg(forJob.reduce((a, l) => a + l.available_kg, 0))} KG` : `${picked.length} selected · ${kg(picked.reduce((a, l) => a + n(sel[K(l)].kg), 0))} KG`}</span>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button disabled={!job || (mode === 'import' ? !forJob.length : !picked.length)}
-          onClick={() => onAdd(mode === 'import' ? forJob.map((l) => ({ lot: l, kg: l.available_kg })) : picked.map((l) => ({ lot: l, kg: sel[l.grn_line_id].kg, cone_no: sel[l.grn_line_id].cone, cones: sel[l.grn_line_id].cones })), job)}>
+          onClick={() => onAdd(mode === 'import' ? forJob.map((l) => ({ lot: l, kg: l.available_kg })) : picked.map((l) => ({ lot: l, kg: sel[K(l)].kg, cone_no: sel[K(l)].cone, cones: sel[K(l)].cones })), job)}>
           {mode === 'import' ? 'Import lots' : 'Add lots'}
         </Button>
       </>}>
@@ -317,17 +335,17 @@ function LotPicker({ mode, jobs, taken, onClose, onAdd }: {
             {!job && <tr><td colSpan={13} className="px-2 py-6 text-center text-slate-400">Choose the job first</td></tr>}
             {job && lots.isLoading && <tr><td colSpan={13} className="px-2 py-6 text-center text-slate-400">Loading…</td></tr>}
             {job && shown.map((l) => {
-              const on = !!sel[l.grn_line_id];
+              const on = !!sel[K(l)];
               return (
-                <tr key={l.grn_line_id} className={`border-t border-slate-100 ${on ? 'bg-emerald-50' : ''}`}>
-                  {mode === 'job' && <td className="px-2 py-1"><input type="checkbox" checked={on} onChange={() => setSel((s) => { const x = { ...s }; if (on) delete x[l.grn_line_id]; else x[l.grn_line_id] = { kg: l.available_kg, cone: l.cone_no ?? '', cones: l.cones ?? 0 }; return x; })} /></td>}
+                <tr key={K(l)} className={`border-t border-slate-100 ${on ? 'bg-emerald-50' : ''}`}>
+                  {mode === 'job' && <td className="px-2 py-1"><input type="checkbox" checked={on} onChange={() => setSel((s) => { const x = { ...s }; if (on) delete x[K(l)]; else x[K(l)] = { kg: l.available_kg, cone: l.cone_no ?? '', cones: l.cones ?? 0 }; return x; })} /></td>}
                   <td className="px-2 py-1 font-mono font-semibold">{l.lot_no}{l.processed ? <span className="ml-1 rounded bg-purple-100 px-1 text-[10px] text-purple-800">processed</span> : null}</td>
                   <td className="px-2 py-1">{l.yarn_name}{l.count_str ? ` ${l.count_str}` : ''}</td><td className="px-2 py-1">{l.color_name || l.shade || '—'}</td>
                   <td className="px-2 py-1">{l.holder_job}</td><td className="px-2 py-1 font-mono">{l.grn_no}</td><td className="px-2 py-1">{l.po_no || '—'}</td><td className="px-2 py-1">{l.supplier_name || '—'}</td>
                   <td className="px-2 py-1">{l.warehouse_name || '—'}</td><td className="px-2 py-1 text-right tabular-nums">{kg(l.available_kg)}</td>
-                  {mode === 'job' && <td className="px-2 py-1 text-right">{on ? <input type="number" step="0.001" className="input w-24 py-0.5 text-right text-xs" value={sel[l.grn_line_id].kg} onChange={(e) => setSel((s) => ({ ...s, [l.grn_line_id]: { ...s[l.grn_line_id], kg: r3(Number(e.target.value)) } }))} /> : '—'}</td>}
-                  {mode === 'job' && <td className="px-2 py-1">{on ? <input className="input w-20 py-0.5 text-xs" value={sel[l.grn_line_id].cone} onChange={(e) => setSel((s) => ({ ...s, [l.grn_line_id]: { ...s[l.grn_line_id], cone: e.target.value } }))} /> : (l.cone_no || '—')}</td>}
-                  {mode === 'job' && <td className="px-2 py-1 text-right">{on ? <input type="number" className="input w-14 py-0.5 text-right text-xs" value={sel[l.grn_line_id].cones} onChange={(e) => setSel((s) => ({ ...s, [l.grn_line_id]: { ...s[l.grn_line_id], cones: Number(e.target.value) } }))} /> : (l.cones || '—')}</td>}
+                  {mode === 'job' && <td className="px-2 py-1 text-right">{on ? <input type="number" step="0.001" className="input w-24 py-0.5 text-right text-xs" value={sel[K(l)].kg} onChange={(e) => setSel((s) => ({ ...s, [K(l)]: { ...s[K(l)], kg: r3(Number(e.target.value)) } }))} /> : '—'}</td>}
+                  {mode === 'job' && <td className="px-2 py-1">{on ? <input className="input w-20 py-0.5 text-xs" value={sel[K(l)].cone} onChange={(e) => setSel((s) => ({ ...s, [K(l)]: { ...s[K(l)], cone: e.target.value } }))} /> : (l.cone_no || '—')}</td>}
+                  {mode === 'job' && <td className="px-2 py-1 text-right">{on ? <input type="number" className="input w-14 py-0.5 text-right text-xs" value={sel[K(l)].cones} onChange={(e) => setSel((s) => ({ ...s, [K(l)]: { ...s[K(l)], cones: Number(e.target.value) } }))} /> : (l.cones || '—')}</td>}
                 </tr>
               );
             })}
