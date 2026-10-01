@@ -153,7 +153,8 @@ export async function writeOutwardLines(tx: Tx, req: Request, ypo: any, lines: O
   let total = 0;
   for (const l of lines) {
     const lot = lots.get(l.grn_line_id);
-    const soId = l.so_id ?? (lot.so_id ? Number(lot.so_id) : null);
+    // no job on the line = the general part of the lot (assertJobLots allowed only that)
+    const soId = opts.allowRejected ? (l.so_id ?? (lot.so_id ? Number(lot.so_id) : null)) : (l.so_id ?? null);
     const job = await jobInfo(tx, cid, soId);
     if (l.process_id) {
       const pr = await txQueryOne<any>(tx, 'SELECT id, process_no, process_type, io_no, so_id FROM trx_yarn_process WHERE id = ? AND company_id = ?', [l.process_id, cid]);

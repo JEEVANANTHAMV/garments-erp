@@ -48,8 +48,20 @@ export async function yarnJobLots(cid: number, f: { so_id?: number | null; yarn_
       hold.set(key(t.to_so_id), (hold.get(key(t.to_so_id)) ?? 0) + n(t.qty));
     }
     for (const d of di.filter((x) => Number(x.grn_line_id) === gl)) {
-      const h = d.so_id && hold.has(key(d.so_id)) ? key(d.so_id) : owner;
-      hold.set(h, (hold.get(h) ?? 0) - n(d.qty));
+      // an issue comes out of its own job's part; a general (no job) issue, or a job with no part of its
+      // own, out of the general part — never more than that part holds; the rest from the owner's part
+      const k = key(d.so_id);
+      const first = hold.has(k) ? k : hold.has(0) ? 0 : owner;
+      let qty = n(d.qty);
+      if (qty < 0) { hold.set(first, (hold.get(first) ?? 0) - qty); continue; }   // net reversal (DC cancelled)
+      for (const h of [first, owner, ...hold.keys()]) {
+        if (qty <= 0) break;
+        const take = h === owner && h !== first ? qty : Math.min(qty, Math.max(0, hold.get(h) ?? 0));
+        if (take <= 0) continue;
+        hold.set(h, (hold.get(h) ?? 0) - take);
+        qty -= take;
+      }
+      if (qty > 0) hold.set(owner, (hold.get(owner) ?? 0) - qty);
     }
     for (const [so, qty] of hold) {
       if (qty <= 0.0005) continue;
