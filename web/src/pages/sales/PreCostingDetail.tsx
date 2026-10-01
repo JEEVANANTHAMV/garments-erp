@@ -413,8 +413,10 @@ export default function PreCostingDetailPage() {
         let share = 1;
         if (l.size_id) share /= Math.max(1, sizesIn.get(groupOf(l))?.size ?? 1);
         if (l.color_id) share /= Math.max(1, colorsIn.get(groupOf(l))?.size ?? 1);
-        const base = basis === 'PER_DOZEN' ? c / 12 : basis === 'FIXED_QTY' ? c / oq : c;
-        return Number(((base + addl / oq) * share).toFixed(6));
+        // a fixed qty (and the additional qty) is already the quantity for the line's own sizes / colours
+        if (basis === 'FIXED_QTY') return Number(((c + addl) / oq).toFixed(6));
+        const base = basis === 'PER_DOZEN' ? c / 12 : c;
+        return Number((base * share + addl / oq).toFixed(6));
       };
       bomLines.forEach((l: any, idx: number) => {
         if (l.material_type === 'FABRIC') {
