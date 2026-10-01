@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { barcodeHtml } from '../../lib/printBarcode';
 import { useSearchParams, Link } from 'react-router-dom';
 import {
   Printer, Plus, ScanLine, X, PackageCheck, Ban, Lock, Send, ChevronDown, ChevronRight, Trash2,
@@ -1564,7 +1565,7 @@ async function printDc(id: number, toast: (m: string, k?: any) => void, autoPrin
       <div class="hdr"><div><h1>${esc(c.legal_name || c.trade_name)}</h1>
         <div>${esc([c.address_line1, c.address_line2, c.city, c.state, c.pincode].filter(Boolean).join(', '))}</div>
         <div>GSTIN: ${esc(c.gstin || '—')} · Ph: ${esc(c.phone || '—')}</div></div>
-        <div style="text-align:right"><b>DC No: ${esc(d.challan_no)}</b><br/>Date: ${esc(fmtDate(d.challan_date))}<br/>
+        <div style="text-align:right">${barcodeHtml(d.challan_no)}<b>DC No: ${esc(d.challan_no)}</b><br/>Date: ${esc(fmtDate(d.challan_date))}<br/>
           ${d.ref_no ? `Ref / SR: ${esc(d.ref_no)}<br/>` : ''}Status: ${esc(human(d.status))}</div></div>
       <h2>DELIVERY CHALLAN — JOB WORK (${esc(String(d.stage_name || '').toUpperCase())})</h2>
       <table class="meta"><tr>

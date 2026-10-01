@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { GrnPrintButton } from '../../components/GrnPrintButton';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Save, Plus, Trash2, PackageCheck, Layers, Disc, Globe
@@ -550,6 +551,7 @@ export default function TrimGRNDetailPage() {
           </div>
         </div>
 
+        {!isNew && <GrnPrintButton kind="trim" id={Number(id)} />}
         {isNew && (
           <div className="flex items-center gap-2">
             <button

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { barcodeHtml } from '../../../lib/printBarcode';
 import { useQuery } from '@tanstack/react-query';
 import { http, ApiError } from '../../../lib/api';
 import { fmtDecimal } from '../../../lib/format';
@@ -97,7 +98,7 @@ export function printDoc(title: string, headHtml: string, bodyHtml: string) {
     table{width:100%;border-collapse:collapse;margin-top:6px}th,td{border:1px solid #888;padding:4px 6px;text-align:left}th{background:#eee}
     .r{text-align:right}.grp td{background:#e8f0f7;font-weight:bold}.sub td{background:#f6f6f6;font-weight:bold}.meta td{border:none;padding:2px 6px}
     .sign{display:flex;justify-content:space-between;margin-top:48px}.sign div{border-top:1px solid #000;width:30%;text-align:center;padding-top:4px}
-    @media print{button{display:none}}</style></head><body>${headHtml}${bodyHtml}
+    @media print{button{display:none}}</style></head><body>${barcodeHtml(title)}${headHtml}${bodyHtml}
     <div class="sign"><div>Prepared by</div><div>Security / Checked</div><div>Receiver's signature</div></div>
     <script>window.onload=()=>window.print()</script></body></html>`);
   w.document.close();

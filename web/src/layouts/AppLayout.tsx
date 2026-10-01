@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   Menu, X, LogOut, ChevronDown, Search, Bell, Building2,
 } from 'lucide-react';
@@ -40,7 +40,15 @@ export default function AppLayout() {
     queryFn: async () => (await http.get<{ data: { id: number; title: string; body: string; is_read: number }[] }>('/admin/notifications')).data,
     refetchInterval: 60_000,
   });
-  const unread = (notifications ?? []).filter((n) => !n.is_read).length;
+  // live alerts (GRN bills pending, process DCs overdue …) — computed by the server every minute
+  const { data: alerts } = useQuery({
+    queryKey: ['alerts'],
+    queryFn: async () => (await http.get<{ data: { key: string; title: string; body: string; count: number; severity: string; link: string }[] }>('/alerts')).data ?? [],
+    refetchInterval: 60_000,
+  });
+  const [bellOpen, setBellOpen] = useState(false);
+  const goto = useNavigate();
+  const unread = (notifications ?? []).filter((n) => !n.is_read).length + (alerts ?? []).length;
 
   const sidebar = (
     <div className="flex h-full flex-col bg-slate-900 text-slate-300">
@@ -157,7 +165,8 @@ export default function AppLayout() {
             </button>
           </div>
 
-          <button className="relative rounded-lg p-2 text-slate-500 hover:bg-surface-hover" aria-label="Notifications">
+          <div className="relative">
+          <button className="relative rounded-lg p-2 text-slate-500 hover:bg-surface-hover" aria-label="Notifications" id="btn-bell" onClick={() => setBellOpen((v) => !v)}>
             <Bell size={17} />
             {unread > 0 && (
               <span className="absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full
@@ -166,6 +175,27 @@ export default function AppLayout() {
               </span>
             )}
           </button>
+          {bellOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setBellOpen(false)} />
+              <div className="absolute right-0 top-full z-20 mt-1.5 w-96 animate-fade-in rounded-xl border border-surface-border bg-white p-1.5 shadow-popover" id="bell-panel">
+                <p className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Alerts</p>
+                {(alerts ?? []).map((a) => (
+                  <button key={a.key} onClick={() => { setBellOpen(false); goto(a.link); }}
+                    className="flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left hover:bg-surface-hover">
+                    <span className={clsx('mt-1 h-2 w-2 shrink-0 rounded-full', a.severity === 'danger' ? 'bg-red-500' : a.severity === 'warning' ? 'bg-amber-500' : 'bg-sky-500')} />
+                    <span><span className="block text-[12.5px] font-semibold text-slate-800">{a.title}</span><span className="block text-[11.5px] text-slate-500">{a.body}</span></span>
+                  </button>
+                ))}
+                {!(alerts ?? []).length && <p className="px-3 py-2 text-[12px] text-slate-400">No alerts</p>}
+                {(notifications ?? []).length > 0 && <p className="mt-1 border-t border-surface-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Notifications</p>}
+                {(notifications ?? []).slice(0, 8).map((n) => (
+                  <div key={n.id} className={clsx('rounded-lg px-3 py-1.5 text-[12px]', n.is_read ? 'text-slate-500' : 'font-medium text-slate-800')}>{n.title}{n.body ? <span className="block text-[11px] font-normal text-slate-500">{n.body}</span> : null}</div>
+                ))}
+              </div>
+            </>
+          )}
+          </div>
 
           <div className="relative">
             <button onClick={() => setUserMenu((v) => !v)}

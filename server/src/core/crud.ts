@@ -70,6 +70,8 @@ export interface ResourceConfig {
   beforeWrite?: (req: Request, data: Record<string, unknown>, before?: any) => Promise<void> | void;
   /** Runs inside the UPDATE transaction before the row is written (e.g. snapshot a version); may adjust `data`. */
   beforeUpdateTx?: (req: Request, id: number, before: any, data: Record<string, unknown>, tx: Tx) => Promise<void>;
+  /** Runs inside the CREATE transaction after the row (and its children) is written, e.g. to link it to its source document. */
+  afterCreateTx?: (req: Request, row: any, tx: Tx) => Promise<void>;
 }
 
 export interface ChildConfig {
@@ -123,7 +125,7 @@ export function buildResourceRouter(cfg: ResourceConfig): Router {
     defaultSort = 't.id',
     children = [],
     autoNumber,
-    readOnly, cancelFlag, beforeDelete, beforeUpdate, beforeCreate, beforeWrite, beforeUpdateTx,
+    readOnly, cancelFlag, beforeDelete, beforeUpdate, beforeCreate, beforeWrite, beforeUpdateTx, afterCreateTx,
   } = cfg;
 
   const scope = (req: Request) => (companyScoped ? req.user!.companyId : null);
@@ -267,7 +269,9 @@ export function buildResourceRouter(cfg: ResourceConfig): Router {
         }
       }
 
-      return txQueryOne(tx, `SELECT * FROM ${table} WHERE id = ?`, [newId]);
+      const row = await txQueryOne(tx, `SELECT * FROM ${table} WHERE id = ?`, [newId]);
+      if (afterCreateTx) await afterCreateTx(req, row, tx);
+      return row;
     });
 
     await audit(req, table, (created as any).id, 'INSERT', undefined, created);

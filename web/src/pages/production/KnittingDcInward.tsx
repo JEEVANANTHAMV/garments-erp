@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
+import { barcodeHtml } from '../../lib/printBarcode';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Truck, PackagePlus, Printer, Plus, Trash2, Save, X, Scale, Undo2 } from 'lucide-react';
 import { http } from '../../lib/api';
@@ -372,7 +373,7 @@ export function KnittingDcPrint({ dcNo, onClose }: { dcNo: string | null; onClos
     const w = window.open('', '_blank', 'width=900,height=700');
     if (!w || !ref.current) return;
     w.document.write(`<!doctype html><html><head><title>${dcNo}</title><style>${PRINT_CSS}</style></head>` +
-      `<body>${ref.current.innerHTML}</body></html>`);
+      `<body>${barcodeHtml(dcNo)}${ref.current.innerHTML}</body></html>`);
     w.document.close();
     w.focus();
     w.print();
@@ -822,7 +823,7 @@ export function KnittingYarnReturnPrint({ returnNo, onClose }: { returnNo: strin
     const w = window.open('', '_blank', 'width=900,height=700');
     if (!w || !ref.current) return;
     w.document.write(`<!doctype html><html><head><title>${returnNo}</title><style>${PRINT_CSS}</style></head>` +
-      `<body>${ref.current.innerHTML}</body></html>`);
+      `<body>${barcodeHtml(returnNo, 'Return note')}${ref.current.innerHTML}</body></html>`);
     w.document.close();
     w.focus();
     w.print();

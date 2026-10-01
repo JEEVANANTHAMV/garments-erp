@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { barcodeHtml } from '../../lib/printBarcode';
 import { Plus, Trash2, Truck, PackageCheck, Printer } from 'lucide-react';
 import { http } from '../../lib/api';
 import { fmtDate, fmtDecimal, today } from '../../lib/format';
@@ -108,7 +109,7 @@ export function YarnProcessDcPanel({ process, yarns, parties, warehouses, onChan
     if (!w) return;
     const esc = (v: unknown) => String(v ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!));
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(d.dc_no)}</title>
-      <style>body{font:12px Arial;margin:24px}table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border:1px solid #999;padding:5px}th{background:#eee}</style></head><body>
+      <style>body{font:12px Arial;margin:24px}table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border:1px solid #999;padding:5px}th{background:#eee}</style></head><body>${barcodeHtml(d.dc_no)}
       <h2>${esc(d.process?.process_label ?? 'Yarn Process')} — Delivery Challan ${esc(d.dc_no)}</h2>
       <p><b>Date:</b> ${esc(fmtDate(d.dc_date))} &nbsp; <b>Supplier / Vendor:</b> ${esc(d.vendor_name)} &nbsp; <b>Vehicle:</b> ${esc(d.vehicle_no ?? '—')}
       &nbsp; <b>Jobs:</b> ${esc((d.jobs ?? []).length)}</p>

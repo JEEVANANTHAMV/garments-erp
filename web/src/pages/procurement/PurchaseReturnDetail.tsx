@@ -6,6 +6,7 @@ import {
   Building2, DollarSign
 } from 'lucide-react';
 import { useLookup } from '../../hooks/useLookup';
+import { barcodeHtml } from '../../lib/printBarcode';
 import { useToast } from '../../hooks/useToast';
 import { http } from '../../lib/api';
 import { fmtDecimal, today } from '../../lib/format';
@@ -375,6 +376,28 @@ export function PurchaseReturnDetailPage() {
   const isDraft = head.status === 'DRAFT';
   const isApproved = head.status === 'APPROVED';
   const isDcCreated = head.status === 'RETURN_DC_CREATED';
+  /** Return DC print with the DC barcode (scanned at the gate to make the outward pass). */
+  const printReturnDc = () => {
+    const w = window.open('', '_blank', 'width=900,height=1000');
+    if (!w) return;
+    const e = (v: unknown) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
+    const sup = (suppliers ?? []).find((x: any) => String(x.id) === String(head.supplier_id))?.label ?? head.supplier_name ?? '';
+    const tot = lines.reduce((a, l) => a + Number(l.return_qty || 0), 0);
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${e(head.return_dc_no)}</title><style>
+      body{font:12px Arial;margin:22px}h1{font-size:17px;margin:0 0 4px}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #888;padding:4px 6px}th{background:#eee}
+      .r{text-align:right}.meta td{border:none;padding:2px 6px}.sign{display:flex;justify-content:space-between;margin-top:48px}.sign div{border-top:1px solid #000;width:30%;text-align:center;padding-top:4px}</style></head><body>
+      ${barcodeHtml(head.return_dc_no)}<h1>DELIVERY CHALLAN — PURCHASE RETURN</h1>
+      <table class="meta"><tr><td><b>DC No:</b> ${e(head.return_dc_no)}</td><td><b>Date:</b> ${e(head.return_dc_date)}</td><td><b>Return No:</b> ${e(head.return_no)}</td></tr>
+      <tr><td><b>To (supplier):</b> ${e(sup)}</td><td><b>Vehicle:</b> ${e(head.vehicle_no || '—')}</td><td><b>E-way bill:</b> ${e(head.eway_bill_no || '—')}</td></tr>
+      <tr><td><b>Transporter:</b> ${e(head.transporter_name || '—')}</td><td><b>Driver:</b> ${e(head.driver_name || '—')}</td><td><b>Reason:</b> ${e(String(head.return_reason ?? '').replace(/_/g, ' ').toLowerCase())}</td></tr></table>
+      <table><thead><tr><th>#</th><th>Item</th><th>Material</th><th class="r">Return qty</th><th>UOM</th><th class="r">Rate</th><th class="r">Amount</th></tr></thead><tbody>
+      ${lines.map((l, i) => `<tr><td>${i + 1}</td><td>${e(l.item_name)}</td><td>${e(l.material_type)}</td><td class="r">${Number(l.return_qty || 0).toFixed(3)}</td><td>${e(l.uom_code ?? '')}</td><td class="r">${Number(l.rate || 0).toFixed(2)}</td><td class="r">${Number(l.total_amount || 0).toFixed(2)}</td></tr>`).join('')}
+      <tr><th colspan="3" class="r">Total</th><th class="r">${tot.toFixed(3)}</th><th colspan="3"></th></tr></tbody></table>
+      <p>Goods returned to the supplier — not for sale. ${e(head.remarks)}</p>
+      <div class="sign"><div>Prepared by</div><div>Security / Checked</div><div>Receiver's signature</div></div>
+      <script>window.onload=()=>window.print()</script></body></html>`);
+    w.document.close();
+  };
 
   return (
     <div className="space-y-6 pb-20">
@@ -1099,6 +1122,9 @@ export function PurchaseReturnDetailPage() {
         <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 mb-4 flex items-center gap-2">
           <Truck className="h-4 w-4 text-brand-600" />
           <span>Return DC (Delivery Challan) &amp; Logistics (Section 16)</span>
+          {head.return_dc_no && (
+            <button type="button" className="btn-secondary ml-auto text-xs normal-case tracking-normal" onClick={printReturnDc} id="btn-print-return-dc">Print Return DC</button>
+          )}
         </h3>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

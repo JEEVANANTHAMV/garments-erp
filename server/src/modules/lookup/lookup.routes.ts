@@ -108,6 +108,7 @@ const LOOKUPS: Record<string, LookupDef> = {
   'delay-reasons': { sql: `SELECT id, reason_code AS code, reason_name AS label, category FROM cfg_delay_reason WHERE company_id=? AND is_active=1 ORDER BY reason_name`, scoped: true },
   'sewing-operation-masters': { sql: `SELECT id, operation_code AS code, operation_name AS label, smv FROM cfg_sewing_operation_master WHERE company_id=? AND is_active=1 ORDER BY sort_order, id`, scoped: true },
 
+  'trim-grns': { sql: `SELECT id, grn_no AS code, grn_no AS label, po_id, supplier_id, net_amount FROM trx_trim_grn WHERE company_id=? ORDER BY id DESC LIMIT 500`, scoped: true },
   grns: { sql: `SELECT id, grn_no AS code, grn_no AS label, po_id, supplier_id FROM trx_grn WHERE company_id=? ORDER BY id DESC LIMIT 500`, scoped: true },
   'gate-inwards': { sql: `SELECT id, entry_no AS code, entry_no AS label, party_id, vehicle_no, supplier_dc_no, supplier_inv_no, material_type, gross_weight_kg, package_count, warehouse_id, status FROM trx_gate_inward WHERE company_id=? ORDER BY id DESC LIMIT 500`, scoped: true },
   'gate-outwards': { sql: `SELECT id, pass_no AS code, pass_no AS label, party_id, vehicle_no FROM trx_gate_outward WHERE company_id=? ORDER BY id DESC LIMIT 500`, scoped: true },

@@ -49,6 +49,7 @@ import { processFlowRouter } from './modules/yarnProcess/processFlow.routes.js';
 import { yarnProcessDcRouter } from './modules/yarnProcess/yarnProcessDc.routes.js';
 import { yarnEngineRouter } from './modules/yarnProcess/yarnEngine.routes.js';
 import { yarnEngineAfterRouter } from './modules/yarnProcess/yarnEngineAfter.routes.js';
+import { gateBillRouter } from './modules/inventory/gateBill.routes.js';
 import { collarRouter } from './modules/yarnProcess/collar.routes.js';
 import { knittingProductionRouter } from './modules/yarnProcess/knittingProduction.routes.js';
 import { processReportsRouter } from './modules/yarnProcess/processReports.routes.js';
@@ -134,6 +135,7 @@ export function createApp() {
   api.use('/', yarnProcessDcRouter);           // /yarn-process-dcs (outward DC / pending at processor)
   api.use('/', yarnEngineRouter);             // /yarn-process/* (yarn process engine: outward / inward / QC)
   api.use('/', yarnEngineAfterRouter);        // /yarn-process/* (return / reprocess / bill / cone tracking / reports)
+  api.use('/', gateBillRouter);              // /dc-lookup (DC barcode at the gate), /procurement/grn-bill-status, /alerts
   api.use('/', processFlowRouter);            // /process-issues, /process-receipts, /process-qc
   api.use('/', collarRouter);                 // /collars, /collar-programs, /collar-productions
   api.use('/', knittingProductionRouter);     // /knitting-productions, /knitting-rolls

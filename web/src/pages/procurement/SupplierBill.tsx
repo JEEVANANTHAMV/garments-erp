@@ -63,6 +63,9 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
   const toast = useToast();
   const suppliers = useLookup('suppliers');
   const grns = useLookup('grns');
+  // Trim GRNs live in their own table — a trims bill links them through trim_grn_ids
+  const trimGrns = useLookup('trim-grns');
+  const [trimGrnIds, setTrimGrnIds] = useState<number[]>([]);
   const purchaseOrders = useLookup('purchase-orders');
   const currencies = useLookup('currencies');
   const uoms = useLookup('uoms');
@@ -152,6 +155,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
             gids = [Number(b.grn_id)];
           }
           setSelectedGrnIds(gids);
+          try { const t = typeof b.trim_grn_ids === 'string' ? JSON.parse(b.trim_grn_ids) : b.trim_grn_ids; setTrimGrnIds(Array.isArray(t) ? t.map(Number).filter(Boolean) : []); } catch { setTrimGrnIds([]); }
 
           if (Array.isArray(b.lines) && b.lines.length > 0) {
             setLines(b.lines.map((l: any) => ({
@@ -177,7 +181,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
       // New Bill
       const bType = initialType && initialType !== 'ALL' ? initialType : 'YARN_PURCHASE';
       setBillType(bType);
-      setSelectedGrnIds([]);
+      setSelectedGrnIds([]); setTrimGrnIds([]);
       setCharges(EMPTY_CHARGES);
       setHeader({
         bill_no: '',
@@ -333,6 +337,29 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
     } finally {
       setFetchingGrn(false);
     }
+  };
+
+  /** Links a trim GRN: its accepted lines come into the bill (qty × GRN rate). */
+  const handleAddTrimGrn = async (idStr: string) => {
+    const tid = Number(idStr);
+    if (!tid || trimGrnIds.includes(tid)) return;
+    try {
+      const g = (await http.get<{ data: any }>(`/trim-grns/${tid}`)).data;
+      if (!header.supplier_id && g.supplier_id) setHeader((h: any) => ({ ...h, supplier_id: String(g.supplier_id), supplier_inv_no: h.supplier_inv_no || g.supplier_inv_no || '' }));
+      const add: BillLineItem[] = (g.lines ?? []).filter((l: any) => Number(l.accepted_qty) > 0).map((l: any) => ({
+        grn_id: null, grn_no: g.grn_no, material_type: 'TRIM', description: [l.trim_name, l.specification].filter(Boolean).join(' — '),
+        color_name: l.color_name ?? '', size_name: l.trim_size ?? '', lot_no: l.internal_lot_no ?? '', bill_qty: Number(l.accepted_qty), grn_qty: Number(l.accepted_qty), po_qty: Number(l.po_qty) || undefined,
+        uom_id: Number(l.uom_id) || 1, rate: Number(l.rate) || 0, amount: Math.round(Number(l.accepted_qty) * Number(l.rate || 0) * 100) / 100, gst_rate: Number(l.gst_rate) || 0,
+        qty_matched: true, rate_matched: true, trim_grn_id: tid,
+      } as BillLineItem & { trim_grn_id: number }));
+      setTrimGrnIds((x) => [...x, tid]);
+      setLines((ls) => [...ls.filter((l) => (l.description || l.bill_qty) ), ...add]);
+      toast(`${g.grn_no}: ${add.length} trim line(s) added`, 'success');
+    } catch { toast('Could not load the trim GRN', 'error'); }
+  };
+  const handleRemoveTrimGrn = (tid: number) => {
+    setTrimGrnIds((x) => x.filter((i) => i !== tid));
+    setLines((ls) => ls.filter((l: any) => l.trim_grn_id !== tid));
   };
 
   const handleRemoveGrn = (grnIdNum: number) => {
@@ -497,6 +524,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
         po_id: header.po_id ? Number(header.po_id) : null,
         grn_id: selectedGrnIds.length > 0 ? selectedGrnIds[0] : (header.grn_id ? Number(header.grn_id) : null),
         grn_ids: selectedGrnIds.length > 0 ? selectedGrnIds : (header.grn_id ? [Number(header.grn_id)] : null),
+        trim_grn_ids: trimGrnIds.length > 0 ? trimGrnIds : null,
         knitting_order_id: header.knitting_order_id ? Number(header.knitting_order_id) : null,
         fabric_process_order_id: header.fabric_process_order_id ? Number(header.fabric_process_order_id) : null,
         currency_id: Number(header.currency_id) || 1,
@@ -733,6 +761,23 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                 />
               </div>
             </div>
+
+            {billType.startsWith('TRIM') && (
+              <div className="flex flex-wrap items-center gap-2 border-t border-dashed border-amber-200 pt-2">
+                <select value="" onChange={(e) => { if (e.target.value) void handleAddTrimGrn(e.target.value); }} id="sel-trim-grn"
+                  className="w-72 rounded-lg border border-amber-300 bg-amber-50/40 px-2 py-1.5 text-xs font-semibold text-amber-900">
+                  <option value="">+ Link Trim GRN (pulls accepted lines)…</option>
+                  {(trimGrns.data || []).filter((g: any) => !trimGrnIds.includes(Number(g.id))).filter((g: any) => !header.supplier_id || String(g.supplier_id) === String(header.supplier_id))
+                    .map((g: any) => <option key={g.id} value={g.id}>{g.label}</option>)}
+                </select>
+                {trimGrnIds.map((tid) => (
+                  <span key={tid} className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-900">
+                    ✂ {(trimGrns.data || []).find((g: any) => Number(g.id) === tid)?.label ?? `Trim GRN #${tid}`}
+                    <button type="button" className="ml-1 text-amber-500 hover:text-rose-600" onClick={() => handleRemoveTrimGrn(tid)}>✕</button>
+                  </span>
+                ))}
+              </div>
+            )}
 
             {/* Selected Multi-GRN Badges */}
             {selectedGrnIds.length > 0 && (

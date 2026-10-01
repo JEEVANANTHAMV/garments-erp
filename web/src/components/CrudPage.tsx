@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Plus, Pencil, Trash2, Filter as FilterIcon } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { useList, useSave, useRemove, useListState } from '../hooks/useResource';
@@ -69,6 +69,8 @@ export interface CrudConfig<T> {
   /** Transform form values into the API payload. */
   toPayload?: (values: Record<string, unknown>) => Record<string, unknown>;
   modalSize?: 'sm' | 'md' | 'lg' | 'xl';
+  /** Opens the "new" form pre-filled (e.g. from a scanned DC barcode); a new `key` opens it again. */
+  newWith?: { key: number; values: Record<string, unknown> } | null;
 }
 
 export function CrudPage<T extends { id: number }>(cfg: CrudConfig<T>) {
@@ -101,6 +103,16 @@ export function CrudPage<T extends { id: number }>(cfg: CrudConfig<T>) {
     }
     setValues(init); setErrors({}); setEditing(null);
   };
+
+  useEffect(() => {
+    if (!cfg.newWith) return;
+    const init: Record<string, unknown> = {};
+    for (const f of cfg.fields) {
+      if (f.defaultValue !== undefined) init[f.name] = typeof f.defaultValue === 'function' ? f.defaultValue() : f.defaultValue;
+    }
+    setValues({ ...init, ...cfg.newWith.values }); setErrors({}); setEditing(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cfg.newWith?.key]);
 
   const openEdit = (row: T) => {
     const v = cfg.toForm ? cfg.toForm(row) : { ...(row as Record<string, unknown>) };

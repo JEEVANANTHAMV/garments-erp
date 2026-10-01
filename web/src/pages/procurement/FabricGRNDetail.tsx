@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { GrnPrintButton } from '../../components/GrnPrintButton';
 import { useQuery } from '@tanstack/react-query';
 import {
   ArrowLeft, Save, PackageCheck, Plus, Trash2, Layers,
@@ -684,6 +685,7 @@ export default function FabricGRNDetailPage() {
             <Boxes size={14} className="text-sky-600" />
             <span>Roll Stock Ledger</span>
           </button>
+          {!isNew && <GrnPrintButton kind="grn" id={Number(id)} />}
           {isNew && (
             <button
               onClick={handleSave}

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { GrnPrintButton } from '../../components/GrnPrintButton';
 import { useQuery } from '@tanstack/react-query';
 import {
   ArrowLeft, Save, PackageCheck, Plus, Trash2, Disc, Layers
@@ -472,6 +473,7 @@ export default function YarnGRNDetailPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          {!isNew && <GrnPrintButton kind="grn" id={Number(id)} />}
           {isNew && (
             <button
               onClick={handleSave}

@@ -78,6 +78,7 @@ import FabricProcessReprocessPage from './pages/production/fabricProcess/Reproce
 import FabricProcessBillPage from './pages/production/fabricProcess/BillPage';
 import { FabricRollTrackingPage, FabricProcessLedgerPage } from './pages/production/fabricProcess/TrackingLedgerPages';
 import { FabricProcessMastersPage, FabricProcessReportsPage } from './pages/production/fabricProcess/MastersReportsPages';
+import GrnBillStatusPage from './pages/procurement/GrnBillStatusPage';
 import YarnProcessOutwardPage from './pages/production/yarnProcess/OutwardPage';
 import YarnProcessInwardPage from './pages/production/yarnProcess/InwardPage';
 import { YarnProcessReturnPage, YarnProcessReprocessPage } from './pages/production/yarnProcess/ReturnReprocessPages';
@@ -241,6 +242,7 @@ export default function App() {
                   <Route path="returns/new" element={<PurchaseReturnDetailPage />} />
                   <Route path="returns/:id" element={<PurchaseReturnDetailPage />} />
                   <Route path="supplier-bills" element={<SupplierBillsPage />} />
+                  <Route path="grn-bill-status" element={<GrnBillStatusPage />} />
 
                   {/* Fabric Procurement */}
                   <Route path="fabric/orders" element={<FabricPurchaseOrdersPage />} />

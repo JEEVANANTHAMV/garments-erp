@@ -1,6 +1,6 @@
 import type { ResourceConfig } from '../../core/crud.js';
 import { s, f } from './schemas.js';
-import { queryOne } from '../../config/db.js';
+import { queryOne, txExecute } from '../../config/db.js';
 import { BadRequest } from '../../core/errors.js';
 import { quotationBeforeUpdateTx } from '../quotation/quotationVersions.js';
 import { computeInvoice, chargesFromRow, writeInvoiceTotals, type GstMode } from '../../core/invoiceCalc.js';
@@ -830,6 +830,7 @@ export const transactionResources: ResourceConfig[] = [
       f('transporter_name', s.nullableStr(120)), f('lr_no', s.nullableStr(50)),
       f('material_type', s.enum(['FABRIC','YARN','TRIM','GARMENT','GENERAL','MACHINERY'])),
       f('package_count', s.int()), f('gross_weight_kg', s.dec()), f('tare_weight_kg', s.dec()), f('net_weight_kg', s.dec()),
+      f('ref_type', s.nullableStr(40)), f('ref_id', s.id()), f('ref_no', s.nullableStr(60)),
       f('warehouse_id', s.id()),
       f('status', s.enum(['GATE_IN','INSPECTED','GRN_COMPLETED','REJECTED','CANCELLED'])),
       f('security_guard', s.nullableStr(80)), f('remarks', s.nullableStr(500)),
@@ -843,6 +844,12 @@ export const transactionResources: ResourceConfig[] = [
     filters: ['pass_type', 'party_id', 'to_unit_id', 'status', 'is_returned'],
     autoNumber: { column: 'pass_no', docType: 'GATE_OUTWARD' },
     beforeWrite: (_req, data, before) => stampGateNow(data, before, 'pass_date', 'pass_time'),
+    // a pass made by scanning a DC barcode links back to the DC (job work DC / purchase return keep gate_outward_id)
+    afterCreateTx: async (_req, row, tx) => {
+      if (!row?.ref_id) return;
+      if (row.ref_type === 'JW_CHALLAN') await txExecute(tx, 'UPDATE trx_jobwork_challan SET gate_outward_id = ? WHERE id = ? AND company_id = ? AND gate_outward_id IS NULL', [row.id, row.ref_id, row.company_id]);
+      if (row.ref_type === 'PURCHASE_RETURN') await txExecute(tx, 'UPDATE trx_purchase_return SET gate_outward_id = ? WHERE id = ? AND company_id = ? AND gate_outward_id IS NULL', [row.id, row.ref_id, row.company_id]);
+    },
     selectExtra: 'p.party_name, u.unit_name AS to_unit_name, um.code AS uom_code',
     joins: 'LEFT JOIN mst_party p ON p.id = t.party_id LEFT JOIN mst_unit u ON u.id = t.to_unit_id LEFT JOIN cfg_uom um ON um.id = t.uom_id',
     fields: [
@@ -851,7 +858,7 @@ export const transactionResources: ResourceConfig[] = [
       f('party_id', s.id()), f('to_unit_id', s.id()),
       f('vehicle_no', s.strReq(30)), f('driver_name', s.nullableStr(80)), f('driver_phone', s.nullableStr(30)),
       f('transporter_name', s.nullableStr(120)), f('lr_no', s.nullableStr(50)),
-      f('purpose', s.nullableStr(255)), f('ref_type', s.nullableStr(40)), f('ref_id', s.id()),
+      f('purpose', s.nullableStr(255)), f('ref_type', s.nullableStr(40)), f('ref_id', s.id()), f('ref_no', s.nullableStr(60)),
       f('expected_return_date', s.date()), f('is_returned', s.bool()), f('returned_date', s.date()),
       f('package_count', s.int()), f('total_qty', s.dec()), f('uom_id', s.id()),
       f('status', s.enum(['DRAFT','APPROVED','GATE_OUT','RETURNED_PARTIAL','RETURNED_FULL','CLOSED'])),
@@ -1102,7 +1109,7 @@ export const transactionResources: ResourceConfig[] = [
       f('bill_type', s.enum(['YARN_PURCHASE','YARN_PROCESS','FABRIC_PURCHASE','FABRIC_PROCESS','TRIMS_PURCHASE','TRIMS_PROCESS','IMPORT_PURCHASE','IMPORT_PROCESS','GENERAL'])),
       f('bill_date', s.date()),
       f('supplier_id', s.idReq()), f('supplier_inv_no', s.nullableStr(60)), f('supplier_inv_date', s.date()),
-      f('po_id', s.id()), f('grn_id', s.id()), f('grn_ids', s.json()),
+      f('po_id', s.id()), f('grn_id', s.id()), f('grn_ids', s.json()), f('trim_grn_ids', s.json()),
       f('knitting_order_id', s.id()), f('fabric_process_order_id', s.id()), f('jobwork_order_id', s.id()),
       f('gate_inward_id', s.id()),
       f('currency_id', s.idReq()),

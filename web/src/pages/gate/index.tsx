@@ -1,5 +1,8 @@
+import { useRef, useState } from 'react';
+import { ScanLine } from 'lucide-react';
 import { CrudPage } from '../../components/CrudPage';
 import { Badge } from '../../components/ui';
+import { http, ApiError } from '../../lib/api';
 import { fmtDecimal, fmtDate, humanize } from '../../lib/format';
 
 /** Local system date (YYYY-MM-DD) and time (HH:MM) for gate entries. */
@@ -51,10 +54,68 @@ const OUTWARD_STATUSES = [
   { value: 'CLOSED', label: 'Closed' },
 ];
 
+
+/**
+ * Scan the barcode on our DC print (client voice note 01-Oct-2026): the DC loads into the gate pass
+ * (outward) or — when the material comes back — into the gate entry (inward).
+ */
+function DcScanBar({ mode, onLoad }: { mode: 'OUT' | 'IN'; onLoad: (values: Record<string, unknown>) => void }) {
+  const [code, setCode] = useState('');
+  const [dc, setDc] = useState<any>(null);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const ref = useRef<HTMLInputElement>(null);
+  const scan = async () => {
+    const c = code.trim(); if (!c) return;
+    setBusy(true); setErr(''); setDc(null);
+    try {
+      const d = (await http.get<{ data: any }>(`/dc-lookup?code=${encodeURIComponent(c)}`)).data;
+      setDc(d);
+      if (!d.warnings?.length) use(d);
+    } catch (e) { setErr(e instanceof ApiError ? e.message : 'DC not found'); } finally { setBusy(false); setCode(''); ref.current?.focus(); }
+  };
+  const use = (d: any) => {
+    const ref_ = { ref_type: d.ref_type, ref_id: d.ref_id, ref_no: d.dc_no };
+    onLoad(mode === 'OUT'
+      ? { ...ref_, pass_type: d.returnable ? 'RETURNABLE_JOBWORK' : 'NON_RETURNABLE_DISPATCH', party_id: d.party_id, vehicle_no: d.vehicle_no ?? '', purpose: d.purpose,
+          package_count: d.packages || 1, total_qty: d.qty, uom_id: d.uom_id, expected_return_date: d.expected_return_date ? String(d.expected_return_date).slice(0, 10) : '',
+          status: 'GATE_OUT', remarks: [d.dc_label, d.jobs ? `Jobs: ${d.jobs}` : ''].filter(Boolean).join(' · ') }
+      : { ...ref_, entry_type: d.returnable ? 'JOBWORK_RETURN' : 'GENERAL_INWARD', party_id: d.party_id, material_type: d.material_type, package_count: d.packages || 1,
+          remarks: `Coming back against our ${d.dc_label} ${d.dc_no}${d.jobs ? ` (jobs ${d.jobs})` : ''}` });
+  };
+  return (
+    <div className="card mb-3 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <ScanLine size={18} className="text-brand-600" />
+        <span className="text-[13px] font-semibold text-slate-800">{mode === 'OUT' ? 'Scan DC barcode → gate pass' : 'Scan our DC barcode (job-work return) → gate entry'}</span>
+        <input ref={ref} id={`dc-scan-${mode}`} className="input w-72 py-1.5 font-mono text-sm" placeholder="Scan or type DC no and press Enter" value={code} autoFocus
+          onChange={(e) => setCode(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void scan(); } }} />
+        <button type="button" className="btn-secondary text-xs" disabled={busy} onClick={() => void scan()}>{busy ? 'Looking up…' : 'Load DC'}</button>
+        {err && <span className="text-xs text-red-600">{err}</span>}
+      </div>
+      {dc && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+          <span className="font-mono font-bold text-brand-700">{dc.dc_no}</span><span>{dc.dc_label}</span><span>{fmtDate(dc.dc_date)}</span>
+          <span className="font-semibold">{dc.party_name ?? '—'}</span><span>{fmtDecimal(dc.qty, 3)} {dc.uom_code}{dc.packages ? ` · ${dc.packages} pkgs` : ''}</span>
+          {dc.jobs && <span>Jobs: {dc.jobs}</span>}<span>Status: {humanize(dc.status)}</span>
+          {dc.gate_passes?.length > 0 && <span>Gate out: {dc.gate_passes.map((p: any) => `${p.pass_no} (${fmtDate(p.pass_date)} ${p.pass_time ?? ''})`).join(', ')}</span>}
+          {dc.gate_inwards?.length > 0 && <span>Gate in: {dc.gate_inwards.map((p: any) => p.entry_no).join(', ')}</span>}
+          {dc.warnings?.map((w: string) => <span key={w} className="font-semibold text-amber-700">⚠ {w}</span>)}
+          {dc.warnings?.length > 0 && <button type="button" className="btn-primary ml-auto py-1 text-xs" onClick={() => use(dc)}>{mode === 'OUT' ? 'Make gate pass anyway' : 'Make gate entry anyway'}</button>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ------------------------------------------------ Inward Gate Entry (IGP) */
 export function GateInwardsPage() {
+  const [nw, setNw] = useState<{ key: number; values: Record<string, unknown> } | null>(null);
   return (
+    <>
+    <DcScanBar mode="IN" onLoad={(values) => setNw({ key: Date.now(), values })} />
     <CrudPage
+      newWith={nw}
       path="gate-inwards"
       title="Inward Gate Entry"
       permission="GATE_INWARD"
@@ -109,6 +170,11 @@ export function GateInwardsPage() {
           ),
         },
         {
+          key: 'ref_no',
+          header: 'Against our DC',
+          render: (r: any) => (r.ref_no ? <span className="font-mono text-xs font-semibold text-brand-700">{r.ref_no}</span> : <span className="text-slate-400">—</span>),
+        },
+        {
           key: 'dc_inv',
           header: 'DC / Inv No',
           render: (r: any) => (
@@ -154,6 +220,7 @@ export function GateInwardsPage() {
         // Stamped from the system clock when the entry is opened (and by the server on save)
         { name: 'entry_date', label: 'Entry Date', type: 'date', readOnly: true, defaultValue: () => nowStamp().date, hint: 'System date' },
         { name: 'entry_time', label: 'Entry Time', type: 'time', readOnly: true, defaultValue: () => nowStamp().time, hint: 'System time' },
+        { name: 'ref_no', label: 'Against our DC (scanned)', readOnly: true, hint: 'Filled by scanning our DC barcode' },
         { name: 'entry_type', label: 'Entry Type', required: true, options: ENTRY_TYPES, defaultValue: 'PURCHASE_INWARD' },
         { name: 'party_id', label: 'Supplier / Vendor', required: true, lookup: 'parties' },
         { name: 'vehicle_no', label: 'Vehicle Number', required: true, placeholder: 'e.g. TN 38 BJ 1234' },
@@ -176,13 +243,18 @@ export function GateInwardsPage() {
         { name: 'remarks', label: 'Remarks / Notes', type: 'textarea', span: 2 },
       ]}
     />
+    </>
   );
 }
 
 /* ------------------------------------------------ Outward Gate Pass (OGP) */
 export function GateOutwardsPage() {
+  const [nw, setNw] = useState<{ key: number; values: Record<string, unknown> } | null>(null);
   return (
+    <>
+    <DcScanBar mode="OUT" onLoad={(values) => setNw({ key: Date.now(), values })} />
     <CrudPage
+      newWith={nw}
       path="gate-outwards"
       title="Outward Gate Pass"
       permission="GATE_OUTWARD"
@@ -210,6 +282,11 @@ export function GateOutwardsPage() {
               {r.pass_time && <span className="ml-1 text-slate-500 font-mono">{r.pass_time}</span>}
             </div>
           ),
+        },
+        {
+          key: 'ref_no',
+          header: 'DC',
+          render: (r: any) => (r.ref_no ? <span className="font-mono text-xs font-semibold text-brand-700">{r.ref_no}</span> : <span className="text-slate-400">—</span>),
         },
         {
           key: 'pass_type',
@@ -279,6 +356,7 @@ export function GateOutwardsPage() {
       fields={[
         { name: 'pass_date', label: 'Pass Date', type: 'date', readOnly: true, defaultValue: () => nowStamp().date, hint: 'System date' },
         { name: 'pass_time', label: 'Pass Time', type: 'time', readOnly: true, defaultValue: () => nowStamp().time, hint: 'System time' },
+        { name: 'ref_no', label: 'DC (scanned)', readOnly: true, hint: 'Filled by scanning the DC barcode' },
         { name: 'pass_type', label: 'Pass Type', required: true, options: PASS_TYPES, defaultValue: 'RETURNABLE_JOBWORK' },
         { name: 'party_id', label: 'Recipient Vendor / Subcontractor', lookup: 'parties' },
         { name: 'to_unit_id', label: 'Or Internal Destination Unit', lookup: 'units' },
@@ -296,5 +374,6 @@ export function GateOutwardsPage() {
         { name: 'remarks', label: 'Remarks / Notes', type: 'textarea', span: 2 },
       ]}
     />
+    </>
   );
 }
