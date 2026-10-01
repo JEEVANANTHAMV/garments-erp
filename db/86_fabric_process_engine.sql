@@ -289,9 +289,9 @@ WHERE NOT EXISTS (SELECT 1 FROM cfg_number_series s WHERE s.company_id = c.id AN
 -- ---------- Backfill DCs received before this engine (single-roll DCs): good / loss on the roll ----------
 UPDATE trx_fabric_process_roll_in ri
   JOIN (SELECT fpo_id, SUM(weight_kg) g FROM trx_fabric_process_roll_out WHERE inward_id IS NULL GROUP BY fpo_id) x ON x.fpo_id = ri.fpo_id
+  JOIN (SELECT fpo_id, COUNT(*) c FROM trx_fabric_process_roll_in GROUP BY fpo_id) cnt ON cnt.fpo_id = ri.fpo_id AND cnt.c = 1
   JOIN trx_fabric_process_order o ON o.id = ri.fpo_id
    SET ri.good_kg = LEAST(ri.weight_kg, x.g),
        ri.loss_kg = IF(o.status = 'COMPLETED', GREATEST(ri.weight_kg - x.g, 0), 0),
        ri.status = IF(o.status = 'COMPLETED', 'RECEIVED', 'PARTIAL')
- WHERE ri.good_kg = 0 AND ri.loss_kg = 0
-   AND (SELECT COUNT(*) FROM trx_fabric_process_roll_in r2 WHERE r2.fpo_id = ri.fpo_id) = 1;
+ WHERE ri.good_kg = 0 AND ri.loss_kg = 0;
