@@ -110,17 +110,22 @@ yarnEngineAfterRouter.post('/yarn-process/returns', requirePermission(YP.RETURN)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
       [cid, no, body.return_date, inw?.id ?? null, inw?.ypo_id ?? null, inw?.vendor_id ?? null, inw?.process_code ?? null, body.return_type, body.reason_id, body.warehouse_id, body.remarks ?? null, req.user!.id]);
     const returnId = Number(r.insertId);
-    const grnId = await lotGrn(tx, req, { no, date: body.return_date, warehouseId: body.warehouse_id, supplierId: inw?.vendor_id ?? null, remarks: `Yarn process return ${no}`, rejected: true });
-    const toStore = await whName(tx, body.warehouse_id);
+    // validate every line first (processed lot of the GRN, KG left)
     const seen = new Set<number>();
-    let total = 0;
+    const checked: { l: typeof body.lines[number]; lot: any }[] = [];
     for (const l of body.lines) {
       if (seen.has(l.source_grn_line_id)) throw BadRequest('The same lot is returned twice');
       seen.add(l.source_grn_line_id);
       const lot = await lotRow(tx, cid, l.source_grn_line_id, true);
-      if (!lot.source_ypo_id) throw BadRequest(`Lot ${lot.lot_no} is not a processed yarn lot`);
+      if (!lot.source_ypo_id) throw BadRequest(`Lot ${lot.lot_no} is not a processed yarn lot — return purchased yarn through a purchase return`);
       if (inw && Number(lot.grn_id) !== Number(inw.grn_id)) throw BadRequest(`Lot ${lot.lot_no} is not from GRN ${inw.inward_no}`);
       if (l.qty_kg > lot.balance_kg + EPS) throw BadRequest(`Lot ${lot.lot_no} has only ${lot.balance_kg} KG left`);
+      checked.push({ l, lot });
+    }
+    const grnId = await lotGrn(tx, req, { no, date: body.return_date, warehouseId: body.warehouse_id, supplierId: inw?.vendor_id ?? checked[0].lot.supplier_id, remarks: `Yarn process return ${no}`, rejected: true });
+    const toStore = await whName(tx, body.warehouse_id);
+    let total = 0;
+    for (const { l, lot } of checked) {
       await lotOut(tx, req, { lot, qty: l.qty_kg, srcType: 'YARN_LOT_MOVE', srcId: returnId, date: body.return_date, soId: lot.so_id, ioNo: lot.job_no, refType: 'YARN_PROC_RETURN', remarks: `Return ${no}` });
       const rl = await lotIn(tx, { grnId, soId: lot.so_id, styleId: lot.style_id, yarnId: lot.yarn_id, yarnType: lot.yarn_type, shade: lot.color_name, lotNo: `${lot.lot_no}-R`,
         coneNo: lot.cone_no, qty: l.qty_kg, rejected: true, parentId: lot.id, ypoId: lot.source_ypo_id });
