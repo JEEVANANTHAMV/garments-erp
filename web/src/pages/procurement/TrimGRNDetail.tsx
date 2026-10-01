@@ -395,6 +395,7 @@ export default function TrimGRNDetailPage() {
     const totalAccepted = lines.reduce((s, l) => s + (Number(l.accepted_qty) || 0), 0);
     const totalRejected = lines.reduce((s, l) => s + (Number(l.rejected_qty) || 0), 0);
     const totalHold = lines.reduce((s, l) => s + (Number(l.hold_qty) || 0), 0);
+    const totalPo = lines.reduce((s, l) => s + (Number(l.po_qty) || 0), 0);
     const taxableAmount = lines.reduce((s, l) => s + (Number(l.taxable_amount) || 0), 0);
 
     let cgstAmount = 0;
@@ -420,7 +421,9 @@ export default function TrimGRNDetailPage() {
     const grandTotal = inv.net;
     const inrGrandTotal = grandTotal * (Number(head.exchange_rate) || 1.0);
 
-    return { totalReceived, totalAccepted, totalRejected, totalHold, taxableAmount, cgstAmount, sgstAmount, igstAmount, taxAmount, grandTotal, inrGrandTotal, inv };
+    return {
+      totalPo,
+      totalReceived, totalAccepted, totalRejected, totalHold, taxableAmount, cgstAmount, sgstAmount, igstAmount, taxAmount, grandTotal, inrGrandTotal, inv };
   }, [lines, head.is_interstate, head.exchange_rate, charges]);
 
   const handleSave = async () => {
@@ -931,17 +934,17 @@ export default function TrimGRNDetailPage() {
                 <th className="py-2.5 px-2 text-left w-24">Spec</th>
                 <th className="py-2.5 px-2 text-left w-20">Color</th>
                 <th className="py-2.5 px-2 text-left w-16">Size</th>
-                <th className="py-2.5 px-2 text-right w-16">PO Qty</th>
-                <th className="py-2.5 px-2 text-right w-18">Rec Qty *</th>
-                <th className="py-2.5 px-2 text-right w-18">Acc Qty *</th>
-                <th className="py-2.5 px-2 text-right w-14">Rej</th>
-                <th className="py-2.5 px-2 text-right w-14">Hold</th>
-                <th className="py-2.5 px-2 text-right w-18">Rate ({currSymbol})</th>
-                <th className="py-2.5 px-2 text-right w-20">Taxable ({currSymbol})</th>
-                <th className="py-2.5 px-2 text-center w-14">{head.is_interstate ? 'IGST %' : 'GST %'}</th>
-                <th className="py-2.5 px-2 text-right w-18">Tax ({currSymbol})</th>
-                <th className="py-2.5 px-2 text-right w-22">Total ({currSymbol})</th>
-                <th className="py-2.5 px-2 text-left w-24">Internal Lot</th>
+                <th className="py-2.5 px-2 text-right min-w-[90px]">PO Qty</th>
+                <th className="py-2.5 px-2 text-right min-w-[96px]">Rec Qty *</th>
+                <th className="py-2.5 px-2 text-right min-w-[96px]">Acc Qty *</th>
+                <th className="py-2.5 px-2 text-right min-w-[84px]">Rej</th>
+                <th className="py-2.5 px-2 text-right min-w-[84px]">Hold</th>
+                <th className="py-2.5 px-2 text-right min-w-[90px]">Rate ({currSymbol})</th>
+                <th className="py-2.5 px-2 text-right min-w-[100px]">Taxable ({currSymbol})</th>
+                <th className="py-2.5 px-2 text-center min-w-[80px]">{head.is_interstate ? 'IGST %' : 'GST %'}</th>
+                <th className="py-2.5 px-2 text-right min-w-[90px]">Tax ({currSymbol})</th>
+                <th className="py-2.5 px-2 text-right min-w-[110px]">Total ({currSymbol})</th>
+                <th className="py-2.5 px-2 text-left min-w-[110px]">Internal Lot</th>
                 <th className="py-2.5 px-2 text-center w-20">QC</th>
                 {isNew && <th className="py-2.5 px-2 text-center w-8"></th>}
               </tr>
@@ -1094,7 +1097,7 @@ export default function TrimGRNDetailPage() {
                         type="number"
                         value={line.received_qty}
                         onChange={(e) => updateLine(idx, { received_qty: Number(e.target.value) })}
-                        className="input text-xs py-1 text-right font-mono font-bold text-slate-800"
+                        className="input text-xs py-1 text-right font-mono font-bold text-slate-800 w-full min-w-[80px] !px-1.5"
                       />
                     ) : (
                       <span className="font-mono font-bold">{fmtDecimal(line.received_qty)}</span>
@@ -1108,7 +1111,7 @@ export default function TrimGRNDetailPage() {
                         type="number"
                         value={line.accepted_qty}
                         onChange={(e) => updateLine(idx, { accepted_qty: Number(e.target.value) })}
-                        className="input text-xs py-1 text-right font-mono font-bold text-emerald-700"
+                        className="input text-xs py-1 text-right font-mono font-bold text-emerald-700 w-full min-w-[80px] !px-1.5"
                       />
                     ) : (
                       <span className="font-mono text-emerald-700 font-bold">{fmtDecimal(line.accepted_qty)}</span>
@@ -1122,7 +1125,7 @@ export default function TrimGRNDetailPage() {
                         type="number"
                         value={line.rejected_qty}
                         onChange={(e) => updateLine(idx, { rejected_qty: Number(e.target.value) })}
-                        className="input text-xs py-1 text-right font-mono text-rose-600"
+                        className="input text-xs py-1 text-right font-mono text-rose-600 w-full min-w-[80px] !px-1.5"
                       />
                     ) : (
                       <span className="font-mono text-rose-600">{fmtDecimal(line.rejected_qty)}</span>
@@ -1136,7 +1139,7 @@ export default function TrimGRNDetailPage() {
                         type="number"
                         value={line.hold_qty}
                         onChange={(e) => updateLine(idx, { hold_qty: Number(e.target.value) })}
-                        className="input text-xs py-1 text-right font-mono text-amber-600"
+                        className="input text-xs py-1 text-right font-mono text-amber-600 w-full min-w-[80px] !px-1.5"
                       />
                     ) : (
                       <span className="font-mono text-amber-600">{fmtDecimal(line.hold_qty)}</span>
@@ -1151,7 +1154,7 @@ export default function TrimGRNDetailPage() {
                         step="0.01"
                         value={line.rate}
                         onChange={(e) => updateLine(idx, { rate: Number(e.target.value) })}
-                        className="input text-xs py-1 text-right font-mono"
+                        className="input text-xs py-1 text-right font-mono w-full min-w-[80px] !px-1.5"
                       />
                     ) : (
                       <span className="font-mono">{currSymbol}{fmtDecimal(line.rate, 2)}</span>
@@ -1243,17 +1246,15 @@ export default function TrimGRNDetailPage() {
             </tbody>
             <tfoot className="bg-slate-50/80 border-t border-slate-200 font-bold text-slate-800">
               <tr>
-                <td colSpan={7} className="py-3 px-3 text-right text-slate-600">Totals:</td>
-                <td className="py-3 px-2 text-right font-mono text-slate-500"></td>
+                <td colSpan={8} className="py-3 px-3 text-right text-slate-600">Totals:</td>
+                <td className="py-3 px-2 text-right font-mono text-slate-500">{fmtDecimal(totals.totalPo)}</td>
                 <td className="py-3 px-2 text-right font-mono text-slate-800">{fmtDecimal(totals.totalReceived)}</td>
                 <td className="py-3 px-2 text-right font-mono text-emerald-800">{fmtDecimal(totals.totalAccepted)}</td>
                 <td className="py-3 px-2 text-right font-mono text-rose-700">{fmtDecimal(totals.totalRejected)}</td>
                 <td className="py-3 px-2 text-right font-mono text-amber-700">{fmtDecimal(totals.totalHold)}</td>
-                <td className="py-3 px-2 text-right text-slate-500 text-xs">Taxable Total:</td>
+                <td className="py-3 px-2"></td>
                 <td className="py-3 px-2 text-right font-mono">{currSymbol}{fmtDecimal(totals.taxableAmount, 2)}</td>
-                <td className="py-3 px-2 text-center text-xs text-slate-500">
-                  {head.is_interstate ? 'IGST:' : 'CGST+SGST:'}
-                </td>
+                <td className="py-3 px-2"></td>
                 <td className="py-3 px-2 text-right font-mono text-purple-700">{currSymbol}{fmtDecimal(totals.taxAmount, 2)}</td>
                 <td className="py-3 px-2 text-right font-mono text-sm font-black text-slate-900">
                   {currSymbol}{fmtDecimal(totals.grandTotal, 2)}
