@@ -6,6 +6,7 @@ import { NotFound, BadRequest, Forbidden } from '../../core/errors.js';
 import { requireAny } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
+import { yarnStockRows, yarnStockQuery } from '../procurement/fabricYarnProcurement.routes.js';
 import { yarnJobLots, approvalHistory, postTransferLines, resolveSoId } from './jobStock.routes.js';
 
 /**
@@ -319,5 +320,11 @@ yarnSubstitutionRouter.get('/jobs/:soId/yarn-ledger', requireAny('PRODUCTION.VIE
         WHERE rt.company_id = ? AND kp.so_id = ? AND rt.status <> 'CANCELLED'
      ) x LEFT JOIN mst_yarn y ON y.id = x.yarn_id ORDER BY x.dt, x.sort_id`,
     [cid, cid, soId, cid, soId, soId, soId, soId, cid, soId, soId, cid, soId, cid, soId]);
-  res.json({ data: { job_no: so.job_no, rows: rows.map((r) => ({ ...r, in_kg: r3(n(r.in_kg)), out_kg: r3(n(r.out_kg)), rate: n(r.rate), amount: Math.round((n(r.in_kg) + n(r.out_kg)) * n(r.rate) * 100) / 100 })) } });
+  // the job's own purchased / processed lots come in as GRN rows (opening of the running balance)
+  const grns = (await yarnStockRows(cid, yarnStockQuery.parse({}))).filter((g: any) => Number(g.owner_so_id) === soId && n(g.net_in_qty) > 0);
+  const rateOf = (yarnId: number) => n(rows.find((r) => Number(r.yarn_id) === Number(yarnId))?.rate);
+  const all = [...rows, ...grns.map((g: any) => ({ dt: g.grn_date, type: 'GRN IN', ref: g.grn_no, yarn_id: g.yarn_id, yarn_name: g.yarn_name, lot_no: g.lot_no, in_kg: g.net_in_qty, out_kg: 0, sort_id: 0,
+    rate: n(g.rate) || rateOf(g.yarn_id) }))]
+    .sort((a, b) => String(a.dt).slice(0, 10).localeCompare(String(b.dt).slice(0, 10)) || (a.type === 'GRN IN' ? -1 : b.type === 'GRN IN' ? 1 : 0) || Number(a.sort_id) - Number(b.sort_id));
+  res.json({ data: { job_no: so.job_no, rows: all.map((r) => ({ ...r, in_kg: r3(n(r.in_kg)), out_kg: r3(n(r.out_kg)), rate: n(r.rate), amount: Math.round((n(r.in_kg) + n(r.out_kg)) * n(r.rate) * 100) / 100 })) } });
 }));
