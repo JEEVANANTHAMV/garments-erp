@@ -254,7 +254,7 @@ knittingDcRouter.post('/knitting-dcs', requirePermission('PROCESS.ISSUE'), ah(as
     for (const j of jobs) {
       const prog = progs.get(j.program_id); const jq = quotes.get(j.program_id)!;
       await txExecute(tx,
-        `INSERT INTO trx_knitting_dc_job (company_id, dc_no, program_id, so_id, io_no, quotation_id, quotation_line_id, rate_per_kg) VALUES (?,?,?,?,?,?,?,?)`,
+        `INSERT INTO trx_knitting_dc_job (company_id, dc_no, program_id, so_id, io_no, quotation_id, quotation_line_id, rate_per_kg, status, status_backfilled) VALUES (?,?,?,?,?,?,?,?, 'OPEN', 1)`,
         [cid, dcNo, j.program_id, prog.so_id ?? null, prog.io_no ?? null, jq.quotation_id, jq.quotation_line_id, jq.rate]);
     }
     return { dc_no: dcNo, jobs: jobs.length, issues, rate_per_kg: quote.rate,
@@ -310,6 +310,22 @@ knittingDcRouter.get('/knitting-dcs', requirePermission('PRODUCTION.VIEW'), ah(a
     delete r.job_rates_raw;
     const mine = progNo ? r.job_rates.find((x: any) => x.program_no === progNo) : r.job_rates.length === 1 ? r.job_rates[0] : null;
     if (mine) { r.rate_per_kg = mine.rate_per_kg; r.quotation_no = mine.quotation_no; }
+    if (forProgram && Number(r.job_count) > 1) {
+      // a multi-job DC seen from one program: that job's own given / received / returned and status
+      const k = await queryOne<any>(
+        `SELECT (SELECT COALESCE(SUM(i.issued_qty_kg), 0) FROM trx_process_issue i WHERE i.company_id = ? AND i.src_type = 'KNITTING_PROGRAM' AND i.dc_no = ? AND i.src_id = ?) issued,
+                (SELECT COALESCE(SUM(i.no_of_cones), 0) FROM trx_process_issue i WHERE i.company_id = ? AND i.src_type = 'KNITTING_PROGRAM' AND i.dc_no = ? AND i.src_id = ?) cones,
+                (SELECT COALESCE(SUM(m.consumed_kg), 0) FROM trx_knitting_inward_dc m WHERE m.dc_no = ? AND m.program_id = ?) consumed,
+                (SELECT COALESCE(SUM(m.fabric_kg), 0) FROM trx_knitting_inward_dc m WHERE m.dc_no = ? AND m.program_id = ?) fabric,
+                (SELECT COALESCE(SUM(yr.total_kg), 0) FROM trx_knitting_yarn_return yr WHERE yr.company_id = ? AND yr.dc_no = ? AND yr.program_id = ? AND yr.status <> 'CANCELLED') returned`,
+        [cid, r.dc_no, forProgram, cid, r.dc_no, forProgram, r.dc_no, forProgram, r.dc_no, forProgram, cid, r.dc_no, forProgram]);
+      r.dc_total_kg = r.total_kg;
+      Object.assign(r, { total_kg: k.issued, total_cones: k.cones, yarn_consumed_kg: k.consumed, fabric_received_kg: k.fabric, yarn_returned_kg: k.returned });
+    }
+    if (forProgram) {
+      const js = await queryOne<any>('SELECT status, close_type FROM trx_knitting_dc_job WHERE company_id = ? AND dc_no = ? AND program_id = ?', [cid, r.dc_no, forProgram]);
+      if (js) { r.dc_status_all = r.dc_status; r.dc_status = js.status; r.close_type = js.close_type; }
+    }
     r.balance_yarn_kg = r3(Number(r.total_kg) - Number(r.yarn_consumed_kg) - Number(r.yarn_returned_kg));
     r.status = r.dc_status ?? (Number(r.yarn_consumed_kg) > 0 ? 'PARTIALLY_RECEIVED' : 'OPEN');
     // closed on the final receipt with yarn still at the knitter = to be returned
@@ -337,7 +353,7 @@ knittingDcRouter.get('/knitting-dcs/:dcNo', requirePermission('PRODUCTION.VIEW')
   const first = lines[0];
   const programIds = [...new Set(lines.map((l) => Number(l.src_id)))];
   const jobs = [];
-  const jq = await query<any>(`SELECT j.program_id, j.quotation_id, j.quotation_line_id, j.rate_per_kg, q.quotation_no FROM trx_knitting_dc_job j LEFT JOIN trx_quotation q ON q.id = j.quotation_id
+  const jq = await query<any>(`SELECT j.program_id, j.quotation_id, j.quotation_line_id, j.rate_per_kg, j.status, j.close_type, q.quotation_no FROM trx_knitting_dc_job j LEFT JOIN trx_quotation q ON q.id = j.quotation_id
                                 WHERE j.company_id = ? AND j.dc_no = ?`, [cid, dcNo]);
   for (const pid of programIds) {
     const prog = await loadProgram(pid, cid);
@@ -345,6 +361,7 @@ knittingDcRouter.get('/knitting-dcs/:dcNo', requirePermission('PRODUCTION.VIEW')
     const q = jq.find((x) => Number(x.program_id) === pid);
     jobs.push({
       quotation_id: q?.quotation_id ?? null, quotation_no: q?.quotation_no ?? null, rate_per_kg: q?.rate_per_kg != null ? Number(q.rate_per_kg) : null,
+      status: q?.status ?? 'OPEN', close_type: q?.close_type ?? null,
       program_id: prog.id, program_no: prog.program_no, so_id: prog.so_id, io_no: prog.io_no, buyer_po_no: prog.buyer_po_no, so_no: prog.so_no,
       style_code: prog.style_code, style_name: prog.style_name, fabric_name: prog.fabric_name ?? prog.fabric_type, gsm: prog.gsm, dia: prog.dia,
       gauge: prog.gauge, part_name: prog.part_name, required_qty_kg: prog.required_qty_kg, lines: ls,
@@ -453,20 +470,39 @@ async function programDcOpen(cid: number, programId: number) {
     `SELECT i.dc_no, MIN(i.id) seq, SUM(i.issued_qty_kg) issued,
             (SELECT COALESCE(SUM(m.consumed_kg), 0) FROM trx_knitting_inward_dc m WHERE m.program_id = i.src_id AND m.dc_no = i.dc_no) consumed,
             (SELECT COALESCE(SUM(yr.total_kg), 0) FROM trx_knitting_yarn_return yr WHERE yr.company_id = i.company_id AND yr.program_id = i.src_id AND yr.dc_no = i.dc_no AND yr.status <> 'CANCELLED') returned,
-            MAX(kd.status) status
+            MAX(COALESCE(j.status, kd.status)) status
        FROM trx_process_issue i LEFT JOIN trx_knitting_dc kd ON kd.company_id = i.company_id AND kd.dc_no = i.dc_no
+       LEFT JOIN trx_knitting_dc_job j ON j.company_id = i.company_id AND j.dc_no = i.dc_no AND j.program_id = i.src_id
       WHERE i.company_id = ? AND i.src_type = 'KNITTING_PROGRAM' AND i.src_id = ? AND i.dc_no IS NOT NULL
       GROUP BY i.dc_no, i.src_id, i.company_id ORDER BY seq`, [cid, programId]);
   return rows.map((r) => ({ dc_no: r.dc_no, status: r.status ?? 'OPEN', issued: Number(r.issued), consumed: Number(r.consumed), returned: Number(r.returned),
     open: r3(Number(r.issued) - Number(r.consumed) - Number(r.returned)) }));
 }
 
-/** Re-evaluates DC status after an inward: CLOSED stays closed; any receipt makes it part received. */
-async function refreshDcStatus(tx: any, cid: number, dcNo: string, final: boolean, uid: number) {
+/**
+ * After an inward: the receiving job's status on the DC (FINAL closes that job only; any receipt makes it part
+ * received), then the DC header follows its jobs — CLOSED only when every job on the DC is closed.
+ */
+async function refreshDcStatus(tx: any, cid: number, dcNo: string, programId: number, final: boolean, uid: number) {
   if (final) {
-    await txExecute(tx, `UPDATE trx_knitting_dc SET status = 'CLOSED', close_type = 'FINAL_RECEIPT', closed_by = ?, closed_at = NOW() WHERE company_id = ? AND dc_no = ? AND status <> 'CLOSED'`, [uid, cid, dcNo]);
+    await txExecute(tx, `UPDATE trx_knitting_dc_job SET status = 'CLOSED', close_type = 'FINAL_RECEIPT', closed_by = ?, closed_at = NOW() WHERE company_id = ? AND dc_no = ? AND program_id = ? AND status <> 'CLOSED'`, [uid, cid, dcNo, programId]);
   } else {
-    await txExecute(tx, `UPDATE trx_knitting_dc SET status = 'PARTIALLY_RECEIVED' WHERE company_id = ? AND dc_no = ? AND status = 'OPEN'`, [cid, dcNo]);
+    await txExecute(tx, `UPDATE trx_knitting_dc_job SET status = 'PARTIALLY_RECEIVED' WHERE company_id = ? AND dc_no = ? AND program_id = ? AND status = 'OPEN'`, [cid, dcNo, programId]);
+  }
+  await syncDcHeader(tx, cid, dcNo, uid);
+}
+
+/** DC header status from its jobs. */
+async function syncDcHeader(tx: any, cid: number, dcNo: string, uid: number) {
+  const x = await txQueryOne<any>(tx, `SELECT COUNT(*) n, SUM(status = 'CLOSED') c, SUM(status <> 'OPEN') moved, SUM(close_type = 'SHORT_CLOSE') short_n
+                                         FROM trx_knitting_dc_job WHERE company_id = ? AND dc_no = ?`, [cid, dcNo]);
+  if (!x || !Number(x.n)) return;
+  if (Number(x.c) === Number(x.n)) {
+    await txExecute(tx, `UPDATE trx_knitting_dc SET status = 'CLOSED', close_type = ?, closed_by = COALESCE(closed_by, ?), closed_at = COALESCE(closed_at, NOW()) WHERE company_id = ? AND dc_no = ?`,
+      [Number(x.short_n) ? 'SHORT_CLOSE' : 'FINAL_RECEIPT', uid, cid, dcNo]);
+  } else {
+    await txExecute(tx, `UPDATE trx_knitting_dc SET status = ?, close_type = NULL, closed_at = NULL WHERE company_id = ? AND dc_no = ?`,
+      [Number(x.moved) ? 'PARTIALLY_RECEIVED' : 'OPEN', cid, dcNo]);
   }
 }
 
@@ -490,7 +526,7 @@ knittingDcRouter.post('/knitting-inwards', requirePermission('PROCESS.PRODUCTION
   for (const d of dcNos) {
     const row = dcOpen.find((x) => x.dc_no === d);
     if (!row) throw BadRequest(`DC ${d} was not given against program ${prog.program_no}`);
-    if (row.status === 'CLOSED') throw BadRequest(`DC ${d} is closed (final receipt done) — nothing more can be received on it`);
+    if (row.status === 'CLOSED') throw BadRequest(`DC ${d} is closed for job ${prog.io_no ?? prog.program_no} (final receipt done) — nothing more can be received on it`);
   }
   let vendorId = prog.vendor_id;
   if (dcNos.length) {
@@ -575,7 +611,7 @@ knittingDcRouter.post('/knitting-inwards', requirePermission('PROCESS.PRODUCTION
     for (const sp of split) {
       await txExecute(tx, 'INSERT INTO trx_knitting_inward_dc (receipt_id, program_id, dc_no, consumed_kg, fabric_kg) VALUES (?,?,?,?,?)',
         [receiptId, body.program_id, sp.dc_no, sp.consumed, consumed > 0 ? r3(fabricKg * sp.consumed / consumed) : 0]);
-      await refreshDcStatus(tx, cid, sp.dc_no, body.receipt_type === 'FINAL', uid);
+      await refreshDcStatus(tx, cid, sp.dc_no, body.program_id, body.receipt_type === 'FINAL', uid);
     }
 
     await postLedger(tx, {
@@ -604,11 +640,18 @@ knittingDcRouter.post('/knitting-dcs/:dcNo/close', requirePermission('PROCESS.PR
   const cid = req.user!.companyId;
   const uid = req.user!.id;
   const dcNo = String(req.params.dcNo);
-  const b = z.object({ reason: z.string().trim().min(3, 'Give the reason').max(255), write_off: z.coerce.boolean().default(false) }).parse(req.body);
-  const progIds = (await query<any>(`SELECT DISTINCT src_id FROM trx_process_issue WHERE company_id = ? AND src_type = 'KNITTING_PROGRAM' AND dc_no = ?`, [cid, dcNo])).map((r) => Number(r.src_id));
-  if (!progIds.length) throw NotFound('Knitting DC not found');
+  const b = z.object({ reason: z.string().trim().min(3, 'Give the reason').max(255), write_off: z.coerce.boolean().default(false),
+    /** Close only this job (program) of the DC; without it every job on the DC is closed. */
+    program_id: z.coerce.number().int().positive().optional() }).parse(req.body);
+  const allProg = (await query<any>(`SELECT DISTINCT src_id FROM trx_process_issue WHERE company_id = ? AND src_type = 'KNITTING_PROGRAM' AND dc_no = ?`, [cid, dcNo])).map((r) => Number(r.src_id));
+  if (!allProg.length) throw NotFound('Knitting DC not found');
+  if (b.program_id && !allProg.includes(b.program_id)) throw BadRequest(`That program is not on DC ${dcNo}`);
+  const jobsSt = await query<any>('SELECT program_id, status, close_type FROM trx_knitting_dc_job WHERE company_id = ? AND dc_no = ?', [cid, dcNo]);
+  const stOf = (pid: number) => jobsSt.find((x) => Number(x.program_id) === pid);
+  // a closed job can still get its leftover yarn written off once (final receipt done, yarn not coming back)
+  const progIds = (b.program_id ? [b.program_id] : allProg).filter((pid) => stOf(pid)?.status !== 'CLOSED' || (b.write_off && stOf(pid)?.close_type !== 'SHORT_CLOSE'));
+  if (!progIds.length) throw BadRequest(`DC ${dcNo}${b.program_id ? ' (this job)' : ''} is already closed`);
   const hdr = await queryOne<any>('SELECT * FROM trx_knitting_dc WHERE company_id = ? AND dc_no = ?', [cid, dcNo]);
-  if (hdr?.status === 'CLOSED' && (hdr.close_type === 'SHORT_CLOSE' || !b.write_off)) throw BadRequest(`DC ${dcNo} is already closed`);
   const out = await transaction(async (tx) => {
     let written = 0;
     if (b.write_off) {
@@ -624,14 +667,20 @@ knittingDcRouter.post('/knitting-dcs/:dcNo/close', requirePermission('PROCESS.PR
         written += o.open;
       }
     }
-    await txExecute(tx,
-      `INSERT INTO trx_knitting_dc (company_id, dc_no, status, close_type, close_reason, closed_by, closed_at) VALUES (?,?, 'CLOSED', ?, ?, ?, NOW())
-       ON DUPLICATE KEY UPDATE status = 'CLOSED', close_type = VALUES(close_type), close_reason = VALUES(close_reason), closed_by = VALUES(closed_by), closed_at = NOW()`,
-      [cid, dcNo, b.write_off ? 'SHORT_CLOSE' : 'FINAL_RECEIPT', b.reason, uid]);
-    return { dc_no: dcNo, written_off_kg: r3(written) };
+    for (const pid of progIds) {
+      await txExecute(tx,
+        `INSERT INTO trx_knitting_dc_job (company_id, dc_no, program_id, status, close_type, close_reason, closed_by, closed_at, status_backfilled) VALUES (?,?,?, 'CLOSED', ?, ?, ?, NOW(), 1)
+         ON DUPLICATE KEY UPDATE status = 'CLOSED', close_type = VALUES(close_type), close_reason = VALUES(close_reason), closed_by = VALUES(closed_by), closed_at = NOW()`,
+        [cid, dcNo, pid, b.write_off ? 'SHORT_CLOSE' : 'FINAL_RECEIPT', b.reason, uid]);
+    }
+    await txExecute(tx, `INSERT IGNORE INTO trx_knitting_dc (company_id, dc_no, status) VALUES (?,?, 'OPEN')`, [cid, dcNo]);
+    await txExecute(tx, 'UPDATE trx_knitting_dc SET close_reason = ? WHERE company_id = ? AND dc_no = ?', [b.reason, cid, dcNo]);
+    await syncDcHeader(tx, cid, dcNo, uid);
+    const h2 = await txQueryOne<any>(tx, 'SELECT status FROM trx_knitting_dc WHERE company_id = ? AND dc_no = ?', [cid, dcNo]);
+    return { dc_no: dcNo, written_off_kg: r3(written), jobs_closed: progIds.length, dc_status: h2?.status };
   });
   await audit(req, 'trx_knitting_dc', 0, 'UPDATE', { status: hdr?.status }, { close: out, reason: b.reason });
-  res.json({ success: true, data: out, message: `DC ${dcNo} closed${out.written_off_kg ? ` — ${out.written_off_kg} KG yarn written off as loss` : ''}` });
+  res.json({ success: true, data: out, message: `DC ${dcNo}${b.program_id ? ' — this job' : ''} closed${out.written_off_kg ? ` — ${out.written_off_kg} KG yarn written off as loss` : ''}${out.dc_status !== 'CLOSED' ? ' (other jobs on the DC stay open)' : ''}` });
 }));
 
 /** GET /knitting-inwards — grey fabric inwards with their rolls. */
@@ -1035,7 +1084,7 @@ async function reconcile(programId: number, cid: number) {
        FROM trx_knitting_inward_dc m JOIN trx_process_receipt r ON r.id = m.receipt_id
        LEFT JOIN trx_knitting_dc kd ON kd.company_id = r.company_id AND kd.dc_no = m.dc_no
       WHERE r.company_id = ? AND m.program_id = ? GROUP BY m.dc_no`, [cid, programId]);
-  const dcHdr = await query<any>(`SELECT kd.dc_no, kd.status, kd.close_type, COALESCE(j.rate_per_kg, kd.rate_per_kg) rate_per_kg FROM trx_knitting_dc kd
+  const dcHdr = await query<any>(`SELECT kd.dc_no, COALESCE(j.status, kd.status) status, COALESCE(j.close_type, kd.close_type) close_type, COALESCE(j.rate_per_kg, kd.rate_per_kg) rate_per_kg FROM trx_knitting_dc kd
       LEFT JOIN trx_knitting_dc_job j ON j.company_id = kd.company_id AND j.dc_no = kd.dc_no AND j.program_id = ?
      WHERE kd.company_id = ? AND kd.dc_no IN (SELECT DISTINCT dc_no FROM trx_process_issue WHERE company_id = ? AND src_type = 'KNITTING_PROGRAM' AND src_id = ?)`, [programId, cid, cid, programId]);
   const dcRet = await query<any>(

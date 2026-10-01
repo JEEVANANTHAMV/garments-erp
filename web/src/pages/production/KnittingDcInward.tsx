@@ -972,11 +972,11 @@ export function KnittingDcInwardTab({ prog }: { prog: any }) {
   };
 
   const closeDc = async (d: any) => {
-    const reason = window.prompt(`Close DC ${d.dc_no}? Reason:`);
+    const reason = window.prompt(`Close DC ${d.dc_no}${Number(d.job_count) > 1 ? ` for job ${prog.io_no ?? prog.program_no} (other jobs on the DC stay open)` : ''}? Reason:`);
     if (!reason || reason.trim().length < 3) return;
     const writeOff = Number(d.balance_yarn_kg) > 0 && window.confirm(`${fmtDecimal(d.balance_yarn_kg, 3)} kg yarn is still with the knitter. OK = write it off as process loss; Cancel = keep it as "to be returned".`);
     try {
-      const r = await http.post<{ message: string }>(`/knitting-dcs/${encodeURIComponent(d.dc_no)}/close`, { reason: reason.trim(), write_off: writeOff });
+      const r = await http.post<{ message: string }>(`/knitting-dcs/${encodeURIComponent(d.dc_no)}/close`, { reason: reason.trim(), write_off: writeOff, program_id: prog.id });
       toast((r as any).message ?? `DC ${d.dc_no} closed`); invalidateKnitting(qc);
     } catch (e: any) { toast(e?.message || 'Close failed', 'error'); }
   };
@@ -1069,6 +1069,7 @@ export function KnittingDcInwardTab({ prog }: { prog: any }) {
                     <td className="td whitespace-nowrap">
                       <span className={`rounded px-1.5 py-0.5 text-[10.5px] font-bold ${d.status === 'CLOSED' ? 'bg-slate-200 text-slate-700' : d.status === 'PARTIALLY_RECEIVED' ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-sky-800'}`}>
                         {d.status === 'CLOSED' ? (d.close_type === 'SHORT_CLOSE' ? 'Closed (short)' : 'Fully received') : d.status === 'PARTIALLY_RECEIVED' ? 'Partially received' : 'Open'}</span>
+                      {Number(d.job_count) > 1 && d.dc_status_all && d.dc_status_all !== d.dc_status && <span className="block text-[10px] text-slate-400">DC: {String(d.dc_status_all).toLowerCase().replace('_', ' ')} (other jobs)</span>}
                       {Number(d.yarn_to_return_kg) > 0 && <span className="ml-1 text-[10.5px] font-semibold text-rose-700">{fmtDecimal(d.yarn_to_return_kg, 3)} kg yarn to return</span>}
                     </td>
                     <td className="td whitespace-nowrap text-[11px]">{d.rate_per_kg != null ? `₹${fmtDecimal(d.rate_per_kg, 2)}` : '—'}{d.quotation_no ? <span className="block text-slate-400">{d.quotation_no}</span> : null}</td>
