@@ -488,11 +488,15 @@ export function KnittingInwardModal({ programId, open, onClose }: {
   const qc = useQueryClient();
   const { data: warehouses = [] } = useLookup('warehouses');
   // only the job's fabrics (program / job programs / job BOM-CAD) — no wrong fabric can be picked
-  const { data: fabrics = [] } = useQuery({
+  const { data: allFabrics = [] } = useLookup('fabrics');
+  const { data: jobFabrics, isFetched: fabricsFetched } = useQuery({
     queryKey: ['knit-program-fabrics', programId],
     queryFn: async () => (await http.get<{ data: any[] }>(`/knitting-programs/${programId}/fabrics`)).data ?? [],
     enabled: open && !!programId,
   });
+  // no fabric on the program / job BOM yet → every fabric (the server then does not restrict either)
+  const noJobFabric = fabricsFetched && !(jobFabrics ?? []).length;
+  const fabrics: any[] = noJobFabric ? allFabrics.map((f: any) => ({ id: f.id, fabric_code: f.code, fabric_name: f.label, source: 'all fabrics' })) : (jobFabrics ?? []);
   const { data: recon } = useReconciliation(open ? programId : null);
   const [h, setH] = useState<any>({});
   const [rolls, setRolls] = useState<any[]>([newRoll()]);
@@ -610,7 +614,7 @@ export function KnittingInwardModal({ programId, open, onClose }: {
               onChange={(e) => setH({ ...h, warehouse_id: e.target.value })} id="kin-wh">
               {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.label}</option>)}
             </Select>
-            <Select label="Grey Fabric (this job's)" required value={h.fabric_id ?? ''} placeholder={fabrics.length ? '— Select —' : 'No fabric on the program / job BOM'}
+            <Select label="Grey Fabric (this job's)" required value={h.fabric_id ?? ''} placeholder={noJobFabric ? '— Select (no fabric on the program / BOM) —' : '— Select —'}
               onChange={(e) => setH({ ...h, fabric_id: e.target.value })} id="kin-fabric">
               {fabrics.map((f: any) => <option key={f.id} value={f.id}>{f.fabric_code ? `${f.fabric_code} — ` : ''}{f.fabric_name} ({f.source})</option>)}
             </Select>

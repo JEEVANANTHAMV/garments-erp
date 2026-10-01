@@ -31,7 +31,7 @@ export async function knittingBillSources(cid: number, vendorId?: number | null)
             b.bill_no, b.status AS bill_status
        FROM trx_process_receipt r JOIN trx_knitting_program kp ON kp.id = r.src_id JOIN trx_grn g ON g.id = r.grn_id LEFT JOIN mst_party p ON p.id = g.supplier_id
        LEFT JOIN trx_knitting_bill b ON b.id = r.bill_id
-      WHERE r.company_id = ? AND r.src_type = 'KNITTING_PROGRAM' AND r.receipt_type <> 'ADJUST' AND r.output_qty > 0 AND kp.job_work_type = 'JOB_WORK'
+      WHERE r.company_id = ? AND r.src_type = 'KNITTING_PROGRAM' AND r.receipt_type <> 'ADJUST' AND r.output_qty > 0 AND g.supplier_id IS NOT NULL
         ${vendorId ? 'AND g.supplier_id = ?' : ''}
       ORDER BY r.receipt_date, r.id`, vendorId ? [cid, vendorId] : [cid]);
   return rows.map((r) => ({ ...r, fabric_kg: r3(n(r.fabric_kg)), quotation_rate: r.quotation_rate != null ? n(r.quotation_rate) : null }));
