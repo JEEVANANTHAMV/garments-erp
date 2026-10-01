@@ -112,7 +112,11 @@ const dcLine = z.object({
 });
 const dcSchema = z.object({
   /** One DC can carry several jobs (knitting programs) to the same knitter. */
-  jobs: z.array(z.object({ program_id: s.idReq(), lines: z.array(dcLine).default([]) })).optional(),
+  jobs: z.array(z.object({
+    program_id: s.idReq(), lines: z.array(dcLine).default([]),
+    /** The job's own approved knitting quotation (rates vary a little job to job); falls back to the DC-level one. */
+    quotation_id: s.id(), quotation_line_id: s.id(), rate_per_kg: z.coerce.number().min(0).nullish(),
+  })).optional(),
   program_id: s.id(),
   lines: z.array(dcLine).optional(),
   dc_no: s.nullableStr(60),
@@ -123,7 +127,7 @@ const dcSchema = z.object({
   allow_override: z.coerce.boolean().default(false),
   override_reason: s.nullableStr(255),
   remarks: s.text(),
-  /** Approved process (knitting) quotation of the knitter — its rate is the job-work rate. */
+  /** Approved process (knitting) quotation of the knitter — used for any job that has no quotation of its own. */
   quotation_id: s.id(),
   quotation_line_id: s.id(),
   rate_per_kg: z.coerce.number().min(0).nullish(),
@@ -151,8 +155,20 @@ knittingDcRouter.post('/knitting-dcs', requirePermission('PROCESS.ISSUE'), ah(as
   }
   const vendorId = body.vendor_id ?? progs.get(jobs[0].program_id)?.vendor_id;
   if (!vendorId) throw BadRequest('Select the knitting vendor (supplier) the yarn is going to');
-  const quote = await checkDcQuotation(cid, { vendor_id: Number(vendorId), quotation_id: body.quotation_id, quotation_line_id: body.quotation_line_id,
-    rate: body.rate_per_kg ?? null, label: 'Knitting DC' });
+  // each job goes out on its own approved quotation (job-wise rate), else on the DC-level one
+  const quotes = new Map<number, Awaited<ReturnType<typeof checkDcQuotation>>>();
+  for (const j of jobs) {
+    const prog = progs.get(j.program_id);
+    const own = (j as any).quotation_id ? j as any : null;
+    quotes.set(j.program_id, await checkDcQuotation(cid, {
+      vendor_id: Number(vendorId), quotation_id: own?.quotation_id ?? body.quotation_id, quotation_line_id: own ? own.quotation_line_id : body.quotation_line_id,
+      rate: (own ? own.rate_per_kg : body.rate_per_kg) ?? null, label: `Knitting DC — ${prog.program_no} (${prog.io_no ?? 'stock'})`,
+      job: { io_no: prog.io_no ?? null, so_id: prog.so_id ?? null },
+    }));
+  }
+  const qs = [...quotes.values()];
+  // DC header keeps the quotation / rate only when every job has the same one
+  const quote = qs.every((x) => x.quotation_id === qs[0].quotation_id && x.rate === qs[0].rate) ? qs[0] : { quotation_id: null, quotation_line_id: null, rate: null };
 
   // lines must belong to their program; yarn lots must belong to the line's job
   const lotChecks: any[] = [];
@@ -235,7 +251,14 @@ knittingDcRouter.post('/knitting-dcs', requirePermission('PROCESS.ISSUE'), ah(as
       `INSERT INTO trx_knitting_dc (company_id, dc_no, dc_date, vendor_id, status, quotation_id, quotation_line_id, rate_per_kg) VALUES (?,?,?,?,'OPEN',?,?,?)
        ON DUPLICATE KEY UPDATE quotation_id = VALUES(quotation_id), quotation_line_id = VALUES(quotation_line_id), rate_per_kg = VALUES(rate_per_kg)`,
       [cid, dcNo, body.dc_date, vendorId, quote.quotation_id, quote.quotation_line_id, quote.rate]);
-    return { dc_no: dcNo, jobs: jobs.length, issues, rate_per_kg: quote.rate };
+    for (const j of jobs) {
+      const prog = progs.get(j.program_id); const jq = quotes.get(j.program_id)!;
+      await txExecute(tx,
+        `INSERT INTO trx_knitting_dc_job (company_id, dc_no, program_id, so_id, io_no, quotation_id, quotation_line_id, rate_per_kg) VALUES (?,?,?,?,?,?,?,?)`,
+        [cid, dcNo, j.program_id, prog.so_id ?? null, prog.io_no ?? null, jq.quotation_id, jq.quotation_line_id, jq.rate]);
+    }
+    return { dc_no: dcNo, jobs: jobs.length, issues, rate_per_kg: quote.rate,
+      job_rates: jobs.map((j) => ({ program_id: j.program_id, program_no: progs.get(j.program_id).program_no, quotation_id: quotes.get(j.program_id)!.quotation_id, rate_per_kg: quotes.get(j.program_id)!.rate })) };
   });
 
   await audit(req, 'trx_process_issue', jobs[0].program_id, 'INSERT', undefined,
@@ -264,6 +287,9 @@ knittingDcRouter.get('/knitting-dcs', requirePermission('PRODUCTION.VIEW'), ah(a
             (SELECT COALESCE(SUM(m.consumed_kg), 0) FROM trx_knitting_inward_dc m JOIN trx_process_receipt r ON r.id = m.receipt_id
               WHERE r.company_id = i.company_id AND m.dc_no = i.dc_no) AS yarn_consumed_kg,
             MAX(kd.status) AS dc_status, MAX(kd.rate_per_kg) AS rate_per_kg, MAX(q.quotation_no) AS quotation_no, MAX(kd.close_type) AS close_type,
+            (SELECT GROUP_CONCAT(CONCAT(kp2.program_no, ':', COALESCE(j.rate_per_kg, ''), ':', COALESCE(q2.quotation_no, '')) ORDER BY kp2.program_no SEPARATOR '|')
+               FROM trx_knitting_dc_job j JOIN trx_knitting_program kp2 ON kp2.id = j.program_id LEFT JOIN trx_quotation q2 ON q2.id = j.quotation_id
+              WHERE j.company_id = i.company_id AND j.dc_no = i.dc_no) AS job_rates_raw,
             (SELECT COALESCE(SUM(yr.total_kg), 0) FROM trx_knitting_yarn_return yr
               WHERE yr.company_id = i.company_id AND yr.dc_no = i.dc_no AND yr.status <> 'CANCELLED') AS yarn_returned_kg,
             (SELECT COALESCE(SUM(yr.total_cones), 0) FROM trx_knitting_yarn_return yr
@@ -276,7 +302,14 @@ knittingDcRouter.get('/knitting-dcs', requirePermission('PRODUCTION.VIEW'), ah(a
        ${where}
       GROUP BY i.dc_no, i.company_id
       ORDER BY MIN(i.id) DESC LIMIT 500`, params);
+  const forProgram = req.query.program_id ? Number(req.query.program_id) : null;
+  const progNo = forProgram ? (await queryOne<any>('SELECT program_no FROM trx_knitting_program WHERE id = ?', [forProgram]))?.program_no : null;
   for (const r of rows) {
+    // each job on the DC has its own quotation rate; a program's view shows its own job's rate
+    r.job_rates = String(r.job_rates_raw ?? '').split('|').filter(Boolean).map((x: string) => { const [program_no, rate, quotation_no] = x.split(':'); return { program_no, rate_per_kg: rate === '' ? null : Number(rate), quotation_no: quotation_no || null }; });
+    delete r.job_rates_raw;
+    const mine = progNo ? r.job_rates.find((x: any) => x.program_no === progNo) : r.job_rates.length === 1 ? r.job_rates[0] : null;
+    if (mine) { r.rate_per_kg = mine.rate_per_kg; r.quotation_no = mine.quotation_no; }
     r.balance_yarn_kg = r3(Number(r.total_kg) - Number(r.yarn_consumed_kg) - Number(r.yarn_returned_kg));
     r.status = r.dc_status ?? (Number(r.yarn_consumed_kg) > 0 ? 'PARTIALLY_RECEIVED' : 'OPEN');
     // closed on the final receipt with yarn still at the knitter = to be returned
@@ -304,10 +337,14 @@ knittingDcRouter.get('/knitting-dcs/:dcNo', requirePermission('PRODUCTION.VIEW')
   const first = lines[0];
   const programIds = [...new Set(lines.map((l) => Number(l.src_id)))];
   const jobs = [];
+  const jq = await query<any>(`SELECT j.program_id, j.quotation_id, j.quotation_line_id, j.rate_per_kg, q.quotation_no FROM trx_knitting_dc_job j LEFT JOIN trx_quotation q ON q.id = j.quotation_id
+                                WHERE j.company_id = ? AND j.dc_no = ?`, [cid, dcNo]);
   for (const pid of programIds) {
     const prog = await loadProgram(pid, cid);
     const ls = lines.filter((l) => Number(l.src_id) === pid);
+    const q = jq.find((x) => Number(x.program_id) === pid);
     jobs.push({
+      quotation_id: q?.quotation_id ?? null, quotation_no: q?.quotation_no ?? null, rate_per_kg: q?.rate_per_kg != null ? Number(q.rate_per_kg) : null,
       program_id: prog.id, program_no: prog.program_no, so_id: prog.so_id, io_no: prog.io_no, buyer_po_no: prog.buyer_po_no, so_no: prog.so_no,
       style_code: prog.style_code, style_name: prog.style_name, fabric_name: prog.fabric_name ?? prog.fabric_type, gsm: prog.gsm, dia: prog.dia,
       gauge: prog.gauge, part_name: prog.part_name, required_qty_kg: prog.required_qty_kg, lines: ls,
@@ -998,7 +1035,9 @@ async function reconcile(programId: number, cid: number) {
        FROM trx_knitting_inward_dc m JOIN trx_process_receipt r ON r.id = m.receipt_id
        LEFT JOIN trx_knitting_dc kd ON kd.company_id = r.company_id AND kd.dc_no = m.dc_no
       WHERE r.company_id = ? AND m.program_id = ? GROUP BY m.dc_no`, [cid, programId]);
-  const dcHdr = await query<any>(`SELECT dc_no, status, close_type, rate_per_kg FROM trx_knitting_dc WHERE company_id = ? AND dc_no IN (SELECT DISTINCT dc_no FROM trx_process_issue WHERE company_id = ? AND src_type = 'KNITTING_PROGRAM' AND src_id = ?)`, [cid, cid, programId]);
+  const dcHdr = await query<any>(`SELECT kd.dc_no, kd.status, kd.close_type, COALESCE(j.rate_per_kg, kd.rate_per_kg) rate_per_kg FROM trx_knitting_dc kd
+      LEFT JOIN trx_knitting_dc_job j ON j.company_id = kd.company_id AND j.dc_no = kd.dc_no AND j.program_id = ?
+     WHERE kd.company_id = ? AND kd.dc_no IN (SELECT DISTINCT dc_no FROM trx_process_issue WHERE company_id = ? AND src_type = 'KNITTING_PROGRAM' AND src_id = ?)`, [programId, cid, cid, programId]);
   const dcRet = await query<any>(
     `SELECT dc_no, SUM(total_kg) AS kg, SUM(total_cones) AS cones
        FROM trx_knitting_yarn_return WHERE company_id = ? AND program_id = ? AND status <> 'CANCELLED' GROUP BY dc_no`,

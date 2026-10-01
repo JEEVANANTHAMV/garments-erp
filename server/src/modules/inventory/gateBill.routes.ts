@@ -291,7 +291,8 @@ gateBillRouter.get('/grn-print/:kind/:id', requireAny('GRN.VIEW', 'PURCHASE.VIEW
 // =====================================================================================
 /** GET /process-quotations?vendor_id=&material=&process= — the vendor's accepted (approved) process quotations with line rates. */
 gateBillRouter.get('/process-quotations', requireAny('PRODUCTION.VIEW', 'FABRIC_PROCESS.VIEW', 'YARN_PROCESS.VIEW', 'QUOTATION.VIEW'), ah(async (req, res) => {
-  const q = z.object({ vendor_id: z.coerce.number().int().positive(), material: z.string().optional(), process: z.string().optional() }).parse(req.query);
+  const q = z.object({ vendor_id: z.coerce.number().int().positive(), material: z.string().optional(), process: z.string().optional(),
+    io_no: z.string().trim().max(60).optional(), so_id: z.coerce.number().int().positive().optional() }).parse(req.query);
   res.json({ data: await processQuotations(req.user!.companyId, q), required: await settingFlag(req.user!.companyId, 'PROCESS_QUOTATION_REQUIRED', false) });
 }));
 

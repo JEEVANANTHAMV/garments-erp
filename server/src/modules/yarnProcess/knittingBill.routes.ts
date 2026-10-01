@@ -25,9 +25,12 @@ export async function knittingBillSources(cid: number, vendorId?: number | null)
     `SELECT r.id AS receipt_id, r.receipt_no, r.receipt_date, r.output_qty AS fabric_kg, r.input_qty AS yarn_kg, r.receipt_type, r.party_dc_no, r.bill_id,
             kp.program_no, kp.io_no, g.supplier_id AS vendor_id, p.party_name AS vendor_name, DATEDIFF(CURDATE(), r.receipt_date) AS days,
             (SELECT GROUP_CONCAT(DISTINCT m.dc_no SEPARATOR ', ') FROM trx_knitting_inward_dc m WHERE m.receipt_id = r.id) AS dc_nos,
-            (SELECT MAX(kd.rate_per_kg) FROM trx_knitting_inward_dc m JOIN trx_knitting_dc kd ON kd.company_id = r.company_id AND kd.dc_no = m.dc_no WHERE m.receipt_id = r.id) AS quotation_rate,
+            -- the rate of THIS job (program) on the DC(s) the GRN came against — jobs on one DC can have different quotations
+            (SELECT MAX(COALESCE(j.rate_per_kg, kd.rate_per_kg)) FROM trx_knitting_inward_dc m JOIN trx_knitting_dc kd ON kd.company_id = r.company_id AND kd.dc_no = m.dc_no
+               LEFT JOIN trx_knitting_dc_job j ON j.company_id = r.company_id AND j.dc_no = m.dc_no AND j.program_id = r.src_id WHERE m.receipt_id = r.id) AS quotation_rate,
             (SELECT GROUP_CONCAT(DISTINCT q.quotation_no) FROM trx_knitting_inward_dc m JOIN trx_knitting_dc kd ON kd.company_id = r.company_id AND kd.dc_no = m.dc_no
-               JOIN trx_quotation q ON q.id = kd.quotation_id WHERE m.receipt_id = r.id) AS quotation_no,
+               LEFT JOIN trx_knitting_dc_job j ON j.company_id = r.company_id AND j.dc_no = m.dc_no AND j.program_id = r.src_id
+               JOIN trx_quotation q ON q.id = COALESCE(j.quotation_id, kd.quotation_id) WHERE m.receipt_id = r.id) AS quotation_no,
             b.bill_no, b.status AS bill_status
        FROM trx_process_receipt r JOIN trx_knitting_program kp ON kp.id = r.src_id JOIN trx_grn g ON g.id = r.grn_id LEFT JOIN mst_party p ON p.id = g.supplier_id
        LEFT JOIN trx_knitting_bill b ON b.id = r.bill_id

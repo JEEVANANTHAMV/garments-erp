@@ -168,7 +168,6 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
     enabled: open,
   });
   const [h, setH] = useState<any>({});
-  const [quote, setQuote] = useState<QuoteValue>({ quotation_id: '', quotation_line_id: '', rate_per_kg: '' });
   const [jobs, setJobs] = useState<DcJob[]>([]);
   const [addId, setAddId] = useState('');
   const [saving, setSaving] = useState(false);
@@ -201,13 +200,12 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
         issued_qty_kg: qty ? String(Math.round(qty * 1000) / 1000) : '', no_of_cones: '',
       };
     });
-    return { program_id: pid, program_no: prog.program_no, io_no: prog.io_no, style: prog.style_code, fabric: prog.fabric_name ?? prog.fabric_type, vendor_id: prog.vendor_id, lines };
+    return { program_id: pid, program_no: prog.program_no, io_no: prog.io_no, so_id: prog.so_id ?? null, quote: { quotation_id: '', quotation_line_id: '', rate_per_kg: '' }, style: prog.style_code, fabric: prog.fabric_name ?? prog.fabric_type, vendor_id: prog.vendor_id, lines };
   };
 
   useEffect(() => {
     if (!open || !programId) return;
     setH({ dc_date: today(), vendor_id: '', vehicle_no: '', warehouse_id: '', remarks: '', allow_override: false, override_reason: '' });
-    setQuote({ quotation_id: '', quotation_line_id: '', rate_per_kg: '' });
     setJobs([]);
     void loadJob(programId).then((j) => { setJobs([j]); setH((x: any) => ({ ...x, vendor_id: j.vendor_id ? String(j.vendor_id) : '' })); })
       .catch((e) => toast(e?.message || 'Could not load the program', 'error'));
@@ -218,6 +216,7 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
     if (jobs.some((j) => String(j.program_id) === addId)) { toast('That job is already on the DC', 'warning'); return; }
     try { const j = await loadJob(Number(addId), usedKg(jobs)); setJobs((js) => [...js, j]); setAddId(''); } catch (e: any) { toast(e?.message || 'Could not load the program', 'error'); }
   };
+  const setQuote = (ji: number, q: QuoteValue) => setJobs((js) => js.map((j, a) => (a === ji ? { ...j, quote: q } : j)));
   const setLine = (ji: number, li: number, patch: any) =>
     setJobs((js) => js.map((j, a) => (a !== ji ? j : { ...j, lines: j.lines.map((l, b) => (b === li ? { ...l, ...patch } : l)) })));
   const all = jobs.flatMap((j) => j.lines);
@@ -230,14 +229,17 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
     if (!(totalKg > 0)) { toast('Enter the KG to send on at least one line', 'error'); return; }
     const noLot = all.find((l) => Number(l.issued_qty_kg) > 0 && !l.grn_line_id);
     if (noLot && !h.allow_override) { toast(`${noLot.yarn}: pick the yarn lot (GRN) the KG comes from`, 'error'); return; }
+    const noQuote = jobs.find((j) => j.lines.some((l) => Number(l.issued_qty_kg) > 0) && !j.quote.quotation_id);
+    if (noQuote) { toast(`Job ${noQuote.io_no ?? noQuote.program_no}: pick its approved knitting quotation`, 'warning'); return; }
     setSaving(true);
     try {
       const r = await http.post<{ data: { dc_no: string } }>('/knitting-dcs', {
         dc_date: h.dc_date, vendor_id: Number(h.vendor_id), vehicle_no: h.vehicle_no || null, warehouse_id: Number(h.warehouse_id),
         allow_override: h.allow_override, override_reason: h.override_reason || null, remarks: h.remarks || null,
-        quotation_id: quote.quotation_id ? Number(quote.quotation_id) : null, quotation_line_id: quote.quotation_line_id ? Number(quote.quotation_line_id) : null,
-        rate_per_kg: quote.rate_per_kg ? Number(quote.rate_per_kg) : null,
-        jobs: jobs.map((j) => ({ program_id: j.program_id, lines: j.lines.filter((l) => Number(l.issued_qty_kg) > 0).map((l) => ({
+        // each job goes out on its own approved quotation / rate
+        jobs: jobs.map((j) => ({ program_id: j.program_id,
+          quotation_id: j.quote.quotation_id ? Number(j.quote.quotation_id) : null, quotation_line_id: j.quote.quotation_line_id ? Number(j.quote.quotation_line_id) : null,
+          rate_per_kg: j.quote.rate_per_kg !== '' ? Number(j.quote.rate_per_kg) : null, lines: j.lines.filter((l) => Number(l.issued_qty_kg) > 0).map((l) => ({
           program_yarn_id: l.program_yarn_id, yarn_id: Number(l.options.find((o: any) => String(o.grn_line_id) === l.grn_line_id)?.yarn_id ?? l.yarn_id), grn_line_id: l.grn_line_id ? Number(l.grn_line_id) : null,
           issued_qty_kg: Number(l.issued_qty_kg), no_of_cones: Number(l.no_of_cones) || 0,
         })) })).filter((j) => j.lines.length),
@@ -266,7 +268,7 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Input label="DC Date" type="date" value={h.dc_date ?? ''} onChange={(e) => setH({ ...h, dc_date: e.target.value })} id="kdc-date" />
             <Select label="Knitting unit (Supplier / Vendor)" required value={h.vendor_id ?? ''} placeholder="— Select —"
-              onChange={(e) => setH({ ...h, vendor_id: e.target.value })} id="kdc-vendor">
+              onChange={(e) => { setH({ ...h, vendor_id: e.target.value }); setJobs((js) => js.map((j) => ({ ...j, quote: { quotation_id: '', quotation_line_id: '', rate_per_kg: '' } }))); }} id="kdc-vendor">
               {suppliers.map((p: any) => <option key={p.id} value={p.id}>{p.label}</option>)}
             </Select>
             <Select label="From Store" required value={h.warehouse_id ?? ''} placeholder="— Select —"
@@ -275,13 +277,16 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
             </Select>
             <Input label="Vehicle No" value={h.vehicle_no ?? ''} onChange={(e) => setH({ ...h, vehicle_no: e.target.value })} id="kdc-vehicle" />
           </div>
-          <QuotationPicker vendorId={h.vendor_id} material="YARN" process="Knitting" value={quote} onChange={setQuote} idPrefix="kdc" />
 
           {jobs.map((j, ji) => (
             <div key={j.program_id} className="overflow-x-auto rounded-lg border border-slate-200">
               <div className="flex flex-wrap items-center justify-between gap-2 bg-sky-50 px-3 py-2 text-[12px]">
                 <span className="font-semibold text-sky-900">Job {j.io_no ?? 'stock'} · Program {j.program_no}{j.style ? ` · Style ${j.style}` : ''}{j.fabric ? ` · ${j.fabric}` : ''}</span>
                 {ji > 0 && <button className="text-slate-500 hover:text-red-600" onClick={() => setJobs((js) => js.filter((_, a) => a !== ji))}><Trash2 size={13} /></button>}
+              </div>
+              <div className="border-b border-slate-100 bg-white px-3 py-2">
+                <QuotationPicker vendorId={h.vendor_id} material="YARN" process="Knitting" ioNo={j.io_no} soId={j.so_id} label={`Knitting quotation for job ${j.io_no ?? j.program_no}`}
+                  value={j.quote} onChange={(q) => setQuote(ji, q)} idPrefix={`kdc-q${ji}`} />
               </div>
               <table className="w-full text-[12px]">
                 <thead className="bg-slate-50"><tr>
@@ -346,7 +351,9 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
 }
 
 interface DcJob {
-  program_id: number; program_no: string; io_no: string | null; style: string | null; fabric: string | null; vendor_id: number | null;
+  program_id: number; program_no: string; io_no: string | null; so_id: number | null; style: string | null; fabric: string | null; vendor_id: number | null;
+  /** The job's own approved knitting quotation — rates vary a little job to job. */
+  quote: QuoteValue;
   lines: { program_yarn_id: number; yarn_id: number; yarn: string; colour: string | null; count: string | null; pending: number; options: any[]; grn_line_id: string; issued_qty_kg: string; no_of_cones: string }[];
 }
 
@@ -422,6 +429,9 @@ export function KnittingDcPrint({ dcNo, onClose }: { dcNo: string | null; onClos
               <div><span>Required fabric</span>{fmtDecimal(dc.required_qty_kg, 2)} kg</div>
               <div><span>Vehicle No</span>{dc.vehicle_no ?? '—'}</div>
               <div><span>From Store</span>{dc.warehouse_name ?? '—'}</div>
+              {(dc.jobs?.length ?? 1) === 1 && dc.jobs?.[0]?.rate_per_kg != null && (
+                <div><span>Knitting rate</span>₹{fmtDecimal(dc.jobs[0].rate_per_kg, 2)}/KG{dc.jobs[0].quotation_no ? ` (${dc.jobs[0].quotation_no})` : ''}</div>
+              )}
             </div>
             <table>
               <thead>
@@ -436,6 +446,7 @@ export function KnittingDcPrint({ dcNo, onClose }: { dcNo: string | null; onClos
                     {(dc.jobs?.length ?? 1) > 1 && (
                       <tr><td colSpan={8} style={{ background: '#e8f0f7', fontWeight: 700 }}>
                         Job {jb.io_no ?? 'stock'} · Program {jb.program_no}{jb.style_code ? ` · Style ${jb.style_code}` : ''}{jb.fabric_name ? ` · ${jb.fabric_name}` : ''} — {fmtDecimal(jb.total_kg, 3)} KG
+                        {jb.rate_per_kg != null ? ` · Knitting rate ₹${fmtDecimal(jb.rate_per_kg, 2)}/KG${jb.quotation_no ? ` (${jb.quotation_no})` : ''}` : ''}
                       </td></tr>
                     )}
                     {jb.lines.map((l: any, i: number) => (
