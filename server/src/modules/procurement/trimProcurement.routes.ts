@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { settingFlag } from '../../core/inwardControls.js';
+import { settingFlag, useGateEntry } from '../../core/inwardControls.js';
 import { z } from 'zod';
 import { query, queryOne, transaction, txQuery, txQueryOne, txExecute } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
@@ -575,13 +575,8 @@ trimProcurementRouter.post('/trim-grns', requireAny('GRN.CREATE', 'PROCUREMENT.C
     await txExecute(tx, `UPDATE trx_trim_grn SET ${sumKeys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`,
       [...sumKeys.map((k) => summaryCols[k]), grnId]);
 
-    if (body.gate_inward_id) {
-      await txExecute(tx, `
-        UPDATE trx_gate_inward
-           SET status = 'GRN_COMPLETED'
-         WHERE id = ? AND company_id = ?
-      `, [Number(body.gate_inward_id), cid]);
-    }
+    // the gate entry must be this supplier's (and not cancelled); it is marked GRN completed
+    if (body.gate_inward_id) await useGateEntry(tx, cid, { gate_inward_id: Number(body.gate_inward_id), party_id: Number(body.supplier_id) || null, label: 'Trims GRN' });
 
     for (const line of calculatedLines) {
       const linePoId = line.po_id || primaryPoId;

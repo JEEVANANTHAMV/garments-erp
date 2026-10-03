@@ -36,7 +36,7 @@ export async function yarnJobLots(cid: number, f: { so_id?: number | null; yarn_
   const ids = lots.map((r: any) => Number(r.id));
   // transfers and lot issues replayed in the order they happened
   const tr = await query<any>(
-    `SELECT l.grn_line_id, t.from_so_id, t.to_so_id, l.qty, t.created_at at, l.id seq FROM trx_job_transfer_line l JOIN trx_job_transfer t ON t.id = l.transfer_id
+    `SELECT l.grn_line_id, t.from_so_id, t.to_so_id, l.qty, t.created_at at, l.id seq, t.transfer_no FROM trx_job_transfer_line l JOIN trx_job_transfer t ON t.id = l.transfer_id
       WHERE t.company_id = ? AND t.material_type = 'YARN' AND t.status = 'POSTED' AND l.grn_line_id IN (?)`, [cid, ids]);
   const di = await query<any>(`SELECT grn_line_id, so_id, issued_qty_kg qty, created_at at, id seq FROM trx_process_issue WHERE company_id = ? AND grn_line_id IN (?)`, [cid, ids]);
   const out: any[] = [];
@@ -77,6 +77,8 @@ export async function yarnJobLots(cid: number, f: { so_id?: number | null; yarn_
         yarn_id: r.yarn_id, yarn_name: r.yarn_name, yarn_code: r.yarn_code, count_str: r.count_str, lot_no: r.lot_no, shade: r.shade, color_name: r.color_name,
         grn_id: r.grn_id, grn_no: r.grn_no, grn_date: r.grn_date, po_no: r.po_no, supplier_name: r.supplier_name, warehouse_id: r.warehouse_id, warehouse_name: r.warehouse_name,
         owner_so_id: r.owner_so_id, io_no: r.internal_ir_no, uom_code: r.uom_code,
+        // how the job came to hold it: its own purchase (PO / GRN) or job transfer(s) into it
+        transfer_nos: so === owner ? null : [...new Set(tr.filter((t) => Number(t.grn_line_id) === gl && key(t.to_so_id) === so).map((t) => t.transfer_no))].join(', ') || null,
       });
     }
   }

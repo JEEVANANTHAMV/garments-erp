@@ -11,6 +11,7 @@ import { useToast } from '../../hooks/useToast';
 import { Badge } from '../../components/ui';
 import { InvoiceSummary } from '../../components/InvoiceSummary';
 import { computeInvoice, chargesFromRow, chargesPayload, EMPTY_CHARGES, type InvoiceCharges } from '../../lib/invoiceCalc';
+import { gateOptions } from '../../lib/gateOptions';
 
 interface GrnLine {
   _key: string;
@@ -726,10 +727,8 @@ export default function TrimGRNDetailPage() {
                 className="input text-xs font-medium border-indigo-300 bg-indigo-50/40"
               >
                 <option value="">-- Select Inward Gate Pass --</option>
-                {gateInwards.map((g: any) => (
-                  <option key={g.id} value={g.id}>
-                    {g.code || g.label} {g.vehicle_no ? `(${g.vehicle_no})` : ''}
-                  </option>
+                {gateOptions(gateInwards, head.supplier_id, head.gate_inward_id).map((g) => (
+                  <option key={g.id} value={g.id}>{g.label}</option>
                 ))}
               </select>
             ) : (

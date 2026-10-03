@@ -88,6 +88,22 @@ api.interceptors.response.use(
       }
     }
 
+    // 502 / 503 / 504 / no answer = the server is restarting (an update is being installed) or unreachable.
+    // Reads are retried quietly (safe to repeat); a save is not repeated — the user is told what happened.
+    const down = !error.response || [502, 503, 504].includes(status);
+    if (down && original) {
+      const o = original as typeof original & { _downTries?: number };
+      if ((o.method ?? 'get').toLowerCase() === 'get' && (o._downTries ?? 0) < 4) {
+        o._downTries = (o._downTries ?? 0) + 1;
+        await new Promise((r) => setTimeout(r, 3000));
+        return api.request(o);
+      }
+      if ((o.method ?? 'get').toLowerCase() !== 'get') {
+        throw new ApiError(status, 'SERVER_RESTARTING',
+          'The ERP server is restarting (an update is being installed) and did not answer. Wait a minute, check whether this was saved, then try again.');
+      }
+    }
+
     const body = error.response?.data?.error;
     throw new ApiError(
       status,

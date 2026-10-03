@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { settingFlag } from '../../core/inwardControls.js';
+import { settingFlag, useGateEntry } from '../../core/inwardControls.js';
 import { z } from 'zod';
 import { calcRollFor, fabricSpec, rollTolerances, ROLL_CALC_COLS, rollCalcVals } from '../../core/fabricRollCalc.js';
 import { query, queryOne, transaction, txQuery, txQueryOne, txExecute, type Tx } from '../../config/db.js';
@@ -563,13 +563,8 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
         summaryCols.other_charges_sign, summaryCols.other_charges_label,
         summaryCols.tds_section, summaryCols.tds_pct, summaryCols.tds_amount, newGrnId]);
 
-    if (body.gate_inward_id) {
-      await txExecute(tx, `
-        UPDATE trx_gate_inward
-           SET status = 'GRN_COMPLETED'
-         WHERE id = ? AND company_id = ?
-      `, [Number(body.gate_inward_id), companyId]);
-    }
+    // the gate entry must be this supplier's (and not cancelled); it is marked GRN completed
+    if (body.gate_inward_id) await useGateEntry(tx, companyId, { gate_inward_id: Number(body.gate_inward_id), party_id: Number(body.supplier_id) || null, label: 'Fabric GRN' });
 
     // 3. Insert GRN Lines
     for (const line of calculatedLines) {
@@ -1473,13 +1468,8 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
         summaryCols.other_charges_sign, summaryCols.other_charges_label,
         summaryCols.tds_section, summaryCols.tds_pct, summaryCols.tds_amount, newGrnId]);
 
-    if (body.gate_inward_id) {
-      await txExecute(tx, `
-        UPDATE trx_gate_inward
-           SET status = 'GRN_COMPLETED'
-         WHERE id = ? AND company_id = ?
-      `, [Number(body.gate_inward_id), companyId]);
-    }
+    // the gate entry must be this supplier's (and not cancelled); it is marked GRN completed
+    if (body.gate_inward_id) await useGateEntry(tx, companyId, { gate_inward_id: Number(body.gate_inward_id), party_id: Number(body.supplier_id) || null, label: 'Yarn GRN' });
 
     for (const line of calculatedLines) {
       const linePoId = line.po_id ? Number(line.po_id) : primaryPoId;

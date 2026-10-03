@@ -51,6 +51,8 @@ interface YarnLine {
   planned_qty_kg: number | '';
   reserved_qty_kg: number;
   issued_qty_kg: number;
+  /** the job's yarn lot (GRN line) the line is planned from */
+  lot_key?: string;
 }
 
 interface StripeLine {
@@ -90,6 +92,11 @@ const emptyForm = () => ({
   gsm: '',
   dia: '',
   fabric_form: '' as '' | 'TUBULAR' | 'OPEN_WIDTH',
+  /** CAD = from the job's CAD fabric program line (fills fabric / GSM / Dia / colour / KG); DIRECT = by hand */
+  program_source: 'CAD' as 'CAD' | 'DIRECT',
+  cad_req_id: '' as number | '',
+  cad_fp_id: '' as number | '',
+  fabric_colour: '',
   gauge: '',
   loop_length: '',
   required_qty_kg: '' as number | '',
@@ -150,6 +157,12 @@ export default function KnittingProgramPage() {
   const { data: parties = [] } = useQ({
     queryKey: ['lookups', 'parties'],
     queryFn: async () => (await http.get<{ data: any[] }>('/lookups/parties')).data || [],
+  });
+  // the I/O (job) list — picking it fills SO, buyer PO and style
+  const { data: jobs = [] } = useQ({
+    queryKey: ['procurement-jobs'],
+    queryFn: async () => (await http.get<{ data: any[] }>('/procurement/jobs')).data || [],
+    staleTime: 60_000,
   });
 
   // Programs list
@@ -217,6 +230,10 @@ export default function KnittingProgramPage() {
       gsm: prog.gsm ?? '',
       dia: prog.dia ?? '',
       fabric_form: prog.fabric_form ?? '',
+      program_source: prog.program_source ?? 'DIRECT',
+      cad_req_id: prog.cad_req_id ?? '',
+      cad_fp_id: prog.cad_fp_id ?? '',
+      fabric_colour: prog.fabric_colour ?? '',
       gauge: prog.gauge ?? '',
       loop_length: prog.loop_length ?? '',
       required_qty_kg: Number(prog.required_qty_kg) || '',
@@ -241,6 +258,9 @@ export default function KnittingProgramPage() {
         style_id: form.style_id === '' ? null : Number(form.style_id),
         fabric_id: form.fabric_id === '' ? null : Number(form.fabric_id),
         fabric_form: form.fabric_form || null,
+        cad_req_id: form.cad_req_id === '' ? null : Number(form.cad_req_id),
+        cad_fp_id: form.cad_fp_id === '' ? null : Number(form.cad_fp_id),
+        fabric_colour: form.fabric_colour || null,
         vendor_id: form.vendor_id === '' ? null : Number(form.vendor_id),
         required_qty_kg: Number(form.required_qty_kg) || 0,
         yarns: form.yarns.map((y, i) => ({
@@ -313,6 +333,48 @@ export default function KnittingProgramPage() {
   };
 
   const setF = (k: string, v: unknown) => setForm((s) => ({ ...s, [k]: v }));
+  // yarn the job holds: its own PO / GRN lots and yarn transferred to it — the only yarn a program may plan
+  const { data: jobLots = [], isFetched: lotsFetched } = useQ({
+    queryKey: ['knit-job-lots', form.so_id],
+    queryFn: async () => (await http.get<{ data: any[] }>(`/yarn-stock/job-lots?so_id=${form.so_id}`)).data || [],
+    enabled: showForm && form.so_id !== '',
+  });
+  // the job's CAD fabric program (from CAD)
+  const { data: cadFab, isFetched: cadFetched } = useQ({
+    queryKey: ['knit-cad-fabrics', form.io_no, form.style_id],
+    queryFn: async () => (await http.get<{ data: any }>(`/knitting/programs/cad-fabrics?io_no=${encodeURIComponent(form.io_no)}${form.style_id ? `&style_id=${form.style_id}` : ''}`)).data,
+    enabled: showForm && form.program_source === 'CAD' && !!form.io_no,
+  });
+  const curJob = jobs.find((j: any) => j.job_no === form.io_no);
+  const jobStyles: any[] = curJob?.styles ?? [];
+  const pickJob = (jobNo: string) => {
+    const j = jobs.find((x: any) => x.job_no === jobNo);
+    setForm((s) => {
+      const keep = j?.styles?.some((st: any) => st.style_id === s.style_id);
+      return { ...s, io_no: jobNo, so_id: j ? Number(j.id) : '', buyer_po_no: j?.buyer_po_no ?? '',
+        style_id: keep ? s.style_id : (j?.styles?.length === 1 ? j.styles[0].style_id : ''), so_line_id: '',
+        cad_req_id: '', cad_fp_id: '',
+        // yarn planned from another job's stock does not belong here any more
+        yarns: s.yarns.map((y) => (y.issued_qty_kg > 0 ? y : { ...y, lot_key: '', yarn_id: '', count_value: '', colour: '', yarn_po_no: '', yarn_lot_no: '' })) };
+    });
+  };
+  const pickCadLine = (id: string) => {
+    const r = (cadFab?.rows ?? []).find((x: any) => String(x.cad_fp_id) === id);
+    if (!r) { setForm((s) => ({ ...s, cad_fp_id: '' })); return; }
+    setForm((s) => ({ ...s, cad_req_id: cadFab.cad_id, cad_fp_id: r.cad_fp_id, fabric_id: r.fabric_id ?? s.fabric_id, fabric_type: r.fabric_type ?? s.fabric_type,
+      gsm: r.gsm ?? s.gsm, dia: r.dia ?? s.dia, fabric_form: r.fabric_form ?? s.fabric_form, fabric_colour: r.colour ?? '',
+      required_qty_kg: Math.max(0, Math.round((r.required_kg - r.programmed_kg) * 1000) / 1000) || r.required_kg }));
+  };
+  const lotLabel = (l: any) => `${l.yarn_code ?? ''} ${l.count_str ?? ''} · lot ${l.lot_no ?? '—'} · ${l.transfer_nos ? `transfer ${l.transfer_nos}` : `PO ${l.po_no ?? '—'}`} · ${l.grn_no} · ${fmtDecimal(l.available_kg, 3)} KG`;
+  const pickLot = (key: string, lotKey: string) => {
+    const l = jobLots.find((x: any) => `${x.grn_line_id}` === lotKey);
+    setYarn(key, l ? { lot_key: lotKey, yarn_id: Number(l.yarn_id), count_value: l.count_str ?? '', colour: l.color_name || l.shade || '',
+      yarn_po_no: l.transfer_nos ? `Transfer ${l.transfer_nos}` : (l.po_no ?? ''), yarn_lot_no: l.lot_no ?? '',
+      planned_qty_kg: Math.min(Number(l.available_kg), Number(form.required_qty_kg) || Number(l.available_kg)) }
+      : { lot_key: '', yarn_id: '', count_value: '', colour: '', yarn_po_no: '', yarn_lot_no: '' });
+  };
+  /** existing line → the job lot it was planned from (same yarn + lot) */
+  const lotKeyOf = (y: YarnLine) => y.lot_key || (jobLots.find((l: any) => Number(l.yarn_id) === Number(y.yarn_id) && (!y.yarn_lot_no || l.lot_no === y.yarn_lot_no))?.grn_line_id?.toString() ?? '');
   // picking the fabric fills its approved specification (target GSM, Dia, tubular / open) from the fabric master
   const { data: diaRules } = useDiaRules();
   const pickFabric = async (v: string) => {
@@ -351,13 +413,6 @@ export default function KnittingProgramPage() {
     }));
 
   // Auto-fill count_value from selected yarn
-  const handleYarnSelect = (key: string, yarnId: string) => {
-    const y = yarns.find((y: any) => y.id === Number(yarnId));
-    setYarn(key, {
-      yarn_id: yarnId === '' ? '' : Number(yarnId),
-      count_value: y?.count_value ?? y?.count_master_value ?? '',
-    });
-  };
 
   // The Sales Order line owns the part (the server enforces this too); selecting
   // a line prefills the SO, style and part so they cannot drift apart.
@@ -651,17 +706,29 @@ export default function KnittingProgramPage() {
                 onChange={(e) => setF('program_no', e.target.value)} id="kp-program-no" />
               <Input label="Program Date" type="date" value={form.program_date}
                 onChange={(e) => setF('program_date', e.target.value)} id="kp-program-date" />
-              <Input label="I/O Number" required value={form.io_no}
-                onChange={(e) => setF('io_no', e.target.value)} id="kp-io-no" />
-              <Input label="Buyer PO No" value={form.buyer_po_no}
+              <label className="block"><span className="label">Program from</span>
+                <div className="inline-flex w-full rounded-lg border border-slate-300 bg-slate-100 p-0.5" id="kp-source">
+                  {(['CAD', 'DIRECT'] as const).map((src) => (
+                    <button key={src} type="button" id={`kp-source-${src}`} onClick={() => setForm((s) => ({ ...s, program_source: src, ...(src === 'DIRECT' ? { cad_req_id: '', cad_fp_id: '' } : {}) }))}
+                      className={`flex-1 rounded-md px-2 py-1 text-xs font-semibold ${form.program_source === src ? 'bg-white text-brand-700 shadow-xs' : 'text-slate-600'}`}>
+                      {src === 'CAD' ? 'From CAD' : 'Direct'}
+                    </button>))}
+                </div></label>
+              <label className="block"><span className="label">I/O Number *</span>
+                <select className="input" value={form.io_no} onChange={(e) => pickJob(e.target.value)} id="kp-io-no">
+                  <option value="">— Select I/O —</option>
+                  {form.io_no && !curJob && <option value={form.io_no}>{form.io_no}</option>}
+                  {jobs.map((j: any) => <option key={j.id} value={j.job_no}>{j.job_no}{j.buyer_name ? ` · ${j.buyer_name}` : ''}</option>)}
+                </select></label>
+              <Input label="Buyer PO No (auto)" value={form.buyer_po_no}
                 onChange={(e) => setF('buyer_po_no', e.target.value)} id="kp-buyer-po" />
-              <select className="input" value={form.so_line_id} onChange={(e) => onSoLineSelect(e.target.value)} id="kp-so-line">
-                <option value="">— Sales Order line (optional) —</option>
-                {soLines.map((l: any) => <option key={l.id} value={l.id}>{l.label}</option>)}
-              </select>
               <select className="input" value={form.style_id} onChange={(e) => setF('style_id', e.target.value ? Number(e.target.value) : '')} id="kp-style">
                 <option value="">— Style (required) —</option>
-                {styles.map((s: any) => <option key={s.id} value={s.id}>{s.style_code} — {s.label}</option>)}
+                {(jobStyles.length ? jobStyles.map((st: any) => ({ id: st.style_id, style_code: st.style_code, label: st.style_name })) : styles).map((s: any) => <option key={s.id} value={s.id}>{s.style_code} — {s.label}</option>)}
+              </select>
+              <select className="input" value={form.so_line_id} onChange={(e) => onSoLineSelect(e.target.value)} id="kp-so-line">
+                <option value="">— SO line / part (optional) —</option>
+                {soLines.filter((l: any) => form.so_id === '' || Number(l.so_id) === Number(form.so_id)).map((l: any) => <option key={l.id} value={l.id}>{l.label}</option>)}
               </select>
               <div>
                 <select className="input w-full" value={form.part_name}
@@ -688,6 +755,24 @@ export default function KnittingProgramPage() {
               <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />
               Fabric Specification
             </h4>
+            {form.program_source === 'CAD' && (
+              <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50/60 p-2.5 text-[12px]" id="kp-cad-box">
+                {!form.io_no ? <span className="text-slate-600">Select the I/O — its CAD fabric program loads here.</span>
+                  : !cadFetched ? <span className="text-slate-500">Loading the CAD…</span>
+                  : !cadFab ? <span className="text-amber-800" id="kp-cad-none">No CAD for {form.io_no}{form.style_id ? ' / this style' : ''} — make the CAD first, or switch to <b>Direct</b>.</span>
+                  : (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-emerald-900">CAD {cadFab.req_no}{cadFab.style_code ? ` (${cadFab.style_code})` : ''}</span>
+                      <select className="input w-[520px] py-1 text-[12px]" value={form.cad_fp_id} onChange={(e) => pickCadLine(e.target.value)} id="kp-cad-line">
+                        <option value="">— Fabric line from the CAD (fabric · GSM · Dia · colour · KG) —</option>
+                        {(cadFab.rows ?? []).map((r: any) => <option key={r.cad_fp_id} value={r.cad_fp_id}>
+                          {r.fabric_type} · {r.gsm ?? '—'} GSM · {r.dia ?? '—'} {r.fabric_form === 'OPEN_WIDTH' ? 'open' : r.fabric_form === 'TUBULAR' ? 'tube' : ''} · {r.colour ?? '—'} · {fmtDecimal(r.required_kg, 1)} KG{r.programmed_kg > 0 ? ` (programmed ${fmtDecimal(r.programmed_kg, 1)})` : ''}
+                        </option>)}
+                      </select>
+                      {form.fabric_colour && <span className="rounded bg-white px-2 py-0.5 text-[11px]">Colour {form.fabric_colour}</span>}
+                    </div>)}
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
               <select className="input" value={form.fabric_id} onChange={(e) => void pickFabric(e.target.value)} id="kp-fabric">
                 <option value="">— Fabric —</option>
@@ -796,17 +881,16 @@ export default function KnittingProgramPage() {
                           <td className="td text-center text-slate-500 font-semibold">{idx + 1}</td>
                           <td className="td p-1">
                             <select
-                              className="input text-[12px] w-full"
-                              value={y.yarn_id}
-                              onChange={(e) => handleYarnSelect(y._key, e.target.value)}
+                              className="input text-[12px] w-full min-w-[330px]"
+                              value={lotKeyOf(y) || (y.yarn_id ? `cur:${y.yarn_id}` : '')}
+                              disabled={form.so_id === '' || y.issued_qty_kg > 0}
+                              onChange={(e) => pickLot(y._key, e.target.value)}
                               id={`yarn-select-${idx}`}
+                              title="Only yarn this job holds — its own PO / GRN lots and yarn transferred to it"
                             >
-                              <option value="">— Select Yarn —</option>
-                              {yarns.map((yn: any) => (
-                                <option key={yn.id} value={yn.id}>
-                                  {yn.yarn_code} — {yn.label ?? yn.yarn_name}
-                                </option>
-                              ))}
+                              <option value="">{form.so_id === '' ? '— Select the I/O first —' : lotsFetched && !jobLots.length ? '— This job holds no yarn (buy / transfer first) —' : "— Yarn from this job's stock —"}</option>
+                              {y.yarn_id && !lotKeyOf(y) && <option value={`cur:${y.yarn_id}`}>{yarns.find((yn: any) => yn.id === Number(y.yarn_id))?.code ?? 'Yarn'} (current — no stock left for the job)</option>}
+                              {jobLots.map((l: any) => <option key={l.grn_line_id} value={String(l.grn_line_id)}>{lotLabel(l)}</option>)}
                             </select>
                           </td>
                           <td className="td p-1">
@@ -823,15 +907,15 @@ export default function KnittingProgramPage() {
                           </td>
                           <td className="td p-1">
                             <input className="input text-[12px] w-32 border-brand-300 focus:border-brand-500 focus:ring-brand-500/20"
-                              value={y.yarn_po_no}
-                              placeholder="YPO-2026-001"
+                              value={y.yarn_po_no} readOnly={!!lotKeyOf(y)}
+                              placeholder="from the yarn lot"
                               title="Yarn Purchase Order number — for full traceability"
                               onChange={(e) => setYarn(y._key, { yarn_po_no: e.target.value })}
                               id={`yarn-po-${idx}`} />
                           </td>
                           <td className="td p-1">
-                            <input className="input text-[12px] w-28" value={y.yarn_lot_no}
-                              placeholder="LOT-001"
+                            <input className="input text-[12px] w-28" value={y.yarn_lot_no} readOnly={!!lotKeyOf(y)}
+                              placeholder="from the yarn lot"
                               onChange={(e) => setYarn(y._key, { yarn_lot_no: e.target.value })}
                               id={`yarn-lot-${idx}`} />
                           </td>

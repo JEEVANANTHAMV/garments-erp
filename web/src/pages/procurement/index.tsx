@@ -12,6 +12,7 @@ import {
   PageHeader, SearchInput, Select, Input, Modal, Spinner, Badge, StatusBadge, useDebounced, LoadingBlock
 } from '../../components/ui';
 import { fmtDecimal, fmtDate, humanize, today } from '../../lib/format';
+import { gateOptions } from '../../lib/gateOptions';
 
 /* -------------------------------------------------------- Purchase orders */
 export function PurchaseOrdersPage() {
@@ -447,7 +448,7 @@ function GrnModal({ open, onClose, onDone }: { open: boolean; onClose: () => voi
           onChange={(e) => setHead((s) => ({ ...s, grn_no: e.target.value }))} />
         <Input label="GRN date" type="date" required value={head.grn_date ?? ''}
           onChange={(e) => setHead((s) => ({ ...s, grn_date: e.target.value }))} />
-        <Select label="Gate Inward Entry" options={toOptions(gateInwards.data)} placeholder="— Select to auto-fill —"
+        <Select label="Gate Inward Entry" options={gateOptions(gateInwards.data, head.supplier_id, head.gate_inward_id)} placeholder="— Select to auto-fill —"
           value={head.gate_inward_id ?? ''} onChange={(e) => handleGateInwardChange(e.target.value)} />
         <Select label="Supplier" required options={toOptions(suppliers.data)} placeholder="— Select —"
           value={head.supplier_id ?? ''} onChange={(e) => setHead((s) => ({ ...s, supplier_id: e.target.value }))} />

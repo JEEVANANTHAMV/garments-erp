@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { query, queryOne, transaction, txQueryOne, txExecute } from '../../config/db.js';
+import { query, queryOne, transaction, txQuery, txQueryOne, txExecute } from '../../config/db.js';
+import { yarnJobLots, resolveSoId } from '../stock/jobStock.routes.js';
 import { ah } from '../../core/asyncHandler.js';
 import { NotFound, BadRequest } from '../../core/errors.js';
 import { requirePermission } from '../../middleware/auth.js';
@@ -63,6 +64,9 @@ const kpSchema = z.object({
   dia: s.nullableStr(40),
   /** Tubular / open width — decides the Dia → width rule for the roll meter calculation. */
   fabric_form: z.enum(['TUBULAR', 'OPEN_WIDTH']).nullable().optional(),
+  /** CAD = made from the job's CAD fabric program line; DIRECT = entered by hand. */
+  program_source: z.enum(['CAD', 'DIRECT']).default('DIRECT'),
+  cad_req_id: s.id(), cad_fp_id: s.id(), fabric_colour: s.nullableStr(80),
   gauge: s.nullableStr(40),
   loop_length: s.nullableStr(40),
   required_qty_kg: z.coerce.number().min(0).default(0),
@@ -95,6 +99,8 @@ const kpUpdateSchema = z.object({
   gsm: s.nullableStr(40),
   dia: s.nullableStr(40),
   fabric_form: z.enum(['TUBULAR', 'OPEN_WIDTH']).nullable().optional(),
+  program_source: z.enum(['CAD', 'DIRECT']).optional(),
+  cad_req_id: s.id(), cad_fp_id: s.id(), fabric_colour: s.nullableStr(80),
   gauge: s.nullableStr(40),
   loop_length: s.nullableStr(40),
   required_qty_kg: z.coerce.number().min(0).optional(),
@@ -271,6 +277,65 @@ knittingRouter.get('/knitting/programs', requirePermission('PRODUCTION.VIEW'), a
   });
 }));
 
+/**
+ * A knitting program's yarn comes only from what the job holds (its own PO / GRN lots and yarn transferred to it —
+ * client 03-Oct-2026), within the KG it holds. New or changed lines are checked; lines left as they were are not.
+ */
+async function assertJobYarns(cid: number, soIdIn: number | null, ioNo: string | null | undefined, yarns: z.infer<typeof kpYarnSchema>[], oldLines: any[]) {
+  const soId = await resolveSoId(cid, soIdIn, ioNo);
+  if (!soId) return;   // not a sales-order job (stock program) — nothing to hold it to
+  const changed = yarns.filter((y) => {
+    const was = y.id ? oldLines.find((o) => Number(o.id) === Number(y.id)) : null;
+    return !was || Number(was.yarn_id ?? 0) !== Number(y.yarn_id ?? 0) || Math.abs(Number(was.planned_qty_kg) - Number(y.planned_qty_kg)) > 0.0005;
+  }).filter((y) => y.yarn_id || Number(y.planned_qty_kg) > 0);
+  if (!changed.length) return;
+  const lots = await yarnJobLots(cid, { so_id: soId });
+  for (const y of changed) {
+    if (!y.yarn_id) throw BadRequest(`Yarn line ${y.seq_no}: pick the yarn from job ${ioNo ?? ''}'s stock`);
+    const mine = lots.filter((l) => Number(l.yarn_id) === Number(y.yarn_id));
+    const avail = mine.reduce((a, l) => a + Number(l.available_kg), 0);
+    if (avail <= 0.0005) throw BadRequest(`Yarn line ${y.seq_no}: job ${ioNo ?? ''} holds no stock of this yarn — buy it for the job (PO → GRN) or transfer it to the job first`);
+    const was = y.id ? oldLines.find((o) => Number(o.id) === Number(y.id)) : null;
+    const need = Number(y.planned_qty_kg) - Number(was?.issued_qty_kg ?? 0);
+    if (need > avail + 0.0005) throw BadRequest(`Yarn line ${y.seq_no}: planned ${Number(y.planned_qty_kg)} KG but job ${ioNo ?? ''} holds only ${Math.round(avail * 1000) / 1000} KG of this yarn`);
+  }
+}
+
+/**
+ * GET /knitting/programs/cad-fabrics?io_no=&style_id= — the job's CAD fabric program (F.PRGM: fabric, GSM, Dia,
+ * colour, required KG) for a program made "from CAD"; each line with the KG already programmed against it and the
+ * fabric master it matches (job BOM fabric first).
+ */
+knittingRouter.get('/knitting/programs/cad-fabrics', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const q = z.object({ io_no: z.string().trim().min(1).max(60), style_id: z.coerce.number().int().positive().optional() }).parse(req.query);
+  const cad = await queryOne<any>(
+    `SELECT cr.id, cr.req_no, cr.status, cr.style_id, st.style_code FROM trx_cad_requirement cr LEFT JOIN mst_style st ON st.id = cr.style_id
+      WHERE cr.company_id = ? AND cr.internal_ir_no = ? ${q.style_id ? 'AND cr.style_id = ?' : ''}
+      ORDER BY (cr.status = 'APPROVED') DESC, cr.id DESC LIMIT 1`, q.style_id ? [cid, q.io_no, q.style_id] : [cid, q.io_no]);
+  if (!cad) { res.json({ data: null }); return; }
+  const rows = await query<any>(`SELECT * FROM trx_cad_fabric_program WHERE cad_req_id = ? AND sheet_type = 'FABRIC_PROGRAM' ORDER BY sort_order, id`, [cad.id]);
+  const soId = await resolveSoId(cid, null, q.io_no);
+  const bomFabrics = await query<any>(
+    `SELECT DISTINCT fb.id, fb.fabric_name, fb.width_form FROM trx_bom b JOIN trx_bom_line bl ON bl.bom_id = b.id JOIN mst_fabric fb ON fb.id = bl.fabric_id
+      WHERE b.company_id = ? AND b.is_active = 1 AND bl.material_type = 'FABRIC' AND ((? IS NOT NULL AND b.so_id = ?) OR b.style_id = ?)`, [cid, soId, soId, cad.style_id ?? 0]);
+  const norm = (x: unknown) => String(x ?? '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+  const done = rows.length ? await query<any>(`SELECT cad_fp_id, SUM(required_qty_kg) kg, GROUP_CONCAT(program_no) nos FROM trx_knitting_program
+                                                 WHERE company_id = ? AND cad_fp_id IN (?) AND status <> 'CANCELLED' GROUP BY cad_fp_id`, [cid, rows.map((r) => r.id)]) : [];
+  const data = [];
+  for (const r of rows) {
+    let fab = bomFabrics.find((f) => norm(f.fabric_name).includes(norm(r.fabric_type)) || norm(r.fabric_type).includes(norm(f.fabric_name)));
+    if (!fab) fab = await queryOne<any>(`SELECT id, fabric_name, width_form FROM mst_fabric WHERE company_id = ? AND is_deleted = 0 AND UPPER(fabric_name) LIKE ? ORDER BY id LIMIT 1`, [cid, `%${String(r.fabric_type ?? '').toUpperCase().slice(0, 60)}%`]).catch(() => null);
+    const diaTxt = String(r.dia_spec ?? r.dia_val ?? '');
+    const form = /TUBE|TUBULAR/i.test(diaTxt) ? 'TUBULAR' : /OPEN/i.test(diaTxt) ? 'OPEN_WIDTH' : (fab?.width_form ?? null);
+    const d = done.find((x) => Number(x.cad_fp_id) === Number(r.id));
+    data.push({ cad_fp_id: Number(r.id), fabric_type: r.fabric_type, gsm: r.gsm != null ? String(Number(r.gsm)) : null, dia: r.dia_val || diaTxt.replace(/\s*(OPEN|TUBE|TUBULAR)\s*/i, '').trim() || null,
+      fabric_form: form, colour: r.color_name, order_pcs: Number(r.order_qty_pcs) || 0, required_kg: Number(r.grand_total_qty) || 0, uom: r.uom,
+      fabric_id: fab ? Number(fab.id) : null, fabric_name: fab?.fabric_name ?? null, programmed_kg: Number(d?.kg ?? 0), programs: d?.nos ?? null });
+  }
+  res.json({ data: { cad_id: Number(cad.id), req_no: cad.req_no, status: cad.status, style_id: cad.style_id, style_code: cad.style_code, rows: data } });
+}));
+
 /** GET /knitting/programs/:id — Detail */
 knittingRouter.get('/knitting/programs/:id', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId;
@@ -284,6 +349,7 @@ knittingRouter.post('/knitting/programs', requirePermission('PRODUCTION.CREATE')
   const cid = req.user!.companyId;
   const uid = req.user!.id;
   const body = kpSchema.parse(req.body);
+  await assertJobYarns(cid, body.so_id ?? null, body.io_no, body.yarns, []);
 
   const result = await transaction(async (tx) => {
     const programNo = body.program_no || await nextDocNumber(tx, cid, 'KNP');
@@ -297,8 +363,9 @@ knittingRouter.post('/knitting/programs', requirePermission('PRODUCTION.CREATE')
       `INSERT INTO trx_knitting_program
          (company_id, program_no, program_date, so_id, so_line_id, io_no, buyer_po_no, style_id,
           part_name, fabric_id, fabric_type, knitting_type, gsm, dia, fabric_form, gauge, loop_length,
-          required_qty_kg, required_date, job_work_type, vendor_id, status, remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          required_qty_kg, required_date, job_work_type, vendor_id, status, remarks, created_by,
+          program_source, cad_req_id, cad_fp_id, fabric_colour)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         cid, programNo, body.program_date, body.so_id ?? null, body.so_line_id ?? null,
         body.io_no ?? null, body.buyer_po_no ?? null,
@@ -306,6 +373,7 @@ knittingRouter.post('/knitting/programs', requirePermission('PRODUCTION.CREATE')
         body.knitting_type, body.gsm ?? null, body.dia ?? null, body.fabric_form ?? null, body.gauge ?? null, body.loop_length ?? null,
         body.required_qty_kg, body.required_date ?? null, body.job_work_type,
         body.vendor_id ?? null, body.status, body.remarks ?? null, uid,
+        body.program_source, body.cad_req_id ?? null, body.cad_fp_id ?? null, body.fabric_colour ?? null,
       ]
     );
     const programId = res2.insertId;
@@ -362,6 +430,11 @@ knittingRouter.put('/knitting/programs/:id', requirePermission('PRODUCTION.UPDAT
   if (['COMPLETED', 'CANCELLED'].includes(existing.status) && body.status !== existing.status) {
     throw BadRequest('Completed / Cancelled programs cannot be edited directly. Create a revision.');
   }
+  if (body.yarns !== undefined) {
+    const cur = await queryOne<any>('SELECT so_id, io_no FROM trx_knitting_program WHERE id = ?', [id]);
+    const oldLines = await query<any>('SELECT id, yarn_id, planned_qty_kg, issued_qty_kg FROM trx_knitting_program_yarns WHERE program_id = ?', [id]);
+    await assertJobYarns(cid, body.so_id !== undefined ? body.so_id ?? null : cur?.so_id ?? null, body.io_no ?? cur?.io_no ?? null, body.yarns ?? [], oldLines);
+  }
 
   await transaction(async (tx) => {
     // Build the UPDATE from only the keys actually present in the request, so
@@ -370,7 +443,7 @@ knittingRouter.put('/knitting/programs/:id', requirePermission('PRODUCTION.UPDAT
       'program_date', 'so_id', 'so_line_id', 'io_no', 'buyer_po_no', 'style_id', 'part_name',
       'fabric_id', 'fabric_type', 'knitting_type', 'gsm', 'dia', 'fabric_form', 'gauge',
       'loop_length', 'required_qty_kg', 'required_date', 'job_work_type',
-      'vendor_id', 'status', 'remarks',
+      'vendor_id', 'status', 'remarks', 'program_source', 'cad_req_id', 'cad_fp_id', 'fabric_colour',
     ] as const;
 
     const sets: string[] = [];
@@ -401,21 +474,38 @@ knittingRouter.put('/knitting/programs/:id', requirePermission('PRODUCTION.UPDAT
       );
     }
 
-    // Replace yarn lines if provided
+    // Yarn lines: kept by id (DC issues, reservations and substitutions point at them), new ones added,
+    // removed ones deleted — a line yarn was already issued on cannot be removed or switched to another yarn.
     if (body.yarns !== undefined) {
-      await txExecute(tx, 'DELETE FROM trx_knitting_program_yarns WHERE program_id = ?', [id]);
+      const old = await txQuery<any>(tx, 'SELECT * FROM trx_knitting_program_yarns WHERE program_id = ?', [id]);
+      const keep = new Set((body.yarns ?? []).filter((y) => y.id).map((y) => Number(y.id)));
+      for (const o of old) {
+        if (keep.has(Number(o.id))) continue;
+        if (Number(o.issued_qty_kg) > 0) throw BadRequest(`Yarn line ${o.seq_no} already has ${Number(o.issued_qty_kg)} KG issued on a DC — it cannot be removed`);
+        await txExecute(tx, 'DELETE FROM trx_knitting_program_yarns WHERE id = ?', [o.id]);
+      }
       for (const yarn of body.yarns ?? []) {
+        const was = yarn.id ? old.find((o) => Number(o.id) === Number(yarn.id)) : null;
+        if (was) {
+          if (Number(was.issued_qty_kg) > 0 && Number(was.yarn_id ?? 0) !== Number(yarn.yarn_id ?? 0)) throw BadRequest(`Yarn line ${was.seq_no} already has yarn issued — it cannot be changed to another yarn (use a yarn substitution)`);
+          await txExecute(tx,
+            `UPDATE trx_knitting_program_yarns SET seq_no = ?, yarn_id = ?, yarn_name_manual = ?, count_value = ?, colour = ?, yarn_po_no = ?, yarn_lot_no = ?,
+                    planning_ratio_pct = ?, planned_qty_kg = ? WHERE id = ?`,
+            [yarn.seq_no, yarn.yarn_id ?? null, yarn.yarn_name_manual ?? null, yarn.count_value ?? null, yarn.colour ?? null, yarn.yarn_po_no ?? null,
+             yarn.yarn_lot_no ?? null, yarn.planning_ratio_pct ?? null, yarn.planned_qty_kg, was.id]);
+          continue;
+        }
         await txExecute(
           tx,
           `INSERT INTO trx_knitting_program_yarns
              (program_id, seq_no, yarn_id, yarn_name_manual, count_value, colour,
               yarn_po_no, yarn_lot_no, planning_ratio_pct, planned_qty_kg, reserved_qty_kg, issued_qty_kg)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+           VALUES (?,?,?,?,?,?,?,?,?,?,0,0)`,
           [
             id, yarn.seq_no, yarn.yarn_id ?? null, yarn.yarn_name_manual ?? null,
             yarn.count_value ?? null, yarn.colour ?? null, yarn.yarn_po_no ?? null,
             yarn.yarn_lot_no ?? null, yarn.planning_ratio_pct ?? null,
-            yarn.planned_qty_kg, yarn.reserved_qty_kg, yarn.issued_qty_kg,
+            yarn.planned_qty_kg,
           ]
         );
       }

@@ -13,6 +13,7 @@ import { Input, Select, Spinner, StatusBadge } from '../../components/ui';
 import { fmtDecimal, today } from '../../lib/format';
 import { InvoiceSummary } from '../../components/InvoiceSummary';
 import { computeInvoice, chargesFromRow, chargesPayload, EMPTY_CHARGES, type InvoiceCharges } from '../../lib/invoiceCalc';
+import { gateOptions } from '../../lib/gateOptions';
 
 export interface GeneralPurchaseLineItem {
   _key: string;
@@ -662,7 +663,7 @@ export function GeneralPurchaseDetailPage() {
             <Select
               label="Map Gate Inward Entry *"
               placeholder="-- Select Inward Gate Pass --"
-              options={toOptions(gateInwards.data || [])}
+              options={gateOptions(gateInwards.data, head.supplier_id, head.gate_inward_id)}
               value={head.gate_inward_id}
               onChange={(e) => {
                 const gid = e.target.value;

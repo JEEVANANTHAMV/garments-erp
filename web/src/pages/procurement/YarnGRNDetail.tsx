@@ -12,6 +12,7 @@ import { Input, Select, Badge } from '../../components/ui';
 import { fmtDecimal, today } from '../../lib/format';
 import { InvoiceSummary } from '../../components/InvoiceSummary';
 import { computeInvoice, chargesFromRow, chargesPayload, EMPTY_CHARGES, type InvoiceCharges } from '../../lib/invoiceCalc';
+import { gateOptions } from '../../lib/gateOptions';
 
 interface YarnGrnLine {
   _key: string;
@@ -634,10 +635,8 @@ export default function YarnGRNDetailPage() {
                 className="w-full text-xs rounded-lg border border-amber-300 bg-amber-50/40 py-1.5 px-2 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
               >
                 <option value="">-- Select Inward Gate Pass --</option>
-                {((gateInwards.data as any[]) || []).map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.code || g.label} {g.vehicle_no ? `(${g.vehicle_no})` : ''}
-                  </option>
+                {gateOptions(gateInwards.data as any[], header.supplier_id, header.gate_inward_id).map((g) => (
+                  <option key={g.id} value={g.id}>{g.label}</option>
                 ))}
               </select>
             </div>

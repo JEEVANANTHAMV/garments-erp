@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { useGateEntry } from '../../core/inwardControls.js';
 import { query, queryOne, transaction, txQueryOne, txExecute, type Tx } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
 import { NotFound, BadRequest } from '../../core/errors.js';
@@ -161,9 +162,7 @@ inventoryRouter.post('/grns', requirePermission('GRN.CREATE'), ah(async (req, re
        body.vehicle_no ?? null, body.status_id ?? null, body.remarks ?? null, req.user!.id]);
     const grnId = r.insertId;
 
-    if (body.gate_inward_id) {
-      await txExecute(tx, `UPDATE trx_gate_inward SET status = 'GRN_COMPLETED' WHERE id = ? AND company_id = ?`, [body.gate_inward_id, req.user!.companyId]);
-    }
+    if (body.gate_inward_id) await useGateEntry(tx, req.user!.companyId, { gate_inward_id: Number(body.gate_inward_id), party_id: Number(body.supplier_id) || null, label: 'GRN' });
 
     for (const l of body.lines) {
       let batchId = l.batch_id ?? null;
