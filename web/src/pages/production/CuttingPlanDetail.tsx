@@ -208,12 +208,13 @@ export function CuttingPlanDetailPage() {
 
   const handleSoSelect = (soIdVal: string) => {
     const soId = soIdVal ? Number(soIdVal) : null;
-    const so = salesOrders.find(s => s.id === soId);
+    const so = salesOrders.find(s => Number(s.id) === soId);
     setHeader((prev: any) => ({
       ...prev,
       so_id: soId,
-      so_line_id: header.so_line_id ?? null,
-      io_no: so?.po_no || so?.so_no || prev.io_no,
+      // a different job's line no longer applies
+      so_line_id: prev.so_id === soId ? prev.so_line_id ?? null : null,
+      io_no: so?.job_no || so?.io_no || so?.so_no || prev.io_no,
       style_id: so?.style_id || prev.style_id,
       color_id: so?.color_id || prev.color_id,
       order_qty: so?.order_qty || prev.order_qty,
@@ -237,11 +238,12 @@ export function CuttingPlanDetailPage() {
 
   const handlePoSelect = (poIdVal: string) => {
     const poId = poIdVal ? Number(poIdVal) : null;
-    const po = prodOrders.find(p => p.id === poId);
+    const po = prodOrders.find(p => Number(p.id) === poId);
     setHeader((prev: any) => ({
       ...prev,
       prod_order_id: poId,
-      io_no: po?.io_no || po?.code || prev.io_no,
+      so_id: po?.so_id ? Number(po.so_id) : prev.so_id,
+      io_no: po?.job_no || po?.io_no || prev.io_no,
       style_id: po?.style_id || prev.style_id,
       color_id: po?.color_id || prev.color_id,
       order_qty: po?.order_qty || prev.order_qty,
@@ -278,9 +280,9 @@ export function CuttingPlanDetailPage() {
             )}
           </div>
 
-          <Select label="Sales Order" value={header.so_id || ''}
+          <Select label="Job (I/O / sales order)" value={header.so_id || ''}
             onChange={e => handleSoSelect(e.target.value)}
-            options={[{ value: '', label: '— Select Sales Order —' }, ...salesOrders.map((s: any) => ({ value: s.id, label: s.label || s.code }))]} />
+            options={[{ value: '', label: '— Select job —' }, ...salesOrders.map((s: any) => ({ value: s.id, label: s.label || s.code }))]} />
           <Select label="Production Order" value={header.prod_order_id || ''}
             onChange={e => handlePoSelect(e.target.value)}
             options={[{ value: '', label: '— Select Production Order —' }, ...prodOrders.map((s: any) => ({ value: s.id, label: s.label || s.code }))]} />

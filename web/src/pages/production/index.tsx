@@ -48,12 +48,12 @@ export function ProductionPlansPage() {
       { key: 'plan_end', header: 'End', render: (r: any) => fmtDate(r.plan_end) },
       { key: 'status_label', header: 'Status', render: (r: any) => <StatusBadge value={r.status_label} /> },
     ]}
-    filters={[{ name: 'so_id', label: 'Sales order', lookup: 'sales-orders' },
+    filters={[{ name: 'so_id', label: 'Job (I/O)', lookup: 'sales-orders' },
               { name: 'unit_id', label: 'Unit', lookup: 'units' }]}
     fields={[
       { name: 'plan_no', label: 'Plan no', hint: 'Blank to auto-generate' },
       { name: 'plan_date', label: 'Plan date', type: 'date', required: true, defaultValue: today() },
-      { name: 'so_id', label: 'Sales order', required: true, lookup: 'sales-orders' },
+      { name: 'so_id', label: 'Job (I/O / sales order)', required: true, lookup: 'sales-orders' },
       { name: 'unit_id', label: 'Unit', lookup: 'units' },
       { name: 'plan_start', label: 'Planned start', type: 'date' },
       { name: 'plan_end', label: 'Planned end', type: 'date' },
@@ -96,7 +96,7 @@ export function ProductionOrdersPage() {
       { key: 'approval_state', header: 'State', render: (r: any) => <StatusBadge value={r.approval_state} /> },
     ]}
     filters={[
-      { name: 'so_id', label: 'Sales order', lookup: 'sales-orders' },
+      { name: 'so_id', label: 'Job (I/O)', lookup: 'sales-orders' },
       { name: 'style_id', label: 'Style', lookup: 'styles' },
       { name: 'unit_id', label: 'Unit', lookup: 'units' },
       { name: 'approval_state', label: 'State', options: STATES.map((v) => ({ value: v, label: humanize(v) })) },
@@ -104,9 +104,10 @@ export function ProductionOrdersPage() {
     modalSize="lg"
     fields={[
       { name: 'po_prod_no', label: 'Work order no', hint: 'Blank to auto-generate' },
-      { name: 'io_no', label: 'Internal order (I/O) no', required: true },
+      { name: 'so_id', label: 'Job (I/O / sales order)', required: true, lookup: 'sales-orders', hint: 'Picking the job fills the I/O no, style and qty',
+        fill: { io_no: 'job_no', style_id: 'style_id', order_qty: 'order_qty' } },
+      { name: 'io_no', label: 'Internal order (I/O) no', required: true, readOnly: true, hint: 'From the job' },
       { name: 'prod_date', label: 'Date', type: 'date', required: true, defaultValue: today() },
-      { name: 'so_id', label: 'Sales order', required: true, lookup: 'sales-orders' },
       { name: 'plan_id', label: 'Production plan', lookup: 'production-plans' },
       { name: 'style_id', label: 'Style', required: true, lookup: 'styles' },
       { name: 'color_id', label: 'Colour', lookup: 'colors' },

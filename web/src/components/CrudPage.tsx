@@ -32,6 +32,11 @@ export interface FormField {
   defaultValue?: string | number | boolean | (() => string | number | boolean);
   /** Shown but not editable (e.g. a system-stamped date / time). */
   readOnly?: boolean;
+  /**
+   * Lookup select only: when a row is picked, other form fields are filled from it — { targetField: rowKey }
+   * (e.g. picking the job fills io_no / style_id / buyer_po_no). Cleared when the select is cleared.
+   */
+  fill?: Record<string, string>;
 }
 
 /** A filter control rendered above the table. */
@@ -238,7 +243,10 @@ export function CrudPage<T extends { id: number }>(cfg: CrudConfig<T>) {
             <FormControl key={f.name} field={f}
               value={values[f.name]}
               error={errors[f.name]}
-              onChange={(v) => setValues((s) => ({ ...s, [f.name]: v }))} />
+              onChange={(v, row) => setValues((s) => ({
+                ...s, [f.name]: v,
+                ...(f.fill ? Object.fromEntries(Object.entries(f.fill).map(([t, k]) => [t, row ? (row[k] ?? null) : v == null ? null : s[t]])) : {}),
+              }))} />
           ))}
         </div>
       </Modal>
@@ -260,7 +268,7 @@ export function CrudPage<T extends { id: number }>(cfg: CrudConfig<T>) {
 /* ----------------------------------------------------- field renderers */
 
 function FormControl({ field, value, error, onChange }: {
-  field: FormField; value: unknown; error?: string; onChange: (v: unknown) => void;
+  field: FormField; value: unknown; error?: string; onChange: (v: unknown, row?: any) => void;
 }) {
   const lookup = useLookup(field.lookup ?? null, !!field.lookup);
   const statuses = useStatuses(field.statusDomain ?? '');
@@ -289,7 +297,10 @@ function FormControl({ field, value, error, onChange }: {
     return <Select className={span} label={field.label} error={error} required={field.required}
       hint={field.hint} placeholder={field.placeholder ?? '— Select —'} options={options ?? []}
       value={(value as string | number) ?? ''}
-      onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)} />;
+      onChange={(e) => {
+        const v = e.target.value === '' ? null : e.target.value;
+        onChange(v, v != null && field.lookup ? (lookup.data ?? []).find((r: any) => String(r.id) === String(v)) : undefined);
+      }} />;
   }
 
   return <Input className={span} label={field.label} error={error} required={field.required}

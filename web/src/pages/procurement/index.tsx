@@ -43,7 +43,7 @@ export function PurchaseOrdersPage() {
       { name: 'po_date', label: 'PO date', type: 'date', required: true, defaultValue: today() },
       { name: 'supplier_id', label: 'Supplier', required: true, lookup: 'suppliers' },
       { name: 'po_type', label: 'PO type', options: ['MATERIAL','JOBWORK','SERVICE','CAPEX'].map((v) => ({ value: v, label: humanize(v) })), defaultValue: 'MATERIAL' },
-      { name: 'so_id', label: 'Against sales order', lookup: 'sales-orders' },
+      { name: 'so_id', label: 'Against job (I/O / sales order)', lookup: 'sales-orders' },
       { name: 'currency_id', label: 'Currency', required: true, lookup: 'currencies' },
       { name: 'exchange_rate', label: 'Exchange rate', type: 'number', defaultValue: 1 },
       { name: 'delivery_date', label: 'Delivery date', type: 'date' },

@@ -8,6 +8,7 @@ import { http } from '../../lib/api';
 import { fmtDate, fmtDecimal, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
 import { Badge } from '../../components/ui';
+import { JobSelect, onlyStyle } from '../../components/JobSelect';
 
 export default function KnittingPage() {
   const qc = useQueryClient();
@@ -439,17 +440,8 @@ export default function KnittingPage() {
               className="p-6 space-y-4 overflow-y-auto flex-1 text-xs"
             >
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
-                  <label className="label">I/O No (Internal Order) *</label>
-                  <input
-                    type="text"
-                    required
-                    value={newOrder.io_no}
-                    onChange={(e) => setNewOrder({ ...newOrder, io_no: e.target.value })}
-                    placeholder="e.g. IO-2026-001"
-                    className="input text-xs font-semibold"
-                  />
-                </div>
+                <JobSelect label="I/O No (Internal Order)" required value={newOrder.io_no} id="ko-io"
+                  onPick={(j) => setNewOrder((o) => ({ ...o, io_no: j?.job_no ?? '', style_id: onlyStyle(j) ? String(onlyStyle(j)) : (j && o.style_id && !j.style_ids.includes(Number(o.style_id)) ? '' : o.style_id) }))} />
                 <div>
                   <label className="label">Customer PO No</label>
                   <input

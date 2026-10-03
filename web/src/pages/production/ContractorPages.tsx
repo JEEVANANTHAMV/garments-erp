@@ -4,6 +4,7 @@ import { Card, Badge, Button, Input, Select, Textarea, Modal, DataTable } from '
 import { api } from '../../lib/api';
 import { fmtDate, fmtNumber, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
+import { JobSelect } from '../../components/JobSelect';
 
 /**
  * Contractor piece-rate screens (client voice note 29-Sep-2026, "contract option"):
@@ -92,8 +93,7 @@ export function JobRateCardPage() {
         </Card>
         <Card title="Rate card">
           <div className="flex flex-wrap items-end gap-3 p-3">
-            <Input label="Job (IO no)" className="w-48" value={ioNo} onChange={(e) => { setIoNo(e.target.value.toUpperCase()); setLoaded(false); }}
-              onKeyDown={(e) => { if (e.key === 'Enter') loadCard(); }} placeholder="e.g. IO-2026-0012" />
+            <JobSelect label="Job (IO no)" className="w-72" value={ioNo} id="rc-job" onPick={(j) => { setIoNo(j?.job_no ?? ''); setLoaded(false); }} />
             <Select label="Process" className="w-44" value={stageId} onChange={(e) => { setStageId(e.target.value); setLoaded(false); }}
               options={stages.map((s) => ({ value: s.id, label: s.stage_name }))} />
             <Button variant="secondary" className="!h-10" onClick={() => loadCard()}><Search size={14} className="mr-1 inline" />Load</Button>
@@ -288,7 +288,7 @@ export function ContractorDebitNotesPage() {
             <Select label="Contractor" required value={f.vendor_id} onChange={(e) => setF({ ...f, vendor_id: e.target.value })} placeholder="— choose —"
               options={contractors.map((c) => ({ value: c.id, label: c.label }))} className="col-span-2" />
             <Input label="Date" type="date" value={f.dn_date} onChange={(e) => setF({ ...f, dn_date: e.target.value })} />
-            <Input label="Job (IO no)" value={f.io_no} onChange={(e) => setF({ ...f, io_no: e.target.value.toUpperCase() })} />
+            <JobSelect label="Job (IO no)" value={f.io_no} id="dn-job" onPick={(j) => setF({ ...f, io_no: j?.job_no ?? '' })} />
             <Input label="Reason" required value={f.reason} placeholder="e.g. Wrong stitching — 40 PCS" onChange={(e) => setF({ ...f, reason: e.target.value })} className="col-span-2" />
             <Input label="PCS" type="number" min={0} value={f.qty} onChange={(e) => setF({ ...f, qty: e.target.value })} />
             <Input label="Rate (₹ / PCS)" type="number" min={0} step="0.01" value={f.rate} onChange={(e) => setF({ ...f, rate: e.target.value })} />

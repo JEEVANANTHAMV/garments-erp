@@ -22,13 +22,13 @@ export function PackingsPage() {
       { key: 'status_label', header: 'Status', render: (r: any) => <StatusBadge value={r.status_label} /> },
     ]}
     filters={[
-      { name: 'so_id', label: 'Sales order', lookup: 'sales-orders' },
+      { name: 'so_id', label: 'Job (I/O)', lookup: 'sales-orders' },
       { name: 'status_id', label: 'Status', statusDomain: 'PACKING' },
     ]}
     fields={[
       { name: 'packing_no', label: 'Packing no', hint: 'Blank to auto-generate' },
       { name: 'pack_date', label: 'Pack date', type: 'date', required: true, defaultValue: today() },
-      { name: 'so_id', label: 'Sales order', required: true, lookup: 'sales-orders' },
+      { name: 'so_id', label: 'Job (I/O / sales order)', required: true, lookup: 'sales-orders' },
       { name: 'prod_order_id', label: 'Production order', lookup: 'prod-orders' },
       { name: 'warehouse_id', label: 'Warehouse', lookup: 'warehouses' },
       { name: 'status_id', label: 'Status', statusDomain: 'PACKING' },
@@ -55,13 +55,13 @@ export function DispatchesPage() {
       { key: 'status_label', header: 'Status', render: (r: any) => <StatusBadge value={r.status_label} /> },
     ]}
     filters={[
-      { name: 'so_id', label: 'Sales order', lookup: 'sales-orders' },
+      { name: 'so_id', label: 'Job (I/O)', lookup: 'sales-orders' },
       { name: 'status_id', label: 'Status', statusDomain: 'DISPATCH' },
     ]}
     fields={[
       { name: 'dispatch_no', label: 'Dispatch no', hint: 'Blank to auto-generate' },
       { name: 'dispatch_date', label: 'Dispatch date', type: 'date', required: true, defaultValue: today() },
-      { name: 'so_id', label: 'Sales order', required: true, lookup: 'sales-orders' },
+      { name: 'so_id', label: 'Job (I/O / sales order)', required: true, lookup: 'sales-orders' },
       { name: 'forwarding_agent_id', label: 'Freight forwarder', lookup: 'agents' },
       { name: 'vehicle_no', label: 'Vehicle no' },
       { name: 'driver_name', label: 'Driver name' },
@@ -129,7 +129,7 @@ export function ExportInvoicesPage() {
     fields={[
       { name: 'invoice_no', label: 'Invoice no', hint: 'Blank to auto-generate' },
       { name: 'invoice_date', label: 'Invoice date', type: 'date', required: true, defaultValue: today() },
-      { name: 'so_id', label: 'Sales order', required: true, lookup: 'sales-orders' },
+      { name: 'so_id', label: 'Job (I/O / sales order)', required: true, lookup: 'sales-orders', fill: { currency_id: 'currency_id' } },
       { name: 'dispatch_id', label: 'Dispatch', lookup: 'dispatches' },
       { name: 'currency_id', label: 'Currency', lookup: 'currencies' },
       { name: 'incoterm', label: 'Incoterm', options: ['FOB','CIF','CFR','EXW','DDP'].map((v) => ({ value: v, label: v })) },

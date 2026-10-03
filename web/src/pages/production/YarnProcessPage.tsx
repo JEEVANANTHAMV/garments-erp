@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { http } from '../../lib/api';
 import { YarnProcessDcPanel } from './YarnProcessDcPanel';
+import { JobSelect, onlyStyle } from '../../components/JobSelect';
 import { fmtDate, fmtDecimal, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
 import {
@@ -121,6 +122,7 @@ export default function YarnProcessPage() {
     setForm((s) => ({
       ...s,
       so_line_id: value === '' ? '' : Number(value),
+      io_no: l ? (l.io_no || l.so_no) : s.io_no,
       style_id: l?.style_id ?? s.style_id,
       part_name: l?.part_name ?? s.part_name,
     }));
@@ -352,10 +354,14 @@ export default function YarnProcessPage() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Select label="Sales Order line" value={form.so_line_id} placeholder="— Not linked —"
               onChange={(e) => onSoLine(e.target.value)} id="p-soline">
-              {soLines.map((l: any) => <option key={l.id} value={l.id}>{l.label}</option>)}
+              {soLines.filter((l: any) => !form.io_no || (l.io_no || l.so_no) === form.io_no).map((l: any) => <option key={l.id} value={l.id}>{l.label}</option>)}
             </Select>
-            <Input label="I/O Number" required value={form.io_no}
-              onChange={(e) => setF('io_no', e.target.value)} id="p-io" />
+            <JobSelect label="I/O Number" required value={form.io_no} id="p-io"
+              onPick={(j) => setForm((s) => {
+                const line = soLines.find((l: any) => l.id === Number(s.so_line_id));
+                return { ...s, io_no: j?.job_no ?? '', style_id: onlyStyle(j) ?? (j && s.style_id && !j.style_ids.includes(Number(s.style_id)) ? '' : s.style_id),
+                  so_line_id: line && j && (line.io_no || line.so_no) !== j.job_no ? '' : s.so_line_id };
+              })} />
             <Select label="Style" required value={form.style_id} placeholder="— Select style —"
               onChange={(e) => setF('style_id', e.target.value ? Number(e.target.value) : '')} id="p-style">
               {styles.map((st: any) => <option key={st.id} value={st.id}>{st.code} — {st.label}</option>)}

@@ -56,7 +56,13 @@ const LOOKUPS: Record<string, LookupDef> = {
   products:    { sql: `SELECT id, product_code AS code, product_name AS label, product_type, default_uom FROM mst_product WHERE company_id=? AND is_active=1 AND is_deleted=0 ORDER BY product_name`, scoped: true },
   styles:      { sql: `SELECT id, style_code AS code, style_name AS label, image_url, buyer_id, product_id, size_group_id, fabric_id FROM mst_style WHERE company_id=? AND is_active=1 AND is_deleted=0 ORDER BY style_code`, scoped: true },
 
-  'sales-orders': { sql: `SELECT id, so_no AS code, CONCAT(so_no,' — ',COALESCE(buyer_po_no,'')) AS label, buyer_id, currency_id FROM trx_sales_order WHERE company_id=? AND is_deleted=0 ORDER BY so_date DESC LIMIT 500`, scoped: true },
+  // a job = sales order; shown IO-first. Picking it fills IO / style / buyer PO on the screens that ask for them.
+  'sales-orders': { sql: `SELECT so.id, so.so_no AS code,
+      CONCAT(COALESCE(NULLIF(so.io_no, ''), so.so_no), IF(NULLIF(so.io_no, '') IS NULL, '', CONCAT(' (', so.so_no, ')')), IF(COALESCE(so.buyer_po_no, '') = '', '', CONCAT(' — ', so.buyer_po_no))) AS label,
+      so.so_no, so.io_no, COALESCE(NULLIF(so.io_no, ''), so.so_no) AS job_no, so.buyer_po_no, so.buyer_id, so.currency_id,
+      (SELECT sol.style_id FROM trx_sales_order_line sol WHERE sol.so_id = so.id ORDER BY sol.id LIMIT 1) AS style_id,
+      (SELECT SUM(sol.order_qty) FROM trx_sales_order_line sol WHERE sol.so_id = so.id) AS order_qty
+    FROM trx_sales_order so WHERE so.company_id=? AND so.is_deleted=0 ORDER BY so.so_date DESC, so.id DESC LIMIT 500`, scoped: true },
   // SO lines carry the garment part chosen next to the colour; downstream
   // screens use this to link a document to its line and prefill the part.
   'sales-order-lines': { sql: `SELECT sol.id, sol.id AS code,
@@ -69,7 +75,9 @@ const LOOKUPS: Record<string, LookupDef> = {
     LEFT JOIN mst_color c ON c.id = sol.color_id
    WHERE so.company_id=? AND so.is_deleted=0
    ORDER BY so.so_date DESC, sol.id LIMIT 500`, scoped: true },
-  'production-orders': { sql: `SELECT id, po_prod_no AS code, po_prod_no AS label, so_id, style_id, order_qty FROM trx_production_order WHERE company_id=? ORDER BY id DESC LIMIT 500`, scoped: true },
+  'production-orders': { sql: `SELECT p.id, p.po_prod_no AS code, CONCAT(p.po_prod_no, IF(so.id IS NULL, '', CONCAT(' · ', COALESCE(NULLIF(so.io_no, ''), so.so_no)))) AS label, p.so_id, p.style_id, p.order_qty,
+      so.io_no, COALESCE(NULLIF(so.io_no, ''), so.so_no) AS job_no, so.buyer_po_no
+    FROM trx_production_order p LEFT JOIN trx_sales_order so ON so.id = p.so_id WHERE p.company_id=? ORDER BY p.id DESC LIMIT 500`, scoped: true },
   'prod-orders': { sql: `SELECT id, po_prod_no AS code, po_prod_no AS label, so_id, style_id, order_qty FROM trx_production_order WHERE company_id=? ORDER BY id DESC LIMIT 500`, scoped: true },
   'purchase-orders': { sql: `SELECT id, po_no AS code, po_no AS label, supplier_id, currency_id FROM trx_purchase_order WHERE company_id=? AND is_deleted=0 ORDER BY id DESC LIMIT 500`, scoped: true },
   'commercial-invoices': { sql: `SELECT id, invoice_no AS code, invoice_no AS label, buyer_id, currency_id, total_value FROM trx_commercial_invoice WHERE company_id=? ORDER BY id DESC LIMIT 500`, scoped: true },
@@ -247,7 +255,8 @@ lookupRouter.get('/grn-lines', ah(async (req, res) => {
             gl.color_name, gl.shade_code, gl.pantone_spec,
             COALESCE(y.yarn_name, fb.fabric_name, tr.trim_name, 'Material') AS description,
             gl.uom_id, u.code AS uom_code, COALESCE(y.hsn_code, fb.hsn_code, tr.hsn_code) AS hsn_code, gl.yarn_count_str,
-            g.grn_no, g.supplier_id, g.supplier_dc_no, g.supplier_inv_no, g.po_id AS header_po_id,
+            g.grn_no, g.supplier_id, g.supplier_dc_no, g.supplier_inv_no, g.po_id AS header_po_id, g.gate_inward_id, g.is_interstate,
+            g.freight_charges AS grn_freight, g.other_charges AS grn_other, g.other_charges_label AS grn_other_label, g.other_charges_sign AS grn_other_sign,
             po.po_no
        FROM trx_grn_line gl
        JOIN trx_grn g ON g.id = gl.grn_id

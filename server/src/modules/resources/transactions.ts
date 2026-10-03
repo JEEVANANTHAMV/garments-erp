@@ -17,6 +17,7 @@ const invoiceSummaryFields = () => [
 import { jobworkInBeforeCreate, jobworkInvoiceBeforeCreate } from '../production/jobworkDivision.js';
 import { computePreCosting, PRE_COST_HEADS } from '../costing/preCostingCalc.js';
 import { assertPurchaseExcess, poItemKeys } from '../../core/purchaseExcess.js';
+import { checkSupplierBill } from '../../core/supplierBillRules.js';
 import { PO_RECEIPT_STATUS_SQL } from '../../core/poReceipt.js';
 import type { Request } from 'express';
 import type { Tx } from '../../config/db.js';
@@ -415,6 +416,19 @@ export const transactionResources: ResourceConfig[] = [
       f('approval_state', s.enum(['DRAFT','APPROVED','IN_PROGRESS','COMPLETED','CLOSED','CANCELLED'])),
       f('remarks', s.nullableStr(500)),
     ],
+    // The IO no is the job's (picked as the sales order) — never typed apart from it; the style must be on that job.
+    beforeWrite: async (req, data, before) => {
+      const soId = Number(data.so_id ?? before?.so_id) || 0;
+      if (!soId) return;
+      const so = await queryOne<any>('SELECT so_no, io_no FROM trx_sales_order WHERE id = ? AND company_id = ?', [soId, req.user!.companyId]);
+      if (!so) throw BadRequest('Sales order not found');
+      if ('so_id' in data || !before?.io_no) data.io_no = so.io_no || so.so_no;
+      const styleId = Number(data.style_id ?? before?.style_id) || 0;
+      if (styleId && ('style_id' in data || 'so_id' in data)) {
+        const ok = await queryOne<any>('SELECT 1 x FROM trx_sales_order_line WHERE so_id = ? AND style_id = ? LIMIT 1', [soId, styleId]);
+        if (!ok) throw BadRequest(`The style is not on job ${so.io_no || so.so_no} — pick a style of that job`);
+      }
+    },
   },
   {
     path: 'process-transactions', table: 'trx_process_transaction', permission: 'PRODUCTION', label: 'Process Transaction',
@@ -435,6 +449,13 @@ export const transactionResources: ResourceConfig[] = [
       f('received_qty', s.int()), f('jobwork_rate', s.dec()), f('status_id', s.id()),
       f('remarks', s.nullableStr(500)),
     ],
+    // IO no = the work order's job
+    beforeWrite: async (req, data, before) => {
+      const po = Number(data.prod_order_id ?? before?.prod_order_id) || 0;
+      if (!po || !('prod_order_id' in data)) return;
+      const r = await queryOne<any>(`SELECT COALESCE(NULLIF(p.io_no, ''), so.io_no, so.so_no) j FROM trx_production_order p LEFT JOIN trx_sales_order so ON so.id = p.so_id WHERE p.id = ? AND p.company_id = ?`, [po, req.user!.companyId]);
+      if (r?.j) data.io_no = r.j;
+    },
   },
   {
     path: 'cuttings', table: 'trx_cutting', permission: 'PRODUCTION', label: 'Cutting',
@@ -1143,7 +1164,8 @@ export const transactionResources: ResourceConfig[] = [
       ...invoiceSummaryFields(),
     ],
     // Totals are recomputed from the lines whenever lines are saved (common invoice summary).
-    beforeWrite: (req, data, before) => {
+    beforeWrite: async (req, data, before) => {
+      await checkSupplierBill(req, data, before);
       const lines = req.body?.lines;
       if (!Array.isArray(lines)) return;
       const row = { ...(before ?? {}), ...data };

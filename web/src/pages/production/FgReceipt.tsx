@@ -3,6 +3,7 @@ import { Card, Badge, Button, Input, Select, DataTable, Textarea } from '../../c
 import { api } from '../../lib/api';
 import { fmtDate, fmtNumber, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
+import { JobSelect, onlyStyle } from '../../components/JobSelect';
 
 export function FgReceiptsPage() {
   const [receipts, setReceipts] = useState<any[]>([]);
@@ -164,8 +165,8 @@ export function FgReceiptsPage() {
               <div className="grid grid-cols-3 gap-4">
                 <Input label="Receipt Date" type="date" value={header.receipt_date}
                   onChange={e => setHeader({ ...header, receipt_date: e.target.value })} />
-                <Input label="I/O Number *" value={header.io_no}
-                  onChange={e => setHeader({ ...header, io_no: e.target.value })} placeholder="IO-2026-00125" />
+                <JobSelect label="I/O Number" required value={header.io_no} id="fg-io"
+                  onPick={(j) => setHeader((h: any) => ({ ...h, io_no: j?.job_no ?? '', style_id: onlyStyle(j) ? String(onlyStyle(j)) : (j && h.style_id && !j.style_ids.includes(Number(h.style_id)) ? '' : h.style_id) }))} />
                 <Select
                   label="Target Style *"
                   value={header.style_id}

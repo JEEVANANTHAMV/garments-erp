@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { CrudPage } from '../../components/CrudPage';
+import { GateEntryPicker } from '../../components/ProcessPickers';
 import { StatusBadge, Badge, Modal, Input, Select, Button, Spinner } from '../../components/ui';
 import { fmtDate, fmtDecimal, humanize, today } from '../../lib/format';
 import { useLookup, toOptions } from '../../hooks/useLookup';
@@ -66,9 +68,16 @@ interface InwardBillModalProps {
 function InwardBillModal({ open, billId, initialType, onClose, onSaved }: InwardBillModalProps) {
   const toast = useToast();
   const suppliers = useLookup('suppliers');
-  const grns = useLookup('grns');
+  // GRNs a bill may pull: the supplier's purchase GRNs (not job-work inward), not already billed elsewhere
+  const [billSupplier, setBillSupplier] = useState('');
+  const billGrns = useQuery({
+    queryKey: ['bill-grns', billSupplier, billId ?? 0],
+    queryFn: async () => (await http.get<{ data: any[] }>(`/lookup/bill-grns?${new URLSearchParams({ ...(billSupplier ? { supplier_id: billSupplier } : {}), ...(billId ? { bill_id: String(billId) } : {}) })}`)).data ?? [],
+    enabled: open,
+  });
+  const grns = { data: (billGrns.data ?? []).filter((g: any) => g.kind === 'GRN') };
   // Trim GRNs live in their own table — a trims bill links them through trim_grn_ids
-  const trimGrns = useLookup('trim-grns');
+  const trimGrns = { data: (billGrns.data ?? []).filter((g: any) => g.kind === 'TRIM_GRN') };
   const [trimGrnIds, setTrimGrnIds] = useState<number[]>([]);
   const purchaseOrders = useLookup('purchase-orders');
   const currencies = useLookup('currencies');
@@ -102,11 +111,13 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
     po_matched: false,
     grn_matched: true,
     gate_matched: false,
+    gate_inward_id: '',
     match_status: 'UNMATCHED',
     payment_due_date: '',
     status: 'DRAFT',
     remarks: '',
   });
+  useEffect(() => { setBillSupplier(String(header.supplier_id || '')); }, [header.supplier_id]);
 
   const [lines, setLines] = useState<BillLineItem[]>([]);
   // Common invoice summary heads (TDS / TCS / other charges / landed cost / round off)
@@ -139,6 +150,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
             po_matched: Boolean(b.po_matched),
             grn_matched: Boolean(b.grn_matched),
             gate_matched: Boolean(b.gate_matched),
+            gate_inward_id: b.gate_inward_id ? String(b.gate_inward_id) : '',
             match_status: b.match_status || 'UNMATCHED',
             payment_due_date: b.payment_due_date?.slice(0, 10) || '',
             status: b.status || 'DRAFT',
@@ -206,6 +218,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
         po_matched: false,
         grn_matched: false,
         gate_matched: false,
+        gate_inward_id: '',
         match_status: 'UNMATCHED',
         payment_due_date: '',
         status: 'DRAFT',
@@ -215,34 +228,11 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
     }
   }, [open, billId, initialType]);
 
+  /** No demo line: a purchase bill's lines come from its GRNs; only a General (direct) bill starts with one blank line. */
   const initDefaultLine = (type: string) => {
-    const isYarn = type.startsWith('YARN');
-    const isFab = type.startsWith('FABRIC');
-    const isTrim = type.startsWith('TRIM');
-    const matType: any = isYarn ? 'YARN' : isFab ? 'FABRIC' : isTrim ? 'TRIM' : 'SERVICE';
-    const defaultUom = isYarn ? 5 : isFab ? 9 : 1; // 5: KG, 9: MTR, 1: PCS
-    setLines([
-      {
-        material_type: matType,
-        description: isYarn ? '30s Combed Cotton Yarn' : isFab ? 'Single Jersey 160 GSM' : isTrim ? 'Buttons / Zippers' : 'Jobwork Service',
-        lot_no: isYarn ? 'LOT-101' : '',
-        no_of_bags: isYarn ? 50 : undefined,
-        no_of_rolls: isFab ? 20 : undefined,
-        dia: isFab ? '32"' : '',
-        gsm: isFab ? 160 : undefined,
-        color_name: '',
-        size_name: '',
-        bill_qty: isYarn ? 2500 : isFab ? 1000 : 500,
-        po_qty: 0,
-        grn_qty: 0,
-        uom_id: defaultUom,
-        rate: isYarn ? 280 : isFab ? 340 : 1.5,
-        amount: isYarn ? 700000 : isFab ? 340000 : 750,
-        gst_rate: isTrim ? 18 : 5,
-        qty_matched: true,
-        rate_matched: true,
-      },
-    ]);
+    setLines(type === 'GENERAL'
+      ? [{ material_type: 'SERVICE', description: '', bill_qty: 0, po_qty: 0, grn_qty: 0, uom_id: 1, rate: 0, amount: 0, gst_rate: 18, qty_matched: true, rate_matched: true } as BillLineItem]
+      : []);
   };
 
   // Auto-Fetch Lines when adding a GRN
@@ -292,12 +282,26 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
           supplier_inv_no: !prev.supplier_inv_no && (first.supplier_dc_no || first.supplier_inv_no) ? (first.supplier_dc_no || first.supplier_inv_no) : prev.supplier_inv_no,
           grn_matched: true,
           match_status: 'FULLY_MATCHED',
+          // the GRN's gate entry and GST nature come with it
+          gate_inward_id: prev.gate_inward_id || (first.gate_inward_id ? String(first.gate_inward_id) : ''),
+          gate_matched: !!(prev.gate_inward_id || first.gate_inward_id),
+          gst_type: selectedGrnIds.length === 0 && first.is_interstate != null ? (Number(first.is_interstate) ? 'INTER_STATE' : 'INTRA_STATE') : prev.gst_type,
         }));
+        // charges booked on the GRN (freight / other) carry to the bill
+        if (Number(first.grn_freight) || Number(first.grn_other)) {
+          setCharges((c) => ({
+            ...c,
+            freight_charges: Math.round(((Number(c.freight_charges) || 0) + (Number(first.grn_freight) || 0)) * 100) / 100,
+            other_charges: Math.round(((Number(c.other_charges) || 0) + Math.abs(Number(first.grn_other) || 0)) * 100) / 100,
+            other_charges_sign: Number(first.grn_other_sign) < 0 ? -1 : (c.other_charges_sign ?? 1),
+            other_charges_label: c.other_charges_label || first.grn_other_label || '',
+          }));
+        }
 
         const isYarn = billType.startsWith('YARN');
         const isFab = billType.startsWith('FABRIC');
-        const mapped: BillLineItem[] = fetchedLines.map((l: any) => {
-          const qty = Number(l.received_qty) || Number(l.received_weight) || Number(l.accepted_qty) || 0;
+        const mapped: BillLineItem[] = fetchedLines.filter((l: any) => (l.accepted_qty != null ? Number(l.accepted_qty) : 1) > 0).map((l: any) => {
+          const qty = l.accepted_qty != null ? Number(l.accepted_qty) : (Number(l.received_qty) || Number(l.received_weight) || 0);
           const r = Number(l.rate) || 0;
           const gst = Number(l.gst_rate) || (billType.startsWith('TRIMS') ? 18 : 5);
           const amt = Math.round(qty * r * 100) / 100;
@@ -322,6 +326,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
             rate: r,
             amount: amt,
             gst_rate: gst,
+            hsn_code: l.hsn_code || '',
             qty_matched: true,
             rate_matched: true,
           };
@@ -398,8 +403,8 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
       if (res.data?.length) {
         const isYarn = billType.startsWith('YARN');
         const isFab = billType.startsWith('FABRIC');
-        const mapped: BillLineItem[] = res.data.map((l: any) => {
-          const qty = Number(l.received_qty) || Number(l.received_weight) || Number(l.accepted_qty) || 0;
+        const mapped: BillLineItem[] = res.data.filter((l: any) => (l.accepted_qty != null ? Number(l.accepted_qty) : 1) > 0).map((l: any) => {
+          const qty = l.accepted_qty != null ? Number(l.accepted_qty) : (Number(l.received_qty) || Number(l.received_weight) || 0);
           const r = Number(l.rate) || 0;
           const gst = Number(l.gst_rate) || (billType.startsWith('TRIMS') ? 18 : 5);
           return {
@@ -423,6 +428,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
             rate: r,
             amount: Math.round(qty * r * 100) / 100,
             gst_rate: gst,
+            hsn_code: l.hsn_code || '',
             qty_matched: true,
             rate_matched: true,
           };
@@ -511,6 +517,10 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
       toast('Please select a Supplier / Mill', 'error');
       return;
     }
+    if (billType !== 'GENERAL' && !selectedGrnIds.length && !trimGrnIds.length && !billId) {
+      toast('A purchase bill is made from its GRN(s) — pick the GRN(s). A direct bill (without GRN) is only for the General bill type', 'error');
+      return;
+    }
     if (lines.length === 0 || lines.some((l) => !l.description || l.bill_qty <= 0)) {
       toast('Please fill all line items with valid description and quantity', 'error');
       return;
@@ -544,7 +554,8 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
         port_code: header.port_code || null,
         po_matched: header.po_matched,
         grn_matched: header.grn_matched,
-        gate_matched: header.gate_matched,
+        gate_matched: !!header.gate_inward_id,
+        gate_inward_id: header.gate_inward_id ? Number(header.gate_inward_id) : null,
         match_status: header.match_status,
         payment_due_date: header.payment_due_date || null,
         status: header.status,
@@ -678,7 +689,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                 <Select
                   label="Supplier / Mill / Processor *"
                   value={header.supplier_id}
-                  onChange={(e) => setHeader((p) => ({ ...p, supplier_id: e.target.value }))}
+                  onChange={(e) => setHeader((p) => ({ ...p, supplier_id: e.target.value, gate_inward_id: '', gate_matched: false }))}
                   options={toOptions(suppliers.data)}
                   placeholder="Select Supplier"
                 />
@@ -930,10 +941,12 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
               </div>
 
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" onClick={addLine} className="text-xs flex items-center gap-1">
-                  <Plus size={13} />
-                  <span>Add Item Line</span>
-                </Button>
+                {billType === 'GENERAL' ? (
+                  <Button size="sm" variant="outline" onClick={addLine} className="text-xs flex items-center gap-1" id="sb-add-line">
+                    <Plus size={13} />
+                    <span>Add Item Line</span>
+                  </Button>
+                ) : <span className="text-[11px] text-slate-500" id="sb-grn-only">Lines come from the linked GRN(s) — a direct bill is only for General</span>}
               </div>
             </div>
 
@@ -1170,15 +1183,12 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                   <span className="font-semibold text-slate-700">GRN Matched</span>
                 </label>
 
-                <label className="flex items-center gap-2 p-2 bg-white rounded-lg border border-slate-200 text-xs cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={header.gate_matched}
-                    onChange={(e) => setHeader((p) => ({ ...p, gate_matched: e.target.checked }))}
-                    className="rounded text-brand-600"
-                  />
-                  <span className="font-semibold text-slate-700">Gate Matched</span>
-                </label>
+                <div className="col-span-full rounded-lg border border-slate-200 bg-white p-2 text-xs">
+                  {header.supplier_id
+                    ? <GateEntryPicker partyId={header.supplier_id} value={header.gate_inward_id} idPrefix="sb-gate" onChange={(v) => setHeader((p) => ({ ...p, gate_inward_id: v, gate_matched: !!v }))} />
+                    : <span className="text-slate-400">Choose the supplier to map the gate entry</span>}
+                  <span className={`mt-1 block font-semibold ${header.gate_inward_id ? 'text-emerald-700' : 'text-slate-500'}`} id="sb-gate-matched">{header.gate_inward_id ? '✓ Gate matched' : 'Gate not matched'}</span>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3 pt-1">
