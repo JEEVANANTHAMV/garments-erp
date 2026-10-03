@@ -309,6 +309,7 @@ lookupRouter.get('/bill-grns', ah(async (req, res) => {
         AND NOT EXISTS (SELECT 1 FROM trx_process_receipt pr WHERE pr.grn_id = g.id)
         AND NOT EXISTS (SELECT 1 FROM trx_fabric_process_inward i WHERE i.grn_id = g.id)
         AND NOT EXISTS (SELECT 1 FROM trx_yarn_process_inward i WHERE i.grn_id = g.id OR i.reject_grn_id = g.id)
+        AND NOT EXISTS (SELECT 1 FROM trx_yarn_process_return yr WHERE yr.grn_id = g.id)
         AND NOT EXISTS (SELECT 1 FROM trx_supplier_bill b WHERE b.company_id = g.company_id AND b.id <> ? AND COALESCE(b.status, '') <> 'CANCELLED'
                           AND (b.grn_id = g.id OR IF(JSON_VALID(b.grn_ids), JSON_CONTAINS(b.grn_ids, CAST(g.id AS JSON)), 0)
                                OR EXISTS (SELECT 1 FROM trx_supplier_bill_line bl WHERE bl.bill_id = b.id AND bl.grn_id = g.id)))
