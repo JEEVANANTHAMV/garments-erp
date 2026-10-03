@@ -1165,7 +1165,7 @@ knittingDcRouter.get('/knitting-programs/:id/reconciliation', requirePermission(
       program: {
         id: prog.id, program_no: prog.program_no, io_no: prog.io_no, status: prog.status,
         style_code: prog.style_code, style_name: prog.style_name, fabric_id: prog.fabric_id,
-        fabric_name: prog.fabric_name ?? prog.fabric_type, gsm: prog.gsm, dia: prog.dia,
+        fabric_name: prog.fabric_name ?? prog.fabric_type, gsm: prog.gsm, dia: prog.dia, fabric_form: prog.fabric_form ?? null,
         vendor_id: prog.vendor_id, vendor_name: prog.vendor_name,
       },
       ...data,
