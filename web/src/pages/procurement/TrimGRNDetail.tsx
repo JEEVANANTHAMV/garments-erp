@@ -175,6 +175,7 @@ export default function TrimGRNDetailPage() {
     if (existingGrn) {
       setHead({
         id: existingGrn.id,
+        receipt_type: (existingGrn.receipt_type === 'FINAL' ? 'FINAL' : 'PARTIAL') as ReceiptType,
         grn_no: existingGrn.grn_no,
         grn_date: existingGrn.grn_date?.split('T')[0] || today(),
         po_id: String(existingGrn.po_id || ''),

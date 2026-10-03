@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Plus, Search, Ban, Download, Pencil, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Plus, Search, Ban, Download, Pencil } from 'lucide-react';
 import { http } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth';
 import { useLookup, toOptions } from '../../../hooks/useLookup';
@@ -9,7 +9,7 @@ import { useToast } from '../../../hooks/useToast';
 import { Button, Input, Select, Tabs, LoadingBlock, Modal, Checkbox } from '../../../components/ui';
 import { ContractorBillEditor } from '../../../components/ContractorBillEditor';
 import { ProcessBillTotalsView, processBillFacts } from '../../../components/ProcessBillParts';
-import { fmtDate, fmtDecimal, today } from '../../../lib/format';
+import { fmtDate, fmtDecimal } from '../../../lib/format';
 import { YpTitle, YpStatus, ReconCards, useYarnTypes, errText, kg, n, MODE_LABEL, type YpType } from './shared';
 
 /** Yarn Process — contractor bill (doc §14), cone tracking (§15), ledger / job reconciliation / reports (§16, §24), process types (§26). */

@@ -7,6 +7,7 @@ import { fmtDate, fmtDateTime } from '../../lib/format';
 import {
   PageHeader, LoadingBlock, EmptyState, ErrorState, Badge, Input, Select, Pager,
 } from '../../components/ui';
+import { JobSelect } from '../../components/JobSelect';
 
 /**
  * Cutting → shipment fabric reports (traceability document §22).

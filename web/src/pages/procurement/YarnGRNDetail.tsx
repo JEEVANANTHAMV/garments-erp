@@ -139,6 +139,7 @@ export default function YarnGRNDetailPage() {
   useEffect(() => {
     if (existingData) {
       setHeader({
+        receipt_type: (existingData.receipt_type === 'FINAL' ? 'FINAL' : 'PARTIAL') as ReceiptType,
         grn_no: existingData.grn_no || '',
         grn_date: existingData.grn_date?.slice(0, 10) || today(),
         po_id: existingData.po_id ? String(existingData.po_id) : '',
@@ -832,7 +833,7 @@ export default function YarnGRNDetailPage() {
                         </select>
                       ) : (
                         <span className="font-medium text-slate-700">
-                          {l.so_id ? ((salesOrders.data ?? []).find((x: any) => String(x.id) === String(l.so_id))?.job_no ?? `SO #${l.so_id}`) : 'Stock / General'}
+                          {l.so_id ? String((salesOrders.data ?? []).find((x: any) => String(x.id) === String(l.so_id))?.job_no ?? `SO #${l.so_id}`) : 'Stock / General'}
                         </span>
                       )}
                     </td>
