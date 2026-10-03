@@ -61,10 +61,10 @@ SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DAT
 SET @s = IF(@x=0, 'ALTER TABLE trx_fabric_process_bill ADD COLUMN round_off DECIMAL(10,2) NOT NULL DEFAULT 0', 'SELECT 1');
 PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_fabric_process_bill' AND COLUMN_NAME='match_status');
-SET @s = IF(@x=0, 'ALTER TABLE trx_fabric_process_bill ADD COLUMN match_status VARCHAR(20) NULL COMMENT FULLY_MATCHED / PARTIAL / DISCREPANCY', 'SELECT 1');
+SET @s = IF(@x=0, 'ALTER TABLE trx_fabric_process_bill ADD COLUMN match_status VARCHAR(20) NULL COMMENT ''FULLY_MATCHED / PARTIAL / DISCREPANCY''', 'SELECT 1');
 PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_fabric_process_bill' AND COLUMN_NAME='calc_version');
-SET @s = IF(@x=0, 'ALTER TABLE trx_fabric_process_bill ADD COLUMN calc_version TINYINT NOT NULL DEFAULT 1 COMMENT 1 = other charges taxed (old), 2 = invoice summary (other charges after GST)', 'SELECT 1');
+SET @s = IF(@x=0, 'ALTER TABLE trx_fabric_process_bill ADD COLUMN calc_version TINYINT NOT NULL DEFAULT 1 COMMENT ''1 = other charges taxed (old), 2 = invoice summary (other charges after GST)''', 'SELECT 1');
 PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 UPDATE trx_fabric_process_bill SET taxable_amount = net_amount - gst_amount WHERE calc_version = 1 AND taxable_amount = 0 AND net_amount <> 0;
 UPDATE trx_fabric_process_bill SET cgst_amount = ROUND(gst_amount / 2, 2), sgst_amount = gst_amount - ROUND(gst_amount / 2, 2) WHERE calc_version = 1 AND cgst_amount = 0 AND igst_amount = 0 AND gst_amount <> 0;
@@ -127,10 +127,10 @@ SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DAT
 SET @s = IF(@x=0, 'ALTER TABLE trx_yarn_process_bill ADD COLUMN round_off DECIMAL(10,2) NOT NULL DEFAULT 0', 'SELECT 1');
 PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_yarn_process_bill' AND COLUMN_NAME='match_status');
-SET @s = IF(@x=0, 'ALTER TABLE trx_yarn_process_bill ADD COLUMN match_status VARCHAR(20) NULL COMMENT FULLY_MATCHED / PARTIAL / DISCREPANCY', 'SELECT 1');
+SET @s = IF(@x=0, 'ALTER TABLE trx_yarn_process_bill ADD COLUMN match_status VARCHAR(20) NULL COMMENT ''FULLY_MATCHED / PARTIAL / DISCREPANCY''', 'SELECT 1');
 PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_yarn_process_bill' AND COLUMN_NAME='calc_version');
-SET @s = IF(@x=0, 'ALTER TABLE trx_yarn_process_bill ADD COLUMN calc_version TINYINT NOT NULL DEFAULT 1 COMMENT 1 = other charges taxed (old), 2 = invoice summary (other charges after GST)', 'SELECT 1');
+SET @s = IF(@x=0, 'ALTER TABLE trx_yarn_process_bill ADD COLUMN calc_version TINYINT NOT NULL DEFAULT 1 COMMENT ''1 = other charges taxed (old), 2 = invoice summary (other charges after GST)''', 'SELECT 1');
 PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 UPDATE trx_yarn_process_bill SET taxable_amount = net_amount - gst_amount WHERE calc_version = 1 AND taxable_amount = 0 AND net_amount <> 0;
 UPDATE trx_yarn_process_bill SET cgst_amount = ROUND(gst_amount / 2, 2), sgst_amount = gst_amount - ROUND(gst_amount / 2, 2) WHERE calc_version = 1 AND cgst_amount = 0 AND igst_amount = 0 AND gst_amount <> 0;
@@ -193,10 +193,10 @@ SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DAT
 SET @s = IF(@x=0, 'ALTER TABLE trx_knitting_bill ADD COLUMN round_off DECIMAL(10,2) NOT NULL DEFAULT 0', 'SELECT 1');
 PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_knitting_bill' AND COLUMN_NAME='match_status');
-SET @s = IF(@x=0, 'ALTER TABLE trx_knitting_bill ADD COLUMN match_status VARCHAR(20) NULL COMMENT FULLY_MATCHED / PARTIAL / DISCREPANCY', 'SELECT 1');
+SET @s = IF(@x=0, 'ALTER TABLE trx_knitting_bill ADD COLUMN match_status VARCHAR(20) NULL COMMENT ''FULLY_MATCHED / PARTIAL / DISCREPANCY''', 'SELECT 1');
 PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_knitting_bill' AND COLUMN_NAME='calc_version');
-SET @s = IF(@x=0, 'ALTER TABLE trx_knitting_bill ADD COLUMN calc_version TINYINT NOT NULL DEFAULT 1 COMMENT 1 = other charges taxed (old), 2 = invoice summary (other charges after GST)', 'SELECT 1');
+SET @s = IF(@x=0, 'ALTER TABLE trx_knitting_bill ADD COLUMN calc_version TINYINT NOT NULL DEFAULT 1 COMMENT ''1 = other charges taxed (old), 2 = invoice summary (other charges after GST)''', 'SELECT 1');
 PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 UPDATE trx_knitting_bill SET taxable_amount = net_amount - gst_amount WHERE calc_version = 1 AND taxable_amount = 0 AND net_amount <> 0;
 UPDATE trx_knitting_bill SET cgst_amount = ROUND(gst_amount / 2, 2), sgst_amount = gst_amount - ROUND(gst_amount / 2, 2) WHERE calc_version = 1 AND cgst_amount = 0 AND igst_amount = 0 AND gst_amount <> 0;
