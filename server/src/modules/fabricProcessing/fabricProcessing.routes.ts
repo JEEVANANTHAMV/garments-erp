@@ -1,5 +1,8 @@
 import { Router, type Request } from 'express';
 import { z } from 'zod';
+import { valueGrnAtRate } from '../../core/grnValue.js';
+import { processBillHeadSchema, checkProcessBillHead, writeProcessBillTotals } from '../../core/processBill.js';
+import { jobFabricAvailability, resolveSoId } from '../stock/jobStock.routes.js';
 import { calcRollFor, ROLL_CALC_COLS, rollCalcVals } from '../../core/fabricRollCalc.js';
 import { query, queryOne, transaction, txQuery, txQueryOne, txExecute, type Tx } from '../../config/db.js';
 import { postLedger, UOM_KG } from '../../core/processEngine.js';
@@ -102,6 +105,43 @@ const STORE_ROLL_SQL = `
     LEFT JOIN mst_fabric fb ON fb.id = fr.fabric_id
     LEFT JOIN mst_warehouse w ON w.id = fr.warehouse_id
     LEFT JOIN trx_sales_order so ON so.id = fr.so_id`;
+
+/**
+ * GET /fabric-process/quotation-plan?quotation_id= — picking the process quotation on an outward DC loads it
+ * (client voice note 03-Oct-2026): per quotation line the job, KG quoted, KG already sent on earlier DCs of that
+ * quotation, the balance, and the job's available rolls suggested oldest first up to the balance.
+ */
+fabricProcessingRouter.get('/fabric-process/quotation-plan', requirePermission(FP.VIEW), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const q = z.object({ quotation_id: z.coerce.number().int().positive(), exclude_fpo_id: z.coerce.number().int().positive().optional() }).parse(req.query);
+  const qt = await queryOne<any>('SELECT id, quotation_no, process_name, job_no FROM trx_quotation WHERE id = ? AND company_id = ?', [q.quotation_id, cid]);
+  if (!qt) throw NotFound('Quotation not found');
+  const lines = await query<any>(`SELECT l.id, l.job_no, l.so_id, l.fabric_id, l.qty, l.description, mc.color_name, fb.fabric_name,
+       COALESCE(NULLIF(l.confirm_rate, 0), NULLIF(l.quotation_rate, 0), l.unit_price) rate
+     FROM trx_quotation_line l LEFT JOIN mst_color mc ON mc.id = l.color_id LEFT JOIN mst_fabric fb ON fb.id = l.fabric_id WHERE l.quotation_id = ? ORDER BY l.sort_order, l.id`, [qt.id]);
+  const dye = /dye/i.test(String(qt.process_name ?? ''));
+  const out = [];
+  for (const l of lines) {
+    const soId = await resolveSoId(cid, l.so_id ?? null, l.job_no ?? qt.job_no ?? null);
+    const sent = soId ? Number((await queryOne<any>(
+      `SELECT COALESCE(SUM(ri.weight_kg), 0) v FROM trx_fabric_process_roll_in ri JOIN trx_fabric_process_order o ON o.id = ri.fpo_id
+        WHERE o.company_id = ? AND o.quotation_id = ? AND o.status <> 'CANCELLED' AND ri.so_id = ? ${l.fabric_id ? 'AND ri.fabric_id = ?' : ''} ${q.exclude_fpo_id ? 'AND o.id <> ?' : ''}`,
+      [cid, qt.id, soId, ...(l.fabric_id ? [l.fabric_id] : []), ...(q.exclude_fpo_id ? [q.exclude_fpo_id] : [])]))?.v ?? 0) : 0;
+    const balance = r3(Math.max(0, Number(l.qty) - sent));
+    const job = soId ? await queryOne<any>('SELECT id, COALESCE(io_no, so_no) job_no, buyer_po_no FROM trx_sales_order WHERE id = ?', [soId]) : null;
+    const avail = soId ? (await jobFabricAvailability(cid, soId, { state: dye ? 'GREY' : null })).rolls.filter((r: any) => !l.fabric_id || Number(r.fabric_id) === Number(l.fabric_id)) : [];
+    let left = balance; const pick = [];
+    for (const r of avail) {
+      if (left <= 0.0005) break;
+      const kg = r3(Math.min(left, r.available_kg)); left = r3(left - kg);
+      pick.push({ ...r, io_no: job?.job_no ?? null, buyer_po_no: job?.buyer_po_no ?? null, so_id: soId, send_kg: kg });
+    }
+    out.push({ line_id: Number(l.id), job_no: job?.job_no ?? l.job_no ?? null, so_id: soId, fabric_id: l.fabric_id, fabric_name: l.fabric_name, description: l.description,
+      dye_colour: l.color_name ?? null, rate: Number(l.rate) || 0, quoted_kg: Number(l.qty) || 0, sent_kg: r3(sent), balance_kg: balance,
+      available_kg: r3(avail.reduce((a: number, r: any) => a + r.available_kg, 0)), short_kg: r3(Math.max(0, left)), rolls: pick });
+  }
+  res.json({ data: { quotation_id: qt.id, quotation_no: qt.quotation_no, process_name: qt.process_name, lines: out } });
+}));
 
 fabricProcessingRouter.get(['/fabric-process/store-rolls', '/fabric-processing/store-rolls'], requirePermission(FP.VIEW), ah(async (req, res) => {
   const cid = req.user!.companyId;
@@ -688,6 +728,8 @@ async function postInward(tx: Tx, req: Request, body: InwardBody, existing?: { i
   await txExecute(tx, `UPDATE trx_fabric_process_order SET status = ?, output_weight_kg = ?, process_loss_kg = ?, process_loss_pct = ? WHERE id = ?`,
     [fpoStatus, r3(n(agg?.g)), r3(n(agg?.l)), n(agg?.w) > 0 ? r2((n(agg?.l) / n(agg?.w)) * 100) : 0, o.id]);
   if (o.reprocess_id) await txExecute(tx, `UPDATE trx_fabric_reprocess SET status = ? WHERE id = ?`, [fpoStatus === 'COMPLETED' ? 'COMPLETED' : 'IN_PROCESS', o.reprocess_id]);
+  // the GRN carries the DC's job-work rate (good KG × rate)
+  await valueGrnAtRate(tx, grnId, o.rate_per_kg);
 
   return { id: inwardId, inward_no: inwardNo, fpo_no: o.fpo_no, fpo_status: fpoStatus, good_kg: totG, reject_kg: totR, loss_kg: totL, rolls: created };
 }
@@ -1199,8 +1241,12 @@ fabricProcessingRouter.get('/fabric-process/bill-sources', requirePermission(FP.
             (SELECT GROUP_CONCAT(DISTINCT ri.io_no SEPARATOR ', ') FROM trx_fabric_process_roll_out ro JOIN trx_fabric_process_roll_in ri ON ri.id = ro.roll_in_id WHERE ro.inward_id = i.id) AS io_no,
             (SELECT bl.rate FROM trx_fabric_process_bill_line bl JOIN trx_fabric_process_bill b ON b.id = bl.bill_id
               WHERE b.vendor_id = i.vendor_id AND bl.sub_process = i.sub_process AND bl.line_type = 'GRN' AND b.status = 'POSTED' ORDER BY bl.id DESC LIMIT 1) AS last_rate,
-            (SELECT o2.rate_per_kg FROM trx_fabric_process_order o2 WHERE o2.id = i.fpo_id) AS quotation_rate
+            o.rate_per_kg AS quotation_rate, o.fpo_no AS dc_no, q.quotation_no, i.challan_no, i.vehicle_no, i.input_kg, i.reject_kg, i.loss_kg, gi.entry_no AS gate_entry_no, gr.grn_no,
+            (SELECT COUNT(*) FROM trx_fabric_process_roll_out ro WHERE ro.inward_id = i.id) AS rolls,
+            (SELECT GROUP_CONCAT(DISTINCT ro.color_name SEPARATOR ', ') FROM trx_fabric_process_roll_out ro WHERE ro.inward_id = i.id) AS colours
        FROM trx_fabric_process_inward i
+       LEFT JOIN trx_fabric_process_order o ON o.id = i.fpo_id LEFT JOIN trx_quotation q ON q.id = o.quotation_id
+       LEFT JOIN trx_gate_inward gi ON gi.id = i.gate_inward_id LEFT JOIN trx_grn gr ON gr.id = i.grn_id
        LEFT JOIN mst_fabric_process_type pt ON pt.company_id = i.company_id AND pt.code = i.sub_process
       WHERE i.company_id = ? AND i.vendor_id = ? AND i.bill_id IS NULL AND i.is_reprocess = 0 AND i.status = 'POSTED'${dp('i.inward_date')}
       ORDER BY i.inward_date, i.id`, [cid, q.vendor_id, ...dv]);
@@ -1230,10 +1276,10 @@ const billSchema = z.object({
   from_date: date.nullish(),
   to_date: date.nullish(),
   discount_amount: z.coerce.number().min(0).default(0),
-  other_charges: z.coerce.number().default(0),
   gst_pct: z.coerce.number().min(0).max(28).default(0),
   remarks: s.text(),
   rate_change_reason: s.nullableStr(255),
+  ...processBillHeadSchema,
   lines: z.array(z.object({ line_type: z.enum(['GRN', 'REPROCESS', 'RECOVERY']), ref_id: s.idReq(), rate: z.coerce.number().min(0).default(0) })).min(1, 'Add at least one GRN / reprocess'),
 });
 
@@ -1245,9 +1291,11 @@ fabricProcessingRouter.get('/fabric-process/bills', requirePermission(FP.VIEW), 
 }));
 fabricProcessingRouter.get('/fabric-process/bills/:id', requirePermission(FP.VIEW), ah(async (req, res) => {
   const id = z.coerce.number().int().positive().parse(req.params.id);
-  const b = await queryOne<any>('SELECT b.*, v.party_name AS vendor_name FROM trx_fabric_process_bill b LEFT JOIN mst_party v ON v.id = b.vendor_id WHERE b.id = ? AND b.company_id = ?', [id, req.user!.companyId]);
+  const b = await queryOne<any>(`SELECT b.*, v.party_name AS vendor_name, g.entry_no AS gate_entry_no FROM trx_fabric_process_bill b LEFT JOIN mst_party v ON v.id = b.vendor_id
+                                  LEFT JOIN trx_gate_inward g ON g.id = b.gate_inward_id WHERE b.id = ? AND b.company_id = ?`, [id, req.user!.companyId]);
   if (!b) throw NotFound('Bill not found');
-  const lines = await query<any>('SELECT * FROM trx_fabric_process_bill_line WHERE bill_id = ? ORDER BY id', [id]);
+  const lines = await query<any>(`SELECT l.*, o.fpo_no AS dc_no, i.challan_no, i.vehicle_no FROM trx_fabric_process_bill_line l
+      LEFT JOIN trx_fabric_process_inward i ON l.line_type = 'GRN' AND i.id = l.ref_id LEFT JOIN trx_fabric_process_order o ON o.id = i.fpo_id WHERE l.bill_id = ? ORDER BY l.id`, [id]);
   res.json({ data: { ...b, lines } });
 }));
 
@@ -1255,8 +1303,11 @@ fabricProcessingRouter.get('/fabric-process/bills/:id', requirePermission(FP.VIE
 fabricProcessingRouter.post('/fabric-process/bills', requirePermission(FP.BILL), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const body = billSchema.parse(req.body);
+  if (new Set(body.lines.map((l) => `${l.line_type}:${l.ref_id}`)).size !== body.lines.length) throw BadRequest('A GRN / reprocess is on the bill twice');
   const out = await transaction(async (tx) => {
+    const gate = await checkProcessBillHead(tx, cid, body, body.vendor_id, 'Fabric process bill');
     const billNo = await nextDocNumber(tx, cid, 'FP_BILL');
+    const changed: string[] = [];
     const r = await txExecute(tx,
       `INSERT INTO trx_fabric_process_bill (company_id, bill_no, bill_date, vendor_id, party_bill_no, from_date, to_date, discount_amount, other_charges, gst_pct, remarks, created_by)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -1276,6 +1327,7 @@ fabricProcessingRouter.post('/fabric-process/bills', requirePermission(FP.BILL),
         if (qr?.rate_per_kg != null && Math.abs(n(qr.rate_per_kg) - l.rate) > 0.005 && !(body.rate_change_reason && body.rate_change_reason.length >= 3)) {
           throw BadRequest(`${i.inward_no}: the rate ₹${l.rate} differs from the approved quotation rate ₹${n(qr.rate_per_kg)} — give the reason for the change`);
         }
+        if (qr?.rate_per_kg != null && Math.abs(n(qr.rate_per_kg) - l.rate) > 0.005) changed.push(`${i.inward_no} ₹${n(qr.rate_per_kg)} → ₹${l.rate}`);
         const amt = r2(n(i.good_kg) * l.rate);
         const jobs = await txQueryOne<any>(tx, 'SELECT GROUP_CONCAT(DISTINCT ri.io_no SEPARATOR \', \') j FROM trx_fabric_process_roll_out ro JOIN trx_fabric_process_roll_in ri ON ri.id = ro.roll_in_id WHERE ro.inward_id = ?', [i.id]);
         await txExecute(tx, 'INSERT INTO trx_fabric_process_bill_line (bill_id, line_type, ref_id, doc_no, doc_date, io_no, sub_process, qty_kg, rate, amount) VALUES (?,?,?,?,?,?,?,?,?,?)',
@@ -1297,11 +1349,9 @@ fabricProcessingRouter.post('/fabric-process/bills', requirePermission(FP.BILL),
         if (isRec) recovery += -amt; else gross += amt;
       }
     }
-    const taxable = r2(gross - recovery - body.discount_amount + body.other_charges);
-    const gst = r2(taxable * body.gst_pct / 100);
-    const net = r2(taxable + gst);
-    await txExecute(tx, 'UPDATE trx_fabric_process_bill SET gross_amount = ?, recovery_amount = ?, gst_amount = ?, net_amount = ? WHERE id = ?', [r2(gross), r2(recovery), gst, net, billId]);
-    return { id: billId, bill_no: billNo, gross_amount: r2(gross), recovery_amount: r2(recovery), gst_amount: gst, net_amount: net };
+    const t = await writeProcessBillTotals(tx, 'trx_fabric_process_bill', billId, body, gross, recovery, gate?.id ?? null, changed.length > 0);
+    if (changed.length) await txExecute(tx, `UPDATE trx_fabric_process_bill SET remarks = CONCAT(COALESCE(remarks, ''), ?) WHERE id = ?`, [`\nRate changed from quotation (${changed.join('; ')}): ${body.rate_change_reason}`, billId]);
+    return { id: billId, bill_no: billNo, gross_amount: r2(gross), recovery_amount: r2(recovery), ...t };
   });
   await audit(req, 'trx_fabric_process_bill', out.id, 'INSERT', undefined, out);
   res.status(201).json({ data: out, message: `${out.bill_no} posted — net ₹${out.net_amount}` });

@@ -129,11 +129,28 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
     target_shade: dyeing ? quoteColour(quoteDoc, quote.quotation_line_id, job?.job_no ?? (lot.holder_so_id ? lot.holder_job : null)) : '', process_id: '' }))];
   });
   const set = (k: string, p: Partial<Row>) => setRows((rs) => rs.map((r) => (r.key === k ? { ...r, ...p } : r)));
-  // picking the dyeing quotation fills the dye colour of lines that have none yet (job's own line first)
+  // picking the quotation loads it (client 03-Oct-2026): per line the job's yarn lots up to the KG still to send
+  const [plan, setPlan] = useState<any | null>(null);
+  const loadPlan = async (qid: string | number, replace: boolean) => {
+    try {
+      const p = (await http.get<{ data: any }>(`/yarn-process/quotation-plan?quotation_id=${qid}${id ? `&exclude_ypo_id=${id}` : ''}`)).data;
+      setPlan(p);
+      const add: Row[] = [];
+      for (const l of p.lines) for (const x of l.lots) add.push({ key: `r${++seq}`, grn_line_id: Number(x.grn_line_id), so_id: l.so_id, io_no: l.job_no ?? 'STOCK', buyer_po_no: l.buyer_po_no ?? null,
+        lot_no: x.lot_no, yarn_name: `${x.yarn_name}${x.count_str ? ` ${x.count_str}` : ''}`, shade: x.color_name || x.shade || '', grn_no: x.grn_no, available_kg: Number(x.available_kg),
+        qty_kg: Number(x.send_kg), cone_no: x.cone_no ?? '', no_of_cones: 0, target_shade: dyeing ? (l.dye_colour ?? '') : '', process_id: '' });
+      if (!add.length) { toast(`${p.quotation_no}: nothing left to send (quoted KG already sent, or the job holds no yarn)`, 'warning'); return; }
+      setRows((rs) => (replace ? add : [...rs, ...add.filter((a) => !rs.some((r) => r.grn_line_id === a.grn_line_id && r.so_id === a.so_id))]));
+      const short = p.lines.filter((l: any) => l.short_kg > 0);
+      toast(`${p.quotation_no}: ${add.length} lot line(s) loaded${short.length ? ` — ${short.map((l: any) => `${l.job_no} short ${l.short_kg} KG`).join(', ')}` : ''}`, short.length ? 'warning' : 'success');
+    } catch (e) { toast(errText(e), 'error'); }
+  };
   const onQuote = (q: any | null) => {
+    const changed = (q?.id ?? null) !== (quoteDoc?.id ?? null);
     setQuoteDoc(q);
-    if (!q || !dyeing || !editable) return;
-    setRows((rs) => rs.map((r) => (r.target_shade ? r : { ...r, target_shade: quoteColour(q, quote.quotation_line_id, r.io_no) })));
+    if (!q || !editable) return;
+    if (changed && !rows.length) { void loadPlan(q.id, true); return; }
+    if (dyeing) setRows((rs) => rs.map((r) => (r.target_shade ? r : { ...r, target_shade: quoteColour(q, quote.quotation_line_id, r.io_no) })));
   };
 
   const payload = () => ({
@@ -200,7 +217,22 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
         <Input label="Expected return" type="date" value={head.expected_return_date} disabled={!editable} onChange={(e) => setHead({ ...head, expected_return_date: e.target.value })} />
         <Textarea label="Remarks" className="col-span-2 md:col-span-3" rows={1} value={head.remarks} disabled={!editable} onChange={(e) => setHead({ ...head, remarks: e.target.value })} />
         <div className="col-span-full">
-          <QuotationPicker vendorId={head.vendor_id} material="YARN" process={pt?.name ?? head.process_code} value={quote} onChange={setQuote} onQuote={onQuote} disabled={!editable} idPrefix="ypo" />
+          <div className="flex flex-wrap items-end gap-3">
+            <QuotationPicker vendorId={head.vendor_id} material="YARN" process={pt?.name ?? head.process_code} value={quote} onChange={setQuote} onQuote={onQuote} disabled={!editable} idPrefix="ypo" />
+            {editable && quote.quotation_id && <Button size="sm" variant="secondary" id="btn-load-quote" onClick={() => void loadPlan(quote.quotation_id, false)}><Download size={13} className="mr-1" /> Load quotation jobs</Button>}
+          </div>
+          {plan && (
+            <table className="mt-2 w-full text-[11.5px]" id="ypo-plan">
+              <thead className="text-slate-500"><tr>{['Quotation line', 'Job', 'Dye colour', 'Rate', 'Quoted KG', 'Sent earlier', 'Balance', 'Job has', 'Short'].map((h) => <th key={h} className={`px-2 py-1 ${/KG|earlier|Balance|has|Short|Rate/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+              <tbody>{plan.lines.map((l: any) => (
+                <tr key={l.line_id} className="border-t border-slate-100">
+                  <td className="px-2 py-1">{l.description || l.yarn_name || '—'}</td><td className="px-2 py-1 font-semibold">{l.job_no ?? '—'}</td><td className="px-2 py-1">{l.dye_colour ?? '—'}</td>
+                  <td className="px-2 py-1 text-right">₹{l.rate}</td><td className="px-2 py-1 text-right">{kg(l.quoted_kg)}</td><td className="px-2 py-1 text-right">{kg(l.sent_kg)}</td>
+                  <td className="px-2 py-1 text-right font-semibold">{kg(l.balance_kg)}</td><td className="px-2 py-1 text-right">{kg(l.available_kg)}</td>
+                  <td className={`px-2 py-1 text-right ${l.short_kg > 0 ? 'font-semibold text-red-700' : 'text-slate-400'}`}>{l.short_kg > 0 ? kg(l.short_kg) : '—'}</td>
+                </tr>))}</tbody>
+            </table>
+          )}
         </div>
       </div>
 

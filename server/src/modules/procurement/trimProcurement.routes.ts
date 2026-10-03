@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { settingFlag, useGateEntry } from '../../core/inwardControls.js';
 import { z } from 'zod';
+import { closePoLinesShort, TRIM_PO_RECEIPT_STATUS_SQL } from '../../core/poReceipt.js';
 import { query, queryOne, transaction, txQuery, txQueryOne, txExecute } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
 import { NotFound, BadRequest } from '../../core/errors.js';
@@ -94,6 +95,8 @@ const trimGrnSchema = z.object({
   po_id: s.id(),
   po_ids: z.array(z.coerce.number().int().positive()).optional(),
   gate_inward_id: s.id(),
+  /** PARTIAL = more to come; FINAL = last delivery — PO lines still pending are closed short. */
+  receipt_type: z.enum(['PARTIAL', 'FINAL']).default('PARTIAL'),
   io_no: s.nullableStr(60),
   style_id: s.id(),
   supplier_id: s.idReq(),
@@ -149,7 +152,8 @@ trimProcurementRouter.get('/trim-pos', requirePermission('PROCUREMENT.VIEW'), ah
             p.party_name AS supplier_name,
             COUNT(tpol.id) AS total_items,
             COALESCE(SUM(tpol.order_qty), 0) AS total_order_qty,
-            COALESCE(SUM(tpol.received_qty), 0) AS total_received_qty
+            COALESCE(SUM(tpol.received_qty), 0) AS total_received_qty,
+            ${TRIM_PO_RECEIPT_STATUS_SQL('tpo.id')} AS receipt_status
        FROM trx_trim_po tpo
        LEFT JOIN cfg_currency cur ON cur.id = tpo.currency_id
        LEFT JOIN mst_style st ON st.id = tpo.style_id
@@ -168,7 +172,7 @@ trimProcurementRouter.get('/trim-pos', requirePermission('PROCUREMENT.VIEW'), ah
 trimProcurementRouter.get('/trim-pos/:id', requirePermission('PROCUREMENT.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const po = await queryOne(
-    `SELECT tpo.*,
+    `SELECT tpo.*, ${TRIM_PO_RECEIPT_STATUS_SQL('tpo.id')} AS receipt_status,
             cur.code AS currency_code, cur.symbol AS currency_symbol,
             st.style_code, st.style_name,
             p.party_name AS supplier_name
@@ -575,6 +579,7 @@ trimProcurementRouter.post('/trim-grns', requireAny('GRN.CREATE', 'PROCUREMENT.C
     );
 
     const grnId = resGrn.insertId;
+    await txExecute(tx, 'UPDATE trx_trim_grn SET receipt_type = ? WHERE id = ?', [body.receipt_type, grnId]);
     const sumKeys = Object.keys(summaryCols);
     await txExecute(tx, `UPDATE trx_trim_grn SET ${sumKeys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`,
       [...sumKeys.map((k) => summaryCols[k]), grnId]);
@@ -609,6 +614,7 @@ trimProcurementRouter.post('/trim-grns', requireAny('GRN.CREATE', 'PROCUREMENT.C
           `UPDATE trx_trim_po_line SET received_qty = received_qty + ? WHERE id = ?`,
           [line.accepted_qty, line.po_line_id]
         );
+        if (body.receipt_type === 'FINAL') await closePoLinesShort(tx, 'TRIM_PO', [Number(line.po_line_id)], Number(grnId));
       }
 
       // Stock posting: ONLY accepted_qty updates unrestricted inventory!

@@ -5,6 +5,7 @@ import { Plus, Search, Eye, Filter, Disc, PackageCheck } from 'lucide-react';
 import { http } from '../../lib/api';
 import { fmtDate, fmtDecimal, fmtNumber } from '../../lib/format';
 import { StatusBadge } from '../../components/ui';
+import { ReceiptStatusBadge } from '../../lib/poReceipt';
 
 export default function YarnPurchaseOrdersPage() {
   const nav = useNavigate();
@@ -138,6 +139,7 @@ export default function YarnPurchaseOrdersPage() {
                 <th className="py-3 px-3">Style Code</th>
                 <th className="py-3 px-3">Delivery Date</th>
                 <th className="py-3 px-3 text-right">Grand Total (₹)</th>
+                <th className="py-3 px-3 text-center">Receipt</th>
                 <th className="py-3 px-3 text-center">Status</th>
                 <th className="py-3 px-4 text-center">Action</th>
               </tr>
@@ -145,13 +147,13 @@ export default function YarnPurchaseOrdersPage() {
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {isLoading ? (
                 <tr>
-                  <td colSpan={8} className="py-10 text-center text-slate-400">
+                  <td colSpan={9} className="py-10 text-center text-slate-400">
                     Loading yarn purchase orders...
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                  <td colSpan={9} className="py-12 text-center text-slate-400">
                     <Disc size={36} className="mx-auto text-slate-300 mb-2" />
                     <p className="text-sm font-medium text-slate-600">No yarn purchase orders found</p>
                     <p className="text-xs text-slate-400 mt-1">Create a new Yarn PO or convert from an approved quotation</p>
@@ -183,6 +185,7 @@ export default function YarnPurchaseOrdersPage() {
                     <td className="py-3 px-3 text-right font-medium text-slate-900">
                       ₹{fmtDecimal(p.grand_total)}
                     </td>
+                    <td className="py-3 px-3 text-center"><ReceiptStatusBadge value={p.receipt_status} /></td>
                     <td className="py-3 px-3 text-center">
                       <StatusBadge value={p.approval_state || 'APPROVED'} />
                     </td>

@@ -10,6 +10,7 @@ import { nextDocNumber } from '../../core/numbering.js';
 import { refreshFabricRollStatus } from '../production/cuttingEngine.js';
 import { postLedger, UOM_KG } from '../../core/processEngine.js';
 import { yarnStockRows, yarnStockQuery } from '../procurement/fabricYarnProcurement.routes.js';
+import { jobBomRequirement } from '../bom/bom.routes.js';
 
 /**
  * Job-wise stock (client voice notes 01-Oct-2026):
@@ -516,3 +517,115 @@ jobStockRouter.get('/traceability/job/:soId', requirePermission('PRODUCTION.VIEW
 }));
 
 
+
+// =====================================================================================
+// Job material genealogy (client doc "Yarn → Fabric → Process Job Material Genealogy", 03-Oct-2026)
+//   BOM = plan · genealogy = trace · stock = availability · process transaction = execution.
+//   A job whose BOM has only yarn still has fabric: the rolls its knitting produced carry the job (so_id),
+//   so downstream processes (dyeing quotation / DC) work from the job's actual available fabric, not a fabric BOM.
+// =====================================================================================
+const r3g = (x: unknown) => Math.round((Number(x) || 0) * 1000) / 1000;
+
+/** The job's fabric rolls that can go to a process now: QC accepted, KG left, not on a draft DC; grouped for quoting. */
+export async function jobFabricAvailability(cid: number, soId: number, opts: { state?: string | null } = {}) {
+  const w = ['fr.company_id = ?', 'fr.so_id = ?', `fr.qc_status = 'ACCEPTED'`, `fr.stock_status <> 'CLOSED'`];
+  const p: unknown[] = [cid, soId];
+  if (opts.state) { w.push('fr.process_state = ?'); p.push(opts.state); }
+  const rows = await query<any>(
+    `SELECT fr.id, fr.roll_no, fr.lot_no, fr.fabric_id, fb.fabric_name, fr.process_state, fr.color_name, fr.gsm, fr.dia, fr.fabric_form,
+            fr.weight_kg, COALESCE(fr.issued_kg, 0) issued_kg, fr.meters, fr.calc_meters, fr.actual_meters, w.warehouse_name, g.grn_no, g.grn_date,
+            (SELECT COALESCE(SUM(ri.weight_kg), 0) FROM trx_fabric_process_roll_in ri WHERE ri.fabric_roll_id = fr.id AND ri.status = 'DRAFT') draft_kg,
+            (SELECT kp.program_no FROM trx_process_receipt pr JOIN trx_knitting_program kp ON kp.id = pr.src_id WHERE pr.grn_id = fr.grn_id AND pr.src_type = 'KNITTING_PROGRAM' LIMIT 1) program_no
+       FROM trx_fabric_roll fr JOIN trx_grn g ON g.id = fr.grn_id LEFT JOIN mst_fabric fb ON fb.id = fr.fabric_id LEFT JOIN mst_warehouse w ON w.id = fr.warehouse_id
+      WHERE ${w.join(' AND ')} ORDER BY g.grn_date, fr.id`, p);
+  const rolls = rows.map((r) => {
+    const avail = r3g(Number(r.weight_kg) - Number(r.issued_kg) - Number(r.draft_kg));
+    const mPerKg = Number(r.weight_kg) > 0 ? Number(r.meters || r.calc_meters || 0) / Number(r.weight_kg) : 0;
+    return { ...r, colour: r.color_name || (r.process_state === 'GREY' ? 'GREY' : null), available_kg: avail, available_m: r3g(avail * mPerKg) };
+  }).filter((r) => r.available_kg > 0.0005);
+  const groups = new Map<string, any>();
+  for (const r of rolls) {
+    const k = `${r.fabric_id}|${r.process_state}|${r.colour ?? ''}|${r.gsm ?? ''}|${r.dia ?? ''}`;
+    const g = groups.get(k) ?? { key: k, fabric_id: r.fabric_id, fabric_name: r.fabric_name, process_state: r.process_state, colour: r.colour, gsm: r.gsm, dia: r.dia,
+      fabric_form: r.fabric_form, rolls: 0, available_kg: 0, available_m: 0, roll_ids: [] as number[], programs: new Set<string>() };
+    g.rolls += 1; g.available_kg = r3g(g.available_kg + r.available_kg); g.available_m = r3g(g.available_m + r.available_m); g.roll_ids.push(Number(r.id));
+    if (r.program_no) g.programs.add(r.program_no);
+    groups.set(k, g);
+  }
+  return { rolls, groups: [...groups.values()].map((g) => ({ ...g, programs: [...g.programs].join(', ') })) };
+}
+
+const jobRow = async (cid: number, soId: number) => queryOne<any>(
+  `SELECT so.id, so.so_no, COALESCE(so.io_no, so.so_no) job_no, so.buyer_po_no, b.party_name buyer_name,
+          (SELECT GROUP_CONCAT(DISTINCT st.style_code) FROM trx_sales_order_line sol JOIN mst_style st ON st.id = sol.style_id WHERE sol.so_id = so.id) styles
+     FROM trx_sales_order so LEFT JOIN mst_party b ON b.id = so.buyer_id WHERE so.id = ? AND so.company_id = ? AND so.is_deleted = 0`, [soId, cid]);
+
+/** GET /jobs/:soId/fabric-availability?state=GREY — the job's actual fabric for a process quotation / DC. */
+jobStockRouter.get('/jobs/:soId/fabric-availability', requireAny('PRODUCTION.VIEW', 'QUOTATION.VIEW', 'FABRIC_PROCESS.VIEW', 'PURCHASE.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const soId = z.coerce.number().int().positive().parse(req.params.soId);
+  const q = z.object({ state: z.string().trim().max(20).optional() }).parse(req.query);
+  const job = await jobRow(cid, soId);
+  if (!job) throw NotFound('Job not found');
+  res.json({ data: { job, ...(await jobFabricAvailability(cid, soId, { state: q.state || null })) } });
+}));
+
+/** GET /jobs/:soId/yarn-availability — the yarn the job holds (own PO / GRN lots + transfers), grouped by yarn + shade. */
+jobStockRouter.get('/jobs/:soId/yarn-availability', requireAny('PRODUCTION.VIEW', 'QUOTATION.VIEW', 'YARN_PROCESS.VIEW', 'PURCHASE.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const soId = z.coerce.number().int().positive().parse(req.params.soId);
+  const job = await jobRow(cid, soId);
+  if (!job) throw NotFound('Job not found');
+  const lots = await yarnJobLots(cid, { so_id: soId, includeGeneral: false });
+  const groups = new Map<string, any>();
+  for (const l of lots) {
+    const shade = l.color_name || l.shade || null;
+    const k = `${l.yarn_id}|${shade ?? ''}`;
+    const g = groups.get(k) ?? { key: k, yarn_id: l.yarn_id, yarn_name: l.yarn_name, yarn_code: l.yarn_code, count_str: l.count_str, shade, lots: 0, available_kg: 0, lot_nos: [] as string[] };
+    g.lots += 1; g.available_kg = r3g(g.available_kg + Number(l.available_kg)); if (l.lot_no) g.lot_nos.push(l.lot_no);
+    groups.set(k, g);
+  }
+  res.json({ data: { job, lots, groups: [...groups.values()].map((g) => ({ ...g, lot_nos: [...new Set(g.lot_nos)].join(', ') })) } });
+}));
+
+/**
+ * GET /jobs/:soId/genealogy — plan vs actual for the job (doc §11) and its lineage:
+ * planned yarn (BOM) → purchased → issued to knitting → consumed → fabric good / reject / loss → fabric available
+ * → each process (input / good / reject / loss).
+ */
+jobStockRouter.get('/jobs/:soId/genealogy', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const soId = z.coerce.number().int().positive().parse(req.params.soId);
+  const job = await jobRow(cid, soId);
+  if (!job) throw NotFound('Job not found');
+  let bom: any = null;
+  try { bom = await jobBomRequirement(cid, { so_id: soId }); } catch { bom = null; }
+  const planned = (t: string) => r3g((bom?.lines ?? []).filter((l: any) => l.material_type === t).reduce((a: number, l: any) => a + Number(l.final_requirement || 0), 0));
+  const one = async (sql: string, p: unknown[]) => Number((await queryOne<any>(sql, p))?.v ?? 0);
+  const yarnPurchased = await one(`SELECT COALESCE(SUM(gl.accepted_qty), 0) v FROM trx_grn_line gl JOIN trx_grn g ON g.id = gl.grn_id
+     WHERE g.company_id = ? AND gl.material_type = 'YARN' AND gl.so_id = ? AND COALESCE(gl.po_id, g.po_id) IS NOT NULL`, [cid, soId]);
+  const programs = await query<any>(`SELECT id, program_no, status, fabric_type, fabric_colour, required_qty_kg, program_source FROM trx_knitting_program
+     WHERE company_id = ? AND (so_id = ? OR io_no = ?) AND status <> 'CANCELLED' ORDER BY id`, [cid, soId, job.job_no]);
+  const pids = programs.map((p) => p.id);
+  const yarnIssued = pids.length ? await one(`SELECT COALESCE(SUM(issued_qty_kg), 0) v FROM trx_process_issue WHERE company_id = ? AND src_type = 'KNITTING_PROGRAM' AND src_id IN (?)`, [cid, pids]) : 0;
+  const knit = pids.length ? await queryOne<any>(`SELECT COALESCE(SUM(input_qty), 0) consumed, COALESCE(SUM(output_qty), 0) good, COALESCE(SUM(rejected_qty), 0) reject, COALESCE(SUM(loss_qty), 0) loss,
+       GROUP_CONCAT(receipt_no) receipts FROM trx_process_receipt WHERE company_id = ? AND src_type = 'KNITTING_PROGRAM' AND src_id IN (?)`, [cid, pids]) : null;
+  const dcs = pids.length ? await query<any>(`SELECT dc_no, MIN(issue_date) dc_date, SUM(issued_qty_kg) kg FROM trx_process_issue WHERE company_id = ? AND src_type = 'KNITTING_PROGRAM' AND src_id IN (?) AND dc_no IS NOT NULL GROUP BY dc_no ORDER BY MIN(id)`, [cid, pids]) : [];
+  const processes = await query<any>(`SELECT o.id, o.fpo_no, o.fpo_date, o.sub_process, o.status, p.party_name vendor, SUM(ri.weight_kg) input_kg, SUM(ri.good_kg) good_kg, SUM(ri.reject_kg) reject_kg, SUM(ri.loss_kg) loss_kg
+       FROM trx_fabric_process_roll_in ri JOIN trx_fabric_process_order o ON o.id = ri.fpo_id LEFT JOIN mst_party p ON p.id = o.vendor_id
+      WHERE o.company_id = ? AND ri.so_id = ? AND o.status NOT IN ('CANCELLED', 'DRAFT') GROUP BY o.id ORDER BY o.id`, [cid, soId]);
+  const avail = await jobFabricAvailability(cid, soId);
+  const byState = (st: string) => r3g(avail.rolls.filter((r: any) => r.process_state === st).reduce((a: number, r: any) => a + r.available_kg, 0));
+  res.json({ data: {
+    job,
+    reconciliation: {
+      planned_yarn_kg: planned('YARN'), planned_fabric_kg: planned('FABRIC'), yarn_purchased_kg: r3g(yarnPurchased), yarn_issued_kg: r3g(yarnIssued),
+      yarn_consumed_kg: r3g(knit?.consumed), fabric_good_kg: r3g(knit?.good), fabric_reject_kg: r3g(knit?.reject), knitting_loss_kg: r3g(knit?.loss),
+      fabric_available_kg: r3g(avail.rolls.reduce((a: number, r: any) => a + r.available_kg, 0)), grey_available_kg: byState('GREY'),
+    },
+    bom: bom ? { bom_no: bom.bom?.bom_no ?? null, boms: (bom.boms ?? []).map((b: any) => b.bom_no) } : null,
+    programs, knitting_dcs: dcs, knitting_receipts: knit?.receipts ? String(knit.receipts).split(',') : [],
+    processes: processes.map((x) => ({ ...x, input_kg: r3g(x.input_kg), good_kg: r3g(x.good_kg), reject_kg: r3g(x.reject_kg), loss_kg: r3g(x.loss_kg) })),
+    fabric_groups: avail.groups,
+  } });
+}));

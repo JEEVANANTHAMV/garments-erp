@@ -130,11 +130,29 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
     });
   };
   const set = (rid: number, p: Partial<DcRow>) => setRows((rs) => rs.map((r) => (r.fabric_roll_id === rid ? { ...r, ...p } : r)));
-  // picking the dyeing quotation fills the dye colour of rolls that have none yet (job's own line first)
+  // picking the quotation loads it (client 03-Oct-2026): per quotation line the job's rolls up to the KG still to send,
+  // with the dye colour; on a DC that already has rolls only the missing dye colours are filled
+  const [plan, setPlan] = useState<any | null>(null);
+  const loadPlan = async (qid: string | number, replace: boolean) => {
+    try {
+      const p = (await http.get<{ data: any }>(`/fabric-process/quotation-plan?quotation_id=${qid}${id ? `&exclude_fpo_id=${id}` : ''}`)).data;
+      setPlan(p);
+      const add: DcRow[] = [];
+      for (const l of p.lines) for (const r of l.rolls) add.push({ fabric_roll_id: Number(r.id), roll_no: r.roll_no, lot_no: r.lot_no, fabric_name: r.fabric_name, so_id: r.so_id, io_no: r.io_no,
+        buyer_po_no: r.buyer_po_no, style_code: null, color_name: dyeing ? (l.dye_colour ?? '') : (r.color_name ?? ''), fabric_color: r.colour ?? '', gsm: r.gsm, dia: r.dia,
+        available_kg: Number(r.available_kg), weight_kg: Number(r.send_kg), meters: 0 });
+      if (!add.length) { toast(`${p.quotation_no}: nothing left to send (quoted KG already sent, or the job has no fabric in stock)`, 'warning'); return; }
+      setRows((rs) => (replace ? add : [...rs, ...add.filter((a) => !rs.some((r) => r.fabric_roll_id === a.fabric_roll_id))]));
+      const short = p.lines.filter((l: any) => l.short_kg > 0);
+      toast(`${p.quotation_no}: ${add.length} roll(s) loaded for ${new Set(add.map((a) => a.io_no)).size} job(s)${short.length ? ` — ${short.map((l: any) => `${l.job_no} short ${l.short_kg} KG`).join(', ')}` : ''}`, short.length ? 'warning' : 'success');
+    } catch (e) { toast(errText(e), 'error'); }
+  };
   const onQuote = (q: any | null) => {
+    const changed = (q?.id ?? null) !== (quoteDoc?.id ?? null);
     setQuoteDoc(q);
-    if (!q || !dyeing || !editable) return;
-    setRows((rs) => rs.map((r) => (r.color_name ? r : { ...r, color_name: quoteColour(q, quote.quotation_line_id, r.io_no) })));
+    if (!q || !editable) return;
+    if (changed && !rows.length) { void loadPlan(q.id, true); return; }
+    if (dyeing) setRows((rs) => rs.map((r) => (r.color_name ? r : { ...r, color_name: quoteColour(q, quote.quotation_line_id, r.io_no) })));
   };
 
   const payload = () => ({
@@ -213,8 +231,23 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
         <Input label="Expected return" type="date" value={head.expected_return_date} disabled={!editable} onChange={(e) => setHead({ ...head, expected_return_date: e.target.value })} />
         <Textarea label="Remarks" className="col-span-2 md:col-span-6" rows={1} value={head.remarks} disabled={!editable} onChange={(e) => setHead({ ...head, remarks: e.target.value })} />
         <div className="col-span-2 md:col-span-6">
-          <QuotationPicker vendorId={head.vendor_id} material="FABRIC" process={types.data?.find((t) => t.code === head.sub_process)?.name ?? head.sub_process}
-            value={quote} onChange={setQuote} onQuote={onQuote} disabled={!editable} idPrefix="fpo" />
+          <div className="flex flex-wrap items-end gap-3">
+            <QuotationPicker vendorId={head.vendor_id} material="FABRIC" process={types.data?.find((t) => t.code === head.sub_process)?.name ?? head.sub_process}
+              value={quote} onChange={setQuote} onQuote={onQuote} disabled={!editable} idPrefix="fpo" />
+            {editable && quote.quotation_id && <Button size="sm" variant="secondary" id="btn-load-quote" onClick={() => void loadPlan(quote.quotation_id, false)}><Download size={13} className="mr-1" /> Load quotation jobs</Button>}
+          </div>
+          {plan && (
+            <table className="mt-2 w-full text-[11.5px]" id="fpo-plan">
+              <thead className="text-slate-500"><tr>{['Quotation line', 'Job', 'Dye colour', 'Rate', 'Quoted KG', 'Sent earlier', 'Balance', 'Job has', 'Short'].map((h) => <th key={h} className={`px-2 py-1 ${/KG|earlier|Balance|has|Short|Rate/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+              <tbody>{plan.lines.map((l: any) => (
+                <tr key={l.line_id} className="border-t border-slate-100">
+                  <td className="px-2 py-1">{l.description || l.fabric_name || '—'}</td><td className="px-2 py-1 font-semibold">{l.job_no ?? '—'}</td><td className="px-2 py-1">{l.dye_colour ?? '—'}</td>
+                  <td className="px-2 py-1 text-right">₹{l.rate}</td><td className="px-2 py-1 text-right">{kg(l.quoted_kg)}</td><td className="px-2 py-1 text-right">{kg(l.sent_kg)}</td>
+                  <td className="px-2 py-1 text-right font-semibold">{kg(l.balance_kg)}</td><td className="px-2 py-1 text-right">{kg(l.available_kg)}</td>
+                  <td className={`px-2 py-1 text-right ${l.short_kg > 0 ? 'font-semibold text-red-700' : 'text-slate-400'}`}>{l.short_kg > 0 ? kg(l.short_kg) : '—'}</td>
+                </tr>))}</tbody>
+            </table>
+          )}
         </div>
       </div>
 

@@ -12,6 +12,7 @@ import { Badge } from '../../components/ui';
 import { InvoiceSummary } from '../../components/InvoiceSummary';
 import { computeInvoice, chargesFromRow, chargesPayload, EMPTY_CHARGES, type InvoiceCharges } from '../../lib/invoiceCalc';
 import { gateOptions } from '../../lib/gateOptions';
+import { ReceiptTypeChooser, LineReceiptChip, openForGrn, type ReceiptType } from '../../lib/poReceipt';
 
 interface GrnLine {
   _key: string;
@@ -130,6 +131,8 @@ export default function TrimGRNDetailPage() {
     id: isNew ? undefined : Number(id),
     grn_no: '',
     grn_date: today(),
+    /** PARTIAL = more to come on the PO; FINAL = last delivery (pending is closed short) */
+    receipt_type: 'PARTIAL' as ReceiptType,
     po_id: '',
     gate_inward_id: '',
     io_no: '',
@@ -669,12 +672,15 @@ export default function TrimGRNDetailPage() {
                   className="input text-xs font-semibold text-indigo-700"
                 >
                   <option value="">+ Add Trim PO to this GRN...</option>
-                  {availablePos.filter((p: any) => !selectedPoIds.includes(String(p.id))).map((p: any) => (
+                  {availablePos.filter((p: any) => !selectedPoIds.includes(String(p.id)) && openForGrn(p)).map((p: any) => (
                     <option key={p.id} value={p.id}>
-                      {p.po_no} ({p.supplier_name}) - {p.io_no}
+                      {p.po_no} ({p.supplier_name}) - {p.io_no}{p.receipt_status === 'PARTIALLY_RECEIVED' ? ' · partially received' : ''}
                     </option>
                   ))}
                 </select>
+                {selectedPoIds.length > 0 && (
+                  <div className="mt-2"><ReceiptTypeChooser value={head.receipt_type} onChange={(v) => setHead((h) => ({ ...h, receipt_type: v }))} id="tgrn-receipt" /></div>
+                )}
 
                 {selectedPoIds.length > 0 && (
                   <div className="flex flex-wrap items-center gap-1.5 mt-2">
@@ -1089,6 +1095,7 @@ export default function TrimGRNDetailPage() {
                         {fmtDecimal(line.prev_received)} recd earlier · <b className="text-amber-700">{fmtDecimal(Math.max(0, line.po_qty - Number(line.prev_received)))} pending</b>
                       </div>
                     )}
+                    {isNew && Number(line.received_qty) > 0 && <div><LineReceiptChip ordered={line.po_qty} prev={line.prev_received} accepted={Number(line.accepted_qty) || 0} type={head.receipt_type} /></div>}
                   </td>
 
                   {/* Received Qty */}

@@ -15,6 +15,7 @@ import { useDiaRules, useFabricSpec, previewRoll, pctCls, fmtPct } from '../../l
 import { InvoiceSummary } from '../../components/InvoiceSummary';
 import { computeInvoice, chargesFromRow, chargesPayload, EMPTY_CHARGES, type InvoiceCharges } from '../../lib/invoiceCalc';
 import { gateOptions, supplierOptions } from '../../lib/gateOptions';
+import { ReceiptTypeChooser, LineReceiptChip, openForGrn, type ReceiptType } from '../../lib/poReceipt';
 
 interface PhysicalRoll {
   _key?: string;
@@ -164,6 +165,8 @@ export default function FabricGRNDetailPage() {
   const [header, setHeader] = useState({
     grn_no: '',
     grn_date: today(),
+    /** PARTIAL = more to come on the PO; FINAL = last delivery (pending is closed short) */
+    receipt_type: 'PARTIAL' as ReceiptType,
     po_id: '',
     gate_inward_id: '',
     internal_ir_no: '',
@@ -793,13 +796,16 @@ export default function FabricGRNDetailPage() {
                 className="w-full text-xs rounded-lg border border-slate-300 py-1.5 px-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-semibold text-emerald-900"
               >
                 <option value="">+ Add PO to this GRN...</option>
-                {poList.filter((p) => !selectedPoIds.includes(String(p.id))).map((p) => (
+                {poList.filter((p) => !selectedPoIds.includes(String(p.id)) && openForGrn(p)).map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.po_no} ({p.supplier_name || 'Mill'})
+                    {p.po_no} ({p.supplier_name || 'Mill'}){p.receipt_status === 'PARTIALLY_RECEIVED' ? ' · partially received' : ''}
                   </option>
                 ))}
               </select>
 
+              {selectedPoIds.length > 0 && (
+                <div className="mt-2"><ReceiptTypeChooser value={header.receipt_type} onChange={(v) => setHeader((h) => ({ ...h, receipt_type: v }))} id="fgrn-receipt" /></div>
+              )}
               {/* Selected PO Badges */}
               {selectedPoIds.length > 0 && (
                 <div className="flex flex-wrap items-center gap-1.5 mt-2">
@@ -1115,6 +1121,7 @@ export default function FabricGRNDetailPage() {
                         <div>{fmtDecimal(l.ordered_qty)} <span className="text-[10px] text-slate-400">ordered</span></div>
                         {Number(l.prev_received) > 0 && <div className="text-slate-500">{fmtDecimal(l.prev_received)} <span className="text-[10px]">recd earlier</span></div>}
                         <div className="font-semibold text-amber-700">{fmtDecimal(l.po_qty)} <span className="text-[10px] font-normal">pending</span></div>
+                        {isNew && <LineReceiptChip ordered={l.ordered_qty} prev={l.prev_received} accepted={Number(l.accepted_qty) || 0} type={header.receipt_type} />}
                       </div>
                     ) : fmtDecimal(l.po_qty)}
                   </td>

@@ -6,7 +6,7 @@ import { NotFound, BadRequest } from '../../core/errors.js';
 import { requireAny } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
-import { useGateEntry } from '../../core/inwardControls.js';
+import { processBillHeadSchema, checkProcessBillHead, writeProcessBillTotals } from '../../core/processBill.js';
 
 /**
  * Knitting job-work bill (Full_Knitting_Module_Developer_Document §22; client voice note 02-Oct-2026):
@@ -31,8 +31,10 @@ export async function knittingBillSources(cid: number, vendorId?: number | null)
             (SELECT GROUP_CONCAT(DISTINCT q.quotation_no) FROM trx_knitting_inward_dc m JOIN trx_knitting_dc kd ON kd.company_id = r.company_id AND kd.dc_no = m.dc_no
                LEFT JOIN trx_knitting_dc_job j ON j.company_id = r.company_id AND j.dc_no = m.dc_no AND j.program_id = r.src_id
                JOIN trx_quotation q ON q.id = COALESCE(j.quotation_id, kd.quotation_id) WHERE m.receipt_id = r.id) AS quotation_no,
-            b.bill_no, b.status AS bill_status
+            b.bill_no, b.status AS bill_status, g.grn_no, gi.entry_no AS gate_entry_no, gi.vehicle_no, kp.fabric_type, kp.fabric_colour, r.rejected_qty AS reject_kg, r.loss_qty AS loss_kg,
+            (SELECT COUNT(*) FROM trx_fabric_roll fr WHERE fr.grn_id = g.id) AS rolls
        FROM trx_process_receipt r JOIN trx_knitting_program kp ON kp.id = r.src_id JOIN trx_grn g ON g.id = r.grn_id LEFT JOIN mst_party p ON p.id = g.supplier_id
+       LEFT JOIN trx_gate_inward gi ON gi.id = g.gate_inward_id
        LEFT JOIN trx_knitting_bill b ON b.id = r.bill_id
       WHERE r.company_id = ? AND r.src_type = 'KNITTING_PROGRAM' AND r.receipt_type <> 'ADJUST' AND r.output_qty > 0 AND g.supplier_id IS NOT NULL
         ${vendorId ? 'AND g.supplier_id = ?' : ''}
@@ -50,10 +52,8 @@ const billSchema = z.object({
   vendor_id: z.coerce.number().int().positive(),
   bill_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   party_bill_no: z.string().trim().max(60).nullish(),
-  gate_inward_id: z.coerce.number().int().positive().nullish(),
+  ...processBillHeadSchema,
   discount_amount: z.coerce.number().min(0).default(0),
-  debit_amount: z.coerce.number().min(0).default(0),
-  other_charges: z.coerce.number().default(0),
   gst_pct: z.coerce.number().min(0).max(28).default(5),
   rate_change_reason: z.string().trim().max(255).nullish(),
   remarks: z.string().trim().max(1000).nullish(),
@@ -80,7 +80,7 @@ knittingBillRouter.post('/knitting-bills', requireAny('PURCHASE.CREATE', 'PRODUC
   if (new Set(b.lines.map((l) => l.receipt_id)).size !== b.lines.length) throw BadRequest('A GRN is on the bill twice');
   const src = await knittingBillSources(cid, b.vendor_id);
   const out = await transaction(async (tx) => {
-    const gate = b.gate_inward_id ? await useGateEntry(tx, cid, { gate_inward_id: b.gate_inward_id, party_id: b.vendor_id, label: 'Knitting bill' }) : null;
+    const gate = await checkProcessBillHead(tx, cid, b, b.vendor_id, 'Knitting bill');
     const no = await nextDocNumber(tx, cid, 'KNIT_BILL');
     const h = await txExecute(tx,
       `INSERT INTO trx_knitting_bill (company_id, bill_no, bill_date, vendor_id, party_bill_no, gate_inward_id, discount_amount, debit_amount, other_charges, gst_pct, remarks, created_by)
@@ -104,12 +104,9 @@ knittingBillRouter.post('/knitting-bills', requireAny('PURCHASE.CREATE', 'PRODUC
     if (changed.length && (!b.rate_change_reason || b.rate_change_reason.length < 3)) {
       throw BadRequest(`The rate differs from the approved quotation (${changed.join('; ')}) — give the reason for the change`);
     }
-    const taxable = r2(gross - b.discount_amount - b.debit_amount + b.other_charges);
-    const gst = r2(taxable * b.gst_pct / 100);
-    const net = r2(taxable + gst);
-    await txExecute(tx, `UPDATE trx_knitting_bill SET gross_amount = ?, gst_amount = ?, net_amount = ?, remarks = CONCAT(COALESCE(remarks, ''), ?) WHERE id = ?`,
-      [r2(gross), gst, net, changed.length ? `\nRate changed from quotation (${changed.join('; ')}): ${b.rate_change_reason}` : '', billId]);
-    return { id: billId, bill_no: no, gross_amount: r2(gross), gst_amount: gst, net_amount: net, rate_changes: changed };
+    const t = await writeProcessBillTotals(tx, 'trx_knitting_bill', billId, b, gross, 0, gate?.id ?? null, changed.length > 0);
+    if (changed.length) await txExecute(tx, `UPDATE trx_knitting_bill SET remarks = CONCAT(COALESCE(remarks, ''), ?) WHERE id = ?`, [`\nRate changed from quotation (${changed.join('; ')}): ${b.rate_change_reason}`, billId]);
+    return { id: billId, bill_no: no, gross_amount: r2(gross), ...t, rate_changes: changed };
   });
   await audit(req, 'trx_knitting_bill', out.id, 'INSERT', undefined, out);
   res.status(201).json({ data: out, message: `${out.bill_no} posted — net ₹${out.net_amount}` });

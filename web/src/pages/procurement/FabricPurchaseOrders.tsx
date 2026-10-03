@@ -5,6 +5,7 @@ import { Plus, Search, Eye, Filter, Layers, PackageCheck } from 'lucide-react';
 import { http } from '../../lib/api';
 import { fmtDate, fmtDecimal } from '../../lib/format';
 import { StatusBadge, Badge } from '../../components/ui';
+import { ReceiptStatusBadge } from '../../lib/poReceipt';
 
 export default function FabricPurchaseOrdersPage() {
   const nav = useNavigate();
@@ -144,6 +145,7 @@ export default function FabricPurchaseOrdersPage() {
                 <th className="py-3 px-4">Supplier</th>
                 <th className="py-3 px-4">Order Type</th>
                 <th className="py-3 px-4 text-right">Value (₹)</th>
+                <th className="py-3 px-3 text-center">Receipt</th>
                 <th className="py-3 px-4 text-center">State</th>
                 <th className="py-3 px-4 text-center">Action</th>
               </tr>
@@ -151,13 +153,13 @@ export default function FabricPurchaseOrdersPage() {
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400">
+                  <td colSpan={10} className="py-12 text-center text-slate-400">
                     Loading fabric purchase orders...
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center">
+                  <td colSpan={10} className="py-12 text-center">
                     <Layers size={32} className="mx-auto text-slate-300 mb-2" />
                     <p className="text-sm font-semibold text-slate-700">No Fabric Purchase Orders Found</p>
                     <p className="text-xs text-slate-400 mt-1">Create a new Fabric PO or convert from an approved quotation.</p>
@@ -191,6 +193,7 @@ export default function FabricPurchaseOrdersPage() {
                     <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
                       ₹{fmtDecimal(r.grand_total, 2)}
                     </td>
+                    <td className="py-3 px-3 text-center"><ReceiptStatusBadge value={r.receipt_status} /></td>
                     <td className="py-3 px-4 text-center">
                       <StatusBadge value={r.approval_state || 'DRAFT'} />
                     </td>

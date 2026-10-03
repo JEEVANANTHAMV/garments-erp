@@ -10,7 +10,7 @@ import { http, ApiError } from '../../lib/api';
 import { useLookup, useStatuses } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
 import {
-  PageHeader, Spinner, Badge, LoadingBlock, ErrorState,
+  PageHeader, Spinner, Badge, LoadingBlock, ErrorState, Modal,
 } from '../../components/ui';
 import { fmtDecimal, today, toDateInput } from '../../lib/format';
 
@@ -470,6 +470,52 @@ export default function QuotationDetailPage() {
     return { ...base, trim_id: it.trim_id,
       description: [it.trim_name, it.specification || it.trim_specification || it.item_description].filter(Boolean).join(' — '),
       trim_size: it.size_code || '' };
+  }
+
+  /*
+   * Process (job-work) quotation: the job's ACTUAL material, not the BOM (client 03-Oct-2026 — a job whose BOM has
+   * only yarn still has fabric once it is knitted; a dyeing quotation must come from the job's available fabric rolls).
+   */
+  const isProcessQuote = head.quotation_category === 'PROCESS' && (head.quotation_type === 'FABRIC' || head.quotation_type === 'YARN');
+  const [actual, setActual] = useState<null | { kind: 'FABRIC' | 'YARN'; job: any; groups: any[]; pick: Record<string, number | ''> }>(null);
+  async function loadJobActual() {
+    if (!bomJobId) { toast('Select the IO No (job) first', 'warning'); return; }
+    setBomLoading(true);
+    try {
+      const kind = head.quotation_type === 'YARN' ? 'YARN' : 'FABRIC';
+      // dyeing takes grey fabric; other processes (washing, compacting …) any state
+      const dye = /dye/i.test(head.process_name || '');
+      const d = kind === 'FABRIC'
+        ? (await http.get<{ data: any }>(`/jobs/${bomJobId}/fabric-availability${dye ? '?state=GREY' : ''}`)).data
+        : (await http.get<{ data: any }>(`/jobs/${bomJobId}/yarn-availability`)).data;
+      if (!d.groups.length) {
+        toast(kind === 'FABRIC' ? `Job ${d.job.job_no} has no ${dye ? 'grey ' : ''}fabric in stock yet (knit it / receive it first)` : `Job ${d.job.job_no} holds no yarn`, 'warning');
+        return;
+      }
+      setActual({ kind, job: d.job, groups: d.groups, pick: Object.fromEntries(d.groups.map((g: any) => [g.key, g.available_kg])) });
+    } catch (e: any) {
+      toast(e instanceof ApiError ? e.message : 'Could not load the job\'s material', 'error');
+    } finally { setBomLoading(false); }
+  }
+  function applyJobActual() {
+    if (!actual) return;
+    const kg = (uoms.data ?? []).find((u: any) => String(u.code).toUpperCase() === 'KG')?.id ?? '';
+    const chosen = actual.groups.filter((g) => Number(actual.pick[g.key]) > 0);
+    if (!chosen.length) { toast('Tick at least one line with KG', 'warning'); return; }
+    const st = bomJob && bomJob.styles.length === 1 ? bomJob.styles[0].style_id : (bomStyleId ? Number(bomStyleId) : '');
+    const next: QLine[] = chosen.map((g, i) => {
+      const base: QLine = { ...newLine(i), job_no: actual.job.job_no, so_id: actual.job.id, style_id: st as any, material_type: actual.kind, qty: Number(actual.pick[g.key]), uom_id: kg as any };
+      return actual.kind === 'FABRIC'
+        ? { ...base, fabric_id: g.fabric_id, dia: g.dia ?? '', gsm: g.gsm != null ? String(g.gsm) : '',
+            description: `${g.fabric_name ?? 'Fabric'} · ${g.process_state}${g.colour && g.colour !== 'GREY' ? ` ${g.colour}` : ''} · ${g.rolls} roll(s)${g.programs ? ` · ${g.programs}` : ''}` }
+        : { ...base, yarn_id: g.yarn_id, yarn_count: g.count_str ?? '', description: `${g.yarn_name ?? 'Yarn'}${g.shade ? ` · ${g.shade}` : ''} · lot ${g.lot_nos}` };
+    });
+    const hasEntered = lines.some(l => l.description || l.qty || l.fabric_id || l.yarn_id);
+    if (hasEntered && !window.confirm(`Replace the ${lines.length} existing line(s)?`)) return;
+    setLines(next);
+    setHead(h => ({ ...h, job_no: actual.job.job_no, buyer_id: h.buyer_id || bomJob?.buyer_id || h.buyer_id }));
+    toast(`${next.length} line(s) loaded from job ${actual.job.job_no}'s actual ${actual.kind === 'FABRIC' ? 'fabric' : 'yarn'}`, 'success');
+    setActual(null);
   }
 
   /** Fills the line items from the selected job's BOM (only this quotation's material type). */
@@ -1109,11 +1155,13 @@ export default function QuotationDetailPage() {
                 <div className="flex items-center gap-2">
                   <Sparkles size={13} className="text-brand-600" />
                   <h4 className="text-[12px] font-bold uppercase tracking-wider text-slate-700">
-                    Load from Bill of Material
+                    {isProcessQuote ? `Load the job's actual ${bomMaterial.label.toLowerCase()}` : 'Load from Bill of Material'}
                   </h4>
                 </div>
                 <span className="text-[11px] text-slate-500">
-                  Picks only the job's BOM {bomMaterial.label.toLowerCase()} items with the planned requirement
+                  {isProcessQuote
+                    ? `Job-work on what the job really has: ${head.quotation_type === 'FABRIC' ? 'the fabric rolls its knitting produced (or bought for it)' : 'the yarn lots bought for / transferred to it'} — no fabric BOM needed`
+                    : `Picks only the job's BOM ${bomMaterial.label.toLowerCase()} items with the planned requirement`}
                 </span>
               </div>
               <div className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-3 items-end">
@@ -1157,13 +1205,48 @@ export default function QuotationDetailPage() {
                     type="button"
                     className="btn-primary w-full justify-center"
                     disabled={!bomJobId || bomLoading}
-                    onClick={() => void loadFromBom()}
+                    onClick={() => void (isProcessQuote ? loadJobActual() : loadFromBom())}
+                    id="btn-load-job-material"
                   >
-                    {bomLoading ? <Spinner size={14} /> : <Layers size={14} />} Load {bomMaterial.label} Items from BOM
+                    {bomLoading ? <Spinner size={14} /> : <Layers size={14} />} {isProcessQuote ? `Load Job's ${bomMaterial.label}` : `Load ${bomMaterial.label} Items from BOM`}
                   </button>
                 </div>
               </div>
             </div>
+          )}
+
+          {actual && (
+            <Modal open onClose={() => setActual(null)} size="xl" title={`Job ${actual.job.job_no} — actual ${actual.kind === 'FABRIC' ? 'fabric' : 'yarn'} available`}
+              footer={<>
+                <span className="mr-auto self-center text-xs text-slate-600">{actual.job.buyer_name ?? ''}{actual.job.styles ? ` · ${actual.job.styles}` : ''}{actual.job.buyer_po_no ? ` · PO ${actual.job.buyer_po_no}` : ''}</span>
+                <button className="btn-secondary" onClick={() => setActual(null)}>Cancel</button>
+                <button className="btn-primary" onClick={applyJobActual} id="btn-apply-job-material">Load selected</button>
+              </>}>
+              <table className="w-full text-xs" id="job-actual-table">
+                <thead className="bg-slate-50 text-slate-500"><tr>
+                  {(actual.kind === 'FABRIC' ? ['', 'Fabric', 'State', 'Colour', 'GSM', 'Dia', 'Rolls', 'From (program)', 'Available KG', 'Quote KG'] : ['', 'Yarn', 'Count', 'Shade', 'Lots', 'Available KG', 'Quote KG'])
+                    .map((h, i) => <th key={i} className={`px-2 py-2 ${/KG|Rolls/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}
+                </tr></thead>
+                <tbody>{actual.groups.map((g) => {
+                  const on = Number(actual.pick[g.key]) > 0;
+                  const setPick = (v: number | '') => setActual((a) => (a ? { ...a, pick: { ...a.pick, [g.key]: v } } : a));
+                  return (
+                    <tr key={g.key} className={`border-t border-slate-100 ${on ? 'bg-emerald-50/50' : ''}`}>
+                      <td className="px-2 py-1"><input type="checkbox" checked={on} onChange={() => setPick(on ? '' : g.available_kg)} /></td>
+                      {actual.kind === 'FABRIC' ? (<>
+                        <td className="px-2 py-1 font-medium">{g.fabric_name}</td><td className="px-2 py-1">{g.process_state}</td><td className="px-2 py-1">{g.colour ?? '—'}</td>
+                        <td className="px-2 py-1">{g.gsm ?? '—'}</td><td className="px-2 py-1">{g.dia ?? '—'}</td><td className="px-2 py-1 text-right">{g.rolls}</td><td className="px-2 py-1">{g.programs || '—'}</td>
+                      </>) : (<>
+                        <td className="px-2 py-1 font-medium">{g.yarn_name}</td><td className="px-2 py-1">{g.count_str ?? '—'}</td><td className="px-2 py-1">{g.shade ?? '—'}</td><td className="px-2 py-1">{g.lot_nos}</td>
+                      </>)}
+                      <td className="px-2 py-1 text-right tabular-nums">{fmtDecimal(g.available_kg, 3)}</td>
+                      <td className="px-2 py-1 text-right"><input type="number" step="0.001" className="w-24 rounded border border-surface-border px-2 py-0.5 text-right text-xs"
+                        value={actual.pick[g.key]} max={g.available_kg} onChange={(e) => setPick(e.target.value === '' ? '' : Math.min(Number(e.target.value), g.available_kg))} /></td>
+                    </tr>);
+                })}</tbody>
+              </table>
+              <p className="mt-2 text-[11px] text-slate-500">Quantities are what the job holds now (QC-accepted, not on another DC). Pick the dye colour on each line after loading.</p>
+            </Modal>
           )}
 
           {/* ── Product Details Table ── */}

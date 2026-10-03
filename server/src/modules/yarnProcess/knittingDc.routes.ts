@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { valueGrnAtRate } from '../../core/grnValue.js';
 import { calcRollFor, fabricSpec, rollTolerances, ROLL_CALC_COLS, rollCalcVals } from '../../core/fabricRollCalc.js';
 import { query, queryOne, transaction, txExecute, txQueryOne } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
@@ -640,6 +641,10 @@ knittingDcRouter.post('/knitting-inwards', requirePermission('PROCESS.PRODUCTION
       `UPDATE trx_knitting_program SET status = 'STOCK_POSTED'
         WHERE id = ? AND status NOT IN ('COMPLETED','CANCELLED')`, [body.program_id]);
 
+    // the grey GRN carries the job's knitting rate from its DC (the job's approved knitting quotation)
+    const jr = dcNos.length ? await txQueryOne<any>(tx, 'SELECT rate_per_kg FROM trx_knitting_dc_job WHERE company_id = ? AND dc_no = ? AND program_id = ?', [cid, dcNos[0], body.program_id]) : null;
+    const dr = !jr?.rate_per_kg && dcNos.length ? await txQueryOne<any>(tx, 'SELECT rate_per_kg FROM trx_knitting_dc WHERE company_id = ? AND dc_no = ?', [cid, dcNos[0]]) : null;
+    await valueGrnAtRate(tx, Number(grnId), jr?.rate_per_kg ?? dr?.rate_per_kg ?? null);
     return { id: receiptId, receipt_no: receiptNo, grn_id: grnId, lot_no: lotNo, receipt_type: body.receipt_type, dcs: split,
              fabric_kg: fabricKg, yarn_consumed_kg: consumed, loss_kg: loss, rolls, gate_entry_no: gate?.entry_no ?? null,
              hold_rolls: rolls.filter((x) => x.qc_status === 'HOLD').length };

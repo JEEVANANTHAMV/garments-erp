@@ -13,6 +13,7 @@ import { fmtDecimal, today } from '../../lib/format';
 import { InvoiceSummary } from '../../components/InvoiceSummary';
 import { computeInvoice, chargesFromRow, chargesPayload, EMPTY_CHARGES, type InvoiceCharges } from '../../lib/invoiceCalc';
 import { gateOptions, supplierOptions } from '../../lib/gateOptions';
+import { ReceiptTypeChooser, LineReceiptChip, openForGrn, type ReceiptType } from '../../lib/poReceipt';
 
 interface YarnGrnLine {
   _key: string;
@@ -25,6 +26,8 @@ interface YarnGrnLine {
   yarn_id: string | number;
   yarn_name?: string;
   yarn_type: string;
+  /** Yarn count as ordered on the PO (e.g. 30s Ne) */
+  yarn_count_str?: string;
   shade_code?: string;
   color_name?: string;
   composition?: string;
@@ -79,6 +82,8 @@ export default function YarnGRNDetailPage() {
   const suppliers = useLookup('suppliers');
   const warehouses = useLookup('warehouses');
   const yarns = useLookup('yarns');
+  /** The yarn master's count (e.g. "30s Ne") — used when the PO line carries none. */
+  const countOf = (yarnId: unknown) => { const y: any = (yarns.data ?? []).find((x: any) => String(x.id) === String(yarnId)); return y?.count_value ? `${y.count_value} ${y.count_type || 'Ne'}` : ''; };
   const styles = useLookup('styles');
   const salesOrders = useLookup('sales-orders');
   const gateInwards = useLookup('gate-inwards');
@@ -100,6 +105,8 @@ export default function YarnGRNDetailPage() {
   const [header, setHeader] = useState({
     grn_no: '',
     grn_date: today(),
+    /** PARTIAL = more to come on the PO; FINAL = last delivery (pending is closed short) */
+    receipt_type: 'PARTIAL' as ReceiptType,
     po_id: '',
     gate_inward_id: '',
     internal_ir_no: '',
@@ -177,6 +184,7 @@ export default function YarnGRNDetailPage() {
             yarn_id: l.yarn_id,
             yarn_name: l.yarn_name,
             yarn_type: l.yarn_type || 'Grey Yarn',
+            yarn_count_str: l.yarn_count_str || '',
             shade_code: l.shade_code || '',
             color_name: l.color_name || '',
             composition: l.composition,
@@ -266,6 +274,7 @@ export default function YarnGRNDetailPage() {
                 yarn_id: pl.yarn_id,
                 yarn_name: pl.yarn_name,
                 yarn_type: pl.yarn_type || 'Grey Yarn',
+                yarn_count_str: pl.yarn_count_str || countOf(pl.yarn_id),
                 shade_code: pl.shade_code || '',
                 color_name: pl.color_name || '',
                 composition: pl.composition,
@@ -409,6 +418,7 @@ export default function YarnGRNDetailPage() {
           style_id: l.style_id ? Number(l.style_id) : undefined,
           yarn_id: l.yarn_id,
           yarn_type: l.yarn_type || 'Grey Yarn',
+          yarn_count_str: l.yarn_count_str || countOf(l.yarn_id) || null,
           shade_code: l.shade_code || null,
           color_name: l.color_name || null,
           received_qty: l.received_qty,
@@ -574,13 +584,16 @@ export default function YarnGRNDetailPage() {
                 className="w-full text-xs rounded-lg border border-slate-300 py-1.5 px-2 focus:border-amber-500 font-semibold text-amber-900"
               >
                 <option value="">+ Add PO to this GRN...</option>
-                {poList.filter((p) => !selectedPoIds.includes(String(p.id))).map((p) => (
+                {poList.filter((p) => !selectedPoIds.includes(String(p.id)) && openForGrn(p)).map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.po_no} ({p.supplier_name || 'Mill'})
+                    {p.po_no} ({p.supplier_name || 'Mill'}){p.receipt_status === 'PARTIALLY_RECEIVED' ? ' · partially received' : ''}
                   </option>
                 ))}
               </select>
 
+              {selectedPoIds.length > 0 && (
+                <div className="mt-2"><ReceiptTypeChooser value={header.receipt_type} onChange={(v) => setHeader((h) => ({ ...h, receipt_type: v }))} id="ygrn-receipt" /></div>
+              )}
               {/* Selected PO Badges */}
               {selectedPoIds.length > 0 && (
                 <div className="flex flex-wrap items-center gap-1.5 mt-2">
@@ -763,6 +776,7 @@ export default function YarnGRNDetailPage() {
                 <th className="py-2.5 px-2 min-w-[130px]">IO No</th>
                 <th className="py-2.5 px-2 min-w-[110px]">Style</th>
                 <th className="py-2.5 px-3 min-w-[140px]">Yarn Item</th>
+                <th className="py-2.5 px-2 w-24">Count</th>
                 <th className="py-2.5 px-2 w-24">Type</th>
                 <th className="py-2.5 px-2 w-24">Color / Shade</th>
                 <th className="py-2.5 px-2 w-24">Lot / Batch</th>
@@ -845,7 +859,7 @@ export default function YarnGRNDetailPage() {
                       {isNew ? (
                         <select
                           value={l.yarn_id}
-                          onChange={(e) => updateLine(idx, { yarn_id: e.target.value })}
+                          onChange={(e) => updateLine(idx, { yarn_id: e.target.value, yarn_count_str: countOf(e.target.value) })}
                           className="w-full text-xs rounded border border-slate-300 py-1 px-1.5"
                         >
                           <option value="">Select Yarn</option>
@@ -858,6 +872,14 @@ export default function YarnGRNDetailPage() {
                       ) : (
                         <div className="font-semibold text-slate-900">{l.yarn_name || 'Yarn Item'}</div>
                       )}
+                    </td>
+
+                    {/* Yarn count (as ordered) */}
+                    <td className="py-2.5 px-2" id={`yg-count-${idx}`}>
+                      {isNew ? (
+                        <input value={l.yarn_count_str ?? ''} placeholder="e.g. 30s Ne" onChange={(e) => updateLine(idx, { yarn_count_str: e.target.value })}
+                          className="w-20 text-xs rounded border border-slate-300 py-0.5 px-1" />
+                      ) : <span className="font-semibold">{l.yarn_count_str || '—'}</span>}
                     </td>
 
                     {/* Yarn Type */}
@@ -922,6 +944,7 @@ export default function YarnGRNDetailPage() {
                           <div>{fmtDecimal(l.ordered_qty)} <span className="text-[10px] text-slate-400">ordered</span></div>
                           {Number(l.prev_received) > 0 && <div>{fmtDecimal(l.prev_received)} <span className="text-[10px]">recd earlier</span></div>}
                           <div className="font-semibold text-amber-700">{fmtDecimal(l.po_qty)} <span className="text-[10px] font-normal">pending</span></div>
+                          {isNew && <LineReceiptChip ordered={l.ordered_qty} prev={l.prev_received} accepted={Number(l.accepted_qty) || 0} type={header.receipt_type} />}
                         </div>
                       ) : fmtDecimal(l.po_qty)}
                     </td>
@@ -1071,7 +1094,7 @@ export default function YarnGRNDetailPage() {
             </tbody>
             <tfoot className="bg-slate-50/80 border-t border-slate-200 font-bold text-slate-800">
               <tr>
-                <td colSpan={8} className="py-3 px-3 text-right text-slate-600">Totals:</td>
+                <td colSpan={9} className="py-3 px-3 text-right text-slate-600">Totals:</td>
                 <td className="py-3 px-2 text-right font-mono text-amber-800">{fmtDecimal(totals.totalKg, 2)}</td>
                 <td className="py-3 px-2 text-center font-mono">{totals.totalPacks}</td>
                 <td className="py-3 px-2 text-right font-mono text-emerald-800">{fmtDecimal(totals.acceptedKg, 2)}</td>

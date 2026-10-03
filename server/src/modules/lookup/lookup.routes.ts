@@ -246,7 +246,7 @@ lookupRouter.get('/grn-lines', ah(async (req, res) => {
             gl.lot_no, gl.no_of_rolls, gl.received_weight,
             gl.color_name, gl.shade_code, gl.pantone_spec,
             COALESCE(y.yarn_name, fb.fabric_name, tr.trim_name, 'Material') AS description,
-            gl.uom_id, u.code AS uom_code,
+            gl.uom_id, u.code AS uom_code, COALESCE(y.hsn_code, fb.hsn_code, tr.hsn_code) AS hsn_code, gl.yarn_count_str,
             g.grn_no, g.supplier_id, g.supplier_dc_no, g.supplier_inv_no, g.po_id AS header_po_id,
             po.po_no
        FROM trx_grn_line gl
@@ -260,13 +260,14 @@ lookupRouter.get('/grn-lines', ah(async (req, res) => {
       ORDER BY gl.grn_id, gl.id`, [companyId, ...ids]
   );
 
-  const trimLines = await query<any>(
+  // trim GRNs are a separate table (their ids overlap trx_grn ids) — only when asked for with trim=1
+  const trimLines = req.query.trim !== '1' ? [] : await query<any>(
     `SELECT tgl.id AS grn_line_id, tgl.grn_id, tgl.po_id, tgl.po_line_id, 'TRIM' AS material_type,
             tgl.received_qty, tgl.accepted_qty, tgl.rate, tgl.taxable_amount, tgl.gst_rate, tgl.total_amount,
             tgl.internal_lot_no AS lot_no, 0 AS no_of_rolls, 0 AS received_weight,
             tgl.color_name, '' AS shade_code, '' AS pantone_spec,
             COALESCE(tr.trim_name, tgl.specification, 'Trim') AS description,
-            tgl.uom_id, u.code AS uom_code,
+            tgl.uom_id, u.code AS uom_code, tr.hsn_code,
             tg.grn_no, tg.supplier_id, tg.supplier_dc_no, tg.supplier_inv_no, tg.po_id AS header_po_id,
             tpo.po_no
        FROM trx_trim_grn_line tgl
@@ -279,6 +280,39 @@ lookupRouter.get('/grn-lines', ah(async (req, res) => {
   );
 
   res.json({ data: [...standardLines, ...trimLines] });
+}));
+
+/**
+ * GET /lookup/bill-grns?supplier_id=&bill_id= — GRNs a supplier bill may pull (client voice note 03-Oct-2026):
+ * purchase GRNs (not job-work inward — knitting / fabric / yarn process GRNs are billed in their own process bills)
+ * and trim GRNs, not already on another live supplier bill. `bill_id` keeps the bill's own GRNs while editing.
+ */
+lookupRouter.get('/bill-grns', ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const q = z.object({ supplier_id: z.coerce.number().int().positive().optional(), bill_id: z.coerce.number().int().positive().optional() }).parse(req.query);
+  const other = q.bill_id ?? 0;
+  const grns = await query<any>(
+    `SELECT g.id, 'GRN' AS kind, g.grn_no, g.grn_date, g.supplier_id, p.party_name AS supplier_name, g.supplier_inv_no, g.supplier_dc_no, po.po_no,
+            (SELECT GROUP_CONCAT(DISTINCT gl.material_type) FROM trx_grn_line gl WHERE gl.grn_id = g.id) AS materials,
+            (SELECT COALESCE(SUM(gl.accepted_qty * gl.rate), 0) FROM trx_grn_line gl WHERE gl.grn_id = g.id) AS value
+       FROM trx_grn g LEFT JOIN mst_party p ON p.id = g.supplier_id LEFT JOIN trx_purchase_order po ON po.id = g.po_id
+      WHERE g.company_id = ? ${q.supplier_id ? 'AND g.supplier_id = ?' : ''}
+        AND NOT EXISTS (SELECT 1 FROM trx_process_receipt pr WHERE pr.grn_id = g.id)
+        AND NOT EXISTS (SELECT 1 FROM trx_fabric_process_inward i WHERE i.grn_id = g.id)
+        AND NOT EXISTS (SELECT 1 FROM trx_yarn_process_inward i WHERE i.grn_id = g.id OR i.reject_grn_id = g.id)
+        AND NOT EXISTS (SELECT 1 FROM trx_supplier_bill b WHERE b.company_id = g.company_id AND b.id <> ? AND COALESCE(b.status, '') <> 'CANCELLED'
+                          AND (b.grn_id = g.id OR IF(JSON_VALID(b.grn_ids), JSON_CONTAINS(b.grn_ids, CAST(g.id AS JSON)), 0)
+                               OR EXISTS (SELECT 1 FROM trx_supplier_bill_line bl WHERE bl.bill_id = b.id AND bl.grn_id = g.id)))
+      ORDER BY g.id DESC LIMIT 300`, [cid, ...(q.supplier_id ? [q.supplier_id] : []), other]);
+  const trims = await query<any>(
+    `SELECT g.id, 'TRIM_GRN' AS kind, g.grn_no, g.grn_date, g.supplier_id, p.party_name AS supplier_name, g.supplier_inv_no, g.supplier_dc_no, NULL AS po_no,
+            'TRIM' AS materials, g.net_amount AS value
+       FROM trx_trim_grn g LEFT JOIN mst_party p ON p.id = g.supplier_id
+      WHERE g.company_id = ? ${q.supplier_id ? 'AND g.supplier_id = ?' : ''}
+        AND NOT EXISTS (SELECT 1 FROM trx_supplier_bill b WHERE b.company_id = g.company_id AND b.id <> ? AND COALESCE(b.status, '') <> 'CANCELLED'
+                          AND IF(JSON_VALID(b.trim_grn_ids), JSON_CONTAINS(b.trim_grn_ids, CAST(g.id AS JSON)), 0))
+      ORDER BY g.id DESC LIMIT 300`, [cid, ...(q.supplier_id ? [q.supplier_id] : []), other]).catch(() => []);
+  res.json({ data: [...grns, ...trims].map((g) => ({ ...g, label: `${g.grn_no} · ${String(g.grn_date ?? '').slice(0, 10)}${g.po_no ? ` · PO ${g.po_no}` : ''}${g.supplier_inv_no ? ` · inv ${g.supplier_inv_no}` : ''} · ${g.materials ?? ''}` })) });
 }));
 
 /** Open PO lines for a single PO — drives GRN entry. */

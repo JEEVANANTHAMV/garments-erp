@@ -1,13 +1,13 @@
-import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Plus, CheckCircle2, Search, Ban } from 'lucide-react';
+import { ArrowLeft, Plus, Ban } from 'lucide-react';
 import { useAuth } from '../../../lib/auth';
 import { http } from '../../../lib/api';
-import { useLookup, toOptions } from '../../../hooks/useLookup';
 import { useToast } from '../../../hooks/useToast';
-import { Button, Input, Select, Textarea, LoadingBlock } from '../../../components/ui';
-import { fmtDate, fmtDecimal, today } from '../../../lib/format';
+import { Button, LoadingBlock } from '../../../components/ui';
+import { ContractorBillEditor } from '../../../components/ContractorBillEditor';
+import { ProcessBillTotalsView, processBillFacts } from '../../../components/ProcessBillParts';
+import { fmtDate, fmtDecimal } from '../../../lib/format';
 import { FpTitle, FpStatus, errText, kg, n } from './shared';
 
 /**
@@ -56,107 +56,7 @@ function BillList({ onOpen }: { onOpen: (id: number | 'new') => void }) {
 }
 
 function BillEditor({ onBack, onDone }: { onBack: () => void; onDone: (id: number) => void }) {
-  const toast = useToast();
-  const qc = useQueryClient();
-  const suppliers = useLookup('suppliers');
-  const [head, setHead] = useState({ vendor_id: '', bill_date: today(), party_bill_no: '', from_date: '', to_date: '', discount_amount: 0, other_charges: 0, gst_pct: 5, remarks: '', rate_change_reason: '' });
-  const [loaded, setLoaded] = useState<any>(null);
-  const [pick, setPick] = useState<Record<string, { on: boolean; rate: number }>>({});
-  const [busy, setBusy] = useState(false);
-  const load = async () => {
-    if (!head.vendor_id) { toast('Choose the contractor', 'warning'); return; }
-    try {
-      const p = new URLSearchParams({ vendor_id: head.vendor_id });
-      if (head.from_date) p.set('from', head.from_date);
-      if (head.to_date) p.set('to', head.to_date);
-      const r = (await http.get<{ data: any }>(`/fabric-process/bill-sources?${p}`)).data;
-      setLoaded(r);
-      const init: Record<string, { on: boolean; rate: number }> = {};
-      r.grns.forEach((g: any) => { init[`GRN:${g.ref_id}`] = { on: true, rate: n(g.quotation_rate ?? g.last_rate) }; });
-      r.reprocess.forEach((x: any) => { init[`${x.line_type}:${x.ref_id}`] = { on: true, rate: n(x.rate) }; });
-      setPick(init);
-    } catch (e) { toast(errText(e), 'error'); }
-  };
-  const lines = loaded ? [
-    ...loaded.grns.map((g: any) => ({ ...g, key: `GRN:${g.ref_id}`, amount: n(g.qty_kg) * n(pick[`GRN:${g.ref_id}`]?.rate) })),
-    ...loaded.reprocess.map((x: any) => ({ ...x, key: `${x.line_type}:${x.ref_id}`, amount: n(x.bill_amount) * (x.line_type === 'RECOVERY' ? -1 : 1) })),
-  ] : [];
-  const on = lines.filter((l: any) => pick[l.key]?.on);
-  const gross = on.filter((l: any) => l.line_type !== 'RECOVERY').reduce((a: number, l: any) => a + l.amount, 0);
-  const recovery = -on.filter((l: any) => l.line_type === 'RECOVERY').reduce((a: number, l: any) => a + l.amount, 0);
-  const taxable = gross - recovery - n(head.discount_amount) + n(head.other_charges);
-  const gst = taxable * n(head.gst_pct) / 100;
-  const rateChanged = on.filter((l: any) => l.line_type === 'GRN' && l.quotation_rate != null && Math.abs(n(l.quotation_rate) - n(pick[l.key]?.rate)) > 0.005);
-  const save = async () => {
-    if (!on.length) { toast('Tick the GRNs / reprocess to bill', 'warning'); return; }
-    const noRate = on.find((l: any) => l.line_type === 'GRN' && !(n(pick[l.key]?.rate) > 0));
-    if (noRate) { toast(`${noRate.doc_no}: enter the rate per KG`, 'warning'); return; }
-    if (rateChanged.length && head.rate_change_reason.trim().length < 3) { toast(`Rate differs from the approved quotation on ${rateChanged.map((l: any) => l.doc_no).join(', ')} — give the reason`, 'warning'); return; }
-    setBusy(true);
-    try {
-      const r = await http.post<{ data: any; message: string }>('/fabric-process/bills', {
-        ...head, vendor_id: Number(head.vendor_id), from_date: head.from_date || null, to_date: head.to_date || null,
-        lines: on.map((l: any) => ({ line_type: l.line_type, ref_id: l.ref_id, rate: n(pick[l.key]?.rate) })),
-      });
-      toast((r as any).message, 'success'); void qc.invalidateQueries({ queryKey: ['fabric-process'] }); onDone(r.data.id);
-    } catch (e) { toast(errText(e), 'error'); } finally { setBusy(false); }
-  };
-  return (
-    <div>
-      <FpTitle no={6} title="New Contractor Bill" actions={<Button variant="secondary" onClick={onBack}><ArrowLeft size={14} className="mr-1" /> Back</Button>} />
-      <div className="card mb-3 grid grid-cols-2 items-end gap-3 p-4 md:grid-cols-6">
-        <Select label="Contractor (Supplier / Vendor) *" value={head.vendor_id} placeholder="—" onChange={(e) => { setHead({ ...head, vendor_id: e.target.value }); setLoaded(null); }} options={toOptions(suppliers.data)} />
-        <Input label="Bill date *" type="date" value={head.bill_date} onChange={(e) => setHead({ ...head, bill_date: e.target.value })} />
-        <Input label="Contractor bill no" value={head.party_bill_no} onChange={(e) => setHead({ ...head, party_bill_no: e.target.value })} />
-        <Input label="From date" type="date" value={head.from_date} onChange={(e) => setHead({ ...head, from_date: e.target.value })} />
-        <Input label="To date" type="date" value={head.to_date} onChange={(e) => setHead({ ...head, to_date: e.target.value })} />
-        <Button onClick={load}><Search size={14} className="mr-1" /> Load GRNs / reprocess</Button>
-      </div>
-      {loaded && (
-        <>
-          <div className="card mb-3 overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead className="bg-slate-50 text-slate-500"><tr>{['', 'Type', 'Doc no', 'Date', 'Job', 'Process', 'Qty KG', 'Rate / KG', 'Amount'].map((h, i) => <th key={i} className={`px-2 py-2 ${/KG|Rate|Amount/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
-              <tbody>
-                {lines.map((l: any) => (
-                  <tr key={l.key} className="border-t border-slate-100">
-                    <td className="px-2 py-1"><input type="checkbox" checked={!!pick[l.key]?.on} onChange={(e) => setPick((p) => ({ ...p, [l.key]: { ...p[l.key], on: e.target.checked } }))} /></td>
-                    <td className="px-2 py-1"><span className={`rounded px-1.5 py-0.5 text-[10.5px] font-semibold ${l.line_type === 'GRN' ? 'bg-sky-100 text-sky-800' : l.line_type === 'RECOVERY' ? 'bg-red-100 text-red-800' : 'bg-purple-100 text-purple-800'}`}>{l.line_type === 'REPROCESS' ? 'Reprocess (billable)' : l.line_type === 'RECOVERY' ? 'Recovery' : 'GRN'}</span></td>
-                    <td className="px-2 py-1 font-mono">{l.doc_no}</td><td className="px-2 py-1">{fmtDate(l.doc_date)}</td><td className="px-2 py-1">{l.io_no || '—'}</td><td className="px-2 py-1">{l.process_name || l.sub_process}</td>
-                    <td className="px-2 py-1 text-right">{kg(l.qty_kg)}</td>
-                    <td className="px-2 py-1 text-right">{l.line_type === 'GRN'
-                      ? <><input type="number" step="0.01" className={`input w-24 py-0.5 text-right text-xs ${l.quotation_rate != null && Math.abs(n(l.quotation_rate) - n(pick[l.key]?.rate)) > 0.005 ? 'border-amber-500 bg-amber-50' : ''}`} value={pick[l.key]?.rate ?? 0} onChange={(e) => setPick((p) => ({ ...p, [l.key]: { ...p[l.key], rate: Number(e.target.value) } }))} />
-                        {l.quotation_rate != null && <span className="block text-[10px] text-slate-400">quote {money(l.quotation_rate)}</span>}</>
-                      : money(l.rate)}</td>
-                    <td className={`px-2 py-1 text-right font-semibold ${l.amount < 0 ? 'text-red-700' : ''}`}>{money(l.amount)}</td>
-                  </tr>
-                ))}
-                {!lines.length && <tr><td colSpan={9} className="px-3 py-8 text-center text-slate-400">Nothing to bill for this contractor</td></tr>}
-              </tbody>
-            </table>
-          </div>
-          {(loaded.excluded.length > 0 || loaded.pending_approval.length > 0) && (
-            <div className="card mb-3 p-3 text-xs text-slate-600">
-              {loaded.excluded.length > 0 && <p><b>Excluded (non-billable / internal / free):</b> {loaded.excluded.map((x: any) => `${x.doc_no} ${kg(x.qty_kg)} KG`).join(' · ')} — total {kg(loaded.excluded.reduce((a: number, x: any) => a + n(x.qty_kg), 0))} KG</p>}
-              {loaded.pending_approval.length > 0 && <p className="mt-1 text-amber-700"><b>Billable, waiting for billing approval:</b> {loaded.pending_approval.map((x: any) => `${x.doc_no} (${money(x.bill_amount)})`).join(' · ')}</p>}
-            </div>
-          )}
-          <div className="card mb-3 grid grid-cols-2 gap-3 p-4 md:grid-cols-6">
-            <Input label="Less: discount (₹)" type="number" value={head.discount_amount} onChange={(e) => setHead({ ...head, discount_amount: Number(e.target.value) })} />
-            <Input label="Add: other charges (₹)" type="number" value={head.other_charges} onChange={(e) => setHead({ ...head, other_charges: Number(e.target.value) })} />
-            <Input label="GST %" type="number" value={head.gst_pct} onChange={(e) => setHead({ ...head, gst_pct: Number(e.target.value) })} />
-            <Textarea label="Remarks" className="col-span-2 md:col-span-3" rows={1} value={head.remarks} onChange={(e) => setHead({ ...head, remarks: e.target.value })} />
-            {rateChanged.length > 0 && <Input label="Reason for rate change from quotation *" className="col-span-2 md:col-span-6" value={head.rate_change_reason} id="fpb-rate-reason" onChange={(e) => setHead({ ...head, rate_change_reason: e.target.value })} />}
-            <div className="col-span-2 md:col-span-6 flex flex-wrap justify-end gap-6 text-sm">
-              <span>Gross <b>{money(gross)}</b></span>{recovery > 0 && <span className="text-red-700">Recovery <b>− {money(recovery)}</b></span>}
-              <span>Taxable <b>{money(taxable)}</b></span><span>GST <b>{money(gst)}</b></span><span className="text-lg">Net <b>{money(taxable + gst)}</b></span>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2"><Button variant="secondary" onClick={onBack}>Cancel</Button><Button loading={busy} onClick={save}><CheckCircle2 size={14} className="mr-1" /> Post Bill</Button></div>
-        </>
-      )}
-    </div>
-  );
+  return <ContractorBillEditor kind="fabric" title={<FpTitle no={6} title="New Contractor Bill (Fabric Process)" sub="Like the purchase bill: gate entry → GRNs → charges, GST, TDS / TCS" />} onBack={onBack} onDone={onDone} />;
 }
 
 function BillView({ id, onBack }: { id: number; onBack: () => void }) {
@@ -175,18 +75,13 @@ function BillView({ id, onBack }: { id: number; onBack: () => void }) {
     <div>
       <FpTitle no={6} title={`Contractor Bill — ${b.bill_no}`} sub={`${b.vendor_name} · ${fmtDate(b.bill_date)}${b.party_bill_no ? ` · party bill ${b.party_bill_no}` : ''}`}
         actions={<><FpStatus value={b.status} />{b.status === 'POSTED' && can('FABRIC_PROCESS.BILL_CANCEL') && <Button variant="danger" onClick={cancel}><Ban size={14} className="mr-1" /> Cancel bill</Button>}<Button variant="secondary" onClick={onBack}><ArrowLeft size={14} className="mr-1" /> Back</Button></>} />
-      <div className="card overflow-x-auto">
+      <div className="card mb-3 grid grid-cols-2 gap-2 p-3 text-xs md:grid-cols-6">{processBillFacts(b).map(([k, v]) => <div key={k}><div className="text-slate-500">{k}</div><div className="font-semibold">{String(v)}</div></div>)}</div>
+      <div className="card overflow-x-auto p-2">
         <table className="w-full text-xs">
-          <thead className="bg-slate-50 text-slate-500"><tr>{['Type', 'Doc no', 'Date', 'Job', 'Process', 'Qty KG', 'Rate', 'Amount'].map((h) => <th key={h} className={`px-2 py-2 ${/KG|Rate|Amount/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
-          <tbody>{b.lines.map((l: any) => <tr key={l.id} className="border-t border-slate-100"><td className="px-2 py-1">{l.line_type}</td><td className="px-2 py-1 font-mono">{l.doc_no}</td><td className="px-2 py-1">{fmtDate(l.doc_date)}</td><td className="px-2 py-1">{l.io_no || '—'}</td><td className="px-2 py-1">{l.sub_process}</td><td className="px-2 py-1 text-right">{kg(l.qty_kg)}</td><td className="px-2 py-1 text-right">{money(l.rate)}</td><td className={`px-2 py-1 text-right ${n(l.amount) < 0 ? 'text-red-700' : ''}`}>{money(l.amount)}</td></tr>)}</tbody>
-          <tfoot className="bg-slate-50 text-right font-semibold">
-            <tr><td colSpan={7} className="px-2 py-1">Gross</td><td className="px-2 py-1">{money(b.gross_amount)}</td></tr>
-            {n(b.recovery_amount) > 0 && <tr><td colSpan={7} className="px-2 py-1 text-red-700">Less recovery</td><td className="px-2 py-1 text-red-700">− {money(b.recovery_amount)}</td></tr>}
-            <tr><td colSpan={7} className="px-2 py-1">Less discount / add other</td><td className="px-2 py-1">− {money(b.discount_amount)} / + {money(b.other_charges)}</td></tr>
-            <tr><td colSpan={7} className="px-2 py-1">GST {fmtDecimal(b.gst_pct, 2)}%</td><td className="px-2 py-1">{money(b.gst_amount)}</td></tr>
-            <tr className="text-sm"><td colSpan={7} className="px-2 py-2">Net amount</td><td className="px-2 py-2">{money(b.net_amount)}</td></tr>
-          </tfoot>
+          <thead className="bg-slate-50 text-slate-500"><tr>{['Type', 'Doc no', 'Date', 'Our DC', 'Party challan', 'Vehicle', 'Job', 'Process', 'Qty KG', 'Rate', 'Amount'].map((h) => <th key={h} className={`px-2 py-2 ${/KG|Rate|Amount/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+          <tbody>{b.lines.map((l: any) => <tr key={l.id} className="border-t border-slate-100"><td className="px-2 py-1">{l.line_type}</td><td className="px-2 py-1 font-mono">{l.doc_no}</td><td className="px-2 py-1">{fmtDate(l.doc_date)}</td><td className="px-2 py-1 font-mono">{l.dc_no || '—'}</td><td className="px-2 py-1">{l.challan_no || '—'}</td><td className="px-2 py-1">{l.vehicle_no || '—'}</td><td className="px-2 py-1">{l.io_no || '—'}</td><td className="px-2 py-1">{l.sub_process}</td><td className="px-2 py-1 text-right">{kg(l.qty_kg)}</td><td className="px-2 py-1 text-right">{money(l.rate)}</td><td className={`px-2 py-1 text-right ${n(l.amount) < 0 ? 'text-red-700' : ''}`}>{money(l.amount)}</td></tr>)}</tbody>
         </table>
+        <div className="mt-2 border-t border-slate-100 pt-2"><ProcessBillTotalsView b={b} /></div>
       </div>
       {b.remarks && <pre className="card mt-3 whitespace-pre-wrap p-3 text-[11px] text-slate-600">{b.remarks}</pre>}
     </div>

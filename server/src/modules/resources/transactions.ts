@@ -17,6 +17,7 @@ const invoiceSummaryFields = () => [
 import { jobworkInBeforeCreate, jobworkInvoiceBeforeCreate } from '../production/jobworkDivision.js';
 import { computePreCosting, PRE_COST_HEADS } from '../costing/preCostingCalc.js';
 import { assertPurchaseExcess, poItemKeys } from '../../core/purchaseExcess.js';
+import { PO_RECEIPT_STATUS_SQL } from '../../core/poReceipt.js';
 import type { Request } from 'express';
 import type { Tx } from '../../config/db.js';
 
@@ -257,7 +258,8 @@ export const transactionResources: ResourceConfig[] = [
     defaultSort: 't.po_date', hasIsActive: false,
     filters: ['supplier_id', 'po_type', 'status_id', 'approval_state', 'so_id', 'branch_id'],
     autoNumber: { column: 'po_no', docType: 'PURCHASE_ORDER' },
-    selectExtra: 'sup.party_name AS supplier_name, cur.code AS currency_code, cur.symbol AS currency_symbol, cs.label AS status_label, so.so_no, st.style_code, ship_to.party_name AS shipping_to_party_name',
+    selectExtra: `sup.party_name AS supplier_name, cur.code AS currency_code, cur.symbol AS currency_symbol, cs.label AS status_label, so.so_no, so.io_no, st.style_code, ship_to.party_name AS shipping_to_party_name,
+      ${PO_RECEIPT_STATUS_SQL('t.id')} AS receipt_status`,
     joins: `LEFT JOIN mst_party sup ON sup.id = t.supplier_id
             LEFT JOIN cfg_currency cur ON cur.id = t.currency_id
             LEFT JOIN cfg_status cs ON cs.id = t.status_id

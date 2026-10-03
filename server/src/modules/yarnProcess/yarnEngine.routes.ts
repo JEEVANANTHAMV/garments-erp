@@ -1,5 +1,7 @@
 import { Router, type Request } from 'express';
 import { z } from 'zod';
+import { valueGrnAtRate } from '../../core/grnValue.js';
+import { yarnJobLots as yjl, resolveSoId as rsi } from '../stock/jobStock.routes.js';
 import { query, queryOne, transaction, txQuery, txQueryOne, txExecute, type Tx } from '../../config/db.js';
 import { postLedger, UOM_KG } from '../../core/processEngine.js';
 import { ah } from '../../core/asyncHandler.js';
@@ -224,6 +226,41 @@ export async function reconciliation(ypoId: number) {
   const sum = (k: 'outward_kg' | 'good_kg' | 'reject_kg' | 'loss_kg' | 'balance_kg') => r3(jobs.reduce((a, j) => a + j[k], 0));
   return { jobs, total: { outward_kg: sum('outward_kg'), good_kg: sum('good_kg'), reject_kg: sum('reject_kg'), loss_kg: sum('loss_kg'), balance_kg: sum('balance_kg') } };
 }
+
+/**
+ * GET /yarn-process/quotation-plan?quotation_id= — the yarn process quotation loaded onto an outward DC: per line the
+ * job, KG quoted / already sent / balance and the job's yarn lots suggested oldest first up to the balance.
+ */
+yarnEngineRouter.get('/yarn-process/quotation-plan', requirePermission(YP.VIEW), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const q = z.object({ quotation_id: z.coerce.number().int().positive(), exclude_ypo_id: z.coerce.number().int().positive().optional() }).parse(req.query);
+  const qt = await queryOne<any>('SELECT id, quotation_no, process_name, job_no FROM trx_quotation WHERE id = ? AND company_id = ?', [q.quotation_id, cid]);
+  if (!qt) throw NotFound('Quotation not found');
+  const lines = await query<any>(`SELECT l.id, l.job_no, l.so_id, l.yarn_id, l.qty, l.description, mc.color_name, y.yarn_name,
+       COALESCE(NULLIF(l.confirm_rate, 0), NULLIF(l.quotation_rate, 0), l.unit_price) rate
+     FROM trx_quotation_line l LEFT JOIN mst_color mc ON mc.id = l.color_id LEFT JOIN mst_yarn y ON y.id = l.yarn_id WHERE l.quotation_id = ? ORDER BY l.sort_order, l.id`, [qt.id]);
+  const out = [];
+  for (const l of lines) {
+    const soId = await rsi(cid, l.so_id ?? null, l.job_no ?? qt.job_no ?? null);
+    const sent = soId ? Number((await queryOne<any>(
+      `SELECT COALESCE(SUM(ol.qty_kg), 0) v FROM trx_yarn_process_order_line ol JOIN trx_yarn_process_order o ON o.id = ol.ypo_id
+        WHERE o.company_id = ? AND o.quotation_id = ? AND o.status <> 'CANCELLED' AND ol.so_id = ? ${l.yarn_id ? 'AND ol.yarn_id = ?' : ''} ${q.exclude_ypo_id ? 'AND o.id <> ?' : ''}`,
+      [cid, qt.id, soId, ...(l.yarn_id ? [l.yarn_id] : []), ...(q.exclude_ypo_id ? [q.exclude_ypo_id] : [])]))?.v ?? 0) : 0;
+    const balance = r3(Math.max(0, Number(l.qty) - sent));
+    const lots = soId ? (await yjl(cid, { so_id: soId, includeGeneral: false })).filter((x: any) => !l.yarn_id || Number(x.yarn_id) === Number(l.yarn_id)) : [];
+    let left = balance; const pick = [];
+    for (const x of lots) {
+      if (left <= 0.0005) break;
+      const kg = r3(Math.min(left, Number(x.available_kg))); left = r3(left - kg);
+      pick.push({ ...x, send_kg: kg });
+    }
+    const job = soId ? await queryOne<any>('SELECT id, COALESCE(io_no, so_no) job_no, buyer_po_no FROM trx_sales_order WHERE id = ?', [soId]) : null;
+    out.push({ line_id: Number(l.id), job_no: job?.job_no ?? l.job_no ?? null, so_id: soId, buyer_po_no: job?.buyer_po_no ?? null, yarn_id: l.yarn_id, yarn_name: l.yarn_name,
+      description: l.description, dye_colour: l.color_name ?? null, rate: Number(l.rate) || 0, quoted_kg: Number(l.qty) || 0, sent_kg: r3(sent), balance_kg: balance,
+      available_kg: r3(lots.reduce((a: number, x: any) => a + Number(x.available_kg), 0)), short_kg: r3(Math.max(0, left)), lots: pick });
+  }
+  res.json({ data: { quotation_id: qt.id, quotation_no: qt.quotation_no, process_name: qt.process_name, lines: out } });
+}));
 
 yarnEngineRouter.get('/yarn-process/outward', requirePermission(YP.VIEW), ah(async (req, res) => {
   const q = z.object({ status: z.string().optional(), vendor_id: z.coerce.number().int().optional(), process_code: z.string().optional(),
@@ -567,6 +604,8 @@ async function postInward(tx: Tx, req: Request, body: InwardBody, existing?: { i
   const st = Number(left?.c) === 0 ? 'COMPLETED' : 'PARTIALLY_RECEIVED';
   await txExecute(tx, 'UPDATE trx_yarn_process_order SET status = ? WHERE id = ?', [st, o.id]);
   if (o.reprocess_id) await txExecute(tx, 'UPDATE trx_yarn_reprocess SET status = ? WHERE id = ?', [st === 'COMPLETED' ? 'COMPLETED' : 'INWARD_PENDING', o.reprocess_id]);
+  // the yarn GRN carries the DC's job-work rate (good KG × rate)
+  if (grnId) await valueGrnAtRate(tx, Number(grnId), o.rate_per_kg);
   return { id: inwardId, inward_no: no, ypo_no: o.ypo_no, ypo_status: st, good_kg: totG, reject_kg: totR, loss_kg: totL, outputs: created };
 }
 

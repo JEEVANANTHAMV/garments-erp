@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { settingFlag, useGateEntry } from '../../core/inwardControls.js';
 import { z } from 'zod';
+import { closePoLinesShort } from '../../core/poReceipt.js';
 import { calcRollFor, fabricSpec, rollTolerances, ROLL_CALC_COLS, rollCalcVals } from '../../core/fabricRollCalc.js';
 import { query, queryOne, transaction, txQuery, txQueryOne, txExecute, type Tx } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
@@ -556,6 +557,7 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
     ]);
 
     const newGrnId = grnRes!.insertId;
+    await txExecute(tx, 'UPDATE trx_grn SET receipt_type = ? WHERE id = ?', [body.receipt_type === 'FINAL' ? 'FINAL' : (primaryPoId ? 'PARTIAL' : null), newGrnId]);
     await txExecute(tx, `
       UPDATE trx_grn SET insurance = ?, customs_duty = ?, clearing_charges = ?,
              other_charges_sign = ?, other_charges_label = ?,
@@ -655,6 +657,8 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
              SET received_qty = COALESCE(received_qty, 0) + ?
            WHERE id = ?
         `, [line.accQty, line.po_line_id]);
+        // FINAL receipt: the PO line is closed (short if less than ordered came)
+        if (body.receipt_type === 'FINAL') await closePoLinesShort(tx, 'PO', [Number(line.po_line_id)], newGrnId);
       }
 
       // 5. Post to Stock Ledger if Accepted
@@ -1462,6 +1466,7 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
     ]);
 
     const newGrnId = grnRes!.insertId;
+    await txExecute(tx, 'UPDATE trx_grn SET receipt_type = ? WHERE id = ?', [body.receipt_type === 'FINAL' ? 'FINAL' : (primaryPoId ? 'PARTIAL' : null), newGrnId]);
     await txExecute(tx, `
       UPDATE trx_grn SET insurance = ?, customs_duty = ?, clearing_charges = ?,
              other_charges_sign = ?, other_charges_label = ?,
@@ -1479,12 +1484,12 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
       await txExecute(tx, `
         INSERT INTO trx_grn_line (
           grn_id, po_id, po_line_id, so_id, style_id, material_type, yarn_id,
-          yarn_type, shade_code, color_name,
+          yarn_type, yarn_count_str, shade_code, color_name,
           received_qty, received_weight, no_of_rolls,
           accepted_qty, rejected_qty, hold_qty, balance_qty,
           rate, taxable_amount, gst_rate, cgst_amount, sgst_amount, igst_amount, total_amount,
           lot_no, qc_status, uom_id
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `, [
         newGrnId,
         linePoId,
@@ -1494,6 +1499,7 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
         'YARN',
         Number(line.yarn_id),
         line.yarn_type || 'Grey Yarn',
+        line.yarn_count_str || null,
         line.shade_code || null,
         line.color_name || null,
         line.recKg,
@@ -1522,6 +1528,7 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
              SET received_qty = COALESCE(received_qty, 0) + ?
            WHERE id = ?
         `, [line.accKg, line.po_line_id]);
+        if (body.receipt_type === 'FINAL') await closePoLinesShort(tx, 'PO', [Number(line.po_line_id)], newGrnId);
       }
 
       if (line.accKg > 0 && body.qc_status !== 'REJECTED') {
@@ -1546,6 +1553,10 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
       }
     }
 
+    // yarn count as ordered on the PO (else the yarn master's count) when the screen did not send it
+    await txExecute(tx, `UPDATE trx_grn_line gl LEFT JOIN trx_purchase_order_line pl ON pl.id = gl.po_line_id LEFT JOIN mst_yarn y ON y.id = gl.yarn_id
+        SET gl.yarn_count_str = COALESCE(NULLIF(pl.yarn_count_str, ''), NULLIF(TRIM(CONCAT(COALESCE(y.count_value, ''), IF(y.count_value IS NULL, '', CONCAT(' ', COALESCE(y.count_type, 'Ne'))))), ''))
+      WHERE gl.grn_id = ? AND (gl.yarn_count_str IS NULL OR gl.yarn_count_str = '')`, [newGrnId]);
     return newGrnId;
   });
 

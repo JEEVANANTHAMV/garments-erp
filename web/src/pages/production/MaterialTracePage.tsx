@@ -18,6 +18,7 @@ export default function MaterialTracePage() {
   const [job, setJob] = useState('');
   const jobs = useQuery({ queryKey: ['procurement-jobs'], queryFn: async () => (await http.get<{ data: any[] }>('/procurement/jobs')).data ?? [] });
   const rt = useQuery({ queryKey: ['trace-roll', rollQ], queryFn: async () => (await http.get<{ data: any }>(`/traceability/fabric-roll?roll_no=${encodeURIComponent(rollQ)}`)).data, enabled: !!rollQ, retry: false });
+  const gen = useQuery({ queryKey: ['job-genealogy', job], queryFn: async () => (await http.get<{ data: any }>(`/jobs/${job}/genealogy`)).data, enabled: !!job });
   const jt = useQuery({ queryKey: ['trace-job', job], queryFn: async () => (await http.get<{ data: any }>(`/traceability/job/${job}`)).data, enabled: !!job });
   return (
     <>
@@ -71,6 +72,7 @@ export default function MaterialTracePage() {
       {tab === 'job' && (
         <>
           <div className="card mb-3 p-4"><Select label="Job" className="w-80" value={job} placeholder="— Job / IO —" onChange={(e) => setJob(e.target.value)} options={(jobs.data ?? []).map((j) => ({ value: j.id, label: j.job_no }))} /></div>
+          {gen.data && <Genealogy g={gen.data} />}
           {jt.isLoading && <LoadingBlock />}
           {jt.data && (
             <div className="space-y-3 text-xs">
@@ -87,6 +89,55 @@ export default function MaterialTracePage() {
         </>
       )}
     </>
+  );
+}
+
+/**
+ * Job material genealogy (client doc, 03-Oct-2026): BOM = plan, genealogy = trace, stock = availability.
+ * Plan vs actual from yarn to fabric, each process with input / good / reject / loss, and the fabric the job holds now.
+ */
+function Genealogy({ g }: { g: any }) {
+  const r = g.reconciliation;
+  const box = (label: string, v: number, sub?: string, tone = 'text-slate-800') => (
+    <div className="rounded-lg border border-slate-200 px-3 py-2"><div className="text-[10.5px] uppercase tracking-wide text-slate-500">{label}</div>
+      <div className={`text-sm font-semibold tabular-nums ${tone}`}>{kg(v)} KG</div>{sub && <div className="text-[10.5px] text-slate-500">{sub}</div>}</div>
+  );
+  const pct = (a: number, b: number) => (b > 0 ? `${fmtDecimal((a / b) * 100, 1)}%` : '');
+  return (
+    <div className="card mb-3 p-4 text-xs" id="job-genealogy">
+      <h3 className="mb-2 text-[13px] font-semibold text-slate-800">Plan vs actual — {g.job?.job_no}{g.bom?.bom_no ? ` · BOM ${g.bom.bom_no}` : ' · no BOM'}</h3>
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-5" id="gen-recon">
+        {box('Planned yarn (BOM)', r.planned_yarn_kg)}
+        {box('Yarn purchased', r.yarn_purchased_kg, pct(r.yarn_purchased_kg, r.planned_yarn_kg) && `${pct(r.yarn_purchased_kg, r.planned_yarn_kg)} of plan`)}
+        {box('Yarn issued to knitting', r.yarn_issued_kg)}
+        {box('Yarn consumed', r.yarn_consumed_kg)}
+        {box('Knitting loss', r.knitting_loss_kg, pct(r.knitting_loss_kg, r.yarn_consumed_kg) && `${pct(r.knitting_loss_kg, r.yarn_consumed_kg)} of consumed`, r.knitting_loss_kg > 0 ? 'text-amber-700' : undefined)}
+        {box('Planned fabric (BOM)', r.planned_fabric_kg, r.planned_fabric_kg ? undefined : 'BOM has no fabric line')}
+        {box('Fabric good (knitted)', r.fabric_good_kg, undefined, 'text-emerald-700')}
+        {box('Fabric rejected', r.fabric_reject_kg, undefined, r.fabric_reject_kg > 0 ? 'text-red-700' : undefined)}
+        {box('Fabric available now', r.fabric_available_kg, 'QC accepted, not issued / on a DC')}
+        {box('Grey available', r.grey_available_kg, 'for dyeing')}
+      </div>
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <div><div className="mb-1 font-semibold text-slate-700">Knitting</div>
+          {g.programs.length ? g.programs.map((p: any) => <div key={p.id}>{p.program_no} · {p.fabric_type ?? '—'}{p.fabric_colour ? ` · ${p.fabric_colour}` : ''} · {kg(p.required_qty_kg)} KG · {p.status}</div>) : <div className="text-slate-400">No knitting programs</div>}
+          {g.knitting_dcs.length > 0 && <div className="mt-1 text-slate-600">DCs: {g.knitting_dcs.map((d: any) => `${d.dc_no} (${kg(d.kg)} KG)`).join(', ')}</div>}
+          {g.knitting_receipts.length > 0 && <div className="text-slate-600">Receipts: {g.knitting_receipts.join(', ')}</div>}
+        </div>
+        <div><div className="mb-1 font-semibold text-slate-700">Fabric processes</div>
+          <table className="w-full" id="gen-processes"><thead className="text-slate-500"><tr>{['Order', 'Process', 'Vendor', 'Input', 'Good', 'Reject', 'Loss', 'Status'].map((h) => <th key={h} className="px-1 text-left">{h}</th>)}</tr></thead>
+            <tbody>{g.processes.map((p: any) => <tr key={p.id} className="border-t border-slate-100"><td className="px-1">{p.fpo_no}</td><td className="px-1">{p.sub_process}</td><td className="px-1">{p.vendor}</td>
+              <td className="px-1 tabular-nums">{kg(p.input_kg)}</td><td className="px-1 tabular-nums">{kg(p.good_kg)}</td><td className="px-1 tabular-nums">{kg(p.reject_kg)}</td><td className="px-1 tabular-nums">{kg(p.loss_kg)}</td><td className="px-1">{p.status}</td></tr>)}
+              {!g.processes.length && <tr><td colSpan={8} className="px-1 py-2 text-slate-400">None yet</td></tr>}</tbody></table>
+        </div>
+      </div>
+      <div className="mt-3"><div className="mb-1 font-semibold text-slate-700">Fabric the job holds (by fabric · state · colour · GSM · Dia)</div>
+        <table className="w-full" id="gen-fabric-groups"><thead className="bg-slate-50 text-slate-500"><tr>{['Fabric', 'State', 'Colour', 'GSM', 'Dia', 'Rolls', 'Available KG', 'Programs'].map((h) => <th key={h} className="px-2 py-1 text-left">{h}</th>)}</tr></thead>
+          <tbody>{g.fabric_groups.map((f: any, i: number) => <tr key={i} className="border-t border-slate-100"><td className="px-2 py-1">{f.fabric_name}</td><td className="px-2 py-1">{f.process_state}</td><td className="px-2 py-1">{f.colour ?? "—"}</td>
+            <td className="px-2 py-1">{f.gsm ?? '—'}</td><td className="px-2 py-1">{f.dia ?? '—'}</td><td className="px-2 py-1">{f.rolls}</td><td className="px-2 py-1 tabular-nums font-semibold">{kg(f.available_kg)}</td><td className="px-2 py-1">{f.programs || '—'}</td></tr>)}
+            {!g.fabric_groups.length && <tr><td colSpan={8} className="px-2 py-2 text-slate-400">No fabric available</td></tr>}</tbody></table>
+      </div>
+    </div>
   );
 }
 

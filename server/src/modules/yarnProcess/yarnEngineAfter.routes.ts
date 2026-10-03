@@ -8,6 +8,7 @@ import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
 import { yarnJobLots } from '../stock/jobStock.routes.js';
+import { processBillHeadSchema, checkProcessBillHead, writeProcessBillTotals } from '../../core/processBill.js';
 import { YP, can, r3, r2, n, EPS, date, processType, whName, coneHistory, lotRow, lotOut, lotGrn, lotIn } from './yarnEngine.common.js';
 import { insertOutwardHeader, writeOutwardLines } from './yarnEngine.routes.js';
 
@@ -377,8 +378,11 @@ yarnEngineAfterRouter.get('/yarn-process/bill-sources', requirePermission(YP.VIE
             (SELECT GROUP_CONCAT(DISTINCT x.io_no SEPARATOR ', ') FROM trx_yarn_process_inward_out x WHERE x.inward_id = i.id) AS io_no,
             (SELECT bl.rate FROM trx_yarn_process_bill_line bl JOIN trx_yarn_process_bill bb ON bb.id = bl.bill_id
               WHERE bb.vendor_id = i.vendor_id AND bl.process_code = i.process_code AND bl.line_type = 'GRN' AND bb.status = 'POSTED' ORDER BY bl.id DESC LIMIT 1) AS last_rate,
-            (SELECT o2.rate_per_kg FROM trx_yarn_process_order o2 WHERE o2.id = i.ypo_id) AS quotation_rate
+            o.rate_per_kg AS quotation_rate, o.ypo_no AS dc_no, q.quotation_no, i.challan_no, i.vehicle_no, i.input_kg, i.reject_kg, i.loss_kg, gi.entry_no AS gate_entry_no, gr.grn_no,
+            (SELECT GROUP_CONCAT(DISTINCT x.lot_no SEPARATOR ', ') FROM trx_yarn_process_inward_out x WHERE x.inward_id = i.id) AS lots
        FROM trx_yarn_process_inward i LEFT JOIN mst_yarn_process_type pt ON pt.company_id = i.company_id AND pt.code = i.process_code
+       LEFT JOIN trx_yarn_process_order o ON o.id = i.ypo_id LEFT JOIN trx_quotation q ON q.id = o.quotation_id
+       LEFT JOIN trx_gate_inward gi ON gi.id = i.gate_inward_id LEFT JOIN trx_grn gr ON gr.id = i.grn_id
       WHERE i.company_id = ? AND i.vendor_id = ? AND i.bill_id IS NULL AND i.is_reprocess = 0 AND i.status = 'POSTED' AND COALESCE(pt.billable, 1) = 1${a.w}
       ORDER BY i.inward_date, i.id`, [cid, q.vendor_id, ...a.p]);
   let reps = await query<any>(
@@ -402,8 +406,9 @@ yarnEngineAfterRouter.get('/yarn-process/bill-sources', requirePermission(YP.VIE
 
 const billSchema = z.object({
   vendor_id: s.idReq(), bill_date: date, party_bill_no: s.nullableStr(60), from_date: date.nullish(), to_date: date.nullish(),
-  discount_amount: z.coerce.number().min(0).default(0), other_charges: z.coerce.number().default(0), gst_pct: z.coerce.number().min(0).max(28).default(0), remarks: s.text(),
+  discount_amount: z.coerce.number().min(0).default(0), gst_pct: z.coerce.number().min(0).max(28).default(0), remarks: s.text(),
   rate_change_reason: s.nullableStr(255),
+  ...processBillHeadSchema,
   lines: z.array(z.object({ line_type: z.enum(['GRN', 'REPROCESS', 'RECOVERY']), ref_id: s.idReq(), rate: z.coerce.number().min(0).default(0) })).min(1, 'Add at least one GRN / reprocess'),
 });
 yarnEngineAfterRouter.get('/yarn-process/bills', requirePermission(YP.VIEW), ah(async (req, res) => {
@@ -412,15 +417,20 @@ yarnEngineAfterRouter.get('/yarn-process/bills', requirePermission(YP.VIEW), ah(
 }));
 yarnEngineAfterRouter.get('/yarn-process/bills/:id', requirePermission(YP.VIEW), ah(async (req, res) => {
   const id = z.coerce.number().int().positive().parse(req.params.id);
-  const b = await queryOne<any>('SELECT b.*, v.party_name AS vendor_name FROM trx_yarn_process_bill b LEFT JOIN mst_party v ON v.id = b.vendor_id WHERE b.id = ? AND b.company_id = ?', [id, req.user!.companyId]);
+  const b = await queryOne<any>(`SELECT b.*, v.party_name AS vendor_name, g.entry_no AS gate_entry_no FROM trx_yarn_process_bill b LEFT JOIN mst_party v ON v.id = b.vendor_id
+                                  LEFT JOIN trx_gate_inward g ON g.id = b.gate_inward_id WHERE b.id = ? AND b.company_id = ?`, [id, req.user!.companyId]);
   if (!b) throw NotFound('Bill not found');
-  res.json({ data: { ...b, lines: await query<any>('SELECT * FROM trx_yarn_process_bill_line WHERE bill_id = ? ORDER BY id', [id]) } });
+  res.json({ data: { ...b, lines: await query<any>(`SELECT l.*, o.ypo_no AS dc_no, i.challan_no, i.vehicle_no FROM trx_yarn_process_bill_line l
+      LEFT JOIN trx_yarn_process_inward i ON l.line_type = 'GRN' AND i.id = l.ref_id LEFT JOIN trx_yarn_process_order o ON o.id = i.ypo_id WHERE l.bill_id = ? ORDER BY l.id`, [id]) } });
 }));
 yarnEngineAfterRouter.post('/yarn-process/bills', requirePermission(YP.BILL), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const body = billSchema.parse(req.body);
+  if (new Set(body.lines.map((l) => `${l.line_type}:${l.ref_id}`)).size !== body.lines.length) throw BadRequest('A GRN / reprocess is on the bill twice');
   const out = await transaction(async (tx) => {
+    const gate = await checkProcessBillHead(tx, cid, body, body.vendor_id, 'Yarn process bill');
     const no = await nextDocNumber(tx, cid, 'YP_BILL');
+    const changed: string[] = [];
     const r = await txExecute(tx,
       `INSERT INTO trx_yarn_process_bill (company_id, bill_no, bill_date, vendor_id, party_bill_no, from_date, to_date, discount_amount, other_charges, gst_pct, remarks, created_by)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -440,6 +450,7 @@ yarnEngineAfterRouter.post('/yarn-process/bills', requirePermission(YP.BILL), ah
         if (qr?.rate_per_kg != null && Math.abs(n(qr.rate_per_kg) - l.rate) > 0.005 && !(body.rate_change_reason && body.rate_change_reason.length >= 3)) {
           throw BadRequest(`${i.inward_no}: the rate ₹${l.rate} differs from the approved quotation rate ₹${n(qr.rate_per_kg)} — give the reason for the change`);
         }
+        if (qr?.rate_per_kg != null && Math.abs(n(qr.rate_per_kg) - l.rate) > 0.005) changed.push(`${i.inward_no} ₹${n(qr.rate_per_kg)} → ₹${l.rate}`);
         const amt = r2(n(i.good_kg) * l.rate);
         const j = await txQueryOne<any>(tx, `SELECT GROUP_CONCAT(DISTINCT io_no SEPARATOR ', ') j FROM trx_yarn_process_inward_out WHERE inward_id = ?`, [i.id]);
         await txExecute(tx, 'INSERT INTO trx_yarn_process_bill_line (bill_id, line_type, ref_id, doc_no, doc_date, io_no, process_code, qty_kg, rate, amount) VALUES (?,?,?,?,?,?,?,?,?,?)',
@@ -461,11 +472,9 @@ yarnEngineAfterRouter.post('/yarn-process/bills', requirePermission(YP.BILL), ah
         if (isRec) recovery += -amt; else gross += amt;
       }
     }
-    const taxable = r2(gross - recovery - body.discount_amount + body.other_charges);
-    const gst = r2(taxable * body.gst_pct / 100);
-    const net = r2(taxable + gst);
-    await txExecute(tx, 'UPDATE trx_yarn_process_bill SET gross_amount = ?, recovery_amount = ?, gst_amount = ?, net_amount = ? WHERE id = ?', [r2(gross), r2(recovery), gst, net, billId]);
-    return { id: billId, bill_no: no, gross_amount: r2(gross), recovery_amount: r2(recovery), gst_amount: gst, net_amount: net };
+    const t = await writeProcessBillTotals(tx, 'trx_yarn_process_bill', billId, body, gross, recovery, gate?.id ?? null, changed.length > 0);
+    if (changed.length) await txExecute(tx, `UPDATE trx_yarn_process_bill SET remarks = CONCAT(COALESCE(remarks, ''), ?) WHERE id = ?`, [`\nRate changed from quotation (${changed.join('; ')}): ${body.rate_change_reason}`, billId]);
+    return { id: billId, bill_no: no, gross_amount: r2(gross), recovery_amount: r2(recovery), ...t };
   });
   await audit(req, 'trx_yarn_process_bill', out.id, 'INSERT', undefined, out);
   res.status(201).json({ data: out, message: `${out.bill_no} posted — net ₹${out.net_amount}` });

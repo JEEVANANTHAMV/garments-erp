@@ -7,6 +7,8 @@ import { useAuth } from '../../../lib/auth';
 import { useLookup, toOptions } from '../../../hooks/useLookup';
 import { useToast } from '../../../hooks/useToast';
 import { Button, Input, Select, Tabs, LoadingBlock, Modal, Checkbox } from '../../../components/ui';
+import { ContractorBillEditor } from '../../../components/ContractorBillEditor';
+import { ProcessBillTotalsView, processBillFacts } from '../../../components/ProcessBillParts';
 import { fmtDate, fmtDecimal, today } from '../../../lib/format';
 import { YpTitle, YpStatus, ReconCards, useYarnTypes, errText, kg, n, MODE_LABEL, type YpType } from './shared';
 
@@ -50,92 +52,7 @@ function BillList({ onOpen }: { onOpen: (id: number | 'new') => void }) {
   );
 }
 function BillEditor({ onBack, onDone }: { onBack: () => void; onDone: (id: number) => void }) {
-  const toast = useToast();
-  const qc = useQueryClient();
-  const suppliers = useLookup('suppliers');
-  const types = useYarnTypes();
-  const [h, setH] = useState({ vendor_id: '', bill_date: today(), party_bill_no: '', from_date: '', to_date: '', process_code: '', io_no: '', billing_type: '', gst_pct: '5', discount_amount: '', other_charges: '', remarks: '', rate_change_reason: '' });
-  const [src, setSrc] = useState<any>(null);
-  const [sel, setSel] = useState<Record<string, number>>({});
-  const [busy, setBusy] = useState(false);
-  const load = async () => {
-    if (!h.vendor_id) { toast('Choose the contractor', 'warning'); return; }
-    const p = new URLSearchParams({ vendor_id: h.vendor_id }); (['from_date', 'to_date'] as const).forEach((k) => h[k] && p.set(k === 'from_date' ? 'from' : 'to', h[k]));
-    if (h.process_code) p.set('process_code', h.process_code); if (h.io_no) p.set('io_no', h.io_no); if (h.billing_type) p.set('billing_type', h.billing_type);
-    try { const r = (await http.get<{ data: any }>(`/yarn-process/bill-sources?${p}`)).data; setSrc(r); setSel(Object.fromEntries([...r.grns.map((g: any) => [`GRN-${g.ref_id}`, n(g.quotation_rate ?? g.last_rate)]), ...r.reprocess.map((x: any) => [`${x.line_type}-${x.ref_id}`, n(x.rate)])])); } catch (e) { toast(errText(e), 'error'); }
-  };
-  const rows = src ? [...src.grns.map((g: any) => ({ ...g, k: `GRN-${g.ref_id}` })), ...src.reprocess.map((x: any) => ({ ...x, k: `${x.line_type}-${x.ref_id}` }))] : [];
-  const amt = (r: any) => (r.line_type === 'GRN' ? n(r.qty_kg) * n(sel[r.k]) : n(r.bill_amount) * (r.line_type === 'RECOVERY' ? -1 : 1));
-  const picked = rows.filter((r) => sel[r.k] !== undefined);
-  const gross = picked.filter((r) => r.line_type !== 'RECOVERY').reduce((a, r) => a + amt(r), 0), rec = -picked.filter((r) => r.line_type === 'RECOVERY').reduce((a, r) => a + amt(r), 0);
-  const taxable = gross - rec - n(h.discount_amount) + n(h.other_charges), net = taxable * (1 + n(h.gst_pct) / 100);
-  const rateChanged = picked.filter((r) => r.line_type === 'GRN' && r.quotation_rate != null && Math.abs(n(r.quotation_rate) - n(sel[r.k])) > 0.005);
-  const save = async () => {
-    if (!picked.length) { toast('Pick the GRNs / reprocess to bill', 'warning'); return; }
-    if (rateChanged.length && h.rate_change_reason.trim().length < 3) { toast(`Rate differs from the approved quotation on ${rateChanged.map((r) => r.doc_no).join(', ')} — give the reason`, 'warning'); return; }
-    setBusy(true);
-    try {
-      const r = await http.post<{ data: any; message: string }>('/yarn-process/bills', { vendor_id: Number(h.vendor_id), bill_date: h.bill_date, party_bill_no: h.party_bill_no || null, from_date: h.from_date || null, to_date: h.to_date || null,
-        gst_pct: n(h.gst_pct), discount_amount: n(h.discount_amount), other_charges: n(h.other_charges), remarks: h.remarks || null, rate_change_reason: h.rate_change_reason || null, lines: picked.map((r) => ({ line_type: r.line_type, ref_id: r.ref_id, rate: n(sel[r.k]) })) });
-      toast((r as any).message, 'success'); void qc.invalidateQueries({ queryKey: ['yarn-process'] }); onDone(r.data.id);
-    } catch (e) { toast(errText(e), 'error'); } finally { setBusy(false); }
-  };
-  return (
-    <div>
-      <YpTitle no={6} title="New Yarn Process Contractor Bill" actions={<Button variant="secondary" onClick={onBack}><ArrowLeft size={14} className="mr-1" /> Back</Button>} />
-      <div className="card mb-3 grid grid-cols-2 gap-3 p-4 md:grid-cols-6">
-        <Select label="Contractor *" value={h.vendor_id} placeholder="— Process unit —" onChange={(e) => { setH({ ...h, vendor_id: e.target.value }); setSrc(null); }} options={toOptions(suppliers.data)} />
-        <Input label="Bill date *" type="date" value={h.bill_date} onChange={(e) => setH({ ...h, bill_date: e.target.value })} />
-        <Input label="Party bill no" value={h.party_bill_no} onChange={(e) => setH({ ...h, party_bill_no: e.target.value })} />
-        <Input label="From" type="date" value={h.from_date} onChange={(e) => setH({ ...h, from_date: e.target.value })} />
-        <Input label="To" type="date" value={h.to_date} onChange={(e) => setH({ ...h, to_date: e.target.value })} />
-        <Select label="Process" value={h.process_code} placeholder="All" onChange={(e) => setH({ ...h, process_code: e.target.value })} options={(types.data ?? []).map((t) => ({ value: t.code, label: t.name }))} />
-        <Input label="Job" value={h.io_no} placeholder="IO no" onChange={(e) => setH({ ...h, io_no: e.target.value })} />
-        <Select label="Billing type" value={h.billing_type} placeholder="All" onChange={(e) => setH({ ...h, billing_type: e.target.value })} options={[{ value: 'BILLABLE', label: 'Billable only' }, { value: 'RECOVERY', label: 'Recovery only' }]} />
-        <div className="flex items-end"><Button onClick={load}><Search size={14} className="mr-1" /> Load GRNs / reprocess</Button></div>
-      </div>
-      {src && (
-        <>
-          <div className="card overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead className="bg-slate-50 text-slate-500"><tr>{['', 'Type', 'Doc', 'Date', 'Process', 'Jobs', 'KG', 'Billing', 'Rate / KG', 'Amount'].map((h2, i) => <th key={i} className={`px-2 py-2 ${/KG|Rate|Amount/.test(h2) ? 'text-right' : 'text-left'}`}>{h2}</th>)}</tr></thead>
-              <tbody>
-                {rows.map((r) => {
-                  const on = sel[r.k] !== undefined;
-                  return (
-                    <tr key={r.k} className={`border-t border-slate-100 ${on ? 'bg-emerald-50' : ''}`}>
-                      <td className="px-2 py-1"><input type="checkbox" checked={on} onChange={() => setSel((s) => { const x = { ...s }; if (on) delete x[r.k]; else x[r.k] = n(r.quotation_rate ?? r.last_rate ?? r.rate); return x; })} /></td>
-                      <td className="px-2 py-1">{r.line_type}</td><td className="px-2 py-1 font-mono">{r.doc_no}</td><td className="px-2 py-1">{fmtDate(r.doc_date)}</td><td className="px-2 py-1">{r.process_name || r.process_code}</td>
-                      <td className="px-2 py-1">{r.io_no || '—'}</td><td className="px-2 py-1 text-right">{kg(r.qty_kg)}</td><td className="px-2 py-1">{r.line_type === 'GRN' ? 'Process charge' : `${r.billing_type} · ${r.cost_treatment}`}</td>
-                      <td className="px-2 py-1 text-right">{r.line_type === 'GRN' && on ? <><input type="number" step="0.01" className={`input w-20 py-0.5 text-right text-xs ${r.quotation_rate != null && Math.abs(n(r.quotation_rate) - n(sel[r.k])) > 0.005 ? 'border-amber-500 bg-amber-50' : ''}`} value={sel[r.k]} onChange={(e) => setSel((s) => ({ ...s, [r.k]: Number(e.target.value) }))} />{r.quotation_rate != null && <span className="block text-[10px] text-slate-400">quote {fmtDecimal(n(r.quotation_rate), 2)}</span>}</> : fmtDecimal(n(r.rate ?? r.last_rate), 2)}</td>
-                      <td className={`px-2 py-1 text-right ${amt(r) < 0 ? 'text-red-700' : ''}`}>₹{fmtDecimal(amt(r), 2)}</td>
-                    </tr>
-                  );
-                })}
-                {!rows.length && <tr><td colSpan={10} className="px-3 py-8 text-center text-slate-400">Nothing to bill for this contractor</td></tr>}
-              </tbody>
-            </table>
-          </div>
-          {(src.excluded.length > 0 || src.pending_approval.length > 0) && (
-            <div className="mt-2 text-[11.5px] text-slate-600">
-              {src.excluded.length > 0 && <div>Excluded (non-billable): {src.excluded.map((x: any) => `${x.doc_no} (${kg(x.qty_kg)} KG, ${x.cost_treatment.toLowerCase()})`).join(', ')}</div>}
-              {src.pending_approval.length > 0 && <div className="text-amber-700">Waiting for billing approval: {src.pending_approval.map((x: any) => x.doc_no).join(', ')}</div>}
-            </div>
-          )}
-          <div className="card mt-3 grid grid-cols-2 gap-3 p-4 md:grid-cols-6">
-            <Input label="Discount (₹)" type="number" value={h.discount_amount} onChange={(e) => setH({ ...h, discount_amount: e.target.value })} />
-            <Input label="Other charges (₹)" type="number" value={h.other_charges} onChange={(e) => setH({ ...h, other_charges: e.target.value })} />
-            <Input label="GST %" type="number" value={h.gst_pct} onChange={(e) => setH({ ...h, gst_pct: e.target.value })} />
-            {rateChanged.length > 0 && <Input label="Reason for rate change from quotation *" className="col-span-2" value={h.rate_change_reason} id="ypb-rate-reason" onChange={(e) => setH({ ...h, rate_change_reason: e.target.value })} />}
-            <div className="text-xs"><div className="text-slate-500">Gross / recovery</div><div className="font-semibold">₹{fmtDecimal(gross, 2)} / <span className="text-red-700">₹{fmtDecimal(rec, 2)}</span></div></div>
-            <div className="text-xs"><div className="text-slate-500">Taxable</div><div className="font-semibold">₹{fmtDecimal(taxable, 2)}</div></div>
-            <div className="text-xs"><div className="text-slate-500">Net</div><div className="text-lg font-bold">₹{fmtDecimal(net, 2)}</div></div>
-          </div>
-          <div className="mt-3 flex justify-end"><Button loading={busy} onClick={save}><CheckCircle2 size={14} className="mr-1" /> Post Bill</Button></div>
-        </>
-      )}
-    </div>
-  );
+  return <ContractorBillEditor kind="yarn" title={<YpTitle no={6} title="New Yarn Process Contractor Bill" sub="Like the purchase bill: gate entry → GRNs → charges, GST, TDS / TCS" />} onBack={onBack} onDone={onDone} />;
 }
 function BillView({ id, onBack }: { id: number; onBack: () => void }) {
   const { can } = useAuth();
@@ -152,16 +69,14 @@ function BillView({ id, onBack }: { id: number; onBack: () => void }) {
     <div>
       <YpTitle no={6} title={`Yarn Contractor Bill — ${b.bill_no}`} sub={`${b.vendor_name} · ${fmtDate(b.bill_date)}${b.party_bill_no ? ` · party bill ${b.party_bill_no}` : ''}`}
         actions={<><YpStatus value={b.status} />{b.status === 'POSTED' && can('YARN_PROCESS.BILL_CANCEL') && <Button variant="danger" onClick={cancel}><Ban size={14} className="mr-1" /> Cancel bill</Button>}<Button variant="secondary" onClick={onBack}><ArrowLeft size={14} className="mr-1" /> Back</Button></>} />
-      <div className="card overflow-x-auto">
+      <div className="card mb-3 grid grid-cols-2 gap-2 p-3 text-xs md:grid-cols-6">{processBillFacts(b).map(([k, v]) => <div key={k}><div className="text-slate-500">{k}</div><div className="font-semibold">{String(v)}</div></div>)}</div>
+      <div className="card overflow-x-auto p-2">
         <table className="w-full text-xs">
-          <thead className="bg-slate-50 text-slate-500"><tr>{['Type', 'Doc', 'Date', 'Process', 'Jobs', 'KG', 'Rate', 'Amount'].map((h) => <th key={h} className={`px-2 py-2 ${/KG|Rate|Amount/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
-          <tbody>{b.lines.map((l: any) => <tr key={l.id} className="border-t border-slate-100"><td className="px-2 py-1">{l.line_type}</td><td className="px-2 py-1 font-mono">{l.doc_no}</td><td className="px-2 py-1">{fmtDate(l.doc_date)}</td><td className="px-2 py-1">{l.process_code}</td>
+          <thead className="bg-slate-50 text-slate-500"><tr>{['Type', 'Doc', 'Date', 'Our DC', 'Party challan', 'Vehicle', 'Process', 'Jobs', 'KG', 'Rate', 'Amount'].map((h) => <th key={h} className={`px-2 py-2 ${/KG|Rate|Amount/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+          <tbody>{b.lines.map((l: any) => <tr key={l.id} className="border-t border-slate-100"><td className="px-2 py-1">{l.line_type}</td><td className="px-2 py-1 font-mono">{l.doc_no}</td><td className="px-2 py-1">{fmtDate(l.doc_date)}</td><td className="px-2 py-1 font-mono">{l.dc_no || '—'}</td><td className="px-2 py-1">{l.challan_no || '—'}</td><td className="px-2 py-1">{l.vehicle_no || '—'}</td><td className="px-2 py-1">{l.process_code}</td>
             <td className="px-2 py-1">{l.io_no || '—'}</td><td className="px-2 py-1 text-right">{kg(l.qty_kg)}</td><td className="px-2 py-1 text-right">{fmtDecimal(l.rate, 2)}</td><td className={`px-2 py-1 text-right ${n(l.amount) < 0 ? 'text-red-700' : ''}`}>₹{fmtDecimal(l.amount, 2)}</td></tr>)}</tbody>
-          <tfoot className="bg-slate-100 font-semibold">
-            {[['Gross', b.gross_amount], ['Recovery', -n(b.recovery_amount)], ['Discount', -n(b.discount_amount)], ['Other charges', b.other_charges], [`GST ${b.gst_pct}%`, b.gst_amount], ['Net', b.net_amount]].map(([k, v]) => (
-              <tr key={String(k)}><td colSpan={7} className="px-2 py-1 text-right">{k}</td><td className="px-2 py-1 text-right">₹{fmtDecimal(Number(v), 2)}</td></tr>))}
-          </tfoot>
         </table>
+        <div className="mt-2 border-t border-slate-100 pt-2"><ProcessBillTotalsView b={b} /></div>
       </div>
     </div>
   );

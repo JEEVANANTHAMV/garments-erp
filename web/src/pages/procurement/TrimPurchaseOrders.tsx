@@ -5,6 +5,7 @@ import { Plus, Search, Eye, Filter, Scissors, PackageCheck } from 'lucide-react'
 import { http } from '../../lib/api';
 import { fmtDate, fmtDecimal } from '../../lib/format';
 import { Badge } from '../../components/ui';
+import { ReceiptStatusBadge } from '../../lib/poReceipt';
 
 export default function TrimPurchaseOrdersPage() {
   const nav = useNavigate();
@@ -153,6 +154,7 @@ export default function TrimPurchaseOrdersPage() {
                 <th className="py-3 px-4 text-right">Order Qty</th>
                 <th className="py-3 px-4 text-right">Received</th>
                 <th className="py-3 px-4 text-right">Grand Total</th>
+                <th className="py-3 px-3 text-center">Receipt</th>
                 <th className="py-3 px-4 text-center">Status</th>
                 <th className="py-3 px-4 text-center">Action</th>
               </tr>
@@ -160,11 +162,11 @@ export default function TrimPurchaseOrdersPage() {
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {isLoading ? (
                 <tr>
-                  <td colSpan={11} className="py-8 text-center text-slate-400">Loading trim purchase orders...</td>
+                  <td colSpan={12} className="py-8 text-center text-slate-400">Loading trim purchase orders...</td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-8 text-center text-slate-400">No trim purchase orders found</td>
+                  <td colSpan={12} className="py-8 text-center text-slate-400">No trim purchase orders found</td>
                 </tr>
               ) : (
                 filtered.map((p) => (
@@ -187,6 +189,7 @@ export default function TrimPurchaseOrdersPage() {
                     <td className="py-3 px-4 text-right font-medium text-slate-900">{fmtDecimal(p.total_order_qty)}</td>
                     <td className="py-3 px-4 text-right font-medium text-indigo-600">{fmtDecimal(p.total_received_qty)}</td>
                     <td className="py-3 px-4 text-right font-bold text-slate-900">₹{fmtDecimal(p.grand_total)}</td>
+                    <td className="py-3 px-3 text-center"><ReceiptStatusBadge value={p.receipt_status} /></td>
                     <td className="py-3 px-4 text-center">
                       <Badge variant={p.status === 'CLOSED' ? 'success' : p.status === 'APPROVED' ? 'info' : p.status === 'PARTIAL' ? 'warning' : 'neutral'}>
                         {p.status}
