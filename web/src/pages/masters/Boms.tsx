@@ -856,13 +856,32 @@ export function BomDetailPage() {
     }
   };
 
-  // Rate lookup so builder can price the BOM live
+  // Rate lookup so builder can price the BOM live: the server's costing rate (standard rate → latest accepted
+  // purchase quotation → latest PO), falling back to the master's standard rate while that loads
+  const matKey = (l: BomLine) => (l.material_type === 'YARN' ? (l.yarn_id ? `YARN:${l.yarn_id}` : '')
+    : l.material_type === 'FABRIC' ? (l.fabric_id ? `FABRIC:${l.fabric_id}` : '') : (l.trim_id ? `TRIM:${l.trim_id}` : ''));
+  const rateIds = (t: string) => [...new Set(lines.map(matKey).filter((k) => k.startsWith(`${t}:`)).map((k) => k.split(':')[1]))].join(',');
+  const rateQs = `yarn_ids=${rateIds('YARN')}&fabric_ids=${rateIds('FABRIC')}&trim_ids=${rateIds('TRIM')}`;
+  const matRates = useQuery({
+    queryKey: ['bom-material-rates', rateQs],
+    queryFn: async () => (await http.get<{ data: Record<string, { rate: number; source: string; ref: string | null }> }>(`/boms/material-rates?${rateQs}`)).data ?? {},
+    staleTime: 60_000,
+  });
+  const rateInfo = (l: BomLine) => matRates.data?.[matKey(l)];
   const rateOf = (l: BomLine): number => {
+    const r = rateInfo(l);
+    if (r) return Number(r.rate) || 0;
     const src = l.material_type === 'YARN' ? yarns.data
               : l.material_type === 'FABRIC' ? fabrics.data : trims.data;
     const mid = l.material_type === 'YARN' ? l.yarn_id
               : l.material_type === 'FABRIC' ? l.fabric_id : l.trim_id;
     return Number((src ?? []).find((x: any) => x.id === Number(mid))?.std_rate ?? 0);
+  };
+  const rateTitle = (l: BomLine) => {
+    const r = rateInfo(l); const rate = rateOf(l);
+    if (!(rate > 0)) return l.material_type === 'YARN' && !l.yarn_id ? 'Save the BOM to resolve the yarn count, then it is priced'
+      : `No rate for this ${l.material_type.toLowerCase()} — set its standard rate in the ${l.material_type === 'YARN' ? 'Yarns master (this count)' : l.material_type === 'FABRIC' ? 'Fabrics master' : 'Trims master'}, or accept a purchase quotation for it`;
+    return `₹${fmtDecimal(rate, 4)} / unit — ${r?.source === 'QUOTATION' ? `latest accepted quotation ${r.ref}` : r?.source === 'PO' ? `latest PO ${r.ref}` : 'standard rate'}`;
   };
 
   /*
@@ -887,10 +906,10 @@ export function BomDetailPage() {
   const lineCostPerGmt = (l: BomLine) => lineCostFor(l, costPcs) / costPcs;
   const costPerGarment = useMemo(() => lines.reduce((sum, l) => sum + lineCostPerGmt(l), 0),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [lines, yarns.data, fabrics.data, trims.data, orderInfo.data, explodeQty, scope]);
+    [lines, yarns.data, fabrics.data, trims.data, orderInfo.data, explodeQty, scope, matRates.data]);
   const explodeTotal = useMemo(() => lines.reduce((sum, l) => sum + lineCostFor(l, Math.max(0, Number(explodeQty) || 0)), 0),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [lines, yarns.data, fabrics.data, trims.data, orderInfo.data, explodeQty, scope]);
+    [lines, yarns.data, fabrics.data, trims.data, orderInfo.data, explodeQty, scope, matRates.data]);
   // explode for the job's plan-cut quantity by default
   useEffect(() => { if (orderPcs > 0) setExplodeQty(orderPcs); }, [orderPcs]);
 
@@ -1165,24 +1184,24 @@ export function BomDetailPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-xs">
+          <table className="w-full min-w-[1780px] text-xs">
             <thead><tr>
-              <th className="th w-[95px]">Type</th>
+              <th className="th min-w-[95px]">Type</th>
               <th className="th min-w-[200px]">Material / Description</th>
               <th className="th min-w-[170px]">Specification</th>
-              <th className="th w-[95px]">Dia / Count</th>
-              <th className="th w-[90px]">GSM</th>
-              <th className="th w-[90px]">Grey / Dyed</th>
-              <th className="th w-[120px]">Dyed colour</th>
-              <th className="th w-[110px]">Applicability</th>
-              <th className="th w-[110px]">Colour</th>
-              <th className="th w-[100px]">Size</th>
-              <th className="th w-[105px]">Basis</th>
-              <th className="th w-[90px] text-right">Cons/pc</th>
-              <th className="th w-[80px] text-right">Addl Qty</th>
-              <th className="th w-[75px]">UOM</th>
-              <th className="th w-[75px] text-right">Waste %</th>
-              <th className="th w-[95px] text-right">Cost/gmt</th>
+              <th className="th min-w-[95px]">Dia / Count</th>
+              <th className="th min-w-[90px]">GSM</th>
+              <th className="th min-w-[90px]">Grey / Dyed</th>
+              <th className="th min-w-[120px]">Dyed colour</th>
+              <th className="th min-w-[110px]">Applicability</th>
+              <th className="th min-w-[110px]">Colour</th>
+              <th className="th min-w-[100px]">Size</th>
+              <th className="th min-w-[105px]">Basis</th>
+              <th className="th min-w-[90px] text-right">Cons/pc</th>
+              <th className="th min-w-[80px] text-right">Addl Qty</th>
+              <th className="th min-w-[75px]">UOM</th>
+              <th className="th min-w-[75px] text-right">Waste %</th>
+              <th className="th min-w-[95px] text-right">Cost/gmt</th>
               {editable && <th className="th w-10" />}
             </tr></thead>
             <tbody>
@@ -1446,8 +1465,10 @@ export function BomDetailPage() {
                         placeholder="0"
                         onChange={(e) => setLine(l._key, { wastage_pct: e.target.value === '' ? '' : Number(e.target.value) })} />
                     </td>
-                    <td className="td text-right tabular-nums font-mono text-slate-700">
-                      {rate > 0 ? `₹${fmtDecimal(lineCost, 3)}` : <span className="text-slate-300">—</span>}
+                    <td className="td text-right tabular-nums font-mono text-slate-700" title={rateTitle(l)}>
+                      {rate > 0 ? <>₹{fmtDecimal(lineCost, 3)}{rateInfo(l)?.source && !['STD', 'NONE'].includes(rateInfo(l)!.source)
+                        ? <span className="ml-1 rounded bg-sky-100 px-1 text-[9px] font-bold text-sky-800">{rateInfo(l)!.source === 'QUOTATION' ? 'QTN' : 'PO'}</span> : null}</>
+                        : <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">no rate</span>}
                     </td>
                     {editable && (
                       <td className="td p-1.5 text-right">

@@ -89,6 +89,8 @@ interface QLine {
   uom_id: number | '';
   quotation_rate: number | '';
   confirm_rate: number | '';
+  /** BOM / master standard rate — shown as a reference only; the quotation / confirm rate is the supplier's. */
+  ref_rate?: number;
   unit_price: number | '';
   gst_rate: number;
   igst_rate: number;
@@ -434,7 +436,8 @@ export default function QuotationDetailPage() {
   const setLine = (key: string, patch: Partial<QLine>) =>
     setLines(ls => ls.map(l => l._key === key ? { ...l, ...patch } : l));
 
-  /** Quotation line from a BOM item of a job (qty = BOM requirement, rate = std rate). */
+  /** Quotation line from a BOM item of a job (qty = BOM requirement). The rate is NOT taken from the BOM: the
+   *  quotation rate / confirm rate are what the supplier quoted (client 03-Oct-2026); the BOM's standard rate is only a reference. */
   function bomItemToLine(it: any, jobNo: string | null | undefined, i: number, keep?: Partial<QLine>): QLine {
     if (!bomMaterial) return { ...newLine(i), ...(keep ?? {}) };
     const rate = Number(it.std_rate) || 0;
@@ -449,7 +452,8 @@ export default function QuotationDetailPage() {
       size_id: it.size_id ?? '',
       qty: Number(it.final_requirement ?? it.order_required_qty) || '',
       uom_id: it.uom_id ?? '',
-      quotation_rate: rate > 0 ? rate : '',
+      quotation_rate: '',
+      ref_rate: rate > 0 ? rate : undefined,
     };
     if (bomMaterial.key === 'fabric_id') {
       return { ...base, fabric_id: it.fabric_id,
@@ -1580,7 +1584,8 @@ export default function QuotationDetailPage() {
                             type="number"
                             step="0.01"
                             min="0"
-                            placeholder="0.00"
+                            placeholder={l.ref_rate ? `BOM ${l.ref_rate}` : '0.00'}
+                            title={l.ref_rate ? `BOM standard rate ₹${l.ref_rate} — reference only; enter the supplier's quoted rate` : undefined}
                             value={l.quotation_rate}
                             onChange={e => setLine(l._key, { quotation_rate: e.target.value === '' ? '' : Number(e.target.value) })}
                             className="w-full rounded border border-surface-border px-2 py-1 text-right text-xs focus:border-brand-500 focus:outline-none font-mono"

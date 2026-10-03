@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { withMaterialRates, materialRates } from '../../core/materialRate.js';
 import { query, queryOne, transaction, txQuery, txQueryOne, txExecute } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
 import { NotFound, BadRequest } from '../../core/errors.js';
@@ -214,7 +215,7 @@ bomRouter.get('/for-job', requireAny('BOM.VIEW', 'PURCHASE.VIEW', 'PROCUREMENT.V
     if (so && st.qty <= 0) warnings.push(`Style ${st.style_code}: plan-cut / order qty is zero on job ${jobNo}`);
 
     const [lines, specs] = await Promise.all([
-      query<any>(LINE_SELECT, [bom.id]),
+      query<any>(LINE_SELECT, [bom.id]).then((r) => withMaterialRates(cid, r)),
       // Material specs the POs / quotations prefill (dia, GSM, count, composition …)
       query<any>(
         `SELECT l.id, fb.dia_inch AS fabric_dia, g.gsm_value AS fabric_gsm, fb.fabric_type AS fabric_master_type,
@@ -314,6 +315,18 @@ bomRouter.get('/for-job', requireAny('BOM.VIEW', 'PURCHASE.VIEW', 'PROCUREMENT.V
  * job / buyer / style and the order's colour × size quantities (plan cut incl. size-wise excess),
  * the same cells MRP, for-job and the BOM print multiply BOM lines by.
  */
+/**
+ * GET /boms/material-rates?yarn_ids=1,2&fabric_ids=&trim_ids= — costing rate of each material with its source
+ * (standard rate → latest accepted purchase quotation → latest PO), so the BOM screen prices lines the same way.
+ */
+bomRouter.get('/material-rates', requirePermission('BOM.VIEW'), ah(async (req, res) => {
+  const ids = (k: string) => String(req.query[k] ?? '').split(',').map(Number).filter((x) => Number.isInteger(x) && x > 0);
+  const items = [...ids('yarn_ids').map((id) => ({ type: 'YARN' as const, id })), ...ids('fabric_ids').map((id) => ({ type: 'FABRIC' as const, id })),
+    ...ids('trim_ids').map((id) => ({ type: 'TRIM' as const, id }))];
+  const m = await materialRates(req.user!.companyId, items);
+  res.json({ data: Object.fromEntries(m) });
+}));
+
 bomRouter.get('/order-cells', requirePermission('BOM.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const q = z.object({ so_id: z.coerce.number().int().positive(), style_id: z.coerce.number().int().positive() }).parse(req.query);
@@ -358,7 +371,7 @@ bomRouter.get('/:id', requirePermission('BOM.VIEW'), ah(async (req, res) => {
        LEFT JOIN cfg_status cs ON cs.id = b.status_id
       WHERE b.id = ? AND b.company_id = ?`, [id, req.user!.companyId]);
   if (!bom) throw NotFound('BOM not found');
-  res.json({ data: { ...bom, lines: await query(LINE_SELECT, [id]) } });
+  res.json({ data: { ...bom, lines: await withMaterialRates(req.user!.companyId, await query<any>(LINE_SELECT, [id])) } });
 }));
 
 /**
@@ -391,7 +404,7 @@ bomRouter.get('/:id/print', requirePermission('BOM.VIEW'), ah(async (req, res) =
     `SELECT legal_name, trade_name, gstin, address_line1, address_line2, city, state, pincode, phone, email
        FROM mst_company WHERE id = ?`, [cid]);
 
-  const lines = await query<any>(LINE_SELECT, [id]);
+  const lines = await withMaterialRates(req.user!.companyId, await query<any>(LINE_SELECT, [id]));
 
   let orderQty: number | null = null;
   let planCutQty: number | null = null;
@@ -530,7 +543,7 @@ bomRouter.get('/:id/explode', requirePermission('BOM.VIEW'), ah(async (req, res)
     [id, req.user!.companyId]);
   if (!bom) throw NotFound('BOM not found');
 
-  const lines = await query<any>(LINE_SELECT, [id]);
+  const lines = await withMaterialRates(req.user!.companyId, await query<any>(LINE_SELECT, [id]));
   const exploded = lines.map((l) => {
     // same rules as MRP / the BOM screen: basis (per piece / ÷ 12 per dozen / fixed qty for the order) + wastage + additional qty
     const perGarment = Number(l.consumption);
@@ -566,7 +579,7 @@ const handleCalculate = ah(async (req, res) => {
     [id, req.user!.companyId]);
   if (!bom) throw NotFound('BOM not found');
 
-  const lines = await query<any>(LINE_SELECT, [id]);
+  const lines = await withMaterialRates(req.user!.companyId, await query<any>(LINE_SELECT, [id]));
   const calculated = lines.map((l) => {
     const cons = Number(l.consumption) || 0;
     const wastePct = Number(l.wastage_pct) || 0;
@@ -808,7 +821,7 @@ bomRouter.post('/:id/sync-cad', requirePermission('BOM.UPDATE'), ah(async (req, 
     }
   });
 
-  const updatedLines = await query(LINE_SELECT, [id]);
+  const updatedLines = await withMaterialRates(cid, await query<any>(LINE_SELECT, [id]));
   res.json({
     success: true,
     message: `Successfully synced CAD auto-consumption from ${cadReq.req_no || 'CAD'} (Fabric: ${fabricConsPerGmt} KG/pc, Yarn: ${yarnConsPerGmt} KG/pc)`,
