@@ -6,6 +6,7 @@ import { http, ApiError } from '../../lib/api';
 import { useToast } from '../../hooks/useToast';
 import { Button, Input } from '../../components/ui';
 import { fmtDecimal } from '../../lib/format';
+import { JobSelect } from '../../components/JobSelect';
 
 /**
  * Job material genealogy panels (client document 03-Oct-2026): the clickable job genealogy tree (§27), the job
@@ -136,32 +137,37 @@ export function SplitRollPanel({ roll, onDone }: { roll: { id: number; roll_no: 
   );
 }
 
-/** §5.3 — merge rolls of the same job / fabric / state / colour / GSM / Dia / store. */
+/** §5.3 — merge rolls of the same job / fabric / state / colour / GSM / Dia / store: pick the job, tick its rolls. */
 export function MergeRollsPanel({ onDone }: { onDone: (msg: string) => void }) {
   const toast = useToast(); const qc = useQueryClient();
-  const [nos, setNos] = useState('');
+  const [job, setJob] = useState<{ id: number; job_no: string } | null>(null);
+  const [sel, setSel] = useState<number[]>([]);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
+  const rolls = useQuery({ queryKey: ['job-rolls', job?.id], queryFn: async () => (await http.get<{ data: any[] }>(`/jobs/${job!.id}/rolls`)).data ?? [], enabled: !!job });
+  const open = (rolls.data ?? []).filter((r) => r.qc_status === 'ACCEPTED' && r.stock_status !== 'CLOSED' && Number(r.weight_kg) - Number(r.issued_kg) > 0.0005);
   const go = async () => {
-    const list = nos.split(/[\s,]+/).map((x) => x.trim()).filter(Boolean);
-    if (list.length < 2) { toast('Enter at least two roll nos', 'warning'); return; }
     setBusy(true);
-    try {
-      const ids: number[] = [];
-      for (const no of list) { const r = (await http.get<{ data: any }>(`/fabric-rolls/lookup?roll_no=${encodeURIComponent(no)}`)).data; ids.push(Number(r.id)); }
-      const r = await http.post<any>('/fabric-rolls/merge', { roll_ids: ids, reason });
-      toast(r.message, 'success'); void qc.invalidateQueries(); onDone(r.message); setNos(''); setReason('');
-    } catch (e) { toast(errText(e), 'error'); } finally { setBusy(false); }
+    try { const r = await http.post<any>('/fabric-rolls/merge', { roll_ids: sel, reason }); toast(r.message, 'success'); void qc.invalidateQueries(); onDone(r.message); setSel([]); setReason(''); }
+    catch (e) { toast(errText(e), 'error'); } finally { setBusy(false); }
   };
   return (
     <div className="card p-4 text-xs" id="merge-rolls">
       <h3 className="mb-2 flex items-center gap-1 text-[13px] font-semibold text-slate-800"><Combine size={14} /> Merge rolls</h3>
-      <div className="flex flex-wrap items-end gap-2">
-        <Input label="Roll nos (comma / space separated)" className="w-96" value={nos} id="merge-nos" onChange={(e) => setNos(e.target.value)} />
+      <div className="mb-2 flex flex-wrap items-end gap-2">
+        <JobSelect label="Job" className="w-72" value={job?.job_no ?? ''} id="merge-job" onPick={(j) => { setJob(j ? { id: j.id, job_no: j.job_no } : null); setSel([]); }} />
         <Input label="Reason *" className="w-64" value={reason} id="merge-reason" onChange={(e) => setReason(e.target.value)} placeholder="e.g. small ends of one lot" />
-        <Button size="sm" loading={busy} onClick={go} disabled={reason.trim().length < 3} id="btn-merge">Merge</Button>
+        <Button size="sm" loading={busy} onClick={go} disabled={sel.length < 2 || reason.trim().length < 3} id="btn-merge">Merge {sel.length || ''} rolls</Button>
       </div>
-      <p className="mt-1 text-slate-500">Only rolls of the same job, fabric, process state, colour, GSM, Dia and store. The KG left on each goes into one new roll; the source rolls are closed and stay in the genealogy.</p>
+      {job && (
+        <table className="w-full" id="merge-table"><thead className="bg-slate-50 text-slate-500"><tr>{['', 'Roll', 'Fabric', 'State', 'Colour', 'GSM', 'Dia', 'Store', 'KG left'].map((h) => <th key={h} className="px-2 py-1 text-left">{h}</th>)}</tr></thead>
+          <tbody>{open.map((r) => <tr key={r.id} className="border-t border-slate-100" data-roll={r.roll_no}>
+            <td className="px-2 py-1"><input type="checkbox" checked={sel.includes(Number(r.id))} onChange={(e) => setSel(e.target.checked ? [...sel, Number(r.id)] : sel.filter((x) => x !== Number(r.id)))} /></td>
+            <td className="px-2 py-1 font-mono">{r.roll_no}</td><td className="px-2 py-1">{r.fabric_name}</td><td className="px-2 py-1">{r.process_state}</td><td className="px-2 py-1">{r.color_name ?? '—'}</td>
+            <td className="px-2 py-1">{r.gsm ?? '—'}</td><td className="px-2 py-1">{r.dia ?? '—'}</td><td className="px-2 py-1">{r.warehouse_name}</td><td className="px-2 py-1 tabular-nums">{kg(Number(r.weight_kg) - Number(r.issued_kg))}</td></tr>)}
+            {!open.length && <tr><td colSpan={9} className="px-2 py-3 text-center text-slate-400">No open rolls</td></tr>}</tbody></table>
+      )}
+      <p className="mt-1 text-slate-500">Only rolls of the same job, fabric, process state, colour, GSM, Dia and store, not on a draft DC or a live quotation. The KG left on each goes into one new roll; the source rolls are closed and stay in the genealogy.</p>
     </div>
   );
 }

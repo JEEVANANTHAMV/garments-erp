@@ -528,12 +528,16 @@ export default function QuotationDetailPage() {
     } finally { setBomLoading(false); }
   }
   /** Scan / type a roll no: reverse-traced to its job; added to the line of the same fabric / state / colour (doc §9.2). */
-  async function addScannedRoll() {
+  const [rollChoice, setRollChoice] = useState<any[] | null>(null);
+  async function addScannedRoll(rollId?: number) {
     const no = scanRoll.trim();
-    if (!no) return;
-    if (lines.some((l) => (l.rolls ?? []).some((r) => r.roll_no === no))) { toast(`${no} is already on this quotation`, 'warning'); return; }
+    if (!no && !rollId) return;
     try {
-      const r = (await http.get<{ data: any }>(`/fabric-rolls/lookup?${new URLSearchParams({ roll_no: no, process: head.process_name || '', ...(!isNew && id ? { exclude_quotation_id: String(id) } : {}) })}`)).data;
+      const r = (await http.get<{ data: any }>(`/fabric-rolls/lookup?${new URLSearchParams({ ...(rollId ? { roll_id: String(rollId) } : { roll_no: no }), process: head.process_name || '',
+        ...(bomJobId ? { so_id: bomJobId } : {}), ...(!isNew && id ? { exclude_quotation_id: String(id) } : {}) })}`)).data;
+      if (r.ambiguous) { setRollChoice(r.candidates); return; }
+      setRollChoice(null);
+      if (lines.some((l) => (l.rolls ?? []).some((x) => x.fabric_roll_id === Number(r.id)))) { toast(`${r.roll_no} is already on this quotation`, 'warning'); return; }
       if (!r.eligible) { toast(`${r.roll_no}: ${r.problems.join('; ')}`, 'error'); return; }
       const kg = (uoms.data ?? []).find((u: any) => String(u.code).toUpperCase() === 'KG')?.id ?? '';
       const roll: QRoll = { fabric_roll_id: Number(r.id), roll_no: r.roll_no, qty_kg: r.available_kg, max_kg: r.available_kg, trace: rollTrace(r) };
@@ -1315,6 +1319,16 @@ export default function QuotationDetailPage() {
                         placeholder="Roll no — fills job, PO, style, buyer, fabric" id="q-scan-roll" className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs" />
                     </label>
                     <button type="button" className="btn-secondary" id="btn-add-roll" disabled={!scanRoll.trim()} onClick={() => void addScannedRoll()}>Add roll</button>
+                  </div>
+                )}
+                {isProcessQuote && rollChoice && (
+                  <div className="md:col-span-full rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs" id="roll-choice">
+                    <div className="mb-1 font-semibold text-amber-900">Roll no {scanRoll} is on several GRNs — pick the one:</div>
+                    {rollChoice.map((c) => (
+                      <button key={c.id} type="button" className="mr-2 mb-1 rounded border border-amber-300 bg-white px-2 py-1 text-left hover:bg-amber-100" onClick={() => void addScannedRoll(Number(c.id))}>
+                        <b>{c.roll_no}</b> · job {c.job_no ?? '—'} · {c.grn_no} · {c.fabric_name} {c.process_state}{c.color_name ? ` ${c.color_name}` : ''} · {c.available_kg} KG
+                      </button>))}
+                    <button type="button" className="text-slate-500 underline" onClick={() => setRollChoice(null)}>cancel</button>
                   </div>
                 )}
               </div>

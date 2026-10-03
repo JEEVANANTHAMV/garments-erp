@@ -66,11 +66,21 @@ function rollProblems(r: any, ctx: { dye?: boolean; so_id?: number | null }) {
 /** GET /fabric-rolls/lookup?roll_no=&process=&so_id=&exclude_quotation_id= — scan a roll for a process quotation (doc §9.2). */
 genealogyRouter.get('/fabric-rolls/lookup', VIEW, ah(async (req, res) => {
   const cid = req.user!.companyId;
-  const q = z.object({ roll_no: z.string().trim().min(1).max(60), process: z.string().max(100).optional(), so_id: z.coerce.number().int().positive().optional(),
-    exclude_quotation_id: z.coerce.number().int().min(0).optional() }).parse(req.query);
-  const row = await queryOne<any>(`${ROLL_SQL(OPEN_ALLOC_SQL('fr.id', '?'))} WHERE fr.company_id = ? AND fr.roll_no = ? ORDER BY fr.id DESC LIMIT 1`, [q.exclude_quotation_id ?? 0, cid, q.roll_no]);
-  if (!row) throw NotFound(`Roll ${q.roll_no} not found`);
-  const r = shapeRoll(row);
+  const q = z.object({ roll_no: z.string().trim().max(60).optional(), roll_id: z.coerce.number().int().positive().optional(), process: z.string().max(100).optional(),
+    so_id: z.coerce.number().int().positive().optional(), exclude_quotation_id: z.coerce.number().int().min(0).optional() }).parse(req.query);
+  if (!q.roll_no && !q.roll_id) throw BadRequest('Enter the roll no');
+  // roll nos repeat across GRNs (01, 02 …): narrow to the job when given; still several → the caller picks
+  const rows = await query<any>(`${ROLL_SQL(OPEN_ALLOC_SQL('fr.id', '?'))} WHERE fr.company_id = ? AND ${q.roll_id ? 'fr.id = ?' : 'fr.roll_no = ?'} ORDER BY fr.id DESC LIMIT 30`,
+    [q.exclude_quotation_id ?? 0, cid, q.roll_id ?? q.roll_no]);
+  if (!rows.length) throw NotFound(`Roll ${q.roll_no ?? q.roll_id} not found`);
+  let cands = rows.map(shapeRoll);
+  if (cands.length > 1 && q.so_id) { const mine = cands.filter((c) => Number(c.so_id) === q.so_id); if (mine.length) cands = mine; }
+  if (cands.length > 1) { const open = cands.filter((c) => c.stock_status !== 'CLOSED' && c.available_kg > EPS); if (open.length) cands = open; }
+  if (cands.length > 1) {
+    res.json({ data: { ambiguous: true, roll_no: q.roll_no, candidates: cands.map((c) => ({ id: c.id, roll_no: c.roll_no, job_no: c.job_no, grn_no: c.grn_no, fabric_name: c.fabric_name, process_state: c.process_state, color_name: c.color_name, available_kg: c.available_kg })) } });
+    return;
+  }
+  const r = cands[0];
   const problems = rollProblems(r, { dye: /dye/i.test(q.process ?? ''), so_id: q.so_id ?? null });
   res.json({ data: { ...r, eligible: !problems.length, problems } });
 }));
