@@ -558,7 +558,7 @@ export async function jobFabricAvailability(cid: number, soId: number, opts: { s
   const rows = await query<any>(
     `SELECT fr.id, fr.roll_no, fr.lot_no, fr.fabric_id, fb.fabric_name, fr.process_state, fr.color_name, fr.gsm, fr.dia, fr.fabric_form,
             fr.weight_kg, COALESCE(fr.issued_kg, 0) issued_kg, fr.meters, fr.calc_meters, fr.actual_meters, w.warehouse_name, g.grn_no, g.grn_date,
-            (SELECT COALESCE(SUM(ri.weight_kg), 0) FROM trx_fabric_process_roll_in ri WHERE ri.fabric_roll_id = fr.id AND ri.status = 'DRAFT') draft_kg,
+            (SELECT COALESCE(SUM(ri.weight_kg), 0) FROM trx_fabric_process_roll_in ri JOIN trx_fabric_process_order dfo ON dfo.id = ri.fpo_id WHERE ri.fabric_roll_id = fr.id AND ri.status = 'DRAFT' AND dfo.status = 'DRAFT') draft_kg,
             ${OPEN_ALLOC_SQL('fr.id', '?')} allocated_kg,
             (SELECT kp.program_no FROM trx_process_receipt pr JOIN trx_knitting_program kp ON kp.id = pr.src_id WHERE pr.grn_id = fr.grn_id AND pr.src_type = 'KNITTING_PROGRAM' LIMIT 1) program_no
        FROM trx_fabric_roll fr JOIN trx_grn g ON g.id = fr.grn_id LEFT JOIN mst_fabric fb ON fb.id = fr.fabric_id LEFT JOIN mst_warehouse w ON w.id = fr.warehouse_id

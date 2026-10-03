@@ -466,6 +466,8 @@ fabricProcessingRouter.post(['/fabric-process/outward/:id/cancel', '/fabric-proc
       }
       if (o.reprocess_id) await txExecute(tx, `UPDATE trx_fabric_reprocess SET status = 'CANCELLED' WHERE id = ?`, [o.reprocess_id]);
     }
+    // a cancelled draft no longer holds its rolls
+    if (o.status === 'DRAFT') await txExecute(tx, `UPDATE trx_fabric_process_roll_in SET status = 'CANCELLED' WHERE fpo_id = ? AND status = 'DRAFT'`, [id]);
     await txExecute(tx, `UPDATE trx_fabric_process_order SET status = 'CANCELLED', cancel_reason = ? WHERE id = ?`, [reason ?? null, id]);
     return { fpo_no: o.fpo_no, returned_kg: r3(returned) };
   });

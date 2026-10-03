@@ -36,7 +36,7 @@ const ROLL_SQL = (alloc: string) => `
          w.warehouse_name, g.grn_no, g.grn_date, so.so_no, so.io_no, COALESCE(NULLIF(so.io_no, ''), so.so_no) job_no, so.buyer_po_no, so.approval_state so_state,
          COALESCE(so.is_deleted, 0) so_deleted, b.party_name buyer_name,
          (SELECT GROUP_CONCAT(DISTINCT st.style_code) FROM trx_sales_order_line sol JOIN mst_style st ON st.id = sol.style_id WHERE sol.so_id = so.id) styles,
-         (SELECT COALESCE(SUM(ri.weight_kg), 0) FROM trx_fabric_process_roll_in ri WHERE ri.fabric_roll_id = fr.id AND ri.status = 'DRAFT') draft_kg,
+         (SELECT COALESCE(SUM(ri.weight_kg), 0) FROM trx_fabric_process_roll_in ri JOIN trx_fabric_process_order dfo ON dfo.id = ri.fpo_id WHERE ri.fabric_roll_id = fr.id AND ri.status = 'DRAFT' AND dfo.status = 'DRAFT') draft_kg,
          ${alloc} allocated_kg,
          pr.receipt_no production_no, kp.program_no, sfo.fpo_no previous_process, sfo.sub_process previous_process_type
     FROM trx_fabric_roll fr JOIN trx_grn g ON g.id = fr.grn_id LEFT JOIN mst_fabric fb ON fb.id = fr.fabric_id LEFT JOIN mst_warehouse w ON w.id = fr.warehouse_id
