@@ -933,7 +933,11 @@ export function GeneralPurchaseDetailPage() {
                         label="I/O (Internal Order) / SO *"
                         options={toOptions(salesOrders.data || [])}
                         value={line.so_id || ''}
-                        onChange={(e) => handleUpdateLine(line._key, 'so_id', e.target.value)}
+                        onChange={(e) => {
+                          handleUpdateLine(line._key, 'so_id', e.target.value);
+                          const so = (salesOrders.data || []).find((x: any) => String(x.id) === e.target.value);
+                          if (so?.style_id) handleUpdateLine(line._key, 'style_id', String(so.style_id));
+                        }}
                         placeholder="Select I/O / SO"
                       />
                       <Select

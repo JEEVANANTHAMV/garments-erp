@@ -11,6 +11,7 @@ import { useToast } from '../../hooks/useToast';
 import { http } from '../../lib/api';
 import { fmtDecimal, today } from '../../lib/format';
 import { Badge, Spinner } from '../../components/ui';
+import { JobSelect } from '../../components/JobSelect';
 
 interface ReturnLine {
   id?: number;
@@ -1050,16 +1051,8 @@ export function PurchaseReturnDetailPage() {
                       </select>
                     </td>
                     <td className="py-2 px-3">
-                      <input
-                        className="input h-8 text-xs font-mono"
-                        value={a.job_no}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setAllocations((prev) => prev.map((x, i) => i === idx ? { ...x, job_no: val } : x));
-                        }}
-                        placeholder="e.g. JOB-1001"
-                        disabled={!isDraft}
-                      />
+                      <JobSelect label="" className="min-w-[12rem]" value={a.job_no} disabled={!isDraft} id={`pr-alloc-job-${idx}`}
+                        onPick={(j) => setAllocations((prev) => prev.map((x, i) => i === idx ? { ...x, job_no: j?.job_no ?? '', style_no: j ? (j.styles.length === 1 ? j.styles[0].style_code : x.style_no) : x.style_no } : x))} />
                     </td>
                     <td className="py-2 px-3">
                       <input

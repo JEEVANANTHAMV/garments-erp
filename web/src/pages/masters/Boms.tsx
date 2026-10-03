@@ -1093,8 +1093,11 @@ export function BomDetailPage() {
             placeholder="— Master (All Orders) —"
             value={head.so_id ?? ''}
             disabled={!editable}
-            hint="Blank = Master for all orders"
-            onChange={(e) => setHead((s) => ({ ...s, so_id: e.target.value }))}
+            hint="Blank = Master for all orders · picking the job fills its style"
+            onChange={(e) => {
+              const so = (salesOrders.data ?? []).find((x: any) => String(x.id) === e.target.value);
+              setHead((s) => ({ ...s, so_id: e.target.value, ...(so?.style_id && !s.style_id ? { style_id: String(so.style_id) } : {}) }));
+            }}
           />
           <Input label="Effective date" type="date" value={head.effective_date ?? ''} disabled={!editable}
             onChange={(e) => setHead((s) => ({ ...s, effective_date: e.target.value }))} />

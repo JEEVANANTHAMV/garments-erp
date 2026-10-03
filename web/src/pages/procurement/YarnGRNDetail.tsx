@@ -819,7 +819,10 @@ export default function YarnGRNDetailPage() {
                       {isNew ? (
                         <select
                           value={l.so_id || ''}
-                          onChange={(e) => updateLine(idx, { so_id: e.target.value })}
+                          onChange={(e) => {
+                            const so = (salesOrders.data ?? []).find((x: any) => String(x.id) === e.target.value);
+                            updateLine(idx, { so_id: e.target.value, ...(so?.style_id ? { style_id: String(so.style_id) } : {}) });
+                          }}
                           className="w-full text-xs rounded border border-slate-300 py-1 px-1 bg-white"
                         >
                           <option value="">Stock / General</option>
@@ -829,7 +832,7 @@ export default function YarnGRNDetailPage() {
                         </select>
                       ) : (
                         <span className="font-medium text-slate-700">
-                          {l.so_id ? `SO #${l.so_id}` : 'Stock / General'}
+                          {l.so_id ? ((salesOrders.data ?? []).find((x: any) => String(x.id) === String(l.so_id))?.job_no ?? `SO #${l.so_id}`) : 'Stock / General'}
                         </span>
                       )}
                     </td>

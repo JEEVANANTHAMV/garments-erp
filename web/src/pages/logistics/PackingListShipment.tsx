@@ -4,6 +4,7 @@ import { Card, Badge, Button, Input, Select, DataTable, Textarea } from '../../c
 import { api } from '../../lib/api';
 import { fmtDate, fmtNumber, fmtDecimal, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
+import { JobSelect } from '../../components/JobSelect';
 
 /* ============================================================
    1-2. PACKING LISTS — register + ASSORTED / SOLID / MIXED editor
@@ -431,8 +432,8 @@ export function ShipmentDetailPage() {
             onChange={e => setField('shipment_no', e.target.value)} placeholder="Auto-generate" />
           
           <div>
-            <Input label="I/O No" value={header.io_no || ''} onChange={e => setField('io_no', e.target.value)}
-              disabled={Boolean(header.packing_list_id)} />
+            <JobSelect label="I/O No" value={header.io_no || ''} disabled={Boolean(header.packing_list_id)} id="shp-io"
+              onPick={(j) => setHeader((p: any) => ({ ...p, io_no: j?.job_no ?? '', so_id: j ? j.id : p.so_id, ...(j?.buyer_id && !p.buyer_id ? { buyer_id: j.buyer_id } : {}) }))} />
             {header.packing_list_id && <span className="text-[10px] text-indigo-600 font-medium">🔒 Inherited from Packing List</span>}
           </div>
 
@@ -441,7 +442,11 @@ export function ShipmentDetailPage() {
             options={[{ value: '', label: '— Select Packing List —' }, ...packingLists.map((p: any) => ({ value: p.id, label: `${p.pl_no} (I/O: ${p.io_no || 'N/A'})` }))]} />
 
           <Select label="Sales Order" value={header.so_id || ''}
-            onChange={e => setField('so_id', e.target.value ? Number(e.target.value) : null)}
+            onChange={e => {
+              const so = salesOrders.find((x: any) => String(x.id) === e.target.value);
+              setHeader((p: any) => ({ ...p, so_id: e.target.value ? Number(e.target.value) : null,
+                ...(so && !p.shipment_id && !p.packing_list_id ? { io_no: so.job_no || so.io_no || so.so_no } : {}), ...(so?.buyer_id && !p.buyer_id ? { buyer_id: so.buyer_id } : {}) }));
+            }}
             options={[{ value: '', label: '— Select —' }, ...salesOrders.map((s: any) => ({ value: s.id, label: s.label || s.code }))]} />
           <Select label="Buyer" value={header.buyer_id || ''}
             onChange={e => setField('buyer_id', e.target.value ? Number(e.target.value) : null)}
@@ -945,8 +950,8 @@ export function DispatchDetailPage() {
           <Input label="Dispatch Date" type="date" value={header.dispatch_date?.slice?.(0, 10) || header.dispatch_date}
             onChange={e => setField('dispatch_date', e.target.value)} />
           <div>
-            <Input label="I/O No" value={header.io_no || ''} onChange={e => setField('io_no', e.target.value)}
-              disabled={Boolean(header.shipment_id)} />
+            <JobSelect label="I/O No" value={header.io_no || ''} disabled={Boolean(header.shipment_id)} id="dsp-io"
+              onPick={(j) => setHeader((p: any) => ({ ...p, io_no: j?.job_no ?? '', so_id: j ? j.id : p.so_id, ...(j?.buyer_id && !p.buyer_id ? { buyer_id: j.buyer_id } : {}) }))} />
             {header.shipment_id && <span className="text-[10px] text-indigo-600 font-medium">🔒 Inherited from Shipment</span>}
           </div>
 
@@ -954,7 +959,11 @@ export function DispatchDetailPage() {
             onChange={e => handleShipmentSelect(e.target.value)}
             options={[{ value: '', label: '— Select Shipment —' }, ...shipments.map((s: any) => ({ value: s.id, label: `${s.shipment_no} (I/O: ${s.io_no || 'N/A'})` }))]} />
           <Select label="Sales Order" value={header.so_id || ''}
-            onChange={e => setField('so_id', e.target.value ? Number(e.target.value) : null)}
+            onChange={e => {
+              const so = salesOrders.find((x: any) => String(x.id) === e.target.value);
+              setHeader((p: any) => ({ ...p, so_id: e.target.value ? Number(e.target.value) : null,
+                ...(so && !p.shipment_id && !p.packing_list_id ? { io_no: so.job_no || so.io_no || so.so_no } : {}), ...(so?.buyer_id && !p.buyer_id ? { buyer_id: so.buyer_id } : {}) }));
+            }}
             options={[{ value: '', label: '— Select —' }, ...salesOrders.map((s: any) => ({ value: s.id, label: s.label || s.code }))]} />
           <Select label="Buyer" value={header.buyer_id || ''}
             onChange={e => setField('buyer_id', e.target.value ? Number(e.target.value) : null)}

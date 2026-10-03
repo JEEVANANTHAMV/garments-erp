@@ -13,6 +13,7 @@ import { InvoiceSummary } from '../../components/InvoiceSummary';
 import { computeInvoice, chargesFromRow, chargesPayload, EMPTY_CHARGES, type InvoiceCharges } from '../../lib/invoiceCalc';
 import { gateOptions } from '../../lib/gateOptions';
 import { ReceiptTypeChooser, LineReceiptChip, openForGrn, type ReceiptType } from '../../lib/poReceipt';
+import { JobSelect } from '../../components/JobSelect';
 
 interface GrnLine {
   _key: string;
@@ -784,16 +785,8 @@ export default function TrimGRNDetailPage() {
             </select>
           </div>
           <div>
-            <label className="label">IO No (Internal Order) *</label>
-            <input
-              type="text"
-              required
-              disabled={!isNew}
-              value={head.io_no}
-              onChange={(e) => setHead({ ...head, io_no: e.target.value })}
-              placeholder="Filled from the linked Trim PO"
-              className="input text-xs font-semibold text-slate-900"
-            />
+            <JobSelect label="IO No (Internal Order)" required disabled={!isNew} value={head.io_no} id="tgrn-io"
+              onPick={(j) => setHead((h: any) => ({ ...h, io_no: j?.job_no ?? '' }))} />
           </div>
           <div>
             <label className="label">Style No (Default)</label>
@@ -980,19 +973,22 @@ export default function TrimGRNDetailPage() {
                     {isNew ? (
                       <select
                         value={line.so_id || ''}
-                        onChange={(e) => updateLine(idx, { so_id: e.target.value })}
+                        onChange={(e) => {
+                          const so = salesOrders.find((x: any) => String(x.id) === e.target.value);
+                          updateLine(idx, { so_id: e.target.value, ...(so?.style_id ? { style_id: String(so.style_id) } : {}) });
+                        }}
                         className="input text-xs py-1 bg-white"
                       >
                         <option value="">{head.io_no ? `${head.io_no} (Default)` : 'Stock / General'}</option>
                         {salesOrders.map((so: any) => (
                           <option key={so.id} value={so.id}>
-                            {so.so_no} {so.style_name ? `(${so.style_name})` : ''}
+                            {so.label || so.so_no}
                           </option>
                         ))}
                       </select>
                     ) : (
                       <span className="font-medium text-slate-700">
-                        {line.so_id ? `SO #${line.so_id}` : (head.io_no || 'Stock')}
+                        {line.so_id ? (salesOrders.find((x: any) => String(x.id) === String(line.so_id))?.job_no ?? `SO #${line.so_id}`) : (head.io_no || 'Stock')}
                       </span>
                     )}
                   </td>

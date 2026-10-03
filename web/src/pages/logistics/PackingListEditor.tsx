@@ -10,6 +10,7 @@ import {
   shippedGroups, STANDARD_PRESETS, uid,
 } from './packingListModel';
 import { PackingListDocument, PackingListPrintPortal } from './PackingListPrint';
+import { JobSelect } from '../../components/JobSelect';
 
 const TYPE_COLOR: Record<string, string> = { ASSORTED: 'indigo', SOLID: 'amber', MIXED: 'violet' };
 const STATUS_COLOR: Record<string, string> = { DRAFT: 'slate', CONFIRMED: 'emerald', CLOSED: 'gray' };
@@ -323,7 +324,8 @@ export function PackingListDetailPage() {
             onChange={(e) => { const v = e.target.value ? Number(e.target.value) : null; const p = lk.packings.find((x: any) => x.id === v);
               setHeader((h) => ({ ...h, packing_id: v, so_id: h.so_id ?? p?.so_id ?? null })); setDirty(true); }}
             options={[{ value: '', label: '— None —' }, ...lk.packings.map((p: any) => ({ value: p.id, label: p.label || p.code }))]} />
-          <Input label="I/O No" value={header.io_no || ''} onChange={(e) => setField('io_no', e.target.value)} />
+          <JobSelect label="I/O No" value={header.io_no || ''} id="pl-io"
+            onPick={(j) => { setHeader((h) => ({ ...h, io_no: j?.job_no ?? '', so_id: j ? j.id : h.so_id })); setDirty(true); if (j && isNew) void fillFromSo(j.id); }} />
           <Select label="Buyer" value={header.buyer_id ?? ''} options={partyOptions} onChange={(e) => setField('buyer_id', e.target.value ? Number(e.target.value) : null)} />
         </fieldset>
       </Card>

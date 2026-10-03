@@ -1036,7 +1036,11 @@ export default function FabricGRNDetailPage() {
                     {isNew ? (
                       <select
                         value={l.so_id || ''}
-                        onChange={(e) => updateLineField(idx, 'so_id', e.target.value)}
+                        onChange={(e) => {
+                          const so = (salesOrders.data ?? []).find((x: any) => String(x.id) === e.target.value);
+                          updateLineField(idx, 'so_id', e.target.value);
+                          if (so?.style_id) updateLineField(idx, 'style_id', String(so.style_id));
+                        }}
                         className="w-32 text-xs rounded border border-slate-300 py-1 px-1 bg-white"
                       >
                         <option value="">Stock / General</option>
@@ -1048,7 +1052,7 @@ export default function FabricGRNDetailPage() {
                       </select>
                     ) : (
                       <span className="text-slate-700 font-medium">
-                        {l.so_id ? `SO #${l.so_id}` : 'Stock / General'}
+                        {l.so_id ? ((salesOrders.data ?? []).find((x: any) => String(x.id) === String(l.so_id))?.job_no ?? `SO #${l.so_id}`) : 'Stock / General'}
                       </span>
                     )}
                   </td>
