@@ -379,7 +379,7 @@ yarnEngineAfterRouter.get('/yarn-process/bill-sources', requirePermission(YP.VIE
             (SELECT bl.rate FROM trx_yarn_process_bill_line bl JOIN trx_yarn_process_bill bb ON bb.id = bl.bill_id
               WHERE bb.vendor_id = i.vendor_id AND bl.process_code = i.process_code AND bl.line_type = 'GRN' AND bb.status = 'POSTED' ORDER BY bl.id DESC LIMIT 1) AS last_rate,
             o.rate_per_kg AS quotation_rate, o.ypo_no AS dc_no, q.quotation_no, i.challan_no, i.vehicle_no, i.input_kg, i.reject_kg, i.loss_kg, gi.entry_no AS gate_entry_no, gr.grn_no,
-            (SELECT GROUP_CONCAT(DISTINCT x.lot_no SEPARATOR ', ') FROM trx_yarn_process_inward_out x WHERE x.inward_id = i.id) AS lots
+            (SELECT GROUP_CONCAT(DISTINCT x.output_lot_no SEPARATOR ', ') FROM trx_yarn_process_inward_out x WHERE x.inward_id = i.id) AS lots
        FROM trx_yarn_process_inward i LEFT JOIN mst_yarn_process_type pt ON pt.company_id = i.company_id AND pt.code = i.process_code
        LEFT JOIN trx_yarn_process_order o ON o.id = i.ypo_id LEFT JOIN trx_quotation q ON q.id = o.quotation_id
        LEFT JOIN trx_gate_inward gi ON gi.id = i.gate_inward_id LEFT JOIN trx_grn gr ON gr.id = i.grn_id
