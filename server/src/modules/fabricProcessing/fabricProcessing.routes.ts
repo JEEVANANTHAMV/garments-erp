@@ -129,11 +129,22 @@ fabricProcessingRouter.get('/fabric-process/quotation-plan', requirePermission(F
       [cid, qt.id, soId, ...(l.fabric_id ? [l.fabric_id] : []), ...(q.exclude_fpo_id ? [q.exclude_fpo_id] : [])]))?.v ?? 0) : 0;
     const balance = r3(Math.max(0, Number(l.qty) - sent));
     const job = soId ? await queryOne<any>('SELECT id, COALESCE(io_no, so_no) job_no, buyer_po_no FROM trx_sales_order WHERE id = ?', [soId]) : null;
-    const avail = soId ? (await jobFabricAvailability(cid, soId, { state: dye ? 'GREY' : null })).rolls.filter((r: any) => !l.fabric_id || Number(r.fabric_id) === Number(l.fabric_id)) : [];
+    const avail = soId ? (await jobFabricAvailability(cid, soId, { state: dye ? 'GREY' : null, excludeQuotationId: qt.id })).rolls.filter((r: any) => !l.fabric_id || Number(r.fabric_id) === Number(l.fabric_id)) : [];
+    // the rolls reserved on this quotation line go first (genealogy doc §18), then the job's other rolls oldest first
+    const reserved = await query<any>(
+      `SELECT qr.fabric_roll_id, qr.qty_kg - COALESCE((SELECT SUM(ri.weight_kg) FROM trx_fabric_process_roll_in ri JOIN trx_fabric_process_order o ON o.id = ri.fpo_id
+          WHERE ri.fabric_roll_id = qr.fabric_roll_id AND o.quotation_id = qr.quotation_id AND o.status <> 'CANCELLED' ${q.exclude_fpo_id ? 'AND o.id <> ?' : ''}), 0) open_kg
+         FROM trx_quotation_roll qr WHERE qr.quotation_id = ? AND qr.quotation_line_id = ? ORDER BY qr.id`,
+      [...(q.exclude_fpo_id ? [q.exclude_fpo_id] : []), qt.id, l.id]);
+    const ordered = [
+      ...reserved.map((x) => ({ x, r: avail.find((r: any) => Number(r.id) === Number(x.fabric_roll_id)) })).filter((o) => o.r && Number(o.x.open_kg) > 0.0005)
+        .map((o) => ({ ...o.r, reserved: true, cap: Math.min(Number(o.x.open_kg), o.r.available_kg) })),
+      ...avail.filter((r: any) => !reserved.some((x) => Number(x.fabric_roll_id) === Number(r.id))).map((r: any) => ({ ...r, reserved: false, cap: r.available_kg })),
+    ];
     let left = balance; const pick = [];
-    for (const r of avail) {
+    for (const r of ordered) {
       if (left <= 0.0005) break;
-      const kg = r3(Math.min(left, r.available_kg)); left = r3(left - kg);
+      const kg = r3(Math.min(left, r.cap)); if (kg <= 0) continue; left = r3(left - kg);
       pick.push({ ...r, io_no: job?.job_no ?? null, buyer_po_no: job?.buyer_po_no ?? null, so_id: soId, send_kg: kg });
     }
     out.push({ line_id: Number(l.id), job_no: job?.job_no ?? l.job_no ?? null, so_id: soId, fabric_id: l.fabric_id, fabric_name: l.fabric_name, description: l.description,

@@ -20,6 +20,7 @@ import { styleRouter } from './modules/style/style.routes.js';
 import { bomRouter } from './modules/bom/bom.routes.js';
 import { quotationVersionsRouter } from './modules/quotation/quotationVersions.js';
 import { jobStockRouter } from './modules/stock/jobStock.routes.js';
+import { genealogyRouter } from './modules/stock/genealogy.routes.js';
 import { salesOrderRouter } from './modules/sales/salesOrder.routes.js';
 import { inventoryRouter } from './modules/inventory/inventory.routes.js';
 import { mrpRouter } from './modules/mrp/mrp.routes.js';
@@ -110,6 +111,7 @@ export function createApp() {
   api.use('/styles', styleRouter);
   api.use('/boms', bomRouter);
   api.use('/', quotationVersionsRouter);     // /quotations/:id/versions
+  api.use('/', genealogyRouter);             // genealogy doc: roll lookup / split / merge, quotation rolls, snapshot, cost, tree, reports
   api.use('/', jobStockRouter);              // /yarn-stock/job-lots, /job-stock, /job-transfers, /traceability/fabric-roll|job
   api.use('/sales-orders', salesOrderRouter);
   api.use('/inventory', inventoryRouter);

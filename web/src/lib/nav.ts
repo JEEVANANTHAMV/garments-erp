@@ -115,6 +115,7 @@ export const NAV: NavSection[] = [
     items: [
       { label: 'Traceability Search',  to: '/production/traceability', icon: Search, perms: ['PRODUCTION.VIEW'] },
       { label: 'Material Traceability (Yarn / Fabric)', to: '/production/material-trace', icon: Workflow, perms: ['PRODUCTION.VIEW'] },
+      { label: 'Genealogy Reports', to: '/production/genealogy-reports', icon: Workflow, perms: ['PRODUCTION.VIEW'] },
       { label: 'Yarn Processing',      to: '/production/knitting', icon: Activity, perms: ['PRODUCTION.VIEW'], hidden: true },
       { label: 'Knitting Programs',    to: '/production/knitting-programs', icon: Layers, perms: ['PRODUCTION.VIEW'] },
       { label: 'Yarn Substitution',    to: '/production/yarn-substitution', icon: GitBranch, perms: ['PRODUCTION.VIEW', 'INVENTORY.VIEW'] },

@@ -1,3 +1,4 @@
+import { ensureRequirementSnapshot } from '../stock/genealogy.routes.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { query, queryOne, transaction, txQuery, txQueryOne, txExecute } from '../../config/db.js';
@@ -415,6 +416,9 @@ knittingRouter.post('/knitting/programs', requirePermission('PRODUCTION.CREATE')
       );
     }
 
+    // the job's planned requirement is frozen before production (genealogy doc §5.1 / §29)
+    const jobId = body.so_id ?? (await txQueryOne<any>(tx, `SELECT id FROM trx_sales_order WHERE company_id = ? AND is_deleted = 0 AND (io_no = ? OR so_no = ?) ORDER BY id DESC LIMIT 1`, [cid, body.io_no, body.io_no]))?.id;
+    await ensureRequirementSnapshot(tx, cid, jobId ? Number(jobId) : null, req.user!.id);
     return { id: programId, program_no: programNo };
   });
 

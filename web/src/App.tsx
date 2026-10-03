@@ -89,6 +89,7 @@ import BillsInwardHub from './pages/procurement/BillsInwardHub';
 import PurchaseExcessPage from './pages/procurement/PurchaseExcessPage';
 import YarnSubstitutionPage from './pages/production/YarnSubstitutionPage';
 import MaterialTracePage from './pages/production/MaterialTracePage';
+import GenealogyReportsPage from './pages/production/GenealogyReportsPage';
 
 import CadRequirementsPage from './pages/production/CadRequirements';
 import CadRequirementDetailPage from './pages/production/CadRequirementDetail';
@@ -317,6 +318,7 @@ export default function App() {
                   <Route path="yarn-process/reports" element={<YarnProcessReportsPage />} />
                   <Route path="yarn-process/types" element={<YarnProcessTypesPage />} />
                   <Route path="material-trace" element={<MaterialTracePage />} />
+                  <Route path="genealogy-reports" element={<GenealogyReportsPage />} />
                   <Route path="fabric-issues" element={<FabricIssuePage />} />
                   <Route path="lay-spreading" element={<LaySpreadingPage />} />
                   <Route path="cut-qc-bundles" element={<CutQcBundlesPage />} />

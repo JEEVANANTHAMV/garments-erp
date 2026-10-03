@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useJobBoms, bomItemLabel, type JobBomItem } from '../../lib/jobBom';
@@ -95,7 +95,19 @@ interface QLine {
   gst_rate: number;
   igst_rate: number;
   sort_order: number;
+  /** Process quotation: the fabric rolls this line is for (genealogy doc §9 / §18) — qty = their KG. */
+  rolls?: QRoll[];
+  /** Process quotation costing (doc §17): process + dye / chemical + other = the quoted rate per KG. */
+  process_rate?: number | '';
+  dye_chem_rate?: number | '';
+  other_rate?: number | '';
+  /** fabric | state | colour | gsm | dia — rolls of the same group go on one line */
+  _group?: string;
 }
+interface QRoll { fabric_roll_id: number; roll_no: string; qty_kg: number | ''; max_kg?: number; trace?: string }
+const rollTrace = (r: any) => [r.production_no ? `prod ${r.production_no}` : null, r.program_no, r.lot_no ? `lot ${r.lot_no}` : null, r.previous_process ? `after ${r.previous_process}` : null].filter(Boolean).join(' · ');
+const rollGroup = (r: any) => `${r.fabric_id}|${r.process_state ?? ''}|${r.color_name ?? r.colour ?? ''}|${r.gsm ?? ''}|${r.dia ?? ''}`;
+const sumRolls = (rs: QRoll[] | undefined) => Math.round((rs ?? []).reduce((a, r) => a + (Number(r.qty_kg) || 0), 0) * 1000) / 1000;
 
 let keySeq = 0;
 const newLine = (sort = 0): QLine => ({
@@ -325,8 +337,22 @@ export default function QuotationDetailPage() {
         gst_rate: Number(l.gst_rate ?? 0),
         igst_rate: Number(l.igst_rate ?? 0),
         sort_order: i,
+        process_rate: l.process_rate != null ? Number(l.process_rate) : '',
+        dye_chem_rate: l.dye_chem_rate != null ? Number(l.dye_chem_rate) : '',
+        other_rate: l.other_rate != null ? Number(l.other_rate) : '',
       }))
     );
+    // the rolls of each line (by its position)
+    if (d.quotation_category === 'PROCESS') {
+      void http.get<{ data: any[] }>(`/quotations/${d.id}/rolls`).then((r) => {
+        const rows = r.data ?? [];
+        if (!rows.length) return;
+        setLines((ls) => ls.map((l, i) => {
+          const mine = rows.filter((x) => Number(x.line_sort) === i);
+          return mine.length ? { ...l, _group: rollGroup(mine[0]), rolls: mine.map((x) => ({ fabric_roll_id: Number(x.fabric_roll_id), roll_no: x.roll_no, qty_kg: Number(x.qty_kg), trace: rollTrace(x) })) } : l;
+        }));
+      }).catch(() => {});
+    }
   }, [detail.data]);
 
   /* ── Rate helper: Confirm Rate takes precedence over Quotation Rate ── */
@@ -477,7 +503,8 @@ export default function QuotationDetailPage() {
    * only yarn still has fabric once it is knitted; a dyeing quotation must come from the job's available fabric rolls).
    */
   const isProcessQuote = head.quotation_category === 'PROCESS' && (head.quotation_type === 'FABRIC' || head.quotation_type === 'YARN');
-  const [actual, setActual] = useState<null | { kind: 'FABRIC' | 'YARN'; job: any; groups: any[]; pick: Record<string, number | ''> }>(null);
+  const [actual, setActual] = useState<null | { kind: 'FABRIC' | 'YARN'; job: any; groups: any[]; rolls: any[]; pick: Record<string, number | ''> }>(null);
+  const [scanRoll, setScanRoll] = useState('');
   async function loadJobActual() {
     if (!bomJobId) { toast('Select the IO No (job) first', 'warning'); return; }
     setBomLoading(true);
@@ -486,23 +513,87 @@ export default function QuotationDetailPage() {
       // dyeing takes grey fabric; other processes (washing, compacting …) any state
       const dye = /dye/i.test(head.process_name || '');
       const d = kind === 'FABRIC'
-        ? (await http.get<{ data: any }>(`/jobs/${bomJobId}/fabric-availability${dye ? '?state=GREY' : ''}`)).data
+        ? (await http.get<{ data: any }>(`/jobs/${bomJobId}/fabric-availability?${new URLSearchParams({ ...(dye ? { state: 'GREY' } : {}), ...(!isNew && id ? { exclude_quotation_id: String(id) } : {}) })}`)).data
         : (await http.get<{ data: any }>(`/jobs/${bomJobId}/yarn-availability`)).data;
       if (!d.groups.length) {
         toast(kind === 'FABRIC' ? `Job ${d.job.job_no} has no ${dye ? 'grey ' : ''}fabric in stock yet (knit it / receive it first)` : `Job ${d.job.job_no} holds no yarn`, 'warning');
         return;
       }
-      setActual({ kind, job: d.job, groups: d.groups, pick: Object.fromEntries(d.groups.map((g: any) => [g.key, g.available_kg])) });
+      // fabric: pick roll by roll (doc §9.1 "select required rolls / quantity"); yarn: by lot group
+      const rolls = kind === 'FABRIC' ? [...(d.rolls ?? [])].sort((a: any, b: any) => rollGroup(a).localeCompare(rollGroup(b)) || a.id - b.id) : [];
+      setActual({ kind, job: d.job, groups: d.groups, rolls,
+        pick: kind === 'FABRIC' ? Object.fromEntries(rolls.map((r: any) => [String(r.id), r.available_kg])) : Object.fromEntries(d.groups.map((g: any) => [g.key, g.available_kg])) });
     } catch (e: any) {
       toast(e instanceof ApiError ? e.message : 'Could not load the job\'s material', 'error');
     } finally { setBomLoading(false); }
   }
+  /** Scan / type a roll no: reverse-traced to its job; added to the line of the same fabric / state / colour (doc §9.2). */
+  async function addScannedRoll() {
+    const no = scanRoll.trim();
+    if (!no) return;
+    if (lines.some((l) => (l.rolls ?? []).some((r) => r.roll_no === no))) { toast(`${no} is already on this quotation`, 'warning'); return; }
+    try {
+      const r = (await http.get<{ data: any }>(`/fabric-rolls/lookup?${new URLSearchParams({ roll_no: no, process: head.process_name || '', ...(!isNew && id ? { exclude_quotation_id: String(id) } : {}) })}`)).data;
+      if (!r.eligible) { toast(`${r.roll_no}: ${r.problems.join('; ')}`, 'error'); return; }
+      const kg = (uoms.data ?? []).find((u: any) => String(u.code).toUpperCase() === 'KG')?.id ?? '';
+      const roll: QRoll = { fabric_roll_id: Number(r.id), roll_no: r.roll_no, qty_kg: r.available_kg, max_kg: r.available_kg, trace: rollTrace(r) };
+      const grp = rollGroup(r);
+      setLines((ls) => {
+        const at = ls.findIndex((l) => l._group === grp && Number(l.so_id) === Number(r.so_id));
+        if (at >= 0) return ls.map((l, i) => { if (i !== at) return l; const rolls = [...(l.rolls ?? []), roll]; return { ...l, rolls, qty: sumRolls(rolls), description: l.description.replace(/· \d+ roll\(s\)/, `· ${rolls.length} roll(s)`) }; });
+        const blank = ls.length === 1 && !ls[0].description && !ls[0].qty && !ls[0].fabric_id;
+        const line: QLine = { ...newLine(ls.length), job_no: r.job_no, so_id: Number(r.so_id), material_type: 'FABRIC', fabric_id: r.fabric_id, dia: r.dia ?? '', gsm: r.gsm != null ? String(r.gsm) : '',
+          uom_id: kg as any, rolls: [roll], qty: r.available_kg, _group: grp, description: `${r.fabric_name ?? 'Fabric'} · ${r.process_state}${r.color_name ? ` ${r.color_name}` : ''} · 1 roll(s)` };
+        return blank ? [line] : [...ls, line];
+      });
+      setHead((h) => ({ ...h, job_no: h.job_no || r.job_no }));
+      toast(`${r.roll_no} → job ${r.job_no}${r.buyer_name ? ` · ${r.buyer_name}` : ''}${r.styles ? ` · ${r.styles}` : ''} · ${r.fabric_name} · ${r.available_kg} KG`, 'success');
+      setScanRoll('');
+    } catch (e: any) { toast(e instanceof ApiError ? e.message : 'Roll not found', 'error'); }
+  }
+  const setRollKg = (key: string, rollId: number, v: number | '') => setLines((ls) => ls.map((l) => {
+    if (l._key !== key) return l;
+    const rolls: QRoll[] = (l.rolls ?? []).map((r): QRoll => (r.fabric_roll_id === rollId ? { ...r, qty_kg: v === '' ? '' : (r.max_kg != null ? Math.min(Number(v), r.max_kg) : Number(v)) } : r));
+    return { ...l, rolls, qty: sumRolls(rolls) };
+  }));
+  const dropRoll = (key: string, rollId: number) => setLines((ls) => ls.map((l) => {
+    if (l._key !== key) return l;
+    const rolls = (l.rolls ?? []).filter((r) => r.fabric_roll_id !== rollId);
+    return { ...l, rolls, qty: rolls.length ? sumRolls(rolls) : l.qty };
+  }));
+  const setBreakup = (key: string, patch: Partial<QLine>) => setLines((ls) => ls.map((l) => {
+    if (l._key !== key) return l;
+    const n2 = { ...l, ...patch };
+    const parts = [n2.process_rate, n2.dye_chem_rate, n2.other_rate];
+    return parts.some((x) => x !== '' && x != null) ? { ...n2, quotation_rate: Math.round(parts.reduce((a: number, x) => a + (Number(x) || 0), 0) * 100) / 100 } : n2;
+  }));
+
   function applyJobActual() {
     if (!actual) return;
     const kg = (uoms.data ?? []).find((u: any) => String(u.code).toUpperCase() === 'KG')?.id ?? '';
+    const st = bomJob && bomJob.styles.length === 1 ? bomJob.styles[0].style_id : (bomStyleId ? Number(bomStyleId) : '');
+    if (actual.kind === 'FABRIC') {
+      const picked = actual.rolls.filter((r) => Number(actual.pick[String(r.id)]) > 0);
+      if (!picked.length) { toast('Tick at least one roll with KG', 'warning'); return; }
+      const byGroup = new Map<string, any[]>();
+      for (const r of picked) byGroup.set(rollGroup(r), [...(byGroup.get(rollGroup(r)) ?? []), r]);
+      const next: QLine[] = [...byGroup.entries()].map(([grp, rs], i) => {
+        const r0 = rs[0];
+        const rolls: QRoll[] = rs.map((r) => ({ fabric_roll_id: Number(r.id), roll_no: r.roll_no, qty_kg: Number(actual.pick[String(r.id)]), max_kg: r.available_kg, trace: rollTrace(r) }));
+        return { ...newLine(i), job_no: actual.job.job_no, so_id: actual.job.id, style_id: st as any, material_type: 'FABRIC', fabric_id: r0.fabric_id, dia: r0.dia ?? '', gsm: r0.gsm != null ? String(r0.gsm) : '',
+          uom_id: kg as any, rolls, qty: sumRolls(rolls), _group: grp,
+          description: `${r0.fabric_name ?? 'Fabric'} · ${r0.process_state}${r0.colour && r0.colour !== 'GREY' ? ` ${r0.colour}` : ''} · ${rs.length} roll(s)` };
+      });
+      const hasEntered = lines.some(l => l.description || l.qty || l.fabric_id || l.yarn_id);
+      if (hasEntered && !window.confirm(`Replace the ${lines.length} existing line(s)?`)) return;
+      setLines(next);
+      setHead(h => ({ ...h, job_no: actual.job.job_no, buyer_id: h.buyer_id || bomJob?.buyer_id || h.buyer_id }));
+      toast(`${next.length} line(s) with ${picked.length} roll(s) loaded from job ${actual.job.job_no}`, 'success');
+      setActual(null);
+      return;
+    }
     const chosen = actual.groups.filter((g) => Number(actual.pick[g.key]) > 0);
     if (!chosen.length) { toast('Tick at least one line with KG', 'warning'); return; }
-    const st = bomJob && bomJob.styles.length === 1 ? bomJob.styles[0].style_id : (bomStyleId ? Number(bomStyleId) : '');
     const next: QLine[] = chosen.map((g, i) => {
       const base: QLine = { ...newLine(i), job_no: actual.job.job_no, so_id: actual.job.id, style_id: st as any, material_type: actual.kind, qty: Number(actual.pick[g.key]), uom_id: kg as any };
       return actual.kind === 'FABRIC'
@@ -514,7 +605,7 @@ export default function QuotationDetailPage() {
     if (hasEntered && !window.confirm(`Replace the ${lines.length} existing line(s)?`)) return;
     setLines(next);
     setHead(h => ({ ...h, job_no: actual.job.job_no, buyer_id: h.buyer_id || bomJob?.buyer_id || h.buyer_id }));
-    toast(`${next.length} line(s) loaded from job ${actual.job.job_no}'s actual ${actual.kind === 'FABRIC' ? 'fabric' : 'yarn'}`, 'success');
+    toast(`${next.length} line(s) loaded from job ${actual.job.job_no}'s actual yarn`, 'success');
     setActual(null);
   }
 
@@ -627,6 +718,10 @@ export default function QuotationDetailPage() {
           igst_amount: iRate > 0 ? (lineAmt * (iRate / 100)) : 0,
           amount: lineAmt,
           sort_order: i,
+          process_rate: l.process_rate === '' || l.process_rate == null ? null : Number(l.process_rate),
+          dye_chem_rate: l.dye_chem_rate === '' || l.dye_chem_rate == null ? null : Number(l.dye_chem_rate),
+          other_rate: l.other_rate === '' || l.other_rate == null ? null : Number(l.other_rate),
+          rolls: (l.rolls ?? []).map((r) => ({ fabric_roll_id: r.fabric_roll_id, qty_kg: Number(r.qty_kg) || 0 })),
         };
       }),
     };
@@ -684,7 +779,8 @@ export default function QuotationDetailPage() {
             )}
           </div>
         }
-        subtitle={isNew ? 'Create quotation with dynamic fields for Fabric, Yarn, Trims, General, Buyer & Import' : `Version ${head.version || 1} • ${head.quotation_date || ''}`}
+        subtitle={isNew ? 'Create quotation with dynamic fields for Fabric, Yarn, Trims, General, Buyer & Import'
+          : `Version ${head.version || 1} • ${head.quotation_date || ''}${(head as any).prepared_by_name ? ` • Prepared by ${(head as any).prepared_by_name}` : ''}${(head as any).approved_by_name ? ` • Approved by ${(head as any).approved_by_name}${(head as any).approved_at ? ` on ${String((head as any).approved_at).slice(0, 10)}` : ''}` : (head as any).status_code && (head as any).status_code !== 'ACCEPTED' ? ' • Not approved yet' : ''}`}
         actions={
           <div className="flex items-center gap-2">
             <button className="btn-secondary" onClick={() => nav('/sales/quotations')}>
@@ -1211,6 +1307,16 @@ export default function QuotationDetailPage() {
                     {bomLoading ? <Spinner size={14} /> : <Layers size={14} />} {isProcessQuote ? `Load Job's ${bomMaterial.label}` : `Load ${bomMaterial.label} Items from BOM`}
                   </button>
                 </div>
+                {isProcessQuote && head.quotation_type === 'FABRIC' && (
+                  <div className="md:col-span-full flex items-end gap-2 border-t border-dashed border-slate-200 pt-2">
+                    <label className="block flex-1 max-w-xs">
+                      <span className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1">Or scan / type a roll no</span>
+                      <input value={scanRoll} onChange={(e) => setScanRoll(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addScannedRoll(); } }}
+                        placeholder="Roll no — fills job, PO, style, buyer, fabric" id="q-scan-roll" className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs" />
+                    </label>
+                    <button type="button" className="btn-secondary" id="btn-add-roll" disabled={!scanRoll.trim()} onClick={() => void addScannedRoll()}>Add roll</button>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1222,9 +1328,29 @@ export default function QuotationDetailPage() {
                 <button className="btn-secondary" onClick={() => setActual(null)}>Cancel</button>
                 <button className="btn-primary" onClick={applyJobActual} id="btn-apply-job-material">Load selected</button>
               </>}>
+              {actual.kind === 'FABRIC' ? (
               <table className="w-full text-xs" id="job-actual-table">
                 <thead className="bg-slate-50 text-slate-500"><tr>
-                  {(actual.kind === 'FABRIC' ? ['', 'Fabric', 'State', 'Colour', 'GSM', 'Dia', 'Rolls', 'From (program)', 'Available KG', 'Quote KG'] : ['', 'Yarn', 'Count', 'Shade', 'Lots', 'Available KG', 'Quote KG'])
+                  {['', 'Roll', 'Fabric', 'State', 'Colour', 'GSM', 'Dia', 'Production · program · lot', 'QC', 'Available KG', 'Available M', 'Quote KG'].map((h, i) => <th key={i} className={`px-2 py-2 ${/KG|M$/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}
+                </tr></thead>
+                <tbody>{actual.rolls.map((r) => {
+                  const k = String(r.id); const on = Number(actual.pick[k]) > 0;
+                  const setPick = (v: number | '') => setActual((a) => (a ? { ...a, pick: { ...a.pick, [k]: v } } : a));
+                  return (
+                    <tr key={k} className={`border-t border-slate-100 ${on ? 'bg-emerald-50/50' : ''}`} data-roll={r.roll_no}>
+                      <td className="px-2 py-1"><input type="checkbox" checked={on} onChange={() => setPick(on ? '' : r.available_kg)} /></td>
+                      <td className="px-2 py-1 font-mono font-semibold">{r.roll_no}</td><td className="px-2 py-1">{r.fabric_name}</td><td className="px-2 py-1">{r.process_state}</td><td className="px-2 py-1">{r.colour ?? '—'}</td>
+                      <td className="px-2 py-1">{r.gsm ?? '—'}</td><td className="px-2 py-1">{r.dia ?? '—'}</td><td className="px-2 py-1 text-slate-600">{rollTrace(r) || r.grn_no}</td><td className="px-2 py-1">QC ok</td>
+                      <td className="px-2 py-1 text-right tabular-nums">{fmtDecimal(r.available_kg, 3)}</td><td className="px-2 py-1 text-right tabular-nums">{r.available_m ? fmtDecimal(r.available_m, 2) : '—'}</td>
+                      <td className="px-2 py-1 text-right"><input type="number" step="0.001" className="w-24 rounded border border-surface-border px-2 py-0.5 text-right text-xs"
+                        value={actual.pick[k]} max={r.available_kg} onChange={(e) => setPick(e.target.value === '' ? '' : Math.min(Number(e.target.value), r.available_kg))} /></td>
+                    </tr>);
+                })}</tbody>
+              </table>
+              ) : (
+              <table className="w-full text-xs" id="job-actual-table">
+                <thead className="bg-slate-50 text-slate-500"><tr>
+                  {['', 'Yarn', 'Count', 'Shade', 'Lots', 'Available KG', 'Quote KG']
                     .map((h, i) => <th key={i} className={`px-2 py-2 ${/KG|Rolls/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}
                 </tr></thead>
                 <tbody>{actual.groups.map((g) => {
@@ -1245,7 +1371,8 @@ export default function QuotationDetailPage() {
                     </tr>);
                 })}</tbody>
               </table>
-              <p className="mt-2 text-[11px] text-slate-500">Quantities are what the job holds now (QC-accepted, not on another DC). Pick the dye colour on each line after loading.</p>
+              )}
+              <p className="mt-2 text-[11px] text-slate-500">Only the job's own rolls: QC-accepted, KG left, not on a draft DC or another live quotation. Rolls of the same fabric / state / colour / GSM / Dia go on one line. Pick the dye colour on each line after loading.</p>
             </Modal>
           )}
 
@@ -1360,7 +1487,8 @@ export default function QuotationDetailPage() {
                     const lineAmt = (Number(l.qty) || 0) * effRate;
 
                     return (
-                      <tr key={l._key} className="hover:bg-slate-50/80 transition-colors">
+                      <Fragment key={l._key}>
+                      <tr className="hover:bg-slate-50/80 transition-colors">
                         <td className="px-2 py-1.5 text-center font-mono text-[11px] text-slate-400">
                           {i + 1}
                         </td>
@@ -1642,6 +1770,8 @@ export default function QuotationDetailPage() {
                             step="any"
                             placeholder="0"
                             value={l.qty}
+                            readOnly={(l.rolls ?? []).length > 0}
+                            title={(l.rolls ?? []).length > 0 ? 'Qty = the KG of its rolls' : undefined}
                             onChange={e => setLine(l._key, { qty: e.target.value === '' ? '' : Number(e.target.value) })}
                             className="w-full rounded border border-surface-border px-2 py-1 text-right text-xs focus:border-brand-500 focus:outline-none font-mono"
                           />
@@ -1739,6 +1869,38 @@ export default function QuotationDetailPage() {
                           </button>
                         </td>
                       </tr>
+                      {isProcessQuote && ((l.rolls ?? []).length > 0 || true) && (
+                        <tr className="bg-slate-50/60" data-line={i + 1}>
+                          <td />
+                          <td colSpan={99} className="px-2 pb-2 pt-0.5 text-[11px]">
+                            {(l.rolls ?? []).length > 0 && (
+                              <div className="mb-1 flex flex-wrap items-center gap-1.5" id={`q-rolls-${i + 1}`}>
+                                <span className="font-semibold text-slate-600">Rolls:</span>
+                                {(l.rolls ?? []).map((r) => (
+                                  <span key={r.fabric_roll_id} className="inline-flex items-center gap-1 rounded border border-sky-200 bg-white px-1.5 py-0.5" title={r.trace}>
+                                    <b className="font-mono">{r.roll_no}</b>
+                                    <input type="number" step="0.001" className="w-16 rounded border border-slate-200 px-1 text-right" value={r.qty_kg}
+                                      onChange={(e) => setRollKg(l._key, r.fabric_roll_id, e.target.value === '' ? '' : Number(e.target.value))} /> KG
+                                    {r.trace && <span className="text-slate-400">{r.trace}</span>}
+                                    <button type="button" className="text-slate-400 hover:text-rose-600" onClick={() => dropRoll(l._key, r.fabric_roll_id)} title="Take the roll off">✕</button>
+                                  </span>
+                                ))}
+                                <span className="text-slate-500">= {fmtDecimal(sumRolls(l.rolls), 3)} KG</span>
+                              </div>
+                            )}
+                            <div className="flex flex-wrap items-center gap-2 text-slate-600" id={`q-cost-${i + 1}`}>
+                              <span className="font-semibold">Costing / KG:</span>
+                              {([['process_rate', 'Process'], ['dye_chem_rate', 'Dye / chemical'], ['other_rate', 'Other']] as const).map(([k, lab]) => (
+                                <label key={k} className="inline-flex items-center gap-1">{lab}
+                                  <input type="number" step="0.01" min="0" className="w-20 rounded border border-slate-200 px-1 text-right" value={(l as any)[k] ?? ''} id={`q-${k}-${i + 1}`}
+                                    onChange={(e) => setBreakup(l._key, { [k]: e.target.value === '' ? '' : Number(e.target.value) } as any)} /></label>
+                              ))}
+                              <span>= <b>{currSymbol}{fmtDecimal(Number(l.quotation_rate) || 0, 2)}</b> quoted rate{[l.process_rate, l.dye_chem_rate, l.other_rate].some((x) => x !== '' && x != null) ? '' : ' (enter the breakup to build it)'}</span>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     );
                   })}
                 </tbody>

@@ -4,6 +4,7 @@ import { Search } from 'lucide-react';
 import { http, ApiError } from '../../lib/api';
 import { PageHeader, Button, Input, Select, Tabs, LoadingBlock } from '../../components/ui';
 import { fmtDate, fmtDecimal } from '../../lib/format';
+import { JobGenealogyTree, RequirementSnapshot, JobCostPanel, RollCostPanel, SplitRollPanel, MergeRollsPanel } from './GenealogyPanels';
 
 /**
  * Material traceability (client voice note 01-Oct-2026): from a fabric roll back through
@@ -23,7 +24,7 @@ export default function MaterialTracePage() {
   return (
     <>
       <PageHeader breadcrumb={['Production', 'Material Traceability']} title="Material Traceability" subtitle="Yarn PO / GRN / lot → knitting → processing → fabric roll → cutting" />
-      <div className="card mb-3 px-4 pt-2"><Tabs tabs={[{ key: 'roll', label: 'By fabric roll' }, { key: 'job', label: 'By job' }]} active={tab} onChange={setTab} /></div>
+      <div className="card mb-3 px-4 pt-2"><Tabs tabs={[{ key: 'roll', label: 'By fabric roll' }, { key: 'job', label: 'By job' }, { key: 'tools', label: 'Split / merge rolls' }]} active={tab} onChange={setTab} /></div>
       {tab === 'roll' && (
         <>
           <div className="card mb-3 flex items-end gap-2 p-4">
@@ -61,6 +62,9 @@ export default function MaterialTracePage() {
                   )}
                 </div>
               ))}
+              {rt.data.chain[0] && <RollCostPanel rollId={Number(rt.data.chain[0].roll.id)} />}
+              {rt.data.chain[0] && rt.data.chain[0].roll.stock_status !== 'CLOSED' && rt.data.chain[0].roll.qc_status === 'ACCEPTED' && Number(rt.data.chain[0].roll.weight_kg) - Number(rt.data.chain[0].roll.issued_kg) > 0.0005 && (
+                <SplitRollPanel roll={rt.data.chain[0].roll} onDone={() => void rt.refetch()} />)}
               <div className="card p-4 text-xs">
                 <h3 className="mb-1 font-semibold">Forward — used in cutting</h3>
                 {rt.data.cutting.length ? rt.data.cutting.map((x: any, i: number) => <div key={i}>{x.roll_no}: {kg(x.issue_kg)} KG on {x.issue_no} ({fmtDate(x.issue_date)}) for cut order {x.plan_no ?? '—'}</div>) : <span className="text-slate-400">Not issued to cutting yet</span>}
@@ -69,10 +73,19 @@ export default function MaterialTracePage() {
           )}
         </>
       )}
+      {tab === 'tools' && (
+        <div className="space-y-3">
+          <MergeRollsPanel onDone={() => {}} />
+          <div className="card p-4 text-xs text-slate-600">To split a roll, trace it on <b>By fabric roll</b> — the split box is under its trace. Split / merge history is in Genealogy Reports.</div>
+        </div>
+      )}
       {tab === 'job' && (
         <>
           <div className="card mb-3 p-4"><Select label="Job" className="w-80" value={job} placeholder="— Job / IO —" onChange={(e) => setJob(e.target.value)} options={(jobs.data ?? []).map((j) => ({ value: j.id, label: j.job_no }))} /></div>
           {gen.data && <Genealogy g={gen.data} />}
+          {job && <JobGenealogyTree soId={job} onRoll={(no) => { setTab('roll'); setRoll(no); setRollQ(no); }} />}
+          {job && <RequirementSnapshot soId={job} />}
+          {job && <JobCostPanel soId={job} />}
           {jt.isLoading && <LoadingBlock />}
           {jt.data && (
             <div className="space-y-3 text-xs">

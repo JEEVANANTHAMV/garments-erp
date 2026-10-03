@@ -18,6 +18,7 @@ import { jobworkInBeforeCreate, jobworkInvoiceBeforeCreate } from '../production
 import { computePreCosting, PRE_COST_HEADS } from '../costing/preCostingCalc.js';
 import { assertPurchaseExcess, poItemKeys } from '../../core/purchaseExcess.js';
 import { checkSupplierBill } from '../../core/supplierBillRules.js';
+import { quotationAfterWriteTx } from '../stock/genealogy.routes.js';
 import { PO_RECEIPT_STATUS_SQL } from '../../core/poReceipt.js';
 import type { Request } from 'express';
 import type { Tx } from '../../config/db.js';
@@ -174,6 +175,9 @@ export const transactionResources: ResourceConfig[] = [
     autoNumber: { column: 'quotation_no', docType: 'QUOTATION' },
     // Editing a saved quotation keeps the previous content as V1, V2 … (trx_quotation_version)
     beforeUpdateTx: quotationBeforeUpdateTx,
+    // process quotation rolls / costing breakup / approval stamp (genealogy doc §17–§19)
+    afterCreateTx: async (req, row, tx) => { await quotationAfterWriteTx(req, row, tx); },
+    afterUpdateTx: async (req, row, tx) => { await quotationAfterWriteTx(req, row, tx); },
     // Purchase quotations (fabric / yarn / trims / general) come from a supplier; buyer quotations go to a buyer.
     beforeWrite: (_req, data, before) => {
       const type = String(data.quotation_type ?? before?.quotation_type ?? '');
@@ -185,7 +189,9 @@ export const transactionResources: ResourceConfig[] = [
     },
     selectExtra: `b.party_name AS buyer_name, sup.party_name AS supplier_name,
                   cur.code AS currency_code, cur.symbol AS currency_symbol,
-                  cs.label AS status_label`,
+                  cs.label AS status_label, cs.code AS status_code,
+                  (SELECT full_name FROM mst_user WHERE id = t.created_by) AS prepared_by_name,
+                  (SELECT full_name FROM mst_user WHERE id = t.approved_by) AS approved_by_name`,
     joins: `LEFT JOIN mst_party b   ON b.id   = t.buyer_id
             LEFT JOIN mst_party sup ON sup.id  = t.supplier_id
             LEFT JOIN cfg_currency cur ON cur.id = t.currency_id
@@ -215,6 +221,7 @@ export const transactionResources: ResourceConfig[] = [
           f('igst_rate', s.dec()), f('igst_amount', s.dec()),
           f('amount', s.decReq()),
           f('sort_order', s.int()),
+          f('process_rate', s.dec()), f('dye_chem_rate', s.dec()), f('other_rate', s.dec()),
         ],
       },
     ],

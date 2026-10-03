@@ -360,7 +360,7 @@ jobStockRouter.get('/job-transfers/:id', requireAny('INVENTORY.VIEW', 'PRODUCTIO
 // =====================================================================================
 async function rollSource(rollId: number) {
   return queryOne<any>(
-    `SELECT fr.id, fr.roll_no, fr.lot_no, fr.weight_kg, fr.process_state, fr.color_name, fr.source_fpo_id, fr.parent_roll_id, fr.so_id,
+    `SELECT fr.id, fr.roll_no, fr.lot_no, fr.weight_kg, COALESCE(fr.issued_kg, 0) issued_kg, fr.stock_status, fr.qc_status, fr.process_state, fr.color_name, fr.source_fpo_id, fr.parent_roll_id, fr.so_id,
             COALESCE(so.io_no, so.so_no) io_no, fb.fabric_name, g.id grn_id, g.grn_no, g.grn_date, g.supplier_inv_no, g.supplier_dc_no,
             sup.party_name supplier, po.po_no, po.po_date, pr.src_type, pr.src_id, pr.ref_dc_no, pr.receipt_no
        FROM trx_fabric_roll fr JOIN trx_grn g ON g.id = fr.grn_id LEFT JOIN trx_grn_line gl ON gl.id = fr.grn_line_id
@@ -448,11 +448,20 @@ jobStockRouter.get('/traceability/yarn-lot/:grnLineId', requirePermission('PRODU
 jobStockRouter.get('/traceability/fabric-roll', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const q = z.object({ roll_no: z.string().trim().max(60).optional(), roll_id: z.coerce.number().int().positive().optional() }).parse(req.query);
-  const start = q.roll_id ? { id: q.roll_id } : await queryOne<any>('SELECT id FROM trx_fabric_roll WHERE company_id = ? AND roll_no = ? ORDER BY id DESC LIMIT 1', [cid, q.roll_no]);
-  if (!start) throw NotFound(`Roll ${q.roll_no} not found`);
+  const start = q.roll_id ? await queryOne<any>('SELECT id FROM trx_fabric_roll WHERE id = ? AND company_id = ?', [q.roll_id, cid])
+    : await queryOne<any>('SELECT id FROM trx_fabric_roll WHERE company_id = ? AND roll_no = ? ORDER BY id DESC LIMIT 1', [cid, q.roll_no]);
+  if (!start) throw NotFound(`Roll ${q.roll_no ?? q.roll_id} not found`);
+  res.json({ data: await rollTrace(cid, Number(start.id)) });
+}));
+
+/**
+ * Reverse trace of a roll (genealogy doc §1, §9.2): roll → its parents (split / merge / process input) → the
+ * knitting production and program → the yarn lots → PO / GRN / supplier; and forward use in cutting.
+ */
+export async function rollTrace(cid: number, rollId: number) {
   const chain: any[] = [];
   const seen = new Set<number>();
-  let ids: number[] = [Number(start.id)];
+  let ids: number[] = [rollId];
   for (let depth = 0; depth < 12 && ids.length; depth++) {
     const next: number[] = [];
     for (const id of ids) {
@@ -466,7 +475,10 @@ jobStockRouter.get('/traceability/fabric-roll', requirePermission('PRODUCTION.VI
       if (r.source_fpo_id && (!parent || Number(parent.source_fpo_id) !== Number(r.source_fpo_id))) {
         step.process = await queryOne<any>('SELECT fpo_no, fpo_date, sub_process, p.party_name vendor FROM trx_fabric_process_order o LEFT JOIN mst_party p ON p.id = o.vendor_id WHERE o.id = ?', [r.source_fpo_id]);
       }
-      if (r.parent_roll_id) next.push(Number(r.parent_roll_id));
+      // a merged roll came from several rolls (roll history MERGED_FROM)
+      const merged = await query<any>(`SELECT related_roll_id FROM trx_fabric_roll_history WHERE roll_id = ? AND event = 'MERGED_FROM' AND related_roll_id IS NOT NULL`, [id]);
+      if (merged.length) { step.merged_from = merged.map((m) => Number(m.related_roll_id)); next.push(...step.merged_from); }
+      else if (r.parent_roll_id) next.push(Number(r.parent_roll_id));
       else if (r.source_fpo_id) {
         const ins = await query<any>('SELECT DISTINCT fabric_roll_id FROM trx_fabric_process_roll_in WHERE fpo_id = ? AND fabric_roll_id IS NOT NULL', [r.source_fpo_id]);
         next.push(...ins.map((x) => Number(x.fabric_roll_id)));
@@ -486,8 +498,8 @@ jobStockRouter.get('/traceability/fabric-roll', requirePermission('PRODUCTION.VI
   const forward = await query<any>(
     `SELECT fi.issue_no, fi.issue_date, cp.plan_no, fir.issue_kg, fr.roll_no FROM trx_fabric_issue_roll fir JOIN trx_fabric_issue fi ON fi.id = fir.fabric_issue_id
        LEFT JOIN trx_cutting_plan cp ON cp.id = fi.cutting_plan_id JOIN trx_fabric_roll fr ON fr.id = fir.fabric_roll_id WHERE fir.fabric_roll_id IN (?)`, [[...seen]]);
-  res.json({ data: { chain, cutting: forward } });
-}));
+  return { chain, cutting: forward };
+}
 
 /** GET /traceability/job/:soId — every yarn lot / fabric roll of a job with its source and downstream use. */
 jobStockRouter.get('/traceability/job/:soId', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
@@ -518,6 +530,18 @@ jobStockRouter.get('/traceability/job/:soId', requirePermission('PRODUCTION.VIEW
 
 
 
+/**
+ * KG of a roll held by live process quotations (other than `excludeParam`) and not yet sent on their DCs —
+ * a roll on a quotation is not offered to another quotation (genealogy doc §18 / §19: no duplicate active allocation).
+ * A live quotation is one not rejected / cancelled / expired / deleted.
+ */
+export const OPEN_ALLOC_SQL = (rollRef: string, excludeParam: string) => `(SELECT COALESCE(SUM(GREATEST(qr.qty_kg - COALESCE((
+      SELECT SUM(ri2.weight_kg) FROM trx_fabric_process_roll_in ri2 JOIN trx_fabric_process_order o2 ON o2.id = ri2.fpo_id
+       WHERE ri2.fabric_roll_id = qr.fabric_roll_id AND o2.quotation_id = qr.quotation_id AND o2.status <> 'CANCELLED'), 0), 0)), 0)
+    FROM trx_quotation_roll qr JOIN trx_quotation q ON q.id = qr.quotation_id LEFT JOIN cfg_status cs ON cs.id = q.status_id
+   WHERE qr.fabric_roll_id = ${rollRef} AND qr.quotation_id <> ${excludeParam} AND COALESCE(q.is_deleted, 0) = 0
+     AND COALESCE(cs.code, '') NOT IN ('REJECTED', 'CANCELLED', 'EXPIRED', 'LOST'))`;
+
 // =====================================================================================
 // Job material genealogy (client doc "Yarn → Fabric → Process Job Material Genealogy", 03-Oct-2026)
 //   BOM = plan · genealogy = trace · stock = availability · process transaction = execution.
@@ -527,7 +551,7 @@ jobStockRouter.get('/traceability/job/:soId', requirePermission('PRODUCTION.VIEW
 const r3g = (x: unknown) => Math.round((Number(x) || 0) * 1000) / 1000;
 
 /** The job's fabric rolls that can go to a process now: QC accepted, KG left, not on a draft DC; grouped for quoting. */
-export async function jobFabricAvailability(cid: number, soId: number, opts: { state?: string | null } = {}) {
+export async function jobFabricAvailability(cid: number, soId: number, opts: { state?: string | null; excludeQuotationId?: number | null } = {}) {
   const w = ['fr.company_id = ?', 'fr.so_id = ?', `fr.qc_status = 'ACCEPTED'`, `fr.stock_status <> 'CLOSED'`];
   const p: unknown[] = [cid, soId];
   if (opts.state) { w.push('fr.process_state = ?'); p.push(opts.state); }
@@ -535,11 +559,12 @@ export async function jobFabricAvailability(cid: number, soId: number, opts: { s
     `SELECT fr.id, fr.roll_no, fr.lot_no, fr.fabric_id, fb.fabric_name, fr.process_state, fr.color_name, fr.gsm, fr.dia, fr.fabric_form,
             fr.weight_kg, COALESCE(fr.issued_kg, 0) issued_kg, fr.meters, fr.calc_meters, fr.actual_meters, w.warehouse_name, g.grn_no, g.grn_date,
             (SELECT COALESCE(SUM(ri.weight_kg), 0) FROM trx_fabric_process_roll_in ri WHERE ri.fabric_roll_id = fr.id AND ri.status = 'DRAFT') draft_kg,
+            ${OPEN_ALLOC_SQL('fr.id', '?')} allocated_kg,
             (SELECT kp.program_no FROM trx_process_receipt pr JOIN trx_knitting_program kp ON kp.id = pr.src_id WHERE pr.grn_id = fr.grn_id AND pr.src_type = 'KNITTING_PROGRAM' LIMIT 1) program_no
        FROM trx_fabric_roll fr JOIN trx_grn g ON g.id = fr.grn_id LEFT JOIN mst_fabric fb ON fb.id = fr.fabric_id LEFT JOIN mst_warehouse w ON w.id = fr.warehouse_id
-      WHERE ${w.join(' AND ')} ORDER BY g.grn_date, fr.id`, p);
+      WHERE ${w.join(' AND ')} ORDER BY g.grn_date, fr.id`, [opts.excludeQuotationId ?? 0, ...p]);
   const rolls = rows.map((r) => {
-    const avail = r3g(Number(r.weight_kg) - Number(r.issued_kg) - Number(r.draft_kg));
+    const avail = r3g(Number(r.weight_kg) - Number(r.issued_kg) - Number(r.draft_kg) - Number(r.allocated_kg));
     const mPerKg = Number(r.weight_kg) > 0 ? Number(r.meters || r.calc_meters || 0) / Number(r.weight_kg) : 0;
     return { ...r, colour: r.color_name || (r.process_state === 'GREY' ? 'GREY' : null), available_kg: avail, available_m: r3g(avail * mPerKg) };
   }).filter((r) => r.available_kg > 0.0005);
@@ -564,10 +589,10 @@ const jobRow = async (cid: number, soId: number) => queryOne<any>(
 jobStockRouter.get('/jobs/:soId/fabric-availability', requireAny('PRODUCTION.VIEW', 'QUOTATION.VIEW', 'FABRIC_PROCESS.VIEW', 'PURCHASE.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const soId = z.coerce.number().int().positive().parse(req.params.soId);
-  const q = z.object({ state: z.string().trim().max(20).optional() }).parse(req.query);
+  const q = z.object({ state: z.string().trim().max(20).optional(), exclude_quotation_id: z.coerce.number().int().min(0).optional() }).parse(req.query);
   const job = await jobRow(cid, soId);
   if (!job) throw NotFound('Job not found');
-  res.json({ data: { job, ...(await jobFabricAvailability(cid, soId, { state: q.state || null })) } });
+  res.json({ data: { job, ...(await jobFabricAvailability(cid, soId, { state: q.state || null, excludeQuotationId: q.exclude_quotation_id ?? null })) } });
 }));
 
 /** GET /jobs/:soId/yarn-availability — the yarn the job holds (own PO / GRN lots + transfers), grouped by yarn + shade. */
