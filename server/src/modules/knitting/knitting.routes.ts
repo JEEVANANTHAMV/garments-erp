@@ -323,9 +323,15 @@ knittingRouter.get('/knitting/programs/cad-fabrics', requirePermission('PRODUCTI
   const done = rows.length ? await query<any>(`SELECT cad_fp_id, SUM(required_qty_kg) kg, GROUP_CONCAT(program_no) nos FROM trx_knitting_program
                                                  WHERE company_id = ? AND cad_fp_id IN (?) AND status <> 'CANCELLED' GROUP BY cad_fp_id`, [cid, rows.map((r) => r.id)]) : [];
   const data = [];
+  let allFabrics: any[] | undefined;
   for (const r of rows) {
     let fab = bomFabrics.find((f) => norm(f.fabric_name).includes(norm(r.fabric_type)) || norm(r.fabric_type).includes(norm(f.fabric_name)));
-    if (!fab) fab = await queryOne<any>(`SELECT id, fabric_name, width_form FROM mst_fabric WHERE company_id = ? AND is_deleted = 0 AND UPPER(fabric_name) LIKE ? ORDER BY id LIMIT 1`, [cid, `%${String(r.fabric_type ?? '').toUpperCase().slice(0, 60)}%`]).catch(() => null);
+    if (!fab) {
+      // fabric master by name, spacing / punctuation ignored (the CAD names the fabric as text)
+      allFabrics ??= await query<any>('SELECT id, fabric_name, width_form FROM mst_fabric WHERE company_id = ? AND is_deleted = 0 AND is_active = 1 ORDER BY id', [cid]);
+      const t = norm(r.fabric_type);
+      fab = t ? allFabrics.find((f) => norm(f.fabric_name) === t) ?? allFabrics.find((f) => norm(f.fabric_name).startsWith(t) || t.startsWith(norm(f.fabric_name))) ?? allFabrics.find((f) => norm(f.fabric_name).includes(t)) : undefined;
+    }
     const diaTxt = String(r.dia_spec ?? r.dia_val ?? '');
     const form = /TUBE|TUBULAR/i.test(diaTxt) ? 'TUBULAR' : /OPEN/i.test(diaTxt) ? 'OPEN_WIDTH' : (fab?.width_form ?? null);
     const d = done.find((x) => Number(x.cad_fp_id) === Number(r.id));
