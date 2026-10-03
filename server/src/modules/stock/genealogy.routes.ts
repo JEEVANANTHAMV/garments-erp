@@ -373,9 +373,13 @@ export async function rollCost(cid: number, rollId: number, memo = new Map<numbe
     const merged = await query<any>(`SELECT related_roll_id id, qty_kg FROM trx_fabric_roll_history WHERE roll_id = ? AND event = 'MERGED_FROM'`, [rollId]);
     const processStep = r.source_fpo_id && Number(r.source_fpo_id) !== Number(r.parent_fpo ?? 0);
     if (merged.length) {
-      let v = 0, kg = 0;
-      for (const m of merged) { const c = await rollCost(cid, Number(m.id), memo, depth + 1); v += c.cost_per_kg * n(m.qty_kg); kg += n(m.qty_kg); }
-      out = { cost_per_kg: kg > 0 ? v / kg : 0, steps: [{ stage: 'Merged', ref: r.roll_no, note: `${merged.length} rolls, KG-weighted`, rate: kg > 0 ? r2(v / kg) : 0 }] };
+      let v = 0, kg = 0, big: { kg: number; steps: any[] } = { kg: -1, steps: [] };
+      for (const m of merged) {
+        const c = await rollCost(cid, Number(m.id), memo, depth + 1); v += c.cost_per_kg * n(m.qty_kg); kg += n(m.qty_kg);
+        if (n(m.qty_kg) > big.kg) big = { kg: n(m.qty_kg), steps: c.steps };
+      }
+      // the breakdown of the largest source, then the KG-weighted merge
+      out = { cost_per_kg: kg > 0 ? v / kg : 0, steps: [...big.steps, { stage: 'Merged', ref: r.roll_no, note: `${merged.length} rolls, KG-weighted`, rate: kg > 0 ? r2(v / kg) : 0 }] };
     } else if (processStep) {
       // input: the parent roll, else the rolls that went out on the DC
       let inCost = 0;
