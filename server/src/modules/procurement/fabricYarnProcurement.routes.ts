@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { settingFlag } from '../../core/inwardControls.js';
 import { z } from 'zod';
+import { calcRollFor, fabricSpec, rollTolerances, ROLL_CALC_COLS, rollCalcVals } from '../../core/fabricRollCalc.js';
 import { query, queryOne, transaction, txQuery, txQueryOne, txExecute, type Tx } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
 import { NotFound, BadRequest } from '../../core/errors.js';
@@ -390,6 +391,30 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
 
     // 1. Calculate totals across lines
     const lines = Array.isArray(body.lines) ? body.lines : [];
+    // GSM / Dia / meter per roll (server formula, client doc 03-Oct-2026): target GSM from the roll / PO line / fabric,
+    // the roll's entered GSM is the actual (QC) GSM, an entered meter is the measured meter. A roll outside the
+    // GSM / meter tolerance goes on hold (counted as hold qty). CONDITIONAL from the screen = HOLD on the roll.
+    const tol = await rollTolerances(companyId);
+    for (const line of lines) {
+      const pol = line.po_line_id ? await txQueryOne<any>(tx, 'SELECT gsm, dia FROM trx_purchase_order_line WHERE id = ?', [Number(line.po_line_id)]) : null;
+      const spec = await fabricSpec(Number(line.fabric_id) || null, tx);
+      const uom = line.uom_id ? await txQueryOne<any>(tx, 'SELECT code FROM cfg_uom WHERE id = ?', [Number(line.uom_id)]) : null;
+      const kgLine = ['KG', 'KGS'].includes(String(uom?.code ?? '').toUpperCase());
+      for (const r of (Array.isArray(line.rolls) ? line.rolls : [])) {
+        if (!(Number(r.weight_kg) > 0)) continue;
+        // roll GSM (pre-filled from the PO) = target; actual_gsm = the QC GSM; the roll length = measured meter
+        const c = await calcRollFor(companyId, {
+          fabric_id: Number(line.fabric_id) || null, weight_kg: Number(r.weight_kg), on: body.grn_date || null,
+          target_gsm: Number(r.target_gsm) || Number(r.gsm) || Number.parseFloat(String(pol?.gsm ?? '')) || null,
+          actual_gsm: Number(r.actual_gsm) || null, dia: r.dia || pol?.dia || null, fabric_form: r.fabric_form ?? null,
+          actual_meters: Number(r.actual_meters ?? r.meters) || null,
+        }, tx, { tol, spec });
+        r._calc = c;
+        // hold only on a real measurement: a QC GSM, or a measured meter on a KG line (a metre line's length is its order qty split)
+        const measured = Number(r.actual_gsm) > 0 || (kgLine && Number(r.actual_meters ?? r.meters) > 0);
+        if (c.out_of_tolerance && measured && (r.qc_status || 'ACCEPTED') === 'ACCEPTED') { r.qc_status = 'CONDITIONAL'; r._hold = c.reasons.join('; '); }
+      }
+    }
     let totTaxable = 0;
     let totCgst = 0;
     let totSgst = 0;
@@ -412,7 +437,7 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
       const recQty = fromRolls ? sumBy() : Number(line.received_qty) || 0;
       const accQty = fromRolls ? sumBy('ACCEPTED') : Number(line.accepted_qty !== undefined ? line.accepted_qty : recQty);
       const rejQty = fromRolls ? sumBy('REJECTED') : Number(line.rejected_qty) || 0;
-      const holdQty = fromRolls ? sumBy('CONDITIONAL') : Number(line.hold_qty) || 0;
+      const holdQty = fromRolls ? sumBy('CONDITIONAL') + sumBy('HOLD') : Number(line.hold_qty) || 0;
       const rollWeight = rolls.reduce((a, r) => a + (Number(r.weight_kg) || 0), 0);
       line.received_weight = Number(line.received_weight) || rollWeight || (isKg ? recQty : 0);
       const poQty = Number(line.po_qty) || recQty;
@@ -600,8 +625,8 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
           INSERT INTO trx_fabric_roll (
             company_id, grn_id, grn_line_id, fabric_id,
             roll_no, lot_no, meters, weight_kg, gsm, dia, shade,
-            warehouse_id, location_bin, qc_status, stock_status, remarks, so_id
-          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            warehouse_id, location_bin, qc_status, stock_status, remarks, so_id, ${ROLL_CALC_COLS}
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         `, [
           companyId,
           newGrnId,
@@ -609,18 +634,20 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
           Number(line.fabric_id),
           rNo,
           r.lot_no || line.lot_no || null,
-          Number(r.meters || r.qty) || 0,
+          Number(r.meters || r.qty) || r._calc?.meters || 0,
           Number(r.weight_kg) || 0,
-          Number(r.gsm) || null,
+          r._calc?.actual_gsm ? Math.round(r._calc.actual_gsm) : (Number(r.gsm) || (r._calc?.target_gsm ? Math.round(r._calc.target_gsm) : null)),
           r.dia || null,
           r.shade || line.shade_code || null,
           Number(body.warehouse_id),
           r.location_bin || null,
-          r.qc_status || 'ACCEPTED',
-          r.qc_status === 'ACCEPTED' ? 'AVAILABLE' : 'RESERVED',
-          r.remarks || null,
+          // the roll table knows PENDING / ACCEPTED / HOLD / REJECTED — the screen's CONDITIONAL is a hold
+          r.qc_status === 'CONDITIONAL' ? 'HOLD' : (r.qc_status || 'ACCEPTED'),
+          (r.qc_status || 'ACCEPTED') === 'ACCEPTED' ? 'AVAILABLE' : 'RESERVED',
+          [r.remarks, r._hold ? `QC hold: ${r._hold}` : null].filter(Boolean).join(' — ') || null,
           // the roll belongs to the job it was bought for (job-wise stock / transfers)
           line.so_id ? Number(line.so_id) : (body.so_id ? Number(body.so_id) : null),
+          ...(r._calc ? rollCalcVals(r._calc) : [null, null, null, null, null, null, null, null, null, null, null]),
         ]);
       }
 

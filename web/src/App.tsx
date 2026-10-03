@@ -68,6 +68,7 @@ import { ProcessMasterPage, ContractorBillsPage } from './pages/production/Proce
 import { JobRateCardPage, ContractorAdvancesPage, ContractorDebitNotesPage } from './pages/production/ContractorPages';
 import YarnProcessPage from './pages/production/YarnProcessPage';
 import CollarKnittingPage from './pages/production/CollarKnittingPage';
+import FabricGsmMeterPage from './pages/production/FabricGsmMeterPage';
 import ProcessReportsPage from './pages/production/ProcessReportsPage';
 import CuttingReportsPage from './pages/production/CuttingReportsPage';
 import ProcessExecutionPage from './pages/production/ProcessExecutionPage';
@@ -291,6 +292,7 @@ export default function App() {
                   <Route path="process-routes" element={<ProcessRoutePage />} />
                   <Route path="yarn-processes" element={<YarnProcessPage />} />
                   <Route path="collar-knitting" element={<CollarKnittingPage />} />
+                  <Route path="fabric-gsm-meter" element={<FabricGsmMeterPage />} />
                   <Route path="process-reports" element={<ProcessReportsPage />} />
                   <Route path="cutting-reports" element={<CuttingReportsPage />} />
                   <Route path="process-execution" element={<ProcessExecutionPage />} />

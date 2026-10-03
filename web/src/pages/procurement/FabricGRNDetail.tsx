@@ -11,6 +11,7 @@ import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
 import { Input, Select, Badge, Modal } from '../../components/ui';
 import { fmtDecimal, today } from '../../lib/format';
+import { useDiaRules, useFabricSpec, previewRoll, pctCls, fmtPct } from '../../lib/fabricCalc';
 import { InvoiceSummary } from '../../components/InvoiceSummary';
 import { computeInvoice, chargesFromRow, chargesPayload, EMPTY_CHARGES, type InvoiceCharges } from '../../lib/invoiceCalc';
 
@@ -22,9 +23,13 @@ interface PhysicalRoll {
   meters: number;
   weight_kg: number;
   gsm: number;
+  /** QC GSM measured on the roll (blank = not measured); `gsm` is the target from the PO. */
+  actual_gsm?: number | '';
   dia: string;
   shade: string;
   location_bin: string;
+  /** stored by the server on a saved GRN */
+  calc_meters?: number | null; meter_var_pct?: number | null; gsm_var_pct?: number | null; gsm_flag?: string | null;
   qc_status: 'ACCEPTED' | 'CONDITIONAL' | 'REJECTED';
   remarks?: string;
 }
@@ -429,6 +434,12 @@ export default function FabricGRNDetailPage() {
 
   // Current active line for rolls
   const activeLine = lines[selectedLineIdx] || lines[0];
+  // GSM / Dia / meter preview per roll (server recalculates on save; a saved GRN shows the stored figures)
+  const { data: diaRules } = useDiaRules();
+  const { data: fabSpec } = useFabricSpec(activeLine?.fabric_id || null);
+  const rollCalc = (r: PhysicalRoll) => (isNew
+    ? previewRoll({ weight_kg: r.weight_kg, target_gsm: r.gsm || fabSpec?.target_gsm, actual_gsm: r.actual_gsm, dia: r.dia || fabSpec?.dia_inch, form: null, actual_meters: r.meters }, diaRules, fabSpec)
+    : { calc_meters: r.calc_meters != null ? Number(r.calc_meters) : null, meter_var_pct: r.meter_var_pct != null ? Number(r.meter_var_pct) : null, hold: r.gsm_flag ? 'outside tolerance' : null });
 
   // Roll updates
   const updateRoll = (rollIdx: number, field: keyof PhysicalRoll, val: any) => {
@@ -621,6 +632,7 @@ export default function FabricGRNDetailPage() {
             meters: r.meters,
             weight_kg: r.weight_kg,
             gsm: r.gsm,
+            actual_gsm: Number(r.actual_gsm) || null,
             dia: r.dia,
             shade: r.shade,
             location_bin: r.location_bin,
@@ -1223,8 +1235,11 @@ export default function FabricGRNDetailPage() {
                   <th className="py-2 px-2">Lot No</th>
                   <th className="py-2 px-2 text-right">Length (Mtrs) *</th>
                   <th className="py-2 px-2 text-right">Weight (KG) *</th>
-                  <th className="py-2 px-2 text-center">GSM</th>
+                  <th className="py-2 px-2 text-center">Target GSM</th>
+                  <th className="py-2 px-2 text-center">QC GSM</th>
                   <th className="py-2 px-2 text-center">Dia</th>
+                  <th className="py-2 px-2 text-right" title="KG × 1000 ÷ (GSM × width M)">Calc Mtr (auto)</th>
+                  <th className="py-2 px-2 text-right">Mtr var %</th>
                   <th className="py-2 px-2">Shade</th>
                   <th className="py-2 px-2">Location / Bin</th>
                   <th className="py-2 px-2 text-center">QC Status</th>
@@ -1235,7 +1250,7 @@ export default function FabricGRNDetailPage() {
               <tbody className="divide-y divide-slate-100 text-slate-700">
                 {activeLine.rolls?.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="py-8 text-center text-slate-400">
+                    <td colSpan={15} className="py-8 text-center text-slate-400">
                       No rolls added. Click "Auto-Generate Rolls" or "Add Roll".
                     </td>
                   </tr>
@@ -1305,6 +1320,13 @@ export default function FabricGRNDetailPage() {
                       </td>
                       <td className="py-2 px-2 text-center">
                         {isNew ? (
+                          <input type="number" value={r.actual_gsm ?? ''} placeholder="QC" id={`grn-agsm-${rIdx}`}
+                            onChange={(e) => updateRoll(rIdx, 'actual_gsm', e.target.value === '' ? '' : Number(e.target.value))}
+                            className="w-16 text-xs text-center border border-slate-300 rounded px-1 py-0.5" />
+                        ) : <span>{(r as any).actual_gsm ? Number((r as any).actual_gsm).toFixed(1) : '—'}</span>}
+                      </td>
+                      <td className="py-2 px-2 text-center">
+                        {isNew ? (
                           <input
                             type="text"
                             value={r.dia}
@@ -1314,6 +1336,10 @@ export default function FabricGRNDetailPage() {
                         ) : (
                           <span>{r.dia}</span>
                         )}
+                      </td>
+                      <td className="py-2 px-2 text-right tabular-nums text-sky-800" id={`grn-calc-${rIdx}`}>{rollCalc(r).calc_meters ? fmtDecimal(rollCalc(r).calc_meters!, 2) : '—'}</td>
+                      <td className={`py-2 px-2 text-right tabular-nums ${pctCls(rollCalc(r).meter_var_pct, fabSpec?.tolerances?.meterTolPct)}`} title={rollCalc(r).hold ?? ''}>
+                        {fmtPct(rollCalc(r).meter_var_pct)}{rollCalc(r).hold ? <span className="ml-1 rounded bg-orange-100 px-1 text-[9px] font-bold text-orange-800">!</span> : null}
                       </td>
                       <td className="py-2 px-2">
                         {isNew ? (
@@ -1353,7 +1379,7 @@ export default function FabricGRNDetailPage() {
                             }`}
                           >
                             <option value="ACCEPTED">ACCEPTED</option>
-                            <option value="CONDITIONAL">CONDITIONAL</option>
+                            <option value="CONDITIONAL">HOLD (conditional)</option>
                             <option value="REJECTED">REJECTED</option>
                           </select>
                         ) : (

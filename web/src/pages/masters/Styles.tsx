@@ -221,10 +221,12 @@ export function StylesPage() {
   const { page, setPage, search, setSearch, sort, onSort } = useListState({ key: 'style_code', dir: 'asc' });
   const debounced = useDebounced(search);
   const [buyerId, setBuyerId] = useState('');
+  const [statusId, setStatusId] = useState('');
   const buyers = useLookup('buyers');
+  const statuses = useStatuses('STYLE');
 
   const list = useList<any>('styles', {
-    page, pageSize: 25, q: debounced || undefined, buyer_id: buyerId || undefined,
+    page, pageSize: 25, q: debounced || undefined, buyer_id: buyerId || undefined, status_id: statusId || undefined,
   });
 
   return (
@@ -235,10 +237,12 @@ export function StylesPage() {
             <Plus size={15} /> New Style
           </button>)} />
 
-      <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-4">
         <SearchInput value={search} onChange={setSearch} placeholder="Search style code, name or buyer ref…" />
         <Select placeholder="All buyers" options={toOptions(buyers.data)}
           value={buyerId} onChange={(e) => { setBuyerId(e.target.value); setPage(1); }} />
+        <Select placeholder="All statuses (incl. drafts)" options={toPlainOptions(statuses.data)} id="style-status-filter"
+          value={statusId} onChange={(e) => { setStatusId(e.target.value); setPage(1); }} />
       </div>
 
       <DataTable
@@ -294,6 +298,7 @@ export function StyleDetailPage() {
   const fabrics = useLookup('fabrics');
   const colors = useLookup('colors');
   const statuses = useStatuses('STYLE');
+  const statusId = (code: string) => (statuses.data ?? []).find((x: any) => x.code === code)?.id;
 
   const detail = useQuery({
     queryKey: ['styles', 'item', id],
@@ -319,7 +324,10 @@ export function StyleDetailPage() {
         season: v.season || null, size_group_id: v.size_group_id || null,
         fabric_id: v.fabric_id || null, description: v.description || null,
         image_url: v.image_url || null,
-        status_id: v.status_id || null, is_active: asDraft ? 0 : (v.is_active ?? 1), colorIds,
+        // a draft is a status (listed with a Draft badge), not an inactive style; the final save moves a draft to Active
+        status_id: asDraft ? (statusId('DRAFT') ?? v.status_id ?? null)
+          : (String(v.status_id ?? '') === String(statusId('DRAFT') ?? '-') || !v.status_id ? (statusId('ACTIVE') ?? v.status_id ?? null) : v.status_id),
+        is_active: v.is_active ?? 1, colorIds,
       };
       const res = isNew
         ? await http.post<{ data: any }>('/styles', body)

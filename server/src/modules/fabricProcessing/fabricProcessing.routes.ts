@@ -1,5 +1,6 @@
 import { Router, type Request } from 'express';
 import { z } from 'zod';
+import { calcRollFor, ROLL_CALC_COLS, rollCalcVals } from '../../core/fabricRollCalc.js';
 import { query, queryOne, transaction, txQuery, txQueryOne, txExecute, type Tx } from '../../config/db.js';
 import { postLedger, UOM_KG } from '../../core/processEngine.js';
 import { refreshFabricRollStatus } from '../production/cuttingEngine.js';
@@ -615,14 +616,21 @@ async function postInward(tx: Tx, req: Request, body: InwardBody, existing?: { i
     let rejectRollId: number | null = null;
     const outNo = l.output_roll_no || `${inwardNo}-${String(++seq).padStart(2, '0')}`;
     if (l.good_kg > 0) {
+      // GSM / Dia / meter of the processed roll: target = the GSM entered on the GRN (finished GSM) else the input roll's;
+      // a measured meter gives the actual GSM. Recorded with the variance (the process QC decides hold / reject).
+      const c = await calcRollFor(cid, {
+        fabric_id: ri.fabric_id ?? src?.fabric_id ?? null, weight_kg: r3(l.good_kg), on: body.inward_date,
+        target_gsm: Number.parseFloat(String(l.gsm ?? '')) || Number(src?.target_gsm) || Number.parseFloat(String(ri.gsm ?? '')) || null,
+        dia: l.dia ?? ri.dia ?? null, fabric_form: src?.fabric_form ?? null, actual_meters: l.meters || null,
+      }, tx);
       const fr = await txExecute(tx,
         `INSERT INTO trx_fabric_roll (company_id, grn_id, grn_line_id, fabric_id, roll_no, lot_no, meters, weight_kg, gsm, dia, shade,
-           warehouse_id, qc_status, stock_status, remarks, process_state, color_name, source_fpo_id, so_id, parent_roll_id)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [cid, grnId, glId, ri.fabric_id ?? src?.fabric_id ?? null, outNo, src?.lot_no ?? null, l.meters || null, r3(l.good_kg),
+           warehouse_id, qc_status, stock_status, remarks, process_state, color_name, source_fpo_id, so_id, parent_roll_id, ${ROLL_CALC_COLS})
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [cid, grnId, glId, ri.fabric_id ?? src?.fabric_id ?? null, outNo, src?.lot_no ?? null, c.meters ?? (l.meters || null), r3(l.good_kg),
          Number.parseInt(String(l.gsm ?? ri.gsm ?? ''), 10) || null, l.dia ?? ri.dia ?? null, l.shade_no ?? o.shade_code ?? colour,
          body.warehouse_id, l.qc_status, l.qc_status === 'ACCEPTED' ? 'AVAILABLE' : 'RESERVED', `${pt.name} on ${o.fpo_no}`,
-         pt.output_state, colour, o.id, ri.so_id ?? null, ri.fabric_roll_id ?? null]);
+         pt.output_state, colour, o.id, ri.so_id ?? null, ri.fabric_roll_id ?? null, ...rollCalcVals(c)]);
       goodRollId = Number(fr.insertId);
       await history(tx, req, { roll_id: goodRollId, roll_no: outNo, event: o.is_reprocess ? 'REPROCESS_INWARD' : 'PROCESS_INWARD', ref_type: 'FPI', ref_id: inwardId,
         ref_no: inwardNo, sub_process: o.sub_process, from: vendor, to: goodStore, qty: l.good_kg, so_id: ri.so_id, related_roll_id: ri.fabric_roll_id,

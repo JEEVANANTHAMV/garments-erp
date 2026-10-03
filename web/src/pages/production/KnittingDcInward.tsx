@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { QuotationPicker, GateEntryPicker, type QuoteValue } from '../../components/ProcessPickers';
+import { useDiaRules, useFabricSpec, previewRoll, normForm, pctCls, fmtPct, FORM_LABEL } from '../../lib/fabricCalc';
 import { barcodeHtml } from '../../lib/printBarcode';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Truck, PackagePlus, Printer, Plus, Trash2, Save, X, Scale, Undo2 } from 'lucide-react';
@@ -490,7 +491,7 @@ export function KnittingDcPrint({ dcNo, onClose }: { dcNo: string | null; onClos
 /* ─────────────────────────────────────────────────────────────────
    Grey fabric inward — against the knitting DC (roll-wise)
 ───────────────────────────────────────────────────────────────── */
-const newRoll = (p?: any) => ({ roll_no: '', weight_kg: '', dia: p?.dia ?? '', gsm: p?.gsm ?? '', meters: '' });
+const newRoll = (p?: any) => ({ roll_no: '', weight_kg: '', dia: p?.dia ?? '', gsm: p?.gsm ?? '', actual_gsm: '', actual_meters: '' });
 
 export function KnittingInwardModal({ programId, open, onClose }: {
   programId: number | null; open: boolean; onClose: () => void;
@@ -511,6 +512,13 @@ export function KnittingInwardModal({ programId, open, onClose }: {
   const { data: recon } = useReconciliation(open ? programId : null);
   const [h, setH] = useState<any>({});
   const [rolls, setRolls] = useState<any[]>([newRoll()]);
+  // GSM / Dia / meter preview (server recalculates on save)
+  const { data: rules } = useDiaRules();
+  const { data: spec } = useFabricSpec(h.fabric_id || null);
+  const form = normForm(recon?.program?.fabric_form) ?? spec?.fabric_form ?? null;
+  const calcs = rolls.map((r) => previewRoll({ weight_kg: r.weight_kg, target_gsm: r.gsm || spec?.target_gsm, actual_gsm: r.actual_gsm, dia: r.dia || spec?.dia_inch, form, actual_meters: r.actual_meters }, rules, spec));
+  const calcTotal = calcs.reduce((a, c) => a + (c.calc_meters ?? 0), 0);
+  const holds = calcs.filter((c, i) => Number(rolls[i].weight_kg) > 0 && c.hold).length;
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -554,12 +562,13 @@ export function KnittingInwardModal({ programId, open, onClose }: {
         rejected_kg: rejected, remarks: h.remarks || null,
         rolls: good.map((x) => ({
           roll_no: x.roll_no || null, weight_kg: Number(x.weight_kg),
-          meters: x.meters === '' ? null : Number(x.meters),
-          gsm: x.gsm === '' || Number.isNaN(Number.parseInt(x.gsm, 10)) ? null : Number.parseInt(x.gsm, 10),
+          actual_meters: x.actual_meters === '' ? null : Number(x.actual_meters),
+          gsm: x.gsm === '' || Number.isNaN(Number.parseFloat(x.gsm)) ? null : Number.parseFloat(x.gsm),
+          actual_gsm: x.actual_gsm === '' || Number.isNaN(Number.parseFloat(x.actual_gsm)) ? null : Number.parseFloat(x.actual_gsm),
           dia: x.dia || null,
         })),
       });
-      toast(`Grey fabric inward ${r.data.receipt_no} saved — ${r.data.rolls.length} roll(s) in roll stock${r.data.receipt_type === 'FINAL' ? ` · DC ${(h.dc_nos ?? []).join(', ')} closed (final receipt)` : ' · partial — more to come'}`);
+      toast(`Grey fabric inward ${r.data.receipt_no} saved — ${r.data.rolls.length} roll(s) in roll stock${r.data.hold_rolls ? ` · ${r.data.hold_rolls} on QC hold (GSM / meter outside tolerance)` : ''}${r.data.receipt_type === 'FINAL' ? ` · DC ${(h.dc_nos ?? []).join(', ')} closed (final receipt)` : ' · partial — more to come'}`, r.data.hold_rolls ? 'warning' : 'success');
       invalidateKnitting(qc);
       onClose();
     } catch (e: any) {
@@ -643,8 +652,13 @@ export function KnittingInwardModal({ programId, open, onClose }: {
                   <th className="th">Roll No</th>
                   <th className="th text-right">KG</th>
                   <th className="th">Dia</th>
-                  <th className="th">GSM</th>
-                  <th className="th text-right">Meters</th>
+                  <th className="th">Target GSM</th>
+                  <th className="th">Actual GSM</th>
+                  <th className="th text-right" title="KG × 1000 ÷ (GSM × width M)">Calc Mtr (auto)</th>
+                  <th className="th text-right">Actual Mtr</th>
+                  <th className="th text-right">Mtr var %</th>
+                  <th className="th text-right">GSM var %</th>
+                  <th className="th">QC</th>
                   <th className="th" />
                 </tr>
               </thead>
@@ -660,10 +674,16 @@ export function KnittingInwardModal({ programId, open, onClose }: {
                       id={`kin-kg-${i}`} /></td>
                     <td className="td"><input className="input w-20" value={r.dia}
                       onChange={(e) => setRoll(i, { dia: e.target.value })} /></td>
-                    <td className="td"><input className="input w-20" value={r.gsm}
-                      onChange={(e) => setRoll(i, { gsm: e.target.value })} /></td>
-                    <td className="td"><input className="input w-24 text-right" type="number" step="0.01"
-                      value={r.meters} onChange={(e) => setRoll(i, { meters: e.target.value })} /></td>
+                    <td className="td"><input className="input w-20" value={r.gsm} placeholder={spec?.target_gsm ? String(spec.target_gsm) : ''}
+                      onChange={(e) => setRoll(i, { gsm: e.target.value })} id={`kin-gsm-${i}`} /></td>
+                    <td className="td"><input className="input w-20" type="number" value={r.actual_gsm} placeholder="QC"
+                      onChange={(e) => setRoll(i, { actual_gsm: e.target.value })} id={`kin-agsm-${i}`} /></td>
+                    <td className="td text-right tabular-nums text-sky-800" id={`kin-calc-${i}`}>{calcs[i].calc_meters ? fmtDecimal(calcs[i].calc_meters, 2) : '—'}</td>
+                    <td className="td"><input className="input w-24 text-right" type="number" step="0.01" placeholder="measured"
+                      value={r.actual_meters} onChange={(e) => setRoll(i, { actual_meters: e.target.value })} id={`kin-mtr-${i}`} /></td>
+                    <td className={`td text-right tabular-nums ${pctCls(calcs[i].meter_var_pct, spec?.tolerances?.meterTolPct)}`}>{fmtPct(calcs[i].meter_var_pct)}</td>
+                    <td className={`td text-right tabular-nums ${pctCls(calcs[i].gsm_var_pct, spec?.tolerances?.gsmTolPct)}`}>{fmtPct(calcs[i].gsm_var_pct)}{calcs[i].actual_gsm && !Number(r.actual_gsm) ? <span className="ml-1 text-[10px] text-slate-400">({calcs[i].actual_gsm!.toFixed(0)})</span> : null}</td>
+                    <td className="td" id={`kin-qc-${i}`}>{Number(r.weight_kg) > 0 ? (calcs[i].hold ? <span className="rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-bold text-orange-800" title={calcs[i].hold}>HOLD</span> : <span className="text-[10px] font-semibold text-emerald-700">OK</span>) : ''}</td>
                     <td className="td">
                       {rolls.length > 1 && (
                         <button className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
@@ -679,7 +699,9 @@ export function KnittingInwardModal({ programId, open, onClose }: {
                 <tr>
                   <td colSpan={2} className="td font-bold">{rolls.filter((r) => Number(r.weight_kg) > 0).length} roll(s)</td>
                   <td className="td text-right font-bold tabular-nums">{fmtDecimal(fabricKg, 3)}</td>
-                  <td colSpan={4} className="td">
+                  <td colSpan={3} className="td text-[11px] text-slate-500">{form ? FORM_LABEL[form] : ''}{spec?.rule_code ? ` · rule ${spec.rule_code}` : ''}{holds ? <span className="ml-1 font-semibold text-orange-700">· {holds} roll(s) will go on QC hold</span> : null}</td>
+                  <td className="td text-right font-bold tabular-nums text-sky-800">{calcTotal ? fmtDecimal(calcTotal, 2) : ''}</td>
+                  <td colSpan={5} className="td">
                     <button className="btn-secondary btn-sm" onClick={() => setRolls((rs) => [...rs, newRoll(rs[rs.length - 1])])}
                       id="btn-add-inward-roll">
                       <Plus size={13} /> Add roll

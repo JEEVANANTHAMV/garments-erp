@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { calcRollFor, fabricSpec, rollTolerances, ROLL_CALC_COLS, rollCalcVals } from '../../core/fabricRollCalc.js';
 import { query, queryOne, transaction, txExecute, txQueryOne } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
 import { NotFound, BadRequest } from '../../core/errors.js';
@@ -428,8 +429,12 @@ const inwardSchema = z.object({
   rolls: z.array(z.object({
     roll_no: s.nullableStr(60),
     weight_kg: z.coerce.number().positive(),
+    /** Measured meter (QC); older clients sent it as `meters`. */
     meters: z.coerce.number().min(0).nullable().optional(),
-    gsm: z.coerce.number().int().min(0).nullable().optional(),
+    actual_meters: z.coerce.number().min(0).nullable().optional(),
+    /** Target GSM (defaults to the program's); actual GSM is the QC value. */
+    gsm: z.coerce.number().min(0).nullable().optional(),
+    actual_gsm: z.coerce.number().min(0).nullable().optional(),
     dia: s.nullableStr(30),
     shade: s.nullableStr(50),
   })).min(1, 'Add at least one roll'),
@@ -580,20 +585,31 @@ knittingDcRouter.post('/knitting-inwards', requirePermission('PROCESS.PRODUCTION
        'ACCEPTED', fabricKg, fabricKg, body.rolls.length, fabricKg, body.rejected_kg, 0, UOM_KG]);
     const grnLineId = gl.insertId;
 
+    // GSM / Dia / meter per roll (server formula): calculated meter from KG + target GSM + width; a measured
+    // meter / GSM outside the tolerance puts the roll on QC hold (it cannot go out until released)
+    const tol = await rollTolerances(cid);
+    const spec = await fabricSpec(fabricId, tx);
     const rolls = [];
     for (let i = 0; i < body.rolls.length; i++) {
       const r = body.rolls[i];
       const rollNo = r.roll_no || `${receiptNo}-${String(i + 1).padStart(2, '0')}`;
+      const c = await calcRollFor(cid, {
+        fabric_id: fabricId, weight_kg: r.weight_kg, on: body.receipt_date,
+        target_gsm: r.gsm || Number.parseFloat(String(prog.gsm ?? '')) || null, actual_gsm: r.actual_gsm || null,
+        dia: r.dia ?? prog.dia ?? null, fabric_form: prog.fabric_form ?? null, actual_meters: (r.actual_meters ?? r.meters) || null,
+      }, tx, { tol, spec });
+      const hold = c.out_of_tolerance;
       const fr = await txExecute(tx,
         `INSERT INTO trx_fabric_roll
            (company_id, grn_id, grn_line_id, fabric_id, roll_no, lot_no, meters, weight_kg,
-            gsm, dia, shade, warehouse_id, qc_status, stock_status, remarks, so_id)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [cid, grnId, grnLineId, fabricId, rollNo, lotNo, r.meters ?? null, r.weight_kg,
-         r.gsm ?? (Number.parseInt(String(prog.gsm ?? ''), 10) || null),
-         r.dia ?? prog.dia ?? null, r.shade ?? null, body.warehouse_id, 'ACCEPTED', 'AVAILABLE',
-         `Grey from knitting ${prog.program_no}`, prog.so_id ?? null]);
-      rolls.push({ id: fr.insertId, roll_no: rollNo, weight_kg: r.weight_kg });
+            gsm, dia, shade, warehouse_id, qc_status, stock_status, remarks, so_id, ${ROLL_CALC_COLS})
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [cid, grnId, grnLineId, fabricId, rollNo, lotNo, c.meters, r.weight_kg,
+         c.actual_gsm || c.target_gsm ? Math.round(c.actual_gsm ?? c.target_gsm ?? 0) : null,
+         r.dia ?? prog.dia ?? null, r.shade ?? null, body.warehouse_id, hold ? 'HOLD' : 'ACCEPTED', 'AVAILABLE',
+         `Grey from knitting ${prog.program_no}${hold ? ` — QC hold: ${c.reasons.join('; ')}` : ''}`, prog.so_id ?? null, ...rollCalcVals(c)]);
+      rolls.push({ id: fr.insertId, roll_no: rollNo, weight_kg: r.weight_kg, calc_meters: c.calc_meters, actual_meters: c.actual_meters, meters: c.meters,
+        target_gsm: c.target_gsm, actual_gsm: c.actual_gsm, meter_var_pct: c.meter_var_pct, gsm_var_pct: c.gsm_var_pct, qc_status: hold ? 'HOLD' : 'ACCEPTED', hold_reasons: c.reasons });
     }
 
     const rc = await txExecute(tx,
@@ -625,7 +641,8 @@ knittingDcRouter.post('/knitting-inwards', requirePermission('PROCESS.PRODUCTION
         WHERE id = ? AND status NOT IN ('COMPLETED','CANCELLED')`, [body.program_id]);
 
     return { id: receiptId, receipt_no: receiptNo, grn_id: grnId, lot_no: lotNo, receipt_type: body.receipt_type, dcs: split,
-             fabric_kg: fabricKg, yarn_consumed_kg: consumed, loss_kg: loss, rolls, gate_entry_no: gate?.entry_no ?? null };
+             fabric_kg: fabricKg, yarn_consumed_kg: consumed, loss_kg: loss, rolls, gate_entry_no: gate?.entry_no ?? null,
+             hold_rolls: rolls.filter((x) => x.qc_status === 'HOLD').length };
   });
 
   await audit(req, 'trx_process_receipt', result.id, 'INSERT', undefined, result);

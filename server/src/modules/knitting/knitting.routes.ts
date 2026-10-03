@@ -61,6 +61,8 @@ const kpSchema = z.object({
   knitting_type: z.enum(KNITTING_TYPES).default('SOLID'),
   gsm: s.nullableStr(40),
   dia: s.nullableStr(40),
+  /** Tubular / open width — decides the Dia → width rule for the roll meter calculation. */
+  fabric_form: z.enum(['TUBULAR', 'OPEN_WIDTH']).nullable().optional(),
   gauge: s.nullableStr(40),
   loop_length: s.nullableStr(40),
   required_qty_kg: z.coerce.number().min(0).default(0),
@@ -92,6 +94,7 @@ const kpUpdateSchema = z.object({
   knitting_type: z.enum(KNITTING_TYPES).optional(),
   gsm: s.nullableStr(40),
   dia: s.nullableStr(40),
+  fabric_form: z.enum(['TUBULAR', 'OPEN_WIDTH']).nullable().optional(),
   gauge: s.nullableStr(40),
   loop_length: s.nullableStr(40),
   required_qty_kg: z.coerce.number().min(0).optional(),
@@ -293,14 +296,14 @@ knittingRouter.post('/knitting/programs', requirePermission('PRODUCTION.CREATE')
       tx,
       `INSERT INTO trx_knitting_program
          (company_id, program_no, program_date, so_id, so_line_id, io_no, buyer_po_no, style_id,
-          part_name, fabric_id, fabric_type, knitting_type, gsm, dia, gauge, loop_length,
+          part_name, fabric_id, fabric_type, knitting_type, gsm, dia, fabric_form, gauge, loop_length,
           required_qty_kg, required_date, job_work_type, vendor_id, status, remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         cid, programNo, body.program_date, body.so_id ?? null, body.so_line_id ?? null,
         body.io_no ?? null, body.buyer_po_no ?? null,
         body.style_id ?? null, partName, body.fabric_id ?? null, body.fabric_type ?? null,
-        body.knitting_type, body.gsm ?? null, body.dia ?? null, body.gauge ?? null, body.loop_length ?? null,
+        body.knitting_type, body.gsm ?? null, body.dia ?? null, body.fabric_form ?? null, body.gauge ?? null, body.loop_length ?? null,
         body.required_qty_kg, body.required_date ?? null, body.job_work_type,
         body.vendor_id ?? null, body.status, body.remarks ?? null, uid,
       ]
@@ -365,7 +368,7 @@ knittingRouter.put('/knitting/programs/:id', requirePermission('PRODUCTION.UPDAT
     // an omitted field is left untouched while an explicit null clears it.
     const FIELDS = [
       'program_date', 'so_id', 'so_line_id', 'io_no', 'buyer_po_no', 'style_id', 'part_name',
-      'fabric_id', 'fabric_type', 'knitting_type', 'gsm', 'dia', 'gauge',
+      'fabric_id', 'fabric_type', 'knitting_type', 'gsm', 'dia', 'fabric_form', 'gauge',
       'loop_length', 'required_qty_kg', 'required_date', 'job_work_type',
       'vendor_id', 'status', 'remarks',
     ] as const;

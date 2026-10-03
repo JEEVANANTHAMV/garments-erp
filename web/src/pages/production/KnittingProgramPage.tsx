@@ -5,6 +5,7 @@ import {
   RefreshCw, AlertCircle, FileText, Boxes, ShieldCheck, PackageCheck, Truck, PackagePlus,
 } from 'lucide-react';
 import { http } from '../../lib/api';
+import { useDiaRules, previewRoll } from '../../lib/fabricCalc';
 import { fmtDate, fmtDecimal, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
 import { Modal, PageHeader, Input, Spinner, LoadingBlock } from '../../components/ui';
@@ -88,6 +89,7 @@ const emptyForm = () => ({
   knitting_type: 'SOLID' as typeof KNITTING_TYPES[number],
   gsm: '',
   dia: '',
+  fabric_form: '' as '' | 'TUBULAR' | 'OPEN_WIDTH',
   gauge: '',
   loop_length: '',
   required_qty_kg: '' as number | '',
@@ -214,6 +216,7 @@ export default function KnittingProgramPage() {
       knitting_type: prog.knitting_type ?? 'SOLID',
       gsm: prog.gsm ?? '',
       dia: prog.dia ?? '',
+      fabric_form: prog.fabric_form ?? '',
       gauge: prog.gauge ?? '',
       loop_length: prog.loop_length ?? '',
       required_qty_kg: Number(prog.required_qty_kg) || '',
@@ -237,6 +240,7 @@ export default function KnittingProgramPage() {
         so_line_id: form.so_line_id === '' ? null : Number(form.so_line_id),
         style_id: form.style_id === '' ? null : Number(form.style_id),
         fabric_id: form.fabric_id === '' ? null : Number(form.fabric_id),
+        fabric_form: form.fabric_form || null,
         vendor_id: form.vendor_id === '' ? null : Number(form.vendor_id),
         required_qty_kg: Number(form.required_qty_kg) || 0,
         yarns: form.yarns.map((y, i) => ({
@@ -309,6 +313,18 @@ export default function KnittingProgramPage() {
   };
 
   const setF = (k: string, v: unknown) => setForm((s) => ({ ...s, [k]: v }));
+  // picking the fabric fills its approved specification (target GSM, Dia, tubular / open) from the fabric master
+  const { data: diaRules } = useDiaRules();
+  const pickFabric = async (v: string) => {
+    setF('fabric_id', v ? Number(v) : '');
+    if (!v) return;
+    try {
+      const sp = (await http.get<{ data: any }>(`/fabrics/${v}/specification`)).data;
+      setForm((s) => ({ ...s, gsm: sp.target_gsm ? String(sp.target_gsm) : s.gsm, dia: sp.dia_inch ? `${Number(sp.dia_inch)}"` : s.dia,
+        fabric_form: sp.fabric_form ?? s.fabric_form, fabric_type: s.fabric_type || sp.fabric_name || '' }));
+    } catch { /* no specification — keep what was typed */ }
+  };
+  const estMeters = previewRoll({ weight_kg: form.required_qty_kg, target_gsm: form.gsm, dia: form.dia, form: (form.fabric_form || null) as any }, diaRules).calc_meters;
 
   const addYarnLine = () =>
     setForm((s) => ({ ...s, yarns: [...s.yarns, newYarnLine(s.yarns.length + 1)] }));
@@ -673,7 +689,7 @@ export default function KnittingProgramPage() {
               Fabric Specification
             </h4>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-              <select className="input" value={form.fabric_id} onChange={(e) => setF('fabric_id', e.target.value ? Number(e.target.value) : '')} id="kp-fabric">
+              <select className="input" value={form.fabric_id} onChange={(e) => void pickFabric(e.target.value)} id="kp-fabric">
                 <option value="">— Fabric —</option>
                 {fabrics.map((f: any) => <option key={f.id} value={f.id}>{f.fabric_code} — {f.label}</option>)}
               </select>
@@ -683,12 +699,17 @@ export default function KnittingProgramPage() {
                 onChange={(e) => setF('gsm', e.target.value)} id="kp-gsm" />
               <Input label="Dia (Target)" value={form.dia}
                 onChange={(e) => setF('dia', e.target.value)} id="kp-dia" />
+              <label className="block"><span className="label">Fabric form</span>
+                <select className="input" value={form.fabric_form} onChange={(e) => setF('fabric_form', e.target.value)} id="kp-form">
+                  <option value="">— Tubular / open —</option><option value="TUBULAR">Tubular</option><option value="OPEN_WIDTH">Open width</option>
+                </select></label>
               <Input label="Gauge" placeholder="e.g. 24 GG" value={form.gauge}
                 onChange={(e) => setF('gauge', e.target.value)} id="kp-gauge" />
               <Input label="Loop Length" value={form.loop_length}
                 onChange={(e) => setF('loop_length', e.target.value)} id="kp-loop-length" />
               <Input label="Required Qty (KG)" type="number" step="0.001" value={form.required_qty_kg}
-                onChange={(e) => setF('required_qty_kg', e.target.value === '' ? '' : Number(e.target.value))} id="kp-req-qty" />
+                onChange={(e) => setF('required_qty_kg', e.target.value === '' ? '' : Number(e.target.value))} id="kp-req-qty"
+                hint={estMeters ? `≈ ${fmtDecimal(estMeters, 1)} m fabric (KG × 1000 ÷ GSM × width)` : undefined} />
               <Input label="Required Date" type="date" value={form.required_date}
                 onChange={(e) => setF('required_date', e.target.value)} id="kp-req-date" />
               <select className="input" value={form.job_work_type} onChange={(e) => setF('job_work_type', e.target.value)} id="kp-job-type">
@@ -1050,6 +1071,7 @@ function DetailView({ prog, onEdit }: { prog: any; onEdit: () => void }) {
         <InfoRow label="Fabric Type" value={prog.fabric_type ?? prog.fabric_name ?? '—'} />
         <InfoRow label="GSM" value={prog.gsm ?? '—'} />
         <InfoRow label="Dia" value={prog.dia ?? '—'} />
+        <InfoRow label="Fabric form" value={prog.fabric_form === 'OPEN_WIDTH' ? 'Open width' : prog.fabric_form === 'TUBULAR' ? 'Tubular' : '—'} />
         <InfoRow label="Gauge" value={prog.gauge ?? '—'} />
         <InfoRow label="Required KG" value={<span className="font-semibold">{fmtDecimal(prog.required_qty_kg, 2)}</span>} />
         <InfoRow label="Required Date" value={fmtDate(prog.required_date)} />

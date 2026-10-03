@@ -9,6 +9,7 @@ import { useToast } from '../../../hooks/useToast';
 import { useAuth } from '../../../lib/auth';
 import { Button, Input, Select, Textarea, SearchInput, LoadingBlock, Tabs } from '../../../components/ui';
 import { fmtDate, today } from '../../../lib/format';
+import { useDiaRules, previewRoll, pctCls, fmtPct, type DiaRule } from '../../../lib/fabricCalc';
 import { FpTitle, FpStatus, ReconCards, useReasons, useProcessTypes, errText, kg, n, r3, esc, printDoc, groupByJob, isDyeing } from './shared';
 
 /**
@@ -123,6 +124,7 @@ function InwardEditor({ editId, fpoId: fpoParam, onBack, onDone, onPickDc }: { e
   }, [d, existing.data]);
   const requiresQc = !!Number((types.data ?? []).find((t) => t.code === d?.sub_process)?.requires_qc);
   const dyeing = isDyeing(d?.sub_process);
+  const { data: rules } = useDiaRules();
 
   const set = (key: string, p: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...p } : l)));
   const split = (l: Line) => setLines((ls) => { const i = ls.findIndex((x) => x.key === l.key); const c = [...ls]; c.splice(i + 1, 0, { ...l, key: `l${++seq}`, output_roll_no: '', good_kg: '', reject_kg: '', loss_kg: '', meters: '' }); return c; });
@@ -201,17 +203,17 @@ function InwardEditor({ editId, fpoId: fpoParam, onBack, onDone, onPickDc }: { e
               <div className="max-h-[55vh] overflow-auto">
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 z-10 bg-slate-50 text-slate-500"><tr>
-                    {['Input roll', 'Open KG', 'Output roll (blank = auto)', ...(dyeing ? ['Fabric colour', 'Dye colour'] : ['Colour']), 'Good KG', 'Reject KG', 'Loss KG', 'Reject reason', 'Mtr', 'GSM', 'Dia', 'Shade', ''].map((h) => <th key={h} className={`px-2 py-2 ${/KG|Mtr/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}
+                    {['Input roll', 'Open KG', 'Output roll (blank = auto)', ...(dyeing ? ['Fabric colour', 'Dye colour'] : ['Colour']), 'Good KG', 'Reject KG', 'Loss KG', 'Reject reason', 'Mtr (measured)', 'Calc Mtr', 'GSM', 'Dia', 'Shade', ''].map((h) => <th key={h} className={`px-2 py-2 ${/KG|Mtr/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}
                   </tr></thead>
                   <tbody>
                     {groupByJob(lines).map((g) => (
-                      <GrnJobRows key={g.io_no} g={g} dyeing={dyeing} reasons={(reasons.data ?? []).filter((x) => x.kind !== 'BILLING')} set={set} split={split} accounted={accounted}
+                      <GrnJobRows key={g.io_no} g={g} dyeing={dyeing} rules={rules} reasons={(reasons.data ?? []).filter((x) => x.kind !== 'BILLING')} set={set} split={split} accounted={accounted}
                         remove={(k) => setLines((ls) => ls.filter((l) => l.key !== k))} />
                     ))}
-                    {!lines.length && <tr><td colSpan={dyeing ? 14 : 13} className="px-3 py-8 text-center text-slate-400">Every roll of this DC is already received</td></tr>}
+                    {!lines.length && <tr><td colSpan={dyeing ? 15 : 14} className="px-3 py-8 text-center text-slate-400">Every roll of this DC is already received</td></tr>}
                   </tbody>
                   <tfoot className="sticky bottom-0 bg-slate-100 font-bold">
-                    <tr><td colSpan={dyeing ? 5 : 4} className="px-2 py-2 text-right">This GRN</td><td className="px-2 py-2 text-right text-emerald-800">{kg(tot.good)}</td><td className="px-2 py-2 text-right text-red-700">{kg(tot.rej)}</td><td className="px-2 py-2 text-right text-amber-700">{kg(tot.loss)}</td><td colSpan={6} /></tr>
+                    <tr><td colSpan={dyeing ? 5 : 4} className="px-2 py-2 text-right">This GRN</td><td className="px-2 py-2 text-right text-emerald-800">{kg(tot.good)}</td><td className="px-2 py-2 text-right text-red-700">{kg(tot.rej)}</td><td className="px-2 py-2 text-right text-amber-700">{kg(tot.loss)}</td><td colSpan={7} /></tr>
                   </tfoot>
                 </table>
               </div>
@@ -239,11 +241,11 @@ function InwardEditor({ editId, fpoId: fpoParam, onBack, onDone, onPickDc }: { e
   );
 }
 
-function GrnJobRows({ g, dyeing, reasons, set, split, remove, accounted }: { g: { io_no: string; rows: Line[] }; dyeing: boolean; reasons: { id: number; reason: string }[]; set: (k: string, p: Partial<Line>) => void; split: (l: Line) => void; remove: (k: string) => void; accounted: (rid: number) => number }) {
+function GrnJobRows({ g, dyeing, rules, reasons, set, split, remove, accounted }: { g: { io_no: string; rows: Line[] }; dyeing: boolean; rules?: DiaRule[]; reasons: { id: number; reason: string }[]; set: (k: string, p: Partial<Line>) => void; split: (l: Line) => void; remove: (k: string) => void; accounted: (rid: number) => number }) {
   const inp = 'input py-0.5 text-xs';
   return (
     <>
-      <tr className="bg-sky-50/70"><td colSpan={dyeing ? 14 : 13} className="px-2 py-1.5 text-[11.5px] font-semibold text-sky-900">Job {g.io_no}{g.rows[0].buyer_po_no ? ` · PO ${g.rows[0].buyer_po_no}` : ''}{g.rows[0].style_code ? ` · Style ${g.rows[0].style_code}` : ''}</td></tr>
+      <tr className="bg-sky-50/70"><td colSpan={dyeing ? 15 : 14} className="px-2 py-1.5 text-[11.5px] font-semibold text-sky-900">Job {g.io_no}{g.rows[0].buyer_po_no ? ` · PO ${g.rows[0].buyer_po_no}` : ''}{g.rows[0].style_code ? ` · Style ${g.rows[0].style_code}` : ''}</td></tr>
       {g.rows.map((l, i) => {
         const first = i === 0 || g.rows[i - 1].roll_in_id !== l.roll_in_id;
         const over = accounted(l.roll_in_id) > l.open_kg + 0.0005;
@@ -265,6 +267,9 @@ function GrnJobRows({ g, dyeing, reasons, set, split, remove, accounted }: { g: 
               </select>
             </td>
             <td className="px-1 py-1"><input type="number" step="0.01" className={`${inp} w-20 text-right`} value={l.meters} onChange={(e) => set(l.key, { meters: e.target.value === '' ? '' : Number(e.target.value) })} /></td>
+            {(() => { const pv = previewRoll({ weight_kg: l.good_kg, target_gsm: l.gsm, dia: l.dia, form: null, actual_meters: l.meters }, rules); return (
+              <td className="px-2 py-1 text-right tabular-nums text-sky-800" title={pv.meter_var_pct !== null ? `measured vs calculated ${fmtPct(pv.meter_var_pct)}` : 'KG × 1000 ÷ (GSM × width M)'}>
+                {pv.calc_meters ? pv.calc_meters.toFixed(2) : '—'}{pv.meter_var_pct !== null ? <span className={`ml-1 text-[10px] ${pctCls(pv.meter_var_pct)}`}>{fmtPct(pv.meter_var_pct)}</span> : null}</td>); })()}
             <td className="px-1 py-1"><input className={`${inp} w-14`} value={l.gsm} onChange={(e) => set(l.key, { gsm: e.target.value })} /></td>
             <td className="px-1 py-1"><input className={`${inp} w-14`} value={l.dia} onChange={(e) => set(l.key, { dia: e.target.value })} /></td>
             <td className="px-1 py-1"><input className={`${inp} w-16`} value={l.shade_no} onChange={(e) => set(l.key, { shade_no: e.target.value })} /></td>
