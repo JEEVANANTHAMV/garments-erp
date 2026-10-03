@@ -336,7 +336,7 @@ export default function KnittingProgramPage() {
   // yarn the job holds: its own PO / GRN lots and yarn transferred to it — the only yarn a program may plan
   const { data: jobLots = [], isFetched: lotsFetched } = useQ({
     queryKey: ['knit-job-lots', form.so_id],
-    queryFn: async () => (await http.get<{ data: any[] }>(`/yarn-stock/job-lots?so_id=${form.so_id}`)).data || [],
+    queryFn: async () => (await http.get<{ data: any[] }>(`/yarn-stock/job-lots?so_id=${form.so_id}&general=0`)).data || [],
     enabled: showForm && form.so_id !== '',
   });
   // the job's CAD fabric program (from CAD)
