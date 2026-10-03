@@ -72,6 +72,8 @@ export interface ResourceConfig {
   beforeUpdateTx?: (req: Request, id: number, before: any, data: Record<string, unknown>, tx: Tx) => Promise<void>;
   /** Runs inside the CREATE transaction after the row (and its children) is written, e.g. to link it to its source document. */
   afterCreateTx?: (req: Request, row: any, tx: Tx) => Promise<void>;
+  /** Runs inside the UPDATE transaction after the row and its children are written (e.g. cross-document limits). */
+  afterUpdateTx?: (req: Request, row: any, tx: Tx) => Promise<void>;
 }
 
 export interface ChildConfig {
@@ -125,7 +127,7 @@ export function buildResourceRouter(cfg: ResourceConfig): Router {
     defaultSort = 't.id',
     children = [],
     autoNumber,
-    readOnly, cancelFlag, beforeDelete, beforeUpdate, beforeCreate, beforeWrite, beforeUpdateTx, afterCreateTx,
+    readOnly, cancelFlag, beforeDelete, beforeUpdate, beforeCreate, beforeWrite, beforeUpdateTx, afterCreateTx, afterUpdateTx,
   } = cfg;
 
   const scope = (req: Request) => (companyScoped ? req.user!.companyId : null);
@@ -279,7 +281,7 @@ export function buildResourceRouter(cfg: ResourceConfig): Router {
     });
 
     await audit(req, table, (created as any).id, 'INSERT', undefined, created);
-    res.status(201).json({ data: created });
+    res.status(201).json({ data: created, ...((req as any).warnings?.length ? { notices: (req as any).warnings } : {}) });
   }));
 
   // -------------------------------------------------------------- UPDATE
@@ -327,11 +329,14 @@ export function buildResourceRouter(cfg: ResourceConfig): Router {
           );
         }
       }
-      return txQueryOne(tx, `SELECT * FROM ${table} WHERE id = ?`, [id]);
+      const row = await txQueryOne(tx, `SELECT * FROM ${table} WHERE id = ?`, [id]);
+      if (afterUpdateTx) await afterUpdateTx(req, row, tx);
+      return row;
     });
 
     await audit(req, table, id, 'UPDATE', before, after);
-    res.json({ data: after });
+    // hooks may leave warnings for the user (e.g. WARN-mode purchase excess)
+    res.json({ data: after, ...((req as any).warnings?.length ? { notices: (req as any).warnings } : {}) });
   }));
 
   // -------------------------------------------------------------- DELETE

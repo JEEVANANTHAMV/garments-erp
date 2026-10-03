@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import {
-  LayoutDashboard, Building2, Users, Palette, Ruler, Package, Shirt, Layers,
+  LayoutDashboard, ShieldCheck, Building2, Users, Palette, Ruler, Package, Shirt, Layers,
   FileText, Beaker, Calculator, FileSpreadsheet, ShoppingCart, Boxes, Truck,
   Factory, Scissors, ClipboardCheck, PackageCheck, Ship, Receipt, Landmark,
   BarChart3, Shield, Settings, Warehouse, GitBranch, CalendarClock, FileCheck2,
@@ -95,6 +95,7 @@ export const NAV: NavSection[] = [
       { label: 'Goods Receipt (All)', to: '/procurement/grns', icon: PackageCheck, perms: ['GRN.VIEW'] },
       { label: 'Purchase Returns',    to: '/procurement/returns', icon: Truck, perms: ['PURCHASE.VIEW'] },
       { label: 'Bills Inward',        to: '/procurement/supplier-bills', icon: Receipt, perms: ['PURCHASE.VIEW'] },
+      { label: 'Purchase Excess Limits', to: '/procurement/purchase-excess', icon: ShieldCheck, perms: ['PURCHASE.VIEW', 'PROCUREMENT.VIEW'] },
       { label: 'GRN Bill Status',     to: '/procurement/grn-bill-status', icon: Receipt, perms: ['GRN.VIEW', 'PURCHASE.VIEW'] },
     ],
   },

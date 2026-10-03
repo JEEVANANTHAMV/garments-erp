@@ -128,13 +128,21 @@ bomRouter.get('/', requirePermission('BOM.VIEW'), ah(async (req, res) => {
  * accessories / packings / generals with order_required_qty / final_requirement per line.
  */
 bomRouter.get('/for-job', requireAny('BOM.VIEW', 'PURCHASE.VIEW', 'PROCUREMENT.VIEW', 'QUOTATION.VIEW'), ah(async (req, res) => {
-  const cid = req.user!.companyId;
-  const q = z.object({
-    so_id: z.coerce.number().int().positive().optional(),
-    io_no: z.string().trim().min(1).max(60).optional(),
-    style_id: z.coerce.number().int().positive().optional(),
-    order_qty: z.coerce.number().min(0).optional(),
-  }).parse(req.query);
+  res.json({ success: true, data: await jobBomRequirement(req.user!.companyId, forJobQuery.parse(req.query)) });
+}));
+
+export const forJobQuery = z.object({
+  so_id: z.coerce.number().int().positive().optional(),
+  io_no: z.string().trim().min(1).max(60).optional(),
+  style_id: z.coerce.number().int().positive().optional(),
+  order_qty: z.coerce.number().min(0).optional(),
+});
+
+/**
+ * The job's (or a style's) BOM exploded into material requirements — the figures MRP, POs, quotations and the
+ * purchase excess limit all use: per BOM line the requirement for its colour / size cells of the plan cut.
+ */
+export async function jobBomRequirement(cid: number, q: z.infer<typeof forJobQuery>) {
   if (!q.so_id && !q.io_no && !q.style_id) throw BadRequest('Select a job (IO No) or a style to load its BOM');
 
   // 1. Resolve the job
@@ -289,26 +297,23 @@ bomRouter.get('/for-job', requireAny('BOM.VIEW', 'PURCHASE.VIEW', 'PROCUREMENT.V
       : `No active BOM found for style ${styles[0].style_code}. Create the BOM first.`);
   }
 
-  res.json({
-    success: true,
-    data: {
-      bom: boms[0],
-      boms,
-      so,
-      job_no: jobNo,
-      styles,
-      order_qty: styles.reduce((t, s2) => t + s2.qty, 0),
-      warnings,
-      lines: items,
-      yarns: items.filter((i) => i.material_type === 'YARN'),
-      fabrics: items.filter((i) => i.material_type === 'FABRIC'),
-      trims: items.filter((i) => i.material_type === 'TRIM'),
-      accessories: items.filter((i) => i.material_type === 'ACCESSORY'),
-      packings: items.filter((i) => i.material_type === 'PACKING'),
-      generals: items.filter((i) => i.material_type === 'GENERAL'),
-    },
-  });
-}));
+  return {
+    bom: boms[0],
+    boms,
+    so,
+    job_no: jobNo,
+    styles,
+    order_qty: styles.reduce((t, s2) => t + s2.qty, 0),
+    warnings,
+    lines: items,
+    yarns: items.filter((i) => i.material_type === 'YARN'),
+    fabrics: items.filter((i) => i.material_type === 'FABRIC'),
+    trims: items.filter((i) => i.material_type === 'TRIM'),
+    accessories: items.filter((i) => i.material_type === 'ACCESSORY'),
+    packings: items.filter((i) => i.material_type === 'PACKING'),
+    generals: items.filter((i) => i.material_type === 'GENERAL'),
+  };
+}
 
 /**
  * GET /order-cells?so_id=&style_id= — the job strip and requirement grid of the BOM screen:

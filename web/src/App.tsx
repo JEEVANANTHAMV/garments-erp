@@ -86,6 +86,7 @@ import { YarnProcessReturnPage, YarnProcessReprocessPage } from './pages/product
 import { YarnProcessBillPage, YarnConeTrackingPage, YarnProcessReportsPage, YarnProcessTypesPage } from './pages/production/yarnProcess/BillTrackingPages';
 import JobTransferPage from './pages/inventory/JobTransferPage';
 import BillsInwardHub from './pages/procurement/BillsInwardHub';
+import PurchaseExcessPage from './pages/procurement/PurchaseExcessPage';
 import YarnSubstitutionPage from './pages/production/YarnSubstitutionPage';
 import MaterialTracePage from './pages/production/MaterialTracePage';
 
@@ -245,6 +246,7 @@ export default function App() {
                   <Route path="returns/new" element={<PurchaseReturnDetailPage />} />
                   <Route path="returns/:id" element={<PurchaseReturnDetailPage />} />
                   <Route path="supplier-bills" element={<BillsInwardHub />} />
+                  <Route path="purchase-excess" element={<PurchaseExcessPage />} />
                   <Route path="grn-bill-status" element={<GrnBillStatusPage />} />
 
                   {/* Fabric Procurement */}

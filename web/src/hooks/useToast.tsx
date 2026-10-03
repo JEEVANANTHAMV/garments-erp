@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 
 type Kind = 'success' | 'error' | 'info' | 'warning';
@@ -21,8 +21,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           ? String((message as any).message)
           : (typeof message === 'object' ? JSON.stringify(message) : String(message ?? '')));
     setItems((s) => [...s, { id, kind, message: msgStr }]);
-    setTimeout(() => setItems((s) => s.filter((t) => t.id !== id)), 4500);
+    setTimeout(() => setItems((s) => s.filter((t) => t.id !== id)), kind === 'warning' || kind === 'error' ? 9000 : 4500);
   }, []);
+  // warnings the server returns with a successful save (e.g. purchase above the allowed excess in WARN mode)
+  useEffect(() => {
+    const on = (e: Event) => ((e as CustomEvent<string[]>).detail ?? []).forEach((w) => toast(w, 'warning'));
+    window.addEventListener('erp-warnings', on);
+    return () => window.removeEventListener('erp-warnings', on);
+  }, [toast]);
 
   const dismiss = (id: number) => setItems((s) => s.filter((t) => t.id !== id));
 

@@ -9,6 +9,7 @@ import { requirePermission, requireAny } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { computeInvoice, chargesFromRow, invoiceSummaryColumns } from '../../core/invoiceCalc.js';
+import { assertPoExcessById } from '../../core/purchaseExcess.js';
 
 export const fabricYarnProcurementRouter = Router();
 
@@ -366,6 +367,7 @@ fabricYarnProcurementRouter.post('/fabric-purchase-orders/convert-from-quotation
       ]);
     }
     await markQuotationConverted(tx, info.quote.id, poNo);
+    await assertPoExcessById(tx, companyId, Number(newPoId));
     return newPoId;
   });
 
@@ -1310,6 +1312,7 @@ fabricYarnProcurementRouter.post('/yarn-purchase-orders/convert-from-quotation',
       ]);
     }
     await markQuotationConverted(tx, info.quote.id, poNo);
+    await assertPoExcessById(tx, companyId, Number(newPoId));
     return newPoId;
   });
 

@@ -53,6 +53,7 @@ import { gateBillRouter } from './modules/inventory/gateBill.routes.js';
 import { yarnSubstitutionRouter } from './modules/stock/yarnSubstitution.routes.js';
 import { knittingBillRouter } from './modules/yarnProcess/knittingBill.routes.js';
 import { fabricRollCalcRouter } from './modules/fabricRoll/fabricRollCalc.routes.js';
+import { purchaseExcessRouter } from './modules/purchaseExcess/purchaseExcess.routes.js';
 import { collarRouter } from './modules/yarnProcess/collar.routes.js';
 import { knittingProductionRouter } from './modules/yarnProcess/knittingProduction.routes.js';
 import { processReportsRouter } from './modules/yarnProcess/processReports.routes.js';
@@ -140,6 +141,7 @@ export function createApp() {
   api.use('/', yarnEngineAfterRouter);        // /yarn-process/* (return / reprocess / bill / cone tracking / reports)
   api.use('/', gateBillRouter);              // /dc-lookup (DC barcode at the gate), /procurement/grn-bill-status, /alerts
   api.use('/', yarnSubstitutionRouter);      // /yarn-substitution-rules, /yarn-substitution-requests, /knitting-programs/:id/yarn-requirements, /jobs/:soId/yarn-ledger
+  api.use('/', purchaseExcessRouter);       // /purchase-excess/settings, /jobs/:soId/purchase-status, /jobs/:soId/purchase-allowance
   api.use('/', fabricRollCalcRouter);       // /fabric-rolls/calculate, /dia-width-rules, /fabric-rolls/gsm-variance (GSM / Dia / meter engine)
   api.use('/', knittingBillRouter);          // /knitting-bill-sources, /knitting-bills (knitting job-work bill, shown in Bills Inward)
   api.use('/', processFlowRouter);            // /process-issues, /process-receipts, /process-qc

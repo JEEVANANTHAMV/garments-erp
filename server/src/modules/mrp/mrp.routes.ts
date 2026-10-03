@@ -7,6 +7,7 @@ import { NotFound, BadRequest } from '../../core/errors.js';
 import { requirePermission } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
+import { assertPoExcessById } from '../../core/purchaseExcess.js';
 
 export const mrpRouter = Router();
 
@@ -265,6 +266,7 @@ mrpRouter.post('/:id/create-po', requirePermission('PURCHASE.CREATE'), ah(async 
       `UPDATE trx_purchase_order SET total_amount = ?, grand_total = ? WHERE id = ?`,
       [total.toFixed(4), total.toFixed(4), poId]);
 
+    await assertPoExcessById(tx, req.user!.companyId, Number(poId));
     return txQueryOne(tx, `SELECT * FROM trx_purchase_order WHERE id = ?`, [poId]);
   });
 

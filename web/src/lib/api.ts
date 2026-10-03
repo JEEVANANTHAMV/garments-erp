@@ -69,7 +69,11 @@ async function doRefresh(): Promise<string> {
 }
 
 api.interceptors.response.use(
-  (r) => r,
+  (r) => {
+    const w = (r.data as any)?.notices;   // server notices with a successful save (e.g. purchase excess in WARN mode)
+    if (Array.isArray(w) && w.length) window.dispatchEvent(new CustomEvent('erp-warnings', { detail: w }));
+    return r;
+  },
   async (error: AxiosError<{ error?: ApiErrorShape }>) => {
     const original = error.config as (typeof error.config & { _retried?: boolean }) | undefined;
     const status = error.response?.status ?? 0;

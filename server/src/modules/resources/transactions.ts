@@ -16,6 +16,17 @@ const invoiceSummaryFields = () => [
 ];
 import { jobworkInBeforeCreate, jobworkInvoiceBeforeCreate } from '../production/jobworkDivision.js';
 import { computePreCosting, PRE_COST_HEADS } from '../costing/preCostingCalc.js';
+import { assertPurchaseExcess, poItemKeys } from '../../core/purchaseExcess.js';
+import type { Request } from 'express';
+import type { Tx } from '../../config/db.js';
+
+/** Purchase excess limit of the jobs on a PO's lines (cancelled / rejected POs are not checked). */
+async function poExcessCheck(req: Request, row: any, tx: Tx) {
+  if (['CANCELLED', 'REJECTED'].includes(String(row.approval_state ?? ''))) return;
+  const lines: any[] = Array.isArray(req.body?.lines) ? req.body.lines : [];
+  const w = await assertPurchaseExcess(tx, req.user!.companyId, [row.so_id, ...lines.map((l) => l.so_id)], poItemKeys(lines));
+  if (w.length) (req as any).warnings = [...((req as any).warnings ?? []), ...w];
+}
 
 /**
  * Merchandiser Pre-Costing V2: the head columns, smv, total_cost and fob_price of a
@@ -239,6 +250,9 @@ export const transactionResources: ResourceConfig[] = [
   // ------------------------------------------------ Procurement
   {
     path: 'purchase-orders', table: 'trx_purchase_order', permission: 'PURCHASE', label: 'Purchase Order',
+    // a job may buy each BOM material only up to its requirement + allowed excess (client 03-Oct-2026)
+    afterCreateTx: async (req, row, tx) => { await poExcessCheck(req, row, tx); },
+    afterUpdateTx: async (req, row, tx) => { await poExcessCheck(req, row, tx); },
     searchable: ['po_no', 'remarks'], sortable: ['po_no', 'po_date', 'delivery_date'],
     defaultSort: 't.po_date', hasIsActive: false,
     filters: ['supplier_id', 'po_type', 'status_id', 'approval_state', 'so_id', 'branch_id'],

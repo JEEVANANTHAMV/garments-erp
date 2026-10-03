@@ -10,6 +10,7 @@ import { nextDocNumber } from '../../core/numbering.js';
 import { computeInvoice, chargesFromRow, invoiceSummaryColumns } from '../../core/invoiceCalc.js';
 import { s } from '../resources/schemas.js';
 import { loadQuotationForPo, quoteLineTax, markQuotationConverted } from './fabricYarnProcurement.routes.js';
+import { assertPoExcessById } from '../../core/purchaseExcess.js';
 
 export const trimProcurementRouter = Router();
 
@@ -237,11 +238,12 @@ trimProcurementRouter.post('/trim-pos', requirePermission('PROCUREMENT.CREATE'),
       );
     }
 
-    return { id: poId, po_no: poNo };
+    const warnings = await assertPoExcessById(tx, cid, Number(poId), 'TRIM_PO');
+    return { id: poId, po_no: poNo, warnings };
   });
 
   await audit(req, 'trx_trim_po', result.id, 'INSERT', undefined, result);
-  res.status(201).json({ success: true, data: result });
+  res.status(201).json({ success: true, data: result, ...((result as any).warnings?.length ? { notices: (result as any).warnings } : {}) });
 }));
 
 /** PUT /trim-pos/:id — Update Trim PO */
@@ -255,7 +257,7 @@ trimProcurementRouter.put('/trim-pos/:id', requirePermission('PROCUREMENT.UPDATE
     throw BadRequest(`Cannot update PO in ${existing.status} status`);
   }
 
-  await transaction(async (tx) => {
+  const warnings = await transaction(async (tx) => {
     await txExecute(
       tx,
       `UPDATE trx_trim_po
@@ -289,10 +291,11 @@ trimProcurementRouter.put('/trim-pos/:id', requirePermission('PROCUREMENT.UPDATE
         ]
       );
     }
+    return assertPoExcessById(tx, cid, Number(req.params.id), 'TRIM_PO');
   });
 
   await audit(req, 'trx_trim_po', Number(req.params.id), 'UPDATE', existing, body);
-  res.json({ success: true, message: 'Trim PO updated' });
+  res.json({ success: true, message: 'Trim PO updated', ...(warnings.length ? { notices: warnings } : {}) });
 }));
 
 /**
@@ -382,6 +385,7 @@ trimProcurementRouter.post('/trim-pos/convert-from-quotation', requirePermission
         ]);
     }
     await markQuotationConverted(tx, quote.id, poNo);
+    await assertPoExcessById(tx, cid, Number(poId), 'TRIM_PO');
     return { id: poId, po_no: poNo };
   });
 
