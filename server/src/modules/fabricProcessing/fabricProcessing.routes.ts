@@ -156,6 +156,9 @@ const outwardSchema = z.object({
 });
 type OutwardBody = z.infer<typeof outwardSchema>;
 
+/** Dyeing (and re-dyeing) DCs carry a fabric colour + dye colour per roll; other processes keep the roll's colour. */
+export const isDyeing = (code: unknown) => /DYE/i.test(String(code ?? ''));
+
 /** Validates the DC rolls against store stock and writes them (stock is issued only when `issue`). */
 async function writeOutwardRolls(tx: Tx, req: Request, fpoId: number, fpo: any, rolls: OutwardBody['rolls'], issue: boolean, opts: { allowReturned?: boolean } = {}) {
   const cid = req.user!.companyId;
@@ -185,13 +188,18 @@ async function writeOutwardRolls(tx: Tx, req: Request, fpoId: number, fpo: any, 
               (SELECT sol.style_id FROM trx_sales_order_line sol WHERE sol.so_id = so.id ORDER BY sol.id LIMIT 1) AS style_id
          FROM trx_sales_order so WHERE so.id = ? AND so.company_id = ?`, [soId, cid]) : null;
     const meters = r.meters || (n(fr.weight_kg) > 0 ? r2(n(fr.meters) * (r.weight_kg / n(fr.weight_kg))) : 0);
+    // fabric colour = the roll as it goes out (grey / melange / …); color_name = the dye colour on a dyeing DC
+    const fabricColor = fr.color_name || (fr.process_state === 'GREY' ? 'GREY' : null);
+    const dyeing = isDyeing(fpo.sub_process);
+    const colour = r.color_name || fpo.color_name || (dyeing && !fpo.is_reprocess ? null : fr.color_name) || null;
+    if (dyeing && issue && !colour) throw BadRequest(`Roll ${fr.roll_no}: enter the dye colour`);
     await txExecute(tx,
       `INSERT INTO trx_fabric_process_roll_in (fpo_id, fabric_roll_id, roll_no, lot_no, weight_kg, meters, warehouse_id,
-         so_id, io_no, buyer_po_no, style_id, fabric_id, color_name, gsm, dia, status)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         so_id, io_no, buyer_po_no, style_id, fabric_id, color_name, fabric_color, gsm, dia, status)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [fpoId, fr.id, fr.roll_no, fr.lot_no ?? null, r3(r.weight_kg), meters, fr.warehouse_id ?? null,
        job?.id ?? null, job?.io_no ?? null, job?.buyer_po_no ?? null, job?.style_id ?? null, fr.fabric_id ?? null,
-       r.color_name || fpo.color_name || fr.color_name || null, fr.gsm ?? null, fr.dia ?? null, issue ? 'AT_VENDOR' : 'DRAFT']);
+       colour, fabricColor, fr.gsm ?? null, fr.dia ?? null, issue ? 'AT_VENDOR' : 'DRAFT']);
     total += r.weight_kg;
     if (issue) {
       await txExecute(tx, 'UPDATE trx_fabric_roll SET issued_kg = COALESCE(issued_kg, 0) + ? WHERE id = ?', [r3(r.weight_kg), fr.id]);
@@ -477,7 +485,7 @@ fabricProcessingRouter.get('/fabric-process/inward/:id', requirePermission(FP.VI
       WHERE i.id = ? AND i.company_id = ?`, [id, cid]);
   if (!i) throw NotFound('Process GRN not found');
   const lines = await query<any>(
-    `SELECT ro.*, ri.roll_no AS input_roll_no, ri.io_no, ri.buyer_po_no, ri.weight_kg AS input_roll_kg, st.style_code,
+    `SELECT ro.*, ri.roll_no AS input_roll_no, ri.io_no, ri.buyer_po_no, ri.weight_kg AS input_roll_kg, ri.fabric_color, st.style_code,
             fr.roll_no AS output_roll_no_stock, ROUND(fr.weight_kg - COALESCE(fr.issued_kg, 0), 3) AS stock_balance_kg
        FROM trx_fabric_process_roll_out ro
        LEFT JOIN trx_fabric_process_roll_in ri ON ri.id = ro.roll_in_id
@@ -490,7 +498,7 @@ fabricProcessingRouter.get('/fabric-process/inward/:id', requirePermission(FP.VI
     const d = parseDraft(i.draft_json);
     const rins = await query<any>(`SELECT ri.*, st.style_code, ROUND(ri.weight_kg - ri.good_kg - ri.reject_kg - ri.loss_kg, 3) AS open_kg
                                      FROM trx_fabric_process_roll_in ri LEFT JOIN mst_style st ON st.id = ri.style_id WHERE ri.fpo_id = ?`, [i.fpo_id]);
-    draft = { ...d, lines: d.lines.map((l, k) => { const ri = rins.find((x) => Number(x.id) === Number(l.roll_in_id)); return { ...l, line_index: k, input_roll_no: ri?.roll_no, io_no: ri?.io_no, buyer_po_no: ri?.buyer_po_no, style_code: ri?.style_code, open_kg: n(ri?.open_kg), input_roll_kg: n(ri?.weight_kg) }; }) };
+    draft = { ...d, lines: d.lines.map((l, k) => { const ri = rins.find((x) => Number(x.id) === Number(l.roll_in_id)); return { ...l, line_index: k, input_roll_no: ri?.roll_no, fabric_color: ri?.fabric_color ?? null, io_no: ri?.io_no, buyer_po_no: ri?.buyer_po_no, style_code: ri?.style_code, open_kg: n(ri?.open_kg), input_roll_kg: n(ri?.weight_kg) }; }) };
   }
   const qcParams = await query<any>('SELECT * FROM mst_fabric_process_qc_param WHERE company_id = ? AND process_code = ? AND is_active = 1 ORDER BY sort_order, id', [cid, i.sub_process]);
   const qcResults = await query<any>('SELECT * FROM trx_fabric_process_qc WHERE inward_id = ? ORDER BY line_index, id', [id]);

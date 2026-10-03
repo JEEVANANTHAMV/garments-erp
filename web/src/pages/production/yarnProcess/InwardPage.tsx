@@ -10,6 +10,7 @@ import { useAuth } from '../../../lib/auth';
 import { Button, Input, Select, Textarea, SearchInput, LoadingBlock } from '../../../components/ui';
 import { fmtDate, today } from '../../../lib/format';
 import { YpTitle, YpStatus, ReconCards, useReasons, errText, kg, n, r3, esc, printDoc, groupByJob, MODE_LABEL } from './shared';
+import { isDyeing } from '../fabricProcess/shared';
 
 /**
  * Yarn Process — Inward / GRN (doc §9–§11): output cones received against the outward DC, job-wise.
@@ -90,6 +91,8 @@ function InwardEditor({ editId, ypoId: ypoParam, onBack, onDone, onPickDc }: { e
   const d = dc.data;
   const mode: string = d?.process_mode ?? 'CONE_TO_CONE';
   const many = mode === 'MANY_TO_ONE';
+  // yarn dyeing: the lot's yarn colour (as sent) + the dye colour received
+  const dyeing = isDyeing(d?.process_code);
   const [head, setHead] = useState({ inward_date: today(), challan_no: '', vehicle_no: '', received_by: '', warehouse_id: '', reject_warehouse_id: '', loss_override_reason: '', remarks: '', gate_inward_id: '' });
   const [outs, setOuts] = useState<Out[]>([]);
   const [busy, setBusy] = useState(false);
@@ -199,7 +202,7 @@ function InwardEditor({ editId, ypoId: ypoParam, onBack, onDone, onPickDc }: { e
             <div className="max-h-[55vh] overflow-auto">
               <table className="w-full text-xs">
                 <thead className="sticky top-0 z-10 bg-slate-50 text-slate-500"><tr>
-                  {[many ? 'Input cones (ply)' : 'Input lot / cone', many ? 'Input KG' : 'Open KG', 'Output cone', 'Output lot (blank = auto)', 'Shade', many ? 'Output yarn' : null, 'Cones', 'Good KG', 'Reject KG', 'Loss KG', 'Reject reason', ''].filter((x) => x !== null)
+                  {[many ? 'Input cones (ply)' : 'Input lot / cone', many ? 'Input KG' : 'Open KG', 'Output cone', 'Output lot (blank = auto)', ...(dyeing ? ['Yarn colour', 'Dye colour'] : ['Shade']), many ? 'Output yarn' : null, 'Cones', 'Good KG', 'Reject KG', 'Loss KG', 'Reject reason', ''].filter((x) => x !== null)
                     .map((h, i) => <th key={i} className={`px-2 py-2 ${/KG|Cones/.test(String(h)) ? 'text-right' : 'text-left'}`}>{h}</th>)}
                 </tr></thead>
                 <tbody>
@@ -230,7 +233,8 @@ function InwardEditor({ editId, ypoId: ypoParam, onBack, onDone, onPickDc }: { e
                             <td className="px-2 py-1 text-right tabular-nums">{many ? kg(outIn(o)) : first ? kg(l?.balance_kg) : ''}</td>
                             <td className="px-1 py-1"><input className={`${inp} w-24`} value={o.output_cone_no} onChange={(e) => set(o.key, { output_cone_no: e.target.value })} /></td>
                             <td className="px-1 py-1"><input className={`${inp} w-28`} value={o.output_lot_no} onChange={(e) => set(o.key, { output_lot_no: e.target.value })} /></td>
-                            <td className="px-1 py-1"><input className={`${inp} w-20`} value={o.shade} onChange={(e) => set(o.key, { shade: e.target.value })} /></td>
+                            {dyeing && <td className="px-2 py-1 text-slate-600">{many ? '' : (l?.shade || '—')}</td>}
+                            <td className="px-1 py-1"><input className={`${inp} ${dyeing ? 'w-28' : 'w-20'}`} placeholder={dyeing ? 'Dye colour' : ''} value={o.shade} onChange={(e) => set(o.key, { shade: e.target.value })} /></td>
                             {many && <td className="px-1 py-1"><select className={`${inp} w-36`} value={o.yarn_id} onChange={(e) => set(o.key, { yarn_id: e.target.value })}><option value="">Same as input</option>{(yarns.data ?? []).map((y: any) => <option key={y.id} value={y.id}>{y.label}</option>)}</select></td>}
                             <td className="px-1 py-1"><input type="number" className={`${inp} w-14 text-right`} value={o.no_of_cones} onChange={(e) => set(o.key, { no_of_cones: e.target.value === '' ? '' : Number(e.target.value) })} /></td>
                             {(['good_kg', 'reject_kg', 'loss_kg'] as const).map((k) => (
@@ -249,7 +253,7 @@ function InwardEditor({ editId, ypoId: ypoParam, onBack, onDone, onPickDc }: { e
                   ))}
                   {!outs.length && <tr><td colSpan={12} className="px-3 py-8 text-center text-slate-400">{many ? 'Click “Add output cone” and pick its input cones' : 'Every lot of this DC is already received'}</td></tr>}
                 </tbody>
-                <tfoot className="sticky bottom-0 bg-slate-100 font-bold"><tr><td colSpan={many ? 7 : 6} className="px-2 py-2 text-right">This GRN</td><td className="px-2 py-2 text-right text-emerald-800">{kg(tot.good)}</td><td className="px-2 py-2 text-right text-red-700">{kg(tot.rej)}</td><td className="px-2 py-2 text-right text-amber-700">{kg(tot.loss)}</td><td colSpan={2} className="px-2 py-2 text-left text-[11px] font-normal">{tot.good + tot.rej + tot.loss > 0 ? `loss ${lossPct.toFixed(2)}%${tol ? ` (tolerance ${tol}%)` : ''}` : ''}</td></tr></tfoot>
+                <tfoot className="sticky bottom-0 bg-slate-100 font-bold"><tr><td colSpan={(many ? 7 : 6) + (dyeing ? 1 : 0)} className="px-2 py-2 text-right">This GRN</td><td className="px-2 py-2 text-right text-emerald-800">{kg(tot.good)}</td><td className="px-2 py-2 text-right text-red-700">{kg(tot.rej)}</td><td className="px-2 py-2 text-right text-amber-700">{kg(tot.loss)}</td><td colSpan={2} className="px-2 py-2 text-left text-[11px] font-normal">{tot.good + tot.rej + tot.loss > 0 ? `loss ${lossPct.toFixed(2)}%${tol ? ` (tolerance ${tol}%)` : ''}` : ''}</td></tr></tfoot>
               </table>
             </div>
           </div>
@@ -278,12 +282,13 @@ function InwardView({ id, onBack, onEdit }: { id: number; onBack: () => void; on
   if (!g) return <LoadingBlock />;
   if (g.status !== 'POSTED') return <DraftView g={g} onBack={onBack} onEdit={onEdit} />;
   const print = () => {
-    const body = groupByJob(g.outputs as any[]).map((j) => `<tr class="grp"><td colspan="8">Job ${esc(j.io_no)}</td></tr>` + j.rows.map((o: any) =>
-      `<tr><td>${esc(o.inputs ?? '')}</td><td>${esc(o.output_cone_no ?? '')}</td><td>${esc(o.output_lot_no)}</td><td>${esc(o.shade ?? '')}</td><td class="r">${kg(o.input_kg)}</td><td class="r">${kg(o.good_kg)}</td><td class="r">${kg(o.reject_kg)}</td><td class="r">${kg(o.loss_kg)}</td></tr>`).join('')).join('');
+    const dye = isDyeing(g.process_code);
+    const body = groupByJob(g.outputs as any[]).map((j) => `<tr class="grp"><td colspan="${dye ? 9 : 8}">Job ${esc(j.io_no)}</td></tr>` + j.rows.map((o: any) =>
+      `<tr><td>${esc(o.inputs ?? '')}</td><td>${esc(o.output_cone_no ?? '')}</td><td>${esc(o.output_lot_no)}</td>${dye ? `<td>${esc(o.input_shade ?? '')}</td>` : ''}<td>${esc(o.shade ?? '')}</td><td class="r">${kg(o.input_kg)}</td><td class="r">${kg(o.good_kg)}</td><td class="r">${kg(o.reject_kg)}</td><td class="r">${kg(o.loss_kg)}</td></tr>`).join('')).join('');
     printDoc(g.inward_no, `<h1>YARN PROCESS GRN — ${esc(g.process_name ?? g.process_code)}</h1><table class="meta"><tr><td><b>GRN:</b> ${esc(g.inward_no)}</td><td><b>Date:</b> ${esc(fmtDate(g.inward_date))}</td><td><b>DC:</b> ${esc(g.ypo_no)}</td></tr>
       <tr><td><b>Process unit:</b> ${esc(g.vendor_name)}</td><td><b>Challan:</b> ${esc(g.challan_no ?? '—')}</td><td><b>Received by:</b> ${esc(g.received_by ?? '')}</td></tr></table>`,
-      `<table><thead><tr><th>Input cone(s)</th><th>Output cone</th><th>Output lot</th><th>Shade</th><th class="r">Input</th><th class="r">Good</th><th class="r">Reject</th><th class="r">Loss</th></tr></thead><tbody>${body}
-       <tr class="sub"><td colspan="5">Total</td><td class="r">${kg(g.good_kg)}</td><td class="r">${kg(g.reject_kg)}</td><td class="r">${kg(g.loss_kg)}</td></tr></tbody></table>`);
+      `<table><thead><tr><th>Input cone(s)</th><th>Output cone</th><th>Output lot</th>${dye ? '<th>Yarn colour</th><th>Dye colour</th>' : '<th>Shade</th>'}<th class="r">Input</th><th class="r">Good</th><th class="r">Reject</th><th class="r">Loss</th></tr></thead><tbody>${body}
+       <tr class="sub"><td colspan="${dye ? 6 : 5}">Total</td><td class="r">${kg(g.good_kg)}</td><td class="r">${kg(g.reject_kg)}</td><td class="r">${kg(g.loss_kg)}</td></tr></tbody></table>`);
   };
   return (
     <div>
@@ -295,14 +300,14 @@ function InwardView({ id, onBack, onEdit }: { id: number; onBack: () => void; on
       </div>
       <div className="card overflow-x-auto">
         <table className="w-full text-xs">
-          <thead className="bg-slate-50 text-slate-500"><tr>{['Job', 'Input cone(s) (KG)', 'Output cone', 'Output lot', 'Yarn', 'Shade', 'Ply', 'Cones', 'Input KG', 'Good KG', 'Reject KG', 'Loss KG', 'Reject reason'].map((h) => <th key={h} className={`px-2 py-2 ${/KG|Cones|Ply/.test(h) && !/cone\(s\)/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+          <thead className="bg-slate-50 text-slate-500"><tr>{['Job', 'Input cone(s) (KG)', 'Output cone', 'Output lot', 'Yarn', ...(isDyeing(g.process_code) ? ['Yarn colour', 'Dye colour'] : ['Shade']), 'Ply', 'Cones', 'Input KG', 'Good KG', 'Reject KG', 'Loss KG', 'Reject reason'].map((h) => <th key={h} className={`px-2 py-2 ${/KG|Cones|Ply/.test(h) && !/cone\(s\)/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
           <tbody>{g.outputs.map((o: any) => (
             <tr key={o.id} className="border-t border-slate-100"><td className="px-2 py-1 font-semibold">{o.io_no || 'STOCK'}</td><td className="px-2 py-1 font-mono">{o.inputs}</td><td className="px-2 py-1 font-mono">{o.output_cone_no || '—'}</td>
-              <td className="px-2 py-1 font-mono">{o.output_lot_no}</td><td className="px-2 py-1">{o.yarn_name}</td><td className="px-2 py-1">{o.shade || '—'}</td><td className="px-2 py-1 text-right">{o.ply || '—'}</td><td className="px-2 py-1 text-right">{o.no_of_cones || '—'}</td>
+              <td className="px-2 py-1 font-mono">{o.output_lot_no}</td><td className="px-2 py-1">{o.yarn_name}</td>{isDyeing(g.process_code) && <td className="px-2 py-1">{o.input_shade || '—'}</td>}<td className="px-2 py-1">{o.shade || '—'}</td><td className="px-2 py-1 text-right">{o.ply || '—'}</td><td className="px-2 py-1 text-right">{o.no_of_cones || '—'}</td>
               <td className="px-2 py-1 text-right">{kg(o.input_kg)}</td><td className="px-2 py-1 text-right text-emerald-700">{kg(o.good_kg)}</td><td className="px-2 py-1 text-right text-red-700">{kg(o.reject_kg)}</td>
               <td className="px-2 py-1 text-right text-amber-700">{kg(o.loss_kg)}</td><td className="px-2 py-1">{o.reject_reason || '—'}</td></tr>
           ))}</tbody>
-          <tfoot className="bg-slate-100 font-bold"><tr><td colSpan={8} className="px-2 py-2 text-right">Total</td><td className="px-2 py-2 text-right">{kg(g.input_kg)}</td><td className="px-2 py-2 text-right">{kg(g.good_kg)}</td><td className="px-2 py-2 text-right">{kg(g.reject_kg)}</td><td className="px-2 py-2 text-right">{kg(g.loss_kg)}</td><td /></tr></tfoot>
+          <tfoot className="bg-slate-100 font-bold"><tr><td colSpan={isDyeing(g.process_code) ? 9 : 8} className="px-2 py-2 text-right">Total</td><td className="px-2 py-2 text-right">{kg(g.input_kg)}</td><td className="px-2 py-2 text-right">{kg(g.good_kg)}</td><td className="px-2 py-2 text-right">{kg(g.reject_kg)}</td><td className="px-2 py-2 text-right">{kg(g.loss_kg)}</td><td /></tr></tfoot>
         </table>
       </div>
       <div className="card mt-3 p-4"><h3 className="mb-2 text-[13px] font-semibold text-slate-800">DC {g.ypo_no} reconciliation</h3><ReconCards t={g.reconciliation.total} /></div>
@@ -349,7 +354,7 @@ function DraftView({ g, onBack, onEdit }: { g: any; onBack: () => void; onEdit: 
         <div className="flex items-center gap-2 px-4 pt-3 text-[13px] font-semibold text-slate-800"><ClipboardCheck size={15} /> Output cones{params.length ? ' & QC' : ''}</div>
         <table className="mt-2 w-full text-xs">
           <thead className="bg-slate-50 text-slate-500"><tr>
-            {['Job', 'Input cone(s)', 'Output cone', 'Lot', 'Shade', 'Good KG', 'Reject KG', 'Loss KG'].map((h) => <th key={h} className={`px-2 py-2 ${/KG/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}
+            {['Job', 'Input cone(s)', 'Output cone', 'Lot', ...(isDyeing(g.process_code) ? ['Yarn colour', 'Dye colour'] : ['Shade']), 'Good KG', 'Reject KG', 'Loss KG'].map((h) => <th key={h} className={`px-2 py-2 ${/KG/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}
             {params.map((p) => <th key={p.id} className="px-2 py-2 text-left">{p.param_name}{p.uom ? ` (${p.uom})` : ''}{p.is_mandatory ? ' *' : ''}<div className="font-normal normal-case text-slate-400">{p.min_value ?? '…'} – {p.max_value ?? '…'}</div></th>)}
             <th className="px-2 py-2 text-left">QC status</th>
           </tr></thead>
@@ -359,7 +364,7 @@ function DraftView({ g, onBack, onEdit }: { g: any; onBack: () => void; onEdit: 
               return (
                 <tr key={k} className={`border-t border-slate-100 ${f ? 'bg-red-50/60' : ''}`}>
                   <td className="px-2 py-1 font-semibold">{o.io_no || 'STOCK'}</td><td className="px-2 py-1 font-mono">{o.input_text}</td><td className="px-2 py-1 font-mono">{o.output_cone_no || '—'}</td>
-                  <td className="px-2 py-1 font-mono">{o.output_lot_no || <span className="text-slate-400">auto</span>}</td><td className="px-2 py-1">{o.shade || '—'}</td>
+                  <td className="px-2 py-1 font-mono">{o.output_lot_no || <span className="text-slate-400">auto</span>}</td>{isDyeing(g.process_code) && <td className="px-2 py-1">{o.input_shade || '—'}</td>}<td className="px-2 py-1">{o.shade || '—'}</td>
                   <td className="px-2 py-1 text-right text-emerald-700">{kg(o.good_kg)}</td><td className="px-2 py-1 text-right text-red-700">{kg(o.reject_kg)}</td><td className="px-2 py-1 text-right text-amber-700">{kg(o.loss_kg)}</td>
                   {params.map((p) => {
                     const raw = vals[k]?.[String(p.id)]; const rs = result(p, raw);

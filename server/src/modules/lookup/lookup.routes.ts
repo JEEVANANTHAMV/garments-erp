@@ -60,9 +60,9 @@ const LOOKUPS: Record<string, LookupDef> = {
   // SO lines carry the garment part chosen next to the colour; downstream
   // screens use this to link a document to its line and prefill the part.
   'sales-order-lines': { sql: `SELECT sol.id, sol.id AS code,
-      CONCAT(so.so_no, ' / ', COALESCE(st.style_code,''), COALESCE(CONCAT(' ', c.color_name),''),
+      CONCAT(COALESCE(so.io_no, so.so_no), ' / ', COALESCE(st.style_code,''), COALESCE(CONCAT(' ', c.color_name),''),
              COALESCE(CONCAT(' [', sol.part_name, ']'),'')) AS label,
-      sol.so_id, so.so_no, sol.style_id, sol.color_id, sol.part_name, sol.order_qty
+      sol.so_id, so.so_no, so.io_no, sol.style_id, sol.color_id, sol.part_name, sol.order_qty
     FROM trx_sales_order_line sol
     JOIN trx_sales_order so ON so.id = sol.so_id
     LEFT JOIN mst_style st ON st.id = sol.style_id

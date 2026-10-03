@@ -9,16 +9,17 @@ import { useLookup, toOptions } from '../../../hooks/useLookup';
 import { useToast } from '../../../hooks/useToast';
 import { Button, Modal, Input, Select, Textarea, SearchInput, LoadingBlock } from '../../../components/ui';
 import { fmtDate, today } from '../../../lib/format';
-import { FpTitle, FpStatus, ReconCards, useProcessTypes, useJobs, errText, kg, n, r3, esc, printDoc, groupByJob, type StoreRoll, type Job } from './shared';
+import { FpTitle, FpStatus, ReconCards, useProcessTypes, useJobs, errText, kg, n, r3, esc, printDoc, groupByJob, isDyeing, quoteColour, type StoreRoll, type Job } from './shared';
 
 /**
  * Fabric Process — Outward DC (doc §5): one DC, many jobs, many rolls per job.
  * Rows are grouped by job with a subtotal and a sticky total; Save Draft keeps the store untouched,
- * Confirm DC issues the rolls (whole or part KG).
+ * Confirm DC issues the rolls (whole or part KG). The job heading carries job / PO / style; a dyeing DC
+ * shows each roll's fabric colour (as issued: grey, melange …) and its dye colour (typed, or from the quotation).
  */
 interface DcRow {
   fabric_roll_id: number; roll_no: string; lot_no: string | null; fabric_name: string; so_id: number | null; io_no: string | null;
-  buyer_po_no: string | null; style_code: string | null; color_name: string; gsm: string | number | null; dia: string | null;
+  buyer_po_no: string | null; style_code: string | null; color_name: string; fabric_color: string; gsm: string | number | null; dia: string | null;
   available_kg: number; weight_kg: number; meters: number;
 }
 
@@ -99,6 +100,8 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
   const [busy, setBusy] = useState(false);
   const [picker, setPicker] = useState<null | 'job' | 'scan' | 'import'>(null);
   const [quote, setQuote] = useState<QuoteValue>({ quotation_id: '', quotation_line_id: '', rate_per_kg: '' });
+  const [quoteDoc, setQuoteDoc] = useState<any | null>(null);
+  const dyeing = isDyeing(head.sub_process);
 
   useEffect(() => {
     if (!d) return;
@@ -107,7 +110,7 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
       target_dia: d.target_dia ?? '', target_gsm: d.target_gsm ?? '', expected_return_date: d.expected_return_date ? String(d.expected_return_date).slice(0, 10) : '', remarks: d.remarks ?? '' });
     setQuote({ quotation_id: d.quotation_id ? String(d.quotation_id) : '', quotation_line_id: d.quotation_line_id ? String(d.quotation_line_id) : '', rate_per_kg: d.rate_per_kg != null ? String(d.rate_per_kg) : '' });
     setRows((d.rolls ?? []).map((r: any) => ({ fabric_roll_id: Number(r.fabric_roll_id), roll_no: r.roll_no, lot_no: r.lot_no, fabric_name: r.fabric_name, so_id: r.so_id, io_no: r.io_no,
-      buyer_po_no: r.buyer_po_no, style_code: r.style_code, color_name: r.color_name ?? '', gsm: r.gsm, dia: r.dia, available_kg: n(r.weight_kg), weight_kg: n(r.weight_kg), meters: n(r.meters) })));
+      buyer_po_no: r.buyer_po_no, style_code: r.style_code, color_name: r.color_name ?? '', fabric_color: r.fabric_color ?? '', gsm: r.gsm, dia: r.dia, available_kg: n(r.weight_kg), weight_kg: n(r.weight_kg), meters: n(r.meters) })));
   }, [d]);
 
   const groups = useMemo(() => groupByJob(rows), [rows]);
@@ -118,25 +121,37 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
       for (const r of picked) {
         if (next.some((x) => x.fabric_roll_id === r.id)) continue;
         next.push({ fabric_roll_id: r.id, roll_no: r.roll_no, lot_no: r.lot_no, fabric_name: r.fabric_name, so_id: job?.id ?? r.so_id, io_no: job?.job_no ?? r.io_no,
-          buyer_po_no: job?.buyer_po_no ?? r.buyer_po_no, style_code: job?.styles?.[0]?.style_code ?? r.style_code, color_name: head.color_name || r.color_name || '',
+          buyer_po_no: job?.buyer_po_no ?? r.buyer_po_no, style_code: job?.styles?.[0]?.style_code ?? r.style_code,
+          fabric_color: r.color_name || (r.process_state === 'GREY' ? 'GREY' : ''),
+          color_name: dyeing ? quoteColour(quoteDoc, quote.quotation_line_id, job?.job_no ?? r.io_no) : (r.color_name || ''),
           gsm: r.gsm, dia: r.dia, available_kg: r.balance_kg, weight_kg: kgOf(r), meters: 0 });
       }
       return next;
     });
   };
   const set = (rid: number, p: Partial<DcRow>) => setRows((rs) => rs.map((r) => (r.fabric_roll_id === rid ? { ...r, ...p } : r)));
+  // picking the dyeing quotation fills the dye colour of rolls that have none yet (job's own line first)
+  const onQuote = (q: any | null) => {
+    setQuoteDoc(q);
+    if (!q || !dyeing || !editable) return;
+    setRows((rs) => rs.map((r) => (r.color_name ? r : { ...r, color_name: quoteColour(q, quote.quotation_line_id, r.io_no) })));
+  };
 
   const payload = () => ({
     ...head, vendor_id: Number(head.vendor_id), from_warehouse_id: head.from_warehouse_id ? Number(head.from_warehouse_id) : null, expected_return_date: head.expected_return_date || null,
     quotation_id: quote.quotation_id ? Number(quote.quotation_id) : null, quotation_line_id: quote.quotation_line_id ? Number(quote.quotation_line_id) : null,
     rate_per_kg: quote.rate_per_kg !== '' ? Number(quote.rate_per_kg) : null,
-    rolls: rows.map((r) => ({ fabric_roll_id: r.fabric_roll_id, so_id: r.so_id, weight_kg: n(r.weight_kg), meters: n(r.meters), color_name: r.color_name || null })),
+    // the header colour / shade / target dia / GSM are no longer entered (colour is per roll on a dyeing DC)
+    color_name: null, shade_code: null, target_dia: null, target_gsm: null,
+    rolls: rows.map((r) => ({ fabric_roll_id: r.fabric_roll_id, so_id: r.so_id, weight_kg: n(r.weight_kg), meters: n(r.meters), color_name: dyeing ? (r.color_name.trim() || null) : null })),
   });
   const save = async (confirm: boolean) => {
     if (!head.vendor_id) { toast('Choose the process unit (supplier / vendor)', 'warning'); return; }
     if (!rows.length) { toast('Add jobs and rolls', 'warning'); return; }
     const bad = rows.find((r) => n(r.weight_kg) <= 0 || n(r.weight_kg) > r.available_kg + 1e-6);
     if (bad) { toast(`Roll ${bad.roll_no}: KG must be between 0 and ${kg(bad.available_kg)}`, 'warning'); return; }
+    const noDye = confirm && dyeing ? rows.find((r) => !r.color_name.trim()) : undefined;
+    if (noDye) { toast(`Roll ${noDye.roll_no}: enter the dye colour`, 'warning'); return; }
     setBusy(true);
     try {
       if (!id) {
@@ -164,15 +179,17 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
   const print = () => {
     const vendor = suppliers.data?.find((s: any) => String(s.id) === head.vendor_id)?.label ?? d?.vendor_name ?? '';
     const proc = types.data?.find((t) => t.code === head.sub_process)?.name ?? head.sub_process;
-    const body = groups.map((g) => `<tr class="grp"><td colspan="9">Job ${esc(g.io_no)}${g.rows[0].buyer_po_no ? ` · PO ${esc(g.rows[0].buyer_po_no)}` : ''}${g.rows[0].style_code ? ` · Style ${esc(g.rows[0].style_code)}` : ''}</td></tr>` +
-      g.rows.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.roll_no)}</td><td>${esc(r.lot_no ?? '')}</td><td>${esc(r.fabric_name ?? '')}</td><td>${esc(r.color_name)}</td><td>${esc(r.gsm ?? '')}</td><td>${esc(r.dia ?? '')}</td><td class="r">${kg(r.weight_kg)}</td><td class="r">${n(r.meters) ? n(r.meters).toFixed(2) : ''}</td></tr>`).join('') +
-      `<tr class="sub"><td colspan="7">Job total — ${g.rows.length} roll(s)</td><td class="r">${kg(g.rows.reduce((a, r) => a + n(r.weight_kg), 0))}</td><td></td></tr>`).join('');
+    const cc = dyeing ? 10 : 9;
+    const colourTd = (r: DcRow) => (dyeing ? `<td>${esc(r.fabric_color)}</td><td>${esc(r.color_name)}</td>` : `<td>${esc(r.color_name || r.fabric_color)}</td>`);
+    const body = groups.map((g) => `<tr class="grp"><td colspan="${cc}">Job ${esc(g.io_no)}${g.rows[0].buyer_po_no ? ` · PO ${esc(g.rows[0].buyer_po_no)}` : ''}${g.rows[0].style_code ? ` · Style ${esc(g.rows[0].style_code)}` : ''}</td></tr>` +
+      g.rows.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.roll_no)}</td><td>${esc(r.lot_no ?? '')}</td><td>${esc(r.fabric_name ?? '')}</td>${colourTd(r)}<td>${esc(r.gsm ?? '')}</td><td>${esc(r.dia ?? '')}</td><td class="r">${kg(r.weight_kg)}</td><td class="r">${n(r.meters) ? n(r.meters).toFixed(2) : ''}</td></tr>`).join('') +
+      `<tr class="sub"><td colspan="${cc - 2}">Job total — ${g.rows.length} roll(s)</td><td class="r">${kg(g.rows.reduce((a, r) => a + n(r.weight_kg), 0))}</td><td></td></tr>`).join('');
     printDoc(d?.fpo_no ?? 'Outward DC',
       `<h1>DELIVERY CHALLAN — FABRIC ${esc(proc.toUpperCase())}</h1><table class="meta"><tr><td><b>DC No:</b> ${esc(d?.fpo_no ?? '(draft)')}</td><td><b>Date:</b> ${esc(fmtDate(head.fpo_date))}</td><td><b>Challan:</b> ${esc(head.challan_no || '—')}</td></tr>
        <tr><td><b>Supplier / Vendor:</b> ${esc(vendor)}</td><td><b>To:</b> ${esc(head.to_location || '—')}</td><td><b>Vehicle:</b> ${esc(head.vehicle_no || '—')}</td></tr>
-       <tr><td><b>Colour / shade:</b> ${esc([head.color_name, head.shade_code].filter(Boolean).join(' / ') || '—')}</td><td><b>Target dia / GSM:</b> ${esc(head.target_dia || '—')} / ${esc(head.target_gsm || '—')}</td><td><b>Jobs:</b> ${groups.length}</td></tr></table>`,
-      `<table><thead><tr><th>#</th><th>Roll</th><th>Lot</th><th>Fabric</th><th>Colour</th><th>GSM</th><th>Dia</th><th class="r">KG</th><th class="r">Mtr</th></tr></thead><tbody>${body}
-       <tr class="sub"><td colspan="7">GRAND TOTAL — ${rows.length} roll(s), ${groups.length} job(s)</td><td class="r">${kg(total)}</td><td></td></tr></tbody></table>
+       <tr><td><b>Jobs:</b> ${groups.length}</td><td><b>Expected return:</b> ${esc(head.expected_return_date ? fmtDate(head.expected_return_date) : '—')}</td><td></td></tr></table>`,
+      `<table><thead><tr><th>#</th><th>Roll</th><th>Lot</th><th>Fabric</th>${dyeing ? '<th>Fabric colour</th><th>Dye colour</th>' : '<th>Colour</th>'}<th>GSM</th><th>Dia</th><th class="r">KG</th><th class="r">Mtr</th></tr></thead><tbody>${body}
+       <tr class="sub"><td colspan="${cc - 2}">GRAND TOTAL — ${rows.length} roll(s), ${groups.length} job(s)</td><td class="r">${kg(total)}</td><td></td></tr></tbody></table>
        <p>Goods sent for job work (${esc(proc)}) and to be returned after processing — not for sale. ${esc(head.remarks)}</p>`);
   };
 
@@ -193,15 +210,11 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
         <Input label="To process location" value={head.to_location} disabled={!editable} placeholder="Unit / location" onChange={(e) => setHead({ ...head, to_location: e.target.value })} />
         <Input label="Challan no" value={head.challan_no} disabled={!editable} onChange={(e) => setHead({ ...head, challan_no: e.target.value })} />
         <Input label="Vehicle no" value={head.vehicle_no} disabled={!editable} onChange={(e) => setHead({ ...head, vehicle_no: e.target.value })} />
-        <Input label="Colour to dye / print" value={head.color_name} disabled={!editable} onChange={(e) => setHead({ ...head, color_name: e.target.value })} />
-        <Input label="Shade / lab dip" value={head.shade_code} disabled={!editable} onChange={(e) => setHead({ ...head, shade_code: e.target.value })} />
-        <Input label="Target dia" value={head.target_dia} disabled={!editable} placeholder='e.g. 34' onChange={(e) => setHead({ ...head, target_dia: e.target.value })} />
-        <Input label="Target GSM" value={head.target_gsm} disabled={!editable} onChange={(e) => setHead({ ...head, target_gsm: e.target.value })} />
         <Input label="Expected return" type="date" value={head.expected_return_date} disabled={!editable} onChange={(e) => setHead({ ...head, expected_return_date: e.target.value })} />
         <Textarea label="Remarks" className="col-span-2 md:col-span-6" rows={1} value={head.remarks} disabled={!editable} onChange={(e) => setHead({ ...head, remarks: e.target.value })} />
         <div className="col-span-2 md:col-span-6">
           <QuotationPicker vendorId={head.vendor_id} material="FABRIC" process={types.data?.find((t) => t.code === head.sub_process)?.name ?? head.sub_process}
-            value={quote} onChange={setQuote} disabled={!editable} idPrefix="fpo" />
+            value={quote} onChange={setQuote} onQuote={onQuote} disabled={!editable} idPrefix="fpo" />
         </div>
       </div>
 
@@ -218,16 +231,16 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
         <div className="max-h-[55vh] overflow-auto">
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10 bg-slate-50 text-slate-500"><tr>
-              {['#', 'Job no', 'PO no', 'Style no', 'Colour', 'Roll no', 'Lot no', 'Fabric', 'GSM', 'Dia', 'In store KG', 'Qty (KG)', 'Mtr', ''].map((h) => <th key={h} className={`px-2 py-2 ${/KG|Mtr/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}
+              {['#', 'Roll no', 'Lot no', 'Fabric', ...(dyeing ? ['Fabric colour', 'Dye colour'] : ['Colour']), 'GSM', 'Dia', 'In store KG', 'Qty (KG)', 'Mtr', ''].map((h) => <th key={h} className={`px-2 py-2 ${/KG|Mtr/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}
             </tr></thead>
             <tbody>
               {groups.map((g) => (
-                <JobGroup key={g.io_no} g={g} editable={editable} set={set} remove={(rid) => setRows((rs) => rs.filter((r) => r.fabric_roll_id !== rid))} />
+                <JobGroup key={g.io_no} g={g} editable={editable} dyeing={dyeing} set={set} remove={(rid) => setRows((rs) => rs.filter((r) => r.fabric_roll_id !== rid))} />
               ))}
-              {!rows.length && <tr><td colSpan={14} className="px-3 py-10 text-center text-slate-400">Click “Add Job” to pick a job and its rolls from the store (or scan / import rolls)</td></tr>}
+              {!rows.length && <tr><td colSpan={dyeing ? 12 : 11} className="px-3 py-10 text-center text-slate-400">Click “Add Job” to pick a job and its rolls from the store (or scan / import rolls)</td></tr>}
             </tbody>
             <tfoot className="sticky bottom-0 bg-slate-100 font-bold text-slate-800">
-              <tr><td colSpan={11} className="px-2 py-2 text-right">Total rolls: {rows.length} · jobs: {groups.length}</td><td className="px-2 py-2 text-right tabular-nums">{kg(total)}</td><td colSpan={2} /></tr>
+              <tr><td colSpan={dyeing ? 9 : 8} className="px-2 py-2 text-right">Total rolls: {rows.length} · jobs: {groups.length}</td><td className="px-2 py-2 text-right tabular-nums">{kg(total)}</td><td colSpan={2} /></tr>
             </tfoot>
           </table>
         </div>
@@ -238,7 +251,7 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
           <h3 className="text-[13px] font-semibold text-slate-800">Reconciliation — DC vs GRN</h3>
           <ReconCards t={d.reconciliation.total} />
           <table className="w-full text-xs">
-            <thead className="bg-slate-50 text-slate-500"><tr>{['Job', 'PO', 'Style', 'Colour', 'Rolls', 'Outward KG', 'Good KG', 'Reject KG', 'Loss KG', 'Balance'].map((h) => <th key={h} className={`px-2 py-1.5 ${/KG|Balance|Rolls/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+            <thead className="bg-slate-50 text-slate-500"><tr>{['Job', 'PO', 'Style', dyeing ? 'Dye colour' : 'Colour', 'Rolls', 'Outward KG', 'Good KG', 'Reject KG', 'Loss KG', 'Balance'].map((h) => <th key={h} className={`px-2 py-1.5 ${/KG|Balance|Rolls/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
             <tbody>{d.reconciliation.jobs.map((j: any) => (
               <tr key={`${j.io_no}${j.color_name}`} className="border-t border-slate-100"><td className="px-2 py-1 font-semibold">{j.io_no}</td><td className="px-2 py-1">{j.buyer_po_no || '—'}</td><td className="px-2 py-1">{j.style_code || '—'}</td><td className="px-2 py-1">{j.color_name || '—'}</td>
                 <td className="px-2 py-1 text-right">{j.rolls}</td><td className="px-2 py-1 text-right">{kg(j.outward_kg)}</td><td className="px-2 py-1 text-right text-emerald-700">{kg(j.good_kg)}</td><td className="px-2 py-1 text-right text-red-700">{kg(j.reject_kg)}</td>
@@ -263,21 +276,26 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
   );
 }
 
-function JobGroup({ g, editable, set, remove }: { g: { io_no: string; rows: DcRow[] }; editable: boolean; set: (id: number, p: Partial<DcRow>) => void; remove: (id: number) => void }) {
+function JobGroup({ g, editable, dyeing, set, remove }: { g: { io_no: string; rows: DcRow[] }; editable: boolean; dyeing: boolean; set: (id: number, p: Partial<DcRow>) => void; remove: (id: number) => void }) {
   const sub = g.rows.reduce((a, r) => a + n(r.weight_kg), 0);
+  const cols = dyeing ? 12 : 11;
   return (
     <>
-      <tr className="bg-sky-50/70"><td colSpan={14} className="px-2 py-1.5 text-[11.5px] font-semibold text-sky-900">Job {g.io_no}{g.rows[0].buyer_po_no ? ` · PO ${g.rows[0].buyer_po_no}` : ''}{g.rows[0].style_code ? ` · Style ${g.rows[0].style_code}` : ''}</td></tr>
+      <tr className="bg-sky-50/70"><td colSpan={cols} className="px-2 py-1.5 text-[11.5px] font-semibold text-sky-900">Job {g.io_no}{g.rows[0].buyer_po_no ? ` · PO ${g.rows[0].buyer_po_no}` : ''}{g.rows[0].style_code ? ` · Style ${g.rows[0].style_code}` : ''}</td></tr>
       {g.rows.map((r, i) => (
         <tr key={r.fabric_roll_id} className="border-t border-slate-100">
           <td className="px-2 py-1 text-slate-400">{i + 1}</td>
-          <td className="px-2 py-1 font-semibold">{r.io_no || 'STOCK'}</td>
-          <td className="px-2 py-1">{r.buyer_po_no || '—'}</td>
-          <td className="px-2 py-1">{r.style_code || '—'}</td>
-          <td className="px-2 py-1">{editable ? <input className="input w-24 py-0.5 text-xs" value={r.color_name} onChange={(e) => set(r.fabric_roll_id, { color_name: e.target.value })} /> : (r.color_name || '—')}</td>
           <td className="px-2 py-1 font-mono">{r.roll_no}</td>
           <td className="px-2 py-1">{r.lot_no || '—'}</td>
           <td className="px-2 py-1">{r.fabric_name}</td>
+          {dyeing ? (
+            <>
+              <td className="px-2 py-1">{r.fabric_color || '—'}</td>
+              <td className="px-2 py-1">{editable
+                ? <input className={`input w-28 py-0.5 text-xs ${!r.color_name.trim() ? 'border-amber-400' : ''}`} placeholder="Dye colour *" value={r.color_name} onChange={(e) => set(r.fabric_roll_id, { color_name: e.target.value })} />
+                : (r.color_name || '—')}</td>
+            </>
+          ) : <td className="px-2 py-1">{r.color_name || r.fabric_color || '—'}</td>}
           <td className="px-2 py-1">{r.gsm || '—'}</td>
           <td className="px-2 py-1">{r.dia || '—'}</td>
           <td className="px-2 py-1 text-right tabular-nums text-slate-500">{kg(r.available_kg)}</td>
@@ -288,7 +306,12 @@ function JobGroup({ g, editable, set, remove }: { g: { io_no: string; rows: DcRo
           <td className="px-2 py-1 text-right">{editable && <button className="p-1 text-slate-400 hover:text-red-600" onClick={() => remove(r.fabric_roll_id)}><Trash2 size={13} /></button>}</td>
         </tr>
       ))}
-      <tr className="bg-slate-50 font-semibold"><td colSpan={11} className="px-2 py-1 text-right text-slate-600">Job {g.io_no} subtotal · {g.rows.length} roll(s)</td><td className="px-2 py-1 text-right tabular-nums">{kg(sub)}</td><td colSpan={2} /></tr>
+      {editable && dyeing && g.rows.length > 1 && (
+        <tr><td colSpan={cols} className="px-2 py-1 text-[11px]">
+          <button className="text-sky-700 hover:underline" onClick={() => { const c = g.rows.find((r) => r.color_name.trim())?.color_name; if (c) g.rows.forEach((r) => set(r.fabric_roll_id, { color_name: c })); }}>Copy the first dye colour to every roll of job {g.io_no}</button>
+        </td></tr>
+      )}
+      <tr className="bg-slate-50 font-semibold"><td colSpan={cols - 3} className="px-2 py-1 text-right text-slate-600">Job {g.io_no} subtotal · {g.rows.length} roll(s)</td><td className="px-2 py-1 text-right tabular-nums">{kg(sub)}</td><td colSpan={2} /></tr>
     </>
   );
 }

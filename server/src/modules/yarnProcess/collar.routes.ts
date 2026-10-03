@@ -123,6 +123,8 @@ const sizeLineSchema = z.object({
   size_code: s.nullableStr(40),
   std_weight_gm: z.coerce.number().min(0).default(0),
   planned_pcs: z.coerce.number().int().min(0).default(0),
+  /** Collar measurement of the size from the CAD (e.g. 16.75" X 5.875"). */
+  measurement: s.nullableStr(80),
 });
 
 const programSchema = z.object({
@@ -258,6 +260,47 @@ collarRouter.get('/collar-programs', requirePermission('PRODUCTION.VIEW'), ah(as
   });
 }));
 
+/**
+ * GET /collar-programs/cad-plan?io_no=&style_id= — the flat-knit collar / cuff spec of the job's CAD
+ * (latest CAD of the IO, the style's first): size-wise measurement and pieces per component, so a new
+ * collar program (the order to the collar knitter) loads its size grid from the CAD (client 03-Oct-2026).
+ */
+collarRouter.get('/collar-programs/cad-plan', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const q = z.object({ io_no: z.string().trim().min(1).max(60), style_id: z.coerce.number().int().positive().optional() }).parse(req.query);
+  const cad = await queryOne<any>(
+    `SELECT cr.id, cr.req_no, cr.style_id, cr.status, cr.data_json, st.style_code
+       FROM trx_cad_requirement cr LEFT JOIN mst_style st ON st.id = cr.style_id
+      WHERE cr.company_id = ? AND cr.internal_ir_no = ? ${q.style_id ? 'AND cr.style_id = ?' : ''}
+      ORDER BY (cr.status = 'APPROVED') DESC, cr.id DESC LIMIT 1`, q.style_id ? [cid, q.io_no, q.style_id] : [cid, q.io_no]);
+  if (!cad) { res.json({ data: null }); return; }
+  let dj: any = cad.data_json;
+  if (typeof dj === 'string') { try { dj = JSON.parse(dj); } catch { dj = {}; } }
+  const fk = dj?.flat_knit_spec ?? null;
+  const rows: any[] = Array.isArray(fk?.size_rows) ? fk.size_rows : [];
+  // older sheets: fixed collar / cuff columns, the whole set weight on the collar
+  let comps: any[] = Array.isArray(fk?.components) && fk.components.length ? fk.components : [];
+  if (!comps.length && rows.length) {
+    const w = Number(fk?.weight_per_set_g) || 0;
+    comps = [{ key: 'collar', type: 'COLLAR', label: 'Collar', weight_g: w > 1 ? w : w * 1000 }];
+    if (rows.some((r) => Number(r.cuff_pcs) > 0 || String(r.cuff_dimension ?? '').trim())) comps.push({ key: 'cuff', type: 'CUFF', label: 'Cuff', weight_g: 0 });
+  }
+  const cell = (r: any, key: string) => r.values?.[key] ?? (key === 'collar' ? { dimension: r.collar_dimension, pcs: r.collar_pcs } : key === 'cuff' ? { dimension: r.cuff_dimension, pcs: r.cuff_pcs } : null);
+  const sizes = await query<any>('SELECT sz.id, sz.size_code FROM mst_size sz JOIN mst_size_group g ON g.id = sz.size_group_id WHERE g.company_id = ? AND sz.is_active = 1 ORDER BY sz.id', [cid]);
+  res.json({ data: {
+    cad_id: Number(cad.id), req_no: cad.req_no, status: cad.status, style_id: cad.style_id ? Number(cad.style_id) : null, style_code: cad.style_code,
+    enabled: !!fk?.enabled, item_type: fk?.item_type ?? null, color: fk?.color ?? null, gsm: fk?.gsm ?? null,
+    components: comps.map((c) => ({
+      key: String(c.key), type: c.type ?? 'OTHER', label: c.label ?? c.key, weight_g: Number(c.weight_g) || 0,
+      sizes: rows.map((r) => {
+        const v = cell(r, String(c.key)) ?? {};
+        const sz = sizes.find((x) => String(x.size_code).trim().toUpperCase() === String(r.size ?? '').trim().toUpperCase());
+        return { size: String(r.size ?? ''), size_id: sz ? Number(sz.id) : null, measurement: v.dimension ? String(v.dimension) : null, pcs: Number(v.pcs) || 0 };
+      }).filter((x) => x.size && x.pcs > 0),
+    })).filter((c) => c.sizes.length),
+  } });
+}));
+
 collarRouter.get('/collar-programs/:id', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
   const p = await loadProgram(Number(req.params.id), req.user!.companyId);
   if (!p) throw NotFound('Collar program not found');
@@ -291,9 +334,9 @@ collarRouter.post('/collar-programs', requirePermission('PRODUCTION.CREATE'), ah
     for (const sz of rows) {
       await txExecute(tx,
         `INSERT INTO trx_collar_program_size
-           (program_id, size_id, size_code, std_weight_gm, planned_pcs, std_yarn_kg)
-         VALUES (?,?,?,?,?,?)`,
-        [id, sz.size_id ?? null, sz.size_code ?? null, sz.std_weight_gm,
+           (program_id, size_id, size_code, measurement, std_weight_gm, planned_pcs, std_yarn_kg)
+         VALUES (?,?,?,?,?,?,?)`,
+        [id, sz.size_id ?? null, sz.size_code ?? null, sz.measurement ?? null, sz.std_weight_gm,
          sz.planned_pcs, sz.std_yarn_kg]);
     }
     return { id, program_no: programNo };
@@ -339,9 +382,9 @@ collarRouter.put('/collar-programs/:id', requirePermission('PRODUCTION.UPDATE'),
       for (const sz of rows) {
         await txExecute(tx,
           `INSERT INTO trx_collar_program_size
-             (program_id, size_id, size_code, std_weight_gm, planned_pcs, std_yarn_kg)
-           VALUES (?,?,?,?,?,?)`,
-          [id, sz.size_id ?? null, sz.size_code ?? null, sz.std_weight_gm,
+             (program_id, size_id, size_code, measurement, std_weight_gm, planned_pcs, std_yarn_kg)
+           VALUES (?,?,?,?,?,?,?)`,
+          [id, sz.size_id ?? null, sz.size_code ?? null, sz.measurement ?? null, sz.std_weight_gm,
            sz.planned_pcs, sz.std_yarn_kg]);
       }
       sets.push('planned_yarn_kg = ?'); vals.push(totalKg);

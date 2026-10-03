@@ -227,6 +227,18 @@ export function normalizeFlatKnit(spec: FlatKnitSpec): FlatKnitSpec {
   return recalculateFlatKnit({ ...spec, components, size_rows });
 }
 
+/** An empty marker for a new CAD sheet. */
+function blankMarker(): CadMarker {
+  return {
+    _key: `m_${Date.now()}`, marker_ref: '1A', marker_name: '', length_mm: 0, width_mm: 0, fabric_dia_type: 'OPEN',
+    fabric_type: '', gsm: 0, direction: 'ONEWAY', parts_in_lay: '', lay_allowance_cm: 10, width_allowance_in: 2,
+    lay_length_cm: 0, table_width_in: 0, fabric_wt_per_lay_g: 0, no_of_pcs_lay: 1, avg_wt_per_pc_g: 0,
+    req_length_per_pc_cm: 0, total_req_qty: 0, uom: 'KG', sizes: [], ratios: [], colorways: [],
+  };
+}
+
+interface CadJob { id: number; job_no: string; buyer_id: number | null; buyer_name?: string; styles: { style_id: number; style_code: string; order_qty: number }[] }
+
 export default function CadRequirementDetailPage() {
   const { id } = useParams<{ id: string }>();
   const isNew = !id || id === 'new';
@@ -235,6 +247,8 @@ export default function CadRequirementDetailPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const styles = useLookup('styles');
+  // IO no is picked from the jobs (sales orders); the style list then narrows to the job's styles
+  const jobs = useQuery({ queryKey: ['procurement-jobs'], queryFn: async () => (await http.get<{ data: CadJob[] }>('/procurement/jobs')).data ?? [], staleTime: 60_000 });
 
   const [activeTab, setActiveTab] = useState<'MARKERS' | 'F_PRGM' | 'CUT' | 'TRIMS' | 'OUTPUT' | 'RATIO_PATTI'>('MARKERS');
   const [activeMarkerIdx, setActiveMarkerIdx] = useState(0);
@@ -248,8 +262,8 @@ export default function CadRequirementDetailPage() {
     req_date: today(),
     style_id: '',
     buyer_id: '',
-    internal_ir_no: 'IR-2026-0001',
-    order_qty: 4900,
+    internal_ir_no: '',
+    order_qty: 0,
     cad_type: 'KNIT_SJ' as 'KNIT_SJ' | 'KNIT_FLEECE' | 'WOVEN' | 'MULTI_PART',
     uom: 'KG' as 'KG' | 'MTR',
     rejection_pct: 3.0,
@@ -259,165 +273,20 @@ export default function CadRequirementDetailPage() {
     remarks: '',
   });
 
-  // Markers State (initialized with standard Single Jersey setup matching sample 1)
-  const [markers, setMarkers] = useState<CadMarker[]>([
-    {
-      _key: 'm_1A',
-      marker_ref: '1A',
-      marker_name: 'FS 26227A 1A',
-      length_mm: 3982,
-      width_mm: 1473,
-      fabric_dia_type: 'OPEN',
-      fabric_type: '100% ORGANIC COTTON SINGLE JERSEY',
-      gsm: 160,
-      direction: 'ONEWAY',
-      parts_in_lay: 'BCK, FRT, SLV',
-      lay_allowance_cm: 10,
-      width_allowance_in: 2,
-      lay_length_cm: 408.2,
-      table_width_in: 60.0,
-      fabric_wt_per_lay_g: 995.22,
-      no_of_pcs_lay: 10,
-      avg_wt_per_pc_g: 109.47,
-      req_length_per_pc_cm: 0,
-      total_req_qty: 552.63,
-      uom: 'KG',
-      sizes: ['98', '104', '110'],
-      ratios: [2, 2, 6],
-      colorways: [
-        {
-          color_name: 'SEA SALT / SCARLET SAGE',
-          quantities: [1250, 1300, 2350],
-          cut_quantities: [1288, 1339, 2421],
-          total_order_pcs: 4900,
-          total_cut_pcs: 5048,
-          required_qty: 552.63,
-        },
-      ],
-    },
-    {
-      _key: 'm_2A',
-      marker_ref: '2A',
-      marker_name: 'FS 26227A 2A',
-      length_mm: 479,
-      width_mm: 610,
-      fabric_dia_type: 'TUBE',
-      fabric_type: '1*1 LYCRA RIB',
-      gsm: 240,
-      direction: 'ONEWAY',
-      parts_in_lay: 'N/RIB',
-      lay_allowance_cm: 10,
-      width_allowance_in: 1,
-      lay_length_cm: 57.9,
-      table_width_in: 25.0,
-      fabric_wt_per_lay_g: 44.12,
-      no_of_pcs_lay: 15,
-      avg_wt_per_pc_g: 6.59,
-      req_length_per_pc_cm: 0,
-      total_req_qty: 33.28,
-      uom: 'KG',
-      sizes: ['98', '104', '110'],
-      ratios: [3, 4, 8],
-      colorways: [
-        {
-          color_name: 'SCARLET SAGE (19-1559 TCX)',
-          quantities: [1250, 1300, 2350],
-          cut_quantities: [1288, 1339, 2421],
-          total_order_pcs: 4900,
-          total_cut_pcs: 5048,
-          required_qty: 33.28,
-        },
-      ],
-    },
-  ]);
+  // Markers State — a new CAD starts empty (one blank marker); a saved CAD loads its own markers
+  const [markers, setMarkers] = useState<CadMarker[]>([blankMarker()]);
 
   // Consolidated Fabric Program & Cutting Lay
   const [fabricProgram, setFabricProgram] = useState<FabricProgramRow[]>([]);
   const [cuttingLay, setCuttingLay] = useState<FabricProgramRow[]>([]);
 
-  // Trims & Special Parts (Draw cords, twill tapes, collars, zip foldings)
-  const [trims, setTrims] = useState<TrimItem[]>([
-    { item_name: 'Flat Knit Collar & Cuff Set', consumption_per_pc: 0.184, uom: 'KG/SET', total_qty: 901.6, remarks: 'Mens: 0.040+0.052+0.092=0.184 GRM' },
-    { item_name: '10mm Twill Tape', consumption_per_pc: 0.60, uom: 'MTRS/PC', total_qty: 2940, remarks: '60 CM per piece' },
-    { item_name: '15mm Tube Draw Cord', consumption_per_pc: 1.10, uom: 'MTRS/PC', total_qty: 5390, remarks: '110 CM per piece (or ~6 KG)' },
-    { item_name: 'Zip Folding', consumption_per_pc: 0.007, uom: 'GRM/PC', total_qty: 34.3, remarks: '100% CTN S/J 160 GSM' },
-  ]);
-
-  // Flat Knit Collar & Cuff Specification (Size-wise breakdown matrix matching ESTOVIR & NOTRE tech packs)
+  // Trims, flat-knit collar / cuff and specialized parts — empty on a new CAD (no sample data)
+  const [trims, setTrims] = useState<TrimItem[]>([]);
   const [flatKnitSpec, setFlatKnitSpec] = useState<FlatKnitSpec>(() => normalizeFlatKnit({
-    enabled: true,
-    item_type: '95% COTTON 5% ELASTANE 2X2 FLATKNIT',
-    color: 'NAVY',
-    gsm: 500,
-    weight_per_set_g: 184, // 0.184 kg / set (Mens: 0.040 + 0.052 + 0.092 = 0.184)
-    size_rows: [
-      { size: '8A', collar_dimension: '14.75" X 5"', collar_pcs: 46, cuff_dimension: '15.75" X 6.50"', cuff_pcs: 98 },
-      { size: '10A', collar_dimension: '15.25" X 5.50"', collar_pcs: 52, cuff_dimension: '15.75" X 6.50"', cuff_pcs: 0 },
-      { size: '12A', collar_dimension: '15.75" X 5.50"', collar_pcs: 161, cuff_dimension: '16.75" X 6.50"', cuff_pcs: 161 },
-      { size: '14A', collar_dimension: '16.00" X 5.75"', collar_pcs: 187, cuff_dimension: '16.75" X 6.75"', cuff_pcs: 187 },
-      { size: 'S', collar_dimension: '16.75" X 5.875"', collar_pcs: 89, cuff_dimension: '17.00" X 6.75"', cuff_pcs: 89 },
-      { size: 'M', collar_dimension: '17.25" X 5.875"', collar_pcs: 14, cuff_dimension: '17.75" X 7.25"', cuff_pcs: 14 },
-      { size: 'XL', collar_dimension: '18.25" X 5.875"', collar_pcs: 8, cuff_dimension: '18.25" X 7.25"', cuff_pcs: 0 },
-    ],
-    total_collar_pcs: 557,
-    total_cuff_pcs: 549,
-    total_yarn_kg: 102.5,
-    remarks: 'Mens: 0.040+0.052+0.092 = 0.184 GRM | 500 GSM Flatknit',
+    enabled: false, item_type: '', color: '', gsm: 0, weight_per_set_g: 0, size_rows: [],
+    total_collar_pcs: 0, total_cuff_pcs: 0, total_yarn_kg: 0, remarks: '',
   }));
-
-  // Specialized Parts, Foldings & Tapes (Zip Foldings, Twill Tape, Draw Cords, BNT)
-  const [specialParts, setSpecialParts] = useState<SpecialPartRow[]>([
-    {
-      part_name: 'Zip Folding',
-      fabric_type: '100% Cotton Single Jersey',
-      gsm: 160,
-      dia_spec: 'DIA-ANY (TUBE)',
-      color: 'NAVY',
-      consumption_per_pc: 0.007,
-      uom: 'KG',
-      total_qty: 6.0,
-      remarks: 'Zip Folding - 0.007 Gram - 100% CTN S/J - 160 GSM',
-    },
-    {
-      part_name: '10mm Twill Tape',
-      fabric_type: 'Cotton Twill Tape',
-      gsm: 0,
-      dia_spec: '10MM',
-      color: 'NAVY',
-      consumption_per_pc: 0.60,
-      uom: 'MTRS',
-      total_qty: 380,
-      kg_factor: 50,
-      kg_factor_unit: 'PER_KG',
-      remarks: '10MM Twill Tape - 60 CM per pcs',
-    },
-    {
-      part_name: '15mm Tube Rope / Draw Cord',
-      fabric_type: 'Cotton / Poly Tube Rope',
-      gsm: 0,
-      dia_spec: '15MM',
-      color: 'NAVY',
-      consumption_per_pc: 1.10,
-      uom: 'MTRS',
-      total_qty: 290,
-      kg_factor: 50,
-      kg_factor_unit: 'PER_KG',
-      qty_per_kg: 50,
-      total_kg: 5.8,
-      remarks: '15MM Draw Cord - 110 CM per pcs (or ~6 KG)',
-    },
-    {
-      part_name: 'Back Neck Tape (BNT)',
-      fabric_type: '100% Cotton Single Jersey',
-      gsm: 160,
-      dia_spec: '12MM FOLD',
-      color: 'NAVY',
-      consumption_per_pc: 0.003,
-      uom: 'KG',
-      total_qty: 1.5,
-      remarks: 'BNT - 0.003 GRM (S/J)',
-    },
-  ]);
+  const [specialParts, setSpecialParts] = useState<SpecialPartRow[]>([]);
 
   const syncSizesFromMarkers = () => {
     if (!markers.length) {
@@ -553,6 +422,26 @@ export default function CadRequirementDetailPage() {
     const updated = recalculateFlatKnit({ ...flatKnitSpec, components, size_rows, remarks });
     setFlatKnitSpec(updated);
     return { updated, primary };
+  };
+
+  const curJob = (jobs.data ?? []).find((j) => j.job_no === header.internal_ir_no);
+  const jobStyles = curJob?.styles ?? [];
+  const pickJob = (jobNo: string) => {
+    const j = (jobs.data ?? []).find((x) => x.job_no === jobNo);
+    setHeader((p) => {
+      const keep = j?.styles.find((st) => String(st.style_id) === p.style_id);
+      const st = keep ?? (j?.styles.length === 1 ? j.styles[0] : undefined);
+      return {
+        ...p, internal_ir_no: jobNo,
+        buyer_id: j?.buyer_id ? String(j.buyer_id) : p.buyer_id,
+        style_id: st ? String(st.style_id) : (j ? '' : p.style_id),
+        order_qty: st?.order_qty || p.order_qty,
+      };
+    });
+  };
+  const pickStyle = (styleId: string) => {
+    const st = jobStyles.find((x) => String(x.style_id) === styleId);
+    setHeader((p) => ({ ...p, style_id: styleId, order_qty: st?.order_qty || p.order_qty }));
   };
 
   // Load existing requirement
@@ -1299,6 +1188,10 @@ export default function CadRequirementDetailPage() {
 
   // Save CAD Requirement
   const handleSave = async () => {
+    if (!header.internal_ir_no.trim()) {
+      toast('Please select the IO No', 'error');
+      return;
+    }
     if (!header.style_id) {
       toast('Please select a Style No', 'error');
       return;
@@ -1514,18 +1407,24 @@ export default function CadRequirementDetailPage() {
           />
 
           <Select
-            label="Style No *"
-            value={header.style_id}
-            onChange={(e) => setHeader((p) => ({ ...p, style_id: e.target.value }))}
-            options={toOptions(styles.data)}
-            placeholder="Select Style"
+            label="IO No *"
+            id="cad-io"
+            value={header.internal_ir_no}
+            onChange={(e) => pickJob(e.target.value)}
+            options={[
+              ...(header.internal_ir_no && !(jobs.data ?? []).some((j) => j.job_no === header.internal_ir_no) ? [{ value: header.internal_ir_no, label: header.internal_ir_no }] : []),
+              ...(jobs.data ?? []).map((j) => ({ value: j.job_no, label: `${j.job_no}${j.buyer_name ? ` · ${j.buyer_name}` : ''}` })),
+            ]}
+            placeholder="Select IO No"
           />
 
-          <Input
-            label="Job / IR No"
-            value={header.internal_ir_no}
-            onChange={(e) => setHeader((p) => ({ ...p, internal_ir_no: e.target.value }))}
-            placeholder="e.g. G3 RG 218 AL"
+          <Select
+            label="Style No *"
+            id="cad-style"
+            value={header.style_id}
+            onChange={(e) => pickStyle(e.target.value)}
+            options={jobStyles.length ? jobStyles.map((st) => ({ value: String(st.style_id), label: st.style_code })) : toOptions(styles.data)}
+            placeholder="Select Style"
           />
 
           <div className="space-y-1">

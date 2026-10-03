@@ -10,11 +10,13 @@ import { fmtDate, fmtDecimal } from '../lib/format';
  */
 export interface QuoteValue { quotation_id: string; quotation_line_id: string; rate_per_kg: string }
 
-export function QuotationPicker({ vendorId, material, process, value, onChange, disabled, idPrefix = 'q', ioNo, soId, label }: {
+export function QuotationPicker({ vendorId, material, process, value, onChange, disabled, idPrefix = 'q', ioNo, soId, label, onQuote }: {
   vendorId: string | number | null | undefined; material: 'FABRIC' | 'YARN' | 'TRIM' | 'GENERAL'; process?: string | null;
   value: QuoteValue; onChange: (v: QuoteValue) => void; disabled?: boolean; idPrefix?: string;
   /** The job the quotation is for: its own (job-wise) quotations come first, other jobs' quotations are not offered. */
   ioNo?: string | null; soId?: number | null; label?: string;
+  /** Called with the picked quotation (all its lines, with colour) — a dyeing DC fills the dye colour from it. */
+  onQuote?: (q: any | null) => void;
 }) {
   const jobQs = `${ioNo ? `&io_no=${encodeURIComponent(ioNo)}` : ''}${soId ? `&so_id=${soId}` : ''}`;
   const q = useQuery({
@@ -25,6 +27,8 @@ export function QuotationPicker({ vendorId, material, process, value, onChange, 
   const list = q.data?.data ?? [];
   const required = !!q.data?.required;
   const quote = list.find((x) => String(x.id) === value.quotation_id);
+  useEffect(() => { onQuote?.(quote ?? null); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quote?.id, value.quotation_line_id]);
   // pick automatically: the one quotation made for this job, else the only approved quotation
   useEffect(() => {
     if (value.quotation_id) return;
@@ -51,7 +55,7 @@ export function QuotationPicker({ vendorId, material, process, value, onChange, 
           <span className="label">Rate line</span>
           <select className="input w-64 py-1.5 text-xs" disabled={disabled} value={value.quotation_line_id} id={`${idPrefix}-qline`}
             onChange={(e) => { const l = quote.lines.find((x: any) => String(x.id) === e.target.value); onChange({ ...value, quotation_line_id: e.target.value, rate_per_kg: l ? String(l.rate) : value.rate_per_kg }); }}>
-            {quote.lines.map((l: any) => <option key={l.id} value={l.id}>{l.job_match ? '★ ' : ''}{l.job_no ? `${l.job_no} · ` : ''}{l.description || l.fabric_name || l.yarn_name || 'Line'} · ₹{fmtDecimal(l.rate, 2)}{l.uom_code ? `/${l.uom_code}` : ''}</option>)}
+            {quote.lines.map((l: any) => <option key={l.id} value={l.id}>{l.job_match ? '★ ' : ''}{l.job_no ? `${l.job_no} · ` : ''}{l.description || l.fabric_name || l.yarn_name || 'Line'}{l.color_name ? ` · ${l.color_name}` : ''} · ₹{fmtDecimal(l.rate, 2)}{l.uom_code ? `/${l.uom_code}` : ''}</option>)}
           </select>
         </label>
       )}

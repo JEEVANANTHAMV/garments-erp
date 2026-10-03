@@ -23,7 +23,7 @@ export const fabricYarnProcurementRouter = Router();
  * plan-cut qty. Cancelled / rejected orders are left out.
  */
 fabricYarnProcurementRouter.get('/procurement/jobs',
-  requireAny('PURCHASE.VIEW', 'PROCUREMENT.VIEW', 'QUOTATION.VIEW', 'BOM.VIEW'), ah(async (req, res) => {
+  requireAny('PURCHASE.VIEW', 'PROCUREMENT.VIEW', 'QUOTATION.VIEW', 'BOM.VIEW', 'PRODUCTION.VIEW', 'FABRIC_PROCESS.VIEW', 'YARN_PROCESS.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const q = z.object({
     q: z.string().trim().max(60).optional(),

@@ -370,6 +370,10 @@ const saveCadRequirementHandler = ah(async (req, res) => {
   const userId = req.user!.id;
   const body = req.body;
 
+  // the CAD is made for a job: IO no + style are compulsory (no demo IO default — client 03-Oct-2026)
+  if (!String(body.internal_ir_no ?? '').trim()) throw BadRequest('IO no is required — pick the job (IO no) this CAD is for');
+  if (!Number(body.style_id)) throw BadRequest('Style no is required');
+
   let finalReqNo = body.req_no;
 
   const savedId = await transaction(async (tx) => {
@@ -425,10 +429,10 @@ const saveCadRequirementHandler = ah(async (req, res) => {
          WHERE id = ? AND company_id = ?
       `, [
         body.req_date || new Date().toISOString().slice(0, 10),
-        body.internal_ir_no || 'IR-2026-0001',
+        String(body.internal_ir_no).trim(),
         Number(body.style_id),
         body.buyer_id ? Number(body.buyer_id) : null,
-        Number(body.order_qty) || 1000,
+        Number(body.order_qty) || 0,
         body.size_group_id ? Number(body.size_group_id) : null,
         body.cad_version || 'V01',
         body.import_source || 'MANUAL',
@@ -458,10 +462,10 @@ const saveCadRequirementHandler = ah(async (req, res) => {
         companyId,
         finalReqNo,
         body.req_date || new Date().toISOString().slice(0, 10),
-        body.internal_ir_no || 'IR-2026-0001',
+        String(body.internal_ir_no).trim(),
         Number(body.style_id),
         body.buyer_id ? Number(body.buyer_id) : null,
-        Number(body.order_qty) || 1000,
+        Number(body.order_qty) || 0,
         body.size_group_id ? Number(body.size_group_id) : null,
         body.cad_version || 'V01',
         body.import_source || 'MANUAL',

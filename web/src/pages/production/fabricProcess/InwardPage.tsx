@@ -9,7 +9,7 @@ import { useToast } from '../../../hooks/useToast';
 import { useAuth } from '../../../lib/auth';
 import { Button, Input, Select, Textarea, SearchInput, LoadingBlock, Tabs } from '../../../components/ui';
 import { fmtDate, today } from '../../../lib/format';
-import { FpTitle, FpStatus, ReconCards, useReasons, useProcessTypes, errText, kg, n, r3, esc, printDoc, groupByJob } from './shared';
+import { FpTitle, FpStatus, ReconCards, useReasons, useProcessTypes, errText, kg, n, r3, esc, printDoc, groupByJob, isDyeing } from './shared';
 
 /**
  * Fabric Process — Inward / GRN (doc §6): load the outward DC, then per input roll one or more
@@ -20,7 +20,7 @@ import { FpTitle, FpStatus, ReconCards, useReasons, useProcessTypes, errText, kg
  */
 interface Line {
   key: string; roll_in_id: number; io_no: string; buyer_po_no: string | null; style_code: string | null; input_roll: string; input_kg: number; open_kg: number;
-  output_roll_no: string; color_name: string; good_kg: number | ''; reject_kg: number | ''; loss_kg: number | ''; meters: number | ''; gsm: string; dia: string; shade_no: string; reject_reason: string;
+  output_roll_no: string; color_name: string; fabric_color: string; good_kg: number | ''; reject_kg: number | ''; loss_kg: number | ''; meters: number | ''; gsm: string; dia: string; shade_no: string; reject_reason: string;
 }
 let seq = 0;
 
@@ -112,16 +112,17 @@ function InwardEditor({ editId, fpoId: fpoParam, onBack, onDone, onPickDc }: { e
       setLines(dl.map((l) => {
         const r = (d.rolls ?? []).find((x: any) => Number(x.id) === Number(l.roll_in_id));
         return { key: `l${++seq}`, roll_in_id: l.roll_in_id, io_no: r?.io_no || 'STOCK', buyer_po_no: r?.buyer_po_no ?? null, style_code: r?.style_code ?? null, input_roll: r?.roll_no ?? l.input_roll_no, input_kg: n(r?.weight_kg), open_kg: n(r?.balance_kg),
-          output_roll_no: l.output_roll_no ?? '', color_name: l.color_name ?? '', good_kg: l.good_kg ?? '', reject_kg: l.reject_kg || '', loss_kg: l.loss_kg || '', meters: l.meters || '', gsm: l.gsm ?? '', dia: l.dia ?? '', shade_no: l.shade_no ?? '', reject_reason: l.reject_reason ?? '' };
+          output_roll_no: l.output_roll_no ?? '', color_name: l.color_name ?? '', fabric_color: r?.fabric_color ?? '', good_kg: l.good_kg ?? '', reject_kg: l.reject_kg || '', loss_kg: l.loss_kg || '', meters: l.meters || '', gsm: l.gsm ?? '', dia: l.dia ?? '', shade_no: l.shade_no ?? '', reject_reason: l.reject_reason ?? '' };
       }));
       return;
     }
     setLines((d.rolls ?? []).filter((r: any) => n(r.balance_kg) > 0.0005).map((r: any) => ({
       key: `l${++seq}`, roll_in_id: r.id, io_no: r.io_no || 'STOCK', buyer_po_no: r.buyer_po_no, style_code: r.style_code, input_roll: r.roll_no, input_kg: n(r.weight_kg), open_kg: n(r.balance_kg),
-      output_roll_no: '', color_name: r.color_name || d.color_name || '', good_kg: '', reject_kg: '', loss_kg: '', meters: '', gsm: r.gsm ?? d.target_gsm ?? '', dia: r.dia ?? d.target_dia ?? '', shade_no: d.shade_code ?? '', reject_reason: '',
+      output_roll_no: '', color_name: r.color_name || d.color_name || '', fabric_color: r.fabric_color ?? '', good_kg: '', reject_kg: '', loss_kg: '', meters: '', gsm: r.gsm ?? d.target_gsm ?? '', dia: r.dia ?? d.target_dia ?? '', shade_no: d.shade_code ?? '', reject_reason: '',
     })));
   }, [d, existing.data]);
   const requiresQc = !!Number((types.data ?? []).find((t) => t.code === d?.sub_process)?.requires_qc);
+  const dyeing = isDyeing(d?.sub_process);
 
   const set = (key: string, p: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...p } : l)));
   const split = (l: Line) => setLines((ls) => { const i = ls.findIndex((x) => x.key === l.key); const c = [...ls]; c.splice(i + 1, 0, { ...l, key: `l${++seq}`, output_roll_no: '', good_kg: '', reject_kg: '', loss_kg: '', meters: '' }); return c; });
@@ -200,17 +201,17 @@ function InwardEditor({ editId, fpoId: fpoParam, onBack, onDone, onPickDc }: { e
               <div className="max-h-[55vh] overflow-auto">
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 z-10 bg-slate-50 text-slate-500"><tr>
-                    {['Job', 'PO', 'Input roll', 'Open KG', 'Output roll (blank = auto)', 'Colour', 'Good KG', 'Reject KG', 'Loss KG', 'Reject reason', 'Mtr', 'GSM', 'Dia', 'Shade', ''].map((h) => <th key={h} className={`px-2 py-2 ${/KG|Mtr/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}
+                    {['Input roll', 'Open KG', 'Output roll (blank = auto)', ...(dyeing ? ['Fabric colour', 'Dye colour'] : ['Colour']), 'Good KG', 'Reject KG', 'Loss KG', 'Reject reason', 'Mtr', 'GSM', 'Dia', 'Shade', ''].map((h) => <th key={h} className={`px-2 py-2 ${/KG|Mtr/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}
                   </tr></thead>
                   <tbody>
                     {groupByJob(lines).map((g) => (
-                      <GrnJobRows key={g.io_no} g={g} reasons={(reasons.data ?? []).filter((x) => x.kind !== 'BILLING')} set={set} split={split} accounted={accounted}
+                      <GrnJobRows key={g.io_no} g={g} dyeing={dyeing} reasons={(reasons.data ?? []).filter((x) => x.kind !== 'BILLING')} set={set} split={split} accounted={accounted}
                         remove={(k) => setLines((ls) => ls.filter((l) => l.key !== k))} />
                     ))}
-                    {!lines.length && <tr><td colSpan={15} className="px-3 py-8 text-center text-slate-400">Every roll of this DC is already received</td></tr>}
+                    {!lines.length && <tr><td colSpan={dyeing ? 14 : 13} className="px-3 py-8 text-center text-slate-400">Every roll of this DC is already received</td></tr>}
                   </tbody>
                   <tfoot className="sticky bottom-0 bg-slate-100 font-bold">
-                    <tr><td colSpan={6} className="px-2 py-2 text-right">This GRN</td><td className="px-2 py-2 text-right text-emerald-800">{kg(tot.good)}</td><td className="px-2 py-2 text-right text-red-700">{kg(tot.rej)}</td><td className="px-2 py-2 text-right text-amber-700">{kg(tot.loss)}</td><td colSpan={6} /></tr>
+                    <tr><td colSpan={dyeing ? 5 : 4} className="px-2 py-2 text-right">This GRN</td><td className="px-2 py-2 text-right text-emerald-800">{kg(tot.good)}</td><td className="px-2 py-2 text-right text-red-700">{kg(tot.rej)}</td><td className="px-2 py-2 text-right text-amber-700">{kg(tot.loss)}</td><td colSpan={6} /></tr>
                   </tfoot>
                 </table>
               </div>
@@ -238,21 +239,21 @@ function InwardEditor({ editId, fpoId: fpoParam, onBack, onDone, onPickDc }: { e
   );
 }
 
-function GrnJobRows({ g, reasons, set, split, remove, accounted }: { g: { io_no: string; rows: Line[] }; reasons: { id: number; reason: string }[]; set: (k: string, p: Partial<Line>) => void; split: (l: Line) => void; remove: (k: string) => void; accounted: (rid: number) => number }) {
+function GrnJobRows({ g, dyeing, reasons, set, split, remove, accounted }: { g: { io_no: string; rows: Line[] }; dyeing: boolean; reasons: { id: number; reason: string }[]; set: (k: string, p: Partial<Line>) => void; split: (l: Line) => void; remove: (k: string) => void; accounted: (rid: number) => number }) {
   const inp = 'input py-0.5 text-xs';
   return (
     <>
-      <tr className="bg-sky-50/70"><td colSpan={15} className="px-2 py-1.5 text-[11.5px] font-semibold text-sky-900">Job {g.io_no}{g.rows[0].buyer_po_no ? ` · PO ${g.rows[0].buyer_po_no}` : ''}{g.rows[0].style_code ? ` · Style ${g.rows[0].style_code}` : ''}</td></tr>
+      <tr className="bg-sky-50/70"><td colSpan={dyeing ? 14 : 13} className="px-2 py-1.5 text-[11.5px] font-semibold text-sky-900">Job {g.io_no}{g.rows[0].buyer_po_no ? ` · PO ${g.rows[0].buyer_po_no}` : ''}{g.rows[0].style_code ? ` · Style ${g.rows[0].style_code}` : ''}</td></tr>
       {g.rows.map((l, i) => {
         const first = i === 0 || g.rows[i - 1].roll_in_id !== l.roll_in_id;
         const over = accounted(l.roll_in_id) > l.open_kg + 0.0005;
         return (
           <tr key={l.key} className={`border-t border-slate-100 ${over ? 'bg-red-50' : ''}`}>
-            <td className="px-2 py-1">{first ? l.io_no : ''}</td><td className="px-2 py-1">{first ? (l.buyer_po_no || '—') : ''}</td>
             <td className="px-2 py-1 font-mono">{first ? l.input_roll : <span className="text-slate-400">↳ split</span>}</td>
             <td className="px-2 py-1 text-right tabular-nums">{first ? kg(l.open_kg) : ''}</td>
             <td className="px-1 py-1"><input className={`${inp} w-28`} value={l.output_roll_no} onChange={(e) => set(l.key, { output_roll_no: e.target.value })} /></td>
-            <td className="px-1 py-1"><input className={`${inp} w-20`} value={l.color_name} onChange={(e) => set(l.key, { color_name: e.target.value })} /></td>
+            {dyeing && <td className="px-2 py-1 text-slate-600">{first ? (l.fabric_color || '—') : ''}</td>}
+            <td className="px-1 py-1"><input className={`${inp} ${dyeing ? 'w-28' : 'w-20'}`} placeholder={dyeing ? 'Dye colour' : ''} value={l.color_name} onChange={(e) => set(l.key, { color_name: e.target.value })} /></td>
             {(['good_kg', 'reject_kg', 'loss_kg'] as const).map((k) => (
               <td key={k} className="px-1 py-1"><input type="number" step="0.001" className={`${inp} w-[84px] text-right ${k === 'good_kg' ? 'text-emerald-700' : k === 'reject_kg' ? 'text-red-700' : 'text-amber-700'}`} value={l[k]}
                 onChange={(e) => set(l.key, { [k]: e.target.value === '' ? '' : Number(e.target.value) } as Partial<Line>)} /></td>
@@ -284,12 +285,13 @@ function InwardView({ id, onBack, onEdit }: { id: number; onBack: () => void; on
   if (!g) return <LoadingBlock />;
   if (g.status !== 'POSTED') return <DraftView g={g} onBack={onBack} onEdit={onEdit} />;
   const print = () => {
-    const body = groupByJob(g.lines as any[]).map((j) => `<tr class="grp"><td colspan="9">Job ${esc(j.io_no)}</td></tr>` + j.rows.map((l: any) =>
-      `<tr><td>${esc(l.input_roll_no)}</td><td>${esc(l.roll_no)}</td><td>${esc(l.color_name ?? '')}</td><td class="r">${kg(l.input_kg)}</td><td class="r">${kg(l.weight_kg)}</td><td class="r">${kg(l.reject_kg)}</td><td class="r">${kg(l.loss_kg)}</td><td>${esc(l.gsm ?? '')}</td><td>${esc(l.dia ?? '')}</td></tr>`).join('')).join('');
+    const dye = isDyeing(g.sub_process);
+    const body = groupByJob(g.lines as any[]).map((j) => `<tr class="grp"><td colspan="${dye ? 10 : 9}">Job ${esc(j.io_no)}</td></tr>` + j.rows.map((l: any) =>
+      `<tr><td>${esc(l.input_roll_no)}</td><td>${esc(l.roll_no)}</td>${dye ? `<td>${esc(l.fabric_color ?? '')}</td>` : ''}<td>${esc(l.color_name ?? '')}</td><td class="r">${kg(l.input_kg)}</td><td class="r">${kg(l.weight_kg)}</td><td class="r">${kg(l.reject_kg)}</td><td class="r">${kg(l.loss_kg)}</td><td>${esc(l.gsm ?? '')}</td><td>${esc(l.dia ?? '')}</td></tr>`).join('')).join('');
     printDoc(g.inward_no, `<h1>PROCESS INWARD / GRN — ${esc(g.process_name ?? g.sub_process)}</h1><table class="meta"><tr><td><b>GRN:</b> ${esc(g.inward_no)}</td><td><b>Date:</b> ${esc(fmtDate(g.inward_date))}</td><td><b>DC:</b> ${esc(g.fpo_no)}</td></tr>
       <tr><td><b>Supplier / Vendor:</b> ${esc(g.vendor_name)}</td><td><b>Challan:</b> ${esc(g.challan_no ?? '—')}</td><td><b>Received by:</b> ${esc(g.received_by ?? '')}</td></tr></table>`,
-      `<table><thead><tr><th>Input roll</th><th>Output roll</th><th>Colour</th><th class="r">Input KG</th><th class="r">Good</th><th class="r">Reject</th><th class="r">Loss</th><th>GSM</th><th>Dia</th></tr></thead><tbody>${body}
-       <tr class="sub"><td colspan="4">Total</td><td class="r">${kg(g.good_kg)}</td><td class="r">${kg(g.reject_kg)}</td><td class="r">${kg(g.loss_kg)}</td><td colspan="2"></td></tr></tbody></table>`);
+      `<table><thead><tr><th>Input roll</th><th>Output roll</th>${dye ? '<th>Fabric colour</th><th>Dye colour</th>' : '<th>Colour</th>'}<th class="r">Input KG</th><th class="r">Good</th><th class="r">Reject</th><th class="r">Loss</th><th>GSM</th><th>Dia</th></tr></thead><tbody>${body}
+       <tr class="sub"><td colspan="${dye ? 5 : 4}">Total</td><td class="r">${kg(g.good_kg)}</td><td class="r">${kg(g.reject_kg)}</td><td class="r">${kg(g.loss_kg)}</td><td colspan="2"></td></tr></tbody></table>`);
   };
   return (
     <div>
@@ -301,14 +303,14 @@ function InwardView({ id, onBack, onEdit }: { id: number; onBack: () => void; on
       </div>
       <div className="card overflow-x-auto">
         <table className="w-full text-xs">
-          <thead className="bg-slate-50 text-slate-500"><tr>{['Job', 'PO', 'Style', 'Input roll', 'Output roll', 'Colour', 'Input KG', 'Good KG', 'Reject KG', 'Loss KG', 'Reject reason', 'GSM', 'Dia'].map((h) => <th key={h} className={`px-2 py-2 ${/KG/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+          <thead className="bg-slate-50 text-slate-500"><tr>{['Job', 'PO', 'Style', 'Input roll', 'Output roll', ...(isDyeing(g.sub_process) ? ['Fabric colour', 'Dye colour'] : ['Colour']), 'Input KG', 'Good KG', 'Reject KG', 'Loss KG', 'Reject reason', 'GSM', 'Dia'].map((h) => <th key={h} className={`px-2 py-2 ${/KG/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
           <tbody>{g.lines.map((l: any) => (
             <tr key={l.id} className="border-t border-slate-100"><td className="px-2 py-1 font-semibold">{l.io_no}</td><td className="px-2 py-1">{l.buyer_po_no || '—'}</td><td className="px-2 py-1">{l.style_code || '—'}</td>
-              <td className="px-2 py-1 font-mono">{l.input_roll_no}</td><td className="px-2 py-1 font-mono">{l.roll_no}</td><td className="px-2 py-1">{l.color_name || '—'}</td>
+              <td className="px-2 py-1 font-mono">{l.input_roll_no}</td><td className="px-2 py-1 font-mono">{l.roll_no}</td>{isDyeing(g.sub_process) && <td className="px-2 py-1">{l.fabric_color || '—'}</td>}<td className="px-2 py-1">{l.color_name || '—'}</td>
               <td className="px-2 py-1 text-right">{kg(l.input_kg)}</td><td className="px-2 py-1 text-right text-emerald-700">{kg(l.weight_kg)}</td><td className="px-2 py-1 text-right text-red-700">{kg(l.reject_kg)}</td>
               <td className="px-2 py-1 text-right text-amber-700">{kg(l.loss_kg)}</td><td className="px-2 py-1">{l.reject_reason || '—'}</td><td className="px-2 py-1">{l.gsm || '—'}</td><td className="px-2 py-1">{l.dia || '—'}</td></tr>
           ))}</tbody>
-          <tfoot className="bg-slate-100 font-bold"><tr><td colSpan={7} className="px-2 py-2 text-right">Total</td><td className="px-2 py-2 text-right">{kg(g.good_kg)}</td><td className="px-2 py-2 text-right">{kg(g.reject_kg)}</td><td className="px-2 py-2 text-right">{kg(g.loss_kg)}</td><td colSpan={3} /></tr></tfoot>
+          <tfoot className="bg-slate-100 font-bold"><tr><td colSpan={isDyeing(g.sub_process) ? 8 : 7} className="px-2 py-2 text-right">Total</td><td className="px-2 py-2 text-right">{kg(g.good_kg)}</td><td className="px-2 py-2 text-right">{kg(g.reject_kg)}</td><td className="px-2 py-2 text-right">{kg(g.loss_kg)}</td><td colSpan={3} /></tr></tfoot>
         </table>
       </div>
       <div className="card mt-3 p-4"><h3 className="mb-2 text-[13px] font-semibold text-slate-800">DC {g.fpo_no} reconciliation</h3><ReconCards t={g.reconciliation.total} /></div>
@@ -371,7 +373,7 @@ function DraftView({ g, onBack, onEdit }: { g: any; onBack: () => void; onEdit: 
         <div className="flex items-center gap-2 px-4 pt-3 text-[13px] font-semibold text-slate-800"><ClipboardCheck size={15} /> Received rolls{params.length ? ' & QC' : ''}</div>
         <table className="mt-2 w-full text-xs">
           <thead className="bg-slate-50 text-slate-500"><tr>
-            {['Job', 'Input roll', 'Output roll', 'Colour', 'Good KG', 'Reject KG', 'Loss KG'].map((h) => <th key={h} className={`px-2 py-2 ${/KG/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}
+            {['Job', 'Input roll', 'Output roll', ...(isDyeing(g.sub_process) ? ['Fabric colour', 'Dye colour'] : ['Colour']), 'Good KG', 'Reject KG', 'Loss KG'].map((h) => <th key={h} className={`px-2 py-2 ${/KG/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}
             {params.map((p) => <th key={p.id} className="px-2 py-2 text-left" title={`min ${p.min_value ?? '—'} / max ${p.max_value ?? '—'}`}>{p.param_name}{p.uom ? ` (${p.uom})` : ''}{p.is_mandatory ? ' *' : ''}<div className="font-normal normal-case text-slate-400">{p.min_value ?? '…'} – {p.max_value ?? '…'}</div></th>)}
             <th className="px-2 py-2 text-left">QC status</th><th className="px-2 py-2 text-left">QC remarks</th>
           </tr></thead>
@@ -381,7 +383,7 @@ function DraftView({ g, onBack, onEdit }: { g: any; onBack: () => void; onEdit: 
               return (
                 <tr key={k} className={`border-t border-slate-100 ${f.length ? 'bg-red-50/60' : ''}`}>
                   <td className="px-2 py-1 font-semibold">{l.io_no || 'STOCK'}</td><td className="px-2 py-1 font-mono">{l.input_roll_no}</td><td className="px-2 py-1 font-mono">{l.output_roll_no || <span className="text-slate-400">auto</span>}</td>
-                  <td className="px-2 py-1">{l.color_name || '—'}</td><td className="px-2 py-1 text-right text-emerald-700">{kg(l.good_kg)}</td><td className="px-2 py-1 text-right text-red-700">{kg(l.reject_kg)}</td><td className="px-2 py-1 text-right text-amber-700">{kg(l.loss_kg)}</td>
+                  {isDyeing(g.sub_process) && <td className="px-2 py-1">{l.fabric_color || '—'}</td>}<td className="px-2 py-1">{l.color_name || '—'}</td><td className="px-2 py-1 text-right text-emerald-700">{kg(l.good_kg)}</td><td className="px-2 py-1 text-right text-red-700">{kg(l.reject_kg)}</td><td className="px-2 py-1 text-right text-amber-700">{kg(l.loss_kg)}</td>
                   {params.map((p) => {
                     const raw = vals[k]?.[String(p.id)]; const rs = result(p, raw);
                     return <td key={p.id} className="px-1 py-1">{good ? (qcOpen
@@ -399,7 +401,7 @@ function DraftView({ g, onBack, onEdit }: { g: any; onBack: () => void; onEdit: 
               );
             })}
           </tbody>
-          <tfoot className="bg-slate-100 font-bold"><tr><td colSpan={4} className="px-2 py-2 text-right">Total</td><td className="px-2 py-2 text-right">{kg(g.good_kg)}</td><td className="px-2 py-2 text-right">{kg(g.reject_kg)}</td><td className="px-2 py-2 text-right">{kg(g.loss_kg)}</td><td colSpan={params.length + 2} /></tr></tfoot>
+          <tfoot className="bg-slate-100 font-bold"><tr><td colSpan={isDyeing(g.sub_process) ? 5 : 4} className="px-2 py-2 text-right">Total</td><td className="px-2 py-2 text-right">{kg(g.good_kg)}</td><td className="px-2 py-2 text-right">{kg(g.reject_kg)}</td><td className="px-2 py-2 text-right">{kg(g.loss_kg)}</td><td colSpan={params.length + 2} /></tr></tfoot>
         </table>
         {qcOpen && (
           <div className="flex flex-wrap items-end justify-end gap-2 border-t border-surface-border p-3">

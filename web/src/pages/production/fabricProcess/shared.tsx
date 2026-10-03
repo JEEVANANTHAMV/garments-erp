@@ -115,3 +115,13 @@ export function groupByJob<T extends { io_no?: string | null }>(rows: T[]) {
   }
   return out;
 }
+
+/** Dyeing (and re-dyeing) DCs / GRNs show the issued colour + the dye colour; other processes keep the colour as is. */
+export const isDyeing = (code: unknown) => /DYE/i.test(String(code ?? ''));
+
+/** Dye colour from the process quotation: the job's own line first, else the picked rate line, else any line with a colour. */
+export function quoteColour(q: any | null, lineId: string, ioNo?: string | null): string {
+  const ls: any[] = (q?.lines ?? []).filter((l: any) => l.color_name);
+  const norm = (x: unknown) => String(x ?? '').trim().toUpperCase();
+  return (ls.find((l) => ioNo && norm(l.job_no) === norm(ioNo)) ?? ls.find((l) => String(l.id) === lineId) ?? ls[0])?.color_name ?? '';
+}

@@ -167,6 +167,8 @@ export async function writeOutwardLines(tx: Tx, req: Request, ypo: any, lines: O
       if (pr.process_type !== pt.base_process) throw BadRequest(`${pr.process_no} is a ${pr.process_type.toLowerCase().replace('_', ' ')} program, not ${pt.name}`);
       if (job && pr.io_no && pr.io_no !== job.io_no && Number(pr.so_id) !== Number(job.id)) throw BadRequest(`${pr.process_no} is for job ${pr.io_no}, not ${job.io_no}`);
     }
+    // yarn dyeing: every lot goes out with its dye colour (client 03-Oct-2026); reprocess keeps the lot's shade
+    if (issue && /DYE/i.test(pt.code) && !ypo.is_reprocess && !(l.target_shade || ypo.target_shade)) throw BadRequest(`Lot ${lot.lot_no}: enter the dye colour`);
     const ins = await txExecute(tx,
       `INSERT INTO trx_yarn_process_order_line (ypo_id, so_id, io_no, buyer_po_no, style_id, process_id, yarn_id, grn_line_id, lot_no, cone_no, no_of_cones,
          shade, target_shade, qty_kg, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -619,13 +621,15 @@ yarnEngineRouter.get('/yarn-process/inward/:id', requirePermission(YP.VIEW), ah(
   if (!i) throw NotFound('Yarn process GRN not found');
   const outputs = await query<any>(
     `SELECT x.*, y.yarn_name, (SELECT GROUP_CONCAT(CONCAT(l.lot_no, IF(COALESCE(ii.cone_no, l.cone_no) IS NULL, '', CONCAT('/', COALESCE(ii.cone_no, l.cone_no))), ' (', ii.input_kg, ')') SEPARATOR ' + ')
-                                 FROM trx_yarn_process_inward_in ii JOIN trx_yarn_process_order_line l ON l.id = ii.ypo_line_id WHERE ii.out_id = x.id) AS inputs
+                                 FROM trx_yarn_process_inward_in ii JOIN trx_yarn_process_order_line l ON l.id = ii.ypo_line_id WHERE ii.out_id = x.id) AS inputs,
+            (SELECT GROUP_CONCAT(DISTINCT l.shade SEPARATOR ' + ') FROM trx_yarn_process_inward_in ii JOIN trx_yarn_process_order_line l ON l.id = ii.ypo_line_id WHERE ii.out_id = x.id) AS input_shade
        FROM trx_yarn_process_inward_out x LEFT JOIN mst_yarn y ON y.id = x.yarn_id WHERE x.inward_id = ? ORDER BY x.io_no, x.id`, [id]);
   let draft: any = null;
   if (i.status !== 'POSTED' && i.draft_json) {
     const d = parseDraft(i.draft_json);
     const ls = await query<any>('SELECT * FROM trx_yarn_process_order_line WHERE ypo_id = ?', [i.ypo_id]);
     draft = { ...d, outputs: d.outputs.map((op, k) => ({ ...op, line_index: k, io_no: ls.find((l) => Number(l.id) === Number(op.inputs[0]?.ypo_line_id))?.io_no ?? null,
+      input_shade: [...new Set(op.inputs.map((x) => ls.find((y) => Number(y.id) === Number(x.ypo_line_id))?.shade).filter(Boolean))].join(' + ') || null,
       input_text: op.inputs.map((x) => { const l = ls.find((y) => Number(y.id) === Number(x.ypo_line_id)); return `${l?.lot_no ?? '?'}${x.cone_no || l?.cone_no ? `/${x.cone_no || l?.cone_no}` : ''} (${x.input_kg})`; }).join(' + ') })) };
   }
   const qcParams = await query<any>('SELECT * FROM mst_fabric_process_qc_param WHERE company_id = ? AND process_code = ? AND is_active = 1 ORDER BY sort_order, id', [cid, i.process_code]);

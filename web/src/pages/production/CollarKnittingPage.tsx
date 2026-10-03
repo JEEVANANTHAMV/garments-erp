@@ -18,6 +18,8 @@ import {
  * Output is counted in PCS while yarn is consumed in KG. The standard weight
  * per piece only drives planning; the actual gm/pc shown here is always derived
  * from actual KG ÷ actual PCS, never from a fixed conversion factor.
+ * A new program is picked by IO no: the job's CAD flat-knit spec loads the size grid
+ * (size, collar measurement, pieces, gm/pc) — client 03-Oct-2026.
  */
 
 const STATUS_TONE: Record<string, string> = {
@@ -32,15 +34,20 @@ interface SizeRow {
   _key: string;
   size_id: number | '';
   size_code: string;
+  measurement: string;
   std_weight_gm: number | '';
   planned_pcs: number | '';
 }
 const newSize = (): SizeRow => ({
-  _key: `z${++_sq}`, size_id: '', size_code: '', std_weight_gm: '', planned_pcs: '',
+  _key: `z${++_sq}`, size_id: '', size_code: '', measurement: '', std_weight_gm: '', planned_pcs: '',
 });
+interface CadPlan {
+  cad_id: number; req_no: string; status: string; style_code: string | null; color: string | null; item_type: string | null;
+  components: { key: string; type: string; label: string; weight_g: number; sizes: { size: string; size_id: number | null; measurement: string | null; pcs: number }[] }[];
+}
 
 const emptyForm = {
-  program_date: today(), so_line_id: '' as number | '', io_no: '', buyer_po_no: '',
+  program_date: today(), so_id: '' as number | '', so_line_id: '' as number | '', io_no: '', buyer_po_no: '',
   style_id: '' as number | '', part_name: 'COLLAR', collar_id: '' as number | '',
   collar_type: '', colour: '', yarn_id: '' as number | '', gauge_needle: '',
   required_date: '', job_work_type: 'INTERNAL', vendor_id: '' as number | '',
@@ -73,6 +80,14 @@ export default function CollarKnittingPage() {
   const { data: sizes = [] } = lk('sizes-all');
   const { data: soLines = [] } = lk('sales-order-lines');
   const { data: warehouses = [] } = lk('warehouses');
+
+  const { data: jobs = [] } = useQuery({
+    queryKey: ['procurement-jobs'],
+    queryFn: async () => (await http.get<{ data: any[] }>('/procurement/jobs')).data || [],
+    staleTime: 60_000,
+  });
+  const [cadPlan, setCadPlan] = useState<CadPlan | null | undefined>(undefined);
+  const [cadComp, setCadComp] = useState('');
 
   const { data: collars = [] } = useQuery({
     queryKey: ['collars'],
@@ -108,6 +123,43 @@ export default function CollarKnittingPage() {
       return { pcs: acc.pcs + (Number(z.planned_pcs) || 0), kg: acc.kg + kg };
     }, { pcs: 0, kg: 0 });
 
+  /** The CAD's size grid of one component → the program's size rows. */
+  const sizesFromCad = (plan: CadPlan, key: string): SizeRow[] => {
+    const c = plan.components.find((x) => x.key === key) ?? plan.components[0];
+    return (c?.sizes ?? []).map((z) => ({
+      _key: `z${++_sq}`, size_id: z.size_id ?? '', size_code: z.size, measurement: z.measurement ?? '',
+      std_weight_gm: c.weight_g || '', planned_pcs: z.pcs,
+    }));
+  };
+  const loadCad = async (ioNo: string, styleId: number | '') => {
+    setCadPlan(undefined);
+    if (!ioNo) return;
+    try {
+      const qs = new URLSearchParams({ io_no: ioNo });
+      if (styleId !== '') qs.set('style_id', String(styleId));
+      const plan = (await http.get<{ data: CadPlan | null }>(`/collar-programs/cad-plan?${qs}`)).data;
+      setCadPlan(plan);
+      if (plan?.components.length) {
+        const key = (plan.components.find((c) => c.type === 'COLLAR') ?? plan.components[0]).key;
+        setCadComp(key);
+        setForm((s) => ({ ...s, sizes: sizesFromCad(plan, key), colour: s.colour || plan.color || '',
+          collar_type: s.collar_type || plan.components.find((c) => c.key === key)?.label || '' }));
+      }
+    } catch { setCadPlan(null); }
+  };
+  const onJob = (jobNo: string) => {
+    const j = jobs.find((x: any) => x.job_no === jobNo);
+    const style = j?.styles?.length === 1 ? j.styles[0].style_id : '';
+    setForm((s) => ({
+      ...s, io_no: jobNo, so_id: j ? Number(j.id) : '', buyer_po_no: j?.buyer_po_no ?? '',
+      style_id: style !== '' ? Number(style) : (j?.styles?.some((x: any) => x.style_id === s.style_id) ? s.style_id : ''),
+      so_line_id: '',
+    }));
+    void loadCad(jobNo, style !== '' ? Number(style) : '');
+  };
+  const curJob = jobs.find((x: any) => x.job_no === form.io_no);
+  const jobStyles: any[] = curJob?.styles ?? [];
+
   const onSoLine = (value: string) => {
     const l = soLines.find((x: any) => x.id === Number(value));
     setForm((s) => ({
@@ -140,6 +192,7 @@ export default function CollarKnittingPage() {
     try {
       await http.post('/collar-programs', {
         program_date: form.program_date,
+        so_id: form.so_id === '' ? null : Number(form.so_id),
         so_line_id: form.so_line_id === '' ? null : Number(form.so_line_id),
         io_no: form.io_no || null, buyer_po_no: form.buyer_po_no || null,
         style_id: form.style_id === '' ? null : Number(form.style_id),
@@ -154,6 +207,7 @@ export default function CollarKnittingPage() {
         sizes: form.sizes.map((z) => ({
           size_id: z.size_id === '' ? null : Number(z.size_id),
           size_code: z.size_code || null,
+          measurement: z.measurement || null,
           std_weight_gm: Number(z.std_weight_gm) || 0,
           planned_pcs: Number(z.planned_pcs) || 0,
         })),
@@ -188,7 +242,7 @@ export default function CollarKnittingPage() {
         title="Collar Knitting"
         subtitle="Size-wise planning in PCS against yarn consumed in KG — actual weight is derived from production"
         actions={
-          <button className="btn-primary" onClick={() => { setForm({ ...emptyForm, sizes: [newSize()] }); setErrs({}); setOpen(true); }}
+          <button className="btn-primary" onClick={() => { setForm({ ...emptyForm, sizes: [newSize()] }); setErrs({}); setCadPlan(undefined); setOpen(true); }}
             id="btn-new-collar-prog">
             <Plus size={15} /> New Program
           </button>
@@ -302,13 +356,34 @@ export default function CollarKnittingPage() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Input label="Program Date" type="date" value={form.program_date}
               onChange={(e) => setF('program_date', e.target.value)} id="c-date" />
+            <Select label="I/O Number" required value={form.io_no} error={errs.io_no} placeholder="— Select IO no —"
+              onChange={(e) => onJob(e.target.value)} id="c-io">
+              {jobs.map((j: any) => <option key={j.id} value={j.job_no}>{j.job_no}{j.buyer_name ? ` · ${j.buyer_name}` : ''}</option>)}
+            </Select>
             <Select label="Sales Order line" value={form.so_line_id} placeholder="— Not linked —"
               onChange={(e) => onSoLine(e.target.value)} id="c-soline">
-              {soLines.map((l: any) => <option key={l.id} value={l.id}>{l.label}</option>)}
+              {soLines.filter((l: any) => form.so_id === '' || Number(l.so_id) === Number(form.so_id)).map((l: any) => <option key={l.id} value={l.id}>{l.label}</option>)}
             </Select>
-            <Input label="I/O Number" required value={form.io_no} error={errs.io_no}
-              onChange={(e) => setF('io_no', e.target.value)} id="c-io" />
           </div>
+          {form.io_no && cadPlan === null && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11.5px] text-amber-900" id="c-cad-none">
+              No CAD with a flat-knit collar / cuff spec for {form.io_no}{form.style_id !== '' ? ' and this style' : ''} — enter the sizes below.
+            </div>
+          )}
+          {cadPlan && (
+            <div className="flex flex-wrap items-center gap-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11.5px] text-emerald-900" id="c-cad-info">
+              <span>Sizes loaded from CAD <b>{cadPlan.req_no}</b>{cadPlan.style_code ? ` (${cadPlan.style_code})` : ''}{cadPlan.color ? ` · ${cadPlan.color}` : ''}</span>
+              {cadPlan.components.length > 1 && (
+                <label className="flex items-center gap-1">Component
+                  <select className="input w-40 py-0.5 text-xs" value={cadComp} id="c-cad-comp"
+                    onChange={(e) => { setCadComp(e.target.value); const c = cadPlan.components.find((x) => x.key === e.target.value);
+                      setForm((s) => ({ ...s, sizes: sizesFromCad(cadPlan, e.target.value), collar_type: c?.label ?? s.collar_type })); }}>
+                    {cadPlan.components.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+                  </select>
+                </label>
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
             <Select label="Collar (BOM)" value={form.collar_id} placeholder="— Select collar —"
@@ -329,8 +404,10 @@ export default function CollarKnittingPage() {
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
             <Select label="Style" required value={form.style_id} placeholder="— Select style —" error={errs.style_id}
-              onChange={(e) => setF('style_id', e.target.value ? Number(e.target.value) : '')} id="c-style">
-              {styles.map((s: any) => <option key={s.id} value={s.id}>{s.code} — {s.label}</option>)}
+              onChange={(e) => { const v = e.target.value ? Number(e.target.value) : ''; setF('style_id', v); if (form.io_no) void loadCad(form.io_no, v); }} id="c-style">
+              {jobStyles.length
+                ? jobStyles.map((s: any) => <option key={s.style_id} value={s.style_id}>{s.style_code} — {s.style_name}</option>)
+                : styles.map((s: any) => <option key={s.id} value={s.id}>{s.code} — {s.label}</option>)}
             </Select>
             <Input label="Gauge / Needle" value={form.gauge_needle}
               onChange={(e) => setF('gauge_needle', e.target.value)} id="c-gauge" />
@@ -367,6 +444,7 @@ export default function CollarKnittingPage() {
                 <thead className="bg-slate-50">
                   <tr>
                     <th className="th text-left">Size</th>
+                    <th className="th text-left">Measurement</th>
                     <th className="th w-32">Std Weight (gm/pc)</th>
                     <th className="th w-32">Planned PCS</th>
                     <th className="th w-32 text-right">Std Yarn (KG)</th>
@@ -387,9 +465,13 @@ export default function CollarKnittingPage() {
                                 size_code: sz?.size_code ?? sz?.code ?? '',
                               });
                             }} id={`sz-${i}`}>
-                            <option value="">— Select size —</option>
+                            <option value="">{z.size_code ? `${z.size_code} (not in size master)` : '— Select size —'}</option>
                             {sizes.map((s: any) => <option key={s.id} value={s.id}>{s.label}</option>)}
                           </select>
+                        </td>
+                        <td className="td p-1">
+                          <input className="input text-[12px]" value={z.measurement} placeholder={'e.g. 16.75" X 5.875"'}
+                            onChange={(e) => setSize(z._key, { measurement: e.target.value })} id={`sz-ms-${i}`} />
                         </td>
                         <td className="td p-1">
                           <input className="input text-[12px]" type="number" step="0.001" min="0"
@@ -423,6 +505,7 @@ export default function CollarKnittingPage() {
                 <tfoot className="bg-slate-50">
                   <tr>
                     <td className="td font-bold text-slate-700">Total</td>
+                    <td />
                     <td />
                     <td className="td text-right font-bold tabular-nums">{fmtNumber(totals.pcs)} pcs</td>
                     <td className="td text-right font-bold tabular-nums text-brand-700">
@@ -496,9 +579,10 @@ export default function CollarKnittingPage() {
             </div>
 
             <Section title={`Size-wise plan (${detail.sizes?.length ?? 0})`}>
-              <SimpleTable head={['Size', 'Std gm/pc', 'Planned PCS', 'Std Yarn KG', 'Produced PCS']}
+              <SimpleTable head={['Size', 'Measurement', 'Std gm/pc', 'Planned PCS', 'Std Yarn KG', 'Produced PCS']}
                 rows={(detail.sizes ?? []).map((z: any) => [
                   z.size_code ?? z.size_master_code ?? '—',
+                  z.measurement ?? '—',
                   fmtDecimal(z.std_weight_gm, 3), fmtNumber(z.planned_pcs),
                   fmtDecimal(z.std_yarn_kg, 3), fmtNumber(z.produced_pcs),
                 ])} />

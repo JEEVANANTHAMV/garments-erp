@@ -10,10 +10,12 @@ import { useToast } from '../../../hooks/useToast';
 import { Button, Modal, Input, Select, Textarea, SearchInput, LoadingBlock } from '../../../components/ui';
 import { fmtDate, today } from '../../../lib/format';
 import { YpTitle, YpStatus, ReconCards, useJobs, useYarnTypes, errText, kg, n, r3, esc, printDoc, groupByJob, MODE_LABEL, type Job, type YarnLot } from './shared';
+import { isDyeing, quoteColour } from '../fabricProcess/shared';
 
 /**
  * Yarn Process — Outward DC (doc §6 / §8): one DC to a dyer / winder / twister carries many jobs,
  * lots and cones. Lines are grouped by job; Save Draft keeps the stock, Confirm DC issues the lots.
+ * Yarn dyeing shows each lot's yarn colour and its dye colour (typed, or from the quotation).
  */
 interface Row {
   key: string; grn_line_id: number; so_id: number | null; io_no: string; buyer_po_no: string | null; lot_no: string; yarn_name: string; shade: string; grn_no: string;
@@ -93,6 +95,8 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
   const [picker, setPicker] = useState<null | 'job' | 'scan' | 'import'>(null);
   const [quote, setQuote] = useState<QuoteValue>({ quotation_id: '', quotation_line_id: '', rate_per_kg: '' });
   const pt = (types.data ?? []).find((t) => t.code === head.process_code);
+  const dyeing = isDyeing(head.process_code);
+  const [quoteDoc, setQuoteDoc] = useState<any | null>(null);
   const programs = useQuery({ queryKey: ['yarn-process', 'programs', pt?.base_process], queryFn: async () => (await http.get<{ data: any[] }>(`/yarn-process/programs?base=${pt?.base_process}`)).data ?? [], enabled: !!pt && editable });
 
   useEffect(() => {
@@ -121,15 +125,22 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
     return [...next, ...fresh.map(({ lot, kg: q, cone_no, cones: c }) => ({
     key: `r${++seq}`, grn_line_id: lot.grn_line_id, so_id: job?.id ?? lot.holder_so_id, io_no: job?.job_no ?? (lot.holder_so_id ? lot.holder_job : 'STOCK'), buyer_po_no: job?.buyer_po_no ?? null,
     lot_no: lot.lot_no, yarn_name: `${lot.yarn_name}${lot.count_str ? ` ${lot.count_str}` : ''}`, shade: lot.color_name || lot.shade || '', grn_no: lot.grn_no, available_kg: lot.available_kg,
-    qty_kg: r3(q), cone_no: cone_no ?? lot.cone_no ?? '', no_of_cones: c ?? lot.cones ?? 0, target_shade: head.target_shade, process_id: '' }))];
+    qty_kg: r3(q), cone_no: cone_no ?? lot.cone_no ?? '', no_of_cones: c ?? lot.cones ?? 0,
+    target_shade: dyeing ? quoteColour(quoteDoc, quote.quotation_line_id, job?.job_no ?? (lot.holder_so_id ? lot.holder_job : null)) : '', process_id: '' }))];
   });
   const set = (k: string, p: Partial<Row>) => setRows((rs) => rs.map((r) => (r.key === k ? { ...r, ...p } : r)));
+  // picking the dyeing quotation fills the dye colour of lines that have none yet (job's own line first)
+  const onQuote = (q: any | null) => {
+    setQuoteDoc(q);
+    if (!q || !dyeing || !editable) return;
+    setRows((rs) => rs.map((r) => (r.target_shade ? r : { ...r, target_shade: quoteColour(q, quote.quotation_line_id, r.io_no) })));
+  };
 
   const payload = () => ({
-    ...head, vendor_id: Number(head.vendor_id), from_warehouse_id: head.from_warehouse_id ? Number(head.from_warehouse_id) : null, expected_return_date: head.expected_return_date || null,
+    ...head, target_shade: null, vendor_id: Number(head.vendor_id), from_warehouse_id: head.from_warehouse_id ? Number(head.from_warehouse_id) : null, expected_return_date: head.expected_return_date || null,
     quotation_id: quote.quotation_id ? Number(quote.quotation_id) : null, quotation_line_id: quote.quotation_line_id ? Number(quote.quotation_line_id) : null,
     rate_per_kg: quote.rate_per_kg !== '' ? Number(quote.rate_per_kg) : null,
-    lines: rows.map((r) => ({ grn_line_id: r.grn_line_id, so_id: r.so_id, qty_kg: n(r.qty_kg), cone_no: r.cone_no || null, no_of_cones: n(r.no_of_cones), target_shade: r.target_shade || null,
+    lines: rows.map((r) => ({ grn_line_id: r.grn_line_id, so_id: r.so_id, qty_kg: n(r.qty_kg), cone_no: r.cone_no || null, no_of_cones: n(r.no_of_cones), target_shade: dyeing ? (r.target_shade.trim() || null) : null,
       process_id: r.process_id ? Number(r.process_id) : null })),
   });
   const save = async (confirm: boolean) => {
@@ -137,6 +148,8 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
     if (!rows.length) { toast('Add jobs and yarn lots / cones', 'warning'); return; }
     const bad = rows.find((r) => n(r.qty_kg) <= 0 || n(r.qty_kg) > r.available_kg + 1e-6);
     if (bad) { toast(`Lot ${bad.lot_no}: KG must be between 0 and ${kg(bad.available_kg)}`, 'warning'); return; }
+    const noDye = confirm && dyeing ? rows.find((r) => !r.target_shade.trim()) : undefined;
+    if (noDye) { toast(`Lot ${noDye.lot_no}: enter the dye colour`, 'warning'); return; }
     setBusy(true);
     try {
       if (!id) {
@@ -160,12 +173,12 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
     const vendor = suppliers.data?.find((s: any) => String(s.id) === head.vendor_id)?.label ?? d?.vendor_name ?? '';
     const proc = pt?.name ?? head.process_code;
     const body = groups.map((g) => `<tr class="grp"><td colspan="9">Job ${esc(g.io_no)}${g.rows[0].buyer_po_no ? ` · PO ${esc(g.rows[0].buyer_po_no)}` : ''}</td></tr>` +
-      g.rows.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.yarn_name)}</td><td>${esc(r.shade)}</td><td>${esc(r.lot_no)}</td><td>${esc(r.cone_no)}</td><td class="r">${r.no_of_cones || ''}</td><td>${esc(r.target_shade)}</td><td>${esc(r.grn_no)}</td><td class="r">${kg(r.qty_kg)}</td></tr>`).join('') +
+      g.rows.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.yarn_name)}</td><td>${esc(r.shade)}</td><td>${esc(r.lot_no)}</td><td>${esc(r.cone_no)}</td><td class="r">${r.no_of_cones || ''}</td><td>${dyeing ? esc(r.target_shade) : ''}</td><td>${esc(r.grn_no)}</td><td class="r">${kg(r.qty_kg)}</td></tr>`).join('') +
       `<tr class="sub"><td colspan="8">Job total</td><td class="r">${kg(g.rows.reduce((a, r) => a + n(r.qty_kg), 0))}</td></tr>`).join('');
     printDoc(d?.ypo_no ?? 'Yarn Outward DC',
       `<h1>DELIVERY CHALLAN — YARN ${esc(proc.toUpperCase())}</h1><table class="meta"><tr><td><b>DC No:</b> ${esc(d?.ypo_no ?? '(draft)')}</td><td><b>Date:</b> ${esc(fmtDate(head.ypo_date))}</td><td><b>Challan:</b> ${esc(head.challan_no || '—')}</td></tr>
        <tr><td><b>Process unit:</b> ${esc(vendor)}</td><td><b>To:</b> ${esc(head.to_location || '—')}</td><td><b>Vehicle:</b> ${esc(head.vehicle_no || '—')}</td></tr></table>`,
-      `<table><thead><tr><th>#</th><th>Yarn</th><th>Shade</th><th>Lot</th><th>Cone</th><th class="r">Cones</th><th>Target shade</th><th>GRN</th><th class="r">KG</th></tr></thead><tbody>${body}
+      `<table><thead><tr><th>#</th><th>Yarn</th><th>${dyeing ? 'Yarn colour' : 'Shade'}</th><th>Lot</th><th>Cone</th><th class="r">Cones</th><th>${dyeing ? 'Dye colour' : ''}</th><th>GRN</th><th class="r">KG</th></tr></thead><tbody>${body}
        <tr class="sub"><td colspan="5">GRAND TOTAL — ${groups.length} job(s)</td><td class="r">${cones || ''}</td><td colspan="2"></td><td class="r">${kg(total)}</td></tr></tbody></table>
        <p>Yarn sent for job work (${esc(proc)}) — to be returned after processing, not for sale. ${esc(head.remarks)}</p>`);
   };
@@ -184,11 +197,10 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
         <Input label="To process location" value={head.to_location} disabled={!editable} onChange={(e) => setHead({ ...head, to_location: e.target.value })} />
         <Input label="Challan no" value={head.challan_no} disabled={!editable} onChange={(e) => setHead({ ...head, challan_no: e.target.value })} />
         <Input label="Vehicle no" value={head.vehicle_no} disabled={!editable} onChange={(e) => setHead({ ...head, vehicle_no: e.target.value })} />
-        {pt?.changes_shade ? <Input label="Target shade (all lines)" value={head.target_shade} disabled={!editable} onChange={(e) => setHead({ ...head, target_shade: e.target.value })} /> : null}
         <Input label="Expected return" type="date" value={head.expected_return_date} disabled={!editable} onChange={(e) => setHead({ ...head, expected_return_date: e.target.value })} />
         <Textarea label="Remarks" className="col-span-2 md:col-span-3" rows={1} value={head.remarks} disabled={!editable} onChange={(e) => setHead({ ...head, remarks: e.target.value })} />
         <div className="col-span-full">
-          <QuotationPicker vendorId={head.vendor_id} material="YARN" process={pt?.name ?? head.process_code} value={quote} onChange={setQuote} disabled={!editable} idPrefix="ypo" />
+          <QuotationPicker vendorId={head.vendor_id} material="YARN" process={pt?.name ?? head.process_code} value={quote} onChange={setQuote} onQuote={onQuote} disabled={!editable} idPrefix="ypo" />
         </div>
       </div>
 
@@ -205,16 +217,16 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
         <div className="max-h-[55vh] overflow-auto">
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10 bg-slate-50 text-slate-500"><tr>
-              {['#', 'Job', 'Yarn item', 'Shade', 'Lot', 'GRN', 'Cone no', 'Cones', pt?.changes_shade ? 'Target shade' : null, 'Program', 'Available KG', 'Qty KG', ''].filter((x) => x !== null).map((h, i) => <th key={i} className={`px-2 py-2 ${/KG|Cones/.test(String(h)) ? 'text-right' : 'text-left'}`}>{h}</th>)}
+              {['#', 'Yarn item', dyeing ? 'Yarn colour' : 'Shade', 'Lot', 'GRN', 'Cone no', 'Cones', dyeing ? 'Dye colour' : null, 'Program', 'Available KG', 'Qty KG', ''].filter((x) => x !== null).map((h, i) => <th key={i} className={`px-2 py-2 ${/KG|Cones/.test(String(h)) ? 'text-right' : 'text-left'}`}>{h}</th>)}
             </tr></thead>
             <tbody>
               {groups.map((g) => (
-                <JobRows key={g.io_no} g={g} editable={editable} shade={!!pt?.changes_shade} set={set} remove={(k) => setRows((rs) => rs.filter((r) => r.key !== k))}
+                <JobRows key={g.io_no} g={g} editable={editable} shade={dyeing} set={set} remove={(k) => setRows((rs) => rs.filter((r) => r.key !== k))}
                   programs={(programs.data ?? []).filter((p) => !g.rows[0].so_id || p.io_no === g.io_no || Number(p.so_id) === Number(g.rows[0].so_id))} />
               ))}
-              {!rows.length && <tr><td colSpan={13} className="px-3 py-10 text-center text-slate-400">“Add Job” picks a job and its yarn lots (its own + general stock); scan a lot / cone, or import every lot of a job</td></tr>}
+              {!rows.length && <tr><td colSpan={dyeing ? 12 : 11} className="px-3 py-10 text-center text-slate-400">“Add Job” picks a job and its yarn lots (its own + general stock); scan a lot / cone, or import every lot of a job</td></tr>}
             </tbody>
-            <tfoot className="sticky bottom-0 bg-slate-100 font-bold"><tr><td colSpan={pt?.changes_shade ? 11 : 10} className="px-2 py-2 text-right">Total · {groups.length} job(s) · {cones} cone(s)</td><td className="px-2 py-2 text-right tabular-nums">{kg(total)}</td><td /></tr></tfoot>
+            <tfoot className="sticky bottom-0 bg-slate-100 font-bold"><tr><td colSpan={dyeing ? 10 : 9} className="px-2 py-2 text-right">Total · {groups.length} job(s) · {cones} cone(s)</td><td className="px-2 py-2 text-right tabular-nums">{kg(total)}</td><td /></tr></tfoot>
           </table>
         </div>
       </div>
@@ -256,21 +268,21 @@ function JobRows({ g, editable, shade, set, remove, programs }: { g: { io_no: st
   const inp = 'input py-0.5 text-xs';
   return (
     <>
-      <tr className="bg-sky-50/70"><td colSpan={13} className="px-2 py-1.5 text-[11.5px] font-semibold text-sky-900">Job {g.io_no}{g.rows[0].buyer_po_no ? ` · PO ${g.rows[0].buyer_po_no}` : ''}</td></tr>
+      <tr className="bg-sky-50/70"><td colSpan={shade ? 12 : 11} className="px-2 py-1.5 text-[11.5px] font-semibold text-sky-900">Job {g.io_no}{g.rows[0].buyer_po_no ? ` · PO ${g.rows[0].buyer_po_no}` : ''}</td></tr>
       {g.rows.map((r, i) => (
         <tr key={r.key} className="border-t border-slate-100">
-          <td className="px-2 py-1 text-slate-400">{i + 1}</td><td className="px-2 py-1 font-semibold">{r.io_no}</td><td className="px-2 py-1">{r.yarn_name}</td><td className="px-2 py-1">{r.shade || '—'}</td>
+          <td className="px-2 py-1 text-slate-400">{i + 1}</td><td className="px-2 py-1">{r.yarn_name}</td><td className="px-2 py-1">{r.shade || '—'}</td>
           <td className="px-2 py-1 font-mono">{r.lot_no}</td><td className="px-2 py-1 font-mono text-slate-500">{r.grn_no}</td>
           <td className="px-1 py-1">{editable ? <input className={`${inp} w-20`} value={r.cone_no} onChange={(e) => set(r.key, { cone_no: e.target.value })} /> : (r.cone_no || '—')}</td>
           <td className="px-1 py-1 text-right">{editable ? <input type="number" className={`${inp} w-14 text-right`} value={r.no_of_cones} onChange={(e) => set(r.key, { no_of_cones: Number(e.target.value) })} /> : (r.no_of_cones || '—')}</td>
-          {shade && <td className="px-1 py-1">{editable ? <input className={`${inp} w-24`} value={r.target_shade} onChange={(e) => set(r.key, { target_shade: e.target.value })} /> : (r.target_shade || '—')}</td>}
+          {shade && <td className="px-1 py-1">{editable ? <input className={`${inp} w-28 ${!r.target_shade.trim() ? 'border-amber-400' : ''}`} placeholder="Dye colour *" value={r.target_shade} onChange={(e) => set(r.key, { target_shade: e.target.value })} /> : (r.target_shade || '—')}</td>}
           <td className="px-1 py-1">{editable ? <select className={`${inp} w-28`} value={r.process_id} onChange={(e) => set(r.key, { process_id: e.target.value })}><option value="">—</option>{programs.map((p) => <option key={p.id} value={p.id}>{p.process_no}</option>)}</select> : (r.process_id ? programs.find((p) => String(p.id) === r.process_id)?.process_no ?? '✓' : '—')}</td>
           <td className="px-2 py-1 text-right tabular-nums text-slate-500">{editable ? kg(r.available_kg) : '—'}</td>
           <td className="px-1 py-1 text-right">{editable ? <input type="number" step="0.001" className={`${inp} w-24 text-right`} value={r.qty_kg} onChange={(e) => set(r.key, { qty_kg: Number(e.target.value) })} /> : <span className="tabular-nums">{kg(r.qty_kg)}</span>}</td>
           <td className="px-1 py-1 text-right">{editable && <button className="p-1 text-slate-400 hover:text-red-600" onClick={() => remove(r.key)}><Trash2 size={13} /></button>}</td>
         </tr>
       ))}
-      <tr className="bg-slate-50 font-semibold"><td colSpan={shade ? 11 : 10} className="px-2 py-1 text-right text-slate-600">Job {g.io_no} subtotal · {g.rows.length} line(s)</td><td className="px-2 py-1 text-right tabular-nums">{kg(sub)}</td><td /></tr>
+      <tr className="bg-slate-50 font-semibold"><td colSpan={shade ? 10 : 9} className="px-2 py-1 text-right text-slate-600">Job {g.io_no} subtotal · {g.rows.length} line(s)</td><td className="px-2 py-1 text-right tabular-nums">{kg(sub)}</td><td /></tr>
     </>
   );
 }

@@ -41,8 +41,9 @@ export async function processQuotations(cid: number, f: { vendor_id: number; mat
   if (!rows.length) return [];
   const lines = await query<any>(
     `SELECT l.id, l.quotation_id, l.material_type, l.description, l.fabric_id, l.yarn_id, l.job_no, l.so_id, fb.fabric_name, y.yarn_name, u.code AS uom_code,
-            COALESCE(NULLIF(l.confirm_rate, 0), NULLIF(l.quotation_rate, 0), l.unit_price) AS rate
+            mc.color_name, COALESCE(NULLIF(l.confirm_rate, 0), NULLIF(l.quotation_rate, 0), l.unit_price) AS rate
        FROM trx_quotation_line l LEFT JOIN mst_fabric fb ON fb.id = l.fabric_id LEFT JOIN mst_yarn y ON y.id = l.yarn_id LEFT JOIN cfg_uom u ON u.id = l.uom_id
+       LEFT JOIN mst_color mc ON mc.id = l.color_id
       WHERE l.quotation_id IN (?) ORDER BY l.sort_order, l.id`, [rows.map((r) => r.id)]);
   const mat = (f.material ?? '').toUpperCase();
   const proc = (f.process ?? '').toLowerCase().replace(/[_-]/g, ' ').replace(/^re /, '');
