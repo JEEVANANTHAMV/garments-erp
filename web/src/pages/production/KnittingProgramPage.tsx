@@ -363,7 +363,9 @@ export default function KnittingProgramPage() {
     if (!r) { setForm((s) => ({ ...s, cad_fp_id: '' })); return; }
     setForm((s) => ({ ...s, cad_req_id: cadFab.cad_id, cad_fp_id: r.cad_fp_id, fabric_id: r.fabric_id ?? s.fabric_id, fabric_type: r.fabric_type ?? s.fabric_type,
       gsm: r.gsm ?? s.gsm, dia: r.dia ?? s.dia, fabric_form: r.fabric_form ?? s.fabric_form, fabric_colour: r.colour ?? '',
-      required_qty_kg: Math.max(0, Math.round((r.required_kg - r.programmed_kg) * 1000) / 1000) || r.required_kg }));
+      // the KG still to program on this CAD line (other programs of the line already cover the rest)
+      required_qty_kg: Math.max(0, Math.round((r.required_kg - r.programmed_kg) * 1000) / 1000) }));
+    if (r.programmed_kg >= r.required_kg - 0.0005) toast(`This CAD line is already fully programmed (${r.programs})`, 'warning');
   };
   const lotLabel = (l: any) => `${l.yarn_code ?? ''} ${l.count_str ?? ''} · lot ${l.lot_no ?? '—'} · ${l.transfer_nos ? `transfer ${l.transfer_nos}` : `PO ${l.po_no ?? '—'}`} · ${l.grn_no} · ${fmtDecimal(l.available_kg, 3)} KG`;
   const pickLot = (key: string, lotKey: string) => {
