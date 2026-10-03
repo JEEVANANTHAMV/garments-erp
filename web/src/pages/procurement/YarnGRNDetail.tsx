@@ -12,7 +12,7 @@ import { Input, Select, Badge } from '../../components/ui';
 import { fmtDecimal, today } from '../../lib/format';
 import { InvoiceSummary } from '../../components/InvoiceSummary';
 import { computeInvoice, chargesFromRow, chargesPayload, EMPTY_CHARGES, type InvoiceCharges } from '../../lib/invoiceCalc';
-import { gateOptions } from '../../lib/gateOptions';
+import { gateOptions, supplierOptions } from '../../lib/gateOptions';
 
 interface YarnGrnLine {
   _key: string;
@@ -652,7 +652,7 @@ export default function YarnGRNDetailPage() {
             label="Spinning Mill / Supplier *"
             value={header.supplier_id}
             onChange={(e) => setHeader((p) => ({ ...p, supplier_id: e.target.value }))}
-            options={toOptions(suppliers.data)}
+            options={supplierOptions(suppliers.data, header.supplier_id, poList)}
             placeholder="Select Mill"
             disabled={!isNew}
           />
