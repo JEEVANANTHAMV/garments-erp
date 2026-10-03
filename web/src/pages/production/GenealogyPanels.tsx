@@ -27,17 +27,23 @@ const TONE: Record<string, string> = {
 /** §27 — every node opens the transaction behind it (rolls open their reverse trace). */
 export function JobGenealogyTree({ soId, onRoll }: { soId: string; onRoll: (rollNo: string) => void }) {
   const q = useQuery({ queryKey: ['genealogy-tree', soId], queryFn: async () => (await http.get<{ data: Node }>(`/jobs/${soId}/genealogy-tree`)).data, enabled: !!soId });
+  const [all, setAll] = useState<null | boolean>(null);
+  const [gen, setGen] = useState(0);
   if (!q.data) return null;
+  const set = (v: boolean) => { setAll(v); setGen(gen + 1); };
   return (
     <div className="card mb-3 p-4 text-xs" id="genealogy-tree">
-      <h3 className="mb-2 text-[13px] font-semibold text-slate-800">Job genealogy — click a node to open it</h3>
-      <TreeNode node={q.data} depth={0} onRoll={onRoll} />
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-[13px] font-semibold text-slate-800">Job genealogy — click a node to open it</h3>
+        <div className="flex gap-2"><Button size="sm" variant="secondary" onClick={() => set(true)} id="tree-expand">Expand all</Button><Button size="sm" variant="secondary" onClick={() => set(false)}>Collapse</Button></div>
+      </div>
+      <TreeNode key={gen} node={q.data} depth={0} onRoll={onRoll} all={all} />
     </div>
   );
 }
-function TreeNode({ node, depth, onRoll }: { node: Node; depth: number; onRoll: (rollNo: string) => void }) {
+function TreeNode({ node, depth, onRoll, all }: { node: Node; depth: number; onRoll: (rollNo: string) => void; all: null | boolean }) {
   const nav = useNavigate();
-  const [open, setOpen] = useState(depth < 2);
+  const [open, setOpen] = useState(all ?? depth < 2);
   const kids = node.children ?? [];
   const click = () => { if (node.roll_id) onRoll(node.label); else if (node.link) nav(node.link); else if (kids.length) setOpen(!open); };
   return (
@@ -48,7 +54,7 @@ function TreeNode({ node, depth, onRoll }: { node: Node; depth: number; onRoll: 
           className={`rounded px-1.5 py-0.5 text-left font-semibold ${TONE[node.kind] ?? 'bg-slate-100'} ${node.link || node.roll_id ? 'hover:underline' : ''}`}>{node.label}</button>
         {node.sub && <span className="text-slate-500">{node.sub}</span>}
       </div>
-      {open && kids.map((c) => <TreeNode key={c.key} node={c} depth={depth + 1} onRoll={onRoll} />)}
+      {open && kids.map((c) => <TreeNode key={c.key} node={c} depth={depth + 1} onRoll={onRoll} all={all} />)}
     </div>
   );
 }
