@@ -625,7 +625,10 @@ jobStockRouter.get('/jobs/:soId/genealogy', requirePermission('PRODUCTION.VIEW')
   if (!job) throw NotFound('Job not found');
   let bom: any = null;
   try { bom = await jobBomRequirement(cid, { so_id: soId }); } catch { bom = null; }
-  const planned = (t: string) => r3g((bom?.lines ?? []).filter((l: any) => l.material_type === t).reduce((a: number, l: any) => a + Number(l.final_requirement || 0), 0));
+  // planned = the frozen requirement snapshot when the job has one (doc §5.1), else the live BOM
+  const snap = await query<any>(`SELECT material_type, required_qty, revision_no FROM trx_job_material_requirement WHERE company_id = ? AND so_id = ? AND status = 'ACTIVE'`, [cid, soId]);
+  const planned = (t: string) => r3g(snap.length ? snap.filter((l) => l.material_type === t).reduce((a: number, l: any) => a + Number(l.required_qty || 0), 0)
+    : (bom?.lines ?? []).filter((l: any) => l.material_type === t).reduce((a: number, l: any) => a + Number(l.final_requirement || 0), 0));
   const one = async (sql: string, p: unknown[]) => Number((await queryOne<any>(sql, p))?.v ?? 0);
   const yarnPurchased = await one(`SELECT COALESCE(SUM(gl.accepted_qty), 0) v FROM trx_grn_line gl JOIN trx_grn g ON g.id = gl.grn_id
      WHERE g.company_id = ? AND gl.material_type = 'YARN' AND gl.so_id = ? AND COALESCE(gl.po_id, g.po_id) IS NOT NULL`, [cid, soId]);
@@ -649,6 +652,7 @@ jobStockRouter.get('/jobs/:soId/genealogy', requirePermission('PRODUCTION.VIEW')
       fabric_available_kg: r3g(avail.rolls.reduce((a: number, r: any) => a + r.available_kg, 0)), grey_available_kg: byState('GREY'),
     },
     bom: bom ? { bom_no: bom.bom?.bom_no ?? null, boms: (bom.boms ?? []).map((b: any) => b.bom_no) } : null,
+    plan_source: snap.length ? `requirement snapshot rev ${snap[0].revision_no}` : bom ? 'BOM' : null,
     programs, knitting_dcs: dcs, knitting_receipts: knit?.receipts ? String(knit.receipts).split(',') : [],
     processes: processes.map((x) => ({ ...x, input_kg: r3g(x.input_kg), good_kg: r3g(x.good_kg), reject_kg: r3g(x.reject_kg), loss_kg: r3g(x.loss_kg) })),
     fabric_groups: avail.groups,

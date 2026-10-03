@@ -118,7 +118,7 @@ function Genealogy({ g }: { g: any }) {
   const pct = (a: number, b: number) => (b > 0 ? `${fmtDecimal((a / b) * 100, 1)}%` : '');
   return (
     <div className="card mb-3 p-4 text-xs" id="job-genealogy">
-      <h3 className="mb-2 text-[13px] font-semibold text-slate-800">Plan vs actual — {g.job?.job_no}{g.bom?.bom_no ? ` · BOM ${g.bom.bom_no}` : ' · no BOM'}</h3>
+      <h3 className="mb-2 text-[13px] font-semibold text-slate-800">Plan vs actual — {g.job?.job_no}{g.bom?.bom_no ? ` · BOM ${g.bom.bom_no}` : ' · no BOM'}{g.plan_source ? ` · planned from ${g.plan_source}` : ''}</h3>
       <div className="grid grid-cols-2 gap-2 md:grid-cols-5" id="gen-recon">
         {box('Planned yarn (BOM)', r.planned_yarn_kg)}
         {box('Yarn purchased', r.yarn_purchased_kg, pct(r.yarn_purchased_kg, r.planned_yarn_kg) && `${pct(r.yarn_purchased_kg, r.planned_yarn_kg)} of plan`)}
