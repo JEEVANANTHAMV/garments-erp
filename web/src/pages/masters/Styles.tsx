@@ -382,7 +382,7 @@ export function StyleDetailPage() {
           {editable && (
             <button className="btn-primary" onClick={() => void save()} disabled={saving}>
               {saving ? <Spinner size={15} /> : <Save size={15} />}
-              {isNew ? 'Create Style' : !v.is_active ? 'Activate Style' : 'Save'}
+              {isNew ? 'Create Style' : String(v.status_id ?? '') === String(statusId('DRAFT') ?? '-') ? 'Finalize Style' : !v.is_active ? 'Activate Style' : 'Save'}
             </button>
           )}
         </>} />
