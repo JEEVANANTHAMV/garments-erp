@@ -266,7 +266,7 @@ export default function CuttingReportsPage() {
                 <Input label="From" type="date" value={draft.from_date ?? ''} onChange={(e) => set('from_date', e.target.value)} id="cr-from" />
                 <Input label="To" type="date" value={draft.to_date ?? ''} onChange={(e) => set('to_date', e.target.value)} id="cr-to" />
               </>}
-              {has('io_no') && <Input label="IO No" value={draft.io_no ?? ''} onChange={(e) => set('io_no', e.target.value)} id="cr-io" />}
+              {has('io_no') && <JobSelect label="IO No" value={draft.io_no ?? ''} placeholder="All jobs" onPick={(j) => set('io_no', j?.job_no ?? '')} id="cr-io" />}
               {has('style') && <Input label="Style" value={draft.style ?? ''} onChange={(e) => set('style', e.target.value)} id="cr-style" />}
               {has('cut_order') && <Input label="Cut Order" value={draft.cut_order ?? ''} onChange={(e) => set('cut_order', e.target.value)} id="cr-co" />}
               {has('fabric') && <Input label="Fabric" value={draft.fabric ?? ''} onChange={(e) => set('fabric', e.target.value)} id="cr-fabric" />}
