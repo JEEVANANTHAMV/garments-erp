@@ -22,5 +22,5 @@ export async function closePoLinesShort(tx: Tx, kind: 'PO' | 'TRIM_PO', lineIds:
   const ids = [...new Set(lineIds.filter(Boolean).map(Number))];
   if (!ids.length) return;
   const [tbl, qty] = kind === 'PO' ? ['trx_purchase_order_line', 'qty'] : ['trx_trim_po_line', 'order_qty'];
-  await txExecute(tx, `UPDATE ${tbl} SET short_closed = 1, short_closed_grn_id = ? WHERE id IN (?) AND COALESCE(received_qty, 0) + 0.0005 < ${qty}`, [grnId, ids]);
+  await txExecute(tx, `UPDATE ${tbl} SET short_closed = 1, short_closed_grn_id = ? WHERE id IN (${ids.map(() => '?').join(',')}) AND COALESCE(received_qty, 0) + 0.0005 < ${qty}`, [grnId, ...ids]);
 }
