@@ -34,6 +34,8 @@ import {
 import { allocateRolls, perPly, planLays, type CalcMarker } from './layCalc.js';
 
 export const layEngineRouter = Router();
+// a non-numeric id is a 404, not a database error
+layEngineRouter.param('id', (_req, _res, next, v) => (/^\d+$/.test(String(v)) && Number(v) > 0 ? next() : next(NotFound('Not found'))));
 
 const VIEW = requirePermission('PRODUCTION.VIEW');
 const PLAN = requireAny('PRODUCTION.CREATE', 'CUTTING.PLAN');

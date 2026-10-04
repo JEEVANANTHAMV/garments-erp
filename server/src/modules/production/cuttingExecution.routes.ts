@@ -22,6 +22,7 @@ import {
 } from './cuttingEngine.js';
 
 export const cuttingExecutionRouter = Router();
+cuttingExecutionRouter.param('id', (_req, _res, next, v) => (/^\d+$/.test(String(v)) && Number(v) > 0 ? next() : next(NotFound('Not found'))));
 
 const LOSS_TYPES = ['CUTTING_WASTE', 'END_LOSS', 'SELVEDGE_LOSS', 'REMNANT', 'OTHER'] as const;
 
