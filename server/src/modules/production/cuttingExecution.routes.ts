@@ -42,6 +42,12 @@ function contentHash(c: MarkerContent): string {
   return createHash('sha256').update(JSON.stringify(c)).digest('hex');
 }
 
+/** S2/M4/L4/XL2 for letter sizes; 86/92:1 · 98/104:2 when a size has digits, / or - (unambiguous). */
+export function ratioText(sizes: string[], ratios: number[]): string {
+  const pairs = sizes.some((x) => /[0-9/\-\s]/.test(String(x)));
+  return pairs ? sizes.map((x, i) => `${x}:${ratios[i] ?? 0}`).join(' · ') : sizes.map((x, i) => `${x}${ratios[i] ?? 0}`).join('/');
+}
+
 function hydrateMv(mv: any) {
   if (!mv) return mv;
   return {
@@ -49,7 +55,7 @@ function hydrateMv(mv: any) {
     sizes: parseJson(mv.sizes, []), ratios: parseJson(mv.ratios, []),
     size_consumption: parseJson(mv.size_consumption, null),
     size_quantities: parseJson(mv.size_quantities, null),
-    ratio_text: (parseJson<string[]>(mv.sizes, [])).map((sz, i) => `${sz}${(parseJson<number[]>(mv.ratios, []))[i] ?? 0}`).join(' '),
+    ratio_text: ratioText(parseJson<string[]>(mv.sizes, []), parseJson<number[]>(mv.ratios, [])),
   };
 }
 

@@ -5,6 +5,7 @@ import { api } from '../../lib/api';
 import { fmtDate, fmtNumber, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
 import { JobSelect, onlyStyle, type Job } from '../../components/JobSelect';
+import { ratioText } from './cuttingUi';
 
 /* ============================================================
    CUTTING PLANS LIST
@@ -409,7 +410,7 @@ export function CuttingPlanDetailPage() {
               <div className="flex flex-wrap gap-2 text-[11px]" id="cp-markers">
                 {program.markers.map((m: any) => (
                   <span key={m.marker_ref} className="rounded border bg-white px-2 py-1">
-                    <b>{m.marker_ref}</b> · {m.fabric_type || '—'} · {m.sizes.map((s: string, i: number) => `${s}${m.ratios[i]}`).join(' ')} · {m.ppm} PCS/marker
+                    <b>{m.marker_ref}</b> · {m.fabric_type || '—'} · {ratioText(m.sizes, m.ratios)} · {m.ppm} PCS/marker
                     {m.length_m ? ` · ${m.length_m} m` : ''}{m.kg_per_ply ? ` · ${m.kg_per_ply} KG/ply` : ''}
                     {selectedColour ? (() => { const pl = (selectedColour.marker_plies || []).find((x: any) => x.marker_ref === m.marker_ref)?.plies; return pl != null ? <b className="text-indigo-700"> · {pl} plies</b> : null; })() : null}
                   </span>

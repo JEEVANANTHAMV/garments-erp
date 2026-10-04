@@ -5,7 +5,7 @@ import { fmtDate, fmtDateTime, fmtNumber, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
 import { useAuth } from '../../lib/auth';
 import { JobSelect } from '../../components/JobSelect';
-import { SearchSelect, StatusChip, Qty, UomInput, MetricTile, errMsg } from './cuttingUi';
+import { SearchSelect, StatusChip, Qty, UomInput, MetricTile, errMsg, ratioText } from './cuttingUi';
 
 /**
  * Lay Planner — CAD marker → automatic lay calculation → roll allocation → issue → receive → spreading → cut
@@ -174,7 +174,7 @@ export function LayPlannerTab({ initialPlanId, onExecute, onChanged, reloadSigna
                         <td className="p-2">{v ? <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${v.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{v.status}</span> : <span className="text-amber-700">not imported</span>}
                           {v?.approved_by_name && <span className="block text-[10px] text-slate-400">{v.approved_by_name}</span>}</td>
                         <td className="p-2">{m.fabric_type || '—'}{m.fabric_match === false && <span className="block text-[10px] text-red-600">other fabric</span>}{!m.has_colour && <span className="block text-[10px] text-red-600">colour not on marker</span>}</td>
-                        <td className="p-2 font-mono">{(m.sizes || []).map((s: string, i: number) => `${s}${m.ratios[i]}`).join('/')}</td>
+                        <td className="p-2 font-mono">{ratioText(m.sizes, m.ratios)}</td>
                         <td className="p-2 text-right"><Qty v={m.ppm} uom="PCS" /></td>
                         <td className="p-2 text-right"><Qty v={v?.length_m ?? m.length_m} uom="M" dp={3} /></td>
                         <td className="p-2 text-right"><Qty v={v?.width_in ?? m.width_in} uom="IN" dp={1} /></td>
@@ -627,7 +627,7 @@ function LaySheetModal({ lay, onClose }: { lay: any; onClose: () => void }) {
           <div className="grid grid-cols-4 gap-x-4 gap-y-1">
             <div>Job: <b>{g.job.io_no}</b></div><div>Buyer: <b>{g.job.buyer_name || '—'}</b></div><div>Buyer PO: <b>{g.job.buyer_po_no || '—'}</b></div><div>Cut order: <b>{g.cutting_plan.plan_no}</b></div>
             <div>Style: <b>{g.cutting_plan.style_code}</b></div><div>Colour: <b>{g.cutting_plan.color_name || '—'}</b></div><div>Fabric: <b>{g.cutting_plan.fabric_name || '—'}</b></div><div>Date: <b>{fmtDate(l.lay_date)}</b></div>
-            <div>Marker: <b>{mk ? `${mk.marker_no} v${mk.version}` : l.marker_ref}</b></div><div>Ratio: <b>{mk ? mk.sizes.map((s: string, i: number) => `${s}${mk.ratios[i]}`).join('/') : '—'}</b></div>
+            <div>Marker: <b>{mk ? `${mk.marker_no} v${mk.version}` : l.marker_ref}</b></div><div>Ratio: <b>{mk ? ratioText(mk.sizes, mk.ratios) : '—'}</b></div>
             <div>Marker length: <b>{mk?.length_m ?? l.marker_length_m ?? '—'} m</b></div><div>Width: <b>{mk?.width_in ?? '—'}"</b></div>
             <div>Ply: <b>{l.ply_count}</b></div><div>Output: <b>{l.expected_pieces} PCS</b></div><div>Fabric: <b>{l.planned_kg ?? '—'} KG · {l.planned_length_m ?? '—'} m</b></div><div>Table: <b>{l.table_no || '—'}</b></div>
           </div>
@@ -654,7 +654,7 @@ function GenealogyModal({ lay, onClose }: { lay: any; onClose: () => void }) {
         <div id="lay-genealogy" className="pl-2">
           <Step title="Job">{g.job.io_no} · {g.job.so_no} · {g.job.buyer_name || '—'} · PO {g.job.buyer_po_no || '—'}</Step>
           <Step title="Cutting plan">{g.cutting_plan.plan_no} · {g.cutting_plan.style_code} · {g.cutting_plan.color_name || '—'} · {g.cutting_plan.fabric_name || '—'} · order {g.cutting_plan.order_qty} · cut {g.cutting_plan.actual_cut_qty}</Step>
-          <Step title="CAD marker version">{g.marker ? <>{g.marker.marker_no} v{g.marker.version} · {g.marker.status}{g.marker.is_locked ? ' · locked' : ''} · {g.marker.sizes.map((s: string, i: number) => `${s}${g.marker.ratios[i]}`).join('/')}{g.cad ? ` · CAD ${g.cad.req_no}` : ''}</> : '—'}</Step>
+          <Step title="CAD marker version">{g.marker ? <>{g.marker.marker_no} v{g.marker.version} · {g.marker.status}{g.marker.is_locked ? ' · locked' : ''} · {ratioText(g.marker.sizes, g.marker.ratios)}{g.cad ? ` · CAD ${g.cad.req_no}` : ''}</> : '—'}</Step>
           <Step title="Lay">{g.lay.lay_no} · {flowLabel(g.lay.status)} · {g.lay.ply_count} ply planned{g.lay.actual_ply ? ` · ${g.lay.actual_ply} actual` : ''} · {g.lay.expected_pieces} PCS</Step>
           <Step title="Fabric rolls (reserved / issued)">{g.allocations.length ? g.allocations.map((a: any) => <div key={a.id}><span className="font-mono">{a.roll_no}</span> · {a.shade || '—'}/{a.lot_no || '—'} · {n(a.alloc_kg).toFixed(3)} KG · {a.status} · GRN {a.grn_no || '—'}</div>) : '—'}</Step>
           <Step title="Cutting DC">{g.fabric_issue ? `${g.fabric_issue.issue_no} · ${g.fabric_issue.status}${g.fabric_issue.received_at ? ` · received ${fmtDateTime(g.fabric_issue.received_at)}` : ''}` : '—'}</Step>

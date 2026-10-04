@@ -8,6 +8,14 @@ import { ScanLine, ChevronDown, X } from 'lucide-react';
 import clsx from 'clsx';
 import { fmtNumber } from '../../lib/format';
 
+/** Marker size ratio as text: S2/M4/L4/XL2 for letter sizes; 86/92:1 · 98/104:2 when a size has digits, / or - (unambiguous). */
+export function ratioText(sizes: unknown, ratios: unknown): string {
+  const sz = Array.isArray(sizes) ? sizes.map(String) : [];
+  const rt = Array.isArray(ratios) ? ratios : [];
+  const pairs = sz.some((x) => /[0-9/\-\s]/.test(x));
+  return pairs ? sz.map((x, i) => `${x}:${rt[i] ?? 0}`).join(' · ') : sz.map((x, i) => `${x}${rt[i] ?? 0}`).join('/');
+}
+
 export const errMsg = (e: any, fallback = 'Request failed') =>
   e?.message || e?.response?.data?.error?.message || fallback;
 

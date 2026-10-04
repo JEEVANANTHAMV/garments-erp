@@ -4,7 +4,7 @@ import { Card, Button, Input, DataTable, Textarea, Modal, Tabs, Checkbox, Select
 import { api } from '../../lib/api';
 import { fmtDate, fmtDateTime, fmtNumber, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
-import { SearchSelect, ScanInput, StatusChip, Qty, UomInput, MetricTile, errMsg } from './cuttingUi';
+import { SearchSelect, ScanInput, StatusChip, Qty, UomInput, MetricTile, errMsg, ratioText } from './cuttingUi';
 import { useAuth } from '../../lib/auth';
 import { LayPlannerTab, LayActions, CuttingDashboard, CuttingTables, MarkerImportCard } from './LayPlanner';
 
@@ -478,7 +478,7 @@ function LayDetailModal({ lay, onClose }: { lay: any; onClose: () => void }) {
           <MetricTile label="Actual" value={fmtNumber(lay.actual_kg, 3)} uom="KG" />
           <MetricTile label="Actual KG/PC" value={fmtNumber(lay.actual_kg_per_pc, 4)} uom="KG/PC" />
         </div>
-        {lay.marker_version && <p>Marker <b>{lay.marker_version.marker_no} v{lay.marker_version.version}</b> · ratio {lay.marker_version.sizes.map((s: string, i: number) => `${s}${lay.marker_version.ratios[i]}`).join(' ')} · {lay.marker_version.pieces_per_marker} PCS/marker · {lay.marker_version.is_locked ? 'locked' : 'unlocked'}</p>}
+        {lay.marker_version && <p>Marker <b>{lay.marker_version.marker_no} v{lay.marker_version.version}</b> · ratio {ratioText(lay.marker_version.sizes, lay.marker_version.ratios)} · {lay.marker_version.pieces_per_marker} PCS/marker · {lay.marker_version.is_locked ? 'locked' : 'unlocked'}</p>}
         {lay.executed_at && <p>Executed {fmtDateTime(lay.executed_at)}{lay.override_reason ? ` · override: ${lay.override_reason}` : ''}{lay.cancel_reason ? ` · cancelled: ${lay.cancel_reason}` : ''}</p>}
         <table className="w-full border"><thead className="bg-slate-50"><tr><th className="p-1.5 text-left">Roll</th><th className="p-1.5 text-right">Before</th><th className="p-1.5 text-right">After</th><th className="p-1.5 text-right">Consumed</th></tr></thead>
           <tbody>{lay.rolls.map((r: any) => <tr key={r.id} className="border-t"><td className="p-1.5 font-mono">{r.roll_no} <span className="text-slate-400">{r.issue_no}</span></td><td className="p-1.5 text-right"><Qty v={r.before_kg} uom="KG" dp={3} /></td><td className="p-1.5 text-right"><Qty v={r.after_kg} uom="KG" dp={3} /></td><td className="p-1.5 text-right font-semibold"><Qty v={r.actual_consumed_kg} uom="KG" dp={3} /></td></tr>)}</tbody></table>
@@ -560,7 +560,7 @@ function MarkerVersions() {
         <div className="grid grid-cols-1 items-end gap-3 p-4 md:grid-cols-4">
           <SearchSelect label="CAD requirement" value={cadId} onChange={setCadId} options={cadOptions} />
           <SearchSelect label="Marker" value={snap.marker_ref} onChange={v => setSnap({ ...snap, marker_ref: v })}
-            options={cadMarkers.map((m: any) => ({ value: m.marker_ref, label: `${m.marker_ref} · ${(m.sizes || []).map((s: any, i: number) => `${s}${m.ratios?.[i] ?? ''}`).join(' ')}`, right: `${m.no_of_pcs_lay} PCS` }))} />
+            options={cadMarkers.map((m: any) => ({ value: m.marker_ref, label: `${m.marker_ref} · ${ratioText(m.sizes, m.ratios)}`, right: `${m.no_of_pcs_lay} PCS` }))} />
           <SearchSelect label="Fabric" value={snap.fabric_id} onChange={v => setSnap({ ...snap, fabric_id: v })}
             options={fabrics.map((f: any) => ({ value: f.id, label: f.label || f.code }))} />
           <div className="flex gap-2"><Button onClick={doSnapshot}>Import from CAD</Button><Button variant="outline" onClick={() => setManual({ marker_no: '', style_id: '', fabric_id: '', sizes: 'S M L XL', ratios: '2 3 3 2', length_m: '', width_in: '', marker_kg_per_ply: '', gsm: '' })}>Manual marker</Button></div>
