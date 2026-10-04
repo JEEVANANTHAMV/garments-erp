@@ -443,6 +443,14 @@ export async function rollCost(cid: number, rollId: number, memo = new Map<numbe
   return out;
 }
 
+/** GET /yarn-lots/:grnLineId/cost — a yarn lot's cost per KG down its lineage (purchase rate + each process charge, loss carried). */
+genealogyRouter.get('/yarn-lots/:grnLineId/cost', VIEW, ah(async (req, res) => {
+  const id = z.coerce.number().int().positive().parse(req.params.grnLineId);
+  const l = await queryOne<any>('SELECT gl.id, gl.lot_no, gl.rate, gl.accepted_qty FROM trx_grn_line gl JOIN trx_grn g ON g.id = gl.grn_id WHERE gl.id = ? AND g.company_id = ?', [id, req.user!.companyId]);
+  if (!l) throw NotFound('Yarn lot not found');
+  res.json({ data: { grn_line_id: l.id, lot_no: l.lot_no, own_rate: r2(l.rate), cost_per_kg: r2(await yarnLotCost(req.user!.companyId, id)) } });
+}));
+
 genealogyRouter.get('/fabric-rolls/:id/cost', VIEW, ah(async (req, res) => {
   const id = z.coerce.number().int().positive().parse(req.params.id);
   const roll = await queryOne<any>('SELECT id, roll_no, weight_kg, COALESCE(issued_kg, 0) issued_kg FROM trx_fabric_roll WHERE id = ? AND company_id = ?', [id, req.user!.companyId]);
