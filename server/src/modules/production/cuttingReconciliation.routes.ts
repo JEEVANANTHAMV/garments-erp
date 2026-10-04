@@ -29,7 +29,7 @@ const LOSS_TYPES = ['CUTTING_WASTE', 'END_LOSS', 'SELVEDGE_LOSS', 'REMNANT', 'OT
 async function closeWarnings(tx: any, cid: number, planId: number) {
   const run = <T = any>(sql: string, p: any[]) => (tx ? txQuery<T>(tx, sql, p) : query<T>(sql, p));
   const [openLays, openRolls, unbundled] = await Promise.all([
-    run<any>(`SELECT lay_no, status FROM trx_lay_plan WHERE company_id = ? AND cutting_plan_id = ? AND status IN ('PLANNED','SPREAD')`, [cid, planId]),
+    run<any>(`SELECT lay_no, status FROM trx_lay_plan WHERE company_id = ? AND cutting_plan_id = ? AND status IN ('PLANNED','SPREAD','GENERATED','ROLL_RESERVED','PLAN_APPROVED','ISSUED','RECEIVED','SPREADING','READY_FOR_CUTTING')`, [cid, planId]),
     run<any>(
       `SELECT fir.roll_no, ROUND(COALESCE(fir.issue_kg,0) - fir.consumed_kg - fir.returned_kg, 4) AS remaining_kg
          FROM trx_fabric_issue_roll fir JOIN trx_fabric_issue fi ON fi.id = fir.fabric_issue_id

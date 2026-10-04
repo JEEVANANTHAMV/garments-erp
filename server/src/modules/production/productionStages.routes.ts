@@ -8,9 +8,10 @@ import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
 import {
-  KG_EPS, assertPlanOpen, generateBundlesLegacy, lockPlan, nextUniqueDocNo, num, parseJson, refreshDcRollStatus,
+  KG_EPS, RESERVED_KG_SQL, assertPlanOpen, generateBundlesLegacy, lockPlan, nextUniqueDocNo, num, parseJson, refreshDcRollStatus,
   refreshFabricRollStatus, round,
 } from './cuttingEngine.js';
+import { settingFlag } from '../../core/inwardControls.js';
 
 export const productionStagesRouter = Router();
 
@@ -106,7 +107,7 @@ productionStagesRouter.get('/cutting-plans/:id/issuable-rolls', requirePermissio
   if (!plan) throw NotFound('Cut order not found');
   const params: any[] = [cid];
   let where = `fr.company_id = ? AND fr.qc_status = 'ACCEPTED' AND fr.stock_status <> 'CLOSED'
-               AND COALESCE(fr.weight_kg,0) - fr.issued_kg > ${KG_EPS}`;
+               AND COALESCE(fr.weight_kg,0) - fr.issued_kg - ${RESERVED_KG_SQL('fr.id')} > ${KG_EPS}`;
   if (plan.fabric_id) { where += ' AND fr.fabric_id = ?'; params.push(plan.fabric_id); }
   if (req.query.q) {
     where += ' AND (fr.roll_no LIKE ? OR fr.lot_no LIKE ? OR g.grn_no LIKE ?)';
@@ -115,7 +116,8 @@ productionStagesRouter.get('/cutting-plans/:id/issuable-rolls', requirePermissio
   }
   const rows = await query(
     `SELECT fr.id, fr.roll_no, fr.lot_no, fr.shade, fr.gsm, fr.dia, fr.meters, fr.weight_kg, fr.issued_kg,
-            ROUND(COALESCE(fr.weight_kg,0) - fr.issued_kg, 3) AS available_kg,
+            ROUND(COALESCE(fr.weight_kg,0) - fr.issued_kg - ${RESERVED_KG_SQL('fr.id')}, 3) AS available_kg,
+            ROUND(${RESERVED_KG_SQL('fr.id')}, 3) AS reserved_kg,
             fr.stock_status, fr.qc_status, fr.fabric_id, fb.fabric_name, fr.warehouse_id, wh.warehouse_name,
             fr.location_bin, g.grn_no, g.grn_date, 'KG' AS uom,
             fr.process_state, fr.color_name
@@ -168,8 +170,9 @@ productionStagesRouter.post('/fabric-issues', requirePermission('PRODUCTION.CREA
       }
       if (roll.qc_status !== 'ACCEPTED') throw BadRequest(`Roll ${roll.roll_no} is QC ${roll.qc_status} — only ACCEPTED rolls can be issued`);
       if (roll.stock_status === 'CLOSED') throw BadRequest(`Roll ${roll.roll_no} is CLOSED and cannot be issued`);
-      const available = round(num(roll.weight_kg) - num(roll.issued_kg), 4);
-      if (available <= KG_EPS) throw BadRequest(`Roll ${roll.roll_no} has no available KG`);
+      const held = await txQueryOne<any>(tx, `SELECT ${RESERVED_KG_SQL('?')} AS kg`, [roll.id]);
+      const available = round(num(roll.weight_kg) - num(roll.issued_kg) - num(held?.kg), 4);
+      if (available <= KG_EPS) throw BadRequest(`Roll ${roll.roll_no} has no available KG${num(held?.kg) > 0 ? ` (${round(num(held?.kg), 3)} KG is reserved for lays)` : ''}`);
       const issueKg = round(r.issue_kg ?? available, 4);
       if (issueKg > available + KG_EPS) {
         throw BadRequest(`Roll ${roll.roll_no}: issue ${issueKg} KG exceeds available ${available} KG`);
@@ -398,6 +401,11 @@ productionStagesRouter.post('/lay-plans', requirePermission('PRODUCTION.CREATE')
       }
       if (mv.fabric_id && plan.fabric_id && Number(mv.fabric_id) !== Number(plan.fabric_id)) {
         throw BadRequest(`Marker ${mv.marker_no} v${mv.version} is for a different fabric`);
+      }
+      // doc §23: an unapproved marker cannot be used; an obsolete / rejected one never
+      if (['OBSOLETE', 'REJECTED'].includes(mv.status)) throw BadRequest(`Marker ${mv.marker_no} v${mv.version} is ${mv.status} — it cannot be used for a new lay`);
+      if (mv.status !== 'APPROVED' && await settingFlag(cid, 'CUT_REQUIRE_APPROVED_MARKER', true)) {
+        throw BadRequest(`Marker ${mv.marker_no} v${mv.version} is ${mv.status} — approve it before planning lays from it`);
       }
     }
     const ppm = mv ? num(mv.pieces_per_marker) : 0;

@@ -34,6 +34,7 @@ import { costingRouter } from './modules/costing/costing.routes.js';
 import { cadRouter } from './modules/cad/cad.routes.js';
 import { fabricYarnProcurementRouter } from './modules/procurement/fabricYarnProcurement.routes.js';
 import { cuttingPlanRouter } from './modules/production/cuttingPlan.routes.js';
+import { layEngineRouter } from './modules/production/layEngine.routes.js';
 import { shipmentRouter } from './modules/packing/shipment.routes.js';
 import { productionStagesRouter } from './modules/production/productionStages.routes.js';
 import { productionFloorRouter } from './modules/production/productionFloor.routes.js';
@@ -123,6 +124,7 @@ export function createApp() {
   api.use('/', costingRouter);          // /production-costs/order-data/:id, /pre-costings/style-data/:id, etc.
   api.use('/', cadRouter);              // /cad-requirements, /cad-requirements/:id/calculate, etc.
   api.use('/', fabricYarnProcurementRouter); // /fabric-purchase-orders, /fabric-grns, /yarn-grns, etc.
+  api.use('/', layEngineRouter);              // CAD lay engine: /cutting-plans/job-program, /cutting-plans/:id/lay-workbench|generate-lay, roll allocation, spreading, genealogy (before /cutting-plans/:id)
   api.use('/', cuttingPlanRouter);            // /cutting-plans, /bundles, /fg-receipts
   api.use('/', shipmentRouter);               // /packing-lists, /shipments, /dispatches, /available-packages
   api.use('/', productionStagesRouter);       // /fabric-issues, /lay-plans, /cut-piece-qc, /bundles/generate-detailed

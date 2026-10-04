@@ -27,3 +27,17 @@ export async function closePoLinesShort(tx: Tx, kind: 'PO' | 'TRIM_PO', lineIds:
   await txExecute(tx, `UPDATE ${tbl} l SET l.short_closed = 1, l.short_closed_grn_id = ?
      WHERE l.id IN (${ids.map(() => '?').join(',')}) AND COALESCE(l.received_qty, 0) + ${HELD(grnLines, 'l.id')} + 0.0005 < l.${qty}`, [grnId, ...ids]);
 }
+
+/**
+ * Partial / Final is chosen per GRN line (client voice note 04-Oct-2026): one PO carries several jobs, and one job
+ * may come in half while another is complete. A line without its own choice follows the GRN-level one (older callers).
+ */
+export const lineReceiptType = (line: any, header?: unknown): 'PARTIAL' | 'FINAL' =>
+  String(line?.receipt_type ?? header ?? '').toUpperCase() === 'FINAL' ? 'FINAL' : 'PARTIAL';
+
+/** The GRN header's summary: FINAL when every PO line is final, PARTIAL when any is partial, null with no PO line. */
+export function grnReceiptType(lines: any[], header?: unknown): 'PARTIAL' | 'FINAL' | null {
+  const po = (lines ?? []).filter((l) => l?.po_line_id);
+  if (!po.length) return null;
+  return po.every((l) => lineReceiptType(l, header) === 'FINAL') ? 'FINAL' : 'PARTIAL';
+}

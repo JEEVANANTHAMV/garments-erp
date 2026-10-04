@@ -23,7 +23,7 @@ uploadRouter.post('/', ah(async (req, res) => {
   const schema = z.object({
     filename: z.string().trim().min(1).default('image.png'),
     data: z.string().min(1), // Data URI (e.g. data:image/jpeg;base64,...) or raw base64
-    folder: z.enum(['styles', 'documents', 'attachments']).default('styles'),
+    folder: z.enum(['styles', 'documents', 'attachments', 'cad']).default('styles'),
   });
 
   const { filename, data, folder } = schema.parse(req.body);
@@ -45,11 +45,16 @@ uploadRouter.post('/', ah(async (req, res) => {
   }
 
   // Document folders also take PDF (party DC scans, bills); style images stay image-only.
-  const allowed = folder === 'styles' ? IMAGE_EXT : [...IMAGE_EXT, '.pdf'];
+  // The CAD folder keeps the original marker export a marker import was made from (doc §4.1: stored for audit).
+  if (folder === 'cad' && dataUriMatch) extension = path.extname(filename).toLowerCase() || extension;
+  const allowed = folder === 'styles' ? IMAGE_EXT
+    : folder === 'cad' ? ['.csv', '.xlsx', '.xls', '.xml', '.txt', '.dxf', '.plx', '.hpgl', '.plt', '.pdf']
+      : [...IMAGE_EXT, '.pdf'];
   if (extension && !allowed.includes(extension)) {
     throw BadRequest(folder === 'styles'
       ? 'Invalid image file format. Supported formats: PNG, JPG, JPEG, WEBP, GIF, SVG.'
-      : 'Invalid file format. Supported formats: PDF, PNG, JPG, JPEG, WEBP, GIF, SVG.');
+      : folder === 'cad' ? 'Invalid CAD file. Supported: CSV, XLSX, XLS, XML, TXT, DXF, PLX, HPGL, PLT, PDF.'
+        : 'Invalid file format. Supported formats: PDF, PNG, JPG, JPEG, WEBP, GIF, SVG.');
   }
 
   const buffer = Buffer.from(base64Content, 'base64');

@@ -12,12 +12,14 @@ import { Badge } from '../../components/ui';
 import { InvoiceSummary } from '../../components/InvoiceSummary';
 import { computeInvoice, chargesFromRow, chargesPayload, EMPTY_CHARGES, type InvoiceCharges } from '../../lib/invoiceCalc';
 import { gateOptions } from '../../lib/gateOptions';
-import { ReceiptTypeChooser, LineReceiptChip, openForGrn, type ReceiptType } from '../../lib/poReceipt';
+import { ReceiptAllLines, LineReceiptChip, LineReceiptSelect, LineReceiptBadge, summaryReceiptType, openForGrn, type ReceiptType } from '../../lib/poReceipt';
 import { JobSelect } from '../../components/JobSelect';
 
 interface GrnLine {
   _key: string;
   id?: number;
+  /** Partial / Final for this PO line (client 04-Oct-2026) */
+  receipt_type?: ReceiptType;
   po_id?: number;
   po_no?: string;
   po_line_id?: number;
@@ -225,6 +227,7 @@ export default function TrimGRNDetailPage() {
               po_id: l.po_id ? Number(l.po_id) : (existingGrn.po_id ? Number(existingGrn.po_id) : undefined),
               po_no: l.po_no || undefined,
               po_line_id: l.po_line_id,
+              receipt_type: l.receipt_type === 'FINAL' ? 'FINAL' : l.receipt_type === 'PARTIAL' ? 'PARTIAL' : undefined,
               so_id: l.so_id ? String(l.so_id) : '',
               style_id: l.style_id ? String(l.style_id) : '',
               trim_id: l.trim_id,
@@ -312,6 +315,7 @@ export default function TrimGRNDetailPage() {
               po_id: Number(poId),
               po_no: po.po_no,
               po_line_id: l.id,
+              receipt_type: 'PARTIAL' as ReceiptType,
               so_id: l.so_id ? String(l.so_id) : (po.so_id ? String(po.so_id) : ''),
               style_id: l.style_id ? String(l.style_id) : (po.style_id ? String(po.style_id) : ''),
               trim_id: l.trim_id,
@@ -469,6 +473,7 @@ export default function TrimGRNDetailPage() {
     try {
       const payload = {
         ...head,
+        receipt_type: summaryReceiptType(lines.filter((l) => Number(l.received_qty) > 0)),
         po_id: selectedPoIds.length > 0 ? Number(selectedPoIds[0]) : (head.po_id ? Number(head.po_id) : null),
         po_ids: selectedPoIds.length > 0 ? selectedPoIds.map(Number).filter(Boolean) : (head.po_id ? [Number(head.po_id)] : []),
         gate_inward_id: head.gate_inward_id ? Number(head.gate_inward_id) : null,
@@ -485,6 +490,7 @@ export default function TrimGRNDetailPage() {
         lines: lines.filter((l) => Number(l.received_qty) > 0).map((l) => ({
           po_id: l.po_id || (selectedPoIds[0] ? Number(selectedPoIds[0]) : undefined),
           po_line_id: l.po_line_id || null,
+          receipt_type: l.po_line_id ? (l.receipt_type ?? 'PARTIAL') : undefined,
           so_id: l.so_id ? Number(l.so_id) : undefined,
           style_id: l.style_id ? Number(l.style_id) : undefined,
           trim_id: Number(l.trim_id),
@@ -681,7 +687,8 @@ export default function TrimGRNDetailPage() {
                   ))}
                 </select>
                 {selectedPoIds.length > 0 && (
-                  <div className="mt-2"><ReceiptTypeChooser value={head.receipt_type} onChange={(v) => setHead((h) => ({ ...h, receipt_type: v }))} id="tgrn-receipt" /></div>
+                  <div className="mt-2"><ReceiptAllLines id="tgrn-receipt" total={lines.filter((l) => l.po_line_id).length} finals={lines.filter((l) => l.po_line_id && l.receipt_type === 'FINAL').length}
+                    onSet={(v) => setLines((prev) => prev.map((l) => (l.po_line_id ? { ...l, receipt_type: v } : l)))} /></div>
                 )}
 
                 {selectedPoIds.length > 0 && (
@@ -1092,7 +1099,9 @@ export default function TrimGRNDetailPage() {
                         {fmtDecimal(line.prev_received)} recd earlier · <b className="text-amber-700">{fmtDecimal(Math.max(0, line.po_qty - Number(line.prev_received)))} pending</b>
                       </div>
                     )}
-                    {isNew && Number(line.received_qty) > 0 && <div><LineReceiptChip ordered={line.po_qty} prev={line.prev_received} accepted={Number(line.accepted_qty) || 0} type={head.receipt_type} /></div>}
+                    {isNew && line.po_line_id && <div><LineReceiptSelect id={`tgrn-line-${idx}-receipt`} value={line.receipt_type} onChange={(v) => setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, receipt_type: v } : x)))} /></div>}
+                    {isNew && Number(line.received_qty) > 0 && <div><LineReceiptChip ordered={line.po_qty} prev={line.prev_received} accepted={Number(line.accepted_qty) || 0} type={line.receipt_type ?? 'PARTIAL'} /></div>}
+                    {!isNew && <LineReceiptBadge value={line.receipt_type} />}
                   </td>
 
                   {/* Received Qty */}

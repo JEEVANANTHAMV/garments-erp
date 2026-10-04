@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { settingFlag, useGateEntry } from '../../core/inwardControls.js';
 import { z } from 'zod';
-import { closePoLinesShort } from '../../core/poReceipt.js';
+import { closePoLinesShort, grnReceiptType, lineReceiptType } from '../../core/poReceipt.js';
 import { calcRollFor, fabricSpec, rollTolerances, ROLL_CALC_COLS, rollCalcVals } from '../../core/fabricRollCalc.js';
 import { query, queryOne, transaction, txQuery, txQueryOne, txExecute, type Tx } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
@@ -558,7 +558,7 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
     ]);
 
     const newGrnId = grnRes!.insertId;
-    await txExecute(tx, 'UPDATE trx_grn SET receipt_type = ? WHERE id = ?', [body.receipt_type === 'FINAL' ? 'FINAL' : (primaryPoId ? 'PARTIAL' : null), newGrnId]);
+    await txExecute(tx, 'UPDATE trx_grn SET receipt_type = ? WHERE id = ?', [grnReceiptType(calculatedLines, body.receipt_type) ?? (primaryPoId ? lineReceiptType(null, body.receipt_type) : null), newGrnId]);
     await txExecute(tx, `
       UPDATE trx_grn SET insurance = ?, customs_duty = ?, clearing_charges = ?,
              other_charges_sign = ?, other_charges_label = ?,
@@ -658,8 +658,10 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
              SET received_qty = COALESCE(received_qty, 0) + ?
            WHERE id = ?
         `, [line.accQty, line.po_line_id]);
-        // FINAL receipt: the PO line is closed (short if less than ordered came)
-        if (body.receipt_type === 'FINAL') await closePoLinesShort(tx, 'PO', [Number(line.po_line_id)], newGrnId);
+        // Partial / Final per line: a FINAL line closes its PO line (short if less than ordered came)
+        const lineType = lineReceiptType(line, body.receipt_type);
+        await txExecute(tx, 'UPDATE trx_grn_line SET receipt_type = ? WHERE id = ?', [lineType, grnLineId]);
+        if (lineType === 'FINAL') await closePoLinesShort(tx, 'PO', [Number(line.po_line_id)], newGrnId);
       }
 
       // 5. Post to Stock Ledger if Accepted
@@ -1467,7 +1469,7 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
     ]);
 
     const newGrnId = grnRes!.insertId;
-    await txExecute(tx, 'UPDATE trx_grn SET receipt_type = ? WHERE id = ?', [body.receipt_type === 'FINAL' ? 'FINAL' : (primaryPoId ? 'PARTIAL' : null), newGrnId]);
+    await txExecute(tx, 'UPDATE trx_grn SET receipt_type = ? WHERE id = ?', [grnReceiptType(calculatedLines, body.receipt_type) ?? (primaryPoId ? lineReceiptType(null, body.receipt_type) : null), newGrnId]);
     await txExecute(tx, `
       UPDATE trx_grn SET insurance = ?, customs_duty = ?, clearing_charges = ?,
              other_charges_sign = ?, other_charges_label = ?,
@@ -1482,7 +1484,7 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
 
     for (const line of calculatedLines) {
       const linePoId = line.po_id ? Number(line.po_id) : primaryPoId;
-      await txExecute(tx, `
+      const yLineRes = await txExecute(tx, `
         INSERT INTO trx_grn_line (
           grn_id, po_id, po_line_id, so_id, style_id, material_type, yarn_id,
           yarn_type, yarn_count_str, shade_code, color_name,
@@ -1529,7 +1531,10 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
              SET received_qty = COALESCE(received_qty, 0) + ?
            WHERE id = ?
         `, [line.accKg, line.po_line_id]);
-        if (body.receipt_type === 'FINAL') await closePoLinesShort(tx, 'PO', [Number(line.po_line_id)], newGrnId);
+        // Partial / Final per line (client 04-Oct-2026)
+        const lineType = lineReceiptType(line, body.receipt_type);
+        await txExecute(tx, 'UPDATE trx_grn_line SET receipt_type = ? WHERE id = ?', [lineType, yLineRes!.insertId]);
+        if (lineType === 'FINAL') await closePoLinesShort(tx, 'PO', [Number(line.po_line_id)], newGrnId);
       }
 
       if (line.accKg > 0 && body.qc_status !== 'REJECTED') {

@@ -144,7 +144,7 @@ export const NAV: NavSection[] = [
       { label: 'CAD Auto-Consumption', to: '/production/cad-requirements', icon: Scissors, perms: ['PRODUCTION.VIEW'] },
       { label: 'Cutting Plans',        to: '/production/cutting-plans', icon: Scissors, perms: ['PRODUCTION.VIEW'] },
       { label: 'Fabric Issues',        to: '/production/fabric-issues', icon: Beaker, perms: ['PRODUCTION.VIEW'] },
-      { label: 'Lay Plan & Execution', to: '/production/lay-spreading', icon: Layers, perms: ['PRODUCTION.VIEW'] },
+      { label: 'Lay Plan & Marker Execution', to: '/production/lay-spreading', icon: Layers, perms: ['PRODUCTION.VIEW'] },
       { label: 'Cut QC & Bundles',     to: '/production/cut-qc-bundles', icon: Scissors, perms: ['PRODUCTION.VIEW'] },
       { label: 'Cutting Reconciliation', to: '/production/cutting-reconciliation', icon: Calculator, perms: ['PRODUCTION.VIEW'] },
       { label: 'Cutting Reports',      to: '/production/cutting-reports', icon: BarChart3, perms: ['PRODUCTION.VIEW'] },

@@ -59,6 +59,11 @@ export function FabricIssuePage() {
             { key: 'consumed_kg', header: 'Consumed', align: 'right' as const, render: (r: any) => <Qty v={r.consumed_kg} uom="KG" dp={3} /> },
             { key: 'returned_kg', header: 'Returned', align: 'right' as const, render: (r: any) => <Qty v={r.returned_kg} uom="KG" dp={3} /> },
             { key: 'status', header: 'Status', render: (r: any) => <StatusChip status={r.status} /> },
+            { key: 'recv', header: '', render: (r: any) => ['ISSUED', 'CONFIRMED'].includes(r.status) ? (
+              <Button size="sm" variant="outline" id={`dc-receive-${r.issue_no}`} onClick={async () => {
+                try { await api.post(`/fabric-issues/${r.id}/receive`, {}); toast(`DC ${r.issue_no} received at cutting`); fetchIssues(); }
+                catch (e) { toast(errMsg(e), 'error'); }
+              }}>Receive</Button>) : r.status === 'RECEIVED' ? <span className="text-[11px] text-slate-500">at cutting</span> : null },
           ]}
         />
       </Card>

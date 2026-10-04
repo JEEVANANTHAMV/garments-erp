@@ -13,11 +13,13 @@ import { fmtDecimal, today } from '../../lib/format';
 import { InvoiceSummary } from '../../components/InvoiceSummary';
 import { computeInvoice, chargesFromRow, chargesPayload, EMPTY_CHARGES, type InvoiceCharges } from '../../lib/invoiceCalc';
 import { gateOptions, supplierOptions } from '../../lib/gateOptions';
-import { ReceiptTypeChooser, LineReceiptChip, openForGrn, type ReceiptType } from '../../lib/poReceipt';
+import { ReceiptAllLines, LineReceiptChip, LineReceiptSelect, LineReceiptBadge, summaryReceiptType, openForGrn, type ReceiptType } from '../../lib/poReceipt';
 
 interface YarnGrnLine {
   _key: string;
   id?: number;
+  /** Partial / Final for this PO line (client 04-Oct-2026) */
+  receipt_type?: ReceiptType;
   po_id?: number;
   po_no?: string;
   po_line_id?: number;
@@ -180,6 +182,7 @@ export default function YarnGRNDetailPage() {
           const totalAmt = taxable + (taxable * gstRate) / 100;
           return {
             id: l.id,
+            receipt_type: l.receipt_type === 'FINAL' ? 'FINAL' : l.receipt_type === 'PARTIAL' ? 'PARTIAL' : undefined,
             po_id: l.po_id ? Number(l.po_id) : undefined,
             po_no: l.po_no || '',
             yarn_id: l.yarn_id,
@@ -270,6 +273,7 @@ export default function YarnGRNDetailPage() {
                 po_id: Number(poIdStr),
                 po_no: po.po_no,
                 po_line_id: pl.id,
+                receipt_type: 'PARTIAL' as ReceiptType,
                 so_id: pl.so_id ? String(pl.so_id) : (po.so_id ? String(po.so_id) : ''),
                 style_id: pl.style_id ? String(pl.style_id) : (po.style_id ? String(po.style_id) : ''),
                 yarn_id: pl.yarn_id,
@@ -405,6 +409,7 @@ export default function YarnGRNDetailPage() {
     try {
       const payload = {
         ...header,
+        receipt_type: summaryReceiptType(lines),
         po_id: selectedPoIds.length > 0 ? selectedPoIds[0] : (header.po_id || null),
         po_ids: selectedPoIds.length > 0 ? selectedPoIds.map(Number).filter(Boolean) : (header.po_id ? [Number(header.po_id)] : []),
         ...chargesPayload(charges, totals.inv),
@@ -415,6 +420,7 @@ export default function YarnGRNDetailPage() {
         lines: lines.map((l) => ({
           po_id: l.po_id || (selectedPoIds[0] ? Number(selectedPoIds[0]) : undefined),
           po_line_id: l.po_line_id,
+          receipt_type: l.po_line_id ? (l.receipt_type ?? 'PARTIAL') : undefined,
           so_id: l.so_id ? Number(l.so_id) : undefined,
           style_id: l.style_id ? Number(l.style_id) : undefined,
           yarn_id: l.yarn_id,
@@ -593,7 +599,8 @@ export default function YarnGRNDetailPage() {
               </select>
 
               {selectedPoIds.length > 0 && (
-                <div className="mt-2"><ReceiptTypeChooser value={header.receipt_type} onChange={(v) => setHeader((h) => ({ ...h, receipt_type: v }))} id="ygrn-receipt" /></div>
+                <div className="mt-2"><ReceiptAllLines id="ygrn-receipt" total={lines.filter((l) => l.po_line_id).length} finals={lines.filter((l) => l.po_line_id && l.receipt_type === 'FINAL').length}
+                  onSet={(v) => setLines((prev) => prev.map((l) => (l.po_line_id ? { ...l, receipt_type: v } : l)))} /></div>
               )}
               {/* Selected PO Badges */}
               {selectedPoIds.length > 0 && (
@@ -948,9 +955,11 @@ export default function YarnGRNDetailPage() {
                           <div>{fmtDecimal(l.ordered_qty)} <span className="text-[10px] text-slate-400">ordered</span></div>
                           {Number(l.prev_received) > 0 && <div>{fmtDecimal(l.prev_received)} <span className="text-[10px]">recd earlier</span></div>}
                           <div className="font-semibold text-amber-700">{fmtDecimal(l.po_qty)} <span className="text-[10px] font-normal">pending</span></div>
-                          {isNew && <LineReceiptChip ordered={l.ordered_qty} prev={l.prev_received} accepted={Number(l.accepted_qty) || 0} type={header.receipt_type} />}
+                          {isNew && l.po_line_id && <div><LineReceiptSelect id={`ygrn-line-${idx}-receipt`} value={l.receipt_type} onChange={(v) => setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, receipt_type: v } : x)))} /></div>}
+                          {isNew && <LineReceiptChip ordered={l.ordered_qty} prev={l.prev_received} accepted={Number(l.accepted_qty) || 0} type={l.receipt_type ?? 'PARTIAL'} />}
+                          {!isNew && <LineReceiptBadge value={l.receipt_type} />}
                         </div>
-                      ) : fmtDecimal(l.po_qty)}
+                      ) : <>{fmtDecimal(l.po_qty)}{!isNew && <LineReceiptBadge value={l.receipt_type} />}</>}
                     </td>
                     <td className="py-2.5 px-2 text-right">
                       {isNew ? (

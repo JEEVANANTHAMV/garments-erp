@@ -32,8 +32,18 @@ const CHIP: Record<string, string> = {
   ISSUED: 'bg-emerald-100 text-emerald-800 ring-emerald-200',
   GENERATED: 'bg-slate-100 text-slate-700 ring-slate-200',
   REVERSED: 'bg-red-100 text-red-700 ring-red-200',
+  ROLL_RESERVED: 'bg-sky-100 text-sky-800 ring-sky-200',
+  PLAN_APPROVED: 'bg-indigo-100 text-indigo-800 ring-indigo-200',
+  RECEIVED: 'bg-teal-100 text-teal-800 ring-teal-200',
+  SPREADING: 'bg-amber-100 text-amber-800 ring-amber-200',
+  READY_FOR_CUTTING: 'bg-orange-100 text-orange-800 ring-orange-200',
+  IMPORTED: 'bg-slate-100 text-slate-700 ring-slate-200',
+  REVIEW: 'bg-violet-100 text-violet-800 ring-violet-200',
+  REJECTED: 'bg-red-100 text-red-700 ring-red-200',
+  OBSOLETE: 'bg-zinc-200 text-zinc-700 ring-zinc-300',
+  VERIFIED: 'bg-emerald-200 text-emerald-900 ring-emerald-300',
 };
-const LABEL: Record<string, string> = { IN_PROGRESS: 'In Cutting', VARIANCE_PENDING: 'Variance' };
+const LABEL: Record<string, string> = { IN_PROGRESS: 'In Cutting', VARIANCE_PENDING: 'Variance', ROLL_RESERVED: 'Rolls reserved', PLAN_APPROVED: 'Plan approved', READY_FOR_CUTTING: 'Ready for cutting', RECEIVED: 'Received' };
 
 export function StatusChip({ status }: { status?: string | null }) {
   const s = String(status ?? '').toUpperCase();

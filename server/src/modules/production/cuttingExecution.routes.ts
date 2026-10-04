@@ -12,9 +12,10 @@ import { z } from 'zod';
 import { query, queryOne, transaction, txQuery, txQueryOne, txExecute } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
 import { NotFound, BadRequest, Forbidden } from '../../core/errors.js';
-import { requirePermission } from '../../middleware/auth.js';
+import { requirePermission, requireAny } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { s } from '../resources/schemas.js';
+import { resolveSoId } from '../stock/jobStock.routes.js';
 import {
   KG_EPS, assertPlanCuttable, assertPlanOpen, checkOverCut, generateBundlesFromOutput, hasPerm, lockPlan,
   markerSizeKg, nextUniqueDocNo, num, parseJson, refreshDcRollStatus, refreshPlanStatus, resolveKgPerPc, round,
@@ -46,13 +47,21 @@ function hydrateMv(mv: any) {
     ...mv,
     sizes: parseJson(mv.sizes, []), ratios: parseJson(mv.ratios, []),
     size_consumption: parseJson(mv.size_consumption, null),
+    size_quantities: parseJson(mv.size_quantities, null),
     ratio_text: (parseJson<string[]>(mv.sizes, [])).map((sz, i) => `${sz}${(parseJson<number[]>(mv.ratios, []))[i] ?? 0}`).join(' '),
   };
 }
 
+/** Marker master fields that describe a version without changing what is cut (doc §4.2, §5). */
+export interface MarkerMeta {
+  status?: 'DRAFT' | 'IMPORTED'; so_id?: number | null; io_no?: string | null; buyer_po_no?: string | null;
+  efficiency_pct?: number | null; cad_source?: string | null; import_hash?: string | null; import_batch?: string | null;
+  size_quantities?: Record<string, number> | null;
+}
+
 /** Insert a new version when content changed; otherwise return the latest one. */
 async function saveMarkerVersion(tx: any, cid: number, userId: number, cadReqId: number | null,
-  content: MarkerContent, source: 'CAD' | 'MANUAL') {
+  content: MarkerContent, source: 'CAD' | 'MANUAL', meta: MarkerMeta = {}) {
   const hash = contentHash(content);
   const latest = await txQueryOne<any>(tx,
     `SELECT * FROM trx_marker_version WHERE company_id = ? AND cad_req_id <=> ? AND marker_no = ?
@@ -71,16 +80,47 @@ async function saveMarkerVersion(tx: any, cid: number, userId: number, cadReqId:
      content.marker_kg_per_ply, content.cad_kg_per_pc,
      content.size_consumption ? JSON.stringify(content.size_consumption) : null,
      content.uom, hash, source, content.cad_file_ref, userId]);
+  const consM = content.length_m && content.pieces_per_marker > 0 ? round(content.length_m / content.pieces_per_marker, 5) : null;
+  await txExecute(tx,
+    `UPDATE trx_marker_version SET status = ?, so_id = ?, io_no = ?, buyer_po_no = ?, efficiency_pct = ?, cad_source = ?,
+            import_hash = ?, import_batch = ?, size_quantities = ?, consumption_m_per_pc = ? WHERE id = ?`,
+    [meta.status ?? 'DRAFT', meta.so_id ?? null, meta.io_no ?? null, meta.buyer_po_no ?? null, meta.efficiency_pct ?? null,
+     meta.cad_source ?? (source === 'CAD' ? 'ERP_CAD' : 'MANUAL'), meta.import_hash ?? null, meta.import_batch ?? null,
+     meta.size_quantities ? JSON.stringify(meta.size_quantities) : null, consM, r.insertId]);
   return { created: true, id: r.insertId as number };
 }
 
-const MV_SELECT = `SELECT mv.*, st.style_code, col.color_name, fb.fabric_name, cr.req_no AS cad_req_no,
+/** Versions a newer approved version replaces: same CAD (or none), marker no and fabric. */
+const MV_FAMILY = `company_id = ? AND cad_req_id <=> ? AND marker_no = ? AND fabric_id <=> ? AND version < ?`;
+
+/**
+ * Approve a marker version (doc §5, §21: … → APPROVED → OBSOLETE). Older versions of the same marker become OBSOLETE —
+ * lays already made from them keep them, but no new lay can use them (doc §23).
+ */
+export async function approveMarkerVersion(tx: any, cid: number, userId: number, id: number) {
+  const mv = await txQueryOne<any>(tx, `SELECT * FROM trx_marker_version WHERE id = ? AND company_id = ? FOR UPDATE`, [id, cid]);
+  if (!mv) throw NotFound('Marker version not found');
+  if (mv.status === 'APPROVED') throw BadRequest(`Marker ${mv.marker_no} v${mv.version} is already approved`);
+  if (['REJECTED', 'OBSOLETE'].includes(mv.status)) throw BadRequest(`Marker ${mv.marker_no} v${mv.version} is ${mv.status} — import / snapshot a new version`);
+  const newer = await txQueryOne<any>(tx,
+    `SELECT version FROM trx_marker_version WHERE company_id = ? AND cad_req_id <=> ? AND marker_no = ? AND fabric_id <=> ? AND version > ? AND status = 'APPROVED' LIMIT 1`,
+    [cid, mv.cad_req_id, mv.marker_no, mv.fabric_id, mv.version]);
+  if (newer) throw BadRequest(`Marker ${mv.marker_no} already has a newer approved version (v${newer.version})`);
+  await txExecute(tx, `UPDATE trx_marker_version SET status = 'APPROVED', approved_by = ?, approved_at = NOW() WHERE id = ?`, [userId, id]);
+  const obs = await txExecute(tx,
+    `UPDATE trx_marker_version SET status = 'OBSOLETE', obsoleted_by = ?, obsoleted_at = NOW()
+      WHERE ${MV_FAMILY} AND status NOT IN ('OBSOLETE','REJECTED')`, [userId, cid, mv.cad_req_id, mv.marker_no, mv.fabric_id, mv.version]);
+  return { before: mv, obsoleted: obs.affectedRows };
+}
+
+const MV_SELECT = `SELECT mv.*, st.style_code, col.color_name, fb.fabric_name, cr.req_no AS cad_req_no, ua.full_name AS approved_by_name,
        (SELECT COUNT(*) FROM trx_lay_plan lp WHERE lp.marker_version_id = mv.id AND lp.status <> 'CANCELLED') AS lay_count
   FROM trx_marker_version mv
   LEFT JOIN mst_style st ON st.id = mv.style_id
   LEFT JOIN mst_color col ON col.id = mv.color_id
   LEFT JOIN mst_fabric fb ON fb.id = mv.fabric_id
-  LEFT JOIN trx_cad_requirement cr ON cr.id = mv.cad_req_id`;
+  LEFT JOIN trx_cad_requirement cr ON cr.id = mv.cad_req_id
+  LEFT JOIN mst_user ua ON ua.id = mv.approved_by`;
 
 /** GET /marker-versions?style_id=&cad_req_id=&cutting_plan_id=&marker_no= */
 cuttingExecutionRouter.get('/marker-versions', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
@@ -97,6 +137,9 @@ cuttingExecutionRouter.get('/marker-versions', requirePermission('PRODUCTION.VIE
   if (req.query.style_id) { where.push('mv.style_id = ?'); params.push(Number(req.query.style_id)); }
   if (req.query.cad_req_id) { where.push('mv.cad_req_id = ?'); params.push(Number(req.query.cad_req_id)); }
   if (req.query.marker_no) { where.push('mv.marker_no = ?'); params.push(String(req.query.marker_no)); }
+  if (req.query.status) { where.push('mv.status = ?'); params.push(String(req.query.status)); }
+  if (req.query.pending === '1') where.push(`mv.status IN ('DRAFT','IMPORTED','REVIEW')`);
+  if (req.query.io_no) { where.push('mv.io_no = ?'); params.push(String(req.query.io_no)); }
   const rows = await query(`${MV_SELECT} WHERE ${where.join(' AND ')} ORDER BY mv.marker_no, mv.version DESC`, params);
   res.json({ data: rows.map(hydrateMv) });
 }));
@@ -113,14 +156,19 @@ cuttingExecutionRouter.get('/marker-versions/:id', requirePermission('PRODUCTION
  * every CAD save, so ids are never referenced). A new version is created only
  * when the content changed.
  */
-cuttingExecutionRouter.post('/marker-versions/snapshot', requirePermission('PRODUCTION.CREATE'), ah(async (req, res) => {
+cuttingExecutionRouter.post('/marker-versions/snapshot', requireAny('PRODUCTION.CREATE', 'CAD_MARKER.IMPORT'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const body = z.object({
     cad_req_id: s.idReq(),
     marker_ref: s.strReq(50),
     fabric_id: s.id(),
     color_id: s.id(),
+    /** import and approve in one step (needs approval rights) */
+    approve: z.coerce.boolean().default(false),
   }).parse(req.body);
+  if (body.approve && !hasPerm(req, 'PRODUCTION.APPROVE') && !hasPerm(req, 'CAD_MARKER.APPROVE')) {
+    throw Forbidden('Approving a marker needs CAD_MARKER.APPROVE or PRODUCTION.APPROVE');
+  }
 
   const cr = await queryOne<any>(`SELECT * FROM trx_cad_requirement WHERE id = ? AND company_id = ?`, [body.cad_req_id, cid]);
   if (!cr) throw NotFound('CAD requirement not found');
@@ -173,14 +221,35 @@ cuttingExecutionRouter.post('/marker-versions/snapshot', requirePermission('PROD
     length_m: lengthM, sizes, ratios, pieces_per_marker: ppm, marker_kg_per_ply: perPly, cad_kg_per_pc: perPc,
     size_consumption: sizeConsumption, uom, cad_file_ref: cr.marker_file_name || cr.cad_file_name || null,
   };
-  const saved = await transaction((tx) => saveMarkerVersion(tx, cid, req.user!.id, cr.id, content, 'CAD'));
-  const row = await queryOne(`${MV_SELECT} WHERE mv.id = ?`, [saved.id]);
-  if (saved.created) await audit(req, 'trx_marker_version', saved.id, 'INSERT', undefined, row);
-  res.status(saved.created ? 201 : 200).json({ data: hydrateMv(row), created: saved.created });
+  // Job / PO / efficiency / size-wise output of the marker (doc §4.2) — the CAD is made for one job (internal IO)
+  const soId = await resolveSoId(cid, null, cr.internal_ir_no);
+  const so = soId ? await queryOne<any>(`SELECT buyer_po_no FROM trx_sales_order WHERE id = ?`, [soId]) : null;
+  const sizeQty: Record<string, number> = {};
+  for (const cw of Array.isArray(mj.colorways) ? mj.colorways : []) {
+    sizes.forEach((sz, i) => { sizeQty[sz] = (sizeQty[sz] ?? 0) + (Number(cw?.cut_quantities?.[i] ?? cw?.quantities?.[i]) || 0); });
+  }
+  const meta: MarkerMeta = {
+    status: 'IMPORTED', so_id: soId, io_no: cr.internal_ir_no ?? null, buyer_po_no: so?.buyer_po_no ?? null,
+    efficiency_pct: num(cr.marker_efficiency) > 0 ? num(cr.marker_efficiency) : null, cad_source: 'ERP_CAD',
+    size_quantities: Object.keys(sizeQty).length ? sizeQty : null,
+  };
+  const out = await transaction(async (tx) => {
+    const saved = await saveMarkerVersion(tx, cid, req.user!.id, cr.id, content, 'CAD', meta);
+    let approved = false;
+    if (body.approve) {
+      const cur = await txQueryOne<any>(tx, `SELECT status FROM trx_marker_version WHERE id = ?`, [saved.id]);
+      if (!['APPROVED', 'REJECTED', 'OBSOLETE'].includes(cur?.status)) { await approveMarkerVersion(tx, cid, req.user!.id, saved.id); approved = true; }
+    }
+    return { ...saved, approved };
+  });
+  const row = await queryOne(`${MV_SELECT} WHERE mv.id = ?`, [out.id]);
+  if (out.created) await audit(req, 'trx_marker_version', out.id, 'INSERT', undefined, row);
+  if (out.approved) await audit(req, 'trx_marker_version', out.id, 'UPDATE', undefined, { status: 'APPROVED', approved_by: req.user!.id });
+  res.status(out.created ? 201 : 200).json({ data: hydrateMv(row), created: out.created, approved: out.approved });
 }));
 
 /** POST /marker-versions — manual marker (Marker Master, no CAD) */
-cuttingExecutionRouter.post('/marker-versions', requirePermission('PRODUCTION.CREATE'), ah(async (req, res) => {
+cuttingExecutionRouter.post('/marker-versions', requireAny('PRODUCTION.CREATE', 'CAD_MARKER.IMPORT'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const body = z.object({
     marker_no: s.strReq(60),
@@ -223,20 +292,214 @@ cuttingExecutionRouter.post('/marker-versions', requirePermission('PRODUCTION.CR
   res.status(saved.created ? 201 : 200).json({ data: hydrateMv(row), created: saved.created });
 }));
 
-/** POST /marker-versions/:id/approve */
-cuttingExecutionRouter.post('/marker-versions/:id/approve', requirePermission('PRODUCTION.APPROVE'), ah(async (req, res) => {
+const MARKER_APPROVE = requireAny('PRODUCTION.APPROVE', 'CAD_MARKER.APPROVE');
+
+/** POST /marker-versions/:id/approve (alias POST /cad-markers/:id/approve) — doc §18 */
+const approveHandler = ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = Number(req.params.id);
-  await transaction(async (tx) => {
+  const r = await transaction((tx) => approveMarkerVersion(tx, cid, req.user!.id, id));
+  await audit(req, 'trx_marker_version', id, 'UPDATE', { status: r.before.status }, { status: 'APPROVED', approved_by: req.user!.id, obsoleted_older: r.obsoleted });
+  res.json({ data: hydrateMv(await queryOne(`${MV_SELECT} WHERE mv.id = ?`, [id])), obsoleted: r.obsoleted });
+});
+cuttingExecutionRouter.post('/marker-versions/:id/approve', MARKER_APPROVE, approveHandler);
+cuttingExecutionRouter.post('/cad-markers/:id/approve', MARKER_APPROVE, approveHandler);
+
+/** POST /marker-versions/:id/review — DRAFT / IMPORTED → REVIEW */
+cuttingExecutionRouter.post('/marker-versions/:id/review', requireAny('PRODUCTION.CREATE', 'CAD_MARKER.IMPORT', 'CAD_MARKER.APPROVE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = Number(req.params.id);
+  const before = await transaction(async (tx) => {
     const mv = await txQueryOne<any>(tx, `SELECT * FROM trx_marker_version WHERE id = ? AND company_id = ? FOR UPDATE`, [id, cid]);
     if (!mv) throw NotFound('Marker version not found');
-    if (mv.is_locked) throw BadRequest(`Marker ${mv.marker_no} v${mv.version} is locked (used by an executed lay) and immutable`);
-    if (mv.approved_at) throw BadRequest('Marker version is already approved');
-    await txExecute(tx, `UPDATE trx_marker_version SET approved_by = ?, approved_at = NOW() WHERE id = ?`, [req.user!.id, id]);
+    if (!['DRAFT', 'IMPORTED'].includes(mv.status)) throw BadRequest(`Marker ${mv.marker_no} v${mv.version} is ${mv.status} — only a draft / imported version goes to review`);
+    await txExecute(tx, `UPDATE trx_marker_version SET status = 'REVIEW', reviewed_by = ?, reviewed_at = NOW() WHERE id = ?`, [req.user!.id, id]);
+    return mv;
   });
-  await audit(req, 'trx_marker_version', id, 'UPDATE', undefined, { approved_by: req.user!.id });
+  await audit(req, 'trx_marker_version', id, 'UPDATE', { status: before.status }, { status: 'REVIEW' });
   res.json({ data: hydrateMv(await queryOne(`${MV_SELECT} WHERE mv.id = ?`, [id])) });
 }));
+
+/** POST /marker-versions/:id/reject { reason } — a version not yet approved */
+cuttingExecutionRouter.post('/marker-versions/:id/reject', MARKER_APPROVE, ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = Number(req.params.id);
+  const body = z.object({ reason: s.strReq(255) }).parse(req.body ?? {});
+  const before = await transaction(async (tx) => {
+    const mv = await txQueryOne<any>(tx, `SELECT * FROM trx_marker_version WHERE id = ? AND company_id = ? FOR UPDATE`, [id, cid]);
+    if (!mv) throw NotFound('Marker version not found');
+    if (!['DRAFT', 'IMPORTED', 'REVIEW'].includes(mv.status)) throw BadRequest(`Marker ${mv.marker_no} v${mv.version} is ${mv.status} — an approved version is retired with Obsolete, not rejected`);
+    await txExecute(tx, `UPDATE trx_marker_version SET status = 'REJECTED', rejected_by = ?, rejected_at = NOW(), reject_reason = ? WHERE id = ?`, [req.user!.id, body.reason, id]);
+    return mv;
+  });
+  await audit(req, 'trx_marker_version', id, 'UPDATE', { status: before.status }, { status: 'REJECTED', reason: body.reason });
+  res.json({ data: hydrateMv(await queryOne(`${MV_SELECT} WHERE mv.id = ?`, [id])) });
+}));
+
+/** POST /marker-versions/:id/obsolete { reason } — retire an approved version; lays made from it keep it */
+cuttingExecutionRouter.post('/marker-versions/:id/obsolete', MARKER_APPROVE, ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = Number(req.params.id);
+  const body = z.object({ reason: s.strReq(255) }).parse(req.body ?? {});
+  const before = await transaction(async (tx) => {
+    const mv = await txQueryOne<any>(tx, `SELECT * FROM trx_marker_version WHERE id = ? AND company_id = ? FOR UPDATE`, [id, cid]);
+    if (!mv) throw NotFound('Marker version not found');
+    if (mv.status === 'OBSOLETE') throw BadRequest('Marker version is already obsolete');
+    await txExecute(tx, `UPDATE trx_marker_version SET status = 'OBSOLETE', obsoleted_by = ?, obsoleted_at = NOW(), reject_reason = COALESCE(reject_reason, ?) WHERE id = ?`, [req.user!.id, body.reason, id]);
+    return mv;
+  });
+  await audit(req, 'trx_marker_version', id, 'UPDATE', { status: before.status }, { status: 'OBSOLETE', reason: body.reason });
+  res.json({ data: hydrateMv(await queryOne(`${MV_SELECT} WHERE mv.id = ?`, [id])) });
+}));
+
+/** GET /cad-markers/:id — marker detail + size ratio + version history (doc §18, §24) */
+cuttingExecutionRouter.get('/cad-markers/:id', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const row = await queryOne<any>(`${MV_SELECT} WHERE mv.id = ? AND mv.company_id = ?`, [Number(req.params.id), cid]);
+  if (!row) throw NotFound('Marker version not found');
+  const history = await query(`${MV_SELECT} WHERE mv.company_id = ? AND mv.cad_req_id <=> ? AND mv.marker_no = ? ORDER BY mv.version DESC`,
+    [cid, row.cad_req_id, row.marker_no]);
+  const lays = await query(`SELECT id, lay_no, status, ply_count, expected_pieces FROM trx_lay_plan WHERE marker_version_id = ? ORDER BY id`, [row.id]);
+  res.json({ data: { ...hydrateMv(row), history: history.map(hydrateMv), lays } });
+}));
+
+/* ---------------------------------------------------------------- CAD marker import (doc §4, Phase 1: CSV / Excel / XML) */
+
+/** "S2/M4/L4/XL2", "S:2, M:4", "S-2 M-4" → sizes + ratios */
+export function parseSizeRatio(txt: unknown): { sizes: string[]; ratios: number[] } | null {
+  const parts = String(txt ?? '').split(/[\/,;|\s]+/).map((x) => x.trim()).filter(Boolean);
+  const sizes: string[] = []; const ratios: number[] = [];
+  for (const p of parts) {
+    const m = p.match(/^([A-Za-z0-9]+?)[:=\-]?(\d+)$/);
+    if (!m) return null;
+    sizes.push(m[1].toUpperCase()); ratios.push(Number(m[2]));
+  }
+  return sizes.length ? { sizes, ratios } : null;
+}
+
+const importRowSchema = z.object({
+  marker_no: z.string().trim().min(1).max(60),
+  marker_version: z.string().trim().max(20).optional().nullable(),
+  marker_name: z.string().trim().max(120).optional().nullable(),
+  job_no: z.string().trim().min(1).max(60),
+  po_no: z.string().trim().max(60).optional().nullable(),
+  style_no: z.string().trim().min(1).max(60),
+  colour: z.string().trim().max(80).optional().nullable(),
+  fabric: z.string().trim().max(120).optional().nullable(),
+  fabric_id: z.coerce.number().int().positive().optional().nullable(),
+  fabric_width: z.coerce.number().positive(),
+  marker_length_m: z.coerce.number().positive(),
+  efficiency_pct: z.coerce.number().min(0).max(100),
+  pieces_per_marker: z.coerce.number().int().positive(),
+  size_ratio: z.string().trim().min(1).max(200),
+  size_quantities: z.string().trim().max(400).optional().nullable(),
+  gsm: z.coerce.number().positive().optional().nullable(),
+  cad_file: z.string().trim().max(255).optional().nullable(),
+  cad_source: z.string().trim().max(40).optional().nullable(),
+  import_hash: z.string().trim().max(64).optional().nullable(),
+});
+
+/**
+ * POST /marker-versions/import (alias POST /cad-markers/import) { rows, file_name?, file_url?, cad_source?, dry_run? }
+ * Parsed CAD marker rows (the screen reads the CSV / Excel / XML) → validated → IMPORTED marker versions
+ * (CadMarkerImportService + CadMarkerValidationService, doc §19). A row already imported (same import hash) is skipped.
+ */
+const importHandler = ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const body = z.object({
+    rows: z.array(z.record(z.string(), z.any())).min(1).max(500),
+    file_name: s.nullableStr(255), file_url: s.nullableStr(255), cad_source: s.nullableStr(40),
+    dry_run: z.coerce.boolean().default(false),
+  }).parse(req.body);
+  const batch = createHash('sha256').update(`${cid}|${Date.now()}|${body.file_name ?? ''}`).digest('hex').slice(0, 16);
+  const norm = (x: unknown) => String(x ?? '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+  const results: any[] = [];
+  const valid: { idx: number; content: MarkerContent; meta: MarkerMeta }[] = [];
+  for (let i = 0; i < body.rows.length; i++) {
+    const raw = Object.fromEntries(Object.entries(body.rows[i]).map(([k, v]) => [k.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_'), v === '' ? null : v]));
+    const errors: string[] = [];
+    const parsed = importRowSchema.safeParse(raw);
+    if (!parsed.success) {
+      results.push({ row: i + 1, marker_no: raw.marker_no ?? null, status: 'ERROR', errors: parsed.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`) });
+      continue;
+    }
+    const r = parsed.data;
+    const ratio = parseSizeRatio(r.size_ratio);
+    if (!ratio) errors.push(`size_ratio "${r.size_ratio}" is not like S2/M4/L4/XL2`);
+    if (ratio && new Set(ratio.sizes).size !== ratio.sizes.length) errors.push('a size appears twice in size_ratio');
+    const sumRatio = ratio ? ratio.ratios.reduce((a, b) => a + b, 0) : 0;
+    if (ratio && sumRatio > 0 && r.pieces_per_marker % sumRatio !== 0) errors.push(`pieces_per_marker ${r.pieces_per_marker} is not a multiple of the ratio total ${sumRatio}`);
+    let sizeQty: Record<string, number> | null = null;
+    if (r.size_quantities) {
+      const q = parseSizeRatio(r.size_quantities);
+      if (!q) errors.push(`size_quantities "${r.size_quantities}" is not like S10/M20/L20/XL10`);
+      else sizeQty = Object.fromEntries(q.sizes.map((sz, k) => [sz, q.ratios[k]]));
+    }
+    const soId = await resolveSoId(cid, null, r.job_no);
+    const so = soId ? await queryOne<any>(`SELECT id, so_no, io_no, buyer_po_no FROM trx_sales_order WHERE id = ?`, [soId]) : null;
+    if (!so) errors.push(`job ${r.job_no} not found`);
+    if (so && r.po_no && so.buyer_po_no && norm(so.buyer_po_no) !== norm(r.po_no)) errors.push(`po_no ${r.po_no} is not job ${r.job_no}'s buyer PO (${so.buyer_po_no})`);
+    const style = await queryOne<any>(`SELECT id, style_code FROM mst_style WHERE company_id = ? AND (style_code = ? OR style_name = ?) ORDER BY id LIMIT 1`, [cid, r.style_no, r.style_no]);
+    if (!style) errors.push(`style ${r.style_no} not found`);
+    if (so && style) {
+      const onJob = await queryOne<any>(`SELECT 1 x FROM trx_sales_order_line WHERE so_id = ? AND style_id = ? LIMIT 1`, [so.id, style.id]);
+      if (!onJob) errors.push(`style ${r.style_no} is not on job ${r.job_no}`);
+    }
+    let colorId: number | null = null;
+    if (r.colour) {
+      const col = await queryOne<any>(`SELECT id FROM mst_color WHERE company_id = ? AND (color_name = ? OR color_code = ?) ORDER BY id LIMIT 1`, [cid, r.colour, r.colour]);
+      if (!col) errors.push(`colour ${r.colour} not found`); else colorId = Number(col.id);
+    }
+    let fabricId: number | null = r.fabric_id ?? null;
+    if (fabricId) {
+      const f = await queryOne<any>(`SELECT id FROM mst_fabric WHERE id = ? AND company_id = ?`, [fabricId, cid]);
+      if (!f) errors.push(`fabric_id ${fabricId} not found`);
+    } else if (r.fabric) {
+      const f = await queryOne<any>(`SELECT id FROM mst_fabric WHERE company_id = ? AND (fabric_code = ? OR fabric_name = ?) ORDER BY id LIMIT 1`, [cid, r.fabric, r.fabric]);
+      if (!f) errors.push(`fabric ${r.fabric} not found`); else fabricId = Number(f.id);
+    } else errors.push('fabric (name / code) or fabric_id is required');
+    const hash = r.import_hash || createHash('sha256').update(JSON.stringify([r.marker_no, r.marker_version ?? '', r.job_no, r.style_no, r.colour ?? '',
+      fabricId, r.fabric_width, r.marker_length_m, r.efficiency_pct, r.pieces_per_marker, r.size_ratio, r.gsm ?? ''])).digest('hex');
+    const dup = await queryOne<any>(`SELECT id, marker_no, version FROM trx_marker_version WHERE company_id = ? AND import_hash = ? LIMIT 1`, [cid, hash]);
+    if (dup) { results.push({ row: i + 1, marker_no: r.marker_no, status: 'DUPLICATE', id: dup.id, message: `already imported as ${dup.marker_no} v${dup.version}` }); continue; }
+    if (errors.length || !ratio || !style || !so) { results.push({ row: i + 1, marker_no: r.marker_no, status: 'ERROR', errors }); continue; }
+    // KG for one ply (open width, one layer per ratio set): length × width × GSM
+    const layers = r.pieces_per_marker / sumRatio;
+    const kgPerPly = r.gsm ? round(r.marker_length_m * r.fabric_width * 0.0254 * r.gsm / 1000 * layers, 5) : null;
+    const content: MarkerContent = {
+      marker_no: r.marker_no, marker_name: r.marker_name ?? (r.marker_version ? `${r.marker_no} ${r.marker_version}` : null),
+      style_id: Number(style.id), color_id: colorId, fabric_id: fabricId, fabric_type: null, gsm: r.gsm ?? null,
+      width_in: r.fabric_width, length_m: r.marker_length_m, sizes: ratio.sizes, ratios: ratio.ratios,
+      pieces_per_marker: r.pieces_per_marker, marker_kg_per_ply: kgPerPly ?? r.marker_length_m,
+      cad_kg_per_pc: kgPerPly ? round(kgPerPly / r.pieces_per_marker, 5) : round(r.marker_length_m / r.pieces_per_marker, 5),
+      size_consumption: null, uom: kgPerPly ? 'KG' : 'MTR', cad_file_ref: r.cad_file ?? body.file_url ?? body.file_name ?? null,
+    };
+    valid.push({ idx: i, content, meta: {
+      status: 'IMPORTED', so_id: Number(so.id), io_no: so.io_no ?? so.so_no, buyer_po_no: r.po_no ?? so.buyer_po_no ?? null,
+      efficiency_pct: r.efficiency_pct, cad_source: r.cad_source ?? body.cad_source ?? 'CAD_IMPORT', import_hash: hash, import_batch: batch,
+      size_quantities: sizeQty,
+    } });
+    results.push({ row: i + 1, marker_no: r.marker_no, status: 'VALID', kg_per_ply: kgPerPly });
+  }
+  if (!body.dry_run && valid.length) {
+    const saved = await transaction(async (tx) => {
+      const out: any[] = [];
+      for (const v of valid) out.push({ idx: v.idx, ...(await saveMarkerVersion(tx, cid, req.user!.id, null, v.content, 'MANUAL', v.meta)) });
+      return out;
+    });
+    for (const sv of saved) {
+      const res0 = results.find((x) => x.row === sv.idx + 1)!;
+      const row = await queryOne<any>(`SELECT id, marker_no, version FROM trx_marker_version WHERE id = ?`, [sv.id]);
+      Object.assign(res0, { status: sv.created ? 'IMPORTED' : 'UNCHANGED', id: sv.id, version: row?.version });
+      if (sv.created) await audit(req, 'trx_marker_version', sv.id, 'INSERT', undefined, { import_batch: batch, file: body.file_name, row: sv.idx + 1 });
+    }
+  }
+  const count = (st: string) => results.filter((x) => x.status === st).length;
+  res.status(body.dry_run ? 200 : 201).json({ data: { batch, dry_run: body.dry_run, file_name: body.file_name ?? null, rows: results,
+    imported: count('IMPORTED'), valid: count('VALID'), duplicates: count('DUPLICATE'), errors: count('ERROR'), unchanged: count('UNCHANGED') } });
+});
+cuttingExecutionRouter.post('/marker-versions/import', requireAny('PRODUCTION.CREATE', 'CAD_MARKER.IMPORT'), importHandler);
+cuttingExecutionRouter.post('/cad-markers/import', requireAny('PRODUCTION.CREATE', 'CAD_MARKER.IMPORT'), importHandler);
 
 /* ================================================================
    SIZE-SPECIFIC CONSUMPTION — doc §13 (source + version + effective date)
@@ -341,10 +604,16 @@ const executeSchema = z.object({
   override_reason: s.nullableStr(255),
 });
 
-/** POST /lay-plans/:id/execute — record actual consumption + cut output in one transaction */
-cuttingExecutionRouter.post('/lay-plans/:id/execute', requirePermission('PRODUCTION.UPDATE'), ah(async (req, res) => {
+/** Lay statuses before cutting in the CAD lay flow (doc §21), in order. */
+export const LAY_FLOW_PRE_CUT = ['GENERATED', 'ROLL_RESERVED', 'PLAN_APPROVED', 'ISSUED', 'RECEIVED', 'SPREADING', 'READY_FOR_CUTTING'] as const;
+/** Statuses a lay can be cut from: the CAD flow's READY_FOR_CUTTING, or a manual lay (PLANNED / SPREAD). */
+export const LAY_EXECUTABLE = ['PLANNED', 'SPREAD', 'READY_FOR_CUTTING'];
+
+/** POST /lay-plans/:id/execute (alias POST /cutting { lay_id }) — record actual consumption + cut output in one transaction */
+const executeHandler = ah(async (req, res) => {
   const cid = req.user!.companyId;
-  const layId = Number(req.params.id);
+  const layId = Number(req.params.id ?? req.body?.lay_id);
+  if (!Number.isInteger(layId) || layId <= 0) throw BadRequest('lay_id is required');
   const body = executeSchema.parse(req.body);
 
   const rollIds = body.rolls.map((r) => r.fabric_issue_roll_id);
@@ -362,7 +631,12 @@ cuttingExecutionRouter.post('/lay-plans/:id/execute', requirePermission('PRODUCT
   const result = await transaction(async (tx) => {
     const lay = await txQueryOne<any>(tx, `SELECT * FROM trx_lay_plan WHERE id = ? AND company_id = ? FOR UPDATE`, [layId, cid]);
     if (!lay) throw NotFound('Lay not found');
-    if (!['PLANNED', 'SPREAD'].includes(lay.status)) throw BadRequest(`Lay ${lay.lay_no} is already ${lay.status}`);
+    if (!LAY_EXECUTABLE.includes(lay.status)) {
+      if ((LAY_FLOW_PRE_CUT as readonly string[]).includes(lay.status)) {
+        throw BadRequest(`Lay ${lay.lay_no} is ${lay.status.replace(/_/g, ' ')} — reserve rolls, approve, issue, receive and complete spreading before cutting (doc §14)`);
+      }
+      throw BadRequest(`Lay ${lay.lay_no} is already ${lay.status}`);
+    }
     if (!lay.cutting_plan_id) throw BadRequest('Lay is not linked to a cut order');
     const plan = await lockPlan(tx, cid, lay.cutting_plan_id);
     assertPlanCuttable(plan);
@@ -478,19 +752,24 @@ cuttingExecutionRouter.post('/lay-plans/:id/execute', requirePermission('PRODUCT
         good_qty: o.good_qty, reject_qty: o.reject_qty, recut_qty: o.recut_qty, actual_kg: outKg[i], kg_per_pc: kgPc });
     }
 
+    // a CAD-flow lay keeps its planned ply / pieces (planned vs actual, doc §22); the actual ply goes to actual_ply
+    const keepPlan = lay.status === 'READY_FOR_CUTTING';
     await txExecute(tx,
-      `UPDATE trx_lay_plan SET status = 'CUT', actual_kg = ?, actual_cut_qty = ?, ply_count = ?, expected_pieces = ?,
+      `UPDATE trx_lay_plan SET status = 'CUT', actual_kg = ?, actual_cut_qty = ?, ply_count = IF(${keepPlan ? 1 : 0}, ply_count, ?),
+              expected_pieces = IF(${keepPlan ? 1 : 0}, expected_pieces, ?), actual_ply = ?,
               executed_at = NOW(), executed_by = ?, started_at = COALESCE(started_at, NOW()),
               operator_name = COALESCE(?, operator_name), table_no = COALESCE(?, table_no),
               marker_length_m = COALESCE(?, marker_length_m),
               override_reason = ?, override_by = ?, updated_by = ?, updated_at = NOW()
         WHERE id = ?`,
-      [actualKg, goodTotal, ply, expected, req.user!.id, body.operator_name ?? null, body.table_no ?? null,
+      [actualKg, goodTotal, ply, expected, ply, req.user!.id, body.operator_name ?? null, body.table_no ?? null,
        body.lay_length_m ?? null, overrideUsed ? body.override_reason : null, overrideUsed ? req.user!.id : null,
        req.user!.id, lay.id]);
     if (mv && !mv.is_locked) {
       await txExecute(tx, `UPDATE trx_marker_version SET is_locked = 1, locked_at = NOW() WHERE id = ?`, [mv.id]);
     }
+    // the lay's issued roll allocations are now consumed (doc §9 → §14)
+    await txExecute(tx, `UPDATE trx_lay_roll_alloc SET status = 'CONSUMED' WHERE lay_id = ? AND status = 'ISSUED'`, [lay.id]);
     const planState = await refreshPlanStatus(tx, plan.id);
     return {
       lay_id: lay.id, lay_no: lay.lay_no, cutting_id: cuttingId, cut_no: cutNo, status: 'CUT',
@@ -502,23 +781,40 @@ cuttingExecutionRouter.post('/lay-plans/:id/execute', requirePermission('PRODUCT
 
   await audit(req, 'trx_lay_plan', layId, 'UPDATE', { status: 'PLANNED' }, { ...result, override_reason: body.override_reason, rolls: body.rolls, losses: body.losses });
   res.status(201).json({ data: result });
-}));
+});
+const EXECUTE = requireAny('PRODUCTION.UPDATE', 'CUTTING.EXECUTE');
+cuttingExecutionRouter.post('/lay-plans/:id/execute', EXECUTE, executeHandler);
+cuttingExecutionRouter.post('/cutting', EXECUTE, executeHandler);
 
-/** POST /lay-plans/:id/approve — cutting supervisor approval of an executed lay */
-cuttingExecutionRouter.post('/lay-plans/:id/approve', requirePermission('PRODUCTION.APPROVE'), ah(async (req, res) => {
+/**
+ * POST /lay-plans/:id/approve — two approvals share the doc's endpoint (§18):
+ *   ROLL_RESERVED → PLAN_APPROVED   the lay plan with its reserved rolls, before fabric is issued (§21)
+ *   CUT           → APPROVED        the supervisor's verification of an executed lay
+ */
+cuttingExecutionRouter.post('/lay-plans/:id/approve', requireAny('PRODUCTION.APPROVE', 'CUTTING.SUPERVISE'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = Number(req.params.id);
   const body = z.object({ remarks: s.nullableStr(255) }).parse(req.body ?? {});
-  await transaction(async (tx) => {
+  const out = await transaction(async (tx) => {
     const lay = await txQueryOne<any>(tx, `SELECT * FROM trx_lay_plan WHERE id = ? AND company_id = ? FOR UPDATE`, [id, cid]);
     if (!lay) throw NotFound('Lay not found');
-    if (lay.status !== 'CUT') throw BadRequest(`Only an executed (CUT) lay can be approved — lay ${lay.lay_no} is ${lay.status}`);
+    if (lay.status === 'ROLL_RESERVED') {
+      const plan = await lockPlan(tx, cid, lay.cutting_plan_id);
+      assertPlanCuttable(plan);
+      const held = await txQueryOne<any>(tx, `SELECT COUNT(*) n, COALESCE(SUM(alloc_kg),0) kg FROM trx_lay_roll_alloc WHERE lay_id = ? AND status = 'RESERVED'`, [id]);
+      if (!num(held?.n)) throw BadRequest(`Lay ${lay.lay_no} has no reserved rolls — reserve rolls before approving`);
+      await txExecute(tx, `UPDATE trx_lay_plan SET status = 'PLAN_APPROVED', plan_approved_by = ?, plan_approved_at = NOW(),
+                remarks = COALESCE(?, remarks), updated_by = ?, updated_at = NOW() WHERE id = ?`, [req.user!.id, body.remarks ?? null, req.user!.id, id]);
+      return { from: lay.status, status: 'PLAN_APPROVED', reserved_kg: round(num(held?.kg), 3) };
+    }
+    if (lay.status !== 'CUT') throw BadRequest(`Lay ${lay.lay_no} is ${lay.status} — a lay is approved after its rolls are reserved (plan) or after it is cut`);
     await txExecute(tx,
       `UPDATE trx_lay_plan SET status = 'APPROVED', approved_by = ?, approved_at = NOW(),
               remarks = COALESCE(?, remarks) WHERE id = ?`, [req.user!.id, body.remarks ?? null, id]);
+    return { from: 'CUT', status: 'APPROVED' };
   });
-  await audit(req, 'trx_lay_plan', id, 'UPDATE', { status: 'CUT' }, { status: 'APPROVED', remarks: body.remarks });
-  res.json({ data: { id, status: 'APPROVED' } });
+  await audit(req, 'trx_lay_plan', id, 'UPDATE', { status: out.from }, { ...out, remarks: body.remarks });
+  res.json({ data: { id, ...out } });
 }));
 
 /**
@@ -582,9 +878,14 @@ cuttingExecutionRouter.post('/lay-plans/:id/cancel', requirePermission('PRODUCTI
           WHERE lay_id = ? AND is_reversed = 0`, [req.user!.id, body.reason, id]);
       reversed = { bundles: live.length, outputs: outs.affectedRows, rolls: rolls.length, losses: losses.affectedRows };
     }
+    // reserved rolls go back to stock; fabric already issued stays with cutting on its DC (return it from the DC)
+    const released = await txExecute(tx,
+      `UPDATE trx_lay_roll_alloc SET status = 'RELEASED', released_by = ?, released_at = NOW(), release_reason = ?
+        WHERE lay_id = ? AND status = 'RESERVED'`, [req.user!.id, `Lay cancelled: ${body.reason}`.slice(0, 255), id]);
     await txExecute(tx,
       `UPDATE trx_lay_plan SET status = 'CANCELLED', cancel_reason = ?, cancelled_by = ?, cancelled_at = NOW() WHERE id = ?`,
       [body.reason, req.user!.id, id]);
+    (reversed as any).released_reservations = released.affectedRows;
     const planState = plan ? await refreshPlanStatus(tx, plan.id) : null;
     return { id, lay_no: lay.lay_no, previous_status: lay.status, status: 'CANCELLED', reversed, cut_order: planState };
   });
@@ -673,10 +974,15 @@ cuttingExecutionRouter.post('/cut-outputs/:id/bundles', requirePermission('PRODU
   res.status(201).json({ data: result });
 }));
 
-/** POST /lay-plans/:id/bundles { bundle_size } — bundle every open output of a lay */
-cuttingExecutionRouter.post('/lay-plans/:id/bundles', requirePermission('PRODUCTION.CREATE'), ah(async (req, res) => {
+/** POST /lay-plans/:id/bundles { bundle_size } (alias POST /cutting/:id/bundles, :id = the cutting) — bundle every open output of a lay */
+const layBundlesHandler = ah(async (req, res) => {
   const cid = req.user!.companyId;
-  const layId = Number(req.params.id);
+  let layId = Number(req.params.id);
+  if (req.path.startsWith('/cutting/')) {
+    const cut = await queryOne<any>(`SELECT lay_id FROM trx_cutting WHERE id = ? AND company_id = ?`, [layId, cid]);
+    if (!cut?.lay_id) throw NotFound('Cutting not found (or not made from a lay)');
+    layId = Number(cut.lay_id);
+  }
   const body = bundleGenSchema.omit({ qty: true }).parse(req.body);
   const results = await transaction(async (tx) => {
     const lay = await txQueryOne<any>(tx, `SELECT * FROM trx_lay_plan WHERE id = ? AND company_id = ? FOR UPDATE`, [layId, cid]);
@@ -698,4 +1004,6 @@ cuttingExecutionRouter.post('/lay-plans/:id/bundles', requirePermission('PRODUCT
   res.status(201).json({
     data: { outputs: results, count: results.reduce((a, r) => a + r.bundles.length, 0) },
   });
-}));
+});
+cuttingExecutionRouter.post('/lay-plans/:id/bundles', requirePermission('PRODUCTION.CREATE'), layBundlesHandler);
+cuttingExecutionRouter.post('/cutting/:id/bundles', requirePermission('PRODUCTION.CREATE'), layBundlesHandler);

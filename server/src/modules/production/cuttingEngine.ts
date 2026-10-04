@@ -113,7 +113,7 @@ export async function refreshPlanStatus(tx: Tx, planId: number) {
        FROM trx_cut_output co JOIN trx_lay_plan lp ON lp.id = co.lay_id
       WHERE co.cutting_plan_id = ? AND co.status <> 'REVERSED' AND lp.status IN ('CUT','APPROVED')`, [planId]);
   const lays = await q1<any>(tx,
-    `SELECT SUM(status IN ('CUT','APPROVED')) AS executed, SUM(status IN ('PLANNED','SPREAD')) AS pending
+    `SELECT SUM(status IN ('CUT','APPROVED')) AS executed, SUM(status IN ('PLANNED','SPREAD','GENERATED','ROLL_RESERVED','PLAN_APPROVED','ISSUED','RECEIVED','SPREADING','READY_FOR_CUTTING')) AS pending
        FROM trx_lay_plan WHERE cutting_plan_id = ?`, [planId]);
   const actual = num(agg?.good);
   const executed = num(lays?.executed);
@@ -596,3 +596,7 @@ export async function computeConsumption(tx: Tx | null, cid: number, planId: num
     lays: perLay,
   };
 }
+
+/** KG of a roll held by live lay reservations (doc §9: reserved quantity cannot be allocated twice). */
+export const RESERVED_KG_SQL = (rollRef: string, excludeLayParam = '0') => `(SELECT COALESCE(SUM(lra.alloc_kg), 0) FROM trx_lay_roll_alloc lra
+   WHERE lra.fabric_roll_id = ${rollRef} AND lra.status = 'RESERVED' AND lra.lay_id <> ${excludeLayParam})`;

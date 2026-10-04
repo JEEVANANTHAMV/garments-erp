@@ -55,6 +55,9 @@ const cuttingPlanSchema = z.object({
   status_reason: s.nullableStr(255),
   remarks: s.text(),
   part_name: z.string().trim().max(50).optional(),
+  /** the CAD (cutting program) the plan was loaded from, and the job's buyer PO (client 04-Oct-2026) */
+  cad_req_id: s.id(),
+  buyer_po_no: s.nullableStr(60),
   sizes: z.array(sizeLineSchema).default([]),
 });
 type PlanBody = z.infer<typeof cuttingPlanSchema>;
@@ -163,6 +166,10 @@ cuttingPlanRouter.post('/cutting-plans', requirePermission('PRODUCTION.CREATE'),
   }
   assertManualTransition(req, 'DRAFT', body.status);
   const override = validatePlanQty(req, body);
+  if (body.so_id) {
+    const onJob = await queryOne(`SELECT 1 x FROM trx_sales_order_line WHERE so_id = ? AND style_id = ? LIMIT 1`, [body.so_id, body.style_id]);
+    if (!onJob) throw BadRequest('That style is not on the selected job');
+  }
 
   const result = await transaction(async (tx) => {
     const planNo = body.plan_no || await nextUniqueDocNo(tx, cid, 'CUT_PLAN', 'trx_cutting_plan', 'plan_no');
@@ -188,6 +195,7 @@ cuttingPlanRouter.post('/cutting-plans', requirePermission('PRODUCTION.CREATE'),
        body.status, body.remarks ?? null, req.user!.id]);
 
     const planId = r.insertId;
+    await txExecute(tx, `UPDATE trx_cutting_plan SET cad_req_id = ?, buyer_po_no = ? WHERE id = ?`, [body.cad_req_id ?? null, body.buyer_po_no ?? null, planId]);
 
     for (const sz of body.sizes) {
       await txExecute(tx,
@@ -258,6 +266,8 @@ cuttingPlanRouter.put('/cutting-plans/:id', requirePermission('PRODUCTION.UPDATE
        body.status, body.status !== existing.status ? (body.status_reason ?? null) : null,
        body.remarks ?? null, req.user!.id, id]);
 
+    await txExecute(tx, `UPDATE trx_cutting_plan SET cad_req_id = COALESCE(?, cad_req_id), buyer_po_no = COALESCE(?, buyer_po_no) WHERE id = ?`,
+      [body.cad_req_id ?? null, body.buyer_po_no ?? null, id]);
     if (!released && sizesChanged) {
       await txExecute(tx, `DELETE FROM trx_cutting_plan_size WHERE cutting_plan_id = ?`, [id]);
       for (const sz of body.sizes) {

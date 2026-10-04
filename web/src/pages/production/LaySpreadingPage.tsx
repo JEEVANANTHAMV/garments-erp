@@ -1,9 +1,15 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, Button, Input, DataTable, Textarea, Modal, Tabs, Checkbox, Select } from '../../components/ui';
 import { api } from '../../lib/api';
 import { fmtDate, fmtDateTime, fmtNumber, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
 import { SearchSelect, ScanInput, StatusChip, Qty, UomInput, MetricTile, errMsg } from './cuttingUi';
+import { useAuth } from '../../lib/auth';
+import { LayPlannerTab, LayActions, CuttingDashboard, CuttingTables, MarkerImportCard } from './LayPlanner';
+
+/** Lay statuses of the CAD lay flow before cutting — their actions live in LayActions. */
+const FLOW_PRE_CUT = ['GENERATED', 'ROLL_RESERVED', 'PLAN_APPROVED', 'ISSUED', 'RECEIVED', 'SPREADING', 'READY_FOR_CUTTING'];
 
 const LOSS_TYPES = [
   { value: 'CUTTING_WASTE', label: 'Cutting / marker waste' },
@@ -21,7 +27,8 @@ const LOSS_TYPES = [
  */
 export function LaySpreadingPage() {
   const toast = useToast();
-  const [tab, setTab] = useState('lays');
+  const [params] = useSearchParams();
+  const [tab, setTab] = useState(params.get('tab') || 'planner');
   const [lays, setLays] = useState<any[]>([]);
   const [plans, setPlans] = useState<any[]>([]);
   const [planFilter, setPlanFilter] = useState('');
@@ -31,6 +38,7 @@ export function LaySpreadingPage() {
   const [spreadLay, setSpreadLay] = useState<any>(null);
   const [viewLay, setViewLay] = useState<any>(null);
   const [cancelLay, setCancelLay] = useState<any>(null);
+  const [plannerKey, setPlannerKey] = useState(0);
 
   const fetchLays = () => {
     setLoading(true);
@@ -50,16 +58,23 @@ export function LaySpreadingPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Lay Plan & Lay Execution</h1>
-          <p className="text-sm text-slate-500">Marker version × ply → expected PCS and planned KG; execution records roll-wise actual consumption and size-wise cut output.</p>
+          <h1 className="text-2xl font-bold text-slate-800">Lay Plan & Marker Execution</h1>
+          <p className="text-sm text-slate-500">Pick the job — the cutting program and the approved CAD markers load, the lay count comes automatically; enter only what differs and see the balance and the variation.</p>
         </div>
-        <Button onClick={() => setShowNew(true)}>+ New Lay Plan</Button>
+        <Button variant="outline" onClick={() => setShowNew(true)}>+ Manual lay</Button>
       </div>
 
       <Tabs active={tab} onChange={setTab} tabs={[
-        { key: 'lays', label: 'Lays', count: lays.length },
+        { key: 'planner', label: 'Lay Planner (CAD → lays)' },
+        { key: 'lays', label: 'All Lays', count: lays.length },
         { key: 'markers', label: 'Marker Versions' },
+        { key: 'tables', label: 'Cutting Tables' },
+        { key: 'dashboard', label: 'Cutting Dashboard' },
       ]} />
+
+      {tab === 'planner' && <LayPlannerTab initialPlanId={params.get('plan')} onExecute={(l) => setExecLay(l)} onChanged={fetchLays} reloadSignal={plannerKey} />}
+      {tab === 'tables' && <CuttingTables />}
+      {tab === 'dashboard' && <CuttingDashboard />}
 
       {tab === 'lays' && (
         <Card>
@@ -89,7 +104,9 @@ export function LaySpreadingPage() {
               } },
               { key: 'actual_kg_per_pc', header: 'Actual KG/PC', align: 'right' as const, render: (r: any) => <Qty v={r.actual_kg_per_pc} uom="KG/PC" dp={4} /> },
               { key: 'status', header: 'Status', render: (r: any) => <StatusChip status={r.status} /> },
-              { key: 'actions', header: '', align: 'right' as const, render: (r: any) => (
+              { key: 'actions', header: '', align: 'right' as const, render: (r: any) => FLOW_PRE_CUT.includes(r.status) || (r.gen_batch && ['CUT', 'APPROVED'].includes(r.status)) ? (
+                <LayActions lay={r} onExecute={(l) => setExecLay(l)} onDone={fetchLays} />
+              ) : (
                 <div className="flex justify-end gap-1">
                   {['PLANNED', 'SPREAD'].includes(r.status) && <>
                     <Button size="sm" variant="outline" onClick={() => setSpreadLay(r)}>Spreading</Button>
@@ -109,7 +126,7 @@ export function LaySpreadingPage() {
       {tab === 'markers' && <MarkerVersions />}
 
       {showNew && <NewLayModal plans={plans} onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); fetchLays(); }} />}
-      {execLay && <ExecuteModal lay={execLay} onClose={() => setExecLay(null)} onSaved={() => { setExecLay(null); fetchLays(); }} />}
+      {execLay && <ExecuteModal lay={execLay} onClose={() => setExecLay(null)} onSaved={() => { setExecLay(null); fetchLays(); setPlannerKey((k) => k + 1); }} />}
       {spreadLay && <SpreadingModal lay={spreadLay} onClose={() => setSpreadLay(null)} onSaved={() => { setSpreadLay(null); fetchLays(); }} />}
       {viewLay && <LayDetailModal lay={viewLay} onClose={() => setViewLay(null)} />}
       {cancelLay && <CancelLayModal lay={cancelLay} onClose={() => setCancelLay(null)} onSaved={() => { setCancelLay(null); fetchLays(); }} />}
@@ -182,15 +199,30 @@ function ExecuteModal({ lay, onClose, onSaved }: { lay: any; onClose: () => void
   const [override, setOverride] = useState('');
   const [saving, setSaving] = useState(false);
 
+  const [prefilled, setPrefilled] = useState(false);
   useEffect(() => {
     api.get(`/lay-plans/${lay.id}`).then(r => setDetail(r.data.data));
     api.get(`/cutting-plans/${lay.cutting_plan_id}/dc-rolls`).then(r => setDcRolls(r.data.data || []));
-    api.get(`/cutting-plans/${lay.cutting_plan_id}`).then(r => {
+    api.get(`/cutting-plans/${lay.cutting_plan_id}`).then(async r => {
       const sz = r.data.data.sizes || [];
       setSizes(sz);
-      setOutputs(Object.fromEntries(sz.map((s: any) => [s.size_id, { good: '', reject: '', recut: '' }])));
+      const blank = Object.fromEntries(sz.map((s: any) => [s.size_id, { good: '', reject: '', recut: '' }]));
+      // CAD lay flow (audio 3): what comes automatically is filled — rolls from the spread actuals, ply, good PCS =
+      // marker ratio × actual ply, end / splice loss — the user keys only what differs.
+      if (lay.status === 'READY_FOR_CUTTING') {
+        const pf = (await api.get(`/lay-plans/${lay.id}/execution-prefill`)).data.data;
+        setPly(String(pf.ply || ''));
+        if (pf.operator_name) setOperator(pf.operator_name);
+        setRolls(pf.rolls.filter((x: any) => x.roll_status !== 'CLOSED').map((x: any) => ({
+          fabric_issue_roll_id: x.fabric_issue_roll_id, dc: { ...x, remaining_kg: x.remaining_kg },
+          before_kg: String(x.before_kg), after_kg: x.after_kg != null ? String(x.after_kg) : '', plies: String(x.plies || ''), close_roll: false })));
+        setLosses(pf.losses.map((l: any) => ({ loss_type: l.loss_type, qty_kg: String(l.qty_kg), reason: l.reason })));
+        for (const o of pf.outputs) if (blank[o.size_id]) blank[o.size_id] = { good: o.good_qty ? String(o.good_qty) : '', reject: '', recut: '' };
+        setPrefilled(true);
+      }
+      setOutputs(blank);
     });
-  }, [lay.id, lay.cutting_plan_id]);
+  }, [lay.id, lay.cutting_plan_id, lay.status]);
 
   const mv = detail?.marker_version;
   const plyN = Number(ply) || 0;
@@ -250,6 +282,7 @@ function ExecuteModal({ lay, onClose, onSaved }: { lay: any; onClose: () => void
     <Modal open onClose={onClose} title={`Execute Lay ${lay.lay_no}`} size="full"
       footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button onClick={submit} loading={saving}>Post Lay Execution</Button></>}>
       <div className="space-y-5">
+        {prefilled && <p className="rounded bg-indigo-50 px-3 py-2 text-xs text-indigo-800" id="exec-prefilled">Filled from the spreading actuals and the CAD marker (ratio × actual ply). Change only what differs, then post.</p>}
         {/* Planned vs actual — kept at the top so the operator sees it while keying */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
           <MetricTile label="Marker" value={mv ? `${mv.marker_no} v${mv.version}` : (lay.marker_ref || '—')} sub={mv?.ratio_text} />
@@ -500,25 +533,45 @@ function MarkerVersions() {
       setManual(null); load();
     } catch (e) { toast(errMsg(e), 'error'); }
   };
+  const { canAny } = useAuth();
+  const canApprove = canAny('PRODUCTION.APPROVE', 'CAD_MARKER.APPROVE');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [reasonFor, setReasonFor] = useState<{ id: number; action: 'reject' | 'obsolete' } | null>(null);
+  const [reason, setReason] = useState('');
+  const [history, setHistory] = useState<any>(null);
   const approve = async (id: number) => {
-    try { await api.post(`/marker-versions/${id}/approve`, {}); toast('Marker version approved'); load(); } catch (e) { toast(errMsg(e), 'error'); }
+    try { const r = await api.post(`/marker-versions/${id}/approve`, {}); toast(`Marker version approved${r.data.obsoleted ? ` — ${r.data.obsoleted} older version(s) now obsolete` : ''}`); load(); } catch (e) { toast(errMsg(e), 'error'); }
   };
+  const review = async (id: number) => {
+    try { await api.post(`/marker-versions/${id}/review`, {}); toast('Sent for review'); load(); } catch (e) { toast(errMsg(e), 'error'); }
+  };
+  const withReason = async () => {
+    if (!reasonFor || !reason.trim()) return;
+    try { await api.post(`/marker-versions/${reasonFor.id}/${reasonFor.action}`, { reason }); toast(reasonFor.action === 'reject' ? 'Marker version rejected' : 'Marker version made obsolete'); setReasonFor(null); setReason(''); load(); }
+    catch (e) { toast(errMsg(e), 'error'); }
+  };
+  const showHistory = (id: number) => api.get(`/cad-markers/${id}`).then((r) => setHistory(r.data.data));
   const cadOptions = useMemo(() => cads.map((c: any) => ({ value: c.id, label: `${c.req_no} · ${c.style_code || ''} · ${c.internal_ir_no || ''}`, right: c.status })), [cads]);
 
   return (
     <div className="space-y-4">
-      <Card title="Snapshot a CAD marker" subtitle="Values are copied into an immutable version; a new version is created only when the CAD marker changed.">
+      <MarkerImportCard onImported={load} />
+      <Card title="Import a marker from the ERP CAD" subtitle="Values are copied into an immutable version (status IMPORTED); a new version is created only when the CAD marker changed. Approve it before it plans lays — approving a newer version makes the older one obsolete.">
         <div className="grid grid-cols-1 items-end gap-3 p-4 md:grid-cols-4">
           <SearchSelect label="CAD requirement" value={cadId} onChange={setCadId} options={cadOptions} />
           <SearchSelect label="Marker" value={snap.marker_ref} onChange={v => setSnap({ ...snap, marker_ref: v })}
             options={cadMarkers.map((m: any) => ({ value: m.marker_ref, label: `${m.marker_ref} · ${(m.sizes || []).map((s: any, i: number) => `${s}${m.ratios?.[i] ?? ''}`).join(' ')}`, right: `${m.no_of_pcs_lay} PCS` }))} />
           <SearchSelect label="Fabric" value={snap.fabric_id} onChange={v => setSnap({ ...snap, fabric_id: v })}
             options={fabrics.map((f: any) => ({ value: f.id, label: f.label || f.code }))} />
-          <div className="flex gap-2"><Button onClick={doSnapshot}>Snapshot</Button><Button variant="outline" onClick={() => setManual({ marker_no: '', style_id: '', fabric_id: '', sizes: 'S M L XL', ratios: '2 3 3 2', length_m: '', width_in: '', marker_kg_per_ply: '', gsm: '' })}>Manual marker</Button></div>
+          <div className="flex gap-2"><Button onClick={doSnapshot}>Import from CAD</Button><Button variant="outline" onClick={() => setManual({ marker_no: '', style_id: '', fabric_id: '', sizes: 'S M L XL', ratios: '2 3 3 2', length_m: '', width_in: '', marker_kg_per_ply: '', gsm: '' })}>Manual marker</Button></div>
         </div>
       </Card>
       <Card>
-        <DataTable data={rows} columns={[
+        <div className="flex items-end gap-3 border-b bg-slate-50 p-3">
+          <Select label="Status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
+            options={[{ value: '', label: 'All' }, ...['IMPORTED', 'DRAFT', 'REVIEW', 'APPROVED', 'REJECTED', 'OBSOLETE'].map((x) => ({ value: x, label: x }))]} />
+        </div>
+        <DataTable data={statusFilter ? rows.filter((r) => r.status === statusFilter) : rows} columns={[
           { key: 'marker_no', header: 'Marker', render: (r: any) => <span className="font-mono text-xs font-semibold">{r.marker_no} v{r.version}</span> },
           { key: 'source', header: 'Source', render: (r: any) => <span className="text-xs">{r.source}{r.cad_req_no ? ` · ${r.cad_req_no}` : ''}</span> },
           { key: 'style_code', header: 'Style' },
@@ -530,10 +583,35 @@ function MarkerVersions() {
           { key: 'marker_kg_per_ply', header: 'Per ply', align: 'right' as const, render: (r: any) => <Qty v={r.marker_kg_per_ply} uom={r.uom} dp={4} /> },
           { key: 'cad_kg_per_pc', header: 'CAD / PC', align: 'right' as const, render: (r: any) => <Qty v={r.cad_kg_per_pc} uom={`${r.uom}/PC`} dp={4} /> },
           { key: 'size_consumption', header: 'Size-wise', render: (r: any) => r.size_consumption ? <span className="text-[11px]">{Object.entries(r.size_consumption).map(([k, v]) => `${k}:${v}`).join(' ')}</span> : '—' },
-          { key: 'lock', header: 'State', render: (r: any) => <span className="text-xs">{r.is_locked ? '🔒 Locked' : r.approved_at ? 'Approved' : 'Draft'} · {r.lay_count} lay(s)</span> },
-          { key: 'a', header: '', render: (r: any) => !r.is_locked && !r.approved_at ? <Button size="sm" variant="outline" onClick={() => approve(r.id)}>Approve</Button> : null },
+          { key: 'job', header: 'Job / PO', render: (r: any) => <span className="text-[11px]">{r.io_no || '—'}{r.buyer_po_no ? ` · ${r.buyer_po_no}` : ''}</span> },
+          { key: 'eff', header: 'Eff %', align: 'right' as const, render: (r: any) => r.efficiency_pct ?? '—' },
+          { key: 'status', header: 'Status', render: (r: any) => <div><StatusChip status={r.status} />{r.approved_by_name && <div className="text-[10px] text-slate-400">{r.approved_by_name}</div>}{r.reject_reason && <div className="text-[10px] text-red-600">{r.reject_reason}</div>}</div> },
+          { key: 'lock', header: 'Use', render: (r: any) => <span className="text-xs">{r.is_locked ? '🔒 ' : ''}{r.lay_count} lay(s)</span> },
+          { key: 'a', header: '', render: (r: any) => (
+            <div className="flex flex-wrap justify-end gap-1">
+              {['DRAFT', 'IMPORTED'].includes(r.status) && <Button size="sm" variant="ghost" onClick={() => review(r.id)}>Review</Button>}
+              {canApprove && ['DRAFT', 'IMPORTED', 'REVIEW'].includes(r.status) && <Button size="sm" variant="outline" id={`mv-approve-${r.id}`} onClick={() => approve(r.id)}>Approve</Button>}
+              {canApprove && ['DRAFT', 'IMPORTED', 'REVIEW'].includes(r.status) && <Button size="sm" variant="ghost" onClick={() => setReasonFor({ id: r.id, action: 'reject' })}>Reject</Button>}
+              {canApprove && r.status === 'APPROVED' && <Button size="sm" variant="ghost" onClick={() => setReasonFor({ id: r.id, action: 'obsolete' })}>Obsolete</Button>}
+              <Button size="sm" variant="ghost" onClick={() => showHistory(r.id)}>History</Button>
+            </div>) },
         ]} />
       </Card>
+      {reasonFor && (
+        <Modal open onClose={() => setReasonFor(null)} title={reasonFor.action === 'reject' ? 'Reject marker version' : 'Make marker version obsolete'} size="sm"
+          footer={<><Button variant="ghost" onClick={() => setReasonFor(null)}>Back</Button><Button variant="danger" disabled={!reason.trim()} onClick={withReason}>Confirm</Button></>}>
+          <Textarea label="Reason" required rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
+        </Modal>
+      )}
+      {history && (
+        <Modal open onClose={() => setHistory(null)} title={`Marker ${history.marker_no} — version history`} size="xl">
+          <table className="w-full text-xs"><thead className="border-b bg-slate-50 text-left"><tr><th className="p-1.5">Version</th><th className="p-1.5">Status</th><th className="p-1.5">Ratio</th><th className="p-1.5 text-right">PCS/marker</th><th className="p-1.5 text-right">Length</th><th className="p-1.5 text-right">Per ply</th><th className="p-1.5">Source</th><th className="p-1.5">Created</th><th className="p-1.5">File</th></tr></thead>
+            <tbody>{history.history.map((h: any) => <tr key={h.id} className={`border-b ${h.id === history.id ? 'bg-indigo-50' : ''}`}><td className="p-1.5 font-semibold">v{h.version}</td><td className="p-1.5"><StatusChip status={h.status} /></td><td className="p-1.5">{h.ratio_text}</td>
+              <td className="p-1.5 text-right">{h.pieces_per_marker}</td><td className="p-1.5 text-right">{h.length_m ?? '—'} m</td><td className="p-1.5 text-right">{h.marker_kg_per_ply ?? '—'} {h.uom}</td><td className="p-1.5">{h.cad_source || h.source}</td><td className="p-1.5">{fmtDateTime(h.created_at)}</td>
+              <td className="p-1.5">{h.cad_file_ref && String(h.cad_file_ref).startsWith('/uploads/') ? <a className="text-brand-700 hover:underline" href={h.cad_file_ref} target="_blank" rel="noreferrer">original</a> : (h.cad_file_ref || '—')}</td></tr>)}</tbody></table>
+          <p className="mt-2 text-xs text-slate-500">CAD values are never overwritten — new CAD data is a new version. Lays: {history.lays.map((l: any) => `${l.lay_no} (${l.status})`).join(', ') || 'none'}.</p>
+        </Modal>
+      )}
       {manual && (
         <Modal open onClose={() => setManual(null)} title="Manual marker (Marker Master)" size="lg"
           footer={<><Button variant="ghost" onClick={() => setManual(null)}>Cancel</Button><Button onClick={saveManual}>Save version</Button></>}>
