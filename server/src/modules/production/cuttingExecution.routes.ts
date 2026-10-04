@@ -366,9 +366,22 @@ cuttingExecutionRouter.get('/cad-markers/:id', requirePermission('PRODUCTION.VIE
 
 /* ---------------------------------------------------------------- CAD marker import (doc §4, Phase 1: CSV / Excel / XML) */
 
-/** "S2/M4/L4/XL2", "S:2, M:4", "S-2 M-4" → sizes + ratios */
+/**
+ * "S2/M4/L4/XL2", "S-2 M-4" → sizes + ratios. Sizes that contain "/" or spaces ("86/92", "2-3Y") are written as
+ * size:ratio pairs separated by commas: "86/92:2, 98/104:4".
+ */
 export function parseSizeRatio(txt: unknown): { sizes: string[]; ratios: number[] } | null {
-  const parts = String(txt ?? '').split(/[\/,;|\s]+/).map((x) => x.trim()).filter(Boolean);
+  const t = String(txt ?? '').trim();
+  if (/[:=]/.test(t)) {
+    const sizes: string[] = []; const ratios: number[] = [];
+    for (const p of t.split(/[,;|]+/).map((x) => x.trim()).filter(Boolean)) {
+      const m = p.match(/^(.+?)\s*[:=]\s*(\d+)$/);
+      if (!m) return null;
+      sizes.push(m[1].trim().toUpperCase()); ratios.push(Number(m[2]));
+    }
+    return sizes.length ? { sizes, ratios } : null;
+  }
+  const parts = t.split(/[\/,;|\s]+/).map((x) => x.trim()).filter(Boolean);
   const sizes: string[] = []; const ratios: number[] = [];
   for (const p of parts) {
     const m = p.match(/^([A-Za-z0-9]+?)[:=\-]?(\d+)$/);

@@ -832,7 +832,7 @@ export function MarkerImportCard({ onImported }: { onImported: () => void }) {
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'cad_marker_import_template.csv'; a.click();
   };
   return (
-    <Card title="Import CAD markers (CSV / Excel)" subtitle="Approved CAD output comes in without re-keying. Columns: marker_no, marker_version, job_no, po_no, style_no, colour, fabric, fabric_width, marker_length_m, efficiency_pct, pieces_per_marker, size_ratio (S2/M4/L4/XL2), size_quantities, gsm, cad_file, cad_source">
+    <Card title="Import CAD markers (CSV / Excel)" subtitle="Approved CAD output comes in without re-keying. Columns: marker_no, marker_version, job_no, po_no, style_no, colour, fabric, fabric_width, marker_length_m, efficiency_pct, pieces_per_marker, size_ratio (S2/M4/L4/XL2, or 86/92:2, 98/104:4 when sizes contain a slash), size_quantities, gsm, cad_file, cad_source">
       <div className="flex flex-wrap items-end gap-3 p-4">
         <label className="text-xs"><span className="label">CAD export file</span><input type="file" accept=".csv,.xlsx,.xls,.xml" id="mi-file" onChange={(e) => onFile(e.target.files?.[0] ?? null)} /></label>
         <Button variant="outline" size="sm" onClick={template}>Download template</Button>
