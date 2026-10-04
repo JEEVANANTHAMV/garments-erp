@@ -415,6 +415,7 @@ const importHandler = ah(async (req, res) => {
   const batch = createHash('sha256').update(`${cid}|${Date.now()}|${body.file_name ?? ''}`).digest('hex').slice(0, 16);
   const norm = (x: unknown) => String(x ?? '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
   const results: any[] = [];
+  let allFabrics: any[] | undefined;
   const valid: { idx: number; content: MarkerContent; meta: MarkerMeta }[] = [];
   for (let i = 0; i < body.rows.length; i++) {
     const raw = Object.fromEntries(Object.entries(body.rows[i]).map(([k, v]) => [k.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_'), v === '' ? null : v]));
@@ -456,7 +457,15 @@ const importHandler = ah(async (req, res) => {
       const f = await queryOne<any>(`SELECT id FROM mst_fabric WHERE id = ? AND company_id = ?`, [fabricId, cid]);
       if (!f) errors.push(`fabric_id ${fabricId} not found`);
     } else if (r.fabric) {
-      const f = await queryOne<any>(`SELECT id FROM mst_fabric WHERE company_id = ? AND (fabric_code = ? OR fabric_name = ?) ORDER BY id LIMIT 1`, [cid, r.fabric, r.fabric]);
+      // CAD exports name the fabric loosely: code, id, exact name, then the name ignoring spacing / punctuation
+      let f = await queryOne<any>(`SELECT id FROM mst_fabric WHERE company_id = ? AND (fabric_code = ? OR fabric_name = ? OR id = ?) ORDER BY id LIMIT 1`,
+        [cid, r.fabric, r.fabric, /^\d+$/.test(r.fabric) ? Number(r.fabric) : 0]);
+      if (!f) {
+        allFabrics ??= await query<any>(`SELECT id, fabric_name, fabric_code FROM mst_fabric WHERE company_id = ? AND COALESCE(is_deleted,0) = 0 ORDER BY id`, [cid]);
+        const t = norm(r.fabric);
+        f = allFabrics.find((x) => norm(x.fabric_name) === t || norm(x.fabric_code) === t)
+          ?? allFabrics.find((x) => norm(x.fabric_name).startsWith(t) || t.startsWith(norm(x.fabric_name)));
+      }
       if (!f) errors.push(`fabric ${r.fabric} not found`); else fabricId = Number(f.id);
     } else errors.push('fabric (name / code) or fabric_id is required');
     const hash = r.import_hash || createHash('sha256').update(JSON.stringify([r.marker_no, r.marker_version ?? '', r.job_no, r.style_no, r.colour ?? '',
