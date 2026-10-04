@@ -245,6 +245,10 @@ export function CuttingPlanDetailPage() {
       planned_qty: Math.max(0, n(x.suggested_qty) - n(x.planned_other)),
       actual_qty: 0,
     })).filter((x: any) => x.order_qty > 0 || x.planned_qty > 0);
+    if (isNew && lines.length && lines.every((x: any) => x.planned_qty <= 0)) {
+      toast(`Everything of ${c.color_name} is already on cut plan(s) ${(c.plans || []).map((p: any) => p.plan_no).join(', ') || ''} — nothing left to plan`, 'warning');
+      return;
+    }
     if (!sizesLocked) setSizes(lines);
     // The CAD cut qty carries the rejection % (rounded up per size): authorise exactly that over-cut, so the plan
     // saves without an override — the largest size-wise % decides (every size line is checked on its own).
