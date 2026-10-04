@@ -246,8 +246,16 @@ export function CuttingPlanDetailPage() {
       actual_qty: 0,
     })).filter((x: any) => x.order_qty > 0 || x.planned_qty > 0);
     if (!sizesLocked) setSizes(lines);
+    // The CAD cut qty carries the rejection % (rounded up per size): authorise exactly that over-cut, so the plan
+    // saves without an override — the largest size-wise % decides (every size line is checked on its own).
+    const ordT = lines.reduce((a: number, x: any) => a + x.order_qty, 0);
+    const plT = lines.reduce((a: number, x: any) => a + x.planned_qty, 0);
+    const pcts = [ordT > 0 ? (plT - ordT) / ordT * 100 : 0, ...lines.map((x: any) => (x.order_qty > 0 ? (x.planned_qty - x.order_qty) / x.order_qty * 100 : 0))];
+    const needPct = Math.ceil(Math.max(0, ...pcts) * 100 - 1e-6) / 100;
     setHeader((p: any) => ({
       ...p,
+      over_cut_pct: needPct > n(p.over_cut_pct) ? needPct : p.over_cut_pct,
+      over_cut_reason: needPct > 0 && !p.over_cut_reason ? `CAD rejection allowance (${program.cad?.rejection_pct ?? needPct}% per size, rounded up)` : p.over_cut_reason,
       color_id: c.color_id ?? p.color_id,
       order_qty: lines.reduce((a: number, x: any) => a + x.order_qty, 0),
       planned_cut_qty: lines.reduce((a: number, x: any) => a + x.planned_qty, 0),
