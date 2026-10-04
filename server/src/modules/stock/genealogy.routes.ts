@@ -6,7 +6,7 @@ import { NotFound, BadRequest } from '../../core/errors.js';
 import { requireAny } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { jobBomRequirement } from '../bom/bom.routes.js';
-import { rollTrace, OPEN_ALLOC_SQL } from './jobStock.routes.js';
+import { rollTrace, OPEN_ALLOC_SQL, yarnLotOrigin } from './jobStock.routes.js';
 
 /**
  * Job material genealogy — the remaining sections of the client document (03-Oct-2026):
@@ -358,6 +358,31 @@ genealogyRouter.post('/fabric-rolls/merge', EDIT, ah(async (req, res) => {
  * roll's cost × input / output KG (process loss) + the process rate; a split child = its parent; a merged roll =
  * the KG-weighted cost of its sources. Standard (BOM) cost stays separate (job cost).
  */
+/**
+ * Cost per KG of a yarn lot: a purchased lot = its GRN rate; a dyed / wound / twisted lot = its process charge + the
+ * cost of the lots it was made from × input KG ÷ its output KG (process loss carried), down the whole lineage.
+ */
+export async function yarnLotCost(cid: number, grnLineId: number, memo = new Map<number, number>()): Promise<number> {
+  if (memo.has(grnLineId)) return memo.get(grnLineId)!;
+  const tree = await yarnLotOrigin(cid, grnLineId);
+  const rateOf = async (id: number) => n((await queryOne<any>('SELECT rate FROM trx_grn_line WHERE id = ?', [id]))?.rate);
+  const walk = async (node: any, depth: number): Promise<number> => {
+    if (!node) return 0;
+    const id = Number(node.grn_line_id);
+    if (memo.has(id)) return memo.get(id)!;
+    let c = await rateOf(id);
+    if (node.kind === 'PROCESSED' && depth < 8 && (node.from ?? []).length) {
+      const out = n(node.process?.output_qty) || n(node.accepted_qty);
+      let v = 0;
+      for (const f of node.from) v += (await walk(f.origin, depth + 1)) * n(f.issued_qty_kg);
+      if (out > 0) c += v / out;
+    }
+    memo.set(id, c);
+    return c;
+  };
+  return walk(tree, 0);
+}
+
 export async function rollCost(cid: number, rollId: number, memo = new Map<number, any>(), depth = 0): Promise<{ cost_per_kg: number; steps: any[] }> {
   if (memo.has(rollId)) return memo.get(rollId);
   if (depth > 15) return { cost_per_kg: 0, steps: [{ stage: 'Depth limit', rate: 0 }] };
@@ -399,8 +424,11 @@ export async function rollCost(cid: number, rollId: number, memo = new Map<numbe
       const c = await rollCost(cid, Number(r.parent_roll_id), memo, depth + 1);
       out = { cost_per_kg: c.cost_per_kg, steps: c.steps };
     } else if (r.src_type === 'KNITTING_PROGRAM' && r.src_id) {
-      const y = await queryOne<any>(`SELECT COALESCE(SUM(pi.issued_qty_kg * COALESCE(gl.rate, 0)), 0) v, COALESCE(SUM(pi.issued_qty_kg), 0) kg
-          FROM trx_process_issue pi LEFT JOIN trx_grn_line gl ON gl.id = pi.grn_line_id WHERE pi.src_type = 'KNITTING_PROGRAM' AND pi.src_id = ?`, [r.src_id]);
+      // yarn issued to the program, each lot at its full lineage cost (a dyed lot carries its grey yarn + dyeing)
+      const issues = await query<any>(`SELECT pi.grn_line_id, pi.issued_qty_kg FROM trx_process_issue pi WHERE pi.src_type = 'KNITTING_PROGRAM' AND pi.src_id = ?`, [r.src_id]);
+      const lotMemo = new Map<number, number>();
+      const y = { v: 0, kg: 0 };
+      for (const x of issues) { y.kg += n(x.issued_qty_kg); if (x.grn_line_id) y.v += n(x.issued_qty_kg) * await yarnLotCost(cid, Number(x.grn_line_id), lotMemo); }
       const out_kg = n((await queryOne<any>(`SELECT COALESCE(SUM(output_qty), 0) v FROM trx_process_receipt WHERE src_type = 'KNITTING_PROGRAM' AND src_id = ?`, [r.src_id]))?.v);
       const yarnPerKg = out_kg > 0 ? n(y?.v) / out_kg : 0;
       out = { cost_per_kg: yarnPerKg + n(r.grn_rate), steps: [

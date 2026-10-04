@@ -2,7 +2,7 @@ import { Router, type Request } from 'express';
 import { z } from 'zod';
 import { valueGrnAtRate } from '../../core/grnValue.js';
 import { processBillHeadSchema, checkProcessBillHead, writeProcessBillTotals } from '../../core/processBill.js';
-import { jobFabricAvailability, resolveSoId } from '../stock/jobStock.routes.js';
+import { jobFabricAvailability, resolveSoId, OPEN_ALLOC_SQL } from '../stock/jobStock.routes.js';
 import { calcRollFor, ROLL_CALC_COLS, rollCalcVals } from '../../core/fabricRollCalc.js';
 import { query, queryOne, transaction, txQuery, txQueryOne, txExecute, type Tx } from '../../config/db.js';
 import { postLedger, UOM_KG } from '../../core/processEngine.js';
@@ -163,6 +163,7 @@ fabricProcessingRouter.get(['/fabric-process/store-rolls', '/fabric-processing/s
     state: z.string().trim().max(20).optional(),
     returned: z.coerce.number().int().optional(),
     q: z.string().trim().max(60).optional(),
+    quotation_id: z.coerce.number().int().min(0).optional(),
   }).parse(req.query);
   const where = ['fr.company_id = ?', `fr.stock_status <> 'CLOSED'`, 'COALESCE(fr.weight_kg, 0) - COALESCE(fr.issued_kg, 0) > 0.0005'];
   const params: unknown[] = [cid];
@@ -174,7 +175,14 @@ fabricProcessingRouter.get(['/fabric-process/store-rolls', '/fabric-processing/s
   if (q.state) { where.push('fr.process_state = ?'); params.push(q.state); }
   if (q.q) { where.push('(fr.roll_no = ? OR fr.roll_no LIKE ? OR fr.lot_no LIKE ? OR g.grn_no LIKE ?)'); params.push(q.q, `%${q.q}%`, `%${q.q}%`, `%${q.q}%`); }
   const rows = await query<any>(`${STORE_ROLL_SQL} WHERE ${where.join(' AND ')} ORDER BY g.grn_date DESC, fr.id DESC LIMIT 3000`, params);
-  res.json({ data: rows.map((r) => ({ ...r, balance_kg: n(r.balance_kg), weight_kg: n(r.weight_kg), meters: n(r.meters) })) });
+  // KG reserved on other live quotations (not this DC's) is not offered
+  const ids = rows.map((r) => Number(r.id));
+  const held = ids.length ? await query<any>(`SELECT fr.id, ${OPEN_ALLOC_SQL('fr.id', '?')} kg FROM trx_fabric_roll fr WHERE fr.id IN (?)`, [q.quotation_id ?? 0, ids]) : [];
+  const heldOf = new Map(held.map((h) => [Number(h.id), n(h.kg)]));
+  res.json({ data: rows.map((r) => {
+    const reserved = heldOf.get(Number(r.id)) ?? 0;
+    return { ...r, reserved_kg: r3(reserved), balance_kg: r3(Math.max(0, n(r.balance_kg) - reserved)), weight_kg: n(r.weight_kg), meters: n(r.meters) };
+  }).filter((r) => r.balance_kg > 0.0005) });
 }));
 
 // =====================================================================================
@@ -230,6 +238,14 @@ async function writeOutwardRolls(tx: Tx, req: Request, fpoId: number, fpo: any, 
     if (fr.stock_status === 'CLOSED') throw BadRequest(`Roll ${fr.roll_no} is closed`);
     const avail = n(fr.weight_kg) - n(fr.issued_kg);
     if (r.weight_kg > avail + 1e-9) throw BadRequest(`Roll ${fr.roll_no} has only ${avail.toFixed(3)} KG in store`);
+    // KG reserved for another live process quotation stays for that quotation (genealogy doc §19)
+    const held = await txQueryOne<any>(tx, `SELECT ${OPEN_ALLOC_SQL('?', '?')} kg,
+        (SELECT GROUP_CONCAT(DISTINCT q.quotation_no) FROM trx_quotation_roll qr JOIN trx_quotation q ON q.id = qr.quotation_id LEFT JOIN cfg_status cs ON cs.id = q.status_id
+          WHERE qr.fabric_roll_id = ? AND qr.quotation_id <> ? AND COALESCE(q.is_deleted, 0) = 0 AND COALESCE(cs.code, '') NOT IN ('REJECTED', 'CANCELLED', 'EXPIRED', 'LOST')) nos`,
+      [fr.id, fpo.quotation_id ?? 0, fr.id, fpo.quotation_id ?? 0]);
+    if (n(held?.kg) > 0.0005 && r.weight_kg > avail - n(held.kg) + 1e-9) {
+      throw BadRequest(`Roll ${fr.roll_no}: ${r3(n(held.kg))} KG of it is reserved on quotation ${held.nos} — only ${r3(Math.max(0, avail - n(held.kg)))} KG is free for this DC`);
+    }
     // Roll must belong to the selected job (doc §15) — a roll without a job can go for any job
     const soId = r.so_id ?? (fr.so_id ? Number(fr.so_id) : null);
     if (r.so_id && fr.so_id && Number(fr.so_id) !== Number(r.so_id)) {
@@ -295,7 +311,7 @@ async function insertOutwardHeader(tx: Tx, req: Request, b: OutwardBody, extra: 
      b.challan_no ?? null, b.shade_code ?? null, b.color_name ?? null, b.target_dia ?? null, b.target_gsm ?? null,
      b.expected_return_date ?? null, extra.status, b.remarks ?? null, req.user!.id, extra.is_reprocess ? 1 : 0, extra.reprocess_id ?? null,
      extra.status === 'DISPATCHED' ? req.user!.id : null, extra.status === 'DISPATCHED' ? new Date() : null, quote.quotation_id, quote.quotation_line_id, quote.rate]);
-  return { id: Number(r.insertId), fpo_no: fpoNo, sub_process: pt.code, vendor_id: b.vendor_id, color_name: b.color_name ?? null, is_reprocess: !!extra.is_reprocess };
+  return { id: Number(r.insertId), fpo_no: fpoNo, sub_process: pt.code, vendor_id: b.vendor_id, color_name: b.color_name ?? null, is_reprocess: !!extra.is_reprocess, quotation_id: (b as any).quotation_id ?? null };
 }
 
 /** GET /fabric-process/outward — DC register with job count and reconciliation totals. */
@@ -403,7 +419,7 @@ fabricProcessingRouter.put('/fabric-process/outward/:id', requirePermission(FP.E
        body.shade_code ?? null, body.color_name ?? null, body.target_dia ?? null, body.target_gsm ?? null, body.expected_return_date ?? null, body.remarks ?? null,
        body.quotation_id ?? null, body.quotation_line_id ?? null, body.rate_per_kg ?? null, id]);
     await txExecute(tx, 'DELETE FROM trx_fabric_process_roll_in WHERE fpo_id = ?', [id]);
-    const kg = await writeOutwardRolls(tx, req, id, { ...o, sub_process: pt.code, vendor_id: body.vendor_id, color_name: body.color_name }, body.rolls, false);
+    const kg = await writeOutwardRolls(tx, req, id, { ...o, sub_process: pt.code, vendor_id: body.vendor_id, color_name: body.color_name, quotation_id: body.quotation_id ?? null }, body.rolls, false);
     return { id, fpo_no: o.fpo_no, outward_kg: kg };
   });
   await audit(req, 'trx_fabric_process_order', id, 'UPDATE', undefined, out);

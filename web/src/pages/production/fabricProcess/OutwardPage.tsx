@@ -303,7 +303,7 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
         <Button variant="secondary" disabled={!rows.length} onClick={print}><Printer size={14} className="mr-1" /> Print DC</Button>
       </div>
 
-      {picker && <RollPicker mode={picker} jobs={jobs.data ?? []} warehouseId={head.from_warehouse_id} taken={rows.map((r) => r.fabric_roll_id)}
+      {picker && <RollPicker mode={picker} jobs={jobs.data ?? []} warehouseId={head.from_warehouse_id} quotationId={quote.quotation_id} taken={rows.map((r) => r.fabric_roll_id)}
         onClose={() => setPicker(null)} onAdd={(picked, job, kgOf) => { addRolls(picked, job, kgOf); setPicker(null); toast(`${picked.length} roll(s) added${job ? ` to ${job.job_no}` : ''}`, 'success'); }} />}
     </div>
   );
@@ -350,8 +350,8 @@ function JobGroup({ g, editable, dyeing, set, remove }: { g: { io_no: string; ro
 }
 
 /** Add Job (job → its store rolls + rolls without a job), Scan Roll, Import from Job (all rolls of the job). */
-function RollPicker({ mode, jobs, warehouseId, taken, onClose, onAdd }: {
-  mode: 'job' | 'scan' | 'import'; jobs: Job[]; warehouseId: string; taken: number[];
+function RollPicker({ mode, jobs, warehouseId, quotationId, taken, onClose, onAdd }: {
+  mode: 'job' | 'scan' | 'import'; jobs: Job[]; warehouseId: string; quotationId?: string | number; taken: number[];
   onClose: () => void; onAdd: (rolls: StoreRoll[], job: Job | null, kgOf: (r: StoreRoll) => number) => void;
 }) {
   const toast = useToast();
@@ -360,10 +360,12 @@ function RollPicker({ mode, jobs, warehouseId, taken, onClose, onAdd }: {
   const [sel, setSel] = useState<Record<number, number>>({});
   const job = jobs.find((j) => String(j.id) === jobId) ?? null;
   const rolls = useQuery({
-    queryKey: ['fabric-process', 'store-rolls', mode, jobId, warehouseId],
+    queryKey: ['fabric-process', 'store-rolls', mode, jobId, warehouseId, quotationId],
     queryFn: async () => {
       const p = new URLSearchParams();
       if (warehouseId) p.set('warehouse_id', warehouseId);
+      // KG reserved on other process quotations is held back (this DC's own quotation keeps its rolls)
+      if (quotationId) p.set('quotation_id', String(quotationId));
       const all = (await http.get<{ data: StoreRoll[] }>(`/fabric-process/store-rolls?${p}`)).data ?? [];
       return all.filter((r) => !taken.includes(r.id));
     },
