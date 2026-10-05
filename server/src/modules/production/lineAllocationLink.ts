@@ -215,7 +215,7 @@ export async function recordLineOutput(tx: Tx, req: Request, proc: LinkProc, lin
 export async function stitchDcPending(tx: Tx | null, cid: number, bundleIds: number[]) {
   const map = new Map<number, number>();
   if (!bundleIds.length) return map;
-  const sql = `SELECT jl.bundle_id, SUM(GREATEST(jl.qty - jl.received_qty - jl.rejected_qty - jl.shortage_qty, 0)) AS pending
+  const sql = `SELECT jl.bundle_id, SUM(GREATEST(jl.qty - jl.received_qty - jl.rejected_qty - jl.shortage_qty - jl.loss_qty - jl.returned_qty, 0)) AS pending
                  FROM trx_jobwork_challan_line jl
                  JOIN trx_jobwork_challan jc ON jc.id = jl.challan_id
                  JOIN cfg_process_stage ps ON ps.id = jc.stage_id

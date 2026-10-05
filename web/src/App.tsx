@@ -66,6 +66,7 @@ import KnittingProgramPage from './pages/production/KnittingProgramPage';
 import ProcessRoutePage from './pages/production/ProcessRoutePage';
 import { ProcessMasterPage, ContractorBillsPage } from './pages/production/ProcessMasterPage';
 import { JobRateCardPage, ContractorAdvancesPage, ContractorDebitNotesPage } from './pages/production/ContractorPages';
+import { JobWorkOrdersPage, JobWorkDashboardPage, JobWorkRatesPage, ContractorAccountsPage } from './pages/production/JobWorkOrdersPage';
 import YarnProcessPage from './pages/production/YarnProcessPage';
 import CollarKnittingPage from './pages/production/CollarKnittingPage';
 import FabricGsmMeterPage from './pages/production/FabricGsmMeterPage';
@@ -360,6 +361,10 @@ export default function App() {
                   <Route path="yarn-substitution" element={<YarnSubstitutionPage />} />
                   <Route path="job-rate-cards" element={<JobRateCardPage />} />
                   <Route path="contractor-advances" element={<ContractorAdvancesPage />} />
+                  <Route path="job-work-orders" element={<JobWorkOrdersPage />} />
+                  <Route path="job-work-dashboard" element={<JobWorkDashboardPage />} />
+                  <Route path="job-work-rates" element={<JobWorkRatesPage />} />
+                  <Route path="contractor-accounts" element={<ContractorAccountsPage />} />
                   <Route path="contractor-debit-notes" element={<ContractorDebitNotesPage />} />
                   <Route path="jobwork-ins" element={<JobWorkInsPage />} />
                   <Route path="jobwork-invoices" element={<JobWorkInvoicesPage />} />

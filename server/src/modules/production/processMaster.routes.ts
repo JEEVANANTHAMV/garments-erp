@@ -299,7 +299,9 @@ export async function jobPieceRates(cid: number, challanIds: number[], ioNos: st
 //   net       = payable + GST − TDS − % deduction − other − advance − debit notes
 // ============================================================
 async function unbilledReceipts(cid: number, vendorId: number, from?: string, to?: string, includeBillId?: number) {
-  const where = ['r.company_id = ?', 'r.vendor_id = ?', includeBillId ? '(r.contractor_bill_id IS NULL OR r.contractor_bill_id = ?)' : 'r.contractor_bill_id IS NULL'];
+  // only QC-accepted, billable inward (job work doc §16: billing from approved output, never from outward)
+  const where = ['r.company_id = ?', 'r.vendor_id = ?', includeBillId ? '(r.contractor_bill_id IS NULL OR r.contractor_bill_id = ?)' : 'r.contractor_bill_id IS NULL',
+    `(r.contractor_bill_id IS NOT NULL OR (COALESCE(r.qc_status, 'ACCEPTED') = 'ACCEPTED' AND COALESCE(r.billable, 1) = 1))`];
   const params: unknown[] = includeBillId ? [cid, vendorId, includeBillId] : [cid, vendorId];
   if (from) { where.push('r.receipt_date >= ?'); params.push(from); }
   if (to) { where.push('r.receipt_date <= ?'); params.push(to); }

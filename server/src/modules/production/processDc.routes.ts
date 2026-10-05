@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { query, queryOne, execute, transaction, txQuery, txQueryOne, txExecute, type Tx } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
 import { NotFound, BadRequest } from '../../core/errors.js';
-import { requirePermission } from '../../middleware/auth.js';
+import { requirePermission, requireAny } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
@@ -41,6 +41,8 @@ async function resolveFromLine(tx: Tx | null, cid: number, st: StageInfo, lineId
   if (!line) throw BadRequest(`${proc} line #${lineId} not found`);
   return { proc, lineId, line };
 }
+import { refreshJwOrder, resolveJwRate, lossTolerance } from './jwOrderStatus.js';
+import { settingFlag } from '../../core/inwardControls.js';
 import { contractorRates } from './processMaster.routes.js';
 
 /**
@@ -98,21 +100,24 @@ async function stageInfo(cid: number, stageId: number): Promise<StageInfo> {
 }
 
 /** Ledger deltas for issuing q PCS on a DC of this stage. */
-function issueDelta(st: StageInfo, q: number): Partial<Record<Counter, number>> {
+export function issueDelta(st: StageInfo, q: number): Partial<Record<Counter, number>> {
   if (st.kind === 'SEWING') return { balance_qty: -q, sew_in_qty: q };
   if (st.kind === 'FINISHING') return { fin_in_qty: q };
   if (st.level === 'CUT') return { balance_qty: -q, out_cut_qty: q };
   if (st.level === 'SEWN') return { out_sewn_qty: q };
   return { out_pack_qty: q };
 }
-function receiptDelta(st: StageInfo, good: number, loss: number): Partial<Record<Counter, number>> {
+export function receiptDelta(st: StageInfo, good: number, loss: number): Partial<Record<Counter, number>> {
   if (st.kind === 'SEWING') return { sew_good_qty: good, sew_reject_qty: loss };
   if (st.kind === 'FINISHING') return { fin_good_qty: good, fin_reject_qty: loss };
   if (st.level === 'CUT') return { out_cut_qty: -(good + loss), balance_qty: good, cut_loss_qty: loss };
   if (st.level === 'SEWN') return { out_sewn_qty: -(good + loss), sewn_loss_qty: loss };
   return { out_pack_qty: -(good + loss), pack_loss_qty: loss };
 }
-const negate = (d: Partial<Record<Counter, number>>) =>
+/** PCS still with the contractor on a DC line: issued − good − rejected − shortage − process loss − returned unprocessed. */
+export const DC_PENDING = (a = '') => `(${a}qty - ${a}received_qty - ${a}rejected_qty - ${a}shortage_qty - ${a}loss_qty - ${a}returned_qty)`;
+
+export const negate = (d: Partial<Record<Counter, number>>) =>
   Object.fromEntries(Object.entries(d).map(([k, v]) => [k, -(v as number)])) as Partial<Record<Counter, number>>;
 
 const LEVEL_LABEL: Record<Level, string> = {
@@ -126,7 +131,7 @@ async function openDcHolds(runner: Tx | null, cid: number, stageId: number, bund
                  JOIN trx_jobwork_challan jc ON jc.id = jl.challan_id
                 WHERE jc.company_id = ? AND jc.stage_id = ? AND jc.status IN ('DRAFT','ISSUED','PARTIAL_RECEIVED')
                   AND jl.bundle_id IN (?) AND jc.id <> ?
-                  AND (jc.status = 'DRAFT' OR jl.qty > jl.received_qty + jl.rejected_qty + jl.shortage_qty)`;
+                  AND (jc.status = 'DRAFT' OR ${DC_PENDING('jl.')} > 0)`;
   const params = [cid, stageId, bundleIds, excludeChallanId ?? 0];
   const rows = runner ? await txQuery<any>(runner, sql, params) : await query<any>(sql, params);
   return new Map(rows.map((r) => [Number(r.bundle_id), String(r.challan_no)]));
@@ -345,7 +350,8 @@ processDcRouter.get('/process-dcs', requirePermission('PRODUCTION.VIEW'), ah(asy
             COUNT(jl.id) AS bundle_count, COALESCE(SUM(jl.qty),0) AS issued_pcs,
             COALESCE(SUM(jl.received_qty),0) AS received_pcs, COALESCE(SUM(jl.rejected_qty),0) AS rejected_pcs,
             COALESCE(SUM(jl.shortage_qty),0) AS shortage_pcs,
-            COALESCE(SUM(jl.qty - jl.received_qty - jl.rejected_qty - jl.shortage_qty),0) AS pending_pcs
+            COALESCE(SUM(jl.loss_qty),0) AS loss_pcs, COALESCE(SUM(jl.returned_qty),0) AS returned_pcs, COALESCE(SUM(jl.rework_open_qty),0) AS rework_open_pcs,
+            COALESCE(SUM(${DC_PENDING('jl.')}),0) AS pending_pcs
        FROM trx_jobwork_challan jc
        LEFT JOIN trx_jobwork_challan_line jl ON jl.challan_id = jc.id
        LEFT JOIN mst_party v ON v.id = jc.vendor_id
@@ -361,9 +367,13 @@ async function loadDc(cid: number, id: number) {
     `SELECT jc.*, v.party_name AS vendor_name, v.party_code AS vendor_code, v.gstin AS vendor_gstin, v.phone AS vendor_phone,
             ps.stage_name, ps.stage_code, st.style_code, st.style_name, cp.plan_no,
             wf.warehouse_name AS from_location, wt.warehouse_name AS to_location,
-            ui.full_name AS issued_by_name, uc.full_name AS cancelled_by_name, ucr.full_name AS created_by_name
+            ui.full_name AS issued_by_name, uc.full_name AS cancelled_by_name, ucr.full_name AS created_by_name,
+            jo.jw_no, jol.seq_no AS jw_line_seq, uva.full_name AS variance_approved_by_name
        FROM trx_jobwork_challan jc
        LEFT JOIN mst_party v ON v.id = jc.vendor_id
+       LEFT JOIN trx_jw_order jo ON jo.id = jc.jw_order_id
+       LEFT JOIN trx_jw_order_line jol ON jol.id = jc.jw_order_line_id
+       LEFT JOIN mst_user uva ON uva.id = jc.variance_approved_by
        LEFT JOIN cfg_process_stage ps ON ps.id = jc.stage_id
        LEFT JOIN mst_warehouse wf ON wf.id = jc.from_warehouse_id
        LEFT JOIN mst_warehouse wt ON wt.id = jc.to_warehouse_id
@@ -378,7 +388,7 @@ async function loadDc(cid: number, id: number) {
     `SELECT jl.*, cb.bundle_no, cb.barcode, cb.status AS bundle_status, cb.qty AS bundle_qty, cb.io_no AS bundle_io_no,
             COALESCE(jl.io_no, cb.io_no) AS job_io_no, lp.lay_no, c.cut_no, cb.status AS stock_stage, op.op_name AS operation_name,
             COALESCE(jl.part_name, cb.part_name) AS part, st.style_code, col.color_name, sz.size_code, sz.sort_order AS size_sort,
-            (jl.qty - jl.received_qty - jl.rejected_qty - jl.shortage_qty) AS pending_qty,
+            ${DC_PENDING('jl.')} AS pending_qty,
             cb.balance_qty, cb.sew_in_qty, cb.sew_good_qty, cb.sew_reject_qty, cb.fin_in_qty, cb.fin_good_qty,
             cb.fin_reject_qty, cb.qc_pass_qty, cb.qc_reject_qty, cb.packed_qty, cb.cut_loss_qty, cb.sewn_loss_qty,
             cb.pack_loss_qty, cb.out_cut_qty, cb.out_sewn_qty, cb.out_pack_qty
@@ -437,6 +447,9 @@ async function loadDc(cid: number, id: number) {
     received: ls.reduce((a, l) => a + n(l.received_qty), 0),
     rejected: ls.reduce((a, l) => a + n(l.rejected_qty), 0),
     shortage: ls.reduce((a, l) => a + n(l.shortage_qty), 0),
+    loss: ls.reduce((a, l) => a + n(l.loss_qty), 0),
+    returned: ls.reduce((a, l) => a + n(l.returned_qty), 0),
+    rework_open: ls.reduce((a, l) => a + n(l.rework_open_qty), 0),
     pending: ls.reduce((a, l) => a + Math.max(n(l.pending_qty), 0), 0),
   });
   const totals = tally(lines);
@@ -529,6 +542,9 @@ const dcSchema = z.object({
   release_line_allocation: z.coerce.boolean().default(false),
   // Line of the previous process whose bundles this DC moves on (issuing = that line's output).
   from_line_id: z.coerce.number().int().positive().nullish(),
+  // Job work order line this DC is sent against (outward within the order balance — job work doc §9, §30)
+  jw_order_line_id: z.coerce.number().int().positive().nullish(),
+  outward_override_reason: s.nullableStr(255),
 });
 
 interface PreparedLine {
@@ -697,6 +713,45 @@ async function postIssue(tx: Tx, req: Request, dc: any, st: StageInfo, lines: Pr
     [req.user!.id, req.user!.id, dc.id]);
 }
 
+/**
+ * A DC sent against a job work order line (job work doc §9, §30): the order is approved, the line's process and the
+ * contractor match, and the outward stays within the line's planned qty unless a manager authorises more (reason).
+ * The line rate (else the process rate master) becomes the DC rate when none is typed / no operation is picked.
+ */
+async function checkOrderLine(tx: Tx, req: Request, body: z.infer<typeof dcSchema>, st: StageInfo, qty: number, excludeChallanId?: number) {
+  if (!body.jw_order_line_id) return null;
+  const cid = req.user!.companyId;
+  const line = await txQueryOne<any>(tx,
+    `SELECT l.*, o.id AS order_id, o.jw_no, o.status AS order_status, o.vendor_id, o.style_id AS order_style_id, o.buyer_id AS order_buyer_id
+       FROM trx_jw_order_line l JOIN trx_jw_order o ON o.id = l.order_id WHERE l.id = ? AND o.company_id = ? FOR UPDATE`, [body.jw_order_line_id, cid]);
+  if (!line) throw NotFound('Job work order line not found');
+  if (!['APPROVED', 'PARTIAL_OUTWARD', 'IN_PROCESS', 'PARTIAL_INWARD', 'COMPLETED'].includes(line.order_status)) {
+    throw BadRequest(`Job work order ${line.jw_no} is ${line.order_status} — only an approved order takes DCs`);
+  }
+  if (Number(line.stage_id) !== st.id) throw BadRequest(`Job work order ${line.jw_no} line ${line.seq_no} is for another process`);
+  if (Number(line.vendor_id) !== Number(body.vendor_id)) throw BadRequest(`Job work order ${line.jw_no} is for another contractor`);
+  if (line.input_kind === 'FABRIC') throw BadRequest('That order line sends fabric — make a fabric DC from the job work order');
+  const done = await txQueryOne<any>(tx,
+    `SELECT COALESCE(SUM(total_qty),0) q FROM trx_jobwork_challan WHERE jw_order_line_id = ? AND status <> 'CANCELLED' AND id <> ?`, [line.id, excludeChallanId ?? 0]);
+  const after = n(done?.q) + qty;
+  let override = false;
+  if (n(line.planned_input_qty) > 0 && after > n(line.planned_input_qty)) {
+    const msg = `DC ${qty} PCS takes job work order ${line.jw_no} line ${line.seq_no} to ${after} PCS — over its ${n(line.planned_input_qty)} PCS`;
+    if (!hasAny(req, ['PRODUCTION.APPROVE', 'JOBWORK.APPROVE'])) throw BadRequest(`${msg}. A manager must authorise it.`);
+    if (!body.outward_override_reason?.trim()) throw BadRequest(`${msg}. Give the override reason.`);
+    override = true;
+  }
+  if (body.rate == null && !body.operations.length) {
+    if (line.rate != null) body.rate = n(line.rate);
+    else {
+      const r = await resolveJwRate(cid, { vendor_id: body.vendor_id, stage_id: st.id, style_id: line.order_style_id, buyer_id: line.order_buyer_id, uom: 'PCS', on: body.challan_date });
+      if (r) body.rate = r.rate;
+    }
+  }
+  return { line, override };
+}
+const hasAny = (req: Request, codes: string[]) => !!req.user?.isSuperAdmin || codes.some((c) => req.user!.permissions.has(c));
+
 processDcRouter.post('/process-dcs', requirePermission('PRODUCTION.CREATE'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const body = dcSchema.parse(req.body);
@@ -712,6 +767,11 @@ processDcRouter.post('/process-dcs', requirePermission('PRODUCTION.CREATE'), ah(
     const fromLine = await resolveFromLine(tx, cid, st, body.from_line_id);
     const lines = await prepareLines(tx, cid, st, body.lines, undefined, body.release_line_allocation, fromLine);
     const h = headerFrom(lines);
+    const ol = await checkOrderLine(tx, req, body, st, h.total_qty);
+    if (!ol && body.rate == null && !ops.length) {
+      const r = await resolveJwRate(cid, { vendor_id: body.vendor_id, stage_id: st.id, style_id: h.style_id, uom: 'PCS', on: body.challan_date });
+      if (r) body.rate = r.rate;
+    }
     const challanNo = body.challan_no || await nextDocNumber(tx, cid, 'JW_CHALLAN');
     const dup = await txQueryOne(tx, `SELECT id FROM trx_jobwork_challan WHERE company_id = ? AND challan_no = ?`, [cid, challanNo]);
     if (dup) throw BadRequest(`DC no ${challanNo} already exists`);
@@ -729,9 +789,12 @@ processDcRouter.post('/process-dcs', requirePermission('PRODUCTION.CREATE'), ah(
        body.from_warehouse_id ?? null, body.to_warehouse_id ?? null, body.release_line_allocation ? 1 : 0,
        fromLine?.proc ?? null, fromLine?.lineId ?? null, req.user!.id]);
     const dc = { id: r.insertId, challan_no: challanNo, challan_date: body.challan_date };
+    if (ol) await txExecute(tx, `UPDATE trx_jobwork_challan SET jw_order_id = ?, jw_order_line_id = ?, outward_override_reason = ? WHERE id = ?`,
+      [ol.line.order_id, ol.line.id, ol.override ? body.outward_override_reason : null, dc.id]);
     await writeLines(tx, dc.id, st, lines);
     await writeOps(tx, dc.id, ops);
     if (body.issue) await postIssue(tx, req, dc, st, lines, vendor?.party_name ?? 'Vendor', body.release_line_allocation, fromLine);
+    if (ol) await refreshJwOrder(tx, ol.line.order_id);
     await audit(req, 'trx_jobwork_challan', dc.id, 'INSERT', undefined,
       { challan_no: challanNo, stage: st.stage_code, bundles: lines.length, qty: h.total_qty, issued: body.issue }, tx);
     return dc.id;
@@ -758,6 +821,9 @@ processDcRouter.put('/process-dcs/:id', requirePermission('PRODUCTION.UPDATE'), 
     const fromLine = await resolveFromLine(tx, cid, st, body.from_line_id);
     const lines = await prepareLines(tx, cid, st, body.lines, id, body.release_line_allocation, fromLine);
     const h = headerFrom(lines);
+    const ol = await checkOrderLine(tx, req, body, st, h.total_qty, id);
+    await txExecute(tx, `UPDATE trx_jobwork_challan SET jw_order_id = ?, jw_order_line_id = ?, outward_override_reason = ? WHERE id = ?`,
+      [ol?.line.order_id ?? null, ol?.line.id ?? null, ol?.override ? body.outward_override_reason : null, id]);
     await txExecute(tx,
       `UPDATE trx_jobwork_challan SET challan_date = ?, prod_order_id = ?, vendor_id = ?, stage_id = ?, gate_outward_id = ?,
               total_qty = ?, rate = ?, total_amount = ?, expected_return = ?, remarks = ?, io_no = ?, cutting_plan_id = ?,
@@ -775,6 +841,7 @@ processDcRouter.put('/process-dcs/:id', requirePermission('PRODUCTION.UPDATE'), 
     await writeLines(tx, id, st, lines);
     await writeOps(tx, id, ops);
     if (body.issue) await postIssue(tx, req, { ...before, challan_date: body.challan_date }, st, lines, vendor?.party_name ?? 'Vendor', body.release_line_allocation, fromLine);
+    await refreshJwOrder(tx, ol?.line.order_id ?? before.jw_order_id);
     await audit(req, 'trx_jobwork_challan', id, 'UPDATE', before,
       { bundles: lines.length, qty: h.total_qty, issued: body.issue }, tx);
   });
@@ -798,6 +865,7 @@ processDcRouter.post('/process-dcs/:id/issue', requirePermission('PRODUCTION.CRE
       bundle_id: l.bundle_id, qty: l.qty, description: l.description, operation_id: l.operation_id, operator_line: l.operator_line,
     })), id, !!dc.release_line_alloc, await resolveFromLine(tx, cid, st, dc.from_line_id));
     await postIssue(tx, req, dc, st, lines, dc.vendor_name ?? 'Vendor', !!dc.release_line_alloc, await resolveFromLine(tx, cid, st, dc.from_line_id));
+    await refreshJwOrder(tx, dc.jw_order_id);
     await audit(req, 'trx_jobwork_challan', id, 'UPDATE', { status: 'DRAFT' }, { status: 'ISSUED' }, tx);
   });
   res.json({ data: await loadDc(cid, id) });
@@ -838,6 +906,7 @@ processDcRouter.post('/process-dcs/:id/cancel', requirePermission('PRODUCTION.UP
       [reason, req.user!.id, req.user!.id, id]);
     // PCS are back in stock and the DC no longer holds them: give back the line allocation / plan it released.
     if (dc.status === 'ISSUED') restored = await restoreLineAllocations(tx, req, id);
+    await refreshJwOrder(tx, dc.jw_order_id);
     await audit(req, 'trx_jobwork_challan', id, 'UPDATE', { status: dc.status }, { status: 'CANCELLED', reason, allocation_restored: restored }, tx);
     return restored;
   });
@@ -865,6 +934,13 @@ const receiptSchema = z.object({
     received_qty: z.coerce.number().int().min(0).default(0),
     rejected_qty: z.coerce.number().int().min(0).default(0),
     shortage_qty: z.coerce.number().int().min(0).default(0),
+    /** approved process loss (job work doc §12–§13) */
+    loss_qty: z.coerce.number().int().min(0).default(0),
+    /** unprocessed PCS returned by the contractor — back to our stock (doc §14) */
+    return_qty: z.coerce.number().int().min(0).default(0),
+    /** PCS sent back to the contractor for rework — they stay pending on the DC (doc §15) */
+    rework_qty: z.coerce.number().int().min(0).default(0),
+    rework_reason: s.nullableStr(255),
     reject_reason: s.nullableStr(255),
     weight_kg: z.coerce.number().min(0).max(99999).nullish(),
     excess_qty: z.coerce.number().int().min(0).max(100000).default(0),
@@ -874,7 +950,7 @@ const receiptSchema = z.object({
   })).min(1).max(2000),
 });
 
-async function postReceipt(tx: Tx, req: Request, dc: any, body: z.infer<typeof receiptSchema>, kind: 'RECEIPT' | 'CLOSE_SHORT') {
+export async function postReceipt(tx: Tx, req: Request, dc: any, body: z.infer<typeof receiptSchema>, kind: 'RECEIPT' | 'CLOSE_SHORT' | 'RETURN') {
   const cid = req.user!.companyId;
   const st = await stageInfo(cid, dc.stage_id);
   const dcLines = await txQuery<any>(tx, `SELECT * FROM trx_jobwork_challan_line WHERE challan_id = ? FOR UPDATE`, [dc.id]);
@@ -882,7 +958,7 @@ async function postReceipt(tx: Tx, req: Request, dc: any, body: z.infer<typeof r
   // Resolve each receipt line to its DC line.
   const picked: {
     line: any; good: number; rej: number; short: number; reason: string | null; weight: number | null; remarks: string | null;
-    excess: number; operation_id: number | null; operator_line: string | null;
+    excess: number; operation_id: number | null; operator_line: string | null; loss: number; ret: number; rework: number; reworkReason: string | null;
   }[] = [];
   for (const rl of body.lines) {
     let line = rl.line_id ? dcLines.find((l) => Number(l.id) === Number(rl.line_id)) : null;
@@ -893,16 +969,21 @@ async function postReceipt(tx: Tx, req: Request, dc: any, body: z.infer<typeof r
     }
     if (!line) throw BadRequest('Each receipt line needs the DC line or bundle');
     if (picked.some((p) => p.line.id === line.id)) throw BadRequest('A bundle is listed twice in the receipt');
-    const total = rl.received_qty + rl.rejected_qty + rl.shortage_qty;
-    const pending = n(line.qty) - n(line.received_qty) - n(line.rejected_qty) - n(line.shortage_qty);
+    const total = rl.received_qty + rl.rejected_qty + rl.shortage_qty + rl.loss_qty + rl.return_qty;
+    const pending = n(line.qty) - n(line.received_qty) - n(line.rejected_qty) - n(line.shortage_qty) - n(line.loss_qty) - n(line.returned_qty);
+    if (rl.rework_qty > 0) {
+      const bno = (await txQueryOne<any>(tx, `SELECT bundle_no FROM trx_cutting_bundle WHERE id = ?`, [line.bundle_id]))?.bundle_no;
+      if (rl.rework_qty > pending - total) throw BadRequest(`Bundle ${bno ?? line.id}: ${rl.rework_qty} PCS for rework, but only ${pending - total} PCS stay with the contractor after this inward`);
+      if (!rl.rework_reason?.trim()) throw BadRequest(`Bundle ${bno ?? line.id}: give the rework reason (it is kept against this inward)`);
+    }
     if (total === 0 && rl.excess_qty > 0) {
       const bno = (await txQueryOne<any>(tx, `SELECT bundle_no FROM trx_cutting_bundle WHERE id = ?`, [line.bundle_id]))?.bundle_no;
       throw BadRequest(`Bundle ${bno ?? line.id}: excess PCS can be entered only when all ${pending} pending PCS are received / rejected / short`);
     }
-    if (total === 0) continue;
+    if (total === 0 && !(rl.rework_qty > 0)) continue;
     if (total > pending) {
       const bno = (await txQueryOne<any>(tx, `SELECT bundle_no FROM trx_cutting_bundle WHERE id = ?`, [line.bundle_id]))?.bundle_no;
-      throw BadRequest(`Bundle ${bno ?? line.id}: received + rejected + shortage (${total} PCS) exceeds the ${pending} PCS pending on the DC`);
+      throw BadRequest(`Bundle ${bno ?? line.id}: good + rejected + shortage + loss + returned (${total} PCS) exceeds the ${pending} PCS pending on the DC`);
     }
     // Excess = PCS returned beyond what was sent: recorded only (never enters the bundle ledger),
     // and only on a bundle whose pending PCS are fully accounted for in this inward.
@@ -918,25 +999,31 @@ async function postReceipt(tx: Tx, req: Request, dc: any, body: z.infer<typeof r
       line, good: rl.received_qty, rej: rl.rejected_qty, short: rl.shortage_qty,
       reason: rl.rejected_qty ? rl.reject_reason ?? null : null, weight: rl.weight_kg ?? null, remarks: rl.remarks ?? null,
       excess: rl.excess_qty, operation_id: rl.operation_id ?? null, operator_line: rl.operator_line ?? null,
+      loss: rl.loss_qty, ret: rl.return_qty, rework: rl.rework_qty, reworkReason: rl.rework_qty ? rl.rework_reason ?? null : null,
     });
   }
-  if (!picked.length) throw BadRequest('Enter received, rejected or shortage PCS for at least one bundle');
+  if (!picked.length) throw BadRequest('Enter good, rejected, shortage, loss, returned or rework PCS for at least one bundle');
   picked.sort((a, b) => n(a.line.bundle_id) - n(b.line.bundle_id));
 
-  const tot = picked.reduce((a, p) => ({ g: a.g + p.good, r: a.r + p.rej, s: a.s + p.short, i: a.i + n(p.line.qty), x: a.x + p.excess }), { g: 0, r: 0, s: 0, i: 0, x: 0 });
+  const tot = picked.reduce((a, p) => ({ g: a.g + p.good, r: a.r + p.rej, s: a.s + p.short, i: a.i + n(p.line.qty), x: a.x + p.excess, l: a.l + p.loss, t: a.t + p.ret, w: a.w + p.rework }),
+    { g: 0, r: 0, s: 0, i: 0, x: 0, l: 0, t: 0, w: 0 });
+  // billing only from QC-accepted inward when the company wants a QC step (doc §16)
+  const qcPending = kind === 'RECEIPT' && tot.g > 0 && await settingFlag(cid, 'JW_INWARD_QC_REQUIRED', false);
   const receiptNo = body.receipt_no || await nextDocNumber(tx, cid, 'JW_RECEIPT');
   const rr = await txExecute(tx,
     `INSERT INTO trx_jobwork_receipt
        (company_id, receipt_no, receipt_date, challan_id, vendor_id, gate_inward_id, issued_qty, received_qty,
         rejected_qty, shortage_qty, rework_qty, rate, total_amount, status, remarks, party_dc_no, party_dc_date,
         to_warehouse_id, vehicle_no, ref_no, inward_group_no, excess_qty, created_by)
-     VALUES (?,?,?,?,?,?,?,?,?,?,0,?,?,'RECEIVED',?,?,?,?,?,?,?,?,?)`,
-    [cid, receiptNo, body.receipt_date, dc.id, dc.vendor_id, body.gate_inward_id ?? null, tot.i, tot.g, tot.r, tot.s,
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'RECEIVED',?,?,?,?,?,?,?,?,?)`,
+    [cid, receiptNo, body.receipt_date, dc.id, dc.vendor_id, body.gate_inward_id ?? null, tot.i, tot.g, tot.r, tot.s, tot.w,
      dc.rate ?? null, dc.rate != null ? Math.round(n(dc.rate) * tot.g * 100) / 100 : null,
-     (kind === 'CLOSE_SHORT' ? `Closed short: ${body.remarks ?? ''}` : body.remarks ?? null),
+     (kind === 'CLOSE_SHORT' ? `Closed short: ${body.remarks ?? ''}` : kind === 'RETURN' ? `Returned unprocessed: ${body.remarks ?? ''}` : body.remarks ?? null),
      body.party_dc_no ?? null, body.party_dc_date ?? null, body.to_warehouse_id ?? null, body.vehicle_no ?? null,
      body.ref_no ?? null, body.inward_group_no ?? null, tot.x, req.user!.id]);
 
+  await txExecute(tx, `UPDATE trx_jobwork_receipt SET loss_qty = ?, return_qty = ?, qc_status = ?, billable = ? WHERE id = ?`,
+    [tot.l, tot.t, qcPending ? 'PENDING' : 'ACCEPTED', tot.g > 0 ? 1 : 0, rr.insertId]);
   for (const p of picked) {
     await txExecute(tx,
       `INSERT INTO trx_jobwork_receipt_line
@@ -945,27 +1032,56 @@ async function postReceipt(tx: Tx, req: Request, dc: any, body: z.infer<typeof r
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [rr.insertId, p.line.id, p.line.bundle_id ?? null, p.line.sku_id ?? null, n(p.line.qty), p.good, p.rej, p.short,
        p.reason, p.weight, p.remarks, p.excess, p.operation_id, p.operator_line]);
+    // rework: PCS that come back after rework are linked to the inward that sent them back (doc §15: rework is traceable)
+    const reworkBack = Math.min(n(p.line.rework_open_qty), p.good + p.rej);
+    const rlId = (await txQueryOne<any>(tx, `SELECT id FROM trx_jobwork_receipt_line WHERE receipt_id = ? AND challan_line_id = ? ORDER BY id DESC LIMIT 1`, [rr.insertId, p.line.id]))?.id;
+    const refLine = reworkBack > 0 ? await txQueryOne<any>(tx,
+      `SELECT rl.id FROM trx_jobwork_receipt_line rl WHERE rl.challan_line_id = ? AND rl.rework_qty > 0 AND rl.receipt_id <> ? ORDER BY rl.id DESC LIMIT 1`, [p.line.id, rr.insertId]) : null;
+    await txExecute(tx, `UPDATE trx_jobwork_receipt_line SET loss_qty = ?, return_qty = ?, rework_qty = ?, rework_reason = ?, rework_received_qty = ?, rework_ref_line_id = ? WHERE id = ?`,
+      [p.loss, p.ret, p.rework, p.reworkReason, reworkBack, refLine?.id ?? null, rlId]);
     await txExecute(tx,
-      `UPDATE trx_jobwork_challan_line SET received_qty = received_qty + ?, rejected_qty = rejected_qty + ?, shortage_qty = shortage_qty + ? WHERE id = ?`,
-      [p.good, p.rej, p.short, p.line.id]);
-    if (p.line.bundle_id) {
+      `UPDATE trx_jobwork_challan_line SET received_qty = received_qty + ?, rejected_qty = rejected_qty + ?, shortage_qty = shortage_qty + ?,
+              loss_qty = loss_qty + ?, returned_qty = returned_qty + ?, rework_qty = rework_qty + ?,
+              rework_open_qty = GREATEST(rework_open_qty - ?, 0) + ? WHERE id = ?`,
+      [p.good, p.rej, p.short, p.loss, p.ret, p.rework, reworkBack, p.rework, p.line.id]);
+    if (p.line.bundle_id && p.good + p.rej + p.short + p.loss > 0) {
       const b = await lockBundle(tx, cid, { id: p.line.bundle_id });
-      const after = await applyBundle(tx, b, receiptDelta(st, p.good, p.rej + p.short));
+      const after = await applyBundle(tx, b, receiptDelta(st, p.good, p.rej + p.short + p.loss));
       await addMovement(tx, req, b, {
         txn_type: kind === 'CLOSE_SHORT' ? 'DC_SHORT_CLOSE' : 'DC_RECEIPT', from_stage: b.status, to_stage: after.status,
-        qty: p.good + p.rej + p.short, good: p.good, reject: p.rej + p.short,
+        qty: p.good + p.rej + p.short + p.loss, good: p.good, reject: p.rej + p.short + p.loss,
         location: st.stage_name, work_center: dc.vendor_name ?? null,
         ref_table: 'trx_jobwork_receipt_line', ref_id: rr.insertId,
-        remarks: `${receiptNo} vs DC ${dc.challan_no}${p.short ? ` · shortage ${p.short}` : ''}${p.reason ? ` · reject: ${p.reason}` : ''}${p.remarks ? ` · ${p.remarks}` : ''}`.slice(0, 255),
+        remarks: `${receiptNo} vs DC ${dc.challan_no}${p.short ? ` · shortage ${p.short}` : ''}${p.loss ? ` · loss ${p.loss}` : ''}${p.reason ? ` · reject: ${p.reason}` : ''}${reworkBack ? ` · ${reworkBack} back from rework` : ''}${p.remarks ? ` · ${p.remarks}` : ''}`.slice(0, 255),
+      });
+    }
+    // unprocessed PCS returned: back to our stock at the level they left (doc §14, a separate stock movement)
+    if (p.line.bundle_id && p.ret > 0) {
+      const b = await lockBundle(tx, cid, { id: p.line.bundle_id });
+      const after = await applyBundle(tx, b, negate(issueDelta(st, p.ret)));
+      await addMovement(tx, req, b, {
+        txn_type: 'DC_RETURN', from_stage: b.status, to_stage: after.status, qty: p.ret, good: p.ret,
+        location: st.stage_name, work_center: dc.vendor_name ?? null, ref_table: 'trx_jobwork_receipt_line', ref_id: rr.insertId,
+        remarks: `${receiptNo}: ${p.ret} PCS returned unprocessed vs DC ${dc.challan_no}`.slice(0, 255),
+      });
+    }
+    if (p.line.bundle_id && p.rework > 0) {
+      const b = await lockBundle(tx, cid, { id: p.line.bundle_id });
+      await addMovement(tx, req, b, {
+        txn_type: 'DC_REWORK', from_stage: b.status, to_stage: b.status, qty: p.rework, good: 0,
+        location: st.stage_name, work_center: dc.vendor_name ?? null, ref_table: 'trx_jobwork_receipt_line', ref_id: rr.insertId,
+        remarks: `${receiptNo}: ${p.rework} PCS back to ${dc.vendor_name ?? 'contractor'} for rework — ${p.reworkReason ?? ''}`.slice(0, 255),
       });
     }
   }
   const left = await txQueryOne<any>(tx,
-    `SELECT COALESCE(SUM(qty - received_qty - rejected_qty - shortage_qty),0) AS p FROM trx_jobwork_challan_line WHERE challan_id = ?`, [dc.id]);
+    `SELECT COALESCE(SUM(${DC_PENDING()}),0) AS p FROM trx_jobwork_challan_line WHERE challan_id = ?`, [dc.id]);
   const status = kind === 'CLOSE_SHORT' ? 'CLOSED' : n(left?.p) === 0 ? 'FULLY_RECEIVED' : 'PARTIAL_RECEIVED';
   await txExecute(tx, `UPDATE trx_jobwork_challan SET status = ?, updated_by = ? WHERE id = ?`, [status, req.user!.id, dc.id]);
+  await refreshJwOrder(tx, dc.jw_order_id);
   await audit(req, 'trx_jobwork_receipt', rr.insertId, 'INSERT', undefined,
-    { receipt_no: receiptNo, challan: dc.challan_no, received: tot.g, rejected: tot.r, shortage: tot.s, excess: tot.x, dc_status: status, group: body.inward_group_no ?? null }, tx);
+    { receipt_no: receiptNo, challan: dc.challan_no, received: tot.g, rejected: tot.r, shortage: tot.s, loss: tot.l, returned: tot.t, rework: tot.w, excess: tot.x,
+      qc: qcPending ? 'PENDING' : 'ACCEPTED', dc_status: status, group: body.inward_group_no ?? null }, tx);
   return { receipt_id: rr.insertId, receipt_no: receiptNo, dc_status: status };
 }
 
@@ -1134,11 +1250,48 @@ processDcRouter.post('/process-dcs/resolve-bundles', requirePermission('PRODUCTI
   res.json({ data: result, meta: { ready: result.filter((r) => r.ok).length, rejected: result.filter((r) => !r.ok).length } });
 }));
 
+/**
+ * POST /process-dcs/:id/return { return_date, reason, lines: [{ line_id | bundle_id, qty }] } — the contractor gives back
+ * PCS unprocessed (job work doc §14): a separate stock movement, the PCS are ours again at the level they left.
+ */
+processDcRouter.post('/process-dcs/:id/return', requirePermission('PRODUCTION.CREATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = Number(req.params.id);
+  const b = z.object({ return_date: dateStr.optional(), reason: reasonReq, party_dc_no: s.nullableStr(60),
+    lines: z.array(z.object({ line_id: s.id(), bundle_id: s.id(), qty: z.coerce.number().int().positive() })).min(1).max(2000) }).parse(req.body ?? {});
+  const out = await transaction(async (tx) => {
+    const dc = await txQueryOne<any>(tx,
+      `SELECT jc.*, v.party_name AS vendor_name FROM trx_jobwork_challan jc LEFT JOIN mst_party v ON v.id = jc.vendor_id
+        WHERE jc.id = ? AND jc.company_id = ? FOR UPDATE OF jc`, [id, cid]);
+    if (!dc) throw NotFound('DC not found');
+    if (!['ISSUED', 'PARTIAL_RECEIVED'].includes(dc.status)) throw BadRequest(`DC ${dc.challan_no} is ${dc.status} — nothing is with the contractor`);
+    return postReceipt(tx, req, dc, {
+      receipt_date: b.return_date ?? new Date().toISOString().slice(0, 10), remarks: b.reason, party_dc_no: b.party_dc_no ?? null,
+      lines: b.lines.map((l) => ({ line_id: l.line_id, bundle_id: l.bundle_id, received_qty: 0, rejected_qty: 0, shortage_qty: 0, loss_qty: 0, return_qty: l.qty, rework_qty: 0, excess_qty: 0 })),
+    } as any, 'RETURN');
+  });
+  res.status(201).json({ data: { ...out, dc: await loadDc(cid, id) } });
+}));
+
+/** POST /process-dcs/receipts/:id/qc { status: ACCEPTED | REJECTED, remarks } — only accepted inward is billed (doc §16) */
+processDcRouter.post('/process-dcs/receipts/:rid/qc', requireAny('PRODUCTION.APPROVE', 'JOBWORK.QC', 'QC.CREATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const rid = Number(req.params.rid);
+  const b = z.object({ status: z.enum(['ACCEPTED', 'REJECTED']), remarks: s.nullableStr(255) }).parse(req.body ?? {});
+  const r = await queryOne<any>(`SELECT * FROM trx_jobwork_receipt WHERE id = ? AND company_id = ?`, [rid, cid]);
+  if (!r) throw NotFound('Inward not found');
+  if (r.contractor_bill_id) throw BadRequest(`Inward ${r.receipt_no} is already on a contractor bill`);
+  if (b.status === 'REJECTED' && !b.remarks?.trim()) throw BadRequest('Give the QC remarks for a rejected inward');
+  await query(`UPDATE trx_jobwork_receipt SET qc_status = ?, qc_by = ?, qc_at = NOW(), qc_remarks = ? WHERE id = ?`, [b.status, req.user!.id, b.remarks ?? null, rid]);
+  await audit(req, 'trx_jobwork_receipt', rid, 'UPDATE', { qc_status: r.qc_status }, { qc_status: b.status, remarks: b.remarks });
+  res.json({ data: { id: rid, receipt_no: r.receipt_no, qc_status: b.status } });
+}));
+
 /** Close an issued / partly received DC: every pending PCS is written off as shortage. */
 processDcRouter.post('/process-dcs/:id/close', requirePermission('PRODUCTION.APPROVE'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = Number(req.params.id);
-  const { reason, receipt_date } = z.object({ reason: reasonReq, receipt_date: dateStr.optional() }).parse(req.body);
+  const { reason, receipt_date, variance_reason } = z.object({ reason: reasonReq, receipt_date: dateStr.optional(), variance_reason: s.nullableStr(255) }).parse(req.body);
   await transaction(async (tx) => {
     const dc = await txQueryOne<any>(tx,
       `SELECT jc.*, v.party_name AS vendor_name FROM trx_jobwork_challan jc LEFT JOIN mst_party v ON v.id = jc.vendor_id
@@ -1146,8 +1299,18 @@ processDcRouter.post('/process-dcs/:id/close', requirePermission('PRODUCTION.APP
     if (!dc) throw NotFound('DC not found');
     if (!['ISSUED', 'PARTIAL_RECEIVED'].includes(dc.status)) throw BadRequest(`DC ${dc.challan_no} is ${dc.status} — it cannot be closed short`);
     const pending = await txQuery<any>(tx,
-      `SELECT id, (qty - received_qty - rejected_qty - shortage_qty) AS p FROM trx_jobwork_challan_line
-        WHERE challan_id = ? AND qty > received_qty + rejected_qty + shortage_qty`, [id]);
+      `SELECT id, ${DC_PENDING()} AS p FROM trx_jobwork_challan_line
+        WHERE challan_id = ? AND ${DC_PENDING()} > 0`, [id]);
+    // reconciliation (doc §13): issued = good + reject + shortage + loss + returned; above the tolerance a manager
+    // approves the variance with a reason (who + when kept on the DC)
+    const tolPct = await lossTolerance(tx, cid, dc);
+    const tot = await txQueryOne<any>(tx, `SELECT COALESCE(SUM(qty),0) q, COALESCE(SUM(rejected_qty + shortage_qty + loss_qty),0) lost, COALESCE(SUM(returned_qty),0) ret,
+        COALESCE(SUM(${DC_PENDING()}),0) p FROM trx_jobwork_challan_line WHERE challan_id = ?`, [id]);
+    const base = n(tot?.q) - n(tot?.ret);
+    const lossPct = base > 0 ? Math.round(((n(tot?.lost) + n(tot?.p)) / base) * 10000) / 100 : 0;
+    if (lossPct > tolPct + 1e-9 && !variance_reason?.trim()) {
+      throw BadRequest(`Closing ${dc.challan_no} puts reject + shortage + loss at ${lossPct}% — over the ${tolPct}% tolerance. Give the variance reason to approve it.`);
+    }
     if (pending.length) {
       await postReceipt(tx, req, dc, {
         receipt_date: receipt_date ?? new Date().toISOString().slice(0, 10), remarks: reason,
@@ -1156,8 +1319,10 @@ processDcRouter.post('/process-dcs/:id/close', requirePermission('PRODUCTION.APP
     } else {
       await txExecute(tx, `UPDATE trx_jobwork_challan SET status = 'CLOSED' WHERE id = ?`, [id]);
     }
-    await txExecute(tx, `UPDATE trx_jobwork_challan SET close_reason = ?, closed_by = ?, closed_at = NOW() WHERE id = ?`, [reason, req.user!.id, id]);
-    await audit(req, 'trx_jobwork_challan', id, 'UPDATE', { status: dc.status }, { status: 'CLOSED', reason }, tx);
+    await txExecute(tx, `UPDATE trx_jobwork_challan SET close_reason = ?, closed_by = ?, closed_at = NOW(), variance_reason = ?, variance_approved_by = ? WHERE id = ?`,
+      [reason, req.user!.id, lossPct > tolPct ? variance_reason : null, lossPct > tolPct ? req.user!.id : null, id]);
+    await refreshJwOrder(tx, dc.jw_order_id);
+    await audit(req, 'trx_jobwork_challan', id, 'UPDATE', { status: dc.status }, { status: 'CLOSED', reason, loss_pct: lossPct, tolerance_pct: tolPct, variance_reason: lossPct > tolPct ? variance_reason : null }, tx);
   });
   res.json({ data: await loadDc(cid, id) });
 }));

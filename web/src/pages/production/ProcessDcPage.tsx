@@ -315,9 +315,19 @@ function DcEditor({ id, stages, onClose, onSaved }: {
   const [head, setHead] = useState<any>({
     challan_no: '', challan_date: today(), stage_id: '', vendor_id: '', from_warehouse_id: '', to_warehouse_id: '',
     ref_no: '', expected_return: '', rate: '', vehicle_no: '', driver_name: '', transporter: '', remarks: '',
-    release_line_allocation: false, from_line_id: '',
+    release_line_allocation: false, from_line_id: '', jw_order_line_id: '', outward_override_reason: '',
   });
   const [lines, setLines] = useState<Line[]>([]);
+  // Job work order lines (approved orders of this contractor for this process) — DC drawn against the order balance
+  const [jwLines, setJwLines] = useState<any[]>([]);
+  useEffect(() => {
+    if (!head.stage_id || !head.vendor_id) { setJwLines([]); return; }
+    api.get('/job-work/orders', { params: { vendor_id: head.vendor_id } }).then((r) => setJwLines((r.data.data || [])
+      .filter((o: any) => ['APPROVED', 'PARTIAL_OUTWARD', 'IN_PROCESS', 'PARTIAL_INWARD', 'COMPLETED'].includes(o.status))
+      .flatMap((o: any) => (o.lines || []).filter((l: any) => Number(l.stage_id) === Number(head.stage_id) && l.input_kind !== 'FABRIC')
+        .map((l: any) => ({ ...l, jw_no: o.jw_no, io_no: o.io_no, style_code: o.style_code }))))).catch(() => setJwLines([]));
+  }, [head.stage_id, head.vendor_id]);
+  const jwLine = jwLines.find((l) => String(l.id) === String(head.jw_order_line_id));
   const sewLines = useLookup('sewing-lines');
   const chkLines = useLookup('checking-lines');
   const irnLines = useLookup('ironing-lines');
@@ -343,6 +353,7 @@ function DcEditor({ id, stages, onClose, onSaved }: {
         from_warehouse_id: d.from_warehouse_id ?? '', to_warehouse_id: d.to_warehouse_id ?? '', ref_no: d.ref_no ?? '',
         expected_return: d.expected_return ? String(d.expected_return).slice(0, 10) : '', rate: d.rate ?? '',
         vehicle_no: d.vehicle_no ?? '', driver_name: d.driver_name ?? '', transporter: d.transporter ?? '', remarks: d.remarks ?? '',
+        jw_order_line_id: d.jw_order_line_id ?? '', outward_override_reason: d.outward_override_reason ?? '',
         release_line_allocation: !!d.release_line_alloc, from_line_id: d.from_line_id ?? '',
       });
       setOpSel(Object.fromEntries((d.operations || []).map((o: any) => [o.operation_id, String(Number(o.rate))])));
@@ -460,6 +471,8 @@ function DcEditor({ id, stages, onClose, onSaved }: {
       })),
       issue,
       from_line_id: srcProc && head.from_line_id ? Number(head.from_line_id) : null,
+      jw_order_line_id: head.jw_order_line_id ? Number(head.jw_order_line_id) : null,
+      outward_override_reason: head.outward_override_reason || null,
     };
     try {
       const r = id ? await api.put(`/process-dcs/${id}`, body) : await api.post('/process-dcs', body);
@@ -505,6 +518,15 @@ function DcEditor({ id, stages, onClose, onSaved }: {
             onChange={(e) => { setRateTouched(true); setHead({ ...head, rate: e.target.value }); }} />
           <Input label="Vehicle no" value={head.vehicle_no} onChange={(e) => setHead({ ...head, vehicle_no: e.target.value.toUpperCase() })} />
           <Input label="Driver" value={head.driver_name} onChange={(e) => setHead({ ...head, driver_name: e.target.value })} />
+          {jwLines.length > 0 && (
+            <Select label="Job work order" id="dc-jw-line" value={head.jw_order_line_id} className="md:col-span-2"
+              onChange={(e) => setHead({ ...head, jw_order_line_id: e.target.value })} placeholder="— not against an order —"
+              options={jwLines.map((l) => ({ value: l.id, label: `${l.jw_no} · ${l.io_no ?? ''} ${l.style_code ?? ''} · line ${l.seq_no} — ${fmtNumber(l.outward)} of ${fmtNumber(l.planned)} PCS sent` }))} />
+          )}
+          {jwLine && total + num(jwLine.outward) > num(jwLine.planned) && (
+            <Input label={`Over the order by ${fmtNumber(total + num(jwLine.outward) - num(jwLine.planned))} PCS — manager override reason`} id="dc-jw-override" className="md:col-span-2"
+              value={head.outward_override_reason} onChange={(e) => setHead({ ...head, outward_override_reason: e.target.value })} />
+          )}
         </div>
         {(stage?.kind === 'SEWING' || stage?.kind === 'FINISHING' || ['PACK', 'PACKING'].includes(String(stage?.stage_code ?? '').toUpperCase())) && (
           <label className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-xs ${lines.some((l) => l.line_alloc) ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
@@ -1014,6 +1036,9 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
   const [receiving, setReceiving] = useState(false);
   const [reasonFor, setReasonFor] = useState<'cancel' | 'close' | null>(null);
   const [reason, setReason] = useState('');
+  const [variance, setVariance] = useState('');
+  const [returning, setReturning] = useState(false);
+  const [qcFor, setQcFor] = useState<any>(null);
 
   const load = () => api.get(`/process-dcs/${id}`).then((r) => setDc(r.data.data)).catch((e) => toast(errMsg(e), 'error'));
   useEffect(() => { load(); }, [id]);
@@ -1039,7 +1064,10 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
             <Button variant="danger" disabled={busy} onClick={() => { setReason(''); setReasonFor('cancel'); }}><Ban size={13} className="inline mr-1" />Cancel DC</Button>
           )}
           {canReceive && (
-            <Button variant="secondary" disabled={busy} onClick={() => { setReason(''); setReasonFor('close'); }}><Lock size={13} className="inline mr-1" />Close short</Button>
+            <Button variant="secondary" disabled={busy} onClick={() => { setReason(''); setVariance(''); setReasonFor('close'); }}><Lock size={13} className="inline mr-1" />Close short</Button>
+          )}
+          {canReceive && dc.dc_kind !== 'FABRIC' && (
+            <Button variant="secondary" disabled={busy} id="dc-return-btn" onClick={() => setReturning(true)}>Return unprocessed</Button>
           )}
         </div>
         <Button variant="secondary" onClick={() => printDc(id, toast, false)}><Eye size={13} className="inline mr-1" />Preview DC</Button>
@@ -1065,7 +1093,12 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
         <Info label="Rate">{dc.rate != null ? `₹${Number(dc.rate).toFixed(2)} / PCS` : '—'}</Info>
         <Info label="Operations">{dc.operations?.length ? dc.operations.map((o: any) => `${o.op_name} ₹${Number(o.rate).toFixed(2)}`).join(', ') : '—'}</Info>
         <Info label="Remarks">{dc.remarks ?? '—'}</Info>
+        {dc.jw_no && <Info label="Job work order"><Link to={`/production/job-work-orders?open=${dc.jw_order_id}`} className="font-mono text-brand-700 hover:underline">{dc.jw_no}</Link>{dc.jw_line_seq ? ` · line ${dc.jw_line_seq}` : ''}</Info>}
+        {dc.outward_override_reason && <Info label="Over-plan override">{dc.outward_override_reason}</Info>}
       </div>
+      {dc.variance_reason && (
+        <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">Loss over tolerance approved by {dc.variance_approved_by_name ?? '—'}: {dc.variance_reason}</p>
+      )}
       {(dc.cancel_reason || dc.close_reason) && (
         <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
           {dc.cancel_reason ? `Cancelled: ${dc.cancel_reason}` : `Closed short: ${dc.close_reason}`}
@@ -1078,7 +1111,8 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
           { label: 'Total bundles', value: fmtNumber(t.bundles), icon: <Boxes size={20} />, tone: 'border-violet-100 bg-violet-50 text-violet-800' },
           { label: 'Sent (PCS)', value: fmtNumber(t.qty), icon: <Shirt size={20} />, tone: 'border-cyan-100 bg-cyan-50 text-cyan-800' },
           { label: 'Received good (PCS)', value: fmtNumber(t.received), icon: <CheckCircle2 size={20} />, tone: 'border-emerald-100 bg-emerald-50 text-emerald-800' },
-          { label: 'Reject + shortage / pending', value: `${fmtNumber(t.rejected + t.shortage)} / ${fmtNumber(['DRAFT', 'CANCELLED'].includes(dc.status) ? 0 : t.pending)}`, icon: <Weight size={20} />, tone: 'border-amber-100 bg-amber-50 text-amber-800' },
+          { label: 'Reject + shortage + loss / pending', value: `${fmtNumber(t.rejected + t.shortage + num(t.loss))} / ${fmtNumber(['DRAFT', 'CANCELLED'].includes(dc.status) ? 0 : t.pending)}`, icon: <Weight size={20} />, tone: 'border-amber-100 bg-amber-50 text-amber-800' },
+          { label: 'Returned unprocessed / rework open', value: `${fmtNumber(num(t.returned))} / ${fmtNumber(num(t.rework_open))}`, icon: <Boxes size={20} />, tone: 'border-slate-200 bg-slate-50 text-slate-700' },
         ]} />
       </div>
 
@@ -1104,6 +1138,7 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
                     <th className="px-2 py-1.5 text-left">Assort colour</th><th className="px-2 py-1.5 text-left">Size</th>
                     <th className="px-2 py-1.5 text-right">Sent</th><th className="px-2 py-1.5 text-right">Received</th>
                     <th className="px-2 py-1.5 text-right">Reject</th><th className="px-2 py-1.5 text-right">Shortage</th>
+                    <th className="px-2 py-1.5 text-right">Loss</th><th className="px-2 py-1.5 text-right">Returned</th><th className="px-2 py-1.5 text-right">Rework open</th>
                     <th className="px-2 py-1.5 text-right">Balance</th><th className="px-2 py-1.5 text-right">Weight (KG)</th>
                     <th className="px-2 py-1.5 text-left">Process completed</th><th className="px-2 py-1.5 text-left">Operator / line</th>
                     <th className="px-2 py-1.5 text-left">Status</th><th className="px-2 py-1.5 text-left">Remarks</th>
@@ -1123,6 +1158,9 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
                         <td className="px-2 py-1 text-right text-emerald-700">{num(l.received_qty) || '—'}</td>
                         <td className="px-2 py-1 text-right text-red-600">{num(l.rejected_qty) || '—'}</td>
                         <td className="px-2 py-1 text-right text-orange-600">{num(l.shortage_qty) || '—'}</td>
+                        <td className="px-2 py-1 text-right text-orange-600">{num(l.loss_qty) || '—'}</td>
+                        <td className="px-2 py-1 text-right text-slate-600">{num(l.returned_qty) || '—'}</td>
+                        <td className="px-2 py-1 text-right text-violet-700">{num(l.rework_open_qty) || '—'}</td>
                         <td className="px-2 py-1 text-right font-semibold">{['DRAFT', 'CANCELLED'].includes(dc.status) ? '—' : num(l.pending_qty)}</td>
                         <td className="px-2 py-1 text-right">{l.weight_kg != null ? Number(l.weight_kg).toFixed(2) : '—'}</td>
                         <td className="px-2 py-1">{l.operation_name ?? '—'}</td>
@@ -1153,7 +1191,8 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
               <th className="px-2 py-1 text-left">Inward no</th><th className="px-2 py-1 text-left">Date</th>
               <th className="px-2 py-1 text-left">Party DC</th><th className="px-2 py-1 text-left">Location</th>
               <th className="px-2 py-1 text-right">Good (PCS)</th><th className="px-2 py-1 text-right">Reject (PCS)</th>
-              <th className="px-2 py-1 text-right">Shortage (PCS)</th><th className="px-2 py-1 text-left">By</th><th className="px-2 py-1 text-left">Remarks</th>
+              <th className="px-2 py-1 text-right">Shortage (PCS)</th><th className="px-2 py-1 text-right">Loss</th><th className="px-2 py-1 text-right">Returned</th>
+              <th className="px-2 py-1 text-right">Rework</th><th className="px-2 py-1 text-left">QC</th><th className="px-2 py-1 text-left">By</th><th className="px-2 py-1 text-left">Remarks</th>
             </tr></thead>
             <tbody>
               {dc.receipts.map((r: any) => (
@@ -1164,6 +1203,16 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
                   <td className="px-2 py-1 text-right text-emerald-700">{fmtNumber(r.received_qty)}</td>
                   <td className="px-2 py-1 text-right text-red-600">{fmtNumber(r.rejected_qty)}</td>
                   <td className="px-2 py-1 text-right text-orange-600">{fmtNumber(r.shortage_qty)}</td>
+                  <td className="px-2 py-1 text-right">{num(r.loss_qty) || '—'}</td><td className="px-2 py-1 text-right">{num(r.return_qty) || '—'}</td>
+                  <td className="px-2 py-1 text-right text-violet-700">{num(r.rework_qty) || '—'}</td>
+                  <td className="px-2 py-1">
+                    {num(r.received_qty) > 0 ? <Badge tone={r.qc_status === 'ACCEPTED' ? 'green' : r.qc_status === 'REJECTED' ? 'red' : 'amber'}>{r.qc_status ?? 'ACCEPTED'}</Badge> : '—'}
+                    {num(r.received_qty) > 0 && !r.contractor_bill_id && (
+                      <button className="ml-1 text-[11px] font-semibold text-brand-700 hover:underline" id={`dc-qc-${r.id}`} onClick={() => setQcFor({ ...r, status: r.qc_status === 'ACCEPTED' ? 'REJECTED' : 'ACCEPTED', remarks: '' })}>
+                        {r.qc_status === 'ACCEPTED' ? 'QC reject' : 'QC accept'}
+                      </button>
+                    )}
+                  </td>
                   <td className="px-2 py-1">{r.created_by_name}</td><td className="px-2 py-1">{r.remarks}</td>
                 </tr>
               ))}
@@ -1176,12 +1225,24 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
       <DcAudit dcId={id} />
 
       {receiving && <InwardModal dcs={[dc]} onClose={() => setReceiving(false)} onDone={() => { setReceiving(false); load(); onChanged(); }} />}
+      {returning && <ReturnModal dc={dc} onClose={() => setReturning(false)} onDone={() => { setReturning(false); load(); onChanged(); }} />}
+      {qcFor && (
+        <Modal open onClose={() => setQcFor(null)} size="sm" title={`QC ${qcFor.status === 'ACCEPTED' ? 'accept' : 'reject'} inward ${qcFor.receipt_no}`}
+          footer={<>
+            <Button variant="secondary" onClick={() => setQcFor(null)}>Back</Button>
+            <Button variant={qcFor.status === 'ACCEPTED' ? 'primary' : 'danger'} id="dc-qc-confirm" disabled={qcFor.status === 'REJECTED' && qcFor.remarks.trim().length < 3}
+              onClick={() => { const q = qcFor; setQcFor(null); act(() => api.post(`/process-dcs/receipts/${q.id}/qc`, { status: q.status, remarks: q.remarks || null }), `Inward ${q.receipt_no} QC ${q.status.toLowerCase()}`); }}>Confirm</Button>
+          </>}>
+          <p className="mb-2 text-xs text-slate-600">Only a QC-accepted inward goes on the contractor bill.</p>
+          <Textarea label="QC remarks" required={qcFor.status === 'REJECTED'} value={qcFor.remarks} onChange={(e) => setQcFor({ ...qcFor, remarks: e.target.value })} />
+        </Modal>
+      )}
       {reasonFor && (
         <Modal open onClose={() => setReasonFor(null)} size="sm" title={reasonFor === 'cancel' ? `Cancel DC ${dc.challan_no}` : `Close DC ${dc.challan_no} short`}
           footer={<>
             <Button variant="secondary" onClick={() => setReasonFor(null)}>Back</Button>
             <Button variant="danger" loading={busy} disabled={reason.trim().length < 3}
-              onClick={() => { const f = reasonFor; setReasonFor(null); act(() => api.post(`/process-dcs/${id}/${f}`, { reason }), f === 'cancel' ? 'DC cancelled' : 'DC closed — pending PCS written off as shortage'); }}>
+              onClick={() => { const f = reasonFor; setReasonFor(null); act(() => api.post(`/process-dcs/${id}/${f}`, { reason, variance_reason: variance || null }), f === 'cancel' ? 'DC cancelled' : 'DC closed — pending PCS written off as shortage'); }}>
               Confirm
             </Button>
           </>}>
@@ -1191,8 +1252,53 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
               : `Every pending PCS (${t.pending} PCS) is written off as contractor shortage against its bundle.`}
           </p>
           <Textarea label="Reason" required value={reason} onChange={(e) => setReason(e.target.value)} />
+          {reasonFor === 'close' && (
+            <Textarea label="Variance reason (needed when reject + shortage + loss is over the tolerance)" id="dc-close-variance" className="mt-2" value={variance} onChange={(e) => setVariance(e.target.value)} />
+          )}
         </Modal>
       )}
+    </Modal>
+  );
+}
+
+/** Unprocessed PCS given back by the contractor (job work doc §14) — back to our stock at the level they left. */
+function ReturnModal({ dc, onClose, onDone }: { dc: any; onClose: () => void; onDone: () => void }) {
+  const toast = useToast();
+  const open = (dc.lines as any[]).filter((l) => num(l.pending_qty) > 0);
+  const [qty, setQty] = useState<Record<number, number>>({});
+  const [reason, setReason] = useState('');
+  const [partyDc, setPartyDc] = useState('');
+  const [busy, setBusy] = useState(false);
+  const total = Object.values(qty).reduce((a, v) => a + v, 0);
+  const save = async () => {
+    setBusy(true);
+    try {
+      const r = await api.post(`/process-dcs/${dc.id}/return`, { reason, party_dc_no: partyDc || null,
+        lines: open.filter((l) => qty[l.id] > 0).map((l) => ({ line_id: l.id, qty: qty[l.id] })) });
+      toast(`${total} PCS returned unprocessed (${r.data.data.receipt_no}) — back in our stock`); onDone();
+    } catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(false); }
+  };
+  return (
+    <Modal open onClose={onClose} size="lg" title={`Return unprocessed — DC ${dc.challan_no}`}
+      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button>
+        <Button loading={busy} id="dc-return-save" disabled={!total || reason.trim().length < 3} onClick={save}>Return {total} PCS</Button></>}>
+      <div className="mb-3 grid grid-cols-2 gap-3">
+        <Input label="Reason" required id="dc-return-reason" value={reason} onChange={(e) => setReason(e.target.value)} />
+        <Input label="Party DC no" value={partyDc} onChange={(e) => setPartyDc(e.target.value)} />
+      </div>
+      <div className="mb-2 flex justify-end"><Button size="sm" variant="secondary" onClick={() => setQty(Object.fromEntries(open.map((l) => [l.id, num(l.pending_qty)])))}>All pending</Button></div>
+      <table className="w-full text-xs">
+        <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-1 text-left">Bundle</th><th className="px-2 py-1 text-left">Colour</th><th className="px-2 py-1 text-left">Size</th>
+          <th className="px-2 py-1 text-right">With contractor</th><th className="px-2 py-1 text-right">Return (PCS)</th></tr></thead>
+        <tbody>{open.map((l) => (
+          <tr key={l.id} className="border-t border-slate-100">
+            <td className="px-2 py-1 font-mono">{l.bundle_no ?? '—'}</td><td className="px-2 py-1">{l.color_name}</td><td className="px-2 py-1">{l.size_code}</td>
+            <td className="px-2 py-1 text-right">{num(l.pending_qty)}</td>
+            <td className="px-2 py-1 text-right"><input type="number" min={0} max={num(l.pending_qty)} id={`dc-return-qty-${l.id}`} className="input h-7 w-16 px-1.5 text-right" value={qty[l.id] ?? 0}
+              onChange={(e) => setQty({ ...qty, [l.id]: Math.min(num(l.pending_qty), Math.max(0, Math.floor(Number(e.target.value) || 0))) })} /></td>
+          </tr>
+        ))}</tbody>
+      </table>
     </Modal>
   );
 }
@@ -1286,7 +1392,7 @@ function Info({ label, children }: { label: string; children: React.ReactNode })
 // ════════════════════════════════════════════════════════════════════
 // Process Inward against a DC — job-wise good / reject (+reason) / shortage
 // ════════════════════════════════════════════════════════════════════
-type InRow = { g: number; r: number; s: number; x: number; reason: string; kg: string; remarks: string; op: string; operator: string };
+type InRow = { g: number; r: number; s: number; x: number; l: number; t: number; w: number; wReason: string; reason: string; kg: string; remarks: string; op: string; operator: string };
 
 /**
  * Process Inward. One DC → POST /process-dcs/:id/receipts; several DCs of the same
@@ -1301,7 +1407,7 @@ function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void
   const open = dcs.flatMap((dc) => (dc.lines as any[]).filter((l) => num(l.pending_qty) > 0)
     .map((l) => ({ ...l, io_no: l.job_io_no, _dc: dc })));
   const jobMeta = new Map<string, any>(dcs.flatMap((dc) => (dc.summary.jobs as any[]).map((j) => [j.io_no ?? '—', j] as [string, any])));
-  const blank: InRow = { g: 0, r: 0, s: 0, x: 0, reason: '', kg: '', remarks: '', op: '', operator: '' };
+  const blank: InRow = { g: 0, r: 0, s: 0, x: 0, l: 0, t: 0, w: 0, wReason: '', reason: '', kg: '', remarks: '', op: '', operator: '' };
   const [rows, setRows] = useState<Record<number, InRow>>(Object.fromEntries(open.map((l) => [l.id, {
     ...blank, op: l.operation_id ? String(l.operation_id) : '', operator: l.operator_line ?? '',
   }])));
@@ -1315,7 +1421,7 @@ function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void
 
   const set = (id: number, patch: Partial<InRow>) => setRows((cur) => ({ ...cur, [id]: { ...cur[id], ...patch } }));
   const clampInt = (v: string) => Math.max(0, Math.floor(Number(v) || 0));
-  const entered = (id: number) => rows[id].g + rows[id].r + rows[id].s;
+  const entered = (id: number) => rows[id].g + rows[id].r + rows[id].s + rows[id].l + rows[id].t;
 
   const onScan = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1323,33 +1429,36 @@ function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void
     const l = open.find((x) => x.barcode === code || x.bundle_no === code);
     if (!l) toast(`${code} is not pending on ${dcs.length > 1 ? 'these DCs' : 'this DC'}`, 'error');
     else {
-      set(l.id, { g: num(l.pending_qty) - rows[l.id].r - rows[l.id].s });
+      set(l.id, { g: num(l.pending_qty) - rows[l.id].r - rows[l.id].s - rows[l.id].l - rows[l.id].t - rows[l.id].w });
       setLast({ bundle_no: l.bundle_no, io_no: l.io_no, style_code: l.style_code, size_code: l.size_code, qty: num(l.pending_qty), note: `DC ${l._dc.challan_no} · filled as good` });
     }
     setScan('');
   };
   const fillGood = (ls: any[]) => setRows((cur) => {
     const next = { ...cur };
-    for (const l of ls) next[l.id] = { ...next[l.id], g: num(l.pending_qty) - next[l.id].r - next[l.id].s };
+    for (const l of ls) next[l.id] = { ...next[l.id], g: num(l.pending_qty) - next[l.id].r - next[l.id].s - next[l.id].l - next[l.id].t - next[l.id].w };
     return next;
   });
   const restShortage = (ls: any[]) => setRows((cur) => {
     const next = { ...cur };
     for (const l of ls) {
       const x = next[l.id];
-      const left = num(l.pending_qty) - x.g - x.r - x.s;
+      const left = num(l.pending_qty) - x.g - x.r - x.s - x.l - x.t - x.w;
       if (left > 0) next[l.id] = { ...x, s: x.s + left };
     }
     return next;
   });
 
-  const tot = open.reduce((a, l) => ({ p: a.p + num(l.pending_qty), g: a.g + rows[l.id].g, r: a.r + rows[l.id].r, s: a.s + rows[l.id].s, x: a.x + rows[l.id].x }), { p: 0, g: 0, r: 0, s: 0, x: 0 });
-  const over = open.some((l) => entered(l.id) > num(l.pending_qty));
+  const tot = open.reduce((a, l) => ({ p: a.p + num(l.pending_qty), g: a.g + rows[l.id].g, r: a.r + rows[l.id].r, s: a.s + rows[l.id].s, x: a.x + rows[l.id].x,
+    l: a.l + rows[l.id].l, t: a.t + rows[l.id].t, w: a.w + rows[l.id].w }), { p: 0, g: 0, r: 0, s: 0, x: 0, l: 0, t: 0, w: 0 });
+  const over = open.some((l) => entered(l.id) + rows[l.id].w > num(l.pending_qty));
+  const noRework = open.some((l) => rows[l.id].w > 0 && !rows[l.id].wReason.trim());
   const noReason = open.some((l) => rows[l.id].r > 0 && !rows[l.id].reason.trim());
   const badExcess = open.some((l) => rows[l.id].x > 0 && entered(l.id) !== num(l.pending_qty));
 
-  const linesOf = (dc: any) => open.filter((l) => l._dc.id === dc.id && (entered(l.id) > 0 || rows[l.id].x > 0)).map((l) => ({
+  const linesOf = (dc: any) => open.filter((l) => l._dc.id === dc.id && (entered(l.id) > 0 || rows[l.id].x > 0 || rows[l.id].w > 0)).map((l) => ({
     line_id: l.id, received_qty: rows[l.id].g, rejected_qty: rows[l.id].r, shortage_qty: rows[l.id].s, excess_qty: rows[l.id].x,
+    loss_qty: rows[l.id].l, return_qty: rows[l.id].t, rework_qty: rows[l.id].w, rework_reason: rows[l.id].wReason || null,
     reject_reason: rows[l.id].reason || null, weight_kg: rows[l.id].kg === '' ? null : Number(rows[l.id].kg), remarks: rows[l.id].remarks || null,
     operation_id: rows[l.id].op ? Number(rows[l.id].op) : null, operator_line: rows[l.id].operator || null,
   }));
@@ -1358,6 +1467,7 @@ function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void
     const perDc = dcs.map((dc) => ({ challan_id: dc.id, lines: linesOf(dc) })).filter((d) => d.lines.length);
     if (!perDc.length) { toast('Enter quantities for at least one bundle', 'error'); return; }
     if (noReason) { toast('Give the mistake / reject reason for every rejected bundle', 'error'); return; }
+    if (noRework) { toast('Give the rework reason for every bundle sent back for rework', 'error'); return; }
     if (badExcess) { toast('Excess PCS only on a bundle whose pending PCS are all accounted for', 'error'); return; }
     const common = {
       ...head, party_dc_no: head.party_dc_no || null, party_dc_date: head.party_dc_date || null, ref_no: head.ref_no || null,
@@ -1378,6 +1488,7 @@ function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void
 
   const status = (l: any) => {
     const x = rows[l.id]; const e = entered(l.id); const p = num(l.pending_qty);
+    if (e === 0 && x.w > 0) return <Badge tone="violet">Rework</Badge>;
     if (e === 0) return <Badge tone="slate">Pending</Badge>;
     if (e > p) return <Badge tone="red">Over</Badge>;
     if (x.x > 0) return <Badge tone="blue">Excess</Badge>;
@@ -1395,7 +1506,7 @@ function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void
       title={`Process Inward — ${first.stage_name ?? ''} from ${first.vendor_name}${dcs.length > 1 ? ` (${dcs.length} DCs)` : ''}`}
       footer={<>
         <span className="mr-auto self-center text-xs text-slate-600">
-          Good <b>{tot.g}</b> · Reject <b>{tot.r}</b> · Shortage <b>{tot.s}</b>{tot.x ? <> · Excess <b>{tot.x}</b></> : null} · Still pending <b>{tot.p - tot.g - tot.r - tot.s}</b> PCS
+          Good <b>{tot.g}</b> · Reject <b>{tot.r}</b> · Shortage <b>{tot.s}</b>{tot.l ? <> · Loss <b>{tot.l}</b></> : null}{tot.t ? <> · Returned unprocessed <b>{tot.t}</b></> : null}{tot.w ? <> · Rework <b>{tot.w}</b></> : null}{tot.x ? <> · Excess <b>{tot.x}</b></> : null} · Still with contractor <b>{tot.p - tot.g - tot.r - tot.s - tot.l - tot.t}</b> PCS
         </span>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button loading={saving} disabled={over} onClick={save}><CheckCircle2 size={13} className="inline mr-1" />Save &amp; confirm inward</Button>
@@ -1458,7 +1569,11 @@ function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void
                       <th className="px-2 py-1.5 text-left">Size</th><th className="px-2 py-1.5 text-right">Sent (PCS)</th>
                       <th className="px-2 py-1.5 text-right">Received (PCS)</th>
                       <th className="px-2 py-1.5 text-right">Mistake / reject</th><th className="px-2 py-1.5 text-left">Reject reason</th>
-                      <th className="px-2 py-1.5 text-right">Shortage</th><th className="px-2 py-1.5 text-right">Excess</th>
+                      <th className="px-2 py-1.5 text-right">Shortage</th>
+                      <th className="px-2 py-1.5 text-right" title="Approved process loss">Loss</th>
+                      <th className="px-2 py-1.5 text-right" title="Unprocessed PCS returned — back to our stock">Returned</th>
+                      <th className="px-2 py-1.5 text-right" title="Sent back to the contractor for rework — stays pending">Rework</th><th className="px-2 py-1.5 text-left">Rework reason</th>
+                      <th className="px-2 py-1.5 text-right">Excess</th>
                       <th className="px-2 py-1.5 text-right">Difference</th><th className="px-2 py-1.5 text-right">Weight (KG)</th>
                       <th className="px-2 py-1.5 text-left">Process completed</th><th className="px-2 py-1.5 text-left">Operator / line</th>
                       <th className="px-2 py-1.5 text-left">Status</th><th className="px-2 py-1.5 text-left">Remarks</th>
@@ -1466,7 +1581,7 @@ function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void
                     <tbody>
                       {j.rows.map((l: any, i: number) => {
                         const x = rows[l.id]; const p = num(l.pending_qty); const diff = x.g + x.x - p;
-                        const bad = entered(l.id) > p || (x.x > 0 && entered(l.id) !== p);
+                        const bad = entered(l.id) + x.w > p || (x.x > 0 && entered(l.id) !== p);
                         return (
                           <tr key={l.id} className={`border-t border-slate-100 ${bad ? 'bg-red-50' : x.s > 0 || x.r > 0 ? 'bg-amber-50/50' : ''}`}>
                             <td className="px-2 py-1 text-slate-400">{i + 1}</td>
@@ -1482,6 +1597,11 @@ function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void
                                 className={`input h-7 w-36 px-1.5 ${x.r && !x.reason.trim() ? 'input-error' : ''}`} />
                             </td>
                             <td className="px-2 py-1 text-right"><input type="number" min={0} value={x.s} onChange={(e) => set(l.id, { s: clampInt(e.target.value) })} className="input h-7 w-16 px-1.5 text-right" /></td>
+                            <td className="px-2 py-1 text-right"><input type="number" min={0} value={x.l} id={`in-loss-${l.id}`} onChange={(e) => set(l.id, { l: clampInt(e.target.value) })} className="input h-7 w-14 px-1.5 text-right" /></td>
+                            <td className="px-2 py-1 text-right"><input type="number" min={0} value={x.t} id={`in-ret-${l.id}`} onChange={(e) => set(l.id, { t: clampInt(e.target.value) })} className="input h-7 w-14 px-1.5 text-right" /></td>
+                            <td className="px-2 py-1 text-right"><input type="number" min={0} value={x.w} id={`in-rework-${l.id}`} onChange={(e) => set(l.id, { w: clampInt(e.target.value) })} className="input h-7 w-14 px-1.5 text-right" /></td>
+                            <td className="px-2 py-1"><input value={x.wReason} disabled={!x.w} placeholder={x.w ? 'Required' : ''} id={`in-rework-reason-${l.id}`} onChange={(e) => set(l.id, { wReason: e.target.value })}
+                              className={`input h-7 w-32 px-1.5 ${x.w && !x.wReason.trim() ? 'input-error' : ''}`} /></td>
                             <td className="px-2 py-1 text-right"><input type="number" min={0} value={x.x} title="PCS returned beyond the DC qty (recorded only)" onChange={(e) => set(l.id, { x: clampInt(e.target.value) })} className="input h-7 w-14 px-1.5 text-right" /></td>
                             <td className={`px-2 py-1 text-right font-semibold ${diff < 0 ? 'text-red-600' : diff > 0 ? 'text-blue-600' : 'text-slate-500'}`}>{entered(l.id) || x.x ? diff : '—'}</td>
                             <td className="px-2 py-1 text-right"><input type="number" min={0} step="0.01" value={x.kg} placeholder={l.weight_kg != null ? Number(l.weight_kg).toFixed(2) : '—'} onChange={(e) => set(l.id, { kg: e.target.value })} className="input h-7 w-20 px-1.5 text-right" /></td>
