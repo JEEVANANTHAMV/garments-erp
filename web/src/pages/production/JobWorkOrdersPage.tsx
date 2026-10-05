@@ -366,6 +366,7 @@ function FabricOutwardModal({ order, line, onClose, onDone }: { order: any; line
   const totalKg = Object.values(kg).reduce((a, v) => a + num(v), 0);
   const totalPcs = Object.values(qty).reduce((a, v) => a + num(v), 0);
   const over = num(line.planned) > 0 && num(line.outward) + totalKg > num(line.planned) + 0.0005;
+  const overRoll = (opts?.rolls ?? []).some((r) => num(kg[r.id]) > num(r.free_kg) + 0.0005);
   const colours = useMemo(() => [...new Set((opts?.skus ?? []).map((k) => k.color_name))], [opts]);
   const sizes = useMemo(() => [...new Map((opts?.skus ?? []).map((k) => [k.size_id, k])).values()], [opts]);
   const save = async () => {
@@ -384,7 +385,7 @@ function FabricOutwardModal({ order, line, onClose, onDone }: { order: any; line
     <Modal open onClose={onClose} size="full" title={`Fabric outward — ${order.jw_no} · ${line.stage_name} · ${order.vendor_name}`}
       footer={<><span className="mr-auto self-center text-xs text-slate-600">{totalKg.toFixed(3)} KG · {totalPcs} PCS expected back · order {fmtNumber(line.outward)} of {fmtNumber(line.planned)} KG sent</span>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button loading={busy} id="jwf-save" disabled={!totalKg || !totalPcs || (over && h.override_reason.trim().length < 3)} onClick={save}><Truck size={13} className="mr-1 inline" />Issue fabric DC</Button></>}>
+        <Button loading={busy} id="jwf-save" disabled={!totalKg || !totalPcs || overRoll || (over && h.override_reason.trim().length < 3)} onClick={save}><Truck size={13} className="mr-1 inline" />Issue fabric DC</Button></>}>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Input label="DC date" type="date" value={h.dc_date} onChange={(e) => setH({ ...h, dc_date: e.target.value })} />
         <Input label="Expected return" type="date" value={h.expected_return} onChange={(e) => setH({ ...h, expected_return: e.target.value })} />
