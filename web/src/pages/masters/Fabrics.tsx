@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { MasterValueSelect, useMasterValues } from '../../components/MasterValueSelect';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -62,24 +63,6 @@ const FIBRE_COLOR_PALETTE = [
   '#64748b', // Slate
 ];
 
-const FIBRE_PRESETS = [
-  'Cotton (Organic)',
-  'Cotton (BCI)',
-  'Cotton (Carded)',
-  'Cotton (Combed)',
-  'Polyester (Virgin)',
-  'Polyester (Recycled / rPET)',
-  'Elastane / Spandex',
-  'Viscose / Rayon',
-  'Modal',
-  'Tencel / Lyocell',
-  'Linen',
-  'Wool',
-  'Nylon / Polyamide',
-  'Silk',
-  'Bamboo Fibre',
-  'Other Blend',
-];
 
 const KNIT_STRUCTURES = [
   'Single Jersey',
@@ -103,35 +86,7 @@ const KNIT_STRUCTURES = [
   'Other Construction',
 ];
 
-const STRUCTURES = [
-  'None / Standard',
-  '1x1 Rib',
-  '2x2 Rib',
-  '4x2 Rib',
-  '1x1 Plated Rib',
-  '2x2 Plated Rib',
-  'Double Layer',
-  'Other Structure',
-];
 
-const EFFECTS = [
-  'None',
-  'Slub',
-  'Melange',
-  'Grindle',
-  'Snow',
-  'Stripe',
-  'Fancy Stripe',
-  'AOP',
-  'Digital AOP',
-  'Neppy',
-  'Space Dyed',
-  'Cross Loop',
-  'Pin Stripe',
-  'Indigo Effect',
-  'Drop Needle',
-  'Quilted',
-];
 
 export const FINISH_TYPES = [
   'Bio-wash + Silicon Softener',
@@ -191,19 +146,9 @@ export function generateFabricAutoDescription(
   return parts.join(' ').replace(/\s+/g, ' ').trim();
 }
 
-const STANDARD_GSM_PRESETS = [
-  { gsm: 140, label: '140 GSM', defaultDia: 30, defaultWidth: 150, rate: 385 },
-  { gsm: 160, label: '160 GSM', defaultDia: 32, defaultWidth: 160, rate: 405 },
-  { gsm: 180, label: '180 GSM', defaultDia: 34, defaultWidth: 170, rate: 420 },
-  { gsm: 200, label: '200 GSM', defaultDia: 34, defaultWidth: 180, rate: 445 },
-  { gsm: 220, label: '220 GSM', defaultDia: 34, defaultWidth: 185, rate: 465 },
-  { gsm: 240, label: '240 GSM', defaultDia: 36, defaultWidth: 190, rate: 485 },
-  { gsm: 280, label: '280 GSM', defaultDia: 36, defaultWidth: 200, rate: 520 },
-  { gsm: 320, label: '320 GSM', defaultDia: 34, defaultWidth: 200, rate: 550 },
-];
 
 function parseCompositionToLines(desc?: string): FibreDetailLine[] {
-  if (!desc) return [{ _key: `fl_${++fibreLineSeq}`, fibre_name: 'Cotton (Organic)', percentage: 100 }];
+  if (!desc) return [{ _key: `fl_${++fibreLineSeq}`, fibre_name: 'Cotton', percentage: 100 }];
   const parts = desc.split(/[\/,+]/).map((s) => s.trim()).filter(Boolean);
   const lines: FibreDetailLine[] = [];
   for (const part of parts) {
@@ -222,7 +167,7 @@ function parseCompositionToLines(desc?: string): FibreDetailLine[] {
       });
     }
   }
-  return lines.length > 0 ? lines : [{ _key: `fl_${++fibreLineSeq}`, fibre_name: 'Cotton (Organic)', percentage: 100 }];
+  return lines.length > 0 ? lines : [{ _key: `fl_${++fibreLineSeq}`, fibre_name: 'Cotton', percentage: 100 }];
 }
 
 /* ==============================================================================
@@ -634,12 +579,12 @@ export function FabricDetailPage() {
 
   // Fibre Composition Lines
   const [fibreLines, setFibreLines] = useState<FibreDetailLine[]>([
-    { _key: 'fl_init_1', fibre_name: 'Cotton (Organic)', percentage: 100 },
+    { _key: 'fl_init_1', fibre_name: 'Cotton', percentage: 100 },
   ]);
 
   // GSM Variants List
   // GSM / Dia variants — GSM from the GSM master, Dia from the Dia master (chosen per row)
-  const [variants, setVariants] = useState<FabricVariantLine[]>([
+  const [variants, setVariants] = useState<FabricVariantLine[]>(isNew ? [] : [
     {
       _key: 'var_1',
       fabric_code: '',
@@ -757,6 +702,21 @@ export function FabricDetailPage() {
     }
   }, [isNew, categories.data, uoms.data]);
 
+  const fibreMaster = useMasterValues('FIBRE');
+
+  // Base name follows the composition + construction ("100% Cotton Single Jersey") until the user types their own;
+  // GSM / Dia are not part of the master (client 05-Oct-2026: they are picked in each transaction).
+  const autoBaseName = useMemo(() => [fibreLines.filter((l) => Number(l.percentage) > 0 && l.fibre_name).map((l) => `${l.percentage}% ${l.fibre_name}`).join(' '),
+    head.knit_structure, head.structure && head.structure !== 'None / Standard' ? head.structure : '', head.effect && head.effect !== 'None' ? head.effect : '']
+    .filter(Boolean).join(' ').replace(/\s+/g, ' ').trim(), [fibreLines, head.knit_structure, head.structure, head.effect]);
+  const [lastAuto, setLastAuto] = useState('');
+  useEffect(() => {
+    if (!isNew) return;
+    if (!head.base_name || head.base_name === lastAuto) setHead((h) => ({ ...h, base_name: autoBaseName }));
+    setLastAuto(autoBaseName);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoBaseName]);
+
   // Total Percentage Validator
   const totalPercentage = useMemo(() => {
     return fibreLines.reduce((acc, curr) => acc + (Number(curr.percentage) || 0), 0);
@@ -784,7 +744,7 @@ export function FabricDetailPage() {
   // Fibre Line handlers
   const handleAddFibreLine = () => {
     const used = new Set(fibreLines.map((l) => l.fibre_name));
-    const nextFibre = FIBRE_PRESETS.find((p) => !used.has(p)) || 'Cotton (Organic)';
+    const nextFibre = fibreMaster.data?.map((x) => x.attr_value).find((p) => !used.has(p)) || '';
     const remaining = Math.max(0, 100 - totalPercentage);
     setFibreLines((s) => [...s, { _key: `fl_${++fibreLineSeq}`, fibre_name: nextFibre, percentage: remaining || 0 }]);
   };
@@ -858,10 +818,6 @@ export function FabricDetailPage() {
   };
 
   const handleRemoveVariant = (key: string) => {
-    if (variants.length <= 1) {
-      toast('At least one GSM variant is required for a Fabric Base', 'info');
-      return;
-    }
     setVariants((s) => s.filter((v) => v._key !== key));
   };
 
@@ -902,24 +858,24 @@ export function FabricDetailPage() {
       toast(`Fibre composition must total exactly 100% (currently ${totalPercentage.toFixed(1)}%)`, 'info');
       return;
     }
-    if (variants.length === 0) {
-      toast('Please add at least one GSM variant', 'info');
+    if (fibreLines.some((l) => !String(l.fibre_name || '').trim())) {
+      toast('Choose the fibre on every composition row', 'info');
       return;
     }
-    // Every row needs GSM (GSM master) and Dia (Dia master) — checked before anything is saved,
-    // so a half-filled form never leaves a fabric base without variants behind.
-    const missing = variants.findIndex((v) => !v.gsm_id || !(Number(v.dia_inch) > 0));
-    if (missing >= 0) {
-      toast(`Row ${missing + 1}: choose the GSM and the Dia`, 'info');
-      return;
-    }
-    // Blank item codes / names are generated (FAB-<base>-<gsm>-<dia>D)
+    // GSM / Dia rows are optional (client 05-Oct-2026): GSM and Dia come from their masters in each PO / BOM line.
+    // A fabric with no row still gets one plain item (no GSM / Dia) so it can be bought and planned.
     const baseSlug = head.base_code.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-    const rows = variants.map((v) => ({
-      ...v,
-      fabric_code: (v.fabric_code || '').trim() || `FAB-${baseSlug}-${v.gsm_value}-${Number(v.dia_inch)}D`,
-      fabric_name: (v.fabric_name || '').trim() || `${head.base_name.trim()} ${v.gsm_value} GSM ${Number(v.dia_inch)}" Dia`,
-    }));
+    const src = variants.length ? variants : [{ _key: `var_${++variantLineSeq}`, fabric_code: '', fabric_name: '', gsm_id: '', gsm_value: '', min_gsm: '', max_gsm: '',
+      width_cm: '', width_uom: 'INCH', width_form: 'TUBULAR', dia_inch: '', gauge: '', std_rate: '', is_active: 1 } as FabricVariantLine];
+    const rows = src.map((v) => {
+      const gsm = v.gsm_id ? v.gsm_value : '';
+      const dia = Number(v.dia_inch) > 0 ? Number(v.dia_inch) : 0;
+      return {
+        ...v,
+        fabric_code: (v.fabric_code || '').trim() || ['FAB', baseSlug, gsm, dia ? `${dia}D` : ''].filter(Boolean).join('-'),
+        fabric_name: (v.fabric_name || '').trim() || [head.base_name.trim(), gsm ? `${gsm} GSM` : '', dia ? `${dia}" Dia` : ''].filter(Boolean).join(' '),
+      };
+    });
     const dup = rows.find((v, i) => rows.findIndex((x) => x.fabric_code.toUpperCase() === v.fabric_code.toUpperCase()) !== i);
     if (dup) {
       toast(`Two rows have the same item code ${dup.fabric_code} — change the GSM / Dia or the code`, 'info');
@@ -930,17 +886,20 @@ export function FabricDetailPage() {
     setSaving(true);
     try {
       // 1. Create or Find Composition Record
+      // the same composition is reused (one record per "95% Cotton / 5% Elastane"), with its fibre rows
       let compositionId = head.composition_id;
       if (autoCompositionString) {
-        try {
+        const found = await http.get<any>('/compositions', { q: autoCompositionString, pageSize: 50 }).catch(() => null);
+        const same = (found?.data?.items ?? found?.data ?? []).find((c: any) => String(c.description || '').trim().toUpperCase() === autoCompositionString.toUpperCase());
+        if (same) compositionId = same.id;
+        else {
           const compRes = await http.post<any>('/compositions', {
             composition_code: `COMP-${Date.now().toString().slice(-6)}`,
             description: autoCompositionString,
             is_active: 1,
-          });
-          compositionId = compRes.data?.id;
-        } catch {
-          // ignore duplicate composition error
+            details: fibreLines.filter((l) => Number(l.percentage) > 0 && l.fibre_name).map((l) => ({ fibre_name: l.fibre_name, percentage: Number(l.percentage) })),
+          }).catch(() => null);
+          compositionId = compRes?.data?.id ?? compositionId;
         }
       }
 
@@ -997,7 +956,7 @@ export function FabricDetailPage() {
           width_uom: v.width_uom || 'INCH',
           width_form: v.width_form || 'TUBULAR',
           dia_inch: Number(v.dia_inch) || 0,
-          gauge: v.gauge || '24 GG',
+          gauge: v.gauge || null,
           yarn_id: head.yarn_id || null,
           finish_type: head.finish_type || null,
           hsn_code: head.hsn_code || '6006',
@@ -1150,46 +1109,22 @@ export function FabricDetailPage() {
 
           <div>
             <label className="label">Fabric Type *</label>
-            <Select
-              value={head.fabric_type}
-              disabled={!editable}
-              onChange={(e) => setHead({ ...head, fabric_type: e.target.value })}
-              options={[
-                { value: 'KNIT', label: 'Knit Fabric' },
-                { value: 'WOVEN', label: 'Woven Fabric' },
-                { value: 'NONWOVEN', label: 'Non-Woven' },
-              ]}
-            />
+            <MasterValueSelect type="FABRIC_TYPE" id="fab-type" value={head.fabric_type} disabled={!editable} onChange={(v) => setHead({ ...head, fabric_type: v })} />
           </div>
 
           <div>
             <label className="label">Construction / Fabric Type *</label>
-            <Select
-              value={head.knit_structure}
-              disabled={!editable}
-              onChange={(e) => setHead({ ...head, knit_structure: e.target.value })}
-              options={KNIT_STRUCTURES.map((s) => ({ value: s, label: s }))}
-            />
+            <MasterValueSelect type="KNIT_STRUCTURE" id="fab-construction" value={head.knit_structure} disabled={!editable} onChange={(v) => setHead({ ...head, knit_structure: v })} />
           </div>
 
           <div>
             <label className="label">Structure (Rib / Double Layer)</label>
-            <Select
-              value={head.structure}
-              disabled={!editable}
-              onChange={(e) => setHead({ ...head, structure: e.target.value })}
-              options={STRUCTURES.map((s) => ({ value: s, label: s }))}
-            />
+            <MasterValueSelect type="STRUCTURE" id="fab-structure" value={head.structure} disabled={!editable} onChange={(v) => setHead({ ...head, structure: v })} />
           </div>
 
           <div>
             <label className="label">Effect / Design</label>
-            <Select
-              value={head.effect}
-              disabled={!editable}
-              onChange={(e) => setHead({ ...head, effect: e.target.value })}
-              options={EFFECTS.map((eff) => ({ value: eff, label: eff }))}
-            />
+            <MasterValueSelect type="EFFECT" id="fab-effect" value={head.effect} disabled={!editable} onChange={(v) => setHead({ ...head, effect: v })} />
           </div>
 
 
@@ -1350,20 +1285,8 @@ export function FabricDetailPage() {
                           <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: color }} />
                         </td>
                         <td className="py-1 px-2">
-                          <input
-                            type="text"
-                            list={`fibre-presets-${line._key}`}
-                            value={line.fibre_name}
-                            disabled={!editable}
-                            onChange={(e) => handleUpdateFibreLine(line._key, { fibre_name: e.target.value })}
-                            placeholder="Select or type fibre name"
-                            className="input py-1 px-2 font-medium text-slate-800 text-xs w-full"
-                          />
-                          <datalist id={`fibre-presets-${line._key}`}>
-                            {FIBRE_PRESETS.map((p) => (
-                              <option key={p} value={p} />
-                            ))}
-                          </datalist>
+                          <MasterValueSelect type="FIBRE" compact id={`fab-fibre-${idx}`} value={line.fibre_name} disabled={!editable}
+                            onChange={(v) => handleUpdateFibreLine(line._key, { fibre_name: v })} />
                         </td>
                         <td className="py-1 px-2 text-right">
                           <div className="relative inline-block w-24">
@@ -1547,7 +1470,7 @@ export function FabricDetailPage() {
         {/* Quick Add Presets Toolbar */}
         <div className="mb-4 flex flex-wrap items-center gap-1.5 rounded-lg bg-slate-50 p-2.5 border border-slate-200">
           <span className="text-xs font-bold text-slate-700 flex items-center gap-1 mr-2">
-            <Tag size={13} className="text-brand-600" /> Quick Add GSM Presets:
+            <Tag size={13} className="text-brand-600" /> Optional — add GSM / Dia items:
           </span>
           {(gsmList.data || []).slice(0, 10).map((g: any) => ({ gsm: Number(g.code), defaultDia: undefined as number | undefined, rate: undefined as number | undefined })).map((p) => {
             const added = variants.some((v) => Number(v.gsm_value) === p.gsm);
@@ -1564,7 +1487,7 @@ export function FabricDetailPage() {
                 }`}
               >
                 {added && <Check size={12} className="text-brand-600" />}
-                <span>+ {p.label} ({p.defaultDia}" Dia)</span>
+                <span>+ {p.gsm} GSM</span>
               </button>
             );
           })}

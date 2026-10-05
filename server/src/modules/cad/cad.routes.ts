@@ -6,9 +6,35 @@ import { NotFound, BadRequest } from '../../core/errors.js';
 import { requirePermission } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
+import path from 'node:path';
+import fs from 'node:fs';
+import crypto from 'node:crypto';
+import { z } from 'zod';
+import { readMarkerReport } from '../../core/markerReport.js';
+import { resolveSoId } from '../stock/jobStock.routes.js';
 import { isKgUom, partKg, partQtyPerKg, readPartFactor, factorUnitLabel, withPartWeight } from '../../core/partWeight.js';
 
 export const cadRouter = Router();
+
+/**
+ * GET /cad-requirements/job-colours?io_no=&style_id= — the colours on the job's sales order (client 05-Oct-2026: a CAD
+ * colourway is picked from the IO's colours, never typed, so CAD and order never mismatch).
+ */
+cadRouter.get('/cad-requirements/job-colours', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const q = z.object({ io_no: z.string().trim().min(1).max(60), style_id: z.coerce.number().int().positive().optional() }).parse(req.query);
+  const soId = await resolveSoId(cid, null, q.io_no);
+  if (!soId) { res.json({ data: [], meta: { so_id: null } }); return; }
+  const rows = await query<any>(
+    `SELECT DISTINCT c.id AS color_id, c.color_name, c.color_code
+       FROM trx_sales_order_line sol
+       LEFT JOIN trx_sales_order_sku sos ON sos.so_line_id = sol.id
+       LEFT JOIN mst_style_sku sk ON sk.id = sos.sku_id
+       JOIN mst_color c ON c.id = COALESCE(sk.color_id, sol.color_id)
+      WHERE sol.so_id = ? ${q.style_id ? 'AND sol.style_id = ?' : ''} ORDER BY c.color_name`, q.style_id ? [soId, q.style_id] : [soId]);
+  res.json({ data: rows, meta: { so_id: soId } });
+}));
+
 
 /* ==============================================================================
    CAD REQUIREMENT & AUTO-CONSUMPTION ENGINE
@@ -205,6 +231,7 @@ cadRouter.get('/cad-requirements/:id', requirePermission('PRODUCTION.VIEW'), ah(
     data: {
       ...reqRow,
       ratio_patti_ref: ratioPatti,
+      marker_files: await markerFiles(companyId, id),
       markers: markers.length > 0 ? markers : (dataJson.markers || []),
       fabric_program: fabricPrograms.filter((f) => f.sheet_type === 'FABRIC_PROGRAM'),
       cutting_lay: fabricPrograms.filter((f) => f.sheet_type === 'CUTTING_LAY'),
@@ -1181,3 +1208,83 @@ cadRouter.post('/cad-requirements/:id/approve', requirePermission('PRODUCTION.AP
 
   res.json({ data: { status: 'APPROVED', cad_req_id: id, purchase_requirement: purchaseRequirement } });
 }));
+
+/* ------------------------------------------------------------------ marker files (client voice note 05-Oct-2026)
+ * The marker report PDF (Gemini / Lectra prints one per marker) or the CAD file, uploaded on each marker. A PDF gives
+ * the marker layout picture — stored as a small JPEG and shown beside the marker — and its figures (width, length,
+ * efficiency, size ratio) for the "Apply" button. Kept by CAD + marker no, so a CAD save (which rewrites the markers)
+ * does not lose them. */
+
+export async function markerFiles(cid: number, cadReqId: number) {
+  const rows = await query<any>(
+    `SELECT f.id, f.marker_ref, f.kind, f.file_name, f.file_url, f.file_size, f.image_url, f.image_w, f.image_h, f.parsed_json, f.uploaded_at, u.full_name AS uploaded_by_name
+       FROM trx_cad_marker_file f LEFT JOIN mst_user u ON u.id = f.uploaded_by
+      WHERE f.company_id = ? AND f.cad_req_id = ? AND f.is_active = 1 ORDER BY f.marker_ref, f.id DESC`, [cid, cadReqId]).catch(() => []);
+  return rows.map((r) => { let parsed: any = null; try { parsed = r.parsed_json ? JSON.parse(r.parsed_json) : null; } catch { parsed = null; } return { ...r, parsed_json: undefined, parsed }; });
+}
+
+const CAD_DIR = () => { const d = path.resolve(process.cwd(), 'uploads', 'cad'); if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }); return d; };
+const safeBase = (name: string) => path.basename(name, path.extname(name)).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40) || 'marker';
+
+cadRouter.get('/cad-requirements/:id/marker-files', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  res.json({ data: await markerFiles(req.user!.companyId, Number(req.params.id)) });
+}));
+
+/** POST /cad-requirements/:id/marker-files { marker_ref, file_name, data (base64 / data URI) } */
+cadRouter.post('/cad-requirements/:id/marker-files', requirePermission('PRODUCTION.CREATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const cadReqId = Number(req.params.id);
+  const b = z.object({ marker_ref: z.string().trim().min(1).max(50), file_name: z.string().trim().min(1).max(200), data: z.string().min(10) }).parse(req.body ?? {});
+  const cr = await queryOne<any>(`SELECT id, req_no FROM trx_cad_requirement WHERE id = ? AND company_id = ?`, [cadReqId, cid]);
+  if (!cr) throw NotFound('CAD requirement not found');
+  const buf = Buffer.from(b.data.replace(/^data:[^;]+;base64,/, ''), 'base64');
+  if (!buf.length) throw BadRequest('The file is empty');
+  if (buf.length > 15 * 1024 * 1024) throw BadRequest('The file is over 15 MB');
+  const ext = path.extname(b.file_name).toLowerCase();
+  const isPdf = buf.subarray(0, 5).toString('latin1') === '%PDF-';
+  const isImg = ['.jpg', '.jpeg', '.png', '.webp'].includes(ext);
+  const allowed = ['.pdf', '.ord', '.gemx', '.dxf', '.plx', '.hpgl', '.plt', '.mrk', '.jpg', '.jpeg', '.png', '.webp'];
+  if (!allowed.includes(ext) && !isPdf) throw BadRequest(`File type ${ext || '?'} is not accepted — upload the marker report PDF, the CAD file (.ord, .dxf, .plx …) or a picture`);
+  const stamp = `${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+  const base = `${safeBase(b.file_name)}_${stamp}`;
+  const fileName = `${base}${isPdf ? '.pdf' : ext}`;
+  fs.writeFileSync(path.join(CAD_DIR(), fileName), buf);
+  const fileUrl = `/uploads/cad/${fileName}`;
+  let kind = isPdf ? 'REPORT' : isImg ? 'IMAGE' : 'CAD';
+  let imageUrl: string | null = isImg ? fileUrl : null;
+  let imageW: number | null = null; let imageH: number | null = null;
+  let parsed: any = null;
+  if (isPdf) {
+    try {
+      const { report, images } = readMarkerReport(buf);
+      const { rows, ...figures } = report;
+      parsed = { ...figures, text_rows: rows.slice(0, 40) };
+      const pic = images.find((im) => im.width * im.height >= 40_000) ?? images[0];
+      if (pic) {
+        const imgName = `${base}_layout.jpg`;
+        fs.writeFileSync(path.join(CAD_DIR(), imgName), pic.jpeg);
+        imageUrl = `/uploads/cad/${imgName}`; imageW = pic.width; imageH = pic.height;
+      }
+    } catch (e) {
+      kind = 'CAD';
+      parsed = { error: `Could not read the PDF: ${(e as Error).message}` };
+    }
+  }
+  const ins: any = await query(
+    `INSERT INTO trx_cad_marker_file (company_id, cad_req_id, marker_ref, kind, file_name, file_url, file_size, image_url, image_w, image_h, parsed_json, uploaded_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [cid, cadReqId, b.marker_ref, kind, b.file_name, fileUrl, buf.length, imageUrl, imageW, imageH, parsed ? JSON.stringify(parsed) : null, req.user!.id]);
+  const id = Number(ins?.insertId ?? 0);
+  await audit(req, 'trx_cad_marker_file', id, 'INSERT', undefined, { cad: cr.req_no, marker_ref: b.marker_ref, file: b.file_name, kind, image: !!imageUrl });
+  const files = await markerFiles(cid, cadReqId);
+  res.status(201).json({ data: files.find((f) => Number(f.id) === id) ?? null, files });
+}));
+
+cadRouter.delete('/cad-requirements/:id/marker-files/:fileId', requirePermission('PRODUCTION.CREATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const r: any = await query(`UPDATE trx_cad_marker_file SET is_active = 0 WHERE id = ? AND cad_req_id = ? AND company_id = ?`, [Number(req.params.fileId), Number(req.params.id), cid]);
+  if (!r?.affectedRows) throw NotFound('Marker file not found');
+  await audit(req, 'trx_cad_marker_file', Number(req.params.fileId), 'UPDATE', undefined, { is_active: 0 });
+  res.json({ data: { id: Number(req.params.fileId), removed: true } });
+}));
+

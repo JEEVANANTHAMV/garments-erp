@@ -21,6 +21,12 @@ import { checkSupplierBill } from '../../core/supplierBillRules.js';
 import { quotationAfterWriteTx } from '../stock/genealogy.routes.js';
 import { PO_RECEIPT_STATUS_SQL } from '../../core/poReceipt.js';
 import type { Request } from 'express';
+
+/** A yarn PO line's count is its yarn item's count (client 05-Oct-2026: "…40s" item with a "30s" count must not happen). */
+async function syncYarnCount(row: any, tx: Tx) {
+  await txExecute(tx, `UPDATE trx_purchase_order_line pl JOIN mst_yarn y ON y.id = pl.yarn_id
+      SET pl.yarn_count_str = y.count_value WHERE pl.po_id = ? AND pl.material_type = 'YARN' AND COALESCE(y.count_value, '') <> ''`, [row.id]);
+}
 import type { Tx } from '../../config/db.js';
 
 /** Purchase excess limit of the jobs on a PO's lines (cancelled / rejected POs are not checked). */
@@ -260,8 +266,8 @@ export const transactionResources: ResourceConfig[] = [
   {
     path: 'purchase-orders', table: 'trx_purchase_order', permission: 'PURCHASE', label: 'Purchase Order',
     // a job may buy each BOM material only up to its requirement + allowed excess (client 03-Oct-2026)
-    afterCreateTx: async (req, row, tx) => { await poExcessCheck(req, row, tx); },
-    afterUpdateTx: async (req, row, tx) => { await poExcessCheck(req, row, tx); },
+    afterCreateTx: async (req, row, tx) => { await syncYarnCount(row, tx); await poExcessCheck(req, row, tx); },
+    afterUpdateTx: async (req, row, tx) => { await syncYarnCount(row, tx); await poExcessCheck(req, row, tx); },
     searchable: ['po_no', 'remarks'], sortable: ['po_no', 'po_date', 'delivery_date'],
     defaultSort: 't.po_date', hasIsActive: false,
     filters: ['supplier_id', 'po_type', 'status_id', 'approval_state', 'so_id', 'branch_id'],

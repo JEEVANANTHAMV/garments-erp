@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { StyleSizesPanel } from './StyleSizesPanel';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, ArrowLeft, Sparkles, Save, FileText, Check, ChevronDown, X, Search } from 'lucide-react';
@@ -335,7 +336,9 @@ export function StyleDetailPage() {
       toast(asDraft ? 'Style saved as Draft — resume anytime' : `Style ${isNew ? 'created' : 'updated'} successfully`);
       void qc.invalidateQueries({ queryKey: ['styles'] });
       void qc.invalidateQueries({ queryKey: ['lookup'] });
+      void qc.invalidateQueries({ queryKey: ['style-sizes'] });
       if (isNew) nav(`/masters/styles/${res.data.id}`, { replace: true });
+      else { setHydrated(false); void detail.refetch(); }
     } catch (e) {
       if (e instanceof ApiError) { setErrors(e.fieldErrors); toast(e.message, 'error'); }
     } finally { setSaving(false); }
@@ -345,8 +348,10 @@ export function StyleDetailPage() {
     setGenerating(true);
     try {
       const res = await http.post<{ data: { created: number; total: number } }>(`/styles/${id}/generate-skus`);
-      toast(`${res.data.created} new SKU${res.data.created === 1 ? '' : 's'} generated (${res.data.total} total)`);
+      const r: any = res.data;
+      toast(`${r.created} new SKU${r.created === 1 ? '' : 's'} generated${r.deactivated ? `, ${r.deactivated} retired (size / colour no longer on the style)` : ''} (${r.total} total)`);
       void detail.refetch();
+      void qc.invalidateQueries({ queryKey: ['lookup', 'style-skus'] });
     } catch (e) {
       toast(e instanceof ApiError ? e.message : 'Could not generate SKUs', 'error');
     } finally { setGenerating(false); }
@@ -418,7 +423,7 @@ export function StyleDetailPage() {
                 <Select label="Size group" options={toOptions(sizeGroups.data)} placeholder="— Select —"
                   value={v.size_group_id ?? ''} disabled={!editable}
                   onChange={(e) => set('size_group_id', e.target.value)}
-                  hint="Required before SKUs can be generated" />
+                  hint={isNew ? 'Fills the sizes of the style — change single sizes after saving' : 'Changing the group replaces the sizes (and their SKUs) on save'} />
                 <Select label="Body fabric" options={toOptions(fabrics.data)} placeholder="— Select —"
                   value={v.fabric_id ?? ''} disabled={!editable} onChange={(e) => set('fabric_id', e.target.value)} />
                 <ColorMultiSelect colors={colors.data ?? []} selectedIds={colorIds} onChange={setColorIds} disabled={!editable} />
@@ -428,6 +433,8 @@ export function StyleDetailPage() {
                   disabled={!editable} onChange={(e) => set('description', e.target.value)} />
               </div>
             </div>
+
+            {!isNew && <div className="lg:col-span-3 order-last"><StyleSizesPanel styleId={Number(id)} editable={editable} onSaved={() => void detail.refetch()} /></div>}
 
             {/* Right 1 Col: Garment Photo & Sketch Upload */}
             <div className="card p-4">

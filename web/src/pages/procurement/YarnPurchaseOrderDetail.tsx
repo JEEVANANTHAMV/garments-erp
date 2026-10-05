@@ -135,6 +135,25 @@ export default function YarnPurchaseOrderDetailPage() {
 
   const suppliers = useLookup('suppliers');
   const yarns = useLookup('yarns');
+  const yarnBases = useLookup('yarn-bases');
+  const yarnCounts = useLookup('yarn-counts');
+  /** client 05-Oct-2026: the yarn master is the base ("100% Organic Cotton"); base + count give the item, so the item
+   *  name and the count column can never disagree */
+  const baseOf = (yarnId: unknown) => (yarns.data || []).find((y: any) => String(y.id) === String(yarnId))?.yarn_base_id ?? null;
+  const countIdOf = (l: any) => {
+    const y: any = (yarns.data || []).find((x: any) => String(x.id) === String(l.yarn_id));
+    if (y?.count_id) return String(y.count_id);
+    const c: any = (yarnCounts.data || []).find((x: any) => String(x.count_value).toUpperCase() === String(l.yarn_count_str || '').toUpperCase());
+    return c ? String(c.id) : '';
+  };
+  const resolveYarn = async (idx: number, baseId: unknown, countId: unknown) => {
+    if (!baseId || !countId) return;
+    try {
+      const y = (await http.post<{ data: any }>('/yarn-variants/resolve', { yarn_base_id: Number(baseId), yarn_count_id: Number(countId) })).data;
+      await yarns.refetch();
+      updateLine(idx, { _bom: undefined, yarn_id: String(y.id), yarn_name: y.yarn_name, yarn_count_str: String(y.count_value || '') });
+    } catch (e: any) { toast(e?.message || 'Could not resolve the yarn item', 'error'); }
+  };
   const styles = useLookup('styles');
   const parties = useLookup('parties');
   const currencies = useLookup('currencies');
@@ -343,7 +362,7 @@ export default function YarnPurchaseOrderDetailPage() {
           yarn_name: l.yarn_name,
           yarn_type: (l.yarn_type as any) || 'Grey Yarn',
           purchase_basis: (l.purchase_basis as any) || 'DIRECT_KG',
-          yarn_count_str: l.yarn_count_str || '30s',
+          yarn_count_str: l.yarn_count_str || '',
           yarn_category: l.yarn_category || 'Combed',
           composition: l.composition || '100% Cotton',
           shade_code: l.shade_code || '',
@@ -1055,6 +1074,14 @@ export default function YarnPurchaseOrderDetailPage() {
                         value={l._bom && lineBom.some((it) => it.bom_line_id === l._bom) ? `bom:${l._bom}` : l.yarn_id}
                         onChange={(e) => {
                           const val = e.target.value;
+                          if (val.startsWith('base:')) {
+                            const baseId = val.slice(5);
+                            const cnt = countIdOf(l);
+                            if (cnt) { void resolveYarn(idx, baseId, cnt); return; }
+                            updateLine(idx, { _bom: undefined, yarn_id: '', yarn_name: '', _pending_base: baseId } as any);
+                            toast('Now choose the count — base + count make the yarn item', 'info');
+                            return;
+                          }
                           if (val.startsWith('bom:')) {
                             const it = lineBom.find((x) => `bom:${x.bom_line_id}` === val);
                             if (it) pickBomYarn(idx, l, it);
@@ -1085,16 +1112,22 @@ export default function YarnPurchaseOrderDetailPage() {
                             {lineBom.map((it) => <option key={it.bom_line_id} value={`bom:${it.bom_line_id}`}>{bomItemLabel(it)}</option>)}
                           </optgroup>
                         )}
-                        <optgroup label="All yarns">
-                          {((filterBomOnly && bomYarns.length > 0)
-                            ? (yarns.data || []).filter((y: any) => bomYarns.some((by: any) => Number(by.yarn_id) === Number(y.id)))
-                            : (yarns.data || [])
-                          ).map((o: any) => (
-                            <option key={o.id} value={o.id}>
-                              {o.yarn_name || o.yarn_code || o.label}
-                            </option>
-                          ))}
-                        </optgroup>
+                        {l.yarn_id && !(filterBomOnly && bomYarns.length > 0) && (
+                          <optgroup label="Selected item">
+                            <option value={l.yarn_id}>{(yarns.data || []).find((y: any) => String(y.id) === String(l.yarn_id))?.label || l.yarn_name || 'Yarn'}</option>
+                          </optgroup>
+                        )}
+                        {(filterBomOnly && bomYarns.length > 0) ? (
+                          <optgroup label="All yarns (BOM only)">
+                            {(yarns.data || []).filter((y: any) => bomYarns.some((by: any) => Number(by.yarn_id) === Number(y.id))).map((o: any) => (
+                              <option key={o.id} value={o.id}>{o.yarn_name || o.yarn_code || o.label}</option>
+                            ))}
+                          </optgroup>
+                        ) : (
+                          <optgroup label="Yarn (base) — then choose the count">
+                            {(yarnBases.data || []).map((b: any) => <option key={`b${b.id}`} value={`base:${b.id}`}>{b.label}</option>)}
+                          </optgroup>
+                        )}
                       </select>
                     </td>
 
@@ -1138,13 +1171,22 @@ export default function YarnPurchaseOrderDetailPage() {
 
                     {/* Count */}
                     <td className="py-2.5 px-2">
-                      <input
-                        type="text"
-                        value={l.yarn_count_str}
-                        onChange={(e) => updateLine(idx, { yarn_count_str: e.target.value })}
-                        className="w-14 text-xs font-mono font-medium border border-slate-300 rounded px-1.5 py-1"
-                        placeholder="30s"
-                      />
+                      <select
+                        value={countIdOf(l)}
+                        id={`ypo-line-${idx}-count`}
+                        onChange={(e) => {
+                          const cnt = e.target.value;
+                          const baseId = baseOf(l.yarn_id) ?? (l as any)._pending_base;
+                          if (baseId) { void resolveYarn(idx, baseId, cnt); return; }
+                          const c: any = (yarnCounts.data || []).find((x: any) => String(x.id) === cnt);
+                          updateLine(idx, { yarn_count_str: c ? String(c.count_value) : '' });
+                        }}
+                        className="w-20 text-xs font-mono font-medium border border-slate-300 rounded px-1 py-1"
+                        title="The count is part of the yarn item: changing it switches to that base's item for the count"
+                      >
+                        <option value="">{l.yarn_count_str || '—'}</option>
+                        {(yarnCounts.data || []).map((c: any) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                      </select>
                     </td>
 
                     {/* Composition */}

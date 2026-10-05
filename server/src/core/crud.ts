@@ -1,6 +1,6 @@
 import { Router, type Request } from 'express';
 import { z } from 'zod';
-import { query, queryOne, execute, transaction, txQueryOne, txExecute, type Tx } from '../config/db.js';
+import { query, queryOne, execute, transaction, txQuery, txQueryOne, txExecute, type Tx } from '../config/db.js';
 import { ah } from './asyncHandler.js';
 import { BadRequest, NotFound } from './errors.js';
 import { requirePermission } from '../middleware/auth.js';
@@ -85,6 +85,11 @@ export interface ChildConfig {
   fields: FieldDef[];
   /** ORDER BY when reading children back. */
   orderBy?: string;
+  /**
+   * Keep child ids on update: rows sent with their `id` are updated, new rows inserted, rows left out deleted — or,
+   * when other documents still reference them, deactivated through this column (e.g. sizes used by SKUs).
+   */
+  upsert?: { deactivateCol?: string };
 }
 
 const listQuerySchema = z.object({
@@ -317,6 +322,36 @@ export function buildResourceRouter(cfg: ResourceConfig): Router {
       for (const c of children) {
         const rows = req.body?.[c.key];
         if (!Array.isArray(rows)) continue;
+        if (c.upsert) {
+          const existing = await txQuery<any>(tx, `SELECT id FROM ${c.table} WHERE ${c.fk} = ?`, [id]);
+          const ids = new Set(existing.map((r) => Number(r.id)));
+          const kept = new Set<number>();
+          for (const raw of rows) {
+            const childData = pickWritable(c.fields, raw, false);
+            childData[c.fk] = id;
+            const cid = Number(raw?.id);
+            const ccols = Object.keys(childData);
+            if (cid && ids.has(cid)) {
+              kept.add(cid);
+              await txExecute(tx, `UPDATE ${c.table} SET ${ccols.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`, [...ccols.map((k) => childData[k]), cid]);
+            } else {
+              await txExecute(tx, `INSERT INTO ${c.table} (${ccols.join(',')}) VALUES (${ccols.map(() => '?').join(',')})`, ccols.map((k) => childData[k]));
+            }
+          }
+          for (const old of ids) {
+            if (kept.has(old)) continue;
+            try {
+              await (tx as any).query(`SAVEPOINT child_del`);
+              await txExecute(tx, `DELETE FROM ${c.table} WHERE id = ?`, [old]);
+              await (tx as any).query(`RELEASE SAVEPOINT child_del`);
+            } catch (e: any) {
+              await (tx as any).query(`ROLLBACK TO SAVEPOINT child_del`);
+              if (!c.upsert.deactivateCol || !/foreign key|ER_ROW_IS_REFERENCED/i.test(String(e?.message ?? e?.code))) throw e;
+              await txExecute(tx, `UPDATE ${c.table} SET ${c.upsert.deactivateCol} = 0 WHERE id = ?`, [old]);
+            }
+          }
+          continue;
+        }
         await txExecute(tx, `DELETE FROM ${c.table} WHERE ${c.fk} = ?`, [id]);
         for (const raw of rows) {
           const childData = pickWritable(c.fields, raw, false);

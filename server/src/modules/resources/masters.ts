@@ -230,7 +230,8 @@ export const masterResources: ResourceConfig[] = [
     selectExtra: 'p.party_name AS buyer_name, (SELECT COUNT(*) FROM mst_size s WHERE s.size_group_id = t.id AND s.is_active=1) AS size_count, (SELECT GROUP_CONCAT(s.size_code ORDER BY s.sort_order SEPARATOR " ➔ ") FROM mst_size s WHERE s.size_group_id = t.id AND s.is_active=1) AS size_scale_preview',
     joins: `LEFT JOIN mst_party p ON p.id = t.buyer_id`,
     children: [
-      { key: 'sizes', table: 'mst_size', fk: 'size_group_id', orderBy: 'sort_order, id', fields: [
+      // sizes keep their ids (SKUs, cutting, bundles point at them); a removed size still in use is deactivated
+      { key: 'sizes', table: 'mst_size', fk: 'size_group_id', orderBy: 'sort_order, id', upsert: { deactivateCol: 'is_active' }, fields: [
         f('size_code', s.strReq(20)), f('size_label', s.strReq(40)),
         f('body_measurement', s.nullableStr(80)), f('barcode_suffix', s.nullableStr(40)),
         f('sort_order', s.int()), f('is_active', s.bool()),
@@ -289,6 +290,16 @@ export const masterResources: ResourceConfig[] = [
     ],
   },
   {
+    // user-maintained lists for the fabric / yarn masters (client 05-Oct-2026: fibre, fabric type, structure … are created, not fixed)
+    path: 'material-attrs', table: 'mst_material_attr', permission: 'MATERIAL', label: 'Master value',
+    searchable: ['attr_value'], sortable: ['sort_order', 'attr_value'], defaultSort: 't.sort_order',
+    softDelete: false, hasIsActive: true, hasAuditCols: false, filters: ['attr_type'],
+    fields: [
+      f('attr_type', s.enumReq(['FIBRE', 'FABRIC_TYPE', 'KNIT_STRUCTURE', 'STRUCTURE', 'EFFECT', 'YARN_TYPE', 'YARN_CONSTRUCTION'])),
+      f('attr_value', s.strReq(80)), f('sort_order', s.int()), f('is_active', s.bool()),
+    ],
+  },
+  {
     path: 'yarn-counts', table: 'mst_yarn_count', permission: 'MATERIAL', label: 'Yarn Count',
     searchable: ['count_value', 'description'], sortable: ['sort_order', 'count_value'],
     defaultSort: 't.sort_order ASC, t.count_value ASC', filters: ['count_type'],
@@ -309,7 +320,7 @@ export const masterResources: ResourceConfig[] = [
     fields: [
       f('base_code', s.strReq(40)), f('base_name', s.strReq(150)), f('category_id', s.id()),
       f('composition_id', s.id()),
-      f('yarn_type', s.enum(['COMBED','CARDED','OE','COMPACT','MELANGE','SLUB','OTHER'])),
+      f('yarn_type', s.nullableStr(40)),
       f('spinning_system', s.nullableStr(60)), f('yarn_construction', s.nullableStr(60)),
       f('effect', s.nullableStr(80)), f('dye_status', s.nullableStr(60)), f('dyeing_method', s.nullableStr(60)),
       f('colour_id', s.id()), f('twist_direction', s.enum(['S','Z'])),
@@ -342,7 +353,7 @@ export const masterResources: ResourceConfig[] = [
       f('yarn_base_id', s.id()), f('count_id', s.id()),
       f('count_value', s.nullableStr(20)), f('count_type', s.enum(['Ne','Nm','Denier','Tex'])),
       f('composition_id', s.id()), f('ply', s.int()), f('twist', s.nullableStr(10)),
-      f('yarn_type', s.enum(['COMBED','CARDED','OE','COMPACT','MELANGE','SLUB','OTHER'])),
+      f('yarn_type', s.nullableStr(40)),
       f('hsn_code', s.nullableStr(10)), f('base_uom', s.idReq()),
       f('std_rate', s.dec()), f('is_active', s.bool()),
     ],
@@ -359,7 +370,7 @@ export const masterResources: ResourceConfig[] = [
             LEFT JOIN mst_yarn y ON y.id = t.yarn_id`,
     fields: [
       f('base_code', s.strReq(40)), f('base_name', s.strReq(150)), f('category_id', s.id()),
-      f('fabric_type', s.enumReq(['KNIT','WOVEN','NONWOVEN'])), f('knit_structure', s.nullableStr(60)),
+      f('fabric_type', s.strReq(40)), f('knit_structure', s.nullableStr(60)),
       f('structure', s.nullableStr(80)), f('effect', s.nullableStr(80)),
       f('composition_id', s.id()), f('yarn_id', s.id()), f('finish_type', s.nullableStr(80)),
       f('printing', s.nullableStr(80)), f('decoration', s.nullableStr(80)),
@@ -384,7 +395,7 @@ export const masterResources: ResourceConfig[] = [
     fields: [
       f('fabric_code', s.strReq(40)), f('fabric_name', s.strReq(150)), f('category_id', s.id()),
       f('fabric_base_id', s.id()), f('gauge', s.nullableStr(20)),
-      f('fabric_type', s.enumReq(['KNIT','WOVEN','NONWOVEN'])), f('knit_structure', s.nullableStr(60)),
+      f('fabric_type', s.strReq(40)), f('knit_structure', s.nullableStr(60)),
       f('composition_id', s.id()), f('gsm_id', s.id()),
       f('min_gsm', s.int()), f('max_gsm', s.int()),
       f('width_cm', s.dec()), f('grey_width', s.dec()), f('finished_width', s.dec()), f('usable_width', s.dec()),

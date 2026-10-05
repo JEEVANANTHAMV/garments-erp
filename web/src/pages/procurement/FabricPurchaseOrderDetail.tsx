@@ -145,6 +145,13 @@ export default function FabricPurchaseOrderDetailPage() {
   const suppliers = useLookup('suppliers');
   const styles = useLookup('styles');
   const fabrics = useLookup('fabrics');
+  // GSM / Dia come from their masters on each line (client 05-Oct-2026 — the fabric master no longer carries them)
+  const gsmList = useLookup('gsm');
+  const diaList = useLookup('dias');
+  const pickList = (rows: any[] | undefined, cur: string) => {
+    const vals = [...new Set((rows ?? []).map((r: any) => { const v = String(r.code ?? r.label); return /^\d+(\.\d+)?$/.test(v) ? String(Number(v)) : v; }))];
+    return cur && !vals.includes(String(cur)) ? [String(cur), ...vals] : vals;
+  };
   const uoms = useLookup('uoms');
   const parties = useLookup('parties');
   const currencies = useLookup('currencies');
@@ -1168,23 +1175,17 @@ export default function FabricPurchaseOrderDetailPage() {
                   </td>
                   {/* GSM */}
                   <td className="py-2 px-2">
-                    <input
-                      type="text"
-                      value={l.gsm}
-                      onChange={(e) => updateLine(idx, { gsm: e.target.value })}
-                      placeholder="180"
-                      className="input py-1 text-xs w-full"
-                    />
+                    <select value={l.gsm ?? ''} id={`fpo-line-${idx}-gsm`} onChange={(e) => updateLine(idx, { gsm: e.target.value })} className="input py-1 text-xs w-full">
+                      <option value="">—</option>
+                      {pickList(gsmList.data as any, l.gsm).map((g) => <option key={g} value={g}>{g}</option>)}
+                    </select>
                   </td>
                   {/* DIA */}
                   <td className="py-2 px-2">
-                    <input
-                      type="text"
-                      value={l.dia}
-                      onChange={(e) => updateLine(idx, { dia: e.target.value })}
-                      placeholder='30"'
-                      className="input py-1 text-xs w-full"
-                    />
+                    <select value={l.dia ?? ''} id={`fpo-line-${idx}-dia`} onChange={(e) => updateLine(idx, { dia: e.target.value })} className="input py-1 text-xs w-full">
+                      <option value="">—</option>
+                      {pickList(diaList.data as any, l.dia).map((d) => <option key={d} value={d}>{d}</option>)}
+                    </select>
                   </td>
                   {/* Qty */}
                   <td className="py-2 px-2">

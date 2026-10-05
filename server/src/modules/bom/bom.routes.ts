@@ -435,7 +435,7 @@ bomRouter.get('/:id/print', requirePermission('BOM.VIEW'), ah(async (req, res) =
  * base (composition, type, HSN, UOM) — a base created in the Yarn master is usable on the
  * BOM without generating count variants first. POs / quotations / MRP keep using yarn_id.
  */
-async function resolveYarnVariant(tx: any, cid: number, userId: number, baseId: number, countId: number): Promise<number> {
+export async function resolveYarnVariant(tx: any, cid: number, userId: number, baseId: number, countId: number): Promise<number> {
   const cnt = await txQueryOne<any>(tx, 'SELECT id, count_value, count_type FROM mst_yarn_count WHERE id = ? AND company_id = ?', [countId, cid]);
   if (!cnt) throw BadRequest('Yarn count not found');
   const base = await txQueryOne<any>(tx, 'SELECT * FROM mst_yarn_base WHERE id = ? AND company_id = ? AND is_deleted = 0', [baseId, cid]);
@@ -834,3 +834,17 @@ bomRouter.post('/:id/sync-cad', requirePermission('BOM.UPDATE'), ah(async (req, 
   });
 }));
 
+
+/**
+ * POST /yarn-variants/resolve { yarn_base_id, yarn_count_id } — the yarn item of a base + count, created when missing
+ * (client 05-Oct-2026: the yarn master is the base — "100% Organic Cotton" — and the count is chosen on the PO, so the
+ * item name and the count can never disagree).
+ */
+export const yarnVariantRouter = Router();
+yarnVariantRouter.post('/resolve', requireAny('PURCHASE.CREATE', 'PURCHASE.UPDATE', 'BOM.CREATE', 'MATERIAL.CREATE', 'GRN.CREATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const b = z.object({ yarn_base_id: z.coerce.number().int().positive(), yarn_count_id: z.coerce.number().int().positive() }).parse(req.body ?? {});
+  const id = await transaction((tx) => resolveYarnVariant(tx, cid, req.user!.id, b.yarn_base_id, b.yarn_count_id));
+  const y = await queryOne<any>(`SELECT id, yarn_code AS code, yarn_name AS label, yarn_name, yarn_base_id, count_id, count_value, count_type, base_uom, std_rate, hsn_code FROM mst_yarn WHERE id = ?`, [id]);
+  res.json({ data: y });
+}));

@@ -1559,10 +1559,12 @@ fabricYarnProcurementRouter.post('/yarn-grns', requirePermission('GRN.CREATE'), 
       }
     }
 
-    // yarn count as ordered on the PO (else the yarn master's count) when the screen did not send it
+    // the count is the yarn item's own count (client 05-Oct-2026: item "… 40s" with count "30s" must not happen);
+    // only an item without a count keeps the count sent / ordered on the PO
     await txExecute(tx, `UPDATE trx_grn_line gl LEFT JOIN trx_purchase_order_line pl ON pl.id = gl.po_line_id LEFT JOIN mst_yarn y ON y.id = gl.yarn_id
-        SET gl.yarn_count_str = COALESCE(NULLIF(pl.yarn_count_str, ''), NULLIF(TRIM(CONCAT(COALESCE(y.count_value, ''), IF(y.count_value IS NULL, '', CONCAT(' ', COALESCE(y.count_type, 'Ne'))))), ''))
-      WHERE gl.grn_id = ? AND (gl.yarn_count_str IS NULL OR gl.yarn_count_str = '')`, [newGrnId]);
+        SET gl.yarn_count_str = COALESCE(NULLIF(TRIM(CONCAT(COALESCE(y.count_value, ''), IF(y.count_value IS NULL, '', CONCAT(' ', COALESCE(y.count_type, 'Ne'))))), ''),
+                                         NULLIF(gl.yarn_count_str, ''), NULLIF(pl.yarn_count_str, ''))
+      WHERE gl.grn_id = ?`, [newGrnId]);
     return newGrnId;
   });
 

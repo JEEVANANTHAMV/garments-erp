@@ -86,6 +86,19 @@ export default function YarnGRNDetailPage() {
   const yarns = useLookup('yarns');
   /** The yarn master's count (e.g. "30s Ne") — used when the PO line carries none. */
   const countOf = (yarnId: unknown) => { const y: any = (yarns.data ?? []).find((x: any) => String(x.id) === String(yarnId)); return y?.count_value ? `${y.count_value} ${y.count_type || 'Ne'}` : ''; };
+  const yarnCounts = useLookup('yarn-counts');
+  /** client 05-Oct-2026: the count is part of the yarn item (base + count) — changing it switches to that base's item */
+  const switchCount = async (idx: number, yarnId: unknown, countId: string) => {
+    const y: any = (yarns.data ?? []).find((x: any) => String(x.id) === String(yarnId));
+    const c: any = (yarnCounts.data ?? []).find((x: any) => String(x.id) === countId);
+    if (!c) return;
+    if (!y?.yarn_base_id) { updateLine(idx, { yarn_count_str: `${c.count_value} ${c.count_type || 'Ne'}` }); return; }
+    try {
+      const v = (await http.post<{ data: any }>('/yarn-variants/resolve', { yarn_base_id: y.yarn_base_id, yarn_count_id: c.id })).data;
+      await yarns.refetch();
+      updateLine(idx, { yarn_id: String(v.id), yarn_name: v.yarn_name, yarn_count_str: `${v.count_value} ${v.count_type || 'Ne'}` } as any);
+    } catch (e: any) { toast(e?.message || 'Could not switch the count', 'error'); }
+  };
   const styles = useLookup('styles');
   const salesOrders = useLookup('sales-orders');
   const gateInwards = useLookup('gate-inwards');
@@ -279,7 +292,7 @@ export default function YarnGRNDetailPage() {
                 yarn_id: pl.yarn_id,
                 yarn_name: pl.yarn_name,
                 yarn_type: pl.yarn_type || 'Grey Yarn',
-                yarn_count_str: pl.yarn_count_str || countOf(pl.yarn_id),
+                yarn_count_str: countOf(pl.yarn_id) || pl.yarn_count_str,
                 shade_code: pl.shade_code || '',
                 color_name: pl.color_name || '',
                 composition: pl.composition,
@@ -425,7 +438,7 @@ export default function YarnGRNDetailPage() {
           style_id: l.style_id ? Number(l.style_id) : undefined,
           yarn_id: l.yarn_id,
           yarn_type: l.yarn_type || 'Grey Yarn',
-          yarn_count_str: l.yarn_count_str || countOf(l.yarn_id) || null,
+          yarn_count_str: countOf(l.yarn_id) || l.yarn_count_str || null,
           shade_code: l.shade_code || null,
           color_name: l.color_name || null,
           received_qty: l.received_qty,
@@ -888,8 +901,11 @@ export default function YarnGRNDetailPage() {
                     {/* Yarn count (as ordered) */}
                     <td className="py-2.5 px-2" id={`yg-count-${idx}`}>
                       {isNew ? (
-                        <input value={l.yarn_count_str ?? ''} placeholder="e.g. 30s Ne" onChange={(e) => updateLine(idx, { yarn_count_str: e.target.value })}
-                          className="w-20 text-xs rounded border border-slate-300 py-0.5 px-1" />
+                        <select value="" id={`yg-count-${idx}-select`} title="Count of the yarn item — changing it switches to the base's item for that count"
+                          onChange={(e) => void switchCount(idx, l.yarn_id, e.target.value)} className="w-24 text-xs rounded border border-slate-300 py-0.5 px-1">
+                          <option value="">{l.yarn_count_str || '—'}</option>
+                          {(yarnCounts.data ?? []).map((c: any) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                        </select>
                       ) : <span className="font-semibold">{l.yarn_count_str || '—'}</span>}
                     </td>
 

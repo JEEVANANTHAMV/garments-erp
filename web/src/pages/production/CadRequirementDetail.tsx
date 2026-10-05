@@ -16,6 +16,7 @@ import {
   partKg, withPartWeight, readPartFactor, factorUnitLabel, isKgUom, type PartFactorUnit,
 } from '../../lib/partWeight';
 import { createPortal } from 'react-dom';
+import { MarkerFilesPanel, MarkerThumb, type MarkerFile } from './MarkerFilesPanel';
 
 interface ColorwayRow {
   color_name: string;
@@ -268,10 +269,13 @@ export default function CadRequirementDetailPage() {
     uom: 'KG' as 'KG' | 'MTR',
     rejection_pct: 3.0,
     fabric_allowance_pct: 10.0,
+    marker_efficiency: 85,
     special_notes: '',
     status: 'DRAFT',
     remarks: '',
   });
+  // marker report PDF / CAD file per marker, with the layout picture (client 05-Oct-2026)
+  const [markerFiles, setMarkerFiles] = useState<MarkerFile[]>([]);
 
   // Markers State — a new CAD starts empty (one blank marker); a saved CAD loads its own markers
   const [markers, setMarkers] = useState<CadMarker[]>([blankMarker()]);
@@ -468,10 +472,12 @@ export default function CadRequirementDetailPage() {
         uom: existingData.uom || (existingData.cad_type === 'WOVEN' ? 'MTR' : 'KG'),
         rejection_pct: Number(existingData.rejection_pct ?? 3.0),
         fabric_allowance_pct: Number(existingData.fabric_allowance_pct ?? 10.0),
+        marker_efficiency: Number(existingData.marker_efficiency) || 85,
         special_notes: existingData.special_notes || '',
         status: existingData.status || 'DRAFT',
         remarks: existingData.remarks || '',
       });
+      setMarkerFiles(Array.isArray(existingData.marker_files) ? existingData.marker_files : []);
 
       if (existingData.markers?.length) {
         setMarkers(
@@ -865,6 +871,37 @@ export default function CadRequirementDetailPage() {
     setMarkers(copy);
     setActiveMarkerIdx(Math.max(0, activeMarkerIdx - 1));
     toast('Marker removed', 'info');
+  };
+
+  // colourways are picked from the IO's sales order colours (client 05-Oct-2026: typed colours mismatch the order)
+  const jobColours = useQuery({
+    queryKey: ['cad-job-colours', header.internal_ir_no, header.style_id],
+    queryFn: async () => (await http.get<{ data: any[] }>('/cad-requirements/job-colours', { io_no: header.internal_ir_no, style_id: header.style_id || undefined })).data ?? [],
+    enabled: !!header.internal_ir_no,
+    staleTime: 60_000,
+  });
+
+  /** Fill the active marker from its marker report (width, length, ratio, garments per marker) + the CAD efficiency. */
+  const applyMarkerReport = (p: NonNullable<MarkerFile['parsed']>) => {
+    if (!activeMarker) return;
+    const patch: Partial<CadMarker> = {};
+    if (p.marker_length_m) patch.length_mm = Math.round(p.marker_length_m * 1000);
+    if (p.marker_width_in) patch.width_mm = Math.round(p.marker_width_in * 25.4 * 10) / 10;
+    if (p.ratio_sizes?.length && p.ratios?.length) {
+      const sizes = p.ratio_sizes.map(String);
+      patch.sizes = sizes;
+      patch.ratios = p.ratios.map(Number);
+      // keep each colourway's quantities for the sizes that stay
+      patch.colorways = (activeMarker.colorways || []).map((cw) => ({
+        ...cw,
+        quantities: sizes.map((sz) => { const i = (activeMarker.sizes || []).findIndex((x) => String(x).toUpperCase() === sz.toUpperCase()); return i >= 0 ? Number(cw.quantities?.[i]) || 0 : 0; }),
+        cut_quantities: undefined as any,
+      }));
+    }
+    if (p.garments_per_marker) patch.no_of_pcs_lay = p.garments_per_marker;
+    updateActiveMarker(patch);
+    if (p.efficiency_pct) setHeader((h) => ({ ...h, marker_efficiency: Number(p.efficiency_pct) }));
+    toast(`Marker ${activeMarker.marker_ref} filled from the marker report — check the colour quantities and Save`, 'success');
   };
 
   const recomputeSingleMarker = (m: CadMarker) => {
@@ -1568,6 +1605,7 @@ export default function CadRequirementDetailPage() {
                       : 'text-slate-600 hover:bg-white/60'
                   }`}
                 >
+                  <MarkerThumb url={markerFiles.find((f) => f.marker_ref === m.marker_ref && f.image_url)?.image_url} size={22} alt={`Marker ${m.marker_ref}`} />
                   <span>Sheet {m.marker_ref}</span>
                   <span className="text-[10px] px-1 py-0.5 rounded bg-slate-100 font-normal">
                     {fmtDecimal(m.total_req_qty)} {isWoven ? 'MTR' : (m.uom || 'KG')}
@@ -1617,6 +1655,8 @@ export default function CadRequirementDetailPage() {
                 {activeMarker.parts_in_lay || 'Body / Sleeve'}
               </span>
             </div>
+
+            <MarkerFilesPanel cadId={isNew ? null : Number(id)} markerRef={activeMarker.marker_ref} files={markerFiles} onFiles={setMarkerFiles} onApply={applyMarkerReport} />
 
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2.5 text-xs">
               <div>
@@ -2071,16 +2111,36 @@ export default function CadRequirementDetailPage() {
                         {/* Row 1: Raw Order Quantity Input */}
                         <tr className="hover:bg-slate-50/50">
                           <td className="py-2 px-3 row-span-2">
-                            <input
-                              type="text"
-                              value={cw.color_name}
-                              onChange={(e) => {
-                                const copy = [...activeMarker.colorways];
-                                copy[cwIdx].color_name = e.target.value;
-                                updateActiveMarker({ colorways: copy });
-                              }}
-                              className="w-44 text-xs font-semibold border border-slate-300 rounded px-2 py-1"
-                            />
+                            {(jobColours.data ?? []).length > 0 ? (
+                              <select
+                                value={cw.color_name}
+                                id={`cad-cw-colour-${cwIdx}`}
+                                onChange={(e) => {
+                                  const copy = [...activeMarker.colorways];
+                                  copy[cwIdx].color_name = e.target.value;
+                                  updateActiveMarker({ colorways: copy });
+                                }}
+                                className={`w-44 text-xs font-semibold border rounded px-2 py-1 ${(jobColours.data ?? []).some((c: any) => String(c.color_name).toUpperCase() === String(cw.color_name).toUpperCase()) ? 'border-slate-300' : 'border-red-400 bg-red-50'}`}
+                                title="Colours of this IO's sales order"
+                              >
+                                {!(jobColours.data ?? []).some((c: any) => String(c.color_name).toUpperCase() === String(cw.color_name).toUpperCase()) && (
+                                  <option value={cw.color_name}>{cw.color_name ? `${cw.color_name} (not on the order)` : '— Colour of the order —'}</option>
+                                )}
+                                {(jobColours.data ?? []).map((c: any) => <option key={c.color_id} value={c.color_name}>{c.color_name}</option>)}
+                              </select>
+                            ) : (
+                              <input
+                                type="text"
+                                value={cw.color_name}
+                                onChange={(e) => {
+                                  const copy = [...activeMarker.colorways];
+                                  copy[cwIdx].color_name = e.target.value;
+                                  updateActiveMarker({ colorways: copy });
+                                }}
+                                title={header.internal_ir_no ? 'This IO has no colours on its sales order' : 'Pick the IO first — its order colours become a list'}
+                                className="w-44 text-xs font-semibold border border-slate-300 rounded px-2 py-1"
+                              />
+                            )}
                           </td>
                           <td className="py-1 px-2 text-center font-medium text-slate-500">Order Qty</td>
                           {(cw.quantities || []).map((q, sIdx) => (

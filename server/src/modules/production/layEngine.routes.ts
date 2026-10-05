@@ -140,6 +140,8 @@ async function sizeIdsFor(styleId: number, codes: string[]) {
   if (!codes.length) return out;
   const want = [...new Set(codes.map(up))];
   const take = (rows: any[]) => rows.forEach((r) => { if (!out.has(up(r.size_code))) out.set(up(r.size_code), { size_id: Number(r.id), size_code: r.size_code, sort_order: Number(r.sort_order) || 0 }); });
+  // the style's assigned sizes first (size doc §16–§17), then its SKUs
+  take(await query<any>(`SELECT sz.id, sz.size_code, ss.sequence_no AS sort_order FROM mst_style_size ss JOIN mst_size sz ON sz.id = ss.size_id WHERE ss.style_id = ? AND ss.is_active = 1 ORDER BY ss.sequence_no`, [styleId]).catch(() => []));
   take(await query<any>(`SELECT DISTINCT sz.id, sz.size_code, sz.sort_order FROM mst_style_sku sk JOIN mst_size sz ON sz.id = sk.size_id WHERE sk.style_id = ?`, [styleId]));
   const left = want.filter((c) => !out.has(c));
   if (left.length) {
@@ -431,6 +433,9 @@ function fabricSummary(rolls: RollElig[]) {
 async function planMarkers(cid: number, plan: any) {
   const cad = await findCad(cid, [plan.io_no, plan.so_no], Number(plan.style_id), plan.cad_req_id ? Number(plan.cad_req_id) : null);
   const markers = cad ? await cadMarkers(Number(cad.id)) : [];
+  const pics = cad ? await query<any>(`SELECT marker_ref, image_url, file_url, kind FROM trx_cad_marker_file WHERE cad_req_id = ? AND is_active = 1 ORDER BY id DESC`, [cad.id]).catch(() => []) : [];
+  const picOf = (ref: string) => pics.find((p) => p.marker_ref === ref && p.image_url)?.image_url ?? null;
+  const reportOf = (ref: string) => pics.find((p) => p.marker_ref === ref && p.kind === 'REPORT')?.file_url ?? null;
   const versions = await query<any>(
     `SELECT mv.*, u.full_name AS approved_by_name FROM trx_marker_version mv LEFT JOIN mst_user u ON u.id = mv.approved_by
       WHERE mv.company_id = ? AND ((? IS NOT NULL AND mv.cad_req_id = ?) OR (mv.cad_req_id IS NULL AND mv.style_id = ?))
@@ -442,7 +447,7 @@ async function planMarkers(cid: number, plan: any) {
     length_m: v.length_m != null ? num(v.length_m) : null, width_in: v.width_in != null ? num(v.width_in) : null, gsm: v.gsm != null ? num(v.gsm) : null,
     marker_kg_per_ply: v.marker_kg_per_ply != null ? num(v.marker_kg_per_ply) : null, uom: v.uom, efficiency_pct: v.efficiency_pct != null ? num(v.efficiency_pct) : null,
     cad_kg_per_pc: v.cad_kg_per_pc != null ? num(v.cad_kg_per_pc) : null, is_locked: !!v.is_locked, approved_at: v.approved_at, approved_by_name: v.approved_by_name ?? null,
-    cad_file_ref: v.cad_file_ref ?? null,
+    cad_file_ref: v.cad_file_ref ?? null, marker_image_url: v.marker_image_url ?? null,
   });
   const fits = (v: any) => (!v.fabric_id || !plan.fabric_id || Number(v.fabric_id) === Number(plan.fabric_id))
     && (!v.color_id || !plan.color_id || Number(v.color_id) === Number(plan.color_id));
@@ -457,6 +462,7 @@ async function planMarkers(cid: number, plan: any) {
       cad_plies: cadPliesForColour(m, plan.color_name), sizes: m.sizes, ratios: m.ratios, ppm: m.ppm, length_m: m.length_m,
       kg_per_ply: m.kg_per_ply, width_in: m.width_in, gsm: m.gsm, uom: m.uom,
       versions: vs, usable: vs.find((v) => v.status === 'APPROVED') ?? null, latest: vs[0] ?? null,
+      image_url: picOf(m.marker_ref), report_url: reportOf(m.marker_ref),
     };
   });
   // imported / manual markers of the style (no CAD requirement)
@@ -468,6 +474,7 @@ async function planMarkers(cid: number, plan: any) {
       key: `MV:${no}`, source: l.cad_source || l.source || 'IMPORT', marker_ref: no, marker_name: null, fabric_type: null, fabric_match: null, has_colour: true,
       cad_plies: null, sizes: l.sizes, ratios: l.ratios, ppm: l.pieces_per_marker, length_m: l.length_m, kg_per_ply: l.uom === 'KG' ? l.marker_kg_per_ply : null,
       width_in: l.width_in, gsm: l.gsm, uom: l.uom, versions: vs, usable: vs.find((v) => v.status === 'APPROVED') ?? null, latest: l,
+      image_url: l.marker_image_url ?? null, report_url: null,
     });
   }
   return { cad, markers: out };
@@ -1072,6 +1079,7 @@ async function layGenealogy(cid: number, layId: number) {
     cad,
     marker: mv ? { id: mv.id, marker_no: mv.marker_no, version: mv.version, status: mv.status, sizes: parseJson(mv.sizes, []), ratios: parseJson(mv.ratios, []),
       pieces_per_marker: mv.pieces_per_marker, length_m: mv.length_m, width_in: mv.width_in, efficiency_pct: mv.efficiency_pct, cad_file_ref: mv.cad_file_ref,
+      image_url: mv.marker_image_url ?? (mv.cad_req_id ? (await queryOne<any>(`SELECT image_url FROM trx_cad_marker_file WHERE cad_req_id = ? AND marker_ref = ? AND is_active = 1 AND image_url IS NOT NULL ORDER BY id DESC LIMIT 1`, [mv.cad_req_id, mv.marker_no]).catch(() => null))?.image_url ?? null : null),
       is_locked: !!mv.is_locked, approved_at: mv.approved_at } : null,
     lay: { ...lay, size_output: parseJson(lay.size_output, null) },
     allocations: allocs, fabric_issue: dc ? { ...dc, rolls: dcRolls } : null,

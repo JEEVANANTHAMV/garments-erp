@@ -1210,7 +1210,6 @@ export function BomDetailPage() {
             <tbody>
               {filteredLines.map((l) => {
                 const rate = rateOf(l);
-                const cons = Number(l.consumption) || 0;
                 const lineCost = lineCostPerGmt(l);
                 const isGeneralOrPacking = ['ACCESSORY', 'PACKING', 'GENERAL'].includes(l.material_type);
                 const isYarnLine = l.material_type === 'YARN';
@@ -1525,7 +1524,7 @@ export function BomDetailPage() {
       </div>
 
       {orderInfo.data ? (
-        <BomRequirementTable lines={lines} info={orderInfo.data} materialName={materialName} uomCode={uomCode} />
+        <BomRequirementTable lines={lines} info={orderInfo.data} materialName={materialName} uomCode={(id: unknown) => String(uomCode(id) ?? "")} />
       ) : (
         <p className="mb-4 text-[11.5px] text-slate-500">Select the sales order to see the size-wise order qty and the total requirement of every material.</p>
       )}

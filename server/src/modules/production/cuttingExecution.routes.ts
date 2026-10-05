@@ -242,6 +242,10 @@ cuttingExecutionRouter.post('/marker-versions/snapshot', requireAny('PRODUCTION.
   };
   const out = await transaction(async (tx) => {
     const saved = await saveMarkerVersion(tx, cid, req.user!.id, cr.id, content, 'CAD', meta);
+    // the marker layout picture uploaded on the CAD marker (marker report PDF) goes with the version — lay sheet / planner
+    await txExecute(tx, `UPDATE trx_marker_version mv SET mv.marker_image_url = COALESCE((SELECT f.image_url FROM trx_cad_marker_file f
+        WHERE f.cad_req_id = ? AND f.marker_ref = ? AND f.is_active = 1 AND f.image_url IS NOT NULL ORDER BY f.id DESC LIMIT 1), mv.marker_image_url) WHERE mv.id = ?`,
+      [cr.id, cm.marker_ref, saved.id]);
     let approved = false;
     if (body.approve) {
       const cur = await txQueryOne<any>(tx, `SELECT status FROM trx_marker_version WHERE id = ?`, [saved.id]);

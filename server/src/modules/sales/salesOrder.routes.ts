@@ -165,6 +165,10 @@ async function writeLines(tx: Tx, soId: number, lines: z.infer<typeof lineSchema
        l.ship_date ?? null]);
 
     for (const sk of sizeRows) {   // empty cells in the size grid are skipped
+      // the size must be a size of this style (and colour, when the line has one) — size doc §13
+      const ok = await txQueryOne<any>(tx, `SELECT 1 x FROM mst_style_sku WHERE id = ? AND style_id = ? AND (? IS NULL OR color_id = ?)`,
+        [sk.sku_id, l.style_id, l.color_id ?? null, l.color_id ?? null]);
+      if (!ok) throw BadRequest(`Size / SKU #${sk.sku_id} is not a size of this style${l.color_id ? ' and colour' : ''}`);
       await txExecute(tx,
         `INSERT INTO trx_sales_order_sku (so_line_id, sku_id, qty, excess_pct, plan_cut_qty) VALUES (?,?,?,?,?)`,
         [r.insertId, sk.sku_id, sk.qty, sk.excess_pct ?? null, sk.planCut]);

@@ -17,7 +17,7 @@ import { authRouter } from './modules/auth/auth.routes.js';
 import { adminRouter } from './modules/admin/admin.routes.js';
 import { lookupRouter } from './modules/lookup/lookup.routes.js';
 import { styleRouter } from './modules/style/style.routes.js';
-import { bomRouter } from './modules/bom/bom.routes.js';
+import { bomRouter, yarnVariantRouter } from './modules/bom/bom.routes.js';
 import { quotationVersionsRouter } from './modules/quotation/quotationVersions.js';
 import { jobStockRouter } from './modules/stock/jobStock.routes.js';
 import { genealogyRouter } from './modules/stock/genealogy.routes.js';
@@ -111,6 +111,7 @@ export function createApp() {
   // Hand-built modules with domain logic.
   api.use('/styles', styleRouter);
   api.use('/boms', bomRouter);
+  api.use('/yarn-variants', yarnVariantRouter);   // POST /yarn-variants/resolve — yarn base + count → item
   api.use('/', quotationVersionsRouter);     // /quotations/:id/versions
   api.use('/', genealogyRouter);             // genealogy doc: roll lookup / split / merge, quotation rolls, snapshot, cost, tree, reports
   api.use('/', jobStockRouter);              // /yarn-stock/job-lots, /job-stock, /job-transfers, /traceability/fabric-roll|job

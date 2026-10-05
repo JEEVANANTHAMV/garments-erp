@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Plus, Trash2, Save, CheckCircle2, Sparkles, Check, X, PackageSearch, Layers, PlayCircle, ExternalLink, AlertCircle, CheckCircle, FileText } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
+import { AddOrderSize } from './AddOrderSize';
 import { http, ApiError } from '../../lib/api';
 import { useLookup, toOptions, useStyleColors, useStyleSkus, useStatuses, toPlainOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
@@ -1728,6 +1729,9 @@ function LineCard({
                 <Sparkles size={13} className="text-brand-600" />
                 {showRatioTool ? 'Close Ratio Tool' : '⚡ Ratio Split / Auto-Distribute'}
               </button>
+            )}
+            {editable && line.style_id && (
+              <AddOrderSize styleId={Number(line.style_id)} existingCodes={distinctSizes.map((x) => x.size_code)} onAdded={() => void skus.refetch()} />
             )}
           </div>
           {lineQty > 0 && (
