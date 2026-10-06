@@ -16,6 +16,7 @@ import {
   sourceProcOf, lineInfo, lineOpenBundles, recordLineOutput, stitchDcPending, type LinkProc,
 } from './lineAllocationLink.js';
 import { postBundleSewingOutput, postCheckingQc } from './productionFloor.routes.js';
+import { dcBillBasis } from './billBasis.js';
 
 /**
  * PCS a bundle can put on a DC that carries a line's output: what the stage
@@ -545,6 +546,7 @@ const dcSchema = z.object({
   // Job work order line this DC is sent against (outward within the order balance — job work doc §9, §30)
   jw_order_line_id: z.coerce.number().int().positive().nullish(),
   outward_override_reason: s.nullableStr(255),
+  bill_basis: z.enum(['ISSUED', 'GOOD', 'GOOD_MISTAKE']).nullish(),
 });
 
 interface PreparedLine {
@@ -775,19 +777,20 @@ processDcRouter.post('/process-dcs', requirePermission('PRODUCTION.CREATE'), ah(
     const challanNo = body.challan_no || await nextDocNumber(tx, cid, 'JW_CHALLAN');
     const dup = await txQueryOne(tx, `SELECT id FROM trx_jobwork_challan WHERE company_id = ? AND challan_no = ?`, [cid, challanNo]);
     if (dup) throw BadRequest(`DC no ${challanNo} already exists`);
+    const basis = await dcBillBasis(tx, body.vendor_id, body.jw_order_line_id, body.bill_basis);
     const r = await txExecute(tx,
       `INSERT INTO trx_jobwork_challan
          (company_id, challan_no, challan_date, prod_order_id, vendor_id, stage_id, gate_outward_id, total_qty, rate,
           total_amount, expected_return, status, remarks, io_no, cutting_plan_id, style_id, is_bundle_dc,
           vehicle_no, driver_name, transporter, ref_no, from_warehouse_id, to_warehouse_id, release_line_alloc,
-          from_line_proc, from_line_id, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,'DRAFT',?,?,?,?,1,?,?,?,?,?,?,?,?,?,?)`,
+          from_line_proc, from_line_id, bill_basis, created_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,'DRAFT',?,?,?,?,1,?,?,?,?,?,?,?,?,?,?,?)`,
       [cid, challanNo, body.challan_date, body.prod_order_id ?? null, body.vendor_id, st.id, body.gate_outward_id ?? null,
        h.total_qty, body.rate ?? null, body.rate != null ? Math.round(body.rate * h.total_qty * 100) / 100 : null,
        body.expected_return ?? null, body.remarks ?? null, h.io_no, body.cutting_plan_id ?? null, h.style_id,
        body.vehicle_no ?? null, body.driver_name ?? null, body.transporter ?? null, body.ref_no ?? null,
        body.from_warehouse_id ?? null, body.to_warehouse_id ?? null, body.release_line_allocation ? 1 : 0,
-       fromLine?.proc ?? null, fromLine?.lineId ?? null, req.user!.id]);
+       fromLine?.proc ?? null, fromLine?.lineId ?? null, basis ?? null, req.user!.id]);
     const dc = { id: r.insertId, challan_no: challanNo, challan_date: body.challan_date };
     if (ol) await txExecute(tx, `UPDATE trx_jobwork_challan SET jw_order_id = ?, jw_order_line_id = ?, outward_override_reason = ? WHERE id = ?`,
       [ol.line.order_id, ol.line.id, ol.override ? body.outward_override_reason : null, dc.id]);
@@ -822,20 +825,21 @@ processDcRouter.put('/process-dcs/:id', requirePermission('PRODUCTION.UPDATE'), 
     const lines = await prepareLines(tx, cid, st, body.lines, id, body.release_line_allocation, fromLine);
     const h = headerFrom(lines);
     const ol = await checkOrderLine(tx, req, body, st, h.total_qty, id);
+    const basis = await dcBillBasis(tx, body.vendor_id, body.jw_order_line_id, body.bill_basis);
     await txExecute(tx, `UPDATE trx_jobwork_challan SET jw_order_id = ?, jw_order_line_id = ?, outward_override_reason = ? WHERE id = ?`,
       [ol?.line.order_id ?? null, ol?.line.id ?? null, ol?.override ? body.outward_override_reason : null, id]);
     await txExecute(tx,
       `UPDATE trx_jobwork_challan SET challan_date = ?, prod_order_id = ?, vendor_id = ?, stage_id = ?, gate_outward_id = ?,
               total_qty = ?, rate = ?, total_amount = ?, expected_return = ?, remarks = ?, io_no = ?, cutting_plan_id = ?,
               style_id = ?, vehicle_no = ?, driver_name = ?, transporter = ?, ref_no = ?, from_warehouse_id = ?,
-              to_warehouse_id = ?, release_line_alloc = ?, from_line_proc = ?, from_line_id = ?, updated_by = ?
+              to_warehouse_id = ?, release_line_alloc = ?, from_line_proc = ?, from_line_id = ?, bill_basis = ?, updated_by = ?
         WHERE id = ?`,
       [body.challan_date, body.prod_order_id ?? null, body.vendor_id, st.id, body.gate_outward_id ?? null,
        h.total_qty, body.rate ?? null, body.rate != null ? Math.round(body.rate * h.total_qty * 100) / 100 : null,
        body.expected_return ?? null, body.remarks ?? null, h.io_no, body.cutting_plan_id ?? null, h.style_id,
        body.vehicle_no ?? null, body.driver_name ?? null, body.transporter ?? null, body.ref_no ?? null,
        body.from_warehouse_id ?? null, body.to_warehouse_id ?? null, body.release_line_allocation ? 1 : 0,
-       fromLine?.proc ?? null, fromLine?.lineId ?? null, req.user!.id, id]);
+       fromLine?.proc ?? null, fromLine?.lineId ?? null, basis ?? null, req.user!.id, id]);
     // Draft lines have no ledger effect yet, so replacing them is safe.
     await txExecute(tx, `DELETE FROM trx_jobwork_challan_line WHERE challan_id = ?`, [id]);
     await writeLines(tx, id, st, lines);

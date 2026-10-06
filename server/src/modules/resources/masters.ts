@@ -136,6 +136,7 @@ export const masterResources: ResourceConfig[] = [
       f('legal_name', s.nullableStr(200)), f('short_name', s.nullableStr(80)),
       f('is_customer', s.bool()), f('is_buyer', s.bool()), f('is_supplier', s.bool()),
       f('is_vendor', s.bool()), f('is_agent', s.bool()), f('is_contractor', s.bool()),
+      f('jw_bill_basis', s.nullableStr(12)),
       f('party_type', s.enum(['DOMESTIC','EXPORT','BOTH'])),
       f('country_id', s.id()), f('currency_id', s.id()),
       f('gstin', s.nullableStr(15)), f('pan', s.nullableStr(10)),

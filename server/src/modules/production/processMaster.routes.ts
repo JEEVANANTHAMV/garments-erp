@@ -7,6 +7,7 @@ import { requirePermission } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
+import { effectiveBasis, billedQty, BillBasis, BILL_BASIS_LABEL } from './billBasis.js';
 
 /**
  * Process master, operations and contractor bills (client review 24-Sep-2026).
@@ -298,7 +299,7 @@ export async function jobPieceRates(cid: number, challanIds: number[], ioNos: st
 //               ALLOWed, kept as ADVANCE (paid, recovered later) or REVISEd
 //   net       = payable + GST − TDS − % deduction − other − advance − debit notes
 // ============================================================
-async function unbilledReceipts(cid: number, vendorId: number, from?: string, to?: string, includeBillId?: number) {
+async function unbilledReceipts(cid: number, vendorId: number, from?: string, to?: string, includeBillId?: number, overrideBasis?: string | null) {
   // only QC-accepted, billable inward (job work doc §16: billing from approved output, never from outward)
   const where = ['r.company_id = ?', 'r.vendor_id = ?', includeBillId ? '(r.contractor_bill_id IS NULL OR r.contractor_bill_id = ?)' : 'r.contractor_bill_id IS NULL',
     `(r.contractor_bill_id IS NOT NULL OR (COALESCE(r.qc_status, 'ACCEPTED') = 'ACCEPTED' AND COALESCE(r.billable, 1) = 1))`];
@@ -307,7 +308,9 @@ async function unbilledReceipts(cid: number, vendorId: number, from?: string, to
   if (to) { where.push('r.receipt_date <= ?'); params.push(to); }
   const rows = await query<any>(
     `SELECT r.id AS receipt_id, r.receipt_no, r.receipt_date, r.party_dc_no, r.received_qty, r.rejected_qty,
-            jc.id AS challan_id, jc.challan_no, jc.rate AS dc_rate, ps.stage_name, ps.bill_include_mistake,
+            COALESCE(r.shortage_qty, 0) AS shortage_qty, COALESCE(r.loss_qty, 0) AS loss_qty,
+            jc.id AS challan_id, jc.challan_no, jc.rate AS dc_rate, jc.bill_basis AS dc_bill_basis,
+            p.jw_bill_basis AS party_bill_basis, ps.stage_name, ps.bill_include_mistake,
             (SELECT GROUP_CONCAT(DISTINCT jl.io_no ORDER BY jl.io_no SEPARATOR ', ')
                FROM trx_jobwork_receipt_line rl JOIN trx_jobwork_challan_line jl ON jl.id = rl.challan_line_id
               WHERE rl.receipt_id = r.id) AS io_list,
@@ -316,37 +319,64 @@ async function unbilledReceipts(cid: number, vendorId: number, from?: string, to
               WHERE co.challan_id = jc.id) AS operations
        FROM trx_jobwork_receipt r
        JOIN trx_jobwork_challan jc ON jc.id = r.challan_id
+       LEFT JOIN mst_party p ON p.id = r.vendor_id
        LEFT JOIN cfg_process_stage ps ON ps.id = jc.stage_id
       WHERE ${where.join(' AND ')}
       ORDER BY r.receipt_date, r.id`, params);
   if (!rows.length) return [];
   // Billed PCS per job on each inward, priced with the job's rate card.
   const perIo = await query<any>(
-    `SELECT rl.receipt_id, jl.io_no, SUM(rl.received_qty) AS good, SUM(rl.rejected_qty) AS mistake
+    `SELECT rl.receipt_id, jl.io_no, SUM(rl.received_qty) AS good, SUM(rl.rejected_qty) AS mistake,
+            SUM(COALESCE(rl.shortage_qty, 0)) AS short, SUM(COALESCE(rl.loss_qty, 0)) AS loss
        FROM trx_jobwork_receipt_line rl JOIN trx_jobwork_challan_line jl ON jl.id = rl.challan_line_id
       WHERE rl.receipt_id IN (?) GROUP BY rl.receipt_id, jl.io_no`, [rows.map((r) => r.receipt_id)]);
   const rates = await jobPieceRates(cid, [...new Set(rows.map((r) => Number(r.challan_id)))], perIo.map((p) => p.io_no));
   return rows.map((r) => {
-    const inclMistake = !!n(r.bill_include_mistake);
-    const billed = n(r.received_qty) + (inclMistake ? n(r.rejected_qty) : 0);
+    const basis = effectiveBasis({
+      override: overrideBasis,
+      dc: r.dc_bill_basis,
+      party: r.party_bill_basis,
+      stageInclMistake: r.bill_include_mistake,
+    });
+    const billed = billedQty(basis, {
+      good: r.received_qty,
+      mistake: r.rejected_qty,
+      short: r.shortage_qty,
+      loss: r.loss_qty,
+    });
     const parts = perIo.filter((p) => Number(p.receipt_id) === Number(r.receipt_id));
     let amount = 0; let qty = 0;
     const jobs = parts.map((p) => {
-      const q = n(p.good) + (inclMistake ? n(p.mistake) : 0);
+      const q = billedQty(basis, {
+        good: p.good,
+        mistake: p.mistake,
+        short: p.short,
+        loss: p.loss,
+      });
       const rate = rates.get(`${r.challan_id}|${p.io_no}`) ?? n(r.dc_rate);
       amount += q * rate; qty += q;
       return { io_no: p.io_no, qty: q, rate };
     });
     // Inwards without per-bundle lines fall back to the DC rate.
     const ourRate = qty > 0 ? Math.round((amount / qty) * 10000) / 10000 : n(r.dc_rate);
-    return { ...r, dc_rate: n(r.dc_rate), rate: ourRate, our_rate: ourRate, jobs, billed_qty: billed, amount: r2(billed * ourRate) };
+    return {
+      ...r,
+      bill_basis: basis,
+      bill_basis_label: BILL_BASIS_LABEL[basis],
+      dc_rate: n(r.dc_rate),
+      rate: ourRate,
+      our_rate: ourRate,
+      jobs,
+      billed_qty: billed,
+      amount: r2(billed * ourRate),
+    };
   });
 }
 
 processMasterRouter.get('/contractor-bills/unbilled', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
   // bill_id: also return the inwards already on that draft (to revise it).
-  const qp = z.object({ vendor_id: s.idReq(), from: dateStr.optional(), to: dateStr.optional(), bill_id: s.id() }).parse(req.query);
-  res.json({ data: await unbilledReceipts(req.user!.companyId, qp.vendor_id, qp.from, qp.to, qp.bill_id ?? undefined) });
+  const qp = z.object({ vendor_id: s.idReq(), from: dateStr.optional(), to: dateStr.optional(), bill_id: s.id(), basis: z.enum(['ISSUED', 'GOOD', 'GOOD_MISTAKE']).nullish() }).parse(req.query);
+  res.json({ data: await unbilledReceipts(req.user!.companyId, qp.vendor_id, qp.from, qp.to, qp.bill_id ?? undefined, qp.basis) });
 }));
 
 processMasterRouter.get('/contractor-bills', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
@@ -404,11 +434,13 @@ const billSchema = z.object({
   vendor_id: s.idReq(),
   period_from: s.date(),
   period_to: s.date(),
+  bill_basis: z.enum(['ISSUED', 'GOOD', 'GOOD_MISTAKE']).nullish(),
   receipt_ids: z.array(s.idReq()).min(1, 'Pick at least one process inward').max(1000),
   // Contractor's invoice rate per inward and what to do with any excess over our rate.
   lines: z.array(z.object({
     receipt_id: s.idReq(),
     bill_rate: z.coerce.number().min(0).max(100000).nullish(),
+    bill_basis: z.enum(['ISSUED', 'GOOD', 'GOOD_MISTAKE']).nullish(),
     variance_action: z.enum(VARIANCE).default('NONE'),
   })).max(1000).default([]),
   tds_pct: z.coerce.number().min(0).max(30).default(0),
@@ -444,16 +476,18 @@ async function buildBill(tx: any, cid: number, b: BillBody, billId = 0) {
   if (billedAlready) throw BadRequest(`Inward ${billedAlready.receipt_no} is already on a contractor bill`);
 
   const input = new Map(b.lines.map((l) => [l.receipt_id, l]));
-  const priced = (await unbilledReceipts(cid, b.vendor_id, undefined, undefined, billId || undefined)).filter((r) => ids.includes(Number(r.receipt_id)));
+  const priced = (await unbilledReceipts(cid, b.vendor_id, undefined, undefined, billId || undefined, b.bill_basis)).filter((r) => ids.includes(Number(r.receipt_id)));
   const lines = priced.map((r) => {
     const inp = input.get(Number(r.receipt_id));
+    const basis = (inp?.bill_basis || b.bill_basis || r.bill_basis) as BillBasis;
+    const billed = basis !== r.bill_basis ? billedQty(basis, { good: r.received_qty, mistake: r.rejected_qty, short: r.shortage_qty, loss: r.loss_qty }) : r.billed_qty;
     const billRate = inp?.bill_rate != null ? n(inp.bill_rate) : r.our_rate;
     const over = billRate > r.our_rate + 0.00005;
     const action = over ? (inp?.variance_action ?? 'NONE') : 'NONE';
     // Pay the lower of the two unless the excess is allowed / kept as advance.
     const payRate = over && (action === 'ALLOW' || action === 'ADVANCE') ? billRate : Math.min(billRate, r.our_rate);
-    const excess = over ? r2((billRate - r.our_rate) * r.billed_qty) : 0;
-    return { ...r, bill_rate: billRate, variance_action: action, pay_rate: payRate, excess, amount: r2(r.billed_qty * payRate) };
+    const excess = over ? r2((billRate - r.our_rate) * billed) : 0;
+    return { ...r, bill_basis: basis, billed_qty: billed, bill_rate: billRate, variance_action: action, pay_rate: payRate, excess, amount: r2(billed * payRate) };
   });
   const qty = lines.reduce((a, l) => a + l.billed_qty, 0);
   const gross = r2(lines.reduce((a, l) => a + l.amount, 0));
@@ -490,10 +524,10 @@ async function writeBillLines(tx: any, billId: number, lines: any[]) {
   for (const l of lines) {
     await txExecute(tx,
       `INSERT INTO trx_contractor_bill_line
-         (bill_id, receipt_id, challan_id, good_qty, mistake_qty, billed_qty, rate, our_rate, bill_rate, variance_action, excess_amount, amount)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [billId, l.receipt_id, l.challan_id, n(l.received_qty), n(l.rejected_qty), l.billed_qty, l.pay_rate, l.our_rate,
-       l.bill_rate, l.variance_action, l.excess, l.amount]);
+         (bill_id, receipt_id, challan_id, good_qty, mistake_qty, short_loss_qty, billed_qty, bill_basis, rate, our_rate, bill_rate, variance_action, excess_amount, amount)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [billId, l.receipt_id, l.challan_id, n(l.received_qty), n(l.rejected_qty), n(l.shortage_qty) + n(l.loss_qty), l.billed_qty,
+       l.bill_basis ?? null, l.pay_rate, l.our_rate, l.bill_rate, l.variance_action, l.excess, l.amount]);
   }
 }
 
@@ -509,12 +543,12 @@ processMasterRouter.post('/contractor-bills', requirePermission('PRODUCTION.CREA
       `INSERT INTO trx_contractor_bill
          (company_id, bill_no, bill_date, vendor_id, period_from, period_to, billed_qty, gross_amount, gst_pct, gst_amount,
           is_interstate, tds_pct, tds_amount, other_deduction_label, other_deduction, deduction_pct, deduction_label, deduction_amount,
-          advance_adjusted, debit_note_amount, excess_amount, excess_as_advance, round_off, net_amount, status, remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'DRAFT',?,?)`,
+          advance_adjusted, debit_note_amount, excess_amount, excess_as_advance, round_off, net_amount, status, remarks, bill_basis, created_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'DRAFT',?,?,?)`,
       [cid, billNo, b.bill_date, b.vendor_id, b.period_from ?? null, b.period_to ?? null, x.qty, x.gross, b.gst_pct, x.gst,
        b.is_interstate ? 1 : 0, b.tds_pct, x.tds, b.other_deduction_label ?? null, b.other_deduction,
        b.deduction_pct, b.deduction_label ?? null, x.pctDed, b.advance_adjust, x.dnAmount, x.excessTotal, x.excessAsAdvance,
-       r2(x.net - x.beforeRound), x.net, b.remarks ?? null, req.user!.id]);
+       r2(x.net - x.beforeRound), x.net, b.remarks ?? null, b.bill_basis ?? null, req.user!.id]);
     await writeBillLines(tx, r.insertId, x.lines);
     await txExecute(tx, `UPDATE trx_jobwork_receipt SET contractor_bill_id = ? WHERE id IN (${x.ids.map(() => '?').join(',')})`, [r.insertId, ...x.ids]);
     if (x.dns.length) {
@@ -546,11 +580,11 @@ processMasterRouter.put('/contractor-bills/:id', requirePermission('PRODUCTION.U
       `UPDATE trx_contractor_bill SET bill_date = ?, period_from = ?, period_to = ?, billed_qty = ?, gross_amount = ?, gst_pct = ?, gst_amount = ?,
               is_interstate = ?, tds_pct = ?, tds_amount = ?, other_deduction_label = ?, other_deduction = ?, deduction_pct = ?, deduction_label = ?,
               deduction_amount = ?, advance_adjusted = ?, debit_note_amount = ?, excess_amount = ?, excess_as_advance = ?, round_off = ?,
-              net_amount = ?, remarks = ?
+              net_amount = ?, remarks = ?, bill_basis = ?
         WHERE id = ?`,
       [b.bill_date, b.period_from ?? null, b.period_to ?? null, x.qty, x.gross, b.gst_pct, x.gst, b.is_interstate ? 1 : 0, b.tds_pct, x.tds,
        b.other_deduction_label ?? null, b.other_deduction, b.deduction_pct, b.deduction_label ?? null, x.pctDed, b.advance_adjust, x.dnAmount,
-       x.excessTotal, x.excessAsAdvance, r2(x.net - x.beforeRound), x.net, b.remarks ?? null, id]);
+       x.excessTotal, x.excessAsAdvance, r2(x.net - x.beforeRound), x.net, b.remarks ?? null, b.bill_basis ?? null, id]);
     await writeBillLines(tx, id, x.lines);
     await txExecute(tx, `UPDATE trx_jobwork_receipt SET contractor_bill_id = ? WHERE id IN (${x.ids.map(() => '?').join(',')})`, [id, ...x.ids]);
     if (x.dns.length) {

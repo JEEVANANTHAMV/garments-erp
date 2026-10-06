@@ -308,7 +308,7 @@ function BillEditor({ billId, onClose, onSaved }: { billId?: number; onClose: ()
   const contractors = useContractors();
   const [f, setF] = useState<any>({
     vendor_id: '', bill_date: today(), period_from: '', period_to: '', tds_pct: '1', gst_pct: '0', is_interstate: false,
-    deduction_pct: '0', deduction_label: '', other_deduction_label: '', other_deduction: '', advance_adjust: '', remarks: '',
+    deduction_pct: '0', deduction_label: '', other_deduction_label: '', other_deduction: '', advance_adjust: '', remarks: '', bill_basis: '',
   });
   const [rows, setRows] = useState<any[]>([]);
   const [picked, setPicked] = useState<Set<number>>(new Set());
@@ -329,7 +329,7 @@ function BillEditor({ billId, onClose, onSaved }: { billId?: number; onClose: ()
         period_to: b.period_to ? String(b.period_to).slice(0, 10) : '', tds_pct: String(num(b.tds_pct)), gst_pct: String(num(b.gst_pct)),
         is_interstate: !!b.is_interstate, deduction_pct: String(num(b.deduction_pct)), deduction_label: b.deduction_label ?? '',
         other_deduction_label: b.other_deduction_label ?? '', other_deduction: num(b.other_deduction) ? String(num(b.other_deduction)) : '',
-        advance_adjust: num(b.advance_adjusted) ? String(num(b.advance_adjusted)) : '', remarks: b.remarks ?? '',
+        advance_adjust: num(b.advance_adjusted) ? String(num(b.advance_adjusted)) : '', remarks: b.remarks ?? '', bill_basis: b.bill_basis ?? '',
       });
       setPicked(new Set(b.lines.map((l: any) => Number(l.receipt_id))));
       setBillRates(Object.fromEntries(b.lines.map((l: any) => [Number(l.receipt_id), { bill_rate: l.bill_rate != null ? String(num(l.bill_rate)) : '', action: l.variance_action || 'NONE' }])));
@@ -340,7 +340,7 @@ function BillEditor({ billId, onClose, onSaved }: { billId?: number; onClose: ()
 
   useEffect(() => {
     if (!f.vendor_id || !loaded) { setRows([]); return; }
-    const params = { vendor_id: f.vendor_id, from: f.period_from || undefined, to: f.period_to || undefined, bill_id: billId || undefined };
+    const params = { vendor_id: f.vendor_id, from: f.period_from || undefined, to: f.period_to || undefined, bill_id: billId || undefined, basis: f.bill_basis || undefined };
     api.get('/contractor-bills/unbilled', { params })
       .then((r) => { const d = r.data.data || []; setRows(d); if (!billId) setPicked(new Set(d.map((x: any) => x.receipt_id))); })
       .catch((e) => toast(errMsg(e), 'error'));
@@ -348,7 +348,7 @@ function BillEditor({ billId, onClose, onSaved }: { billId?: number; onClose: ()
     api.get('/contractor-debit-notes', { params: { vendor_id: f.vendor_id } })
       .then((r) => setDns((r.data.data || []).filter((d: any) => d.status === 'OPEN' || (billId && Number(d.bill_id) === billId))))
       .catch(() => setDns([]));
-  }, [f.vendor_id, f.period_from, f.period_to, loaded]);
+  }, [f.vendor_id, f.period_from, f.period_to, f.bill_basis, loaded]);
 
   // Same pricing as the server: pay the lower rate unless the excess is allowed / kept as advance.
   const priced = rows.filter((r) => picked.has(r.receipt_id)).map((r) => {
@@ -373,6 +373,7 @@ function BillEditor({ billId, onClose, onSaved }: { billId?: number; onClose: ()
     try {
       const body = {
         ...f, vendor_id: Number(f.vendor_id), period_from: f.period_from || null, period_to: f.period_to || null,
+        bill_basis: f.bill_basis || null,
         tds_pct: num(f.tds_pct), gst_pct: num(f.gst_pct), is_interstate: !!f.is_interstate,
         deduction_pct: num(f.deduction_pct), deduction_label: f.deduction_label || null,
         other_deduction: num(f.other_deduction), other_deduction_label: f.other_deduction_label || null,
@@ -399,6 +400,13 @@ function BillEditor({ billId, onClose, onSaved }: { billId?: number; onClose: ()
       <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
         <Select label="Contractor" required value={f.vendor_id} disabled={!!billId} onChange={(e) => setF({ ...f, vendor_id: e.target.value })}
           placeholder="— choose —" options={contractors.map((c) => ({ value: c.id, label: c.label }))} className="md:col-span-2" />
+        <Select label="Billing basis" id="bill-basis-select" value={f.bill_basis} onChange={(e) => setF({ ...f, bill_basis: e.target.value })}
+          options={[
+            { value: '', label: 'As per DC / process default' },
+            { value: 'GOOD', label: 'Good PCS received (deduct mistakes)' },
+            { value: 'ISSUED', label: 'Full DC qty sent (100% issued basis)' },
+            { value: 'GOOD_MISTAKE', label: 'Good + mistake PCS' },
+          ]} className="md:col-span-2" />
         <Input label="Bill date" type="date" value={f.bill_date} onChange={(e) => setF({ ...f, bill_date: e.target.value })} />
         <Input label="Inwards from" type="date" value={f.period_from} onChange={(e) => setF({ ...f, period_from: e.target.value })} />
         <Input label="Inwards to" type="date" value={f.period_to} onChange={(e) => setF({ ...f, period_to: e.target.value })} />
@@ -422,13 +430,13 @@ function BillEditor({ billId, onClose, onSaved }: { billId?: number; onClose: ()
               onChange={(e) => setPicked(e.target.checked ? new Set(rows.map((r) => r.receipt_id)) : new Set())} />
           </th>
           <th className="px-2 py-1.5 text-left">Inward</th><th className="px-2 py-1.5 text-left">DC / process</th><th className="px-2 py-1.5 text-left">Jobs</th>
-          <th className="px-2 py-1.5 text-right">Billed PCS</th><th className="px-2 py-1.5 text-right" title="Job rate card, else DC rate">Our rate</th>
+          <th className="px-2 py-1.5 text-right">Inward PCS</th><th className="px-2 py-1.5 text-right">Billed PCS</th><th className="px-2 py-1.5 text-right" title="Job rate card, else DC rate">Our rate</th>
           <th className="px-2 py-1.5 text-right">Contractor rate</th><th className="px-2 py-1.5 text-left">If billed above ours</th>
           <th className="px-2 py-1.5 text-right">Pay rate</th><th className="px-2 py-1.5 text-right">Amount</th>
         </tr></thead>
         <tbody>
-          {!f.vendor_id && <tr><td colSpan={10} className="py-6 text-center text-slate-400">Choose the contractor to see inwards not billed yet.</td></tr>}
-          {f.vendor_id && !rows.length && <tr><td colSpan={10} className="py-6 text-center text-slate-400">No unbilled inwards for this contractor.</td></tr>}
+          {!f.vendor_id && <tr><td colSpan={11} className="py-6 text-center text-slate-400">Choose the contractor to see inwards not billed yet.</td></tr>}
+          {f.vendor_id && !rows.length && <tr><td colSpan={11} className="py-6 text-center text-slate-400">No unbilled inwards for this contractor.</td></tr>}
           {rows.map((r) => {
             const p = priced.find((x) => x.receipt_id === r.receipt_id);
             const inp = billRates[r.receipt_id] ?? { bill_rate: '', action: 'NONE' };
@@ -442,7 +450,8 @@ function BillEditor({ billId, onClose, onSaved }: { billId?: number; onClose: ()
                 <td className="px-2 py-1"><span className="font-mono">{r.receipt_no}</span><span className="block text-[11px] text-slate-400">{fmtDate(r.receipt_date)}</span></td>
                 <td className="px-2 py-1"><span className="font-mono">{r.challan_no}</span> · {r.stage_name}{r.operations && <span className="block text-[11px] text-slate-400">{r.operations}</span>}</td>
                 <td className="px-2 py-1">{(r.jobs || []).map((j: any) => <span key={j.io_no} className="block">{j.io_no}: {fmtNumber(j.qty)} × ₹{num(j.rate).toFixed(2)}</span>)}{!(r.jobs || []).length && (r.io_list ?? '—')}</td>
-                <td className="px-2 py-1 text-right font-semibold">{fmtNumber(r.billed_qty)}</td>
+                <td className="px-2 py-1 text-right text-slate-500">Good {fmtNumber(r.received_qty)}{r.rejected_qty ? <span className="text-red-600 block">Mistake {r.rejected_qty}</span> : null}</td>
+                <td className="px-2 py-1 text-right font-semibold"><span className="text-brand-700">{fmtNumber(r.billed_qty)}</span><span className="block text-[10px] text-slate-400">{r.bill_basis_label ?? r.bill_basis}</span></td>
                 <td className="px-2 py-1 text-right">{num(r.our_rate).toFixed(2)}</td>
                 <td className="px-2 py-1 text-right">
                   <input type="number" min={0} step="0.01" className="input h-6 w-20 text-right text-[11px]" placeholder={num(r.our_rate).toFixed(2)}

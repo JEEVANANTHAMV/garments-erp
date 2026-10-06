@@ -52,6 +52,7 @@ const lineSchema = z.object({
   loss_tolerance_pct: z.coerce.number().min(0).max(100).nullish(),
   rate: z.coerce.number().min(0).nullish(),
   rate_basis: z.enum(['PCS', 'KG', 'M', 'BUNDLE', 'CARTON']).default('PCS'),
+  bill_basis: z.enum(['ISSUED', 'GOOD', 'GOOD_MISTAKE']).nullish(),
   remarks: s.nullableStr(255),
 });
 const orderSchema = z.object({
@@ -100,9 +101,9 @@ async function writeOrderLines(tx: Tx, orderId: number, lines: z.infer<typeof li
     seq = l.seq_no ?? seq + 10;
     await txExecute(tx,
       `INSERT INTO trx_jw_order_line (order_id, seq_no, stage_id, input_kind, input_desc, input_uom, output_kind, output_desc, output_uom,
-          planned_input_qty, expected_output_qty, loss_tolerance_pct, rate, rate_basis, remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          planned_input_qty, expected_output_qty, loss_tolerance_pct, rate, rate_basis, bill_basis, remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [orderId, seq, l.stage_id, l.input_kind, l.input_desc ?? null, l.input_uom, l.output_kind, l.output_desc ?? null, l.output_uom,
-       l.planned_input_qty, l.expected_output_qty, l.loss_tolerance_pct ?? null, l.rate ?? null, l.rate_basis, l.remarks ?? null]);
+       l.planned_input_qty, l.expected_output_qty, l.loss_tolerance_pct ?? null, l.rate ?? null, l.rate_basis, l.bill_basis ?? null, l.remarks ?? null]);
   }
 }
 
