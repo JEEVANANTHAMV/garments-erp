@@ -679,8 +679,8 @@ bomRouter.post('/:id/approve', requirePermission('BOM.APPROVE'), ah(async (req, 
   res.json({ success: true, message: 'BOM approved successfully', data: { id, approval_state: 'APPROVED' } });
 }));
 
-/** POST /:id/revision — Create revision (v+1) from approved BOM, preserving history */
-bomRouter.post('/:id/revision', requirePermission('BOM.CREATE'), ah(async (req, res) => {
+/** POST /:id/revision & /:id/revise — Create revision (v+1) from approved BOM, preserving history */
+const handleBomRevision = ah(async (req, res) => {
   const id = Number(req.params.id);
   const cid = req.user!.companyId;
   const bom = await queryOne<any>(`SELECT * FROM trx_bom WHERE id = ? AND company_id = ?`,
@@ -721,36 +721,73 @@ bomRouter.post('/:id/revision', requirePermission('BOM.CREATE'), ah(async (req, 
     message: `Created revision v${(newRevision as any).version}`,
     data: newRevision,
   });
-}));
+});
+
+bomRouter.post('/:id/revision', requirePermission('BOM.CREATE'), handleBomRevision);
+bomRouter.post('/:id/revise', requirePermission('BOM.CREATE'), handleBomRevision);
 
 /** GET /latest-cad/:styleId — Check for approved CAD Auto-Consumption for style */
 bomRouter.get('/latest-cad/:styleId', requirePermission('BOM.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const styleId = Number(req.params.styleId);
 
-  const cadReq = await queryOne<any>(`
+  let cadReq = await queryOne<any>(`
     SELECT cmr.id AS cmr_id, cmr.total_fabric_kg, cmr.total_yarn_kg, cmr.created_at AS approved_at,
-           cr.id AS cad_req_id, cr.req_no, cr.order_qty, cr.marker_efficiency, cr.cad_version
+           cr.id AS cad_req_id, cr.req_no, cr.order_qty, cr.marker_efficiency, cr.cad_version, cr.data_json
       FROM trx_cad_material_requirement cmr
       JOIN trx_cad_requirement cr ON cr.id = cmr.cad_req_id
-     WHERE cmr.company_id = ? AND cmr.style_id = ? AND cmr.status = 'APPROVED'
+     WHERE cmr.company_id = ? AND cmr.style_id = ?
      ORDER BY cmr.id DESC LIMIT 1
   `, [cid, styleId]);
+
+  if (!cadReq) {
+    cadReq = await queryOne<any>(`
+      SELECT NULL AS cmr_id,
+             (SELECT COALESCE(SUM(total_req_qty), 0) FROM trx_cad_marker WHERE cad_req_id = cr.id) AS marker_total_fabric,
+             cr.id AS cad_req_id, cr.req_no, cr.order_qty, cr.marker_efficiency, cr.cad_version, cr.data_json, cr.created_at AS approved_at
+        FROM trx_cad_requirement cr
+       WHERE cr.company_id = ? AND cr.style_id = ?
+       ORDER BY cr.id DESC LIMIT 1
+    `, [cid, styleId]);
+  }
 
   if (!cadReq) {
     return res.json({ success: true, data: null });
   }
 
   const orderQty = Number(cadReq.order_qty) || 1000;
-  const totalFabric = Number(cadReq.total_fabric_kg) || 0;
-  const totalYarn = Number(cadReq.total_yarn_kg) || 0;
+  let parsedJson: any = null;
+  try {
+    parsedJson = typeof cadReq.data_json === 'string' ? JSON.parse(cadReq.data_json) : cadReq.data_json;
+  } catch {}
+
+  const totalFabric = Number(cadReq.total_fabric_kg) ||
+                      Number(cadReq.marker_total_fabric) ||
+                      Number(parsedJson?.total_fabric_kg) ||
+                      Number(parsedJson?.summary_metrics?.grandTotalMaterial) || 0;
+  const totalYarn = Number(cadReq.total_yarn_kg) ||
+                    Number(parsedJson?.total_yarn_kg) ||
+                    (totalFabric > 0 ? Number((totalFabric * 1.05).toFixed(2)) : 0);
+
+  const styleRow = await queryOne<any>(`SELECT fabric_id FROM mst_style WHERE id = ?`, [styleId]);
+  const defaultFabric = await queryOne<any>(`SELECT id FROM mst_fabric WHERE company_id = ? AND is_active = 1 LIMIT 1`, [cid]);
+  const defaultYarn = await queryOne<any>(`SELECT id FROM mst_yarn WHERE company_id = ? AND is_active = 1 LIMIT 1`, [cid]);
+
+  const fCons = totalFabric > 0 ? Number((totalFabric / orderQty).toFixed(5)) : 0.82;
+  const yCons = totalYarn > 0 ? Number((totalYarn / orderQty).toFixed(5)) : Number((fCons * 1.05).toFixed(5));
 
   res.json({
     success: true,
     data: {
       ...cadReq,
-      fabric_consumption_per_pc: totalFabric > 0 ? Number((totalFabric / orderQty).toFixed(5)) : 0.82,
-      yarn_consumption_per_pc: totalYarn > 0 ? Number((totalYarn / orderQty).toFixed(5)) : 0.86,
+      has_approved_cad: true,
+      marker_name: cadReq.req_no || 'CAD-MKR',
+      efficiency_pct: Number(cadReq.marker_efficiency) || 85,
+      fabric_consumption_per_pc: fCons,
+      yarn_consumption_per_pc: yCons,
+      yarn_req_per_pc: yCons,
+      fabric_id: styleRow?.fabric_id || defaultFabric?.id || null,
+      yarn_id: defaultYarn?.id || null,
     },
   });
 }));
@@ -765,8 +802,8 @@ bomRouter.post('/:id/sync-cad', requirePermission('BOM.UPDATE'), ah(async (req, 
   `, [id, cid]);
   if (!bom) throw NotFound('BOM not found');
 
-  // Look for approved CAD material requirement
-  const cadReq = await queryOne<any>(`
+  // Look for CAD requirement: try cmr first, then cr directly
+  let cadReq = await queryOne<any>(`
     SELECT cmr.*, cr.req_no, cr.order_qty, cr.marker_efficiency, cr.data_json
       FROM trx_cad_material_requirement cmr
       JOIN trx_cad_requirement cr ON cr.id = cmr.cad_req_id
@@ -775,12 +812,33 @@ bomRouter.post('/:id/sync-cad', requirePermission('BOM.UPDATE'), ah(async (req, 
   `, [cid, bom.style_id]);
 
   if (!cadReq) {
-    throw BadRequest('No approved CAD Auto-Consumption found for this Style. Please create & approve a CAD requirement first.');
+    cadReq = await queryOne<any>(`
+      SELECT NULL AS cmr_id,
+             (SELECT COALESCE(SUM(total_req_qty), 0) FROM trx_cad_marker WHERE cad_req_id = cr.id) AS marker_total_fabric,
+             cr.id AS cad_req_id, cr.req_no, cr.order_qty, cr.marker_efficiency, cr.data_json
+        FROM trx_cad_requirement cr
+       WHERE cr.company_id = ? AND cr.style_id = ?
+       ORDER BY cr.id DESC LIMIT 1
+    `, [cid, bom.style_id]);
+  }
+
+  if (!cadReq) {
+    throw BadRequest('No CAD Requirement found for this Style. Please create CAD requirement first.');
   }
 
   const orderQty = Number(cadReq.order_qty) || 1000;
-  const totalFabricKg = Number(cadReq.total_fabric_kg) || 0;
-  const totalYarnKg = Number(cadReq.total_yarn_kg) || 0;
+  let parsedJson: any = null;
+  try {
+    parsedJson = typeof cadReq.data_json === 'string' ? JSON.parse(cadReq.data_json) : cadReq.data_json;
+  } catch {}
+
+  const totalFabricKg = Number(cadReq.total_fabric_kg) ||
+                        Number(cadReq.marker_total_fabric) ||
+                        Number(parsedJson?.total_fabric_kg) ||
+                        Number(parsedJson?.summary_metrics?.grandTotalMaterial) || 0;
+  const totalYarnKg = Number(cadReq.total_yarn_kg) ||
+                      Number(parsedJson?.total_yarn_kg) ||
+                      (totalFabricKg > 0 ? Number((totalFabricKg * 1.05).toFixed(2)) : 0);
 
   const fabricConsPerGmt = totalFabricKg > 0 ? Number((totalFabricKg / orderQty).toFixed(5)) : 0.82;
   const yarnConsPerGmt = totalYarnKg > 0 ? Number((totalYarnKg / orderQty).toFixed(5)) : Number((fabricConsPerGmt * 1.05).toFixed(5));

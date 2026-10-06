@@ -250,7 +250,8 @@ export async function loadQuotationForPo(companyId: number, quotationId: number,
 }
 
 const convertQuotationSchema = z.object({
-  quotation_id: z.coerce.number().int().positive(),
+  quotation_id: z.coerce.number().int().positive().optional(),
+  quotation_ids: z.array(z.coerce.number().int().positive()).optional(),
   required_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish(),
   remarks: z.string().max(2000).nullish(),
   billing_address: z.string().max(5000).nullish(),
@@ -321,8 +322,10 @@ const titleCase = (v: unknown) => {
 fabricYarnProcurementRouter.post('/fabric-purchase-orders/convert-from-quotation', requirePermission('PURCHASE.CREATE'), ah(async (req, res) => {
   const companyId = req.user!.companyId;
   const body = convertQuotationSchema.parse(req.body);
-  await assertQuotationNotConverted(companyId, body.quotation_id);
-  const info = await loadQuotationForPo(companyId, body.quotation_id, 'FABRIC');
+  const qId = body.quotation_id || body.quotation_ids?.[0];
+  if (!qId) throw BadRequest('At least one quotation must be selected');
+  await assertQuotationNotConverted(companyId, qId);
+  const info = await loadQuotationForPo(companyId, qId, 'FABRIC');
 
   const ids = info.lines.map((l) => l.material_id).filter(Boolean);
   const masters = ids.length ? await query<any>(
@@ -1274,10 +1277,27 @@ fabricYarnProcurementRouter.post('/yarn-stock/:id/bin', requirePermission('INVEN
 fabricYarnProcurementRouter.post('/yarn-purchase-orders/convert-from-quotation', requirePermission('PURCHASE.CREATE'), ah(async (req, res) => {
   const companyId = req.user!.companyId;
   const body = convertQuotationSchema.parse(req.body);
-  await assertQuotationNotConverted(companyId, body.quotation_id);
-  const info = await loadQuotationForPo(companyId, body.quotation_id, 'YARN');
+  const qids = Array.from(new Set(body.quotation_ids?.length ? body.quotation_ids : (body.quotation_id ? [body.quotation_id] : [])));
+  if (!qids.length) throw BadRequest('At least one quotation must be selected');
 
-  const ids = info.lines.map((l) => l.material_id).filter(Boolean);
+  const allInfos: QuotationForPo[] = [];
+  for (const qid of qids) {
+    await assertQuotationNotConverted(companyId, qid);
+    allInfos.push(await loadQuotationForPo(companyId, qid, 'YARN'));
+  }
+
+  const supplierId = allInfos[0].quote.supplier_id;
+  const differentSupplier = allInfos.find((inf) => inf.quote.supplier_id !== supplierId);
+  if (differentSupplier) {
+    throw BadRequest(`All selected quotations must belong to the same supplier/mill. Quote ${differentSupplier.quote.quotation_no} belongs to a different supplier.`);
+  }
+
+  const combinedLines = allInfos.flatMap((inf) => inf.lines);
+  const quoteNos = allInfos.map((inf) => inf.quote.quotation_no).join(', ');
+  const primaryInfo = allInfos[0];
+  const isInterstate = allInfos.some((inf) => inf.isInterstate);
+
+  const ids = combinedLines.map((l) => l.material_id).filter(Boolean);
   const masters = ids.length ? await query<any>(
     `SELECT y.id, y.yarn_name, y.count_value, y.count_type, y.yarn_type, y.base_uom, y.hsn_code,
             comp.description AS composition
@@ -1286,13 +1306,13 @@ fabricYarnProcurementRouter.post('/yarn-purchase-orders/convert-from-quotation',
       WHERE y.id IN (?)`, [ids]) : [];
   const master = new Map(masters.map((y) => [Number(y.id), y]));
 
-  const prepared = info.lines.map((ql) => {
+  const prepared = combinedLines.map((ql) => {
     const y = ql.material_id ? master.get(Number(ql.material_id)) : null;
     const uomId = ql.uom_id || y?.base_uom || null;
     if (!uomId) throw BadRequest(`Quotation line "${ql.description || `#${ql.id}`}" has no UOM`);
     const colorName = ql.line_color_name || null;
     const count = ql.yarn_count || (y?.count_value ? `${y.count_value}${y.count_type && y.count_type !== 'Ne' ? ` ${y.count_type}` : ''}` : null);
-    return { ql, y, uomId, colorName, count, t: quoteLineTax(ql, info.isInterstate) };
+    return { ql, y, uomId, colorName, count, t: quoteLineTax(ql, isInterstate) };
   });
   const sums = prepared.reduce((a, p) => ({
     amount: a.amount + p.t.amount, cgst: a.cgst + p.t.cgst, sgst: a.sgst + p.t.sgst, igst: a.igst + p.t.igst,
@@ -1301,7 +1321,8 @@ fabricYarnProcurementRouter.post('/yarn-purchase-orders/convert-from-quotation',
   let poNo = '';
   const poId = await transaction(async (tx) => {
     poNo = await nextDocNumber(tx, companyId, 'PURCHASE_ORDER');
-    const newPoId = await insertPoFromQuotation(tx, req, info, poNo, body, sums, 'Yarn');
+    const remarks = body.remarks || `Converted from Yarn Quotations: ${quoteNos}`;
+    const newPoId = await insertPoFromQuotation(tx, req, { ...primaryInfo, isInterstate }, poNo, { ...body, remarks }, sums, 'Yarn');
     for (const { ql, y, uomId, colorName, count, t } of prepared) {
       await txExecute(tx, `
         INSERT INTO trx_purchase_order_line (
@@ -1318,13 +1339,15 @@ fabricYarnProcurementRouter.post('/yarn-purchase-orders/convert-from-quotation',
         t.cgstRate, t.cgst, t.sgstRate, t.sgst, t.igstRate, t.igst, t.tax, t.net,
       ]);
     }
-    await markQuotationConverted(tx, info.quote.id, poNo);
+    for (const inf of allInfos) {
+      await markQuotationConverted(tx, inf.quote.id, poNo);
+    }
     await assertPoExcessById(tx, companyId, Number(newPoId));
     return newPoId;
   });
 
-  await audit(req, 'trx_purchase_order', poId, 'INSERT', null, { po_no: poNo, quotation_id: body.quotation_id });
-  res.json({ data: { id: poId, po_no: poNo, unresolved_lines: info.unresolved } });
+  await audit(req, 'trx_purchase_order', poId, 'INSERT', null, { po_no: poNo, quotation_ids: qids });
+  res.json({ data: { id: poId, po_no: poNo, quotation_ids: qids, unresolved_lines: allInfos.some((i) => i.unresolved) } });
 }));
 
 /**

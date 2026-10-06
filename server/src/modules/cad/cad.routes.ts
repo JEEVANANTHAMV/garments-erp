@@ -35,6 +35,68 @@ cadRouter.get('/cad-requirements/job-colours', requirePermission('PRODUCTION.VIE
   res.json({ data: rows, meta: { so_id: soId } });
 }));
 
+/**
+ * GET /cad-requirements/job-breakdown?io_no=&style_id= — loads sizes and pure order quantities (without excess)
+ * from sales order breakdown so CAD can inherit exact SO quantities.
+ */
+cadRouter.get('/cad-requirements/job-breakdown', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const q = z.object({ io_no: z.string().trim().min(1).max(60), style_id: z.coerce.number().int().positive().optional() }).parse(req.query);
+  const soId = await resolveSoId(cid, null, q.io_no);
+  if (!soId) { res.json({ data: { colors: [], sizes: [], colorways: [], total_order_qty: 0 }, meta: { so_id: null } }); return; }
+
+  const colorRows = await query<any>(
+    `SELECT DISTINCT c.id AS color_id, c.color_name, c.color_code
+       FROM trx_sales_order_line sol
+       LEFT JOIN trx_sales_order_sku sos ON sos.so_line_id = sol.id
+       LEFT JOIN mst_style_sku sk ON sk.id = sos.sku_id
+       JOIN mst_color c ON c.id = COALESCE(sk.color_id, sol.color_id)
+      WHERE sol.so_id = ? ${q.style_id ? 'AND sol.style_id = ?' : ''} ORDER BY c.color_name`, q.style_id ? [soId, q.style_id] : [soId]);
+
+  const sizeRows = await query<any>(
+    `SELECT DISTINCT sz.id AS size_id, sz.size_code, sz.size_label, sz.sort_order
+       FROM trx_sales_order_line sol
+       JOIN trx_sales_order_sku sos ON sos.so_line_id = sol.id
+       JOIN mst_style_sku sk ON sk.id = sos.sku_id
+       JOIN mst_size sz ON sz.id = sk.size_id
+      WHERE sol.so_id = ? ${q.style_id ? 'AND sol.style_id = ?' : ''}
+      ORDER BY sz.sort_order, sz.id`, q.style_id ? [soId, q.style_id] : [soId]);
+
+  const skuRows = await query<any>(
+    `SELECT c.color_name, sz.size_code, SUM(COALESCE(sos.qty, 0)) AS qty, SUM(COALESCE(sos.plan_cut_qty, 0)) AS plan_cut_qty
+       FROM trx_sales_order_line sol
+       JOIN trx_sales_order_sku sos ON sos.so_line_id = sol.id
+       JOIN mst_style_sku sk ON sk.id = sos.sku_id
+       JOIN mst_color c ON c.id = COALESCE(sk.color_id, sol.color_id)
+       JOIN mst_size sz ON sz.id = sk.size_id
+      WHERE sol.so_id = ? ${q.style_id ? 'AND sol.style_id = ?' : ''}
+      GROUP BY c.color_name, sz.size_code`, q.style_id ? [soId, q.style_id] : [soId]);
+
+  const sizes = sizeRows.map(s => s.size_code || s.size_label);
+  const colorways = colorRows.map(c => {
+    const quantities = sizes.map(sz => {
+      const match = skuRows.find(r => r.color_name === c.color_name && r.size_code === sz);
+      return Number(match?.qty) || 0;
+    });
+    return {
+      color_name: c.color_name,
+      quantities,
+    };
+  });
+
+  const totalOrderQty = colorways.reduce((sum, cw) => sum + cw.quantities.reduce((a, b) => a + b, 0), 0);
+
+  res.json({
+    data: {
+      colors: colorRows,
+      sizes,
+      colorways,
+      total_order_qty: totalOrderQty,
+    },
+    meta: { so_id: soId }
+  });
+}));
+
 
 /* ==============================================================================
    CAD REQUIREMENT & AUTO-CONSUMPTION ENGINE

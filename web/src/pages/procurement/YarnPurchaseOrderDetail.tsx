@@ -162,7 +162,7 @@ export default function YarnPurchaseOrderDetailPage() {
 
   const [saving, setSaving] = useState(false);
   const [quoteModalOpen, setQuoteModalOpen] = useState(false);
-  const [selectedQuoteId, setSelectedQuoteId] = useState<string>('');
+  const [selectedQuoteIds, setSelectedQuoteIds] = useState<string[]>([]);
   const [filterBomOnly, setFilterBomOnly] = useState(false);
 
   // PO Header State
@@ -522,26 +522,28 @@ export default function YarnPurchaseOrderDetailPage() {
     }));
   };
 
-  // Convert from Quotation
+  // Convert from Quotation (supports multiple quotations)
   const handleConvertQuotation = async () => {
-    if (!selectedQuoteId) {
-      toast('Please select a quotation', 'error');
+    if (!selectedQuoteIds.length) {
+      toast('Please select at least one quotation', 'error');
       return;
     }
 
     try {
+      const qids = selectedQuoteIds.map(Number);
       const res = await http.post<{ data: { id: number; po_no: string } }>(
         '/yarn-purchase-orders/convert-from-quotation',
         {
-          quotation_id: selectedQuoteId,
+          quotation_ids: qids,
+          quotation_id: qids[0],
           required_date: header.delivery_date || undefined,
-          remarks: `Converted from Yarn Quotation #${selectedQuoteId}`,
+          remarks: `Converted from Yarn Quotations: #${qids.join(', #')}`,
           billing_address: header.billing_address,
           shipping_address: header.shipping_address,
           shipping_to_party_id: header.shipping_to_party_id ? Number(header.shipping_to_party_id) : undefined,
         }
       );
-      toast(`Converted to PO ${res.data.po_no}`, 'success');
+      toast(`Converted ${qids.length} quotation(s) to PO ${res.data.po_no}`, 'success');
       if ((res.data as any).unresolved_lines) {
         toast(`${(res.data as any).unresolved_lines} line(s) have no yarn master — pick the yarn on the PO and approve it`, 'warning');
       }
@@ -1482,47 +1484,95 @@ export default function YarnPurchaseOrderDetailPage() {
       {/* Convert from Quotation Modal */}
       {quoteModalOpen && (
         <Modal
-          title="Convert Yarn Quotation to PO"
+          title="Convert Approved Yarn Quotations to PO"
           open={quoteModalOpen}
           onClose={() => setQuoteModalOpen(false)}
         >
           <div className="space-y-4 text-xs">
-            <p className="text-slate-600">
-              Select an approved Yarn Quotation to automatically pull items, counts, rates, and supplier details into a Purchase Order.
-            </p>
-
-            <div>
-              <label className="block text-[11px] font-medium text-slate-700 mb-1">
-                Approved Quotations
-              </label>
-              <select
-                value={selectedQuoteId}
-                onChange={(e) => setSelectedQuoteId(e.target.value)}
-                className="w-full text-xs rounded-lg border border-slate-300 py-2 px-2.5 focus:border-amber-500"
-              >
-                <option value="">-- Choose Quotation --</option>
-                {approvedQuotes.map((q) => (
-                  <option key={q.id} value={q.id}>
-                    {q.quotation_no} - {q.supplier_name || q.buyer_name || 'Mill'} (₹{fmtDecimal(q.total_amount)})
-                  </option>
-                ))}
-              </select>
+            <div className="flex items-center justify-between">
+              <p className="text-slate-600">
+                Select one or more approved Yarn Quotations for the same mill to pull accepted rates, items, and counts into PO lines.
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedQuoteIds.length === approvedQuotes.length) {
+                      setSelectedQuoteIds([]);
+                    } else {
+                      setSelectedQuoteIds(approvedQuotes.map((q: any) => String(q.id)));
+                    }
+                  }}
+                  className="text-[11px] font-semibold text-amber-700 hover:text-amber-800 underline"
+                >
+                  {selectedQuoteIds.length === approvedQuotes.length ? 'Deselect All' : 'Select All'}
+                </button>
+              </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-              <button
-                onClick={() => setQuoteModalOpen(false)}
-                className="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConvertQuotation}
-                disabled={!selectedQuoteId}
-                className="px-4 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-medium disabled:opacity-50"
-              >
-                Convert & Open PO
-              </button>
+            <div className="max-h-72 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
+              {approvedQuotes.length === 0 ? (
+                <div className="p-4 text-center text-slate-500">No approved yarn quotations found</div>
+              ) : (
+                approvedQuotes.map((q: any) => {
+                  const isChecked = selectedQuoteIds.includes(String(q.id));
+                  return (
+                    <label
+                      key={q.id}
+                      className={`flex items-start gap-3 p-3 cursor-pointer hover:bg-slate-50 transition ${
+                        isChecked ? 'bg-amber-50/50' : ''
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedQuoteIds((prev) => [...prev, String(q.id)]);
+                          } else {
+                            setSelectedQuoteIds((prev) => prev.filter((x) => x !== String(q.id)));
+                          }
+                        }}
+                        className="mt-0.5 rounded text-amber-600 focus:ring-amber-500"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-slate-900 font-mono">{q.quotation_no}</span>
+                          <span className="font-bold text-slate-900">₹{fmtDecimal(q.total_amount || 0)}</span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 flex items-center justify-between mt-0.5">
+                          <span>{q.supplier_name || q.buyer_name || 'Spinning Mill'}</span>
+                          <span>{q.quotation_date?.slice(0, 10)}</span>
+                        </div>
+                        {q.remarks && (
+                          <div className="text-[10.5px] text-slate-400 truncate mt-0.5 italic">{q.remarks}</div>
+                        )}
+                      </div>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+              <span className="text-slate-600 font-medium">
+                {selectedQuoteIds.length} quotation(s) selected
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setQuoteModalOpen(false)}
+                  className="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConvertQuotation}
+                  disabled={selectedQuoteIds.length === 0}
+                  className="px-4 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-medium disabled:opacity-50"
+                >
+                  Convert {selectedQuoteIds.length > 0 ? `(${selectedQuoteIds.length})` : ''} & Open PO
+                </button>
+              </div>
             </div>
           </div>
         </Modal>

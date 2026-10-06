@@ -17,7 +17,7 @@ export function StyleSizesPanel({ styleId, editable, onSaved }: { styleId: numbe
   const toast = useToast();
   const qc = useQueryClient();
   const sizeGroups = useLookup('size-groups');
-  const cur = useQuery({ queryKey: ['style-sizes', styleId], queryFn: async () => (await http.get<{ data: Row[]; log: any[] }>(`/styles/${styleId}/sizes`)) });
+  const cur = useQuery({ queryKey: ['style-sizes', styleId], queryFn: async () => (await http.get<{ data: Row[]; log: any[]; version_no?: number }>(`/styles/${styleId}/sizes`)) });
   const catalog = useQuery({ queryKey: ['size-catalog'], queryFn: async () => (await http.get<{ data: any[] }>('/styles/size-catalog')).data ?? [], staleTime: 60_000 });
   const [rows, setRows] = useState<Row[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -74,8 +74,15 @@ export function StyleSizesPanel({ styleId, editable, onSaved }: { styleId: numbe
     <div className="card p-4" id="style-sizes">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h3 className="text-[13px] font-bold uppercase tracking-wider text-slate-700">Sizes of this style</h3>
-          <p className="text-[11.5px] text-slate-500">Pick the sizes one by one (any size from the size master). A size group only fills the list. The sales order shows exactly these sizes.</p>
+          <div className="flex items-center gap-2">
+            <h3 className="text-[13px] font-bold uppercase tracking-wider text-slate-700">Sizes of this style</h3>
+            {cur.data?.version_no != null && (
+              <span className="font-mono text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
+                Active Version: v{cur.data.version_no}
+              </span>
+            )}
+          </div>
+          <p className="text-[11.5px] text-slate-500">Pick the sizes one by one. Modifying sizes updates SKUs and increments the style version for audit tracking.</p>
         </div>
         {dirty && <span className="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">Not saved</span>}
       </div>

@@ -256,6 +256,8 @@ export function StylesPage() {
             render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.style_code}</span> },
           { key: 'style_name', header: 'Name', sortable: true,
             render: (r: any) => <span className="font-medium text-slate-800">{r.style_name}</span> },
+          { key: 'version_no', header: 'Version', width: '75px',
+            render: (r: any) => <span className="font-mono text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">v{r.version_no || 1}</span> },
           { key: 'product_name', header: 'Product' },
           { key: 'buyer_name', header: 'Buyer' },
           { key: 'season', header: 'Season' },
@@ -372,6 +374,11 @@ export function StyleDetailPage() {
               <ImageThumbnail url={v.image_url} alt={d?.style_code} title={`${d?.style_code} — ${d?.style_name}`} size="md" />
             )}
             <span>{isNew ? 'New Style' : d?.style_code ?? 'Style'}</span>
+            {!isNew && (
+              <span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
+                v{d?.version_no || 1}
+              </span>
+            )}
           </div>
         }
         subtitle={isNew ? 'Define a buyer style and its colourways' : d?.style_name}

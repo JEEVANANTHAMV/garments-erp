@@ -368,9 +368,10 @@ const hasSkus = async (tx: Tx, id: number) => Number((await txQueryOne<any>(tx, 
 
 styleRouter.get('/:id/sizes', requirePermission('STYLE.VIEW'), ah(async (req, res) => {
   const id = Number(req.params.id);
+  const st = await queryOne<any>(`SELECT version_no FROM mst_style WHERE id = ?`, [id]);
   const log = await query<any>(`SELECT l.*, sz.size_code, u.full_name AS user_name FROM trx_style_size_log l LEFT JOIN mst_size sz ON sz.id = l.size_id
     LEFT JOIN mst_user u ON u.id = l.user_id WHERE l.style_id = ? ORDER BY l.id DESC LIMIT 100`, [id]);
-  res.json({ data: await styleSizes(null, id), log });
+  res.json({ data: await styleSizes(null, id), log, version_no: st?.version_no || 1 });
 }));
 
 /** PUT /styles/:id/sizes { sizes: [{ size_id, is_default? }] in order, reason? } — the full size list of the style */
@@ -395,10 +396,13 @@ styleRouter.put('/:id/sizes', requirePermission('STYLE.UPDATE'), ah(async (req, 
     if (order(before.filter((r) => ids.includes(Number(r.size_id)))) !== order(after.filter((r) => before.some((x) => Number(x.size_id) === Number(r.size_id))))) {
       await logSize(tx, req, id, 'REORDER', null, order(before), order(after), b.reason);
     }
+    // Increment style version number on size modification (Audio 1: v1, v2)
+    await txExecute(tx, `UPDATE mst_style SET version_no = COALESCE(version_no, 1) + 1 WHERE id = ?`, [id]);
+    const updatedSt = await txQueryOne<any>(tx, `SELECT version_no FROM mst_style WHERE id = ?`, [id]);
     const sync = (await hasSkus(tx, id)) ? await syncSkus(tx, id, st.style_code) : null;
-    return { sizes: after, sync };
+    return { sizes: after, sync, version_no: updatedSt?.version_no || 1 };
   });
-  await audit(req, 'mst_style', id, 'UPDATE', undefined, { sizes: out.sizes.map((x: any) => x.size_code), reason: b.reason, sku_sync: out.sync });
+  await audit(req, 'mst_style', id, 'UPDATE', undefined, { sizes: out.sizes.map((x: any) => x.size_code), reason: b.reason, sku_sync: out.sync, version_no: out.version_no });
   res.json({ data: out });
 }));
 

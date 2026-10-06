@@ -22,3 +22,5 @@ server/uploads/
 *.docs
 *.docx
 
+*.pdf
+*.ord

@@ -71,6 +71,7 @@ interface FabricProgramRow {
   order_qty_pcs: number;
   net_qty: number;
   buffer_qty: number;
+  sample_qty?: number;
   grand_total_qty: number;
   uom: string;
 }
@@ -193,14 +194,18 @@ export function recalculateFlatKnit(spec: FlatKnitSpec): FlatKnitSpec {
 
   const yarnKg = components.reduce((s, c) => s + (totals[c.key] || 0) * (Number(c.weight_g) || 0) / 1000, 0);
   const setWeight = components.reduce((s, c) => s + (Number(c.weight_g) || 0), 0);
+  const hasPieces = Object.values(totals).some((cnt) => cnt > 0);
+  const isEnabled = spec.enabled || yarnKg > 0 || hasPieces;
+
   return {
     ...spec,
+    enabled: isEnabled,
     components,
     size_rows,
     component_totals: totals,
     weight_per_set_g: Math.round(setWeight * 1000) / 1000,
-    total_collar_pcs: components.filter((c) => c.type === 'COLLAR').reduce((s, c) => s + totals[c.key], 0),
-    total_cuff_pcs: components.filter((c) => c.type === 'CUFF').reduce((s, c) => s + totals[c.key], 0),
+    total_collar_pcs: components.filter((c) => c.type === 'COLLAR').reduce((s, c) => s + (totals[c.key] || 0), 0),
+    total_cuff_pcs: components.filter((c) => c.type === 'CUFF').reduce((s, c) => s + (totals[c.key] || 0), 0),
     total_yarn_kg: Math.round(yarnKg * 100) / 100,
   };
 }
@@ -549,7 +554,6 @@ export default function CadRequirementDetailPage() {
 
   // Mathematical Engine (Pure Reactive Client-side Calculation)
   const isWoven = header.cad_type === 'WOVEN' || header.uom === 'MTR';
-  const totalAllowancePct = header.rejection_pct + header.fabric_allowance_pct;
 
   const runCalculation = () => {
     setCalculating(true);
@@ -562,6 +566,7 @@ export default function CadRequirementDetailPage() {
 
         const layAllowance = Number(m.lay_allowance_cm ?? 10.0);
         const widthAllowance = Number(m.width_allowance_in ?? (diaType === 'TUBE' ? 1.0 : 2.0));
+        const markerIsWoven = (m.uom === 'MTR') || isWoven;
         const markerRejectionPct = m.rejection_pct != null ? Number(m.rejection_pct) : Number(header.rejection_pct ?? 3.0);
         const markerFabAllowancePct = m.fabric_allowance_pct != null ? Number(m.fabric_allowance_pct) : Number(header.fabric_allowance_pct ?? 10.0);
 
@@ -569,7 +574,7 @@ export default function CadRequirementDetailPage() {
         const layLenCm = Math.round(((lengthMm / 10.0) + layAllowance) * 10) / 10;
         // Table width in inches: (Width mm / 25.4) + allowance
         const tblWidthIn = Math.round(((widthMm / 25.4) + widthAllowance) * 100) / 100;
-        const diaIn = m.dia_in != null && m.dia_in > 0 ? Number(m.dia_in) : Math.round(tblWidthIn);
+        const diaIn = Math.round(tblWidthIn);
         const diaVal = `${diaIn}"`;
         const diaSpec = `${diaVal} ${diaType}`;
 
@@ -582,7 +587,7 @@ export default function CadRequirementDetailPage() {
         let actLenPc = 0;
         let reqLenPc = 0;
 
-        if (!isWoven) {
+        if (!markerIsWoven) {
           const layerMult = diaType === 'TUBE' ? 2 : 1;
           fabricWtLay = Math.round(((layLenCm * (tblWidthIn * 2.54) * gsm / 10000.0) * layerMult) * 1000) / 1000;
           pcsLay = Math.max(1, sumRatios * layerMult);
@@ -602,7 +607,7 @@ export default function CadRequirementDetailPage() {
           const totCut = cutQtys.reduce((a, b) => a + b, 0);
 
           let reqQty = 0;
-          if (!isWoven) {
+          if (!markerIsWoven) {
             reqQty = Math.round(((avgWtPc * totCut) / 1000.0) * 1000) / 1000;
           } else {
             reqQty = Math.round(((reqLenPc * totCut) / 100.0) * 1000) / 1000;
@@ -620,7 +625,7 @@ export default function CadRequirementDetailPage() {
           };
         });
 
-        const markerUom = isWoven ? 'MTR' : (m.uom || 'KG');
+        const markerUom = markerIsWoven ? 'MTR' : (m.uom || 'KG');
         return {
           ...m,
           uom: markerUom,
@@ -647,16 +652,19 @@ export default function CadRequirementDetailPage() {
       // Consolidate Fabric Program (F.PRGM) & Cutting Lay (CUT)
       const fabMap: Record<string, any> = {};
       updatedMarkers.forEach((m) => {
-        const diaV = m.dia_val || (m.dia_in ? `${m.dia_in}"` : `${Math.round(m.table_width_in || 0)}"`);
+        const markerIsWoven = m.uom === 'MTR' || isWoven;
+        const diaV = `${Math.round(m.table_width_in || 0)}"`;
         const diaT = m.fabric_dia_type === 'TUBE' ? 'TUBE' : 'OPEN';
-        const key = `${m.fabric_type || 'Main Fabric'}_${m.gsm || 0}_${diaV}_${diaT}`;
+        const mUom = m.uom || (markerIsWoven ? 'MTR' : 'KG');
+        const key = `${m.fabric_type || 'Main Fabric'}_${markerIsWoven ? 0 : (m.gsm || 0)}_${diaV}_${diaT}_${mUom}`;
         if (!fabMap[key]) {
           fabMap[key] = {
             fabric_type: m.fabric_type || 'Main Fabric',
-            gsm: m.gsm || 160,
+            gsm: markerIsWoven ? 0 : (m.gsm || 160),
             dia_val: diaV,
             dia_type: diaT,
             dia_spec: `${diaV} ${diaT}`,
+            uom: mUom,
             colorways: {},
           };
         }
@@ -676,10 +684,14 @@ export default function CadRequirementDetailPage() {
 
       Object.values(fabMap).forEach((fab: any) => {
         Object.entries(fab.colorways).forEach(([cName, d]: [string, any]) => {
+          const existingFp = fabricProgram.find(
+            (p) => p.fabric_type === fab.fabric_type && p.color_name === cName && p.dia_val === fab.dia_val
+          );
+          const sample = Number(existingFp?.sample_qty || 0);
           const net = Math.round(d.net_qty * 10) / 10;
           const roundedNet = Math.ceil(net);
           const buffer = Math.max(1, Math.round(roundedNet * 0.02));
-          const grand = roundedNet + buffer;
+          const grand = roundedNet + buffer + sample;
 
           fpLines.push({
             fabric_type: fab.fabric_type,
@@ -691,8 +703,9 @@ export default function CadRequirementDetailPage() {
             order_qty_pcs: d.order_pcs,
             net_qty: net,
             buffer_qty: buffer,
+            sample_qty: sample,
             grand_total_qty: grand,
-            uom: isWoven ? 'MTR' : 'KG',
+            uom: fab.uom || (isWoven ? 'MTR' : 'KG'),
           });
 
           cutLines.push({
@@ -706,7 +719,7 @@ export default function CadRequirementDetailPage() {
             net_qty: net,
             buffer_qty: 0,
             grand_total_qty: net,
-            uom: isWoven ? 'MTR' : 'KG',
+            uom: fab.uom || (isWoven ? 'MTR' : 'KG'),
           });
         });
       });
@@ -765,7 +778,7 @@ export default function CadRequirementDetailPage() {
     const avgGarmentCons = totalOrderPcs > 0 ? (grandFabric / totalOrderPcs) : 0;
     const actGarmentCons = avgGarmentCons * (1 - lossPct / 100.0);
 
-    const collarYarnKg = flatKnitSpec.enabled ? Number(flatKnitSpec.total_yarn_kg || 0) : 0;
+    const collarYarnKg = (flatKnitSpec.enabled || Number(flatKnitSpec.total_yarn_kg || 0) > 0) ? Number(flatKnitSpec.total_yarn_kg || 0) : 0;
     const foldingFabricKg = specialParts
       .filter((p) => isKgUom(p.uom))
       .reduce((sum, p) => sum + (Number(p.total_qty) || 0), 0);
@@ -881,6 +894,33 @@ export default function CadRequirementDetailPage() {
     staleTime: 60_000,
   });
 
+  // sales order size breakdown & pure order quantities (without excess)
+  const jobBreakdown = useQuery({
+    queryKey: ['cad-job-breakdown', header.internal_ir_no, header.style_id],
+    queryFn: async () => (await http.get<{ data: any }>('/cad-requirements/job-breakdown', { io_no: header.internal_ir_no, style_id: header.style_id || undefined })).data,
+    enabled: !!header.internal_ir_no,
+    staleTime: 60_000,
+  });
+
+  const syncOrderBreakdownToMarker = () => {
+    const b = jobBreakdown.data;
+    if (!b?.sizes?.length) {
+      toast('No sizes or lines found on this sales order', 'warning');
+      return;
+    }
+    const sizes = b.sizes.map(String);
+    const ratios = sizes.map(() => 1);
+    const colorways = (b.colorways?.length ? b.colorways : [{ color_name: 'Solid', quantities: sizes.map(() => 0) }]).map((cw: any) => ({
+      color_name: cw.color_name,
+      quantities: (cw.quantities || []).map((q: any) => Number(q) || 0),
+    }));
+    updateActiveMarker({ sizes, ratios, colorways });
+    if (b.total_order_qty > 0) {
+      setHeader((p) => ({ ...p, order_qty: b.total_order_qty }));
+    }
+    toast(`Loaded ${sizes.length} sizes and pure order quantities from Sales Order`, 'success');
+  };
+
   /** Fill the active marker from its marker report (width, length, ratio, garments per marker) + the CAD efficiency. */
   const applyMarkerReport = (p: NonNullable<MarkerFile['parsed']>) => {
     if (!activeMarker) return;
@@ -912,12 +952,13 @@ export default function CadRequirementDetailPage() {
 
     const layAllowance = Number(m.lay_allowance_cm ?? 10.0);
     const widthAllowance = Number(m.width_allowance_in ?? (diaType === 'TUBE' ? 1.0 : 2.0));
+    const markerIsWoven = (m.uom === 'MTR') || isWoven;
     const markerRejectionPct = m.rejection_pct != null ? Number(m.rejection_pct) : Number(header.rejection_pct ?? 3.0);
     const markerFabAllowancePct = m.fabric_allowance_pct != null ? Number(m.fabric_allowance_pct) : Number(header.fabric_allowance_pct ?? 10.0);
 
     const layLenCm = Math.round(((lengthMm / 10.0) + layAllowance) * 10) / 10;
     const tblWidthIn = Math.round(((widthMm / 25.4) + widthAllowance) * 100) / 100;
-    const diaIn = m.dia_in != null && m.dia_in > 0 ? Number(m.dia_in) : Math.round(tblWidthIn);
+    const diaIn = Math.round(tblWidthIn);
     const diaVal = `${diaIn}"`;
     const diaSpec = `${diaVal} ${diaType}`;
 
@@ -930,7 +971,7 @@ export default function CadRequirementDetailPage() {
     let actLenPc = 0;
     let reqLenPc = 0;
 
-    if (!isWoven) {
+    if (!markerIsWoven) {
       const layerMult = diaType === 'TUBE' ? 2 : 1;
       fabricWtLay = Math.round(((layLenCm * (tblWidthIn * 2.54) * gsm / 10000.0) * layerMult) * 1000) / 1000;
       pcsLay = Math.max(1, sumRatios * layerMult);
@@ -950,7 +991,7 @@ export default function CadRequirementDetailPage() {
       const totCut = cutQtys.reduce((a, b) => a + b, 0);
 
       let reqQty = 0;
-      if (!isWoven) {
+      if (!markerIsWoven) {
         reqQty = Math.round(((avgWtPc * totCut) / 1000.0) * 1000) / 1000;
       } else {
         reqQty = Math.round(((reqLenPc * totCut) / 100.0) * 1000) / 1000;
@@ -968,7 +1009,7 @@ export default function CadRequirementDetailPage() {
       };
     });
 
-    const markerUom = (isWoven || header.cad_type === 'WOVEN' || header.uom === 'MTR') ? 'MTR' : (m.uom || 'KG');
+    const markerUom = markerIsWoven ? 'MTR' : (m.uom || 'KG');
     return {
       ...m,
       uom: markerUom,
@@ -1476,22 +1517,13 @@ export default function CadRequirementDetailPage() {
                   ...p,
                   cad_type: val,
                   uom: nextUom,
-                  fabric_allowance_pct: woven ? 0.0 : 10.0,
+                  fabric_allowance_pct: woven ? 0.0 : (p.fabric_allowance_pct || 10.0),
                 }));
-                setMarkers((prev) =>
-                  prev.map((m) =>
-                    recomputeSingleMarker({
-                      ...m,
-                      uom: nextUom,
-                    })
-                  )
-                );
-                setFabricProgram((prev) =>
-                  prev.map((fp) => ({ ...fp, uom: nextUom }))
-                );
-                setCuttingLay((prev) =>
-                  prev.map((cl) => ({ ...cl, uom: nextUom }))
-                );
+                // Update active marker rather than destructively overwriting all markers
+                updateActiveMarker({
+                  uom: nextUom,
+                  ...(woven ? { gsm: 0 } : {}),
+                });
               }}
               className="w-full text-xs rounded-lg border border-slate-300 py-1.5 px-2 bg-white font-medium text-slate-800"
             >
@@ -1510,53 +1542,15 @@ export default function CadRequirementDetailPage() {
           />
         </div>
 
-        {/* Allowances & Instructions Bar */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 pt-2 border-t border-slate-100 items-center">
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-semibold text-slate-700 whitespace-nowrap">Rejection %:</label>
-            <input
-              type="number"
-              step="0.5"
-              value={header.rejection_pct}
-              onChange={(e) => {
-                const v = parseFloat(e.target.value) || 0;
-                const prev = Number(header.rejection_pct);
-                // Markers still on the document value follow the change; per-marker overrides stay.
-                setMarkers((ms) => ms.map((m) => (m.rejection_pct == null || Number(m.rejection_pct) === prev ? { ...m, rejection_pct: v } : m)));
-                setHeader((p) => ({ ...p, rejection_pct: v }));
-              }}
-              className="w-20 text-xs font-bold text-amber-700 border border-slate-300 rounded px-2 py-1 text-right"
-            />
-            <span className="text-[11px] text-slate-500">(CEIL per size)</span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-semibold text-slate-700 whitespace-nowrap">Fabric Loss %:</label>
-            <input
-              type="number"
-              step="0.5"
-              value={header.fabric_allowance_pct}
-              onChange={(e) => {
-                const v = parseFloat(e.target.value) || 0;
-                const prev = Number(header.fabric_allowance_pct);
-                // Loss % is set per document each time; markers on the old value follow it.
-                setMarkers((ms) => ms.map((m) => (m.fabric_allowance_pct == null || Number(m.fabric_allowance_pct) === prev ? { ...m, fabric_allowance_pct: v } : m)));
-                setHeader((p) => ({ ...p, fabric_allowance_pct: v }));
-              }}
-              className="w-20 text-xs font-bold text-indigo-700 border border-slate-300 rounded px-2 py-1 text-right"
-            />
-            <span className="text-[11px] text-slate-500">(Total: {totalAllowancePct}%)</span>
-          </div>
-
-          <div className="md:col-span-2">
-            <input
-              type="text"
-              placeholder="Special notes e.g. GREY FORM BIO WASH, 10MM TWILL TAPE - 60 CM..."
-              value={header.special_notes}
-              onChange={(e) => setHeader((p) => ({ ...p, special_notes: e.target.value }))}
-              className="w-full text-xs border border-slate-300 rounded px-2 py-1 font-mono text-slate-700"
-            />
-          </div>
+        {/* Special Instructions & Notes Bar */}
+        <div className="pt-2 border-t border-slate-100">
+          <input
+            type="text"
+            placeholder="Special instructions / notes e.g. GREY FORM BIO WASH, 10MM TWILL TAPE - 60 CM..."
+            value={header.special_notes}
+            onChange={(e) => setHeader((p) => ({ ...p, special_notes: e.target.value }))}
+            className="w-full text-xs border border-slate-300 rounded px-2.5 py-1.5 font-mono text-slate-700 bg-white"
+          />
         </div>
       </div>
 
@@ -1737,14 +1731,42 @@ export default function CadRequirementDetailPage() {
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600">GSM</label>
-                <input
-                  type="number"
-                  value={activeMarker.gsm}
-                  onChange={(e) => updateActiveMarker({ gsm: parseInt(e.target.value) || 0 })}
-                  className="w-full border border-slate-300 rounded px-2 py-1 mt-0.5 font-medium"
-                />
+                <label className="block text-[11px] font-semibold text-slate-600">Unit / Mode</label>
+                <select
+                  value={activeMarker.uom || 'KG'}
+                  onChange={(e) => {
+                    const newUom = e.target.value as 'KG' | 'MTR';
+                    updateActiveMarker({
+                      uom: newUom,
+                      ...(newUom === 'MTR' ? { gsm: 0 } : { gsm: activeMarker.gsm || 160 }),
+                    });
+                  }}
+                  className="w-full border border-slate-300 rounded px-2 py-1 mt-0.5 font-bold text-indigo-700 bg-white"
+                >
+                  <option value="KG">KG (Knitted)</option>
+                  <option value="MTR">MTR (Woven / Foam)</option>
+                </select>
               </div>
+
+              {activeMarker.uom !== 'MTR' ? (
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600">GSM</label>
+                  <input
+                    type="number"
+                    value={activeMarker.gsm}
+                    onChange={(e) => updateActiveMarker({ gsm: parseInt(e.target.value) || 0 })}
+                    className="w-full border border-slate-300 rounded px-2 py-1 mt-0.5 font-medium"
+                    placeholder="e.g. 180"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-400">GSM (N/A for MTR)</label>
+                  <div className="w-full border border-slate-200 bg-slate-100 text-slate-400 rounded px-2 py-1 mt-0.5 text-xs font-semibold flex items-center h-[30px]">
+                    — Not Applicable
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-[11px] font-semibold text-slate-600">Direction</label>
@@ -1955,21 +1977,32 @@ export default function CadRequirementDetailPage() {
                   Defines garment sizes in the marker and how many pieces cut per table ply
                 </p>
               </div>
-              <button
-                onClick={() => {
-                  const newSizes = [...activeMarker.sizes, `S${activeMarker.sizes.length + 1}`];
-                  const newRatios = [...activeMarker.ratios, 1];
-                  const newColorways = activeMarker.colorways.map((cw) => ({
-                    ...cw,
-                    quantities: [...cw.quantities, 0],
-                  }));
-                  updateActiveMarker({ sizes: newSizes, ratios: newRatios, colorways: newColorways });
-                }}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
-              >
-                <Plus size={13} />
-                <span>Add Size Column</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={syncOrderBreakdownToMarker}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition"
+                  title="Load all sizes and pure order quantities from the Sales Order (Audio 2)"
+                >
+                  <Sparkles size={13} />
+                  <span>Sync Sizes from Order</span>
+                </button>
+                <button
+                  onClick={() => {
+                    const newSizes = [...activeMarker.sizes, `S${activeMarker.sizes.length + 1}`];
+                    const newRatios = [...activeMarker.ratios, 1];
+                    const newColorways = activeMarker.colorways.map((cw) => ({
+                      ...cw,
+                      quantities: [...cw.quantities, 0],
+                    }));
+                    updateActiveMarker({ sizes: newSizes, ratios: newRatios, colorways: newColorways });
+                  }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
+                >
+                  <Plus size={13} />
+                  <span>Add Size Column</span>
+                </button>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -1979,16 +2012,39 @@ export default function CadRequirementDetailPage() {
                     <th className="py-2 px-3 w-40">Parameter</th>
                     {activeMarker.sizes.map((s, sIdx) => (
                       <th key={sIdx} className="py-2 px-2 text-center">
-                        <input
-                          type="text"
-                          value={s}
-                          onChange={(e) => {
-                            const copy = [...activeMarker.sizes];
-                            copy[sIdx] = e.target.value;
-                            updateActiveMarker({ sizes: copy });
-                          }}
-                          className="w-20 text-center text-xs font-bold border border-slate-300 rounded px-1.5 py-0.5"
-                        />
+                        <div className="flex items-center justify-center gap-1">
+                          <input
+                            type="text"
+                            value={s}
+                            onChange={(e) => {
+                              const copy = [...activeMarker.sizes];
+                              copy[sIdx] = e.target.value;
+                              updateActiveMarker({ sizes: copy });
+                            }}
+                            className="w-16 text-center text-xs font-bold border border-slate-300 rounded px-1.5 py-0.5"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (activeMarker.sizes.length <= 1) {
+                                toast('Marker must have at least one size', 'warning');
+                                return;
+                              }
+                              const newSizes = activeMarker.sizes.filter((_, idx) => idx !== sIdx);
+                              const newRatios = activeMarker.ratios.filter((_, idx) => idx !== sIdx);
+                              const newColorways = activeMarker.colorways.map((cw) => ({
+                                ...cw,
+                                quantities: cw.quantities.filter((_, idx) => idx !== sIdx),
+                              }));
+                              updateActiveMarker({ sizes: newSizes, ratios: newRatios, colorways: newColorways });
+                              toast(`Removed size ${s} from marker`, 'info');
+                            }}
+                            className="text-slate-400 hover:text-red-600 transition p-0.5 rounded hover:bg-red-50"
+                            title={`Remove size ${s} from this marker`}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
                       </th>
                     ))}
                     <th className="py-2 px-2 text-center w-20">Total</th>
@@ -2250,6 +2306,7 @@ export default function CadRequirementDetailPage() {
                     <th className="py-2.5 px-2 text-right">Order Qty</th>
                     <th className="py-2.5 px-2 text-right">Net Req ({header.uom})</th>
                     <th className="py-2.5 px-2 text-right">Buffer ({header.uom})</th>
+                    <th className="py-2.5 px-2 text-right text-purple-700 font-bold">Sample ({header.uom})</th>
                     <th className="py-2.5 px-3 text-right text-indigo-700">Grand Total ({header.uom})</th>
                     {!isWoven && <th className="py-2.5 px-3 text-right text-sky-700" title="KG × 1000 ÷ (GSM × width m); tube = 2 layers">Meterage (MTR)</th>}
                   </tr>
@@ -2271,6 +2328,32 @@ export default function CadRequirementDetailPage() {
                       <td className="py-2.5 px-2 text-right">{fmtNumber(fp.order_qty_pcs)} Pcs</td>
                       <td className="py-2.5 px-2 text-right font-medium">{fmtDecimal(fp.net_qty)}</td>
                       <td className="py-2.5 px-2 text-right text-amber-700 font-medium">+{fmtDecimal(fp.buffer_qty)}</td>
+                      <td className="py-2.5 px-2 text-right text-purple-700 font-medium">
+                        <div className="flex items-center justify-end gap-1">
+                          <span className="text-[10px] text-purple-500 font-bold">+</span>
+                          <input
+                            type="number"
+                            step="0.5"
+                            min="0"
+                            value={fp.sample_qty ?? ''}
+                            placeholder="0"
+                            onChange={(e) => {
+                              const sQty = Math.max(0, parseFloat(e.target.value) || 0);
+                              setFabricProgram((prev) => {
+                                const next = [...prev];
+                                const row = { ...next[idx] };
+                                row.sample_qty = sQty;
+                                const net = Number(row.net_qty) || 0;
+                                const buf = Number(row.buffer_qty) || 0;
+                                row.grand_total_qty = Math.round((Math.ceil(net) + buf + sQty) * 100) / 100;
+                                next[idx] = row;
+                                return next;
+                              });
+                            }}
+                            className="w-14 text-right font-bold text-purple-900 border border-purple-300 rounded px-1.5 py-0.5 bg-purple-50/50 focus:bg-white text-xs"
+                          />
+                        </div>
+                      </td>
                       <td className="py-2.5 px-3 text-right font-bold text-indigo-700 text-sm">
                         {fmtDecimal(fp.grand_total_qty)} {fp.uom}
                       </td>
@@ -2292,6 +2375,9 @@ export default function CadRequirementDetailPage() {
                     </td>
                     <td className="py-3 px-2 text-right text-amber-800">
                       +{fmtDecimal(fabricProgram.reduce((s, x) => s + Number(x.buffer_qty || 0), 0))}
+                    </td>
+                    <td className="py-3 px-2 text-right text-purple-800">
+                      +{fmtDecimal(fabricProgram.reduce((s, x) => s + Number(x.sample_qty || 0), 0))}
                     </td>
                     <td className="py-3 px-3 text-right text-base text-indigo-900">
                       {fmtDecimal(summaryKpis.grandFabric)} {summaryKpis.uom}
@@ -2335,7 +2421,7 @@ export default function CadRequirementDetailPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
                   {/* Flat Knit Collar Row if configured */}
-                  {flatKnitSpec.enabled && (
+                  {(flatKnitSpec.enabled || Number(flatKnitSpec.total_yarn_kg || 0) > 0) && (
                     <tr className="hover:bg-amber-50/40 bg-amber-50/20 font-medium">
                       <td className="py-2.5 px-3 font-bold text-slate-900 flex items-center gap-1.5">
                         <Disc size={13} className="text-amber-700" />
@@ -2461,22 +2547,31 @@ export default function CadRequirementDetailPage() {
               </div>
             )}
 
-            {/* Average consumption per piece, computed from the totals above incl. all Part B items */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-2 border-t border-indigo-200/60 text-xs">
-              <span className="font-bold text-indigo-950 uppercase tracking-wider">
-                Average Consumption / Pc (incl. collar, foldings, tapes & cords)
+            {/* Piece Weights: Actual Piece Weight & Average Piece Weight side-by-side */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2.5 border-t border-indigo-200/60 text-xs">
+              <span className="font-bold text-indigo-950 uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles size={14} className="text-indigo-600" />
+                <span>Piece Weight Analysis (incl. collar, foldings, tapes & cords)</span>
               </span>
-              <div className="flex flex-wrap items-center gap-2 font-mono">
-                <span className="text-slate-600">
-                  Fabric {fmtDecimal(summaryKpis.avgGarmentCons * (isWoven ? 1 : 1000), 2)} {isWoven ? 'Mtrs' : 'Gms'}
-                </span>
-                <span className="text-slate-600">+ Parts {fmtDecimal(summaryKpis.partsKgPerPc * 1000, 2)} Gms</span>
-                {!isWoven && (
-                  <span className="text-emerald-900 bg-emerald-100/80 px-2 py-0.5 rounded font-extrabold text-sm">
-                    = {fmtDecimal(summaryKpis.avgConsInclParts * 1000, 2)} Gms / pc
+              <div className="flex flex-wrap items-center gap-2.5 font-mono">
+                {/* 1. Actual Piece Weight (before Average Piece Weight) */}
+                <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-300 text-amber-950 px-2.5 py-1 rounded-lg shadow-2xs">
+                  <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-amber-800">Actual Piece Weight:</span>
+                  <span className="font-extrabold text-sm text-amber-950">
+                    {fmtDecimal(summaryKpis.actualPieceWt * (isWoven ? 1 : 1000), 2)} {isWoven ? 'Mtrs' : 'Gms'}
                   </span>
-                )}
-                <span className="text-slate-400 font-sans">
+                  <span className="text-[10px] font-sans text-amber-700 font-medium">(-{summaryKpis.lossPct}% loss)</span>
+                </div>
+
+                {/* 2. Average Piece Weight (Gross) */}
+                <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-300 text-emerald-950 px-2.5 py-1 rounded-lg shadow-2xs">
+                  <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-emerald-800">Average Piece Weight:</span>
+                  <span className="font-extrabold text-sm text-emerald-950">
+                    {fmtDecimal(summaryKpis.avgConsInclParts * (isWoven ? 1 : 1000), 2)} {isWoven ? 'Mtrs' : 'Gms'}
+                  </span>
+                </div>
+
+                <span className="text-slate-400 font-sans text-[11px]">
                   ({fmtDecimal(summaryKpis.grandTotalMaterial, 2)} {summaryKpis.uom} ÷ {fmtNumber(summaryKpis.totalOrderPcs)} pcs)
                 </span>
               </div>
@@ -2644,6 +2739,26 @@ export default function CadRequirementDetailPage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextEnabled = !flatKnitSpec.enabled;
+                    const updated = recalculateFlatKnit({
+                      ...flatKnitSpec,
+                      enabled: nextEnabled,
+                    });
+                    setFlatKnitSpec(updated);
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-lg border transition ${
+                    flatKnitSpec.enabled
+                      ? 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                      : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                  }`}
+                  title="Toggle Flat Knit calculation in F.PRGM and procurement summary"
+                >
+                  <Disc size={13} />
+                  <span>{flatKnitSpec.enabled ? 'Flat Knit Active' : 'Enable Flat Knit'}</span>
+                </button>
                 <button
                   type="button"
                   onClick={syncSizesFromMarkers}
