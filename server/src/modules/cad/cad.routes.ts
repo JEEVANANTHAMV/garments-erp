@@ -315,7 +315,8 @@ cadRouter.get('/cad-requirements/:id', requirePermission('PRODUCTION.VIEW'), ah(
       flat_knit_spec: dataJson.flat_knit_spec || null,
       special_parts: dataJson.special_parts || [],
       trims: dataJson.trims || [],
-      purchase_requirement: buildPurchaseRequirement(dataJson.special_parts, dataJson.flat_knit_spec),
+      foam_khada_items: dataJson.foam_khada_items || [],
+      purchase_requirement: buildPurchaseRequirement(dataJson.special_parts, dataJson.flat_knit_spec, dataJson.foam_khada_items),
       dataJson,
     },
   });
@@ -335,9 +336,9 @@ function normalizeSpecialParts(parts: any) {
  * factor stay in their own unit and are counted in `unconverted`. Flat-knit specs saved before components existed carry
  * fixed collar/cuff columns where yarn = collar pcs x set weight — handled the same way.
  */
-export function buildPurchaseRequirement(specialParts: any, flatKnitSpec: any) {
+export function buildPurchaseRequirement(specialParts: any, flatKnitSpec: any, foamKhadaItems?: any) {
   const lines: {
-    source: 'SPECIAL_PART' | 'FLAT_KNIT'; item_name: string; spec: string | null; color: string | null;
+    source: 'SPECIAL_PART' | 'FLAT_KNIT' | 'FOAM_KHADA'; item_name: string; spec: string | null; color: string | null;
     req_qty: number; req_uom: string; qty_per_kg: number | null;
     kg_factor?: number | null; kg_factor_unit?: string | null; purchase_qty: number; purchase_uom: string;
   }[] = [];
@@ -382,6 +383,18 @@ export function buildPurchaseRequirement(specialParts: any, flatKnitSpec: any) {
       kg_factor: isKg || !(factor > 0) ? null : factor,
       kg_factor_unit: isKg ? null : factorUnitLabel(unit, uom),
       purchase_qty: kg ?? qty, purchase_uom: kg != null ? 'KG' : uom,
+    });
+  }
+
+  for (const fk of Array.isArray(foamKhadaItems) ? foamKhadaItems : []) {
+    if (!fk || typeof fk !== 'object') continue;
+    const qty = Number(fk.total_mtrs) || 0;
+    lines.push({
+      source: 'FOAM_KHADA', item_name: fk.item_name || 'Foam / Khada Roll',
+      spec: [fk.material_spec, fk.width_in ? `${fk.width_in}"` : null].filter(Boolean).join(' · ') || null, color: fk.color || null,
+      req_qty: qty, req_uom: 'MTR',
+      qty_per_kg: null,
+      purchase_qty: qty, purchase_uom: 'MTR',
     });
   }
 
@@ -498,6 +511,7 @@ const saveCadRequirementHandler = ah(async (req, res) => {
       flat_knit_spec: body.flat_knit_spec ?? inputDataJson?.flat_knit_spec,
       // Stored KG is recomputed from qty + factor + unit; the client's total_kg is not trusted
       special_parts: normalizeSpecialParts(body.special_parts ?? inputDataJson?.special_parts),
+      foam_khada_items: body.foam_khada_items ?? inputDataJson?.foam_khada_items ?? [],
       trims: body.trims ?? inputDataJson?.trims,
       total_fabric_kg: body.total_fabric_kg ?? inputDataJson?.total_fabric_kg,
     };

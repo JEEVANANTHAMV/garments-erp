@@ -296,6 +296,16 @@ export default function CadRequirementDetailPage() {
     total_collar_pcs: 0, total_cuff_pcs: 0, total_yarn_kg: 0, remarks: '',
   }));
   const [specialParts, setSpecialParts] = useState<SpecialPartRow[]>([]);
+  const [foamKhadaItems, setFoamKhadaItems] = useState<{
+    id?: string;
+    item_name: string;
+    material_spec?: string;
+    color?: string;
+    width_in?: number | string;
+    consumption_per_pc?: number;
+    total_mtrs: number;
+    remarks?: string;
+  }[]>([]);
 
   const syncSizesFromMarkers = () => {
     if (!markers.length) {
@@ -546,6 +556,12 @@ export default function CadRequirementDetailPage() {
       } else if (existingData.dataJson?.trims?.length) {
         setTrims(existingData.dataJson.trims);
       }
+
+      if (existingData.foam_khada_items?.length) {
+        setFoamKhadaItems(existingData.foam_khada_items);
+      } else if (existingData.dataJson?.foam_khada_items?.length) {
+        setFoamKhadaItems(existingData.dataJson.foam_khada_items);
+      }
     }
   }, [existingData, isNew]);
 
@@ -768,14 +784,21 @@ export default function CadRequirementDetailPage() {
     }));
     const totalOrderPcs = Object.values(cellPcs).reduce((a, b) => a + b, 0) || header.order_qty;
 
-    const grandFabric = fabricProgram.length > 0
-      ? fabricProgram.reduce((sum, f) => sum + Number(f.grand_total_qty || 0), 0)
-      : markers.reduce((sum, m) => sum + Number(m.total_req_qty || 0), 0);
+    // Separate Knitted Fabric (KG) and Woven / Foam Interlinings (MTR)
+    const grandFabricKg = fabricProgram.length > 0
+      ? fabricProgram.filter((f) => f.uom !== 'MTR').reduce((sum, f) => sum + Number(f.grand_total_qty || 0), 0)
+      : markers.filter((m) => m.uom !== 'MTR').reduce((sum, m) => sum + Number(m.total_req_qty || 0), 0);
 
-    // Fabric loss % entered on this document is taken OFF the fabric to give the actual
-    // piece weight; collar / cuff / twill tape / cords are not reduced (client call 29-Sep-2026).
+    const grandFabricMtr = fabricProgram.length > 0
+      ? fabricProgram.filter((f) => f.uom === 'MTR').reduce((sum, f) => sum + Number(f.grand_total_qty || 0), 0)
+      : markers.filter((m) => m.uom === 'MTR').reduce((sum, m) => sum + Number(m.total_req_qty || 0), 0);
+
+    const totalFoamKhadaMtrs = foamKhadaItems.reduce((sum, fk) => sum + (Number(fk.total_mtrs) || 0), 0);
+
+    // Fabric loss % entered on this document is taken OFF the knitted fabric to give the actual piece weight
     const lossPct = Number(header.fabric_allowance_pct) || 0;
-    const avgGarmentCons = totalOrderPcs > 0 ? (grandFabric / totalOrderPcs) : 0;
+    // For Knitted garments: piece weight is strictly based on Knitted Fabric (KG). MTR (Foam / Khada) is strictly excluded!
+    const avgGarmentCons = totalOrderPcs > 0 ? ((isWoven ? grandFabricMtr : grandFabricKg) / totalOrderPcs) : 0;
     const actGarmentCons = avgGarmentCons * (1 - lossPct / 100.0);
 
     const collarYarnKg = (flatKnitSpec.enabled || Number(flatKnitSpec.total_yarn_kg || 0) > 0) ? Number(flatKnitSpec.total_yarn_kg || 0) : 0;
@@ -792,10 +815,10 @@ export default function CadRequirementDetailPage() {
     const partsKg = Math.round((collarYarnKg + foldingFabricKg + tapesKg) * 1000) / 1000;
 
     const grandTotalMaterial = isWoven
-      ? Math.round(grandFabric * 100) / 100
-      : Math.round((grandFabric + partsKg) * 100) / 100;
+      ? Math.round(grandFabricMtr * 100) / 100
+      : Math.round((grandFabricKg + partsKg) * 100) / 100;
 
-    // Average per piece from the bottom totals — fabric PLUS collar/cuff yarn, foldings, tapes & cords
+    // Average per piece from the bottom totals — knitted fabric PLUS collar/cuff yarn, foldings, tapes & cords
     const partsKgPerPc = totalOrderPcs > 0 ? partsKg / totalOrderPcs : 0;
     const avgConsInclParts = totalOrderPcs > 0
       ? (isWoven ? avgGarmentCons : grandTotalMaterial / totalOrderPcs)
@@ -807,7 +830,10 @@ export default function CadRequirementDetailPage() {
 
     return {
       totalOrderPcs,
-      grandFabric: Math.round(grandFabric * 100) / 100,
+      grandFabric: Math.round((isWoven ? grandFabricMtr : grandFabricKg) * 100) / 100,
+      grandFabricKg: Math.round(grandFabricKg * 100) / 100,
+      grandFabricMtr: Math.round((grandFabricMtr + totalFoamKhadaMtrs) * 100) / 100,
+      totalFoamKhadaMtrs: Math.round(totalFoamKhadaMtrs * 100) / 100,
       avgGarmentCons: Math.round(avgGarmentCons * 10000) / 10000,
       actGarmentCons: Math.round(actGarmentCons * 10000) / 10000,
       collarYarnKg,
@@ -823,7 +849,7 @@ export default function CadRequirementDetailPage() {
       grandTotalMaterial,
       uom: isWoven ? 'MTR' : 'KG',
     };
-  }, [markers, fabricProgram, header.order_qty, header.fabric_allowance_pct, isWoven, flatKnitSpec, specialParts]);
+  }, [markers, fabricProgram, header.order_qty, header.fabric_allowance_pct, isWoven, flatKnitSpec, specialParts, foamKhadaItems]);
 
   // Marker Operations
   const addMarker = () => {
@@ -1285,6 +1311,7 @@ export default function CadRequirementDetailPage() {
         summary_metrics: summaryKpis,
         flat_knit_spec: flatKnitSpec,
         special_parts: specialParts.map(withPartKg),
+        foam_khada_items: foamKhadaItems,
         trims,
         total_fabric_kg: isWoven ? 0 : summaryKpis.grandTotalMaterial,
         total_fabric_mtrs: isWoven ? summaryKpis.grandFabric : 0,
@@ -1316,6 +1343,7 @@ export default function CadRequirementDetailPage() {
           total_yarn_kg: isWoven ? 0 : Math.round(summaryKpis.grandTotalMaterial * 1.05 * 10) / 10,
           // Purchase hand-off: specialized parts & flat-knit components, converted to KG server-side
           special_parts: specialParts.map(withPartKg),
+          foam_khada_items: foamKhadaItems,
           flat_knit_spec: flatKnitSpec,
           summary_metrics: summaryKpis,
         });
@@ -1440,8 +1468,13 @@ export default function CadRequirementDetailPage() {
         <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-200 shadow-sm">
           <div className="text-[11px] font-semibold text-indigo-700 uppercase tracking-wider">Total Fabric Need</div>
           <div className="text-xl font-bold text-indigo-900 mt-0.5">
-            {fmtDecimal(summaryKpis.grandFabric)} {summaryKpis.uom}
+            {fmtDecimal(isWoven ? summaryKpis.grandFabricMtr : summaryKpis.grandFabricKg)} {summaryKpis.uom}
           </div>
+          {summaryKpis.grandFabricMtr > 0 && !isWoven && (
+            <div className="text-[10px] text-purple-700 font-bold mt-0.5">
+              + {fmtDecimal(summaryKpis.grandFabricMtr)} MTR Foam / Khada
+            </div>
+          )}
           <div className="text-[10px] text-indigo-600">F.PRGM consolidated</div>
         </div>
 
@@ -1468,7 +1501,7 @@ export default function CadRequirementDetailPage() {
 
       {/* Header Parameters Card */}
       <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
           <Input
             label="CAD Req No"
             value={header.req_no}
@@ -1504,35 +1537,6 @@ export default function CadRequirementDetailPage() {
             options={jobStyles.length ? jobStyles.map((st) => ({ value: String(st.style_id), label: st.style_code })) : toOptions(styles.data)}
             placeholder="Select Style"
           />
-
-          <div className="space-y-1">
-            <label className="block text-xs font-semibold text-slate-700">Garment Type / Mode</label>
-            <select
-              value={header.cad_type}
-              onChange={(e) => {
-                const val = e.target.value as any;
-                const woven = val === 'WOVEN';
-                const nextUom = woven ? 'MTR' : 'KG';
-                setHeader((p) => ({
-                  ...p,
-                  cad_type: val,
-                  uom: nextUom,
-                  fabric_allowance_pct: woven ? 0.0 : (p.fabric_allowance_pct || 10.0),
-                }));
-                // Update active marker rather than destructively overwriting all markers
-                updateActiveMarker({
-                  uom: nextUom,
-                  ...(woven ? { gsm: 0 } : {}),
-                });
-              }}
-              className="w-full text-xs rounded-lg border border-slate-300 py-1.5 px-2 bg-white font-medium text-slate-800"
-            >
-              <option value="KNIT_SJ">Single Jersey Knits (KG)</option>
-              <option value="KNIT_FLEECE">Fleece / Heavy Knits (KG)</option>
-              <option value="WOVEN">Woven Fabric (MTRS)</option>
-              <option value="MULTI_PART">Multi-Material Hoodies (KG)</option>
-            </select>
-          </div>
 
           <Input
             label="Order Qty (Pcs)"
@@ -2477,7 +2481,69 @@ export default function CadRequirementDetailPage() {
             </div>
           </div>
 
-          {/* Section C: Consolidated Material & Yarn Procurement Summary Cockpit */}
+          {/* Section C: Foam & Khada Roll Indent (MTR — Non-Piece Weight) */}
+          {foamKhadaItems.length > 0 && (
+            <div className="space-y-2 pt-2 border-t border-slate-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-purple-950 uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-purple-600 inline-block"></span>
+                  <span>Part C: Foam & Khada Roll Indent (MTR — Non-Piece Weight)</span>
+                </h3>
+                <span className="text-[11px] text-purple-800 font-bold bg-purple-100 border border-purple-200 px-2 py-0.5 rounded">
+                  Excluded from Knitted Piece Weight (Trims Procurement Only)
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-purple-50/70 text-purple-950 font-bold border-b border-purple-200">
+                      <th className="py-2.5 px-3">Item / Roll Name</th>
+                      <th className="py-2.5 px-3">Material Specification</th>
+                      <th className="py-2.5 px-2">Width (Inches)</th>
+                      <th className="py-2.5 px-2">Colour</th>
+                      <th className="py-2.5 px-2 text-right">Cons / Pc (Mtr)</th>
+                      <th className="py-2.5 px-2">Unit</th>
+                      <th className="py-2.5 px-3 text-right text-purple-900 font-extrabold">Total Requirement</th>
+                      <th className="py-2.5 px-3">Procurement Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                    {foamKhadaItems.map((fk, idx) => (
+                      <tr key={fk.id || idx} className="hover:bg-purple-50/30">
+                        <td className="py-2.5 px-3 font-semibold text-slate-900 flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+                          <span>{fk.item_name}</span>
+                        </td>
+                        <td className="py-2.5 px-3">{fk.material_spec || '—'}</td>
+                        <td className="py-2.5 px-2 font-mono text-purple-700 font-semibold">{fk.width_in ? `${fk.width_in}"` : '—'}</td>
+                        <td className="py-2.5 px-2 font-semibold text-slate-800">{fk.color || '—'}</td>
+                        <td className="py-2.5 px-2 text-right font-mono text-slate-600">
+                          {fk.consumption_per_pc ? `${fmtDecimal(fk.consumption_per_pc, 3)} / pc` : '—'}
+                        </td>
+                        <td className="py-2.5 px-2 font-bold text-purple-900">MTR</td>
+                        <td className="py-2.5 px-3 text-right font-mono font-extrabold text-purple-900 text-sm">
+                          {fmtDecimal(fk.total_mtrs, 1)} MTR
+                        </td>
+                        <td className="py-2.5 px-3 text-xs text-slate-600">{fk.remarks || 'Interlining roll indent'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-purple-50/60 font-bold text-purple-900 border-t border-purple-200">
+                      <td colSpan={6} className="py-2.5 px-3">TOTAL FOAM & KHADA ROLL REQUIREMENT</td>
+                      <td className="py-2.5 px-3 text-right font-mono text-sm">
+                        {fmtDecimal(foamKhadaItems.reduce((s, x) => s + (Number(x.total_mtrs) || 0), 0))} MTR
+                      </td>
+                      <td className="py-2.5 px-3 text-xs text-purple-700 font-medium">Purchased via Trims / Sourcing in Meters</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Section D: Consolidated Material & Yarn Procurement Summary Cockpit */}
           <div className="p-4 bg-gradient-to-br from-indigo-50/80 via-slate-50 to-amber-50/60 rounded-xl border border-indigo-200/80 space-y-3">
             <div className="flex items-center justify-between border-b border-indigo-200/60 pb-2">
               <h3 className="text-xs font-bold text-indigo-950 uppercase tracking-wider flex items-center gap-1.5">
@@ -2635,29 +2701,79 @@ export default function CadRequirementDetailPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
-                {cuttingLay.map((cl, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/70">
-                    <td className="py-2.5 px-3 font-semibold text-slate-900">{cl.fabric_type}</td>
-                    <td className="py-2.5 px-2">{cl.gsm || '—'}</td>
-                    <td className="py-2.5 px-2 font-mono text-slate-600">{cl.dia_spec}</td>
-                    <td className="py-2.5 px-3 font-bold text-slate-800">{cl.color_name}</td>
-                    <td className="py-2.5 px-2 text-right font-medium">{fmtNumber(cl.order_qty_pcs)} Pcs</td>
-                    <td className="py-2.5 px-3 text-right font-bold text-emerald-700 text-sm">
-                      {fmtDecimal(cl.net_qty)} {cl.uom}
-                    </td>
-                  </tr>
-                ))}
+                {cuttingLay.map((cl, idx) => {
+                  const matchingFp = fabricProgram.find(
+                    (fp) => fp.fabric_type === cl.fabric_type && fp.color_name === cl.color_name
+                  );
+                  const sampleQty = Number(matchingFp?.sample_qty || 0);
+                  const lossPct = Number(header.fabric_allowance_pct) || 10;
+                  const sampleNetCut = sampleQty > 0 ? Math.round(sampleQty * (1 - lossPct / 100) * 100) / 100 : 0;
+
+                  return (
+                    <React.Fragment key={idx}>
+                      <tr className="hover:bg-slate-50/70">
+                        <td className="py-2.5 px-3 font-semibold text-slate-900 flex items-center gap-1.5">
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">BULK</span>
+                          <span>{cl.fabric_type}</span>
+                        </td>
+                        <td className="py-2.5 px-2">{cl.gsm || '—'}</td>
+                        <td className="py-2.5 px-2 font-mono text-slate-600">{cl.dia_spec}</td>
+                        <td className="py-2.5 px-3 font-bold text-slate-800">{cl.color_name}</td>
+                        <td className="py-2.5 px-2 text-right font-medium">{fmtNumber(cl.order_qty_pcs)} Pcs</td>
+                        <td className="py-2.5 px-3 text-right font-bold text-emerald-700 text-sm">
+                          {fmtDecimal(cl.net_qty)} {cl.uom}
+                        </td>
+                      </tr>
+
+                      {sampleQty > 0 && (
+                        <tr className="bg-purple-50/40 hover:bg-purple-50/70 border-b border-purple-100">
+                          <td className="py-2.5 px-3 font-semibold text-purple-950 flex items-center gap-1.5 pl-6">
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-200 text-purple-900">SAMPLE</span>
+                            <span>{cl.fabric_type}</span>
+                          </td>
+                          <td className="py-2.5 px-2 text-purple-800">{cl.gsm || '—'}</td>
+                          <td className="py-2.5 px-2 font-mono text-purple-700">{cl.dia_spec}</td>
+                          <td className="py-2.5 px-3 font-bold text-purple-900">{cl.color_name} (Sample)</td>
+                          <td className="py-2.5 px-2 text-right text-purple-700 font-medium italic">Fitting / Development</td>
+                          <td className="py-2.5 px-3 text-right">
+                            <div className="font-bold text-purple-900 text-sm">{fmtDecimal(sampleNetCut)} {cl.uom}</div>
+                            <div className="text-[10px] text-purple-600 font-normal">({fmtDecimal(sampleQty, 2)} kg − {lossPct}% process loss)</div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
               <tfoot>
-                <tr className="bg-emerald-50/60 font-bold text-emerald-900 border-t border-emerald-200">
-                  <td colSpan={4} className="py-3 px-3">TOTAL CUTTING DEPARTMENT REQUIREMENT</td>
-                  <td className="py-3 px-2 text-right">
-                    {fmtNumber(cuttingLay.reduce((s, x) => s + Number(x.order_qty_pcs || 0), 0))} Pcs
-                  </td>
-                  <td className="py-3 px-3 text-right text-base text-emerald-900">
-                    {fmtDecimal(cuttingLay.reduce((s, x) => s + Number(x.net_qty || 0), 0))} {summaryKpis.uom}
-                  </td>
-                </tr>
+                {(() => {
+                  const totalBulkCut = cuttingLay.reduce((s, x) => s + Number(x.net_qty || 0), 0);
+                  const totalSampleCut = cuttingLay.reduce((s, cl) => {
+                    const mFp = fabricProgram.find((fp) => fp.fabric_type === cl.fabric_type && fp.color_name === cl.color_name);
+                    const sq = Number(mFp?.sample_qty || 0);
+                    const loss = Number(header.fabric_allowance_pct) || 10;
+                    return s + (sq > 0 ? Math.round(sq * (1 - loss / 100) * 100) / 100 : 0);
+                  }, 0);
+
+                  return (
+                    <tr className="bg-emerald-50/60 font-bold text-emerald-900 border-t border-emerald-200">
+                      <td colSpan={4} className="py-3 px-3">
+                        TOTAL CUTTING DEPARTMENT REQUIREMENT
+                        {totalSampleCut > 0 && (
+                          <span className="text-xs font-normal text-emerald-700 ml-2">
+                            (Bulk: {fmtDecimal(totalBulkCut)} {summaryKpis.uom} + Sample: {fmtDecimal(totalSampleCut)} {summaryKpis.uom})
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-2 text-right">
+                        {fmtNumber(cuttingLay.reduce((s, x) => s + Number(x.order_qty_pcs || 0), 0))} Pcs
+                      </td>
+                      <td className="py-3 px-3 text-right text-base text-emerald-900">
+                        {fmtDecimal(totalBulkCut + totalSampleCut)} {summaryKpis.uom}
+                      </td>
+                    </tr>
+                  );
+                })()}
               </tfoot>
             </table>
           </div>
@@ -3293,6 +3409,183 @@ export default function CadRequirementDetailPage() {
               </table>
             </div>
           </div>
+
+          {/* Card 3: Foam & Khada Roll Indent (MTR) - Non-Piece Weight Interlinings */}
+          <div className="bg-white rounded-xl border border-purple-200/90 shadow-sm p-4 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-purple-100">
+              <div>
+                <h2 className="text-sm font-bold text-purple-950 uppercase tracking-wider flex items-center gap-1.5">
+                  <Scissors size={16} className="text-purple-600" />
+                  <span>Foam & Khada Roll Indent (MTR) — Specialized Interlinings</span>
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Interlining Foam rolls, Khada fabric, and chest canvases purchased in <strong>Meters (MTR)</strong>. These quantities are strictly excluded from the Garment Piece Weight (Gms) calculation and Knitted Fabric (KG) sum.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  setFoamKhadaItems((p) => [
+                    ...p,
+                    {
+                      id: `fk-${Date.now()}`,
+                      item_name: 'Foam Sheet Roll',
+                      material_spec: '10mm High-Density Foam',
+                      color: 'White',
+                      width_in: 44,
+                      consumption_per_pc: 0.15,
+                      total_mtrs: Math.round(0.15 * (header.order_qty || 0) * 100) / 100,
+                      remarks: 'Chest interlining',
+                    },
+                  ])
+                }
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-800"
+              >
+                <Plus size={13} />
+                <span>Add Foam / Khada Item</span>
+              </button>
+            </div>
+
+            {foamKhadaItems.length === 0 ? (
+              <div className="py-6 text-center text-xs text-slate-400 bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
+                No Foam or Khada roll items defined for this style. Click "+ Add Foam / Khada Item" if this order requires foam or khada interlinings.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-purple-50/70 text-purple-950 font-bold border-b border-purple-200">
+                      <th className="py-2.5 px-3">Item / Roll Name</th>
+                      <th className="py-2.5 px-3">Material Specification</th>
+                      <th className="py-2.5 px-2">Width (Inches)</th>
+                      <th className="py-2.5 px-2">Colour</th>
+                      <th className="py-2.5 px-2 text-right">Cons / Pc (Mtr)</th>
+                      <th className="py-2.5 px-2 text-right text-purple-900 font-bold">Total Requirement (MTR)</th>
+                      <th className="py-2.5 px-3">Remarks / Usage</th>
+                      <th className="py-2.5 px-2 text-center">Del</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                    {foamKhadaItems.map((fk, idx) => (
+                      <tr key={fk.id || idx} className="hover:bg-purple-50/30">
+                        <td className="py-2 px-3">
+                          <input
+                            type="text"
+                            value={fk.item_name}
+                            onChange={(e) => {
+                              const copy = [...foamKhadaItems];
+                              copy[idx].item_name = e.target.value;
+                              setFoamKhadaItems(copy);
+                            }}
+                            className="w-40 text-xs font-semibold border border-slate-300 rounded px-2 py-1 bg-white"
+                          />
+                        </td>
+                        <td className="py-2 px-3">
+                          <input
+                            type="text"
+                            value={fk.material_spec || ''}
+                            onChange={(e) => {
+                              const copy = [...foamKhadaItems];
+                              copy[idx].material_spec = e.target.value;
+                              setFoamKhadaItems(copy);
+                            }}
+                            className="w-44 text-xs border border-slate-300 rounded px-2 py-1 bg-white"
+                          />
+                        </td>
+                        <td className="py-2 px-2">
+                          <input
+                            type="number"
+                            value={fk.width_in || ''}
+                            onChange={(e) => {
+                              const copy = [...foamKhadaItems];
+                              copy[idx].width_in = parseFloat(e.target.value) || '';
+                              setFoamKhadaItems(copy);
+                            }}
+                            className="w-20 text-xs border border-slate-300 rounded px-2 py-1 bg-white"
+                          />
+                        </td>
+                        <td className="py-2 px-2">
+                          <input
+                            type="text"
+                            value={fk.color || ''}
+                            onChange={(e) => {
+                              const copy = [...foamKhadaItems];
+                              copy[idx].color = e.target.value;
+                              setFoamKhadaItems(copy);
+                            }}
+                            className="w-24 text-xs border border-slate-300 rounded px-2 py-1 bg-white"
+                          />
+                        </td>
+                        <td className="py-2 px-2 text-right">
+                          <input
+                            type="number"
+                            step="0.001"
+                            value={fk.consumption_per_pc || ''}
+                            onChange={(e) => {
+                              const copy = [...foamKhadaItems];
+                              const cons = parseFloat(e.target.value) || 0;
+                              copy[idx].consumption_per_pc = cons;
+                              copy[idx].total_mtrs = Math.round(cons * (header.order_qty || 0) * 100) / 100;
+                              setFoamKhadaItems(copy);
+                            }}
+                            className="w-20 text-xs text-right font-mono border border-slate-300 rounded px-1.5 py-1 bg-white"
+                          />
+                        </td>
+                        <td className="py-2 px-2 text-right font-bold text-purple-900 font-mono">
+                          <div className="flex items-center justify-end gap-1">
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={fk.total_mtrs || ''}
+                              onChange={(e) => {
+                                const copy = [...foamKhadaItems];
+                                copy[idx].total_mtrs = parseFloat(e.target.value) || 0;
+                                setFoamKhadaItems(copy);
+                              }}
+                              className="w-24 text-xs text-right font-mono font-bold text-purple-900 border border-purple-300 rounded px-1.5 py-1 bg-purple-50/50"
+                            />
+                            <span className="text-[10px] text-purple-700 font-semibold">MTR</span>
+                          </div>
+                        </td>
+                        <td className="py-2 px-3">
+                          <input
+                            type="text"
+                            value={fk.remarks || ''}
+                            onChange={(e) => {
+                              const copy = [...foamKhadaItems];
+                              copy[idx].remarks = e.target.value;
+                              setFoamKhadaItems(copy);
+                            }}
+                            className="w-full text-xs text-slate-600 border border-slate-300 rounded px-2 py-1 bg-white"
+                          />
+                        </td>
+                        <td className="py-2 px-2 text-center">
+                          <button
+                            type="button"
+                            onClick={() => setFoamKhadaItems((p) => p.filter((_, i) => i !== idx))}
+                            className="p-1 text-slate-400 hover:text-red-600 rounded"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-purple-50/60 font-bold text-purple-900 border-t border-purple-200">
+                      <td colSpan={5} className="py-2.5 px-3">TOTAL FOAM & KHADA ROLL INDENT (EXCLUDED FROM PIECE WT)</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-sm">
+                        {fmtDecimal(foamKhadaItems.reduce((s, x) => s + (Number(x.total_mtrs) || 0), 0))} MTR
+                      </td>
+                      <td colSpan={2} className="py-2.5 px-3 text-right text-xs text-purple-700 font-medium">
+                        Procured in Meters via Trims/Sourcing
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -3448,6 +3741,21 @@ export default function CadRequirementDetailPage() {
                       </tr>
                     );
                   })}
+                  {foamKhadaItems.map((fk, idx) => (
+                    <tr key={`fk_${idx}`} className="bg-purple-50/20">
+                      <td className="py-2 px-3 font-semibold text-purple-950 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+                        <span>{fk.item_name} (Foam/Khada)</span>
+                      </td>
+                      <td className="py-2 px-3">{fk.material_spec || '—'} {fk.width_in ? `(${fk.width_in}")` : ''}</td>
+                      <td className="py-2 px-2">{fk.color || '—'}</td>
+                      <td className="py-2 px-2 text-right font-mono">{fmtDecimal(fk.total_mtrs, 1)} MTR</td>
+                      <td className="py-2 px-2 text-right font-mono text-purple-600">Trims / Roll</td>
+                      <td className="py-2 px-3 text-right font-mono font-bold text-purple-900">
+                        {fmtDecimal(fk.total_mtrs, 1)} MTR
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
