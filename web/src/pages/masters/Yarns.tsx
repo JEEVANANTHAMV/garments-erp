@@ -248,6 +248,16 @@ export function YarnsPage() {
               ),
             },
             {
+              key: 'std_rate',
+              header: 'Std Rate (₹)',
+              align: 'right',
+              render: (r: any) => (
+                <span className="font-mono text-xs font-semibold text-slate-800">
+                  {Number(r.std_rate) > 0 ? `₹${fmtDecimal(r.std_rate, 2)}` : '—'}
+                </span>
+              ),
+            },
+            {
               key: 'variant_count',
               header: 'Count Variants',
               align: 'center',
@@ -393,6 +403,7 @@ export function YarnDetailPage() {
     certification: 'GOTS',
     hsn_code: '5205',
     base_uom: '',
+    std_rate: '',
     description: '',
     generated_description: '',
     is_active: 1,
@@ -431,6 +442,7 @@ export function YarnDetailPage() {
         certification: b.certification || 'NONE',
         hsn_code: b.hsn_code || '5205',
         base_uom: b.base_uom || '',
+        std_rate: b.std_rate != null ? String(b.std_rate) : '',
         description: b.description || '',
         generated_description: b.generated_description || '',
         is_active: b.is_active ?? 1,
@@ -568,6 +580,7 @@ export function YarnDetailPage() {
         certification: head.certification || 'NONE',
         hsn_code: head.hsn_code || '5205',
         base_uom: head.base_uom ? Number(head.base_uom) : (uoms.data?.[0]?.id ?? 1),
+        std_rate: Number(head.std_rate) || 0,
         description: head.description || null,
         generated_description: liveYarnAutoDescription,
         is_active: mode === 'draft' ? 0 : (head.is_active ?? 1),
@@ -732,6 +745,18 @@ export function YarnDetailPage() {
             value={String(head.is_active ?? 1)}
             onChange={(e) => setHead((s) => ({ ...s, is_active: Number(e.target.value) }))}
             disabled={!editable}
+          />
+
+          <Input
+            label="Standard Rate (₹ / UOM)"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="e.g. 280.00"
+            value={head.std_rate}
+            onChange={(e) => setHead((s) => ({ ...s, std_rate: e.target.value }))}
+            disabled={!editable}
+            hint="Costing reference rate auto-pulled into BOM &amp; estimation"
           />
 
           <div className="lg:col-span-2">

@@ -66,9 +66,13 @@ export function useStyleColors(styleId?: number | null) {
   });
 }
 
-/** Turn lookup rows into <Select options={...}> shape. */
+/** Turn lookup rows into <Select options={...}> shape (Description / Name first, code in subtle suffix). */
 export const toOptions = (items?: LookupItem[]) =>
-  (items ?? []).map((i) => ({ value: i.id, label: i.code ? `${i.code} — ${i.label}` : i.label }));
+  (items ?? []).map((i) => {
+    if (!i.code || i.label === String(i.code)) return { value: i.id, label: i.label };
+    if (i.label.startsWith(`${i.code} —`) || i.label.startsWith(`${i.code} -`)) return { value: i.id, label: i.label };
+    return { value: i.id, label: `${i.label} (${i.code})` };
+  });
 
 export const toPlainOptions = (items?: LookupItem[]) =>
   (items ?? []).map((i) => ({ value: i.id, label: i.label }));

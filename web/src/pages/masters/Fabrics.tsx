@@ -569,6 +569,7 @@ export function FabricDetailPage() {
     hsn_code: '6006',
     loss_percent: 0,
     base_uom: '',
+    std_rate: '',
     image_url: '',
     description: '',
     generated_description: '',
@@ -642,6 +643,7 @@ export function FabricDetailPage() {
         hsn_code: b.hsn_code || '6006',
         loss_percent: b.loss_percent || 0,
         base_uom: b.base_uom || '',
+        std_rate: b.std_rate != null ? String(b.std_rate) : '',
         image_url: b.image_url || '',
         description: b.description || '',
         generated_description: b.generated_description || '',
@@ -920,6 +922,7 @@ export function FabricDetailPage() {
         hsn_code: head.hsn_code || '6006',
         loss_percent: Number(head.loss_percent) || 0,
         base_uom: head.base_uom,
+        std_rate: Number(head.std_rate) || 0,
         image_url: head.image_url || null,
         description: head.description || autoCompositionString,
         generated_description: liveAutoDescription,
@@ -961,7 +964,7 @@ export function FabricDetailPage() {
           finish_type: head.finish_type || null,
           hsn_code: head.hsn_code || '6006',
           base_uom: head.base_uom,
-          std_rate: Number(v.std_rate) || 0,
+          std_rate: Number(v.std_rate) || Number(head.std_rate) || 0,
           is_active: v.is_active ? 1 : 0,
         };
 
@@ -1178,6 +1181,20 @@ export function FabricDetailPage() {
               disabled={!editable}
               onChange={(e) => setHead({ ...head, base_uom: e.target.value })}
               options={toOptions(uoms.data)}
+            />
+          </div>
+
+          <div>
+            <label className="label">Standard Rate (₹ / UOM)</label>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="e.g. 260.00"
+              value={head.std_rate}
+              disabled={!editable}
+              onChange={(e) => setHead({ ...head, std_rate: e.target.value })}
+              hint="Base costing rate auto-pulled into BOM &amp; estimation"
             />
           </div>
 

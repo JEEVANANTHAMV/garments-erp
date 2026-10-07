@@ -237,9 +237,9 @@ export function GateInwardsPage() {
         { name: 'gross_weight_kg', label: 'Gross Weight (Kg)', type: 'number' },
         { name: 'tare_weight_kg', label: 'Tare Weight (Kg)', type: 'number' },
         { name: 'net_weight_kg', label: 'Net Weight (Kg)', type: 'number' },
-        { name: 'warehouse_id', label: 'Target Receiving Store', lookup: 'warehouses' },
+        { name: 'warehouse_id', label: 'Target Receiving Store', required: true, lookup: 'warehouses' },
         { name: 'status', label: 'Gate Status', options: INWARD_STATUSES, defaultValue: 'GATE_IN' },
-        { name: 'security_guard', label: 'Security Guard Name' },
+        { name: 'security_guard', label: 'Security Guard / Officer Name', required: true, placeholder: 'e.g. Ramesh Kumar' },
         { name: 'remarks', label: 'Remarks / Notes', type: 'textarea', span: 2 },
       ]}
     />
@@ -370,7 +370,7 @@ export function GateOutwardsPage() {
         { name: 'uom_id', label: 'Unit of Measure', required: true, lookup: 'uoms' },
         { name: 'expected_return_date', label: 'Expected Return Date (For Returnable Pass)', type: 'date' },
         { name: 'status', label: 'Pass Status', options: OUTWARD_STATUSES, defaultValue: 'GATE_OUT' },
-        { name: 'security_guard', label: 'Security Officer Name' },
+        { name: 'security_guard', label: 'Security Officer Name', required: true, placeholder: 'e.g. Ramesh Kumar' },
         { name: 'remarks', label: 'Remarks / Notes', type: 'textarea', span: 2 },
       ]}
     />

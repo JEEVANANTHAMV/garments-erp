@@ -644,6 +644,7 @@ export function BomDetailPage() {
   const dias = useLookup('dias');
   const yarnCounts = useLookup('yarn-counts');
   const yarnBases = useLookup('yarn-bases');
+  const fabricBases = useLookup('fabric-bases');
   const allColors = useLookup('colors');
   // A yarn line is picked as yarn base + count (Yarn master / Yarn Count master); saved lines
   // carry yarn_id — their base / count come from the yarn variant.
@@ -906,12 +907,16 @@ export function BomDetailPage() {
   const rateInfo = (l: BomLine) => matRates.data?.[matKey(l)];
   const rateOf = (l: BomLine): number => {
     const r = rateInfo(l);
-    if (r) return Number(r.rate) || 0;
-    const src = l.material_type === 'YARN' ? yarns.data
-              : l.material_type === 'FABRIC' ? fabrics.data : trims.data;
-    const mid = l.material_type === 'YARN' ? l.yarn_id
-              : l.material_type === 'FABRIC' ? l.fabric_id : l.trim_id;
-    return Number((src ?? []).find((x: any) => x.id === Number(mid))?.std_rate ?? 0);
+    if (r && r.rate > 0) return Number(r.rate) || 0;
+    const src = l.material_type === 'YARN' ? (yarns.data ?? yarnBases.data)
+              : l.material_type === 'FABRIC' ? (fabrics.data ?? fabricBases.data) : trims.data;
+    const mid = l.material_type === 'YARN' ? (l.yarn_id || l.yarn_base_id)
+              : l.material_type === 'FABRIC' ? (l.fabric_id || (l as any).fabric_base_id) : l.trim_id;
+    let found = (src ?? []).find((x: any) => x.id === Number(mid));
+    if (!found && l.material_type === 'YARN' && l.yarn_base_id) {
+      found = (yarnBases.data ?? []).find((x: any) => x.id === Number(l.yarn_base_id));
+    }
+    return Number(found?.std_rate ?? 0);
   };
   const rateTitle = (l: BomLine) => {
     const r = rateInfo(l); const rate = rateOf(l);
@@ -1242,12 +1247,12 @@ export function BomDetailPage() {
           <table className="w-full min-w-[1880px] text-xs">
             <thead><tr>
               <th className="th min-w-[95px]">Type</th>
-              <th className="th min-w-[140px]">Source Plan</th>
-              <th className="th min-w-[200px]">Material / Description</th>
+              <th className="th min-w-[150px]">Source Plan</th>
+              <th className="th min-w-[270px]">Material / Description</th>
               <th className="th min-w-[170px]">Specification</th>
               <th className="th min-w-[95px]">Dia / Count</th>
               <th className="th min-w-[90px]">GSM</th>
-              <th className="th min-w-[90px]">Grey / Dyed</th>
+              <th className="th min-w-[115px]">Cora / Raw / Dyed</th>
               <th className="th min-w-[120px]">Dyed colour</th>
               <th className="th min-w-[110px]">Applicability</th>
               <th className="th min-w-[110px]">Colour</th>
@@ -1302,7 +1307,7 @@ export function BomDetailPage() {
                       >
                         {l.material_type === 'FABRIC' ? (
                           <>
-                            <option value="PRODUCTION">⚙️ In-House Knitting</option>
+                            <option value="PRODUCTION">⚙️ Knitting / Production (In-House & Job Work DC)</option>
                             <option value="PURCHASE">🛒 Direct Purchase</option>
                             <option value="STOCK">📦 Stock Roll</option>
                           </>
@@ -1420,7 +1425,7 @@ export function BomDetailPage() {
                             setLine(l._key, { dye_type: v, material_color_id: v === 'DYED' ? (l.material_color_id || l.color_id || '') : '' });
                           }}>
                           <option value="">—</option>
-                          <option value="GREY">Grey</option>
+                          <option value="GREY">Cora / Raw</option>
                           <option value="DYED">Dyed</option>
                         </select>
                       ) : <span className="text-slate-300">—</span>}
@@ -1433,7 +1438,7 @@ export function BomDetailPage() {
                           <option value="">— Colour —</option>
                           {(allColors.data ?? []).map((c: any) => <option key={c.id} value={c.id}>{c.label}</option>)}
                         </select>
-                      ) : <span className="text-slate-300">{fabricOrYarn && l.dye_type === 'GREY' ? 'Grey — no colour' : '—'}</span>}
+                      ) : <span className="text-slate-300">{fabricOrYarn && l.dye_type === 'GREY' ? 'Cora / Raw — no colour' : '—'}</span>}
                     </td>
                     {/* Applicability */}
                     <td className="td p-1.5">
@@ -1686,14 +1691,14 @@ export function BomDetailPage() {
                 />
                 <div className="text-xs">
                   <div className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
-                    🧶 Yarn Purchase + In-House Knitting
+                    🧶 Yarn Purchase + Knitting (In-House &amp; Job Work DC)
                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
                       Standard / Recommended (95%+)
                     </span>
                   </div>
                   <p className="text-slate-600 mt-1 leading-relaxed">
                     • <b>Yarn is Purchased (PO)</b>: {fmtDecimal(latestCad?.yarn_req_per_pc, 4)} kg/pc demand generated.<br/>
-                    • <b>Fabric is Produced In-House (Knitting)</b>: {fmtDecimal(latestCad?.fabric_consumption_per_pc, 4)} kg/pc routed to Knitting, NOT direct purchase.<br/>
+                    • <b>Fabric is Produced (Knitting)</b>: {fmtDecimal(latestCad?.fabric_consumption_per_pc, 4)} kg/pc routed to Knitting Program &amp; Delivery Challan (DC) for In-House or Outside Job Work, NOT direct purchase.<br/>
                     • <b>Zero Double-Costing</b>: Fabric purchase rate is excluded from garment material cost (captured via Yarn).
                   </p>
                 </div>

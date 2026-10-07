@@ -883,7 +883,7 @@ export const transactionResources: ResourceConfig[] = [
       f('ref_type', s.nullableStr(40)), f('ref_id', s.id()), f('ref_no', s.nullableStr(60)),
       f('warehouse_id', s.id()),
       f('status', s.enum(['GATE_IN','INSPECTED','GRN_COMPLETED','REJECTED','CANCELLED'])),
-      f('security_guard', s.nullableStr(80)), f('remarks', s.nullableStr(500)),
+      f('security_guard', s.strReq(80)), f('remarks', s.nullableStr(500)),
     ],
   },
   {
@@ -912,7 +912,7 @@ export const transactionResources: ResourceConfig[] = [
       f('expected_return_date', s.date()), f('is_returned', s.bool()), f('returned_date', s.date()),
       f('package_count', s.int()), f('total_qty', s.dec()), f('uom_id', s.id()),
       f('status', s.enum(['DRAFT','APPROVED','GATE_OUT','RETURNED_PARTIAL','RETURNED_FULL','CLOSED'])),
-      f('security_guard', s.nullableStr(80)), f('remarks', s.nullableStr(500)),
+      f('security_guard', s.strReq(80)), f('remarks', s.nullableStr(500)),
     ],
   },
 
