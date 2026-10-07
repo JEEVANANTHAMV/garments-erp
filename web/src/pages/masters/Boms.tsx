@@ -39,6 +39,7 @@ interface BomLine {
   size_id: number | '';
   consumption_basis: string;
   applicability: string;
+  source_type?: 'PURCHASE' | 'PRODUCTION' | 'STOCK' | 'TRANSFER';
   consumption: number | '';
   additional_qty: number | '';
   uom_id: number | '';
@@ -49,6 +50,7 @@ let seq = 0;
 const emptyLine = (type: BomLine['material_type'] = 'TRIM'): BomLine => ({
   _key: `b${++seq}`,
   material_type: type,
+  source_type: type === 'FABRIC' ? 'PRODUCTION' : 'PURCHASE',
   yarn_id: '',
   fabric_id: '',
   trim_id: '',

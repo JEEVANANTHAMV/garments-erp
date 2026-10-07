@@ -71,7 +71,7 @@ export function BomOrderStrip({ info }: { info: OrderInfo }) {
 }
 
 interface ReqLine {
-  material_type: string; yarn_id: unknown; fabric_id: unknown; trim_id: unknown; item_description: string; specification: string;
+  material_type: string; source_type?: string; yarn_id: unknown; fabric_id: unknown; trim_id: unknown; item_description: string; specification: string;
   yarn_base_id?: unknown; yarn_count_id?: unknown;
   color_id: unknown; size_id: unknown; consumption_basis: string; consumption: unknown; additional_qty: unknown; uom_id: unknown; wastage_pct: unknown;
 }
@@ -91,7 +91,7 @@ export function BomRequirementTable({ lines, info, materialName, uomCode }: {
       if (!(Number(l.consumption) > 0) && !(Number(l.additional_qty) > 0)) continue;
       const mat = (l.yarn_base_id && l.yarn_count_id ? `yb${l.yarn_base_id}c${l.yarn_count_id}` : l.yarn_id) || l.fabric_id || l.trim_id || l.item_description;
       if (!mat) continue;
-      const k = [l.material_type, mat, l.color_id || '', (l.specification || '').trim(), l.consumption_basis, l.uom_id].join('|');
+      const k = [l.material_type, l.source_type || 'PURCHASE', mat, l.color_id || '', (l.specification || '').trim(), l.consumption_basis, l.uom_id].join('|');
       groups.set(k, [...(groups.get(k) ?? []), l]);
     }
     return [...groups.values()].map((ls) => {
@@ -132,12 +132,33 @@ export function BomRequirementTable({ lines, info, materialName, uomCode }: {
   const anyAddl = rows.some((r) => r.addl > 0);
   const dp = (v: number) => fmtDecimal(v, v !== 0 && Math.abs(v) < 1 ? 3 : 2);
 
+  const purchaseCount = rows.filter((r) => (r.l0.source_type || 'PURCHASE') === 'PURCHASE').length;
+  const productionCount = rows.filter((r) => r.l0.source_type === 'PRODUCTION').length;
+  const stockCount = rows.filter((r) => r.l0.source_type === 'STOCK').length;
+
   return (
     <div className="card mb-4 overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-border px-4 py-3">
-        <h3 className="text-[13.5px] font-semibold text-slate-800">
-          Total Requirement — {info.job_no} · {info.style_code} <span className="font-normal text-slate-500">(one line per material, plan-cut PCS incl. size-wise excess)</span>
-        </h3>
+        <div>
+          <h3 className="text-[13.5px] font-semibold text-slate-800">
+            Total Requirement — {info.job_no} · {info.style_code} <span className="font-normal text-slate-500">(one line per material, plan-cut PCS incl. size-wise excess)</span>
+          </h3>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+              🛒 Purchase Demand (PO): {purchaseCount} lines
+            </span>
+            {productionCount > 0 && (
+              <span className="text-[11px] font-bold text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                ⚙️ In-House Knitting (Production): {productionCount} lines
+              </span>
+            )}
+            {stockCount > 0 && (
+              <span className="text-[11px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                📦 Stock Allocation: {stockCount} lines
+              </span>
+            )}
+          </div>
+        </div>
         <span className="text-[11px] text-slate-500">Same figures as MRP and the PO / quotation BOM pick</span>
       </div>
       <div className="overflow-x-auto">
@@ -146,6 +167,7 @@ export function BomRequirementTable({ lines, info, materialName, uomCode }: {
             <tr>
               <th rowSpan={2} className="th w-8">#</th>
               <th rowSpan={2} className="th">Type</th>
+              <th rowSpan={2} className="th">Source Plan</th>
               <th rowSpan={2} className="th min-w-[170px]">Material</th>
               <th rowSpan={2} className="th">Colour</th>
               <th rowSpan={2} className="th">UOM</th>
@@ -167,10 +189,26 @@ export function BomRequirementTable({ lines, info, materialName, uomCode }: {
           <tbody>
             {rows.map((r, i) => {
               const tone = TYPE_TONE[r.l0.material_type] ?? TYPE_TONE.GENERAL;
+              const src = r.l0.source_type || 'PURCHASE';
               return (
                 <tr key={i} className={`border-t border-slate-100 ${tone.row}`}>
                   <td className={`td border-l-4 text-center text-slate-400 ${tone.bar}`}>{i + 1}</td>
                   <td className="td"><span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold ${tone.badge}`}>{r.l0.material_type}</span></td>
+                  <td className="td">
+                    {src === 'PRODUCTION' ? (
+                      <span className="rounded border px-1.5 py-0.5 text-[10px] font-bold bg-indigo-100 text-indigo-800 border-indigo-300">
+                        ⚙️ PRODUCTION (Knitting)
+                      </span>
+                    ) : src === 'STOCK' ? (
+                      <span className="rounded border px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 border-amber-300">
+                        📦 STOCK
+                      </span>
+                    ) : (
+                      <span className="rounded border px-1.5 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-800 border-emerald-300">
+                        🛒 PURCHASE (PO)
+                      </span>
+                    )}
+                  </td>
                   <td className="td">
                     <div className="font-semibold text-slate-900">{r.name}</div>
                     {(r.l0.specification || r.lineCount > 1) && (

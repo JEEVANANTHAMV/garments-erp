@@ -38,6 +38,7 @@ interface CadMarker {
   dia_in?: number;
   dia_val?: string;
   dia_spec?: string;
+  fabric_id?: number | string;
   fabric_type: string;
   gsm: number;
   direction: string;
@@ -253,6 +254,7 @@ export default function CadRequirementDetailPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const styles = useLookup('styles');
+  const fabrics = useLookup('fabrics');
   // IO no is picked from the jobs (sales orders); the style list then narrows to the job's styles
   const jobs = useQuery({ queryKey: ['procurement-jobs'], queryFn: async () => (await http.get<{ data: CadJob[] }>('/procurement/jobs')).data ?? [], staleTime: 60_000 });
 
@@ -1668,14 +1670,38 @@ export default function CadRequirementDetailPage() {
               </div>
 
               <div className="lg:col-span-2">
-                <label className="block text-[11px] font-semibold text-slate-600">Fabric Type / Description</label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-semibold text-slate-600">Fabric Type / Description</label>
+                  <span className="text-[10px] text-indigo-600 font-semibold">Fabric Master Linked</span>
+                </div>
                 <input
                   type="text"
+                  list="cad-fabrics-master-list"
                   value={activeMarker.fabric_type}
-                  onChange={(e) => updateActiveMarker({ fabric_type: e.target.value })}
-                  placeholder="e.g. 100% Cotton Single Jersey"
-                  className="w-full font-semibold border border-slate-300 rounded px-2 py-1 mt-0.5"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const matched = (fabrics.data ?? []).find(
+                      (f: any) => f.label === val || f.code === val || `${f.code} — ${f.label}` === val
+                    );
+                    updateActiveMarker({
+                      fabric_type: matched ? matched.label : val,
+                      ...(matched ? {
+                        fabric_id: matched.id,
+                        ...((!activeMarker.gsm || activeMarker.gsm === 0) && (matched.min_gsm || matched.gsm) ? { gsm: Number(matched.min_gsm || matched.gsm) } : {}),
+                        ...((!activeMarker.dia_in || activeMarker.dia_in === 0) && matched.dia_inch ? { dia_in: Number(matched.dia_inch) } : {}),
+                      } : {}),
+                    });
+                  }}
+                  placeholder="Select from Fabric Master or type..."
+                  className="w-full font-semibold border border-indigo-200 rounded px-2 py-1 mt-0.5 bg-indigo-50/20 focus:bg-white"
                 />
+                <datalist id="cad-fabrics-master-list">
+                  {(fabrics.data ?? []).map((f: any) => (
+                    <option key={f.id} value={f.label}>
+                      {f.code ? `[${f.code}] ` : ''}{f.label} {f.min_gsm ? `(${f.min_gsm} GSM)` : ''}
+                    </option>
+                  ))}
+                </datalist>
               </div>
 
               <div>
@@ -3233,13 +3259,15 @@ export default function CadRequirementDetailPage() {
                       <td className="py-2 px-3">
                         <input
                           type="text"
+                          list="cad-fabrics-master-list"
                           value={sp.fabric_type}
+                          placeholder="Select fabric or type..."
                           onChange={(e) => {
                             const copy = [...specialParts];
                             copy[idx].fabric_type = e.target.value;
                             setSpecialParts(copy);
                           }}
-                          className="w-48 text-xs border border-slate-300 rounded px-2 py-1 bg-white"
+                          className="w-48 text-xs border border-indigo-200 rounded px-2 py-1 bg-white"
                         />
                       </td>
                       <td className="py-2 px-2">
