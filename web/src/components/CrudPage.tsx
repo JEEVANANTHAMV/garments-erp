@@ -129,6 +129,19 @@ export function CrudPage<T extends { id: number }>(cfg: CrudConfig<T>) {
 
   const submit = async () => {
     setErrors({});
+    const errs: Record<string, string> = {};
+    for (const f of cfg.fields) {
+      if (f.required && !f.readOnly) {
+        const val = values[f.name];
+        if (val === undefined || val === null || val === '' || (typeof val === 'string' && val.trim() === '')) {
+          errs[f.name] = `${f.label} is required`;
+        }
+      }
+    }
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs);
+      return;
+    }
     const payload = cfg.toPayload ? cfg.toPayload(values) : values;
     try {
       await save.mutateAsync({ id: editing?.id ?? null, body: payload });
@@ -243,10 +256,19 @@ export function CrudPage<T extends { id: number }>(cfg: CrudConfig<T>) {
             <FormControl key={f.name} field={f}
               value={values[f.name]}
               error={errors[f.name]}
-              onChange={(v, row) => setValues((s) => ({
-                ...s, [f.name]: v,
-                ...(f.fill ? Object.fromEntries(Object.entries(f.fill).map(([t, k]) => [t, row ? (row[k] ?? null) : v == null ? null : s[t]])) : {}),
-              }))} />
+              onChange={(v, row) => {
+                setValues((s) => ({
+                  ...s, [f.name]: v,
+                  ...(f.fill ? Object.fromEntries(Object.entries(f.fill).map(([t, k]) => [t, row ? (row[k] ?? null) : v == null ? null : s[t]])) : {}),
+                }));
+                if (errors[f.name]) {
+                  setErrors((prev) => {
+                    const next = { ...prev };
+                    delete next[f.name];
+                    return next;
+                  });
+                }
+              }} />
           ))}
         </div>
       </Modal>

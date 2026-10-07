@@ -503,7 +503,7 @@ export const transactionResources: ResourceConfig[] = [
     ],
     fields: [
       f('cut_no', s.nullableStr(40)), f('io_no', s.nullableStr(40)), f('cut_date', s.date()), f('prod_order_id', s.idReq()),
-      f('fabric_id', s.id()), f('batch_id', s.id()), f('lay_length_m', s.dec()),
+      f('fabric_id', s.idReq()), f('batch_id', s.id()), f('lay_length_m', s.dec()),
       f('ply_count', s.int()), f('marker_ref', s.nullableStr(60)), f('marker_eff_pct', s.dec()),
       f('fabric_used_kg', s.dec()), f('total_pieces', s.int()),
       f('rework_qty', s.int()), f('shortage_qty', s.int()), f('status_id', s.id()),
@@ -624,7 +624,7 @@ export const transactionResources: ResourceConfig[] = [
       f('stage_id', s.id()),
       f('inspection_type', s.enumReq(['INCOMING','INLINE','END_LINE','FINAL','PRE_FINAL','AQL','PACKING'])),
       f('aql_level', s.nullableStr(20)), f('lot_size', s.int()), f('sample_size', s.int()),
-      f('inspected_qty', s.int()), f('passed_qty', s.int()),
+      f('inspected_qty', s.intReq()), f('passed_qty', s.int()),
       f('major_defects', s.int()), f('minor_defects', s.int()), f('critical_defects', s.int()),
       f('result', s.enum(['PASS','FAIL','PENDING','REINSPECT'])),
       f('inspector_id', s.id()), f('buyer_qc', s.bool()), f('remarks', s.text()),
@@ -881,7 +881,7 @@ export const transactionResources: ResourceConfig[] = [
       f('material_type', s.enum(['FABRIC','YARN','TRIM','GARMENT','GENERAL','MACHINERY'])),
       f('package_count', s.int()), f('gross_weight_kg', s.dec()), f('tare_weight_kg', s.dec()), f('net_weight_kg', s.dec()),
       f('ref_type', s.nullableStr(40)), f('ref_id', s.id()), f('ref_no', s.nullableStr(60)),
-      f('warehouse_id', s.id()),
+      f('warehouse_id', s.idReq()),
       f('status', s.enum(['GATE_IN','INSPECTED','GRN_COMPLETED','REJECTED','CANCELLED'])),
       f('security_guard', s.strReq(80)), f('remarks', s.nullableStr(500)),
     ],
@@ -893,7 +893,14 @@ export const transactionResources: ResourceConfig[] = [
     hasIsActive: false, softDelete: false, hasAuditCols: false,
     filters: ['pass_type', 'party_id', 'to_unit_id', 'status', 'is_returned'],
     autoNumber: { column: 'pass_no', docType: 'GATE_OUTWARD' },
-    beforeWrite: (_req, data, before) => stampGateNow(data, before, 'pass_date', 'pass_time'),
+    beforeWrite: (_req, data, before) => {
+      stampGateNow(data, before, 'pass_date', 'pass_time');
+      const party = data.party_id !== undefined ? data.party_id : before?.party_id;
+      const unit = data.to_unit_id !== undefined ? data.to_unit_id : before?.to_unit_id;
+      if (!party && !unit) {
+        throw BadRequest('Select either Recipient Vendor or Internal Destination Unit for the gate pass');
+      }
+    },
     // a pass made by scanning a DC barcode links back to the DC (job work DC / purchase return keep gate_outward_id)
     afterCreateTx: async (_req, row, tx) => {
       if (!row?.ref_id) return;
@@ -908,9 +915,9 @@ export const transactionResources: ResourceConfig[] = [
       f('party_id', s.id()), f('to_unit_id', s.id()),
       f('vehicle_no', s.strReq(30)), f('driver_name', s.nullableStr(80)), f('driver_phone', s.nullableStr(30)),
       f('transporter_name', s.nullableStr(120)), f('lr_no', s.nullableStr(50)),
-      f('purpose', s.nullableStr(255)), f('ref_type', s.nullableStr(40)), f('ref_id', s.id()), f('ref_no', s.nullableStr(60)),
+      f('purpose', s.strReq(255)), f('ref_type', s.nullableStr(40)), f('ref_id', s.id()), f('ref_no', s.nullableStr(60)),
       f('expected_return_date', s.date()), f('is_returned', s.bool()), f('returned_date', s.date()),
-      f('package_count', s.int()), f('total_qty', s.dec()), f('uom_id', s.id()),
+      f('package_count', s.int()), f('total_qty', s.decReq()), f('uom_id', s.idReq()),
       f('status', s.enum(['DRAFT','APPROVED','GATE_OUT','RETURNED_PARTIAL','RETURNED_FULL','CLOSED'])),
       f('security_guard', s.strReq(80)), f('remarks', s.nullableStr(500)),
     ],

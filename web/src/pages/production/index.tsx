@@ -148,7 +148,7 @@ export function CuttingPage() {
       { name: 'cut_no', label: 'Cut no', hint: 'Blank to auto-generate' },
       { name: 'cut_date', label: 'Cut date', type: 'date', required: true, defaultValue: today() },
       { name: 'prod_order_id', label: 'Work order', required: true, lookup: 'production-orders' },
-      { name: 'fabric_id', label: 'Fabric', lookup: 'fabrics' },
+      { name: 'fabric_id', label: 'Fabric', required: true, lookup: 'fabrics' },
       { name: 'batch_id', label: 'Batch', lookup: 'batches' },
       { name: 'lay_length_m', label: 'Lay length (m)', type: 'number' },
       { name: 'ply_count', label: 'Ply count', type: 'number' },

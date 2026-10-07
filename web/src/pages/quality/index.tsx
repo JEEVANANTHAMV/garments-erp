@@ -46,7 +46,7 @@ export function QcInspectionsPage() {
       { name: 'aql_level', label: 'AQL level', placeholder: 'e.g. 2.5' },
       { name: 'lot_size', label: 'Lot size', type: 'number' },
       { name: 'sample_size', label: 'Sample size', type: 'number' },
-      { name: 'inspected_qty', label: 'Inspected qty', type: 'number' },
+      { name: 'inspected_qty', label: 'Inspected qty', type: 'number', required: true },
       { name: 'passed_qty', label: 'Passed qty', type: 'number' },
       { name: 'critical_defects', label: 'Critical defects', type: 'number' },
       { name: 'major_defects', label: 'Major defects', type: 'number' },
