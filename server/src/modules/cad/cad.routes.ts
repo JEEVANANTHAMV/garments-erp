@@ -289,13 +289,23 @@ cadRouter.get('/cad-requirements/:id', requirePermission('PRODUCTION.VIEW'), ah(
 
   const ratioPatti = await loadRatioPattiRefs(companyId, id);
 
+  const rawFabricPrograms = fabricPrograms.filter((f) => f.sheet_type === 'FABRIC_PROGRAM');
+  const jsonFp = Array.isArray(dataJson.fabric_program) ? dataJson.fabric_program : [];
+  const mergedFabricProgram = rawFabricPrograms.map((fp, idx) => {
+    const match = jsonFp.find((j: any) => j.id === fp.id || (j.fabric_type === fp.fabric_type && j.color_name === fp.color_name)) || jsonFp[idx];
+    return {
+      ...fp,
+      sample_qty: Number(fp.sample_qty != null && fp.sample_qty !== '' ? fp.sample_qty : (match?.sample_qty ?? 0)),
+    };
+  });
+
   res.json({
     data: {
       ...reqRow,
       ratio_patti_ref: ratioPatti,
       marker_files: await markerFiles(companyId, id),
       markers: markers.length > 0 ? markers : (dataJson.markers || []),
-      fabric_program: fabricPrograms.filter((f) => f.sheet_type === 'FABRIC_PROGRAM'),
+      fabric_program: mergedFabricProgram.length > 0 ? mergedFabricProgram : jsonFp,
       cutting_lay: fabricPrograms.filter((f) => f.sheet_type === 'CUTTING_LAY'),
       size_breakdown: dataJson.size_breakdown,
       stripes: dataJson.stripes,
@@ -641,8 +651,8 @@ const saveCadRequirementHandler = ah(async (req, res) => {
         await txExecute(tx, `
           INSERT INTO trx_cad_fabric_program (
             cad_req_id, sheet_type, fabric_type, gsm, dia_spec, dia_val, color_name,
-            order_qty_pcs, net_qty, buffer_qty, grand_total_qty, uom, remarks, sort_order
-          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            order_qty_pcs, net_qty, buffer_qty, sample_qty, grand_total_qty, uom, remarks, sort_order
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         `, [
           recId,
           fp.sheet_type || 'FABRIC_PROGRAM',
@@ -654,6 +664,7 @@ const saveCadRequirementHandler = ah(async (req, res) => {
           Number(fp.order_qty_pcs) || 0,
           Number(fp.net_qty) || 0,
           Number(fp.buffer_qty) || 0,
+          Number(fp.sample_qty) || 0,
           Number(fp.grand_total_qty) || 0,
           fp.uom || body.uom || 'KG',
           fp.remarks || null,
