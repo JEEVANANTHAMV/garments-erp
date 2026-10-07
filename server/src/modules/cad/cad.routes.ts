@@ -1273,19 +1273,20 @@ cadRouter.post('/cad-requirements/:id/approve', requirePermission('PRODUCTION.AP
       const uomRow = await txQueryOne<any>(tx, `SELECT id FROM cfg_uom WHERE (code = ? OR code = 'MTRS' OR code = 'KGS') LIMIT 1`, [targetUomCode]);
       const uId = uomRow?.id || defFabric?.base_uom || 1;
 
-      const existFab = await txQueryOne<any>(tx, `SELECT id FROM trx_bom_line WHERE bom_id = ? AND material_type = 'FABRIC' LIMIT 1`, [activeBom.id]);
+      const fabricSourceType = isWoven ? 'PURCHASE' : 'PRODUCTION';
+      const existFab = await txQueryOne<any>(tx, `SELECT id, source_type FROM trx_bom_line WHERE bom_id = ? AND material_type = 'FABRIC' LIMIT 1`, [activeBom.id]);
       if (existFab) {
-        await txExecute(tx, `UPDATE trx_bom_line SET consumption = ?, uom_id = ?, remarks = CONCAT('CAD Auto-Synced (${targetUomCode}): ', ?) WHERE id = ?`, [fCons, uId, cr.req_no || 'CAD', existFab.id]);
+        await txExecute(tx, `UPDATE trx_bom_line SET consumption = ?, uom_id = ?, source_type = COALESCE(source_type, ?), remarks = CONCAT('CAD Auto-Synced (${targetUomCode}): ', ?) WHERE id = ?`, [fCons, uId, fabricSourceType, cr.req_no || 'CAD', existFab.id]);
       } else if (defFabric) {
-        await txExecute(tx, `INSERT INTO trx_bom_line (bom_id, material_type, fabric_id, consumption, uom_id, wastage_pct, remarks) VALUES (?, 'FABRIC', ?, ?, ?, 5.0, ?)`, [activeBom.id, defFabric.id, fCons, uId, `CAD Auto-Synced (${cr.req_no || 'CAD'})`]);
+        await txExecute(tx, `INSERT INTO trx_bom_line (bom_id, material_type, fabric_id, source_type, consumption, uom_id, wastage_pct, remarks) VALUES (?, 'FABRIC', ?, ?, ?, ?, 5.0, ?)`, [activeBom.id, defFabric.id, fabricSourceType, fCons, uId, `CAD Auto-Synced (${cr.req_no || 'CAD'})`]);
       }
 
       if (!isWoven) {
-        const existYrn = await txQueryOne<any>(tx, `SELECT id FROM trx_bom_line WHERE bom_id = ? AND material_type = 'YARN' LIMIT 1`, [activeBom.id]);
+        const existYrn = await txQueryOne<any>(tx, `SELECT id, source_type FROM trx_bom_line WHERE bom_id = ? AND material_type = 'YARN' LIMIT 1`, [activeBom.id]);
         if (existYrn) {
-          await txExecute(tx, `UPDATE trx_bom_line SET consumption = ?, remarks = CONCAT('CAD Auto-Synced: ', ?) WHERE id = ?`, [yCons, cr.req_no || 'CAD', existYrn.id]);
+          await txExecute(tx, `UPDATE trx_bom_line SET consumption = ?, source_type = 'PURCHASE', remarks = CONCAT('CAD Auto-Synced: ', ?) WHERE id = ?`, [yCons, cr.req_no || 'CAD', existYrn.id]);
         } else if (defYarn) {
-          await txExecute(tx, `INSERT INTO trx_bom_line (bom_id, material_type, yarn_id, consumption, uom_id, wastage_pct, remarks) VALUES (?, 'YARN', ?, ?, ?, 3.0, ?)`, [activeBom.id, defYarn.id, yCons, uId, `CAD Auto-Synced (${cr.req_no || 'CAD'})`]);
+          await txExecute(tx, `INSERT INTO trx_bom_line (bom_id, material_type, yarn_id, source_type, consumption, uom_id, wastage_pct, remarks) VALUES (?, 'YARN', ?, 'PURCHASE', ?, ?, 3.0, ?)`, [activeBom.id, defYarn.id, yCons, uId, `CAD Auto-Synced (${cr.req_no || 'CAD'})`]);
         }
       }
     }

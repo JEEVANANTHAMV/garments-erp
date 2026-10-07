@@ -138,13 +138,16 @@ mrpRouter.post('/run', requirePermission('MRP.CREATE'), ah(async (req, res) => {
 
       const bomLines = await txQuery<any>(
         tx,
-        `SELECT material_type, yarn_id, fabric_id, trim_id, color_id, size_id, consumption, consumption_basis,
+        `SELECT material_type, source_type, yarn_id, fabric_id, trim_id, color_id, size_id, consumption, consumption_basis,
                 additional_qty, uom_id, wastage_pct
            FROM trx_bom_line WHERE bom_id = ?`, [bom.id]);
       // Plan-cut PCS per colour × size of this style (size-wise excess included).
       const cells = await orderCells(tx, body.so_id, styleId);
 
       for (const bl of bomLines) {
+        // Materials sourced via PRODUCTION are manufactured internally (e.g. knitting) and not directly purchased via PO
+        if (bl.source_type === 'PRODUCTION') continue;
+
         // A colour / size specific line counts only the order cells it covers.
         const covered = cellsFor(bl, cells);
         if (!covered.length) continue;
