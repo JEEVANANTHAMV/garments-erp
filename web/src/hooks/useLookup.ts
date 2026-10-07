@@ -67,11 +67,20 @@ export function useStyleColors(styleId?: number | null) {
 }
 
 /** Turn lookup rows into <Select options={...}> shape (Description / Name first, code in subtle suffix). */
-export const toOptions = (items?: LookupItem[]) =>
+export const toOptions = (items?: LookupItem[]): { value: number; label: string }[] =>
   (items ?? []).map((i) => {
-    if (!i.code || i.label === String(i.code)) return { value: i.id, label: i.label };
-    if (i.label.startsWith(`${i.code} —`) || i.label.startsWith(`${i.code} -`)) return { value: i.id, label: i.label };
-    return { value: i.id, label: `${i.label} (${i.code})` };
+    const rawLabel = String(i.label ?? '');
+    const codeStr = i.code != null ? String(i.code).trim() : '';
+    if (!codeStr || rawLabel === codeStr) return { value: i.id, label: rawLabel };
+    let cleanLabel = rawLabel;
+    if (cleanLabel.startsWith(`${codeStr} — `)) {
+      cleanLabel = cleanLabel.substring(codeStr.length + 3).trim();
+    } else if (cleanLabel.startsWith(`${codeStr} - `)) {
+      cleanLabel = cleanLabel.substring(codeStr.length + 3).trim();
+    } else if (cleanLabel.startsWith(`${codeStr}: `)) {
+      cleanLabel = cleanLabel.substring(codeStr.length + 2).trim();
+    }
+    return { value: i.id, label: cleanLabel ? `${cleanLabel} (${codeStr})` : codeStr };
   });
 
 export const toPlainOptions = (items?: LookupItem[]) =>
