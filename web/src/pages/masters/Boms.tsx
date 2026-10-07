@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, ArrowLeft, Save, Trash2, Layers, FileText, Zap, Sparkles, Grid, Printer } from 'lucide-react';
+import { Plus, ArrowLeft, Save, Trash2, Layers, FileText, Zap, Sparkles, Grid, Printer, Check } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { http, ApiError } from '../../lib/api';
 import { useList, useListState } from '../../hooks/useResource';
@@ -618,8 +618,10 @@ export function BomDetailPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [syncingCad, setSyncingCad] = useState(false);
+  const [cadModalOpen, setCadModalOpen] = useState(false);
+  const [cadSourcingPlan, setCadSourcingPlan] = useState<'YARN_PURCHASE' | 'FABRIC_PURCHASE' | 'BOTH'>('YARN_PURCHASE');
   const [activeTab, setActiveTab] = useState<'ALL' | 'FABRIC' | 'YARN' | 'TRIM' | 'ACCESSORY' | 'PACKING' | 'GENERAL'>('ALL');
-  const [explodeQty, setExplodeQty] = useState(1000);
+  const [explodeQty, setExplodeQty] = useState(1);
   const [matrixModal, setMatrixModal] = useState<{
     open: boolean;
     line: BomLine | null;
@@ -752,6 +754,7 @@ export function BomDetailPage() {
       size_id: l.size_id ?? '',
       consumption_basis: l.consumption_basis || 'PER_PIECE',
       applicability: l.applicability || 'ALL',
+      source_type: l.source_type || (l.material_type === 'FABRIC' ? 'PRODUCTION' : 'PURCHASE'),
       consumption: Number(l.consumption),
       additional_qty: Number(l.additional_qty ?? 0),
       uom_id: l.uom_id,
@@ -762,19 +765,22 @@ export function BomDetailPage() {
 
   const editable = isNew ? can('BOM.CREATE') : can('BOM.UPDATE');
 
-  // Handle Sync CAD Auto-Consumption (Clip 4 Requirement)
-  const handleSyncCad = async () => {
+  // Handle Sync CAD Auto-Consumption (Job-Wise Material Sourcing)
+  const handleSyncCad = () => {
     if (!latestCad?.has_approved_cad) {
       toast('No approved CAD consumption found for this style', 'warning');
       return;
     }
+    setCadModalOpen(true);
+  };
 
+  const executeCadSync = async () => {
     setSyncingCad(true);
     try {
       if (!isNew && id) {
-        // Backend auto-sync route
-        await http.post(`/boms/${id}/sync-cad`);
-        toast('CAD Auto-Consumption synced successfully into BOM lines!', 'success');
+        // Backend auto-sync route with sourcing mode
+        const res = await http.post<{ message: string; data?: any }>(`/boms/${id}/sync-cad`, { sourcing_mode: cadSourcingPlan });
+        toast((res as any)?.message || (res as any)?.data?.message || 'CAD Auto-Consumption synced successfully!', 'success');
         void qc.invalidateQueries({ queryKey: ['boms', 'item', id] });
         void refetchCad();
       } else {
@@ -784,50 +790,78 @@ export function BomDetailPage() {
         const yarnCons = Number(cad.yarn_req_per_pc) || Number((fabricCons * 1.05).toFixed(4));
         const kgUom = (uoms.data ?? []).find((u: any) => u.code === 'KG')?.id || 5;
 
-        // Keep non-fabric/yarn lines (Trims) and append/replace fabric & yarn
+        // Keep non-fabric/yarn lines (Trims)
         const otherLines = lines.filter((l) => l.material_type !== 'FABRIC' && l.material_type !== 'YARN');
 
-        const newFabricLine: BomLine = {
-          _key: `b${++seq}`,
-          material_type: 'FABRIC',
-          fabric_id: cad.fabric_id || (fabrics.data?.[0]?.id ?? ''),
-          yarn_id: '',
-          trim_id: '',
-          item_description: '',
-          specification: '',
-          color_id: '',
-          size_id: '',
-          consumption_basis: 'PER_PIECE',
-          applicability: 'ALL',
-          consumption: fabricCons,
-          additional_qty: 0,
-          uom_id: kgUom,
-          wastage_pct: 3.0,
-          remarks: `CAD Auto-Consumption (Marker: ${cad.marker_name || 'Approved'})`,
-        };
+        const newLines: BomLine[] = [];
+        if (cadSourcingPlan === 'YARN_PURCHASE' || cadSourcingPlan === 'BOTH') {
+          // 1. Fabric Line (In-House Knitting if YARN_PURCHASE)
+          newLines.push({
+            _key: `b${++seq}`,
+            material_type: 'FABRIC',
+            source_type: cadSourcingPlan === 'YARN_PURCHASE' ? 'PRODUCTION' : 'PURCHASE',
+            fabric_id: cad.fabric_id || (fabrics.data?.[0]?.id ?? ''),
+            yarn_id: '',
+            trim_id: '',
+            item_description: '',
+            specification: '',
+            color_id: '',
+            size_id: '',
+            consumption_basis: 'PER_PIECE',
+            applicability: 'ALL',
+            consumption: fabricCons,
+            additional_qty: 0,
+            uom_id: kgUom,
+            wastage_pct: 5.0,
+            remarks: `CAD Auto-Consumption (Marker: ${cad.marker_name || 'Approved'})`,
+          });
+          // 2. Yarn Line (PURCHASE)
+          newLines.push({
+            _key: `b${++seq}`,
+            material_type: 'YARN',
+            source_type: 'PURCHASE',
+            yarn_id: cad.yarn_id || (yarns.data?.[0]?.id ?? ''),
+            fabric_id: '',
+            trim_id: '',
+            item_description: '',
+            specification: '',
+            color_id: '',
+            size_id: '',
+            consumption_basis: 'PER_PIECE',
+            applicability: 'ALL',
+            consumption: yarnCons,
+            additional_qty: 0,
+            uom_id: kgUom,
+            wastage_pct: 3.0,
+            remarks: `CAD Derived Yarn (Yield: 95%)`,
+          });
+        } else if (cadSourcingPlan === 'FABRIC_PURCHASE') {
+          // Direct Fabric Purchase: Only Fabric line
+          newLines.push({
+            _key: `b${++seq}`,
+            material_type: 'FABRIC',
+            source_type: 'PURCHASE',
+            fabric_id: cad.fabric_id || (fabrics.data?.[0]?.id ?? ''),
+            yarn_id: '',
+            trim_id: '',
+            item_description: '',
+            specification: '',
+            color_id: '',
+            size_id: '',
+            consumption_basis: 'PER_PIECE',
+            applicability: 'ALL',
+            consumption: fabricCons,
+            additional_qty: 0,
+            uom_id: kgUom,
+            wastage_pct: 5.0,
+            remarks: `CAD Auto-Consumption Direct Fabric Purchase (Marker: ${cad.marker_name || 'Approved'})`,
+          });
+        }
 
-        const newYarnLine: BomLine = {
-          _key: `b${++seq}`,
-          material_type: 'YARN',
-          yarn_id: cad.yarn_id || (yarns.data?.[0]?.id ?? ''),
-          fabric_id: '',
-          trim_id: '',
-          item_description: '',
-          specification: '',
-          color_id: '',
-          size_id: '',
-          consumption_basis: 'PER_PIECE',
-          applicability: 'ALL',
-          consumption: yarnCons,
-          additional_qty: 0,
-          uom_id: kgUom,
-          wastage_pct: 2.0,
-          remarks: `CAD Derived Yarn (Yield: 95%)`,
-        };
-
-        setLines([newFabricLine, newYarnLine, ...otherLines]);
-        toast('CAD Auto-Consumption populated into Fabric & Yarn lines!', 'success');
+        setLines([...newLines, ...otherLines]);
+        toast(`CAD Auto-Consumption applied [${cadSourcingPlan}]!`, 'success');
       }
+      setCadModalOpen(false);
     } catch (e) {
       toast((e as any).message || 'Failed to sync CAD consumption', 'error');
     } finally {
@@ -904,7 +938,14 @@ export function BomDetailPage() {
     return share;
   };
   /** Cost of a line for `pcs` garments of the style. */
-  const lineCostFor = (l: BomLine, pcs: number) => lineRequirement(l, pcs * lineShare(l)).required * rateOf(l);
+  const lineCostFor = (l: BomLine, pcs: number) => {
+    // If Fabric is PRODUCTION (Knitted in-house from Yarn), its raw material purchase cost
+    // is already captured by the YARN line! Omit fabric purchase rate to prevent double-costing.
+    if (l.material_type === 'FABRIC' && (l.source_type || 'PRODUCTION') === 'PRODUCTION') {
+      return 0;
+    }
+    return lineRequirement(l, pcs * lineShare(l)).required * rateOf(l);
+  };
   const lineCostPerGmt = (l: BomLine) => lineCostFor(l, costPcs) / costPcs;
   const costPerGarment = useMemo(() => lines.reduce((sum, l) => sum + lineCostPerGmt(l), 0),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -913,7 +954,15 @@ export function BomDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [lines, yarns.data, fabrics.data, trims.data, orderInfo.data, explodeQty, scope, matRates.data]);
   // explode for the job's plan-cut quantity by default
-  useEffect(() => { if (orderPcs > 0) setExplodeQty(orderPcs); }, [orderPcs]);
+  useEffect(() => {
+    if (orderPcs > 0) {
+      setExplodeQty(orderPcs);
+    } else if (orderInfo.data?.totals?.qty && orderInfo.data.totals.qty > 0) {
+      setExplodeQty(orderInfo.data.totals.qty);
+    } else if ((orderInfo.data as any)?.so_order_qty && (orderInfo.data as any).so_order_qty > 0) {
+      setExplodeQty((orderInfo.data as any).so_order_qty);
+    }
+  }, [orderPcs, orderInfo.data?.totals?.qty, (orderInfo.data as any)?.so_order_qty]);
 
   const setLine = (key: string, patch: Partial<BomLine>) =>
     setLines((s) => s.map((l) => (l._key === key ? { ...l, ...patch } : l)));
@@ -963,6 +1012,7 @@ export function BomDetailPage() {
           size_id: l.size_id ? Number(l.size_id) : null,
           consumption_basis: l.consumption_basis || 'PER_PIECE',
           applicability: l.applicability || 'ALL',
+          source_type: l.source_type || (l.material_type === 'FABRIC' ? 'PRODUCTION' : 'PURCHASE'),
           consumption: Number(l.consumption),
           additional_qty: Number(l.additional_qty) || 0,
           uom_id: Number(l.uom_id),
@@ -1189,9 +1239,10 @@ export function BomDetailPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1780px] text-xs">
+          <table className="w-full min-w-[1880px] text-xs">
             <thead><tr>
               <th className="th min-w-[95px]">Type</th>
+              <th className="th min-w-[140px]">Source Plan</th>
               <th className="th min-w-[200px]">Material / Description</th>
               <th className="th min-w-[170px]">Specification</th>
               <th className="th min-w-[95px]">Dia / Count</th>
@@ -1230,10 +1281,43 @@ export function BomDetailPage() {
                       <select className={`input py-1 text-[11px] font-bold ${tone.badge}`} value={l.material_type} disabled={!editable}
                         onChange={(e) => setLine(l._key, {
                           material_type: e.target.value as BomLine['material_type'],
+                          source_type: e.target.value === 'FABRIC' ? 'PRODUCTION' : 'PURCHASE',
                           yarn_id: '', fabric_id: '', trim_id: '', item_description: '',
                           yarn_base_id: '', yarn_count_id: '', dia: '', gsm: '', dye_type: '', material_color_id: '',
                         })}>
                         {MATERIALS.map((m) => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </td>
+                    <td className="td p-1.5">
+                      <select
+                        className={`input py-1 text-[11px] font-bold ${
+                          l.source_type === 'PRODUCTION' ? 'bg-indigo-100 text-indigo-850 border-indigo-300' :
+                          l.source_type === 'STOCK' ? 'bg-amber-100 text-amber-850 border-amber-300' :
+                          l.source_type === 'TRANSFER' ? 'bg-cyan-100 text-cyan-850 border-cyan-300' :
+                          'bg-emerald-100 text-emerald-850 border-emerald-300'
+                        }`}
+                        value={l.source_type || (l.material_type === 'FABRIC' ? 'PRODUCTION' : 'PURCHASE')}
+                        disabled={!editable}
+                        onChange={(e) => setLine(l._key, { source_type: e.target.value as any })}
+                      >
+                        {l.material_type === 'FABRIC' ? (
+                          <>
+                            <option value="PRODUCTION">⚙️ In-House Knitting</option>
+                            <option value="PURCHASE">🛒 Direct Purchase</option>
+                            <option value="STOCK">📦 Stock Roll</option>
+                          </>
+                        ) : l.material_type === 'YARN' ? (
+                          <>
+                            <option value="PURCHASE">🛒 Purchase Yarn</option>
+                            <option value="STOCK">📦 Stock Yarn</option>
+                            <option value="TRANSFER">🔄 Transfer</option>
+                          </>
+                        ) : (
+                          <>
+                            <option value="PURCHASE">🛒 Purchase</option>
+                            <option value="STOCK">📦 Stock</option>
+                          </>
+                        )}
                       </select>
                     </td>
                     <td className="td p-1.5">
@@ -1470,9 +1554,16 @@ export function BomDetailPage() {
                         onChange={(e) => setLine(l._key, { wastage_pct: e.target.value === '' ? '' : Number(e.target.value) })} />
                     </td>
                     <td className="td text-right tabular-nums font-mono text-slate-700" title={rateTitle(l)}>
-                      {rate > 0 ? <>₹{fmtDecimal(lineCost, 3)}{rateInfo(l)?.source && !['STD', 'NONE'].includes(rateInfo(l)!.source)
-                        ? <span className="ml-1 rounded bg-sky-100 px-1 text-[9px] font-bold text-sky-800">{rateInfo(l)!.source === 'QUOTATION' ? 'QTN' : 'PO'}</span> : null}</>
-                        : <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">no rate</span>}
+                      {l.material_type === 'FABRIC' && (l.source_type || 'PRODUCTION') === 'PRODUCTION' ? (
+                        <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold text-indigo-800" title="Knitted from Yarn in-house — Raw material purchase cost is captured in Yarn line">
+                          In-House Knit
+                        </span>
+                      ) : rate > 0 ? (
+                        <>₹{fmtDecimal(lineCost, 3)}{rateInfo(l)?.source && !['STD', 'NONE'].includes(rateInfo(l)!.source)
+                          ? <span className="ml-1 rounded bg-sky-100 px-1 text-[9px] font-bold text-sky-800">{rateInfo(l)!.source === 'QUOTATION' ? 'QTN' : 'PO'}</span> : null}</>
+                      ) : (
+                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">no rate</span>
+                      )}
                     </td>
                     {editable && (
                       <td className="td p-1.5 text-right">
@@ -1537,13 +1628,16 @@ export function BomDetailPage() {
           <div>
             <p className="label">Material cost per garment</p>
             <p className="text-[24px] font-semibold tabular-nums text-slate-900">₹{fmtDecimal(costPerGarment, 4)}</p>
-            <p className="mt-0.5 text-[11.5px] text-slate-500">Standard rates · wastage & additional qty included · fixed-qty items spread over {costPcs.toLocaleString('en-IN')} PCS{orderPcs > 0 ? ' (job plan cut)' : ' (explode qty)'} · size / colour lines by their share</p>
+            <p className="mt-0.5 text-[11.5px] text-slate-500">Standard rates · wastage & additional qty included · fixed-qty items spread over {costPcs.toLocaleString('en-IN')} PCS{orderPcs > 0 ? ' (job plan cut)' : (orderInfo.data as any)?.so_order_qty ? ' (job order qty)' : ' (explode qty)'} · size / colour lines by their share</p>
           </div>
           <div className="flex items-end gap-3">
             <div>
-              <label className="label">Explode for quantity</label>
-              <input type="number" className="input w-36 tabular-nums" value={explodeQty}
-                onChange={(e) => setExplodeQty(Math.max(0, Number(e.target.value)))} />
+              <label className="label">
+                Explode for quantity
+                {orderPcs > 0 ? ' (Job plan cut)' : (orderInfo.data as any)?.so_order_qty ? ' (Job order qty)' : ' (PCS)'}
+              </label>
+              <input type="number" min={1} className="input w-36 tabular-nums text-right font-bold" value={explodeQty}
+                onChange={(e) => setExplodeQty(Math.max(1, Number(e.target.value) || 1))} />
             </div>
             <div className="text-right">
               <p className="label">Total material cost</p>
@@ -1554,6 +1648,130 @@ export function BomDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* CAD Sourcing Plan Modal */}
+      {cadModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start justify-between border-b pb-3 border-slate-100">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Sparkles size={18} className="text-emerald-600" />
+                  CAD Auto-Consumption — Material Sourcing Plan
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  How will fabric and raw yarn requirements be fulfilled for this job? (Job-Wise Source Planning)
+                </p>
+              </div>
+              <button onClick={() => setCadModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1">
+                ✕
+              </button>
+            </div>
+
+            <div className="my-4 space-y-3">
+              <label
+                className={`flex items-start gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition ${
+                  cadSourcingPlan === 'YARN_PURCHASE'
+                    ? 'border-emerald-500 bg-emerald-50/40 text-emerald-950 shadow-xs'
+                    : 'border-slate-200 hover:border-slate-300 bg-white'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="cadSourcingPlan"
+                  value="YARN_PURCHASE"
+                  checked={cadSourcingPlan === 'YARN_PURCHASE'}
+                  onChange={() => setCadSourcingPlan('YARN_PURCHASE')}
+                  className="mt-1"
+                />
+                <div className="text-xs">
+                  <div className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
+                    🧶 Yarn Purchase + In-House Knitting
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                      Standard / Recommended (95%+)
+                    </span>
+                  </div>
+                  <p className="text-slate-600 mt-1 leading-relaxed">
+                    • <b>Yarn is Purchased (PO)</b>: {fmtDecimal(latestCad?.yarn_req_per_pc, 4)} kg/pc demand generated.<br/>
+                    • <b>Fabric is Produced In-House (Knitting)</b>: {fmtDecimal(latestCad?.fabric_consumption_per_pc, 4)} kg/pc routed to Knitting, NOT direct purchase.<br/>
+                    • <b>Zero Double-Costing</b>: Fabric purchase rate is excluded from garment material cost (captured via Yarn).
+                  </p>
+                </div>
+              </label>
+
+              <label
+                className={`flex items-start gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition ${
+                  cadSourcingPlan === 'FABRIC_PURCHASE'
+                    ? 'border-emerald-500 bg-emerald-50/40 text-emerald-950 shadow-xs'
+                    : 'border-slate-200 hover:border-slate-300 bg-white'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="cadSourcingPlan"
+                  value="FABRIC_PURCHASE"
+                  checked={cadSourcingPlan === 'FABRIC_PURCHASE'}
+                  onChange={() => setCadSourcingPlan('FABRIC_PURCHASE')}
+                  className="mt-1"
+                />
+                <div className="text-xs">
+                  <div className="font-bold text-sm text-slate-900">
+                    🧵 Direct Fabric Purchase (Buy Finished Fabric)
+                  </div>
+                  <p className="text-slate-600 mt-1 leading-relaxed">
+                    • <b>Finished Fabric is Purchased (PO)</b>: {fmtDecimal(latestCad?.fabric_consumption_per_pc, 4)} kg/pc.<br/>
+                    • <b>Raw Yarn is NOT Purchased</b>: Eliminates unused yarn purchase demand and mismatches.
+                  </p>
+                </div>
+              </label>
+
+              <label
+                className={`flex items-start gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition ${
+                  cadSourcingPlan === 'BOTH'
+                    ? 'border-emerald-500 bg-emerald-50/40 text-emerald-950 shadow-xs'
+                    : 'border-slate-200 hover:border-slate-300 bg-white'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="cadSourcingPlan"
+                  value="BOTH"
+                  checked={cadSourcingPlan === 'BOTH'}
+                  onChange={() => setCadSourcingPlan('BOTH')}
+                  className="mt-1"
+                />
+                <div className="text-xs">
+                  <div className="font-bold text-sm text-slate-900">
+                    📦 Both Fabric & Yarn Purchase (Custom / Mixed)
+                  </div>
+                  <p className="text-slate-600 mt-1 leading-relaxed">
+                    • Both Fabric and Yarn purchase requirements are generated for procurement.
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setCadModalOpen(false)}
+                className="btn-secondary text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={executeCadSync}
+                disabled={syncingCad}
+                className="btn-primary text-xs flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700"
+              >
+                {syncingCad ? <Spinner size={13} /> : <Check size={14} />}
+                <span>Apply CAD Sourcing Plan</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Trim / Accessory Matrix Modal */}
       {matrixModal.open && (
