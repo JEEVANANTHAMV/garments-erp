@@ -19,6 +19,7 @@ const lineSchema = z.object({
   color_id: s.id(), size_id: s.id(),
   consumption_basis: z.string().default('PER_PIECE'),
   applicability: z.string().default('ALL'),
+  source_type: z.enum(['PURCHASE', 'PRODUCTION', 'STOCK', 'TRANSFER']).default('PURCHASE'),
   consumption: z.coerce.number().positive('Consumption must be greater than zero'),
   additional_qty: z.coerce.number().min(0).default(0),
   uom_id: s.idReq(),
@@ -336,7 +337,7 @@ bomRouter.get('/order-cells', requirePermission('BOM.VIEW'), ah(async (req, res)
   const cid = req.user!.companyId;
   const q = z.object({ so_id: z.coerce.number().int().positive(), style_id: z.coerce.number().int().positive() }).parse(req.query);
   const so = await queryOne<any>(
-    `SELECT so.id, so.so_no, so.io_no, so.buyer_po_no, b.party_name AS buyer_name, st.style_code, st.style_name
+    `SELECT so.id, so.so_no, so.io_no, so.buyer_po_no, so.order_qty, b.party_name AS buyer_name, st.style_code, st.style_name
        FROM trx_sales_order so
        LEFT JOIN mst_party b ON b.id = so.buyer_id
        LEFT JOIN mst_style st ON st.id = ? AND st.company_id = so.company_id
@@ -356,6 +357,7 @@ bomRouter.get('/order-cells', requirePermission('BOM.VIEW'), ah(async (req, res)
     data: {
       so_id: so.id, job_no: so.io_no || so.so_no, so_no: so.so_no, buyer_name: so.buyer_name, buyer_po_no: so.buyer_po_no,
       style_code: so.style_code, style_name: so.style_name,
+      so_order_qty: Number(so.order_qty) || 0,
       sizes: sizes.map((z: any) => ({ size_id: Number(z.id), code: z.code, ...sum((c) => c.size_id === Number(z.id)) })),
       colors: colors.map((c: any) => ({ color_id: Number(c.id), name: c.name, ...sum((x) => x.color_id === Number(c.id)) }))
         .sort((a: any, b: any) => a.name.localeCompare(b.name)),
@@ -471,12 +473,12 @@ async function writeLines(tx: any, bomId: number, lines: z.infer<typeof lineSche
     await txExecute(tx,
       `INSERT INTO trx_bom_line
          (bom_id, material_type, yarn_id, fabric_id, trim_id, item_description,
-          color_id, size_id, consumption_basis, applicability, consumption, additional_qty,
+          color_id, size_id, consumption_basis, applicability, source_type, consumption, additional_qty,
           uom_id, wastage_pct, specification, dia, gsm, yarn_base_id, yarn_count_id, dye_type, material_color_id, remarks)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [bomId, l.material_type, yarnId, l.fabric_id ?? null, l.trim_id ?? null,
        l.item_description ?? null, l.color_id ?? null, l.size_id ?? null,
-       l.consumption_basis || 'PER_PIECE', l.applicability || 'ALL',
+       l.consumption_basis || 'PER_PIECE', l.applicability || 'ALL', l.source_type || 'PURCHASE',
        l.consumption, l.additional_qty || 0, l.uom_id, l.wastage_pct ?? 0,
        l.specification ?? null,
        isFabric ? l.dia ?? null : null, isFabric ? l.gsm ?? null : null,
@@ -701,12 +703,12 @@ const handleBomRevision = ah(async (req, res) => {
     for (const l of lines) {
       await txExecute(tx, `
         INSERT INTO trx_bom_line (bom_id, material_type, yarn_id, fabric_id, trim_id, item_description,
-                                  color_id, size_id, consumption_basis, applicability, consumption,
+                                  color_id, size_id, consumption_basis, applicability, source_type, consumption,
                                   additional_qty, uom_id, wastage_pct, specification, dia, gsm,
                                   yarn_base_id, yarn_count_id, dye_type, material_color_id, remarks)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [newId, l.material_type, l.yarn_id, l.fabric_id, l.trim_id, l.item_description,
-          l.color_id, l.size_id, l.consumption_basis || 'PER_PIECE', l.applicability || 'ALL',
+          l.color_id, l.size_id, l.consumption_basis || 'PER_PIECE', l.applicability || 'ALL', l.source_type || 'PURCHASE',
           l.consumption, l.additional_qty || 0, l.uom_id, l.wastage_pct || 0, l.specification ?? null,
           l.dia ?? null, l.gsm ?? null, l.yarn_base_id ?? null, l.yarn_count_id ?? null, l.dye_type ?? null,
           l.material_color_id ?? null, l.remarks]);
@@ -770,8 +772,37 @@ bomRouter.get('/latest-cad/:styleId', requirePermission('BOM.VIEW'), ah(async (r
                     (totalFabric > 0 ? Number((totalFabric * 1.05).toFixed(2)) : 0);
 
   const styleRow = await queryOne<any>(`SELECT fabric_id FROM mst_style WHERE id = ?`, [styleId]);
-  const defaultFabric = await queryOne<any>(`SELECT id FROM mst_fabric WHERE company_id = ? AND is_active = 1 LIMIT 1`, [cid]);
+  const defaultFabric = await queryOne<any>(`SELECT id, fabric_name, yarn_id FROM mst_fabric WHERE company_id = ? AND is_active = 1 LIMIT 1`, [cid]);
   const defaultYarn = await queryOne<any>(`SELECT id FROM mst_yarn WHERE company_id = ? AND is_active = 1 LIMIT 1`, [cid]);
+
+  // Match fabric from CAD marker or mst_fabric
+  let cadFabricId: number | null = null;
+  let cadYarnId: number | null = null;
+  let cadFabricName: string | null = null;
+
+  const marker0 = parsedJson?.markers?.[0];
+  if (marker0?.fabric_id) {
+    cadFabricId = Number(marker0.fabric_id);
+  } else if (marker0?.fabric_type) {
+    const match = await queryOne<any>(
+      `SELECT id, fabric_name, yarn_id FROM mst_fabric WHERE (fabric_name = ? OR fabric_code = ?) AND company_id = ? AND is_active = 1 LIMIT 1`,
+      [marker0.fabric_type, marker0.fabric_type, cid]
+    );
+    if (match) {
+      cadFabricId = Number(match.id);
+      cadFabricName = match.fabric_name;
+      if (match.yarn_id) cadYarnId = Number(match.yarn_id);
+    }
+  }
+
+  if (!cadFabricId && styleRow?.fabric_id) cadFabricId = Number(styleRow.fabric_id);
+  if (cadFabricId && !cadYarnId) {
+    const fab = await queryOne<any>(`SELECT yarn_id, fabric_name FROM mst_fabric WHERE id = ?`, [cadFabricId]);
+    if (fab?.yarn_id) cadYarnId = Number(fab.yarn_id);
+    if (fab?.fabric_name && !cadFabricName) cadFabricName = fab.fabric_name;
+  }
+  if (!cadFabricId) cadFabricId = defaultFabric?.id || null;
+  if (!cadYarnId) cadYarnId = defaultYarn?.id || null;
 
   const fCons = totalFabric > 0 ? Number((totalFabric / orderQty).toFixed(5)) : 0.82;
   const yCons = totalYarn > 0 ? Number((totalYarn / orderQty).toFixed(5)) : Number((fCons * 1.05).toFixed(5));
@@ -786,16 +817,18 @@ bomRouter.get('/latest-cad/:styleId', requirePermission('BOM.VIEW'), ah(async (r
       fabric_consumption_per_pc: fCons,
       yarn_consumption_per_pc: yCons,
       yarn_req_per_pc: yCons,
-      fabric_id: styleRow?.fabric_id || defaultFabric?.id || null,
-      yarn_id: defaultYarn?.id || null,
+      fabric_id: cadFabricId,
+      fabric_name: cadFabricName || defaultFabric?.fabric_name || 'Main Fabric',
+      yarn_id: cadYarnId,
     },
   });
 }));
 
-/** POST /:id/sync-cad — Sync CAD auto-consumption into BOM Yarn & Fabric lines */
+/** POST /:id/sync-cad — Sync CAD auto-consumption into BOM with Job-Wise Material Sourcing */
 bomRouter.post('/:id/sync-cad', requirePermission('BOM.UPDATE'), ah(async (req, res) => {
   const id = Number(req.params.id);
   const cid = req.user!.companyId;
+  const sourcingMode = (req.body?.sourcing_mode || 'YARN_PURCHASE') as 'YARN_PURCHASE' | 'FABRIC_PURCHASE' | 'BOTH';
 
   const bom = await queryOne<any>(`
     SELECT b.* FROM trx_bom b WHERE b.id = ? AND b.company_id = ?
@@ -843,12 +876,40 @@ bomRouter.post('/:id/sync-cad', requirePermission('BOM.UPDATE'), ah(async (req, 
   const fabricConsPerGmt = totalFabricKg > 0 ? Number((totalFabricKg / orderQty).toFixed(5)) : 0.82;
   const yarnConsPerGmt = totalYarnKg > 0 ? Number((totalYarnKg / orderQty).toFixed(5)) : Number((fabricConsPerGmt * 1.05).toFixed(5));
 
-  const defaultFabric = await queryOne<any>(`SELECT id, base_uom FROM mst_fabric WHERE company_id = ? AND is_active = 1 LIMIT 1`, [cid]);
+  // Resolve Fabric & Yarn matching master
+  const styleRow = await queryOne<any>(`SELECT fabric_id FROM mst_style WHERE id = ?`, [bom.style_id]);
+  const defaultFabric = await queryOne<any>(`SELECT id, base_uom, yarn_id FROM mst_fabric WHERE company_id = ? AND is_active = 1 LIMIT 1`, [cid]);
   const defaultYarn = await queryOne<any>(`SELECT id, base_uom FROM mst_yarn WHERE company_id = ? AND is_active = 1 LIMIT 1`, [cid]);
   const kgUom = await queryOne<any>(`SELECT id FROM cfg_uom WHERE (code = 'KG' OR code = 'KGS') LIMIT 1`);
   const uomId = kgUom?.id || defaultFabric?.base_uom || defaultYarn?.base_uom || 1;
 
+  let targetFabricId: number | null = null;
+  let targetYarnId: number | null = null;
+  const marker0 = parsedJson?.markers?.[0];
+  if (marker0?.fabric_id) {
+    targetFabricId = Number(marker0.fabric_id);
+  } else if (marker0?.fabric_type) {
+    const match = await queryOne<any>(
+      `SELECT id, yarn_id FROM mst_fabric WHERE (fabric_name = ? OR fabric_code = ?) AND company_id = ? AND is_active = 1 LIMIT 1`,
+      [marker0.fabric_type, marker0.fabric_type, cid]
+    );
+    if (match) {
+      targetFabricId = Number(match.id);
+      if (match.yarn_id) targetYarnId = Number(match.yarn_id);
+    }
+  }
+
+  if (!targetFabricId && styleRow?.fabric_id) targetFabricId = Number(styleRow.fabric_id);
+  if (targetFabricId && !targetYarnId) {
+    const fab = await queryOne<any>(`SELECT yarn_id FROM mst_fabric WHERE id = ?`, [targetFabricId]);
+    if (fab?.yarn_id) targetYarnId = Number(fab.yarn_id);
+  }
+  if (!targetFabricId) targetFabricId = defaultFabric?.id || 1;
+  if (!targetYarnId) targetYarnId = defaultYarn?.id || 1;
+
   await transaction(async (tx) => {
+    // 1. Fabric Line: If YARN_PURCHASE, source is PRODUCTION (Knitted in-house). If FABRIC_PURCHASE or BOTH, source is PURCHASE.
+    const fabricSourceType = sourcingMode === 'YARN_PURCHASE' ? 'PRODUCTION' : 'PURCHASE';
     const existingFabric = await txQueryOne<any>(tx, `
       SELECT id FROM trx_bom_line WHERE bom_id = ? AND material_type = 'FABRIC' LIMIT 1
     `, [id]);
@@ -856,38 +917,48 @@ bomRouter.post('/:id/sync-cad', requirePermission('BOM.UPDATE'), ah(async (req, 
     if (existingFabric) {
       await txExecute(tx, `
         UPDATE trx_bom_line
-           SET consumption = ?, wastage_pct = 5.0, remarks = CONCAT('CAD Auto-Synced: ', ?)
+           SET fabric_id = ?, consumption = ?, source_type = ?, wastage_pct = 5.0,
+               remarks = CONCAT('CAD Auto-Synced: ', ?)
          WHERE id = ?
-      `, [fabricConsPerGmt, cadReq.req_no || 'CAD V01', existingFabric.id]);
-    } else if (defaultFabric) {
+      `, [targetFabricId, fabricConsPerGmt, fabricSourceType, cadReq.req_no || 'CAD V01', existingFabric.id]);
+    } else {
       await txExecute(tx, `
-        INSERT INTO trx_bom_line (bom_id, material_type, fabric_id, consumption, uom_id, wastage_pct, remarks)
-        VALUES (?, 'FABRIC', ?, ?, ?, 5.0, ?)
-      `, [id, defaultFabric.id, fabricConsPerGmt, uomId, `CAD Auto-Synced (${cadReq.req_no || 'CAD'})`]);
+        INSERT INTO trx_bom_line (bom_id, material_type, fabric_id, source_type, consumption, uom_id, wastage_pct, remarks)
+        VALUES (?, 'FABRIC', ?, ?, ?, ?, 5.0, ?)
+      `, [id, targetFabricId, fabricSourceType, fabricConsPerGmt, uomId, `CAD Auto-Synced (${cadReq.req_no || 'CAD'})`]);
     }
 
+    // 2. Yarn Line: Only if YARN_PURCHASE or BOTH. If FABRIC_PURCHASE, remove auto-synced yarn to avoid unused yarn line.
     const existingYarn = await txQueryOne<any>(tx, `
-      SELECT id FROM trx_bom_line WHERE bom_id = ? AND material_type = 'YARN' LIMIT 1
+      SELECT id, remarks FROM trx_bom_line WHERE bom_id = ? AND material_type = 'YARN' LIMIT 1
     `, [id]);
 
-    if (existingYarn) {
-      await txExecute(tx, `
-        UPDATE trx_bom_line
-           SET consumption = ?, wastage_pct = 3.0, remarks = CONCAT('CAD Auto-Synced: ', ?)
-         WHERE id = ?
-      `, [yarnConsPerGmt, cadReq.req_no || 'CAD V01', existingYarn.id]);
-    } else if (defaultYarn) {
-      await txExecute(tx, `
-        INSERT INTO trx_bom_line (bom_id, material_type, yarn_id, consumption, uom_id, wastage_pct, remarks)
-        VALUES (?, 'YARN', ?, ?, ?, 3.0, ?)
-      `, [id, defaultYarn.id, yarnConsPerGmt, uomId, `CAD Auto-Synced (${cadReq.req_no || 'CAD'})`]);
+    if (sourcingMode === 'FABRIC_PURCHASE') {
+      if (existingYarn && (existingYarn.remarks || '').includes('CAD Auto-Synced')) {
+        await txExecute(tx, `DELETE FROM trx_bom_line WHERE id = ?`, [existingYarn.id]);
+      }
+    } else {
+      // Sourcing is YARN_PURCHASE or BOTH -> Yarn source_type = PURCHASE
+      if (existingYarn) {
+        await txExecute(tx, `
+          UPDATE trx_bom_line
+             SET yarn_id = ?, consumption = ?, source_type = 'PURCHASE', wastage_pct = 3.0,
+                 remarks = CONCAT('CAD Auto-Synced: ', ?)
+           WHERE id = ?
+        `, [targetYarnId, yarnConsPerGmt, cadReq.req_no || 'CAD V01', existingYarn.id]);
+      } else {
+        await txExecute(tx, `
+          INSERT INTO trx_bom_line (bom_id, material_type, yarn_id, source_type, consumption, uom_id, wastage_pct, remarks)
+          VALUES (?, 'YARN', ?, 'PURCHASE', ?, ?, 3.0, ?)
+        `, [id, targetYarnId, yarnConsPerGmt, uomId, `CAD Auto-Synced (${cadReq.req_no || 'CAD'})`]);
+      }
     }
   });
 
   const updatedLines = await withMaterialRates(cid, await query<any>(LINE_SELECT, [id]));
   res.json({
     success: true,
-    message: `Successfully synced CAD auto-consumption from ${cadReq.req_no || 'CAD'} (Fabric: ${fabricConsPerGmt} KG/pc, Yarn: ${yarnConsPerGmt} KG/pc)`,
+    message: `Successfully synced CAD auto-consumption [${sourcingMode}] from ${cadReq.req_no || 'CAD'} (Fabric: ${fabricConsPerGmt} KG, Yarn: ${sourcingMode !== 'FABRIC_PURCHASE' ? `${yarnConsPerGmt} KG` : 'None'})`,
     data: { ...bom, lines: updatedLines },
   });
 }));
