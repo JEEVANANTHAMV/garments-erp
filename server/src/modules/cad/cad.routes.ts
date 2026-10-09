@@ -1314,17 +1314,23 @@ cadRouter.post('/cad-requirements/:id/revision', requirePermission('PRODUCTION.C
   `, [id, companyId]);
   if (!cr) throw NotFound('CAD requirement not found');
 
-  const currentVerStr = String(cr.cad_version || 'V01');
-  const match = currentVerStr.match(/^([A-Za-z]*)(\d+)$/);
-  let nextVer = 'V02';
-  if (match) {
-    const prefix = match[1] || 'V';
-    const num = parseInt(match[2], 10) + 1;
-    const pad = match[2].length;
-    nextVer = `${prefix}${String(num).padStart(pad, '0')}`;
-  } else {
-    nextVer = `${currentVerStr}-R1`;
+  const allVers = await query<any>(`
+    SELECT cad_version FROM trx_cad_requirement WHERE company_id = ? AND req_no = ?
+  `, [companyId, cr.req_no]);
+
+  let maxVerNum = 1;
+  let verPrefix = 'V';
+  let verPad = 2;
+  for (const v of allVers) {
+    const m = String(v.cad_version || '').match(/^([A-Za-z]*)(\d+)$/);
+    if (m) {
+      verPrefix = m[1] || 'V';
+      verPad = Math.max(verPad, m[2].length);
+      const n = parseInt(m[2], 10);
+      if (n > maxVerNum) maxVerNum = n;
+    }
   }
+  const nextVer = `${verPrefix}${String(maxVerNum + 1).padStart(verPad, '0')}`;
 
   const newRevision = await transaction(async (tx) => {
     // Update previous approved record status to SUPERSEDED
