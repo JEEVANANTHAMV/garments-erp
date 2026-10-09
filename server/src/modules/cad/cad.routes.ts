@@ -936,7 +936,7 @@ cadRouter.post('/cad-requirements/:id/calculate', requirePermission('PRODUCTION.
         uom,
       });
 
-      const cuttingLossPct = fabricAllowancePct || (isWoven ? 2.0 : 12.0);
+      const cuttingLossPct = Number.isFinite(fabricAllowancePct) ? fabricAllowancePct : (isWoven ? 2.0 : 12.0);
       const cuttingNet = Math.round(grand * (1 - (cuttingLossPct / 100.0)) * 100) / 100;
 
       cuttingLayLines.push({

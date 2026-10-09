@@ -590,6 +590,24 @@ export default function CadRequirementDetailPage() {
   // Mathematical Engine (Pure Reactive Client-side Calculation)
   const isWoven = header.cad_type === 'WOVEN' || header.uom === 'MTR';
 
+  /**
+   * Cutting lay sheet row from its fabric program row (client call 09-Oct-2026): the fabric program comes over ditto,
+   * less the fabric (process) loss % — bulk = (grand − sample) × (1 − loss), sample = sample × (1 − loss).
+   * The F.PRGM grand total already contains the sample, so the sample is split out, not added on top.
+   */
+  const cutLossPct = header.fabric_allowance_pct != null && !isNaN(Number(header.fabric_allowance_pct))
+    ? Number(header.fabric_allowance_pct) : (isWoven ? 2.0 : 12.0);
+  const cutQtyFor = (fp: { grand_total_qty?: number | string; sample_qty?: number | string } | undefined, lossPct = cutLossPct) => {
+    const grand = Number(fp?.grand_total_qty) || 0;
+    const sample = Number(fp?.sample_qty) || 0;
+    const k = 1 - lossPct / 100.0;
+    const bulk = Math.round(Math.max(0, grand - sample) * k * 100) / 100;
+    const smp = Math.round(sample * k * 100) / 100;
+    return { net_qty: bulk, sample_qty: smp, grand_total_qty: Math.round((bulk + smp) * 100) / 100 };
+  };
+  const sameFabricRow = (a: { fabric_type?: string; color_name?: string; dia_val?: string }, b: { fabric_type?: string; color_name?: string; dia_val?: string }) =>
+    a.fabric_type === b.fabric_type && a.color_name === b.color_name && (!a.dia_val || !b.dia_val || a.dia_val === b.dia_val);
+
   const runCalculation = () => {
     setCalculating(true);
     try {
@@ -746,10 +764,7 @@ export default function CadRequirementDetailPage() {
             uom: fab.uom || (isWoven ? 'MTR' : 'KG'),
           });
 
-          const cuttingLossPct = header.fabric_allowance_pct !== undefined && header.fabric_allowance_pct !== null
-            ? Number(header.fabric_allowance_pct)
-            : (isWoven ? 2.0 : 12.0);
-          const cuttingNet = Math.round(grand * (1 - (cuttingLossPct / 100.0)) * 100) / 100;
+          const cut = cutQtyFor({ grand_total_qty: grand, sample_qty: sample });
 
           cutLines.push({
             fabric_type: fab.fabric_type,
@@ -759,9 +774,10 @@ export default function CadRequirementDetailPage() {
             dia_spec: fab.dia_spec,
             color_name: cName,
             order_qty_pcs: d.cut_pcs,
-            net_qty: cuttingNet,
+            net_qty: cut.net_qty,
             buffer_qty: 0,
-            grand_total_qty: cuttingNet,
+            sample_qty: cut.sample_qty,
+            grand_total_qty: cut.grand_total_qty,
             uom: fab.uom || (isWoven ? 'MTR' : 'KG'),
           });
         });
@@ -1339,7 +1355,7 @@ export default function CadRequirementDetailPage() {
         ...header,
         markers,
         fabric_program: fabricProgram,
-        cutting_lay: cuttingLay,
+        cutting_lay: cuttingLay.map((cl) => { const fp = fabricProgram.find((f) => sameFabricRow(f, cl)); return fp ? { ...cl, ...cutQtyFor(fp) } : cl; }),
         summary_metrics: summaryKpis,
         flat_knit_spec: flatKnitSpec,
         special_parts: specialParts.map(withPartKg),
@@ -2547,6 +2563,7 @@ export default function CadRequirementDetailPage() {
                                 const buf = Number(row.buffer_qty) || 0;
                                 row.grand_total_qty = Math.round((Math.ceil(net) + buf + sQty) * 100) / 100;
                                 next[idx] = row;
+                                setCuttingLay((cl) => cl.map((c) => (sameFabricRow(c, row) ? { ...c, ...cutQtyFor(row) } : c)));
                                 return next;
                               });
                             }}
@@ -2898,16 +2915,13 @@ export default function CadRequirementDetailPage() {
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
                 {cuttingLay.map((cl, idx) => {
-                  const matchingFp = fabricProgram.find(
-                    (fp) => fp.fabric_type === cl.fabric_type && fp.color_name === cl.color_name
-                  );
-                  const fpGrand = Number(matchingFp?.grand_total_qty || cl.grand_total_qty || cl.net_qty || 0);
+                  const matchingFp = fabricProgram.find((fp) => sameFabricRow(fp, cl));
+                  const fpGrand = Number(matchingFp?.grand_total_qty || 0);
                   const sampleQty = Number(matchingFp?.sample_qty || 0);
-                  const lossPct = header.fabric_allowance_pct !== undefined && header.fabric_allowance_pct !== null 
-                    ? Number(header.fabric_allowance_pct) 
-                    : (isWoven ? 2.0 : 12.0);
-                  const bulkNetCut = Math.round(fpGrand * (1 - (lossPct / 100.0)) * 100) / 100;
-                  const sampleNetCut = sampleQty > 0 ? Math.round(sampleQty * (1 - lossPct / 100) * 100) / 100 : 0;
+                  const lossPct = cutLossPct;
+                  const cq = matchingFp ? cutQtyFor(matchingFp) : { net_qty: Number(cl.net_qty) || 0, sample_qty: Number(cl.sample_qty) || 0 };
+                  const bulkNetCut = cq.net_qty;
+                  const sampleNetCut = cq.sample_qty;
 
                   return (
                     <React.Fragment key={idx}>
@@ -2925,7 +2939,7 @@ export default function CadRequirementDetailPage() {
                             {fmtDecimal(bulkNetCut)} {cl.uom}
                           </div>
                           <div className="text-[10px] text-slate-500 font-normal">
-                            ({fmtDecimal(fpGrand, 2)} {cl.uom} − {lossPct}% process loss)
+                            ({fmtDecimal(fpGrand - sampleQty, 2)} {cl.uom} − {lossPct}% process loss)
                           </div>
                         </td>
                       </tr>
@@ -2952,13 +2966,9 @@ export default function CadRequirementDetailPage() {
               </tbody>
               <tfoot>
                 {(() => {
-                  const totalBulkCut = cuttingLay.reduce((s, x) => s + Number(x.net_qty || 0), 0);
-                  const totalSampleCut = cuttingLay.reduce((s, cl) => {
-                    const mFp = fabricProgram.find((fp) => fp.fabric_type === cl.fabric_type && fp.color_name === cl.color_name);
-                    const sq = Number(mFp?.sample_qty || 0);
-                    const loss = header.fabric_allowance_pct !== undefined && header.fabric_allowance_pct !== null ? Number(header.fabric_allowance_pct) : 0;
-                    return s + (sq > 0 ? Math.round(sq * (1 - loss / 100) * 100) / 100 : 0);
-                  }, 0);
+                  const cqs = cuttingLay.map((cl) => { const mFp = fabricProgram.find((fp) => sameFabricRow(fp, cl)); return mFp ? cutQtyFor(mFp) : { net_qty: Number(cl.net_qty) || 0, sample_qty: Number(cl.sample_qty) || 0 }; });
+                  const totalBulkCut = Math.round(cqs.reduce((s, x) => s + x.net_qty, 0) * 100) / 100;
+                  const totalSampleCut = Math.round(cqs.reduce((s, x) => s + x.sample_qty, 0) * 100) / 100;
 
                   return (
                     <tr className="bg-emerald-50/60 font-bold text-emerald-900 border-t border-emerald-200">
