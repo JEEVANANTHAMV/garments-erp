@@ -815,7 +815,7 @@ cadRouter.post('/cad-requirements/:id/calculate', requirePermission('PRODUCTION.
     const calculatedColorways = colorways.map((cw: any) => {
       const qtys: number[] = Array.isArray(cw.quantities) ? cw.quantities.map((q: any) => Number(q) || 0) : [];
       // Cut pcs with individual marker rejection ceiling: CEILING(qty * (1 + markerRejectionPct))
-      const cutQtys = qtys.map((q) => Math.ceil(q * (1 + (markerRejectionPct / 100.0))));
+      const cutQtys = qtys.map((q) => Math.ceil(q * (1 + (markerRejectionPct / 100.0)) - 1e-9))   // − 1e-9: 100 × 1.1 = 110.00000000000001 must stay 110;
       const totalOrderPcs = qtys.reduce((a, b) => a + b, 0);
       const totalCutPcs = cutQtys.reduce((a, b) => a + b, 0);
 

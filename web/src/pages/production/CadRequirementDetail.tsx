@@ -639,7 +639,7 @@ export default function CadRequirementDetailPage() {
         let markerTotalReq = 0;
         const updatedColorways = m.colorways.map((cw) => {
           const qtys = (cw.quantities || []).map((q) => Number(q) || 0);
-          const cutQtys = qtys.map((q) => Math.ceil(q * (1 + (markerRejectionPct / 100.0))));
+          const cutQtys = qtys.map((q) => Math.ceil(q * (1 + (markerRejectionPct / 100.0)) - 1e-9))   // − 1e-9: 100 × 1.1 = 110.00000000000001 must stay 110;
           const totOrder = qtys.reduce((a, b) => a + b, 0);
           const totCut = cutQtys.reduce((a, b) => a + b, 0);
 
@@ -1043,7 +1043,7 @@ export default function CadRequirementDetailPage() {
     let markerTotalReq = 0;
     const updatedColorways = (m.colorways || []).map((cw) => {
       const qtys = (cw.quantities || []).map((q) => Number(q) || 0);
-      const cutQtys = qtys.map((q) => Math.ceil(q * (1 + (markerRejectionPct / 100.0))));
+      const cutQtys = qtys.map((q) => Math.ceil(q * (1 + (markerRejectionPct / 100.0)) - 1e-9))   // − 1e-9: 100 × 1.1 = 110.00000000000001 must stay 110;
       const totOrder = qtys.reduce((a, b) => a + b, 0);
       const totCut = cutQtys.reduce((a, b) => a + b, 0);
 
@@ -2279,7 +2279,7 @@ export default function CadRequirementDetailPage() {
                   Colorways & Order Matrix (with Rejection CEIL)
                 </h3>
                 <p className="text-[11px] text-slate-500">
-                  Formula: <strong>Cut Pieces = CEILING(Order Qty × (1 + {header.rejection_pct}%), 1)</strong>
+                  Formula: <strong>Cut Pieces = CEILING(Order Qty × (1 + {activeMarker.rejection_pct ?? header.rejection_pct}%), 1)</strong> per size
                 </p>
               </div>
               <button
@@ -2347,7 +2347,7 @@ export default function CadRequirementDetailPage() {
                     const effRej = activeMarker.rejection_pct != null ? Number(activeMarker.rejection_pct) : Number(header.rejection_pct ?? 3.0);
                     const rawQtys = activeMarker.sizes.map((_, sIdx) => Number(cw.quantities?.[sIdx]) || 0);
                     const cutQtys = rawQtys.map((q) =>
-                      Math.ceil(q * (1 + (effRej / 100.0)))
+                      Math.ceil(q * (1 + (effRej / 100.0)) - 1e-9)
                     );
                     const totOrder = rawQtys.reduce((a, b) => a + b, 0);
                     const totCut = cutQtys.reduce((a, b) => a + b, 0);
@@ -4096,7 +4096,7 @@ function computeRatioPatti(m: CadMarker, hdr: RatioPattiHeader, forceWoven: bool
   const orderBy: number[][] = colorways.map((cw) => sizes.map((_, si) => n0(cw.quantities?.[si])));
   const cutBy: number[][] = colorways.map((cw, ci) => sizes.map((_, si) => {
     const stored = cw.cut_quantities?.[si];
-    return stored != null && stored !== ('' as any) ? n0(stored) : Math.ceil(orderBy[ci][si] * (1 + rejectionPct / 100));
+    return stored != null && stored !== ('' as any) ? n0(stored) : Math.ceil(orderBy[ci][si] * (1 + rejectionPct / 100) - 1e-9);
   }));
 
   // Plies needed per colour = the size that needs the most plies decides the lay.
