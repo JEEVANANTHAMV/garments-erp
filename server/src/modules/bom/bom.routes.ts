@@ -728,6 +728,19 @@ const handleBomRevision = ah(async (req, res) => {
 bomRouter.post('/:id/revision', requirePermission('BOM.CREATE'), handleBomRevision);
 bomRouter.post('/:id/revise', requirePermission('BOM.CREATE'), handleBomRevision);
 
+/**
+ * The dia the CAD's fabric program carries for the main fabric — the TABLE dia (actual dia + width allowance,
+ * e.g. 58" + 2" = 60"), never the bare fabric dia (client call 09-Oct-2026). Text like "60", null when unknown.
+ */
+async function cadTableDia(cadReqId: number, marker0: any): Promise<string | null> {
+  const fp = await queryOne<any>(
+    `SELECT dia_val, dia_spec FROM trx_cad_fabric_program WHERE cad_req_id = ? AND sheet_type = 'FABRIC_PROGRAM' ORDER BY sort_order, id LIMIT 1`, [cadReqId]);
+  const fromFp = parseFloat(String(fp?.dia_val ?? fp?.dia_spec ?? '').replace(/[^0-9.]/g, ''));
+  if (fromFp > 0) return String(Math.round(fromFp));
+  const tbl = Number(marker0?.table_width_in) || ((Number(marker0?.dia_in) || 0) > 0 ? Number(marker0.dia_in) + Number(marker0.width_allowance_in ?? 2) : 0);
+  return tbl > 0 ? String(Math.round(tbl)) : null;
+}
+
 /** GET /latest-cad/:styleId — Check for approved CAD Auto-Consumption for style */
 bomRouter.get('/latest-cad/:styleId', requirePermission('BOM.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId;
@@ -818,6 +831,7 @@ bomRouter.get('/latest-cad/:styleId', requirePermission('BOM.VIEW'), ah(async (r
       yarn_consumption_per_pc: yCons,
       yarn_req_per_pc: yCons,
       fabric_id: cadFabricId,
+      fabric_dia: await cadTableDia(Number(cadReq.cad_req_id), marker0),
       fabric_name: cadFabricName || defaultFabric?.fabric_name || 'Main Fabric',
       yarn_id: cadYarnId,
     },
@@ -906,6 +920,7 @@ bomRouter.post('/:id/sync-cad', requirePermission('BOM.UPDATE'), ah(async (req, 
   }
   if (!targetFabricId) targetFabricId = defaultFabric?.id || 1;
   if (!targetYarnId) targetYarnId = defaultYarn?.id || 1;
+  const tableDia = await cadTableDia(Number(cadReq.cad_req_id), marker0);
 
   await transaction(async (tx) => {
     // 1. Fabric Line: If YARN_PURCHASE, source is PRODUCTION (Knitted in-house). If FABRIC_PURCHASE or BOTH, source is PURCHASE.
@@ -917,15 +932,15 @@ bomRouter.post('/:id/sync-cad', requirePermission('BOM.UPDATE'), ah(async (req, 
     if (existingFabric) {
       await txExecute(tx, `
         UPDATE trx_bom_line
-           SET fabric_id = ?, consumption = ?, source_type = ?, wastage_pct = 5.0,
+           SET fabric_id = ?, consumption = ?, source_type = ?, wastage_pct = 5.0, dia = COALESCE(?, dia),
                remarks = CONCAT('CAD Auto-Synced: ', ?)
          WHERE id = ?
-      `, [targetFabricId, fabricConsPerGmt, fabricSourceType, cadReq.req_no || 'CAD V01', existingFabric.id]);
+      `, [targetFabricId, fabricConsPerGmt, fabricSourceType, tableDia, cadReq.req_no || 'CAD V01', existingFabric.id]);
     } else {
       await txExecute(tx, `
-        INSERT INTO trx_bom_line (bom_id, material_type, fabric_id, source_type, consumption, uom_id, wastage_pct, remarks)
-        VALUES (?, 'FABRIC', ?, ?, ?, ?, 5.0, ?)
-      `, [id, targetFabricId, fabricSourceType, fabricConsPerGmt, uomId, `CAD Auto-Synced (${cadReq.req_no || 'CAD'})`]);
+        INSERT INTO trx_bom_line (bom_id, material_type, fabric_id, source_type, consumption, uom_id, wastage_pct, dia, remarks)
+        VALUES (?, 'FABRIC', ?, ?, ?, ?, 5.0, ?, ?)
+      `, [id, targetFabricId, fabricSourceType, fabricConsPerGmt, uomId, tableDia, `CAD Auto-Synced (${cadReq.req_no || 'CAD'})`]);
     }
 
     // 2. Yarn Line: Only if YARN_PURCHASE or BOTH. If FABRIC_PURCHASE, remove auto-synced yarn to avoid unused yarn line.

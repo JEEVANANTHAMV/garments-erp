@@ -802,6 +802,7 @@ export function BomDetailPage() {
             material_type: 'FABRIC',
             source_type: cadSourcingPlan === 'YARN_PURCHASE' ? 'PRODUCTION' : 'PURCHASE',
             fabric_id: cad.fabric_id || (fabrics.data?.[0]?.id ?? ''),
+            dia: cad.fabric_dia ? String(cad.fabric_dia) : '',   // CAD table dia (58" + 2" = 60")
             yarn_id: '',
             trim_id: '',
             item_description: '',
@@ -843,6 +844,7 @@ export function BomDetailPage() {
             material_type: 'FABRIC',
             source_type: 'PURCHASE',
             fabric_id: cad.fabric_id || (fabrics.data?.[0]?.id ?? ''),
+            dia: cad.fabric_dia ? String(cad.fabric_dia) : '',   // CAD table dia (58" + 2" = 60")
             yarn_id: '',
             trim_id: '',
             item_description: '',
