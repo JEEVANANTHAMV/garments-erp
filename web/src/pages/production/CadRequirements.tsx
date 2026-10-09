@@ -190,7 +190,14 @@ export default function CadRequirementsPage() {
                     className="hover:bg-slate-50/70 transition cursor-pointer"
                   >
                     <td className="py-3 px-4">
-                      <div className="font-semibold text-indigo-700">{r.req_no}</div>
+                      <div className="flex items-center gap-1.5 font-semibold text-indigo-700">
+                        <span>{r.req_no}</span>
+                        {r.cad_version && (
+                          <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-indigo-50 border border-indigo-200 text-indigo-800">
+                            {r.cad_version}
+                          </span>
+                        )}
+                      </div>
                       <div className="text-[11px] text-slate-400">{fmtDate(r.req_date)}</div>
                     </td>
                     <td className="py-3 px-3">
@@ -222,6 +229,8 @@ export default function CadRequirementsPage() {
                         tone={
                           r.status === 'APPROVED'
                             ? 'green'
+                            : r.status === 'SUPERSEDED'
+                            ? 'amber'
                             : r.status === 'CALCULATED'
                             ? 'blue'
                             : 'slate'

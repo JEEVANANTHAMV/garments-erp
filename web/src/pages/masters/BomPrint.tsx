@@ -23,11 +23,22 @@ const BASIS_LABEL: Record<string, string> = {
   PER_PIECE: 'Per pc', PER_DOZEN: 'Per dozen', PER_CARTON: 'Per carton', PER_SET: 'Per set', FIXED_QTY: 'Fixed',
 };
 
-const materialName = (l: any) =>
-  l.material_type === 'YARN' ? (l.yarn_name || l.item_description)
-  : l.material_type === 'FABRIC' ? (l.fabric_name || l.item_description)
-  : ([l.trim_name, l.trim_name && l.item_description && l.item_description !== l.trim_name ? l.item_description : null]
-      .filter(Boolean).join(' — ') || l.item_description);
+const cleanMaterialName = (val: any) => {
+  if (!val) return '';
+  return String(val)
+    .replace(/\s*\([A-Za-z0-9_-]+\)$/, '')
+    .replace(/\s*\[[A-Za-z0-9_-]+\]$/, '')
+    .replace(/^[A-Za-z0-9_-]+\s*[-—:]\s*/, '')
+    .trim();
+};
+
+const materialName = (l: any) => {
+  const raw = l.material_type === 'YARN' ? (l.yarn_name || l.item_description)
+    : l.material_type === 'FABRIC' ? (l.fabric_name || l.item_description)
+    : ([l.trim_name, l.trim_name && l.item_description && l.item_description !== l.trim_name ? l.item_description : null]
+        .filter(Boolean).join(' — ') || l.item_description);
+  return cleanMaterialName(raw);
+};
 
 export function BomDocument({ d }: { d: any }) {
   const b = d.bom || {};
@@ -106,7 +117,7 @@ export function BomDocument({ d }: { d: any }) {
                       // Fabric: Dia / GSM · Yarn: count · Grey / Dyed (+ colour)
                       l.material_type === 'FABRIC' && (l.dia || l.gsm) ? [l.dia ? `${String(l.dia).replace(/"$/, '')}" Dia` : '', l.gsm ? `${l.gsm} GSM` : ''].filter(Boolean).join(' · ') : '',
                       l.material_type === 'YARN' && l.yarn_count_value ? `Count ${l.yarn_count_value}${l.yarn_count_type && l.yarn_count_type !== 'Ne' ? ` ${l.yarn_count_type}` : ''}` : '',
-                      l.dye_type ? (l.dye_type === 'DYED' ? `Dyed${l.material_color_name ? ` — ${l.material_color_name}` : ''}` : 'Grey') : '',
+                      l.dye_type ? (l.dye_type === 'DYED' ? `Dyed${l.material_color_name ? ` — ${l.material_color_name}` : ''}` : 'Cora / Raw') : '',
                     ].filter(Boolean).join('\n')}
                   </td>
                   <td className={cell}>{l.color_name || 'All'}</td>

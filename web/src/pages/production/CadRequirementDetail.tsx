@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   ArrowLeft, Save, Sparkles, CheckCircle2, Plus, Trash2, Cpu,
   Layers, Scissors, Disc, FileCheck,
-  UploadCloud, Copy, Printer, FileSpreadsheet
+  UploadCloud, Copy, Printer, FileSpreadsheet, GitBranch, Clock
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { http, ApiError } from '../../lib/api';
@@ -274,6 +274,7 @@ export default function CadRequirementDetailPage() {
     order_qty: 0,
     cad_type: 'KNIT_SJ' as 'KNIT_SJ' | 'KNIT_FLEECE' | 'WOVEN' | 'MULTI_PART',
     uom: 'KG' as 'KG' | 'MTR',
+    cad_version: 'V01',
     rejection_pct: 3.0,
     fabric_allowance_pct: 10.0,
     marker_efficiency: 85,
@@ -487,6 +488,7 @@ export default function CadRequirementDetailPage() {
         order_qty: Number(existingData.order_qty) || 1000,
         cad_type: existingData.cad_type || 'KNIT_SJ',
         uom: existingData.uom || (existingData.cad_type === 'WOVEN' ? 'MTR' : 'KG'),
+        cad_version: existingData.cad_version || 'V01',
         rejection_pct: Number(existingData.rejection_pct ?? 3.0),
         fabric_allowance_pct: Number(existingData.fabric_allowance_pct ?? 10.0),
         marker_efficiency: Number(existingData.marker_efficiency) || 85,
@@ -590,9 +592,11 @@ export default function CadRequirementDetailPage() {
 
         // Lay length in cm: (Length mm / 10) + allowance
         const layLenCm = Math.round(((lengthMm / 10.0) + layAllowance) * 10) / 10;
-        // Table width in inches: (Width mm / 25.4) + allowance
-        const tblWidthIn = Math.round(((widthMm / 25.4) + widthAllowance) * 100) / 100;
-        const diaIn = Math.round(tblWidthIn);
+        // Marker actual dia in inches:
+        const actualDiaIn = Number(m.dia_in) > 0 ? Number(m.dia_in) : (widthMm > 0 ? Math.round(widthMm / 25.4) : 0);
+        // Table width in inches: (actual dia or width mm / 25.4) + width allowance (+2")
+        const tblWidthIn = Math.round(((actualDiaIn > 0 ? actualDiaIn : (widthMm / 25.4)) + widthAllowance) * 100) / 100;
+        const diaIn = actualDiaIn > 0 ? actualDiaIn : (tblWidthIn > widthAllowance ? Math.round(tblWidthIn - widthAllowance) : 0);
         const diaVal = `${diaIn}"`;
         const diaSpec = `${diaVal} ${diaType}`;
 
@@ -671,7 +675,8 @@ export default function CadRequirementDetailPage() {
       const fabMap: Record<string, any> = {};
       updatedMarkers.forEach((m) => {
         const markerIsWoven = m.uom === 'MTR' || isWoven;
-        const diaV = `${Math.round(m.table_width_in || 0)}"`;
+        const tableDiaIn = Math.round(m.table_width_in || ((m.dia_in || 0) + (m.width_allowance_in || 2)));
+        const diaV = `${tableDiaIn}"`;
         const diaT = m.fabric_dia_type === 'TUBE' ? 'TUBE' : 'OPEN';
         const mUom = m.uom || (markerIsWoven ? 'MTR' : 'KG');
         const key = `${m.fabric_type || 'Main Fabric'}_${markerIsWoven ? 0 : (m.gsm || 0)}_${diaV}_${diaT}_${mUom}`;
@@ -798,7 +803,9 @@ export default function CadRequirementDetailPage() {
     const totalFoamKhadaMtrs = foamKhadaItems.reduce((sum, fk) => sum + (Number(fk.total_mtrs) || 0), 0);
 
     // Fabric loss % entered on this document is taken OFF the knitted fabric to give the actual piece weight
-    const lossPct = Number(header.fabric_allowance_pct) || 0;
+    const lossPct = header.fabric_allowance_pct != null && !isNaN(Number(header.fabric_allowance_pct))
+      ? Number(header.fabric_allowance_pct)
+      : (markers.length > 0 && markers[0].fabric_allowance_pct != null ? Number(markers[0].fabric_allowance_pct) : 0);
     // For Knitted garments: piece weight is strictly based on Knitted Fabric (KG). MTR (Foam / Khada) is strictly excluded!
     const avgGarmentCons = totalOrderPcs > 0 ? ((isWoven ? grandFabricMtr : grandFabricKg) / totalOrderPcs) : 0;
     const actGarmentCons = avgGarmentCons * (1 - lossPct / 100.0);
@@ -1358,6 +1365,35 @@ export default function CadRequirementDetailPage() {
     }
   };
 
+  // Next revision label: V01 -> V02, V1 -> V2
+  const nextRevisionLabel = useMemo(() => {
+    const cur = String(header.cad_version || 'V01');
+    const match = cur.match(/^([A-Za-z]*)(\d+)$/);
+    if (match) {
+      const prefix = match[1] || 'V';
+      const num = parseInt(match[2], 10) + 1;
+      return `${prefix}${String(num).padStart(match[2].length, '0')}`;
+    }
+    return `${cur}-R1`;
+  }, [header.cad_version]);
+
+  // Create editable revision for approved CAD
+  const [revising, setRevising] = useState(false);
+  const handleCreateRevision = async () => {
+    if (!id || isNew) return;
+    if (!confirm(`Create new revision (${nextRevisionLabel}) for CAD requirement ${header.req_no}? This will create an editable draft while preserving this approved version in history.`)) return;
+    setRevising(true);
+    try {
+      const res = await http.post<{ success: boolean; data: any }>(`/cad-requirements/${id}/revision`);
+      toast(`Created revision ${res.data?.cad_version || nextRevisionLabel}! Opening new editable draft...`, 'success');
+      nav(`/production/cad-requirements/${res.data.id}`);
+    } catch (e: any) {
+      toast(e.message || 'Failed to create revision', 'error');
+    } finally {
+      setRevising(false);
+    }
+  };
+
   if (!isNew && loadingExisting) {
     return <div className="py-20 text-center text-slate-400">Loading CAD Requirement #{id}...</div>;
   }
@@ -1382,10 +1418,17 @@ export default function CadRequirementDetailPage() {
               <h1 className="text-xl font-bold text-slate-900 tracking-tight">
                 {isNew ? 'New Garment CAD Requirement' : `CAD Sheet: ${header.req_no || id}`}
               </h1>
+              {header.cad_version && (
+                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-indigo-50 border border-indigo-200 text-indigo-800">
+                  {header.cad_version}
+                </span>
+              )}
               <Badge
                 tone={
                   header.status === 'APPROVED'
                     ? 'green'
+                    : header.status === 'SUPERSEDED'
+                    ? 'amber'
                     : header.status === 'CALCULATED'
                     ? 'blue'
                     : 'slate'
@@ -1442,9 +1485,21 @@ export default function CadRequirementDetailPage() {
             </button>
           )}
 
+          {header.status === 'APPROVED' && (
+            <button
+              onClick={handleCreateRevision}
+              disabled={revising}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-600 hover:bg-amber-700 text-white shadow-sm transition disabled:opacity-50"
+              title="Create an editable revision (V2, V3...) while preserving approved V1"
+            >
+              <GitBranch size={14} className={revising ? 'animate-spin' : ''} />
+              <span>{revising ? 'Creating Revision...' : `Create Revision (${nextRevisionLabel})`}</span>
+            </button>
+          )}
+
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || header.status === 'APPROVED'}
             className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition disabled:opacity-50"
           >
             <Save size={14} />
@@ -1452,6 +1507,35 @@ export default function CadRequirementDetailPage() {
           </button>
         </div>
       </div>
+
+      {/* Revision and Approval Status Notifications */}
+      {header.status === 'APPROVED' && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-emerald-900 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+            <span>
+              This CAD Requirement is <strong>Approved</strong> ({header.cad_version || 'V01'}). If changes are needed, click <strong>Create Revision</strong> to generate an editable revision ({nextRevisionLabel}) while preserving this approved version in history.
+            </span>
+          </div>
+          <button
+            onClick={handleCreateRevision}
+            disabled={revising}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white shadow-2xs shrink-0 transition"
+          >
+            <GitBranch size={13} />
+            <span>Create Revision ({nextRevisionLabel})</span>
+          </button>
+        </div>
+      )}
+
+      {header.status === 'SUPERSEDED' && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-2 text-xs text-amber-900 shadow-2xs">
+          <Clock size={16} className="text-amber-600 shrink-0" />
+          <span>
+            This CAD Requirement ({header.cad_version || 'V01'}) is <strong>SUPERSEDED</strong> by a newer revision and is preserved for historical audit.
+          </span>
+        </div>
+      )}
 
       {/* KPI Overview Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
@@ -1503,7 +1587,7 @@ export default function CadRequirementDetailPage() {
 
       {/* Header Parameters Card */}
       <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
           <Input
             label="CAD Req No"
             value={header.req_no}
@@ -1545,6 +1629,19 @@ export default function CadRequirementDetailPage() {
             type="number"
             value={header.order_qty}
             onChange={(e) => setHeader((p) => ({ ...p, order_qty: parseInt(e.target.value) || 0 }))}
+          />
+
+          <Input
+            label="Fabric Loss %"
+            type="number"
+            step="0.5"
+            value={header.fabric_allowance_pct ?? 10}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value) || 0;
+              setHeader((p) => ({ ...p, fabric_allowance_pct: val }));
+              setMarkers((prev) => prev.map((m) => ({ ...m, fabric_allowance_pct: val })));
+            }}
+            placeholder="e.g. 10 or 12"
           />
         </div>
 
@@ -1719,7 +1816,18 @@ export default function CadRequirementDetailPage() {
                 <input
                   type="number"
                   value={activeMarker.width_mm}
-                  onChange={(e) => updateActiveMarker({ width_mm: parseFloat(e.target.value) || 0 })}
+                  onChange={(e) => {
+                    const wMm = parseFloat(e.target.value) || 0;
+                    const dIn = wMm > 0 ? Math.round(wMm / 25.4) : 0;
+                    const allowance = Number(activeMarker.width_allowance_in ?? (activeMarker.fabric_dia_type === 'TUBE' ? 1.0 : 2.0));
+                    updateActiveMarker({ 
+                      width_mm: wMm,
+                      dia_in: dIn,
+                      dia_val: `${dIn}"`,
+                      dia_spec: `${dIn}" ${activeMarker.fabric_dia_type || 'OPEN'}`,
+                      table_width_in: dIn > 0 ? Math.round((dIn + allowance) * 100) / 100 : 0,
+                    });
+                  }}
                   className="w-full font-bold text-indigo-700 border border-slate-300 rounded px-2 py-1 mt-0.5"
                 />
               </div>
@@ -1746,17 +1854,21 @@ export default function CadRequirementDetailPage() {
                 <label className="block text-[11px] font-semibold text-indigo-700">Fabric Dia (Inches)</label>
                 <input
                   type="number"
-                  value={activeMarker.dia_in ?? Math.round(activeMarker.table_width_in || 0)}
+                  value={activeMarker.dia_in ?? (activeMarker.width_mm ? Math.round(activeMarker.width_mm / 25.4) : '')}
                   onChange={(e) => {
                     const dIn = parseFloat(e.target.value) || 0;
+                    const allowance = Number(activeMarker.width_allowance_in ?? (activeMarker.fabric_dia_type === 'TUBE' ? 1.0 : 2.0));
+                    const newTableW = dIn > 0 ? Math.round((dIn + allowance) * 100) / 100 : activeMarker.table_width_in;
                     updateActiveMarker({ 
                       dia_in: dIn,
                       dia_val: `${dIn}"`,
-                      dia_spec: `${dIn}" ${activeMarker.fabric_dia_type}`
+                      dia_spec: `${dIn}" ${activeMarker.fabric_dia_type || 'OPEN'}`,
+                      width_mm: dIn > 0 ? Math.round(dIn * 25.4) : activeMarker.width_mm,
+                      table_width_in: newTableW,
                     });
                   }}
                   className="w-full font-bold text-indigo-800 border border-indigo-300 bg-indigo-50/50 rounded px-2 py-1 mt-0.5"
-                  placeholder='e.g. 60"'
+                  placeholder='e.g. 62"'
                 />
               </div>
 
@@ -1907,12 +2019,12 @@ export default function CadRequirementDetailPage() {
               </div>
 
               <div>
-                <span className="text-slate-500 text-[11px]">Table Width / Dia:</span>
+                <span className="text-slate-500 text-[11px]">Table Width / Dia (+{activeMarker.width_allowance_in ?? 2}"):</span>
                 <div className="font-bold text-indigo-700 mt-0.5 text-sm">
-                  {fmtDecimal(activeMarker.table_width_in, 1)}" ({activeMarker.dia_val || `${Math.round(activeMarker.table_width_in || 0)}"`})
+                  {fmtDecimal(activeMarker.table_width_in, 1)}" (Table Dia: {Math.round(activeMarker.table_width_in || ((activeMarker.dia_in || 0) + (activeMarker.width_allowance_in ?? 2)))}")
                 </div>
                 <span className="text-[10px] text-slate-400">
-                  {((activeMarker.width_mm || 0) / 25.4).toFixed(1)}" + {activeMarker.width_allowance_in}"
+                  Actual Dia: {activeMarker.dia_in || (activeMarker.width_mm ? Math.round(activeMarker.width_mm / 25.4) : 0)}" + {activeMarker.width_allowance_in ?? 2}"
                 </span>
               </div>
 
@@ -2732,7 +2844,7 @@ export default function CadRequirementDetailPage() {
                     (fp) => fp.fabric_type === cl.fabric_type && fp.color_name === cl.color_name
                   );
                   const sampleQty = Number(matchingFp?.sample_qty || 0);
-                  const lossPct = Number(header.fabric_allowance_pct) || 10;
+                  const lossPct = header.fabric_allowance_pct !== undefined && header.fabric_allowance_pct !== null ? Number(header.fabric_allowance_pct) : 0;
                   const sampleNetCut = sampleQty > 0 ? Math.round(sampleQty * (1 - lossPct / 100) * 100) / 100 : 0;
 
                   return (
@@ -2777,7 +2889,7 @@ export default function CadRequirementDetailPage() {
                   const totalSampleCut = cuttingLay.reduce((s, cl) => {
                     const mFp = fabricProgram.find((fp) => fp.fabric_type === cl.fabric_type && fp.color_name === cl.color_name);
                     const sq = Number(mFp?.sample_qty || 0);
-                    const loss = Number(header.fabric_allowance_pct) || 10;
+                    const loss = header.fabric_allowance_pct !== undefined && header.fabric_allowance_pct !== null ? Number(header.fabric_allowance_pct) : 0;
                     return s + (sq > 0 ? Math.round(sq * (1 - loss / 100) * 100) / 100 : 0);
                   }, 0);
 

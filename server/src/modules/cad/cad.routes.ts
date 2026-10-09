@@ -774,9 +774,10 @@ cadRouter.post('/cad-requirements/:id/calculate', requirePermission('PRODUCTION.
     // Lay Length in cm: (Length mm / 10) + allowance
     const layLengthCm = Math.round(((lengthMm / 10.0) + layAllowanceCm) * 10) / 10;
 
-    // Table Width in inches: (Width mm / 10 / 2.54) + allowance
-    const tableWidthIn = Math.round(((widthMm / 25.4) + widthAllowanceIn) * 100) / 100;
-    const diaIn = Number(m.dia_in) || Math.round(tableWidthIn);
+    // Table Width in inches: (Width mm / 25.4) + allowance
+    const actualDiaIn = Number(m.dia_in) > 0 ? Number(m.dia_in) : (widthMm > 0 ? Math.round(widthMm / 25.4) : 0);
+    const tableWidthIn = Math.round(((actualDiaIn > 0 ? actualDiaIn : (widthMm / 25.4)) + widthAllowanceIn) * 100) / 100;
+    const diaIn = actualDiaIn > 0 ? actualDiaIn : (tableWidthIn > widthAllowanceIn ? Math.round(tableWidthIn - widthAllowanceIn) : 0);
     const diaVal = `${diaIn}"`;
     const diaSpec = `DIA-${diaIn} (${diaType})`;
 
@@ -867,15 +868,17 @@ cadRouter.post('/cad-requirements/:id/calculate', requirePermission('PRODUCTION.
   const fabricMap: Record<string, any> = {};
 
   calculatedMarkers.forEach((m: any) => {
-    const diaVal = m.dia_val || `${m.dia_in || Math.round(m.table_width_in || 0)}"`;
-    const diaSpec = m.dia_spec || `${diaVal} (${m.fabric_dia_type || 'OPEN'})`;
-    const fabKey = `${m.fabric_type || 'Main Fabric'}_${m.gsm || 0}_${diaVal}_${m.fabric_dia_type || 'OPEN'}`;
+    // For fabric program, dia is the table width dia (+2 inch)
+    const tableDiaIn = Math.round(m.table_width_in || ((m.dia_in || 0) + (m.width_allowance_in || 2)));
+    const tableDiaVal = `${tableDiaIn}"`;
+    const tableDiaSpec = `${tableDiaVal} (${m.fabric_dia_type || 'OPEN'})`;
+    const fabKey = `${m.fabric_type || 'Main Fabric'}_${m.gsm || 0}_${tableDiaVal}_${m.fabric_dia_type || 'OPEN'}`;
     if (!fabricMap[fabKey]) {
       fabricMap[fabKey] = {
         fabric_type: m.fabric_type || 'Main Fabric',
         gsm: m.gsm || 160,
-        dia_spec: diaSpec,
-        dia_val: diaVal,
+        dia_spec: tableDiaSpec,
+        dia_val: tableDiaVal,
         dia_type: m.fabric_dia_type || 'OPEN',
         colorways: {},
       };
@@ -1295,6 +1298,111 @@ cadRouter.post('/cad-requirements/:id/approve', requirePermission('PRODUCTION.AP
   await audit(req, 'trx_cad_requirement', id, 'UPDATE', null, { status: 'APPROVED', cad_version: cr.cad_version });
 
   res.json({ data: { status: 'APPROVED', cad_req_id: id, purchase_requirement: purchaseRequirement } });
+}));
+
+/**
+ * 8. POST /api/cad-requirements/:id/revision
+ * Creates an editable revision (e.g. V02, V03...) from an approved CAD requirement, preserving historical approved version.
+ */
+cadRouter.post('/cad-requirements/:id/revision', requirePermission('PRODUCTION.CREATE'), ah(async (req, res) => {
+  const id = Number(req.params.id);
+  const companyId = req.user!.companyId;
+  const userId = req.user!.id;
+
+  const cr = await queryOne<any>(`
+    SELECT * FROM trx_cad_requirement WHERE id = ? AND company_id = ?
+  `, [id, companyId]);
+  if (!cr) throw NotFound('CAD requirement not found');
+
+  const currentVerStr = String(cr.cad_version || 'V01');
+  const match = currentVerStr.match(/^([A-Za-z]*)(\d+)$/);
+  let nextVer = 'V02';
+  if (match) {
+    const prefix = match[1] || 'V';
+    const num = parseInt(match[2], 10) + 1;
+    const pad = match[2].length;
+    nextVer = `${prefix}${String(num).padStart(pad, '0')}`;
+  } else {
+    nextVer = `${currentVerStr}-R1`;
+  }
+
+  const newRevision = await transaction(async (tx) => {
+    // Update previous approved record status to SUPERSEDED
+    await txExecute(tx, `UPDATE trx_cad_requirement SET status = 'SUPERSEDED' WHERE id = ?`, [id]);
+
+    const ins = await txExecute(tx, `
+      INSERT INTO trx_cad_requirement (
+        company_id, req_no, req_date, internal_ir_no, style_id, buyer_id,
+        order_qty, size_group_id, cad_version, import_source,
+        consumption_source, cad_type, uom, rejection_pct, fabric_allowance_pct,
+        special_notes, signoff_json, marker_efficiency, status, remarks, data_json, created_by
+      ) VALUES (?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?)
+    `, [
+      companyId,
+      cr.req_no,
+      cr.internal_ir_no,
+      cr.style_id,
+      cr.buyer_id,
+      cr.order_qty,
+      cr.size_group_id,
+      nextVer,
+      cr.import_source,
+      cr.consumption_source,
+      cr.cad_type,
+      cr.uom,
+      cr.rejection_pct,
+      cr.fabric_allowance_pct,
+      cr.special_notes,
+      cr.signoff_json,
+      cr.marker_efficiency,
+      `Revision ${nextVer} based on ${cr.cad_version || 'V01'}`,
+      cr.data_json,
+      userId,
+    ]);
+
+    const newId = ins.insertId;
+
+    // Clone markers
+    const markers = await txQuery<any>(tx, `SELECT * FROM trx_cad_marker WHERE cad_req_id = ?`, [id]);
+    for (const m of markers) {
+      await txExecute(tx, `
+        INSERT INTO trx_cad_marker (
+          cad_req_id, marker_ref, marker_name, length_mm, width_mm, fabric_dia_type,
+          fabric_type, gsm, direction, parts_in_lay, lay_allowance_cm, width_allowance_in,
+          lay_length_cm, table_width_in, fabric_wt_per_lay_g, no_of_pcs_lay, act_wt_per_pc_g,
+          avg_wt_per_pc_g, req_length_per_pc_cm, total_req_qty, uom, sort_order, data_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        newId, m.marker_ref, m.marker_name, m.length_mm, m.width_mm, m.fabric_dia_type,
+        m.fabric_type, m.gsm, m.direction, m.parts_in_lay, m.lay_allowance_cm, m.width_allowance_in,
+        m.lay_length_cm, m.table_width_in, m.fabric_wt_per_lay_g, m.no_of_pcs_lay, m.act_wt_per_pc_g,
+        m.avg_wt_per_pc_g, m.req_length_per_pc_cm, m.total_req_qty, m.uom, m.sort_order, m.data_json
+      ]);
+    }
+
+    // Clone fabric program lines
+    const fabricPrograms = await txQuery<any>(tx, `SELECT * FROM trx_cad_fabric_program WHERE cad_req_id = ?`, [id]);
+    for (const fp of fabricPrograms) {
+      await txExecute(tx, `
+        INSERT INTO trx_cad_fabric_program (
+          cad_req_id, sheet_type, fabric_type, gsm, dia_spec, color_name,
+          order_qty_pcs, net_qty, buffer_qty, grand_total_qty, uom, remarks, sort_order
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        newId, fp.sheet_type, fp.fabric_type, fp.gsm, fp.dia_spec, fp.color_name,
+        fp.order_qty_pcs, fp.net_qty, fp.buffer_qty, fp.grand_total_qty, fp.uom, fp.remarks, fp.sort_order
+      ]);
+    }
+
+    return txQueryOne<any>(tx, `SELECT * FROM trx_cad_requirement WHERE id = ?`, [newId]);
+  });
+
+  await audit(req, 'trx_cad_requirement', (newRevision as any).id, 'INSERT', { source_id: id }, newRevision);
+  res.status(201).json({
+    success: true,
+    message: `Created revision ${nextVer}`,
+    data: newRevision,
+  });
 }));
 
 /* ------------------------------------------------------------------ marker files (client voice note 05-Oct-2026)
