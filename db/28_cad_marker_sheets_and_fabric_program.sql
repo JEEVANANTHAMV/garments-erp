@@ -34,8 +34,8 @@ SET @col_exist = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SC
 SET @sql = IF(@col_exist = 0, 'ALTER TABLE trx_cad_requirement ADD COLUMN signoff_json LONGTEXT NULL AFTER special_notes', 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
--- Ensure status ENUM supports CALCULATED
-ALTER TABLE trx_cad_requirement MODIFY COLUMN status ENUM('DRAFT','CALCULATED','VALIDATED','APPROVED','OBSOLETE') NOT NULL DEFAULT 'DRAFT';
+-- Ensure status ENUM supports CALCULATED and SUPERSEDED
+ALTER TABLE trx_cad_requirement MODIFY COLUMN status ENUM('DRAFT','CALCULATED','VALIDATED','APPROVED','OBSOLETE','SUPERSEDED') NOT NULL DEFAULT 'DRAFT';
 
 -- 2. CREATE TABLE trx_cad_marker
 CREATE TABLE IF NOT EXISTS trx_cad_marker (
