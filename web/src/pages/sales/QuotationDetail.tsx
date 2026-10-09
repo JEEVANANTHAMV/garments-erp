@@ -116,27 +116,31 @@ function useJobAvailability(soIds: (number | string | undefined | null)[], kind:
   const asked = useRef(new Set<string>());
   const clean = soIds.map(x => Number(x) || 0).filter(x => x > 0);
   const sig = [...new Set(clean)].sort().join(',');
+  const dye = /dye/i.test(opts.process_name || '');
+  const ck = (sid: string) => `${kind}|${sid}|${dye ? 'GREY' : ''}`;
 
   useEffect(() => {
     if (!kind) return;
     for (const sid of sig ? sig.split(',') : []) {
-      if (!sid || asked.current.has(sid)) continue;
-      asked.current.add(sid);
-      setCache(c => ({ ...c, [sid]: 'loading' }));
-      const dye = /dye/i.test(opts.process_name || '');
+      if (!sid || asked.current.has(ck(sid))) continue;
+      const k = ck(sid);
+      asked.current.add(k);
+      setCache(c => ({ ...c, [k]: 'loading' }));
       const url = kind === 'FABRIC'
         ? `/jobs/${sid}/fabric-availability?${new URLSearchParams({ ...(dye ? { state: 'GREY' } : {}), ...(!opts.isNew && opts.id ? { exclude_quotation_id: String(opts.id) } : {}) })}`
         : `/jobs/${sid}/yarn-availability`;
       http.get<{ data: any }>(url)
-        .then(r => setCache(c => ({ ...c, [sid]: { groups: r.data?.groups ?? [], rolls: r.data?.rolls ?? [] } })))
-        .catch(() => setCache(c => ({ ...c, [sid]: { groups: [], rolls: [] } })));
+        .then(r => setCache(c => ({ ...c, [k]: { groups: r.data?.groups ?? [], rolls: r.data?.rolls ?? [] } })))
+        .catch(() => setCache(c => ({ ...c, [k]: { groups: [], rolls: [] } })));
     }
-  }, [sig, kind, opts.process_name, opts.isNew, opts.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sig, kind, dye, opts.isNew, opts.id]);
 
   const availabilityFor = useCallback((soId: unknown) => {
-    const v = cache[String(Number(soId) || 0)];
+    const v = cache[ck(String(Number(soId) || 0))];
     return (v && typeof v === 'object') ? v : { groups: [], rolls: [] };
-  }, [cache]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cache, kind, dye]);
 
   return { availabilityFor };
 }
@@ -544,9 +548,12 @@ export default function QuotationDetailPage() {
   const pickAvailableItem = (l: QLine, grp: any, rolls: any[] = []) => {
     const isFabric = head.quotation_type === 'FABRIC';
     const kg = (uoms.data ?? []).find((u: any) => String(u.code).toUpperCase() === 'KG')?.id ?? l.uom_id ?? '';
+    const groupIds = new Set<number>((grp.roll_ids ?? []).map(Number));
+    const onOtherLines = new Set<number>(lines.filter(x => x._key !== l._key).flatMap(x => (x.rolls ?? []).map(r => Number(r.fabric_roll_id))));
     const matchingRolls = isFabric && Array.isArray(rolls)
-      ? rolls.filter((r: any) => String(r.fabric_id) === String(grp.fabric_id) && (!grp.process_state || r.process_state === grp.process_state))
+      ? rolls.filter((r: any) => groupIds.has(Number(r.id)) && !onOtherLines.has(Number(r.id)))
       : [];
+    if (isFabric && !matchingRolls.length) { toast('All rolls of this stock are already on other lines of this quotation', 'warning'); return; }
     const qRolls: QRoll[] = matchingRolls.map((r: any) => ({
       fabric_roll_id: Number(r.id),
       roll_no: r.roll_no,
@@ -564,10 +571,10 @@ export default function QuotationDetailPage() {
       yarn_id: !isFabric ? grp.yarn_id : undefined,
       dia: grp.dia ? `${Number(grp.dia)}"` : l.dia,
       gsm: grp.gsm != null ? String(grp.gsm) : l.gsm,
-      qty: Number(grp.available_kg) || '',
+      qty: isFabric ? sumRolls(qRolls) : (Number(grp.available_kg) || ''),
       uom_id: kg,
       description: desc,
-      rolls: qRolls.length > 0 ? qRolls : l.rolls,
+      rolls: isFabric ? qRolls : l.rolls,
       bom_line_id: '',
     });
   };
@@ -641,13 +648,18 @@ export default function QuotationDetailPage() {
     return parts.some((x) => x !== '' && x != null) ? { ...n2, quotation_rate: Math.round(parts.reduce((a: number, x) => a + (Number(x) || 0), 0) * 100) / 100 } : n2;
   }));
 
+  const isEnteredLine = (l: QLine) => Boolean(l.description || l.qty || l.fabric_id || l.yarn_id || (l.rolls ?? []).length);
   function applyJobActual() {
     if (!actual) return;
     const kg = (uoms.data ?? []).find((u: any) => String(u.code).toUpperCase() === 'KG')?.id ?? '';
     const st = bomJob && bomJob.styles.length === 1 ? bomJob.styles[0].style_id : (bomStyleId ? Number(bomStyleId) : '');
     if (actual.kind === 'FABRIC') {
-      const picked = actual.rolls.filter((r) => Number(actual.pick[String(r.id)]) > 0);
-      if (!picked.length) { toast('Tick at least one roll with KG', 'warning'); return; }
+      // rolls already on this quotation (an earlier load / scan / hand-added line) are not added twice
+      const onLines = new Set(lines.flatMap((l) => (l.rolls ?? []).map((r) => Number(r.fabric_roll_id))));
+      const ticked = actual.rolls.filter((r) => Number(actual.pick[String(r.id)]) > 0);
+      const picked = ticked.filter((r) => !onLines.has(Number(r.id)));
+      if (!ticked.length) { toast('Tick at least one roll with KG', 'warning'); return; }
+      if (!picked.length) { toast('The ticked rolls are already on this quotation', 'warning'); return; }
       const byGroup = new Map<string, any[]>();
       for (const r of picked) byGroup.set(rollGroup(r), [...(byGroup.get(rollGroup(r)) ?? []), r]);
       const next: QLine[] = [...byGroup.entries()].map(([grp, rs], i) => {
@@ -658,11 +670,10 @@ export default function QuotationDetailPage() {
           uom_id: kg as any, rolls, qty: sumRolls(rolls), _group: grp,
           description: `${r0.fabric_name ?? 'Fabric'} · ${resolvedColor ? `${resolvedColor} · ` : ''}${r0.process_state} · ${rs.length} roll(s)${r0.program_no ? ` (${r0.program_no})` : ''}` };
       });
-      const hasEntered = lines.some(l => l.description || l.qty || l.fabric_id || l.yarn_id);
-      if (hasEntered && !window.confirm(`Replace the ${lines.length} existing line(s)?`)) return;
-      setLines(next);
-      setHead(h => ({ ...h, job_no: actual.job.job_no, buyer_id: h.buyer_id || bomJob?.buyer_id || h.buyer_id }));
-      toast(`${next.length} line(s) with ${picked.length} roll(s) loaded from job ${actual.job.job_no}`, 'success');
+      // Added below the lines already entered (other jobs / hand-added lines stay); blank lines are dropped
+      setLines((ls) => [...ls.filter(isEnteredLine), ...next].map((l, i) => ({ ...l, sort_order: i })));
+      setHead(h => ({ ...h, job_no: h.job_no || actual.job.job_no, buyer_id: h.buyer_id || bomJob?.buyer_id || h.buyer_id }));
+      toast(`${next.length} line(s) with ${picked.length} roll(s) added from job ${actual.job.job_no}${picked.length < ticked.length ? ` (${ticked.length - picked.length} roll(s) already on the quotation skipped)` : ''}`, 'success');
       setActual(null);
       return;
     }
@@ -675,11 +686,9 @@ export default function QuotationDetailPage() {
             description: `${g.fabric_name ?? 'Fabric'} · ${g.process_state}${g.colour && g.colour !== 'GREY' ? ` ${g.colour}` : ''} · ${g.rolls} roll(s)${g.programs ? ` · ${g.programs}` : ''}` }
         : { ...base, yarn_id: g.yarn_id, yarn_count: g.count_str ?? '', description: `${g.yarn_name ?? 'Yarn'}${g.shade ? ` · ${g.shade}` : ''} · lot ${g.lot_nos}` };
     });
-    const hasEntered = lines.some(l => l.description || l.qty || l.fabric_id || l.yarn_id);
-    if (hasEntered && !window.confirm(`Replace the ${lines.length} existing line(s)?`)) return;
-    setLines(next);
-    setHead(h => ({ ...h, job_no: actual.job.job_no, buyer_id: h.buyer_id || bomJob?.buyer_id || h.buyer_id }));
-    toast(`${next.length} line(s) loaded from job ${actual.job.job_no}'s actual yarn`, 'success');
+    setLines((ls) => [...ls.filter(isEnteredLine), ...next].map((l, i) => ({ ...l, sort_order: i })));
+    setHead(h => ({ ...h, job_no: h.job_no || actual.job.job_no, buyer_id: h.buyer_id || bomJob?.buyer_id || h.buyer_id }));
+    toast(`${next.length} line(s) added from job ${actual.job.job_no}'s actual yarn`, 'success');
     setActual(null);
   }
 
@@ -1660,8 +1669,10 @@ export default function QuotationDetailPage() {
                                     return;
                                   }
                                 }
-                                // A master item that is on this job's BOM fills from the BOM too (qty, colour, size, spec)
-                                const inBom = bomItems.filter(x => Number(x[bomMaterial.key]) === matId);
+                                if (isProcessQuote && matId > 0 && l.so_id) toast(`Job ${l.job_no || ''} has no ${bomMaterial.label.toLowerCase()} of this item in stock — enter the qty`, 'warning');
+                                // A master item that is on this job's BOM fills from the BOM too (qty, colour, size, spec) — purchase only;
+                                // a process quotation is for the stock actually received, never the BOM requirement
+                                const inBom = isProcessQuote ? [] : bomItems.filter(x => Number(x[bomMaterial.key]) === matId);
                                 if (inBom.length === 1) { pickBomItem(l, inBom[0]); return; }
                                 if (inBom.length > 1) toast(`${inBom.length} BOM lines use this item (colour / size wise) — pick the line from "BOM of ${l.job_no}" to load its qty`, 'info');
                                 const m: any = (materials.data ?? []).find((x: any) => String(x.id) === val);
@@ -1675,7 +1686,7 @@ export default function QuotationDetailPage() {
                               }}
                               className="w-full rounded border border-surface-border bg-white px-2 py-1 text-xs focus:border-brand-500 focus:outline-none"
                             >
-                              <option value="">{st === 'loading' ? 'Loading BOM…' : `— ${bomMaterial.label} —`}</option>
+                              <option value="">{!isProcessQuote && st === 'loading' ? 'Loading BOM…' : `— ${bomMaterial.label} —`}</option>
                               {/* Process quotations show available stock in priority */}
                               {isProcessQuote && availGroups.length > 0 && (
                                 <optgroup label={`Available Stock for ${l.job_no || 'job'} (actual stock KG)`}>
@@ -1690,7 +1701,7 @@ export default function QuotationDetailPage() {
                                   })}
                                 </optgroup>
                               )}
-                              {bomItems.length > 0 && (
+                              {!isProcessQuote && bomItems.length > 0 && (
                                 <optgroup label={`BOM of ${l.job_no || 'job'} (qty = requirement)`}>
                                   {bomItems.map(it => <option key={it.bom_line_id} value={`bom:${it.bom_line_id}`}>{bomItemLabel(it)}</option>)}
                                 </optgroup>

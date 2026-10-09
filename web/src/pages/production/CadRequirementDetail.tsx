@@ -260,6 +260,9 @@ export default function CadRequirementDetailPage() {
 
   const [activeTab, setActiveTab] = useState<'MARKERS' | 'F_PRGM' | 'CUT' | 'TRIMS' | 'OUTPUT' | 'RATIO_PATTI'>('MARKERS');
   const [activeMarkerIdx, setActiveMarkerIdx] = useState(0);
+  // Fabric Dia box text while typing — the box can be cleared / retyped without the marker snapping back to the CAD width's dia
+  const [diaDraft, setDiaDraft] = useState<string | null>(null);
+  useEffect(() => setDiaDraft(null), [activeMarkerIdx]);
   const [saving, setSaving] = useState(false);
   const [calculating, setCalculating] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -1244,9 +1247,10 @@ export default function CadRequirementDetailPage() {
             width_allowance_in: dia === 'TUBE' ? 1 : 2,
             rejection_pct: rejPct,
             fabric_allowance_pct: fabPct,
-            dia_in: Math.round(tblW),
-            dia_val: `${Math.round(tblW)}"`,
-            dia_spec: `${Math.round(tblW)}" ${dia}`,
+            // J25 is the table width (dia + allowance): actual dia = table width − allowance (60" − 2" = 58")
+            dia_in: Math.round(tblW - (dia === 'TUBE' ? 1 : 2)),
+            dia_val: `${Math.round(tblW - (dia === 'TUBE' ? 1 : 2))}"`,
+            dia_spec: `${Math.round(tblW - (dia === 'TUBE' ? 1 : 2))}" ${dia}`,
             lay_length_cm: layLen,
             table_width_in: tblW,
             fabric_wt_per_lay_g: fWtLay,
@@ -1887,18 +1891,20 @@ export default function CadRequirementDetailPage() {
                   type="number"
                   step="any"
                   min="0"
-                  value={activeMarker.dia_in != null && activeMarker.dia_in !== ('' as any) ? activeMarker.dia_in : (activeMarker.width_mm ? Math.round(activeMarker.width_mm / 25.4) : '')}
+                  value={diaDraft ?? (Number(activeMarker.dia_in) > 0 ? activeMarker.dia_in : (activeMarker.width_mm ? Math.round(activeMarker.width_mm / 25.4) : ''))}
+                  onBlur={() => setDiaDraft(null)}
                   onChange={(e) => {
                     const raw = e.target.value;
-                    const dIn = raw === '' ? undefined : parseFloat(raw);
+                    setDiaDraft(raw);
+                    const dIn = parseFloat(raw);
+                    if (!(dIn > 0)) return;   // empty / partial entry: keep the last dia until a number is typed
                     const allowance = Number(activeMarker.width_allowance_in ?? (activeMarker.fabric_dia_type === 'TUBE' ? 1.0 : 2.0));
-                    const newTableW = dIn != null && dIn > 0 ? Math.round((dIn + allowance) * 100) / 100 : activeMarker.table_width_in;
                     updateActiveMarker({ 
                       dia_in: dIn,
-                      dia_val: dIn != null ? `${dIn}"` : undefined,
-                      dia_spec: dIn != null ? `${dIn}" ${activeMarker.fabric_dia_type || 'OPEN'}` : undefined,
-                      width_mm: dIn != null && dIn > 0 ? Math.round(dIn * 25.4) : activeMarker.width_mm,
-                      table_width_in: newTableW,
+                      dia_val: `${dIn}"`,
+                      dia_spec: `${dIn}" ${activeMarker.fabric_dia_type || 'OPEN'}`,
+                      width_mm: Math.round(dIn * 25.4),
+                      table_width_in: Math.round((dIn + allowance) * 100) / 100,
                     });
                   }}
                   className="w-full font-bold text-indigo-800 border border-indigo-300 bg-indigo-50/50 rounded px-2 py-1 mt-0.5"

@@ -1160,7 +1160,8 @@ cadRouter.post('/cad-requirements/import-excel', requirePermission('PRODUCTION.C
     if (widthTxt.includes('1"')) widthAdd = 1.0;
     else if (widthTxt.includes('2"')) widthAdd = 2.0;
 
-    const diaIn = Math.round(tableWidthIn);
+    // tableWidthIn is the sheet's table width (dia + allowance): actual dia = 60" − 2" = 58"
+    const diaIn = Math.round(tableWidthIn - widthAdd);
     const actWt = noOfPcsLay > 0 ? (fabricWtPerLay / noOfPcsLay) : 0;
 
     result.markers.push({
