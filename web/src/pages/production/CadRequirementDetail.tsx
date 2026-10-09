@@ -520,7 +520,12 @@ export default function CadRequirementDetailPage() {
             rejection_pct: m.rejection_pct != null ? Number(m.rejection_pct) : Number(existingData.rejection_pct ?? 3.0),
             fabric_allowance_pct: m.fabric_allowance_pct != null ? Number(m.fabric_allowance_pct) : Number(existingData.fabric_allowance_pct ?? 10.0),
             // dia_in = actual fabric dia (NOT table width). If never stored, derive from table_width_in - allowance.
-            dia_in: m.dia_in != null ? Number(m.dia_in) : (
+            dia_in: m.dia_in != null ? (
+              // saved before 09-Oct-2026 the dia was stored as round(table width) (60 for a 58" fabric) — take the allowance off
+              Number(m.table_width_in) > 0 && Number(m.width_allowance_in ?? 2) > 0 && Number(m.dia_in) === Math.round(Number(m.table_width_in))
+                ? Math.round(Number(m.table_width_in) - Number(m.width_allowance_in ?? (m.fabric_dia_type === 'TUBE' ? 1.0 : 2.0)))
+                : Number(m.dia_in)
+            ) : (
               m.table_width_in
                 ? Math.max(0, Math.round(Number(m.table_width_in) - Number(m.width_allowance_in ?? (m.fabric_dia_type === 'TUBE' ? 1.0 : 2.0))))
                 : (m.width_mm ? Math.round(Number(m.width_mm) / 25.4) : undefined)
@@ -541,6 +546,8 @@ export default function CadRequirementDetailPage() {
             ratios: Array.isArray(m.ratios) ? m.ratios : [1, 2, 1],
             colorways: Array.isArray(m.colorways) ? m.colorways : [],
           }))
+            // dia text always from the (corrected) actual dia
+            .map((m: CadMarker) => (Number(m.dia_in) > 0 ? { ...m, dia_val: `${m.dia_in}"`, dia_spec: `${m.dia_in}" ${m.fabric_dia_type || 'OPEN'}` } : m))
         );
       }
 
@@ -1655,7 +1662,8 @@ export default function CadRequirementDetailPage() {
             onChange={(e) => {
               const val = parseFloat(e.target.value) || 0;
               setHeader((p) => ({ ...p, rejection_pct: val }));
-              setMarkers((prev) => prev.map((m) => ({ ...m, rejection_pct: val })));
+              // recalc at once — cut pieces / required qty must not stay on the old % until Calculate is pressed
+              setMarkers((prev) => prev.map((m) => recomputeSingleMarker({ ...m, rejection_pct: val })));
             }}
             placeholder="e.g. 2, 3 or 5"
           />
@@ -1668,7 +1676,7 @@ export default function CadRequirementDetailPage() {
             onChange={(e) => {
               const val = parseFloat(e.target.value) || 0;
               setHeader((p) => ({ ...p, fabric_allowance_pct: val }));
-              setMarkers((prev) => prev.map((m) => ({ ...m, fabric_allowance_pct: val })));
+              setMarkers((prev) => prev.map((m) => recomputeSingleMarker({ ...m, fabric_allowance_pct: val })));
             }}
             placeholder="e.g. 10 or 12"
           />
