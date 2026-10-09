@@ -106,8 +106,8 @@ interface QLine {
 }
 interface QRoll { fabric_roll_id: number; roll_no: string; qty_kg: number | ''; max_kg?: number; trace?: string }
 const rollTrace = (r: any) => [r.production_no ? `prod ${r.production_no}` : null, r.program_no, r.lot_no ? `lot ${r.lot_no}` : null, r.previous_process ? `after ${r.previous_process}` : null].filter(Boolean).join(' · ');
-/** grey has no colour: availability says 'GREY', the roll lookup leaves it blank — both group alike */
-const rollGroup = (r: any) => `${r.fabric_id}|${r.process_state ?? ''}|${r.color_name || (r.colour && r.colour !== 'GREY' ? r.colour : '')}|${r.gsm ?? ''}|${r.dia ?? ''}`;
+/** Group rolls by fabric, process state, distinct colour, program and geometry */
+const rollGroup = (r: any) => `${r.fabric_id}|${r.process_state ?? ''}|${r.color_name || (r.colour && r.colour !== 'GREY' ? r.colour : '') || (r.lot_no ? `lot:${r.lot_no}` : `roll:${r.id}`)}|${r.program_no || ''}|${r.gsm ?? ''}|${r.dia ?? ''}`;
 const sumRolls = (rs: QRoll[] | undefined) => Math.round((rs ?? []).reduce((a, r) => a + (Number(r.qty_kg) || 0), 0) * 1000) / 1000;
 
 let keySeq = 0;
@@ -585,9 +585,10 @@ export default function QuotationDetailPage() {
       const next: QLine[] = [...byGroup.entries()].map(([grp, rs], i) => {
         const r0 = rs[0];
         const rolls: QRoll[] = rs.map((r) => ({ fabric_roll_id: Number(r.id), roll_no: r.roll_no, qty_kg: Number(actual.pick[String(r.id)]), max_kg: r.available_kg, trace: rollTrace(r) }));
+        const resolvedColor = r0.color_name || (r0.colour && r0.colour !== 'GREY' ? r0.colour : '');
         return { ...newLine(i), job_no: actual.job.job_no, so_id: actual.job.id, style_id: st as any, material_type: 'FABRIC', fabric_id: r0.fabric_id, dia: r0.dia ?? '', gsm: r0.gsm != null ? String(r0.gsm) : '',
           uom_id: kg as any, rolls, qty: sumRolls(rolls), _group: grp,
-          description: `${r0.fabric_name ?? 'Fabric'} · ${r0.process_state}${r0.colour && r0.colour !== 'GREY' ? ` ${r0.colour}` : ''} · ${rs.length} roll(s)` };
+          description: `${r0.fabric_name ?? 'Fabric'} · ${resolvedColor ? `${resolvedColor} · ` : ''}${r0.process_state} · ${rs.length} roll(s)${r0.program_no ? ` (${r0.program_no})` : ''}` };
       });
       const hasEntered = lines.some(l => l.description || l.qty || l.fabric_id || l.yarn_id);
       if (hasEntered && !window.confirm(`Replace the ${lines.length} existing line(s)?`)) return;
@@ -1354,7 +1355,7 @@ export default function QuotationDetailPage() {
                   return (
                     <tr key={k} className={`border-t border-slate-100 ${on ? 'bg-emerald-50/50' : ''}`} data-roll={r.roll_no}>
                       <td className="px-2 py-1"><input type="checkbox" checked={on} onChange={() => setPick(on ? '' : r.available_kg)} /></td>
-                      <td className="px-2 py-1 font-mono font-semibold">{r.roll_no}</td><td className="px-2 py-1">{r.fabric_name}</td><td className="px-2 py-1">{r.process_state}</td><td className="px-2 py-1">{r.colour ?? '—'}</td>
+                      <td className="px-2 py-1 font-mono font-semibold">{r.roll_no}</td><td className="px-2 py-1">{r.fabric_name}</td><td className="px-2 py-1">{r.process_state}</td><td className="px-2 py-1 font-semibold text-slate-800">{r.color_name || (r.colour && r.colour !== 'GREY' ? r.colour : (r.color_name || r.colour || '—'))}</td>
                       <td className="px-2 py-1">{r.gsm ?? '—'}</td><td className="px-2 py-1">{r.dia ?? '—'}</td><td className="px-2 py-1 text-slate-600">{rollTrace(r) || r.grn_no}</td><td className="px-2 py-1">QC ok</td>
                       <td className="px-2 py-1 text-right tabular-nums">{fmtDecimal(r.available_kg, 3)}</td><td className="px-2 py-1 text-right tabular-nums">{r.available_m ? fmtDecimal(r.available_m, 2) : '—'}</td>
                       <td className="px-2 py-1 text-right"><input type="number" step="0.001" className="w-24 rounded border border-surface-border px-2 py-0.5 text-right text-xs"

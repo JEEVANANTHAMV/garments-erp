@@ -774,10 +774,10 @@ cadRouter.post('/cad-requirements/:id/calculate', requirePermission('PRODUCTION.
     // Lay Length in cm: (Length mm / 10) + allowance
     const layLengthCm = Math.round(((lengthMm / 10.0) + layAllowanceCm) * 10) / 10;
 
-    // Table Width in inches: (Width mm / 25.4) + allowance
+    // Table Width in inches: Dia in inches + allowance (e.g. 58" + 2" = 60")
     const actualDiaIn = Number(m.dia_in) > 0 ? Number(m.dia_in) : (widthMm > 0 ? Math.round(widthMm / 25.4) : 0);
-    const tableWidthIn = Math.round(((actualDiaIn > 0 ? actualDiaIn : (widthMm / 25.4)) + widthAllowanceIn) * 100) / 100;
-    const diaIn = actualDiaIn > 0 ? actualDiaIn : (tableWidthIn > widthAllowanceIn ? Math.round(tableWidthIn - widthAllowanceIn) : 0);
+    const tableWidthIn = Math.round((actualDiaIn + widthAllowanceIn) * 100) / 100;
+    const diaIn = actualDiaIn;
     const diaVal = `${diaIn}"`;
     const diaSpec = `DIA-${diaIn} (${diaType})`;
 
@@ -936,6 +936,9 @@ cadRouter.post('/cad-requirements/:id/calculate', requirePermission('PRODUCTION.
         uom,
       });
 
+      const cuttingLossPct = fabricAllowancePct || (isWoven ? 2.0 : 12.0);
+      const cuttingNet = Math.round(grand * (1 - (cuttingLossPct / 100.0)) * 100) / 100;
+
       cuttingLayLines.push({
         fabric_type: fab.fabric_type,
         gsm: fab.gsm,
@@ -944,9 +947,9 @@ cadRouter.post('/cad-requirements/:id/calculate', requirePermission('PRODUCTION.
         dia_type: fab.dia_type,
         color_name: colorName,
         order_qty_pcs: data.cut_pcs,
-        net_qty: net,
+        net_qty: cuttingNet,
         buffer_qty: 0,
-        grand_total_qty: net,
+        grand_total_qty: cuttingNet,
         uom,
       });
     });

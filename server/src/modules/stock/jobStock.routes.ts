@@ -556,7 +556,9 @@ export async function jobFabricAvailability(cid: number, soId: number, opts: { s
   const p: unknown[] = [cid, soId];
   if (opts.state) { w.push('fr.process_state = ?'); p.push(opts.state); }
   const rows = await query<any>(
-    `SELECT fr.id, fr.roll_no, fr.lot_no, fr.fabric_id, fb.fabric_name, fr.process_state, fr.color_name, fr.gsm, fr.dia, fr.fabric_form,
+    `SELECT fr.id, fr.roll_no, fr.lot_no, fr.fabric_id, fb.fabric_name, fr.process_state,
+            COALESCE(fr.color_name, (SELECT kp.fabric_colour FROM trx_process_receipt pr JOIN trx_knitting_program kp ON kp.id = pr.src_id WHERE pr.grn_id = fr.grn_id AND pr.src_type = 'KNITTING_PROGRAM' LIMIT 1)) color_name,
+            fr.gsm, fr.dia, fr.fabric_form,
             fr.weight_kg, COALESCE(fr.issued_kg, 0) issued_kg, fr.meters, fr.calc_meters, fr.actual_meters, w.warehouse_name, g.grn_no, g.grn_date,
             (SELECT COALESCE(SUM(ri.weight_kg), 0) FROM trx_fabric_process_roll_in ri JOIN trx_fabric_process_order dfo ON dfo.id = ri.fpo_id WHERE ri.fabric_roll_id = fr.id AND ri.status = 'DRAFT' AND dfo.status = 'DRAFT') draft_kg,
             ${OPEN_ALLOC_SQL('fr.id', '?')} allocated_kg,
@@ -566,13 +568,14 @@ export async function jobFabricAvailability(cid: number, soId: number, opts: { s
   const rolls = rows.map((r) => {
     const avail = r3g(Number(r.weight_kg) - Number(r.issued_kg) - Number(r.draft_kg) - Number(r.allocated_kg));
     const mPerKg = Number(r.weight_kg) > 0 ? Number(r.meters || r.calc_meters || 0) / Number(r.weight_kg) : 0;
-    return { ...r, colour: r.color_name || (r.process_state === 'GREY' ? 'GREY' : null), available_kg: avail, available_m: r3g(avail * mPerKg) };
+    const resolvedColour = r.color_name || (r.process_state === 'GREY' ? 'GREY' : null);
+    return { ...r, colour: resolvedColour, available_kg: avail, available_m: r3g(avail * mPerKg) };
   }).filter((r) => r.available_kg > 0.0005);
   const groups = new Map<string, any>();
   for (const r of rolls) {
-    const k = `${r.fabric_id}|${r.process_state}|${r.colour ?? ''}|${r.gsm ?? ''}|${r.dia ?? ''}`;
-    const g = groups.get(k) ?? { key: k, fabric_id: r.fabric_id, fabric_name: r.fabric_name, process_state: r.process_state, colour: r.colour, gsm: r.gsm, dia: r.dia,
-      fabric_form: r.fabric_form, rolls: 0, available_kg: 0, available_m: 0, roll_ids: [] as number[], programs: new Set<string>() };
+    const k = `${r.fabric_id}|${r.process_state}|${r.color_name || r.colour || ''}|${r.program_no || ''}|${r.gsm ?? ''}|${r.dia ?? ''}`;
+    const g = groups.get(k) ?? { key: k, fabric_id: r.fabric_id, fabric_name: r.fabric_name, process_state: r.process_state, colour: r.colour, color_name: r.color_name, gsm: r.gsm, dia: r.dia,
+      fabric_form: r.fabric_form, program_no: r.program_no, rolls: 0, available_kg: 0, available_m: 0, roll_ids: [] as number[], programs: new Set<string>() };
     g.rolls += 1; g.available_kg = r3g(g.available_kg + r.available_kg); g.available_m = r3g(g.available_m + r.available_m); g.roll_ids.push(Number(r.id));
     if (r.program_no) g.programs.add(r.program_no);
     groups.set(k, g);

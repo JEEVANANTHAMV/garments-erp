@@ -731,6 +731,11 @@ export default function CadRequirementDetailPage() {
             uom: fab.uom || (isWoven ? 'MTR' : 'KG'),
           });
 
+          const cuttingLossPct = header.fabric_allowance_pct !== undefined && header.fabric_allowance_pct !== null
+            ? Number(header.fabric_allowance_pct)
+            : (isWoven ? 2.0 : 12.0);
+          const cuttingNet = Math.round(grand * (1 - (cuttingLossPct / 100.0)) * 100) / 100;
+
           cutLines.push({
             fabric_type: fab.fabric_type,
             gsm: fab.gsm,
@@ -739,9 +744,9 @@ export default function CadRequirementDetailPage() {
             dia_spec: fab.dia_spec,
             color_name: cName,
             order_qty_pcs: d.cut_pcs,
-            net_qty: net,
+            net_qty: cuttingNet,
             buffer_qty: 0,
-            grand_total_qty: net,
+            grand_total_qty: cuttingNet,
             uom: fab.uom || (isWoven ? 'MTR' : 'KG'),
           });
         });
@@ -1587,7 +1592,7 @@ export default function CadRequirementDetailPage() {
 
       {/* Header Parameters Card */}
       <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-7 gap-3">
           <Input
             label="CAD Req No"
             value={header.req_no}
@@ -1629,6 +1634,19 @@ export default function CadRequirementDetailPage() {
             type="number"
             value={header.order_qty}
             onChange={(e) => setHeader((p) => ({ ...p, order_qty: parseInt(e.target.value) || 0 }))}
+          />
+
+          <Input
+            label="Rejection / Cut %"
+            type="number"
+            step="0.5"
+            value={header.rejection_pct ?? 3}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value) || 0;
+              setHeader((p) => ({ ...p, rejection_pct: val }));
+              setMarkers((prev) => prev.map((m) => ({ ...m, rejection_pct: val })));
+            }}
+            placeholder="e.g. 2, 3 or 5"
           />
 
           <Input
@@ -1985,7 +2003,12 @@ export default function CadRequirementDetailPage() {
                     type="number"
                     step="0.5"
                     value={activeMarker.width_allowance_in ?? (activeMarker.fabric_dia_type === 'TUBE' ? 1.0 : 2.0)}
-                    onChange={(e) => updateActiveMarker({ width_allowance_in: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) => {
+                      const allowance = parseFloat(e.target.value) || 0;
+                      const dIn = Number(activeMarker.dia_in) > 0 ? Number(activeMarker.dia_in) : (activeMarker.width_mm ? Math.round(activeMarker.width_mm / 25.4) : 0);
+                      const newTableW = dIn > 0 ? Math.round((dIn + allowance) * 100) / 100 : activeMarker.table_width_in;
+                      updateActiveMarker({ width_allowance_in: allowance, table_width_in: newTableW });
+                    }}
                     className="w-full font-bold text-slate-800 border border-slate-300 bg-white rounded px-2 py-1"
                   />
                   <span className="text-slate-500 font-medium">in</span>
@@ -2291,8 +2314,9 @@ export default function CadRequirementDetailPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
                   {activeMarker.colorways.map((cw, cwIdx) => {
+                    const effRej = activeMarker.rejection_pct != null ? Number(activeMarker.rejection_pct) : Number(header.rejection_pct ?? 3.0);
                     const cutQtys = (cw.quantities || []).map((q) =>
-                      Math.ceil(q * (1 + (header.rejection_pct / 100.0)))
+                      Math.ceil(q * (1 + (effRej / 100.0)))
                     );
                     const totOrder = (cw.quantities || []).reduce((a, b) => a + (Number(b) || 0), 0);
                     const totCut = cutQtys.reduce((a, b) => a + b, 0);
@@ -2308,7 +2332,7 @@ export default function CadRequirementDetailPage() {
                       <React.Fragment key={cwIdx}>
                         {/* Row 1: Raw Order Quantity Input */}
                         <tr className="hover:bg-slate-50/50">
-                          <td className="py-2 px-3 row-span-2">
+                          <td rowSpan={2} className="py-2 px-3 align-top border-r border-slate-100">
                             {(jobColours.data ?? []).length > 0 ? (
                               <select
                                 value={cw.color_name}
@@ -2388,7 +2412,7 @@ export default function CadRequirementDetailPage() {
                             {fmtNumber(totCut)}
                           </td>
                           <td className="py-1 px-2 text-right text-[10px] text-amber-700">
-                            +{activeMarker.rejection_pct ?? header.rejection_pct}% buffer
+                            +{effRej}% buffer
                           </td>
                           <td></td>
                         </tr>
@@ -2843,8 +2867,12 @@ export default function CadRequirementDetailPage() {
                   const matchingFp = fabricProgram.find(
                     (fp) => fp.fabric_type === cl.fabric_type && fp.color_name === cl.color_name
                   );
+                  const fpGrand = Number(matchingFp?.grand_total_qty || cl.grand_total_qty || cl.net_qty || 0);
                   const sampleQty = Number(matchingFp?.sample_qty || 0);
-                  const lossPct = header.fabric_allowance_pct !== undefined && header.fabric_allowance_pct !== null ? Number(header.fabric_allowance_pct) : 0;
+                  const lossPct = header.fabric_allowance_pct !== undefined && header.fabric_allowance_pct !== null 
+                    ? Number(header.fabric_allowance_pct) 
+                    : (isWoven ? 2.0 : 12.0);
+                  const bulkNetCut = Math.round(fpGrand * (1 - (lossPct / 100.0)) * 100) / 100;
                   const sampleNetCut = sampleQty > 0 ? Math.round(sampleQty * (1 - lossPct / 100) * 100) / 100 : 0;
 
                   return (
@@ -2858,8 +2886,13 @@ export default function CadRequirementDetailPage() {
                         <td className="py-2.5 px-2 font-mono text-slate-600">{cl.dia_spec}</td>
                         <td className="py-2.5 px-3 font-bold text-slate-800">{cl.color_name}</td>
                         <td className="py-2.5 px-2 text-right font-medium">{fmtNumber(cl.order_qty_pcs)} Pcs</td>
-                        <td className="py-2.5 px-3 text-right font-bold text-emerald-700 text-sm">
-                          {fmtDecimal(cl.net_qty)} {cl.uom}
+                        <td className="py-2.5 px-3 text-right">
+                          <div className="font-bold text-emerald-700 text-sm">
+                            {fmtDecimal(bulkNetCut)} {cl.uom}
+                          </div>
+                          <div className="text-[10px] text-slate-500 font-normal">
+                            ({fmtDecimal(fpGrand, 2)} {cl.uom} − {lossPct}% process loss)
+                          </div>
                         </td>
                       </tr>
 
