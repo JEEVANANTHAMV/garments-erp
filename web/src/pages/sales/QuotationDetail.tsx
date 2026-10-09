@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useJobBoms, bomItemLabel, type JobBomItem } from '../../lib/jobBom';
@@ -109,6 +109,37 @@ const rollTrace = (r: any) => [r.production_no ? `prod ${r.production_no}` : nul
 /** Group rolls by fabric, process state, distinct colour, program and geometry */
 const rollGroup = (r: any) => `${r.fabric_id}|${r.process_state ?? ''}|${r.color_name || (r.colour && r.colour !== 'GREY' ? r.colour : '') || (r.lot_no ? `lot:${r.lot_no}` : `roll:${r.id}`)}|${r.program_no || ''}|${r.gsm ?? ''}|${r.dia ?? ''}`;
 const sumRolls = (rs: QRoll[] | undefined) => Math.round((rs ?? []).reduce((a, r) => a + (Number(r.qty_kg) || 0), 0) * 1000) / 1000;
+
+/** Hook to fetch available stock (actual received stock from knitting / stock room) per job for process quotations */
+function useJobAvailability(soIds: (number | string | undefined | null)[], kind: 'FABRIC' | 'YARN' | null, opts: { isNew: boolean; id?: string; process_name?: string } = { isNew: true }) {
+  const [cache, setCache] = useState<Record<string, { groups: any[]; rolls: any[] } | 'loading'>>({});
+  const asked = useRef(new Set<string>());
+  const clean = soIds.map(x => Number(x) || 0).filter(x => x > 0);
+  const sig = [...new Set(clean)].sort().join(',');
+
+  useEffect(() => {
+    if (!kind) return;
+    for (const sid of sig ? sig.split(',') : []) {
+      if (!sid || asked.current.has(sid)) continue;
+      asked.current.add(sid);
+      setCache(c => ({ ...c, [sid]: 'loading' }));
+      const dye = /dye/i.test(opts.process_name || '');
+      const url = kind === 'FABRIC'
+        ? `/jobs/${sid}/fabric-availability?${new URLSearchParams({ ...(dye ? { state: 'GREY' } : {}), ...(!opts.isNew && opts.id ? { exclude_quotation_id: String(opts.id) } : {}) })}`
+        : `/jobs/${sid}/yarn-availability`;
+      http.get<{ data: any }>(url)
+        .then(r => setCache(c => ({ ...c, [sid]: { groups: r.data?.groups ?? [], rolls: r.data?.rolls ?? [] } })))
+        .catch(() => setCache(c => ({ ...c, [sid]: { groups: [], rolls: [] } })));
+    }
+  }, [sig, kind, opts.process_name, opts.isNew, opts.id]);
+
+  const availabilityFor = useCallback((soId: unknown) => {
+    const v = cache[String(Number(soId) || 0)];
+    return (v && typeof v === 'object') ? v : { groups: [], rolls: [] };
+  }, [cache]);
+
+  return { availabilityFor };
+}
 
 let keySeq = 0;
 const newLine = (sort = 0): QLine => ({
@@ -504,6 +535,43 @@ export default function QuotationDetailPage() {
    * only yarn still has fabric once it is knitted; a dyeing quotation must come from the job's available fabric rolls).
    */
   const isProcessQuote = head.quotation_category === 'PROCESS' && (head.quotation_type === 'FABRIC' || head.quotation_type === 'YARN');
+  const jobAvail = useJobAvailability(
+    isProcessQuote ? lines.map(l => l.so_id) : [],
+    isProcessQuote ? (head.quotation_type === 'YARN' ? 'YARN' : 'FABRIC') : null,
+    { isNew, id: id ? String(id) : undefined, process_name: head.process_name }
+  );
+
+  const pickAvailableItem = (l: QLine, grp: any, rolls: any[] = []) => {
+    const isFabric = head.quotation_type === 'FABRIC';
+    const kg = (uoms.data ?? []).find((u: any) => String(u.code).toUpperCase() === 'KG')?.id ?? l.uom_id ?? '';
+    const matchingRolls = isFabric && Array.isArray(rolls)
+      ? rolls.filter((r: any) => String(r.fabric_id) === String(grp.fabric_id) && (!grp.process_state || r.process_state === grp.process_state))
+      : [];
+    const qRolls: QRoll[] = matchingRolls.map((r: any) => ({
+      fabric_roll_id: Number(r.id),
+      roll_no: r.roll_no,
+      qty_kg: Number(r.available_kg),
+      max_kg: Number(r.available_kg),
+      trace: rollTrace(r)
+    }));
+    const resolvedColor = grp.color_name || (grp.colour && grp.colour !== 'GREY' ? grp.colour : (grp.shade || ''));
+    const desc = isFabric
+      ? `${grp.fabric_name ?? 'Fabric'} · ${resolvedColor ? `${resolvedColor} · ` : ''}${grp.process_state || ''}${qRolls.length ? ` · ${qRolls.length} roll(s)` : ''}`
+      : `${grp.yarn_name ?? 'Yarn'}${resolvedColor ? ` · ${resolvedColor}` : ''}${grp.lot_nos ? ` · lot ${grp.lot_nos}` : ''}`;
+
+    setLine(l._key, {
+      fabric_id: isFabric ? grp.fabric_id : undefined,
+      yarn_id: !isFabric ? grp.yarn_id : undefined,
+      dia: grp.dia ? `${Number(grp.dia)}"` : l.dia,
+      gsm: grp.gsm != null ? String(grp.gsm) : l.gsm,
+      qty: Number(grp.available_kg) || '',
+      uom_id: kg,
+      description: desc,
+      rolls: qRolls.length > 0 ? qRolls : l.rolls,
+      bom_line_id: '',
+    });
+  };
+
   const [actual, setActual] = useState<null | { kind: 'FABRIC' | 'YARN'; job: any; groups: any[]; rolls: any[]; pick: Record<string, number | ''> }>(null);
   const [scanRoll, setScanRoll] = useState('');
   async function loadJobActual() {
@@ -1563,25 +1631,43 @@ export default function QuotationDetailPage() {
                           <td className="px-1.5 py-1">
                             {(() => {
                               const bomItems = jobBoms.itemsFor(l.so_id, l.style_id, bomMaterial.types).filter(it => it[bomMaterial.key]);
+                              const avail = isProcessQuote ? jobAvail.availabilityFor(l.so_id) : { groups: [], rolls: [] };
+                              const availGroups = avail.groups || [];
                               const st = jobBoms.statusFor(l.so_id, l.style_id);
                               return (
                             <select
                               value={l.bom_line_id && bomItems.some(it => it.bom_line_id === Number(l.bom_line_id)) ? `bom:${l.bom_line_id}` : l[bomMaterial.key]}
-                              title={st === 'empty' ? `No ${bomMaterial.label.toLowerCase()} in this job's BOM` : undefined}
+                              title={st === 'empty' && !availGroups.length ? `No ${bomMaterial.label.toLowerCase()} in this job's BOM or stock` : undefined}
                               onChange={e => {
-                                if (e.target.value.startsWith('bom:')) {
-                                  const it = bomItems.find(x => `bom:${x.bom_line_id}` === e.target.value);
+                                const val = e.target.value;
+                                if (val.startsWith('avail:')) {
+                                  const key = val.slice(6);
+                                  const grp = availGroups.find((g: any) => g.key === key || String(g.fabric_id || g.yarn_id) === key);
+                                  if (grp) pickAvailableItem(l, grp, avail.rolls);
+                                  return;
+                                }
+                                if (val.startsWith('bom:')) {
+                                  const it = bomItems.find(x => `bom:${x.bom_line_id}` === val);
                                   if (it) pickBomItem(l, it);
                                   return;
                                 }
+                                const matId = Number(val);
+                                // For process quotations, check if material exists in job's available stock first
+                                if (isProcessQuote && matId > 0) {
+                                  const inAvail = availGroups.find((g: any) => Number(g.fabric_id || g.yarn_id) === matId);
+                                  if (inAvail) {
+                                    pickAvailableItem(l, inAvail, avail.rolls);
+                                    return;
+                                  }
+                                }
                                 // A master item that is on this job's BOM fills from the BOM too (qty, colour, size, spec)
-                                const inBom = bomItems.filter(x => Number(x[bomMaterial.key]) === Number(e.target.value));
+                                const inBom = bomItems.filter(x => Number(x[bomMaterial.key]) === matId);
                                 if (inBom.length === 1) { pickBomItem(l, inBom[0]); return; }
                                 if (inBom.length > 1) toast(`${inBom.length} BOM lines use this item (colour / size wise) — pick the line from "BOM of ${l.job_no}" to load its qty`, 'info');
-                                const m: any = (materials.data ?? []).find((x: any) => String(x.id) === e.target.value);
+                                const m: any = (materials.data ?? []).find((x: any) => String(x.id) === val);
                                 setLine(l._key, {
                                   bom_line_id: '',
-                                  [bomMaterial.key]: Number(e.target.value) || '',
+                                  [bomMaterial.key]: matId || '',
                                   material_type: l.material_type || bomMaterial.types[0],
                                   description: l.description || m?.label || '',
                                   uom_id: l.uom_id || (Number(m?.base_uom) || ''),
@@ -1590,6 +1676,20 @@ export default function QuotationDetailPage() {
                               className="w-full rounded border border-surface-border bg-white px-2 py-1 text-xs focus:border-brand-500 focus:outline-none"
                             >
                               <option value="">{st === 'loading' ? 'Loading BOM…' : `— ${bomMaterial.label} —`}</option>
+                              {/* Process quotations show available stock in priority */}
+                              {isProcessQuote && availGroups.length > 0 && (
+                                <optgroup label={`Available Stock for ${l.job_no || 'job'} (actual stock KG)`}>
+                                  {availGroups.map((g: any) => {
+                                    const col = g.color_name || (g.colour && g.colour !== 'GREY' ? g.colour : (g.shade || ''));
+                                    const desc = [g.fabric_name || g.yarn_name, g.process_state, col].filter(Boolean).join(' · ');
+                                    return (
+                                      <option key={g.key} value={`avail:${g.key}`}>
+                                        {desc} — {Number(g.available_kg).toLocaleString('en-IN', { maximumFractionDigits: 3 })} KG in stock
+                                      </option>
+                                    );
+                                  })}
+                                </optgroup>
+                              )}
                               {bomItems.length > 0 && (
                                 <optgroup label={`BOM of ${l.job_no || 'job'} (qty = requirement)`}>
                                   {bomItems.map(it => <option key={it.bom_line_id} value={`bom:${it.bom_line_id}`}>{bomItemLabel(it)}</option>)}

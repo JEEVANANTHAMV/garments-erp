@@ -516,7 +516,12 @@ export default function CadRequirementDetailPage() {
             width_allowance_in: Number(m.width_allowance_in ?? (m.fabric_dia_type === 'TUBE' ? 1.0 : 2.0)),
             rejection_pct: m.rejection_pct != null ? Number(m.rejection_pct) : Number(existingData.rejection_pct ?? 3.0),
             fabric_allowance_pct: m.fabric_allowance_pct != null ? Number(m.fabric_allowance_pct) : Number(existingData.fabric_allowance_pct ?? 10.0),
-            dia_in: m.dia_in != null ? Number(m.dia_in) : (m.table_width_in ? Math.round(Number(m.table_width_in)) : undefined),
+            // dia_in = actual fabric dia (NOT table width). If never stored, derive from table_width_in - allowance.
+            dia_in: m.dia_in != null ? Number(m.dia_in) : (
+              m.table_width_in
+                ? Math.max(0, Math.round(Number(m.table_width_in) - Number(m.width_allowance_in ?? (m.fabric_dia_type === 'TUBE' ? 1.0 : 2.0))))
+                : (m.width_mm ? Math.round(Number(m.width_mm) / 25.4) : undefined)
+            ),
             dia_val: m.dia_val || (m.dia_in ? `${m.dia_in}"` : undefined),
             dia_spec: m.dia_spec || (m.dia_in ? `${m.dia_in}" ${m.fabric_dia_type || 'OPEN'}` : undefined),
             lay_length_cm: Number(m.lay_length_cm) || 0,
@@ -997,10 +1002,12 @@ export default function CadRequirementDetailPage() {
     const markerFabAllowancePct = m.fabric_allowance_pct != null ? Number(m.fabric_allowance_pct) : Number(header.fabric_allowance_pct ?? 10.0);
 
     const layLenCm = Math.round(((lengthMm / 10.0) + layAllowance) * 10) / 10;
-    const tblWidthIn = Math.round(((widthMm / 25.4) + widthAllowance) * 100) / 100;
-    const diaIn = Math.round(tblWidthIn);
-    const diaVal = `${diaIn}"`;
-    const diaSpec = `${diaVal} ${diaType}`;
+    // dia_in = actual fabric dia (e.g. 58"). Table width = actual dia + allowance (e.g. 58 + 2 = 60").
+    const actualDiaIn = Number(m.dia_in) > 0 ? Number(m.dia_in) : (widthMm > 0 ? Math.round(widthMm / 25.4) : 0);
+    const tblWidthIn = Math.round(((actualDiaIn > 0 ? actualDiaIn : (widthMm / 25.4)) + widthAllowance) * 100) / 100;
+    const diaIn = actualDiaIn > 0 ? actualDiaIn : (tblWidthIn > widthAllowance ? Math.round(tblWidthIn - widthAllowance) : 0);
+    const diaVal = diaIn > 0 ? `${diaIn}"` : '';
+    const diaSpec = diaVal ? `${diaVal} ${diaType}` : '';
 
     const sumRatios = (m.ratios || []).reduce((a, b) => a + (Number(b) || 0), 0);
 
@@ -1833,17 +1840,20 @@ export default function CadRequirementDetailPage() {
                 <label className="block text-[11px] font-semibold text-slate-600">CAD Width (mm)</label>
                 <input
                   type="number"
-                  value={activeMarker.width_mm}
+                  step="any"
+                  min="0"
+                  value={activeMarker.width_mm || ''}
                   onChange={(e) => {
-                    const wMm = parseFloat(e.target.value) || 0;
-                    const dIn = wMm > 0 ? Math.round(wMm / 25.4) : 0;
+                    const raw = e.target.value;
+                    const wMm = raw === '' ? 0 : parseFloat(raw) || 0;
+                    const dIn = wMm > 0 ? Math.round(wMm / 25.4) : undefined;
                     const allowance = Number(activeMarker.width_allowance_in ?? (activeMarker.fabric_dia_type === 'TUBE' ? 1.0 : 2.0));
                     updateActiveMarker({ 
                       width_mm: wMm,
                       dia_in: dIn,
-                      dia_val: `${dIn}"`,
-                      dia_spec: `${dIn}" ${activeMarker.fabric_dia_type || 'OPEN'}`,
-                      table_width_in: dIn > 0 ? Math.round((dIn + allowance) * 100) / 100 : 0,
+                      dia_val: dIn ? `${dIn}"` : undefined,
+                      dia_spec: dIn ? `${dIn}" ${activeMarker.fabric_dia_type || 'OPEN'}` : undefined,
+                      table_width_in: dIn ? Math.round((dIn + allowance) * 100) / 100 : 0,
                     });
                   }}
                   className="w-full font-bold text-indigo-700 border border-slate-300 rounded px-2 py-1 mt-0.5"
@@ -1856,9 +1866,12 @@ export default function CadRequirementDetailPage() {
                   value={activeMarker.fabric_dia_type}
                   onChange={(e) => {
                     const diaType = e.target.value as 'OPEN' | 'TUBE';
+                    const allowance = diaType === 'TUBE' ? 1.0 : 2.0;
+                    const dIn = Number(activeMarker.dia_in) > 0 ? Number(activeMarker.dia_in) : (activeMarker.width_mm ? Math.round(activeMarker.width_mm / 25.4) : 0);
                     updateActiveMarker({ 
                       fabric_dia_type: diaType,
-                      width_allowance_in: diaType === 'TUBE' ? 1.0 : 2.0
+                      width_allowance_in: allowance,
+                      table_width_in: dIn > 0 ? Math.round((dIn + allowance) * 100) / 100 : activeMarker.table_width_in,
                     });
                   }}
                   className="w-full border border-slate-300 rounded px-2 py-1 mt-0.5 font-semibold"
@@ -1872,21 +1885,24 @@ export default function CadRequirementDetailPage() {
                 <label className="block text-[11px] font-semibold text-indigo-700">Fabric Dia (Inches)</label>
                 <input
                   type="number"
-                  value={activeMarker.dia_in ?? (activeMarker.width_mm ? Math.round(activeMarker.width_mm / 25.4) : '')}
+                  step="any"
+                  min="0"
+                  value={activeMarker.dia_in != null && activeMarker.dia_in !== ('' as any) ? activeMarker.dia_in : (activeMarker.width_mm ? Math.round(activeMarker.width_mm / 25.4) : '')}
                   onChange={(e) => {
-                    const dIn = parseFloat(e.target.value) || 0;
+                    const raw = e.target.value;
+                    const dIn = raw === '' ? undefined : parseFloat(raw);
                     const allowance = Number(activeMarker.width_allowance_in ?? (activeMarker.fabric_dia_type === 'TUBE' ? 1.0 : 2.0));
-                    const newTableW = dIn > 0 ? Math.round((dIn + allowance) * 100) / 100 : activeMarker.table_width_in;
+                    const newTableW = dIn != null && dIn > 0 ? Math.round((dIn + allowance) * 100) / 100 : activeMarker.table_width_in;
                     updateActiveMarker({ 
                       dia_in: dIn,
-                      dia_val: `${dIn}"`,
-                      dia_spec: `${dIn}" ${activeMarker.fabric_dia_type || 'OPEN'}`,
-                      width_mm: dIn > 0 ? Math.round(dIn * 25.4) : activeMarker.width_mm,
+                      dia_val: dIn != null ? `${dIn}"` : undefined,
+                      dia_spec: dIn != null ? `${dIn}" ${activeMarker.fabric_dia_type || 'OPEN'}` : undefined,
+                      width_mm: dIn != null && dIn > 0 ? Math.round(dIn * 25.4) : activeMarker.width_mm,
                       table_width_in: newTableW,
                     });
                   }}
                   className="w-full font-bold text-indigo-800 border border-indigo-300 bg-indigo-50/50 rounded px-2 py-1 mt-0.5"
-                  placeholder='e.g. 62"'
+                  placeholder='e.g. 58"'
                 />
               </div>
 
@@ -2301,24 +2317,25 @@ export default function CadRequirementDetailPage() {
                 <thead>
                   <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                     <th className="py-2 px-3 w-48">Colorway / Shade</th>
-                    <th className="py-2 px-2 text-center w-24">Metric</th>
+                    <th className="py-2 px-2 text-center w-28">Metric</th>
                     {activeMarker.sizes.map((s, sIdx) => (
-                      <th key={sIdx} className="py-2 px-2 text-right">
+                      <th key={sIdx} className="py-2 px-2 text-right min-w-[70px]">
                         {s}
                       </th>
                     ))}
-                    <th className="py-2 px-2 text-right font-bold">Total Pcs</th>
-                    <th className="py-2 px-2 text-right font-bold text-indigo-700">Req ({isWoven ? 'MTR' : (activeMarker.uom || 'KG')})</th>
+                    <th className="py-2 px-2 text-right font-bold w-24">Total Pcs</th>
+                    <th className="py-2 px-2 text-right font-bold text-indigo-700 w-28">Req ({isWoven ? 'MTR' : (activeMarker.uom || 'KG')})</th>
                     <th className="py-2 px-2 text-center w-10">Del</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
                   {activeMarker.colorways.map((cw, cwIdx) => {
                     const effRej = activeMarker.rejection_pct != null ? Number(activeMarker.rejection_pct) : Number(header.rejection_pct ?? 3.0);
-                    const cutQtys = (cw.quantities || []).map((q) =>
+                    const rawQtys = activeMarker.sizes.map((_, sIdx) => Number(cw.quantities?.[sIdx]) || 0);
+                    const cutQtys = rawQtys.map((q) =>
                       Math.ceil(q * (1 + (effRej / 100.0)))
                     );
-                    const totOrder = (cw.quantities || []).reduce((a, b) => a + (Number(b) || 0), 0);
+                    const totOrder = rawQtys.reduce((a, b) => a + b, 0);
                     const totCut = cutQtys.reduce((a, b) => a + b, 0);
 
                     let reqVal = 0;
@@ -2332,7 +2349,7 @@ export default function CadRequirementDetailPage() {
                       <React.Fragment key={cwIdx}>
                         {/* Row 1: Raw Order Quantity Input */}
                         <tr className="hover:bg-slate-50/50">
-                          <td rowSpan={2} className="py-2 px-3 align-top border-r border-slate-100">
+                          <td rowSpan={2} className="py-2 px-3 align-middle border-r border-slate-100 bg-white">
                             {(jobColours.data ?? []).length > 0 ? (
                               <select
                                 value={cw.color_name}
@@ -2364,23 +2381,26 @@ export default function CadRequirementDetailPage() {
                               />
                             )}
                           </td>
-                          <td className="py-1 px-2 text-center font-medium text-slate-500">Order Qty</td>
-                          {(cw.quantities || []).map((q, sIdx) => (
-                            <td key={sIdx} className="py-1 px-2 text-right">
-                              <input
-                                type="number"
-                                value={q}
-                                onChange={(e) => {
-                                  const copy = [...activeMarker.colorways];
-                                  const qCopy = [...copy[cwIdx].quantities];
-                                  qCopy[sIdx] = parseInt(e.target.value) || 0;
-                                  copy[cwIdx].quantities = qCopy;
-                                  updateActiveMarker({ colorways: copy });
-                                }}
-                                className="w-20 text-xs text-right font-medium border border-slate-300 rounded px-1.5 py-1"
-                              />
-                            </td>
-                          ))}
+                          <td className="py-1 px-2 text-center font-medium text-slate-500 bg-slate-50/50">Order Qty</td>
+                          {activeMarker.sizes.map((_, sIdx) => {
+                            const q = Number(cw.quantities?.[sIdx]) || 0;
+                            return (
+                              <td key={sIdx} className="py-1 px-2 text-right">
+                                <input
+                                  type="number"
+                                  value={q}
+                                  onChange={(e) => {
+                                    const copy = [...activeMarker.colorways];
+                                    const qCopy = [...(copy[cwIdx].quantities || [])];
+                                    qCopy[sIdx] = parseInt(e.target.value) || 0;
+                                    copy[cwIdx].quantities = qCopy;
+                                    updateActiveMarker({ colorways: copy });
+                                  }}
+                                  className="w-20 text-xs text-right font-medium border border-slate-300 rounded px-1.5 py-1"
+                                />
+                              </td>
+                            );
+                          })}
                           <td className="py-1 px-2 text-right font-bold text-slate-900">
                             {fmtNumber(totOrder)}
                           </td>
@@ -2402,16 +2422,16 @@ export default function CadRequirementDetailPage() {
 
                         {/* Row 2: Computed Cut Pieces with Rejection CEIL */}
                         <tr className="bg-amber-50/30 text-[11px] text-amber-900">
-                          <td className="py-1 px-2 text-center font-semibold text-amber-800">Cut Pieces (Ceil)</td>
-                          {cutQtys.map((cq, sIdx) => (
+                          <td className="py-1 px-2 text-center font-semibold text-amber-800 bg-amber-50/60">Cut Pieces (Ceil)</td>
+                          {activeMarker.sizes.map((_, sIdx) => (
                             <td key={sIdx} className="py-1 px-2 text-right font-mono font-medium">
-                              {cq}
+                              {cutQtys[sIdx] ?? 0}
                             </td>
                           ))}
                           <td className="py-1 px-2 text-right font-bold font-mono">
                             {fmtNumber(totCut)}
                           </td>
-                          <td className="py-1 px-2 text-right text-[10px] text-amber-700">
+                          <td className="py-1 px-2 text-right text-[10px] text-amber-700 font-medium">
                             +{effRej}% buffer
                           </td>
                           <td></td>
