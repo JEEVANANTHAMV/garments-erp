@@ -306,16 +306,22 @@ processDcRouter.get('/bundle-stock/available-jobs', requirePermission('PRODUCTIO
     if (!jobs.has(key)) {
       jobs.set(key, {
         io_no: b.io_no, style_codes: new Set<string>(), buyer_name: b.buyer_name, buyer_po_no: b.buyer_po_no,
-        bundles: 0, free_bundles: 0, qty: 0,
+        bundles: 0, free_bundles: 0, qty: 0, colors: new Map<string, { color_id: number | null; color_name: string; bundles: number; qty: number }>(),
       });
     }
     const j = jobs.get(key);
     if (b.style_code) j.style_codes.add(b.style_code);
     j.bundles++;
-    if (!b.open_dc_no) { j.free_bundles++; j.qty += b.available_qty; }
+    if (!b.open_dc_no) {
+      j.free_bundles++; j.qty += b.available_qty;
+      // colours of the job (pick only Beige … on "Add job" — client call 13-Oct-2026)
+      const ck = String(b.color_id ?? b.color_name ?? '—');
+      const c = j.colors.get(ck) ?? { color_id: b.color_id ?? null, color_name: b.color_name ?? '—', bundles: 0, qty: 0 };
+      c.bundles++; c.qty += b.available_qty; j.colors.set(ck, c);
+    }
   }
   res.json({
-    data: [...jobs.values()].map((j) => ({ ...j, style_codes: [...j.style_codes] }))
+    data: [...jobs.values()].map((j) => ({ ...j, style_codes: [...j.style_codes], colors: [...j.colors.values()] }))
       .sort((a, b) => String(a.io_no).localeCompare(String(b.io_no))),
     meta,
   });
@@ -376,6 +382,7 @@ async function availableBundles(cid: number, qp: z.infer<typeof availQuery>, onl
   const assort = await assortColors(jobs, rows);
   const data = rows.map((b) => ({
     id: b.id, bundle_no: b.bundle_no, barcode: b.barcode, io_no: b.io_no, part_name: b.part_name,
+    weight_per_pc: n(b.allocated_kg) > 0 && n(b.qty) > 0 ? Math.round((n(b.allocated_kg) / n(b.qty)) * 100000) / 100000 : null,
     style_id: b.style_id, style_code: b.style_code, color_id: b.color_id, color_name: b.color_name,
     size_id: b.size_id, size_code: b.size_code, size_sort: b.size_sort, qty: b.qty, status: b.status,
     lay_no: b.lay_no, cut_no: b.cut_no, plan_no: b.plan_no, cutting_plan_id: b.cutting_plan_id_resolved,
@@ -413,10 +420,11 @@ processDcRouter.get('/process-dcs', requirePermission('PRODUCTION.VIEW'), ah(asy
   if (req.query.from) { where.push('jc.challan_date >= ?'); params.push(String(req.query.from)); }
   if (req.query.to) { where.push('jc.challan_date <= ?'); params.push(String(req.query.to)); }
   if (req.query.q) {
-    where.push(`(jc.challan_no LIKE ? OR EXISTS (SELECT 1 FROM trx_jobwork_challan_line l2 JOIN trx_cutting_bundle b2 ON b2.id = l2.bundle_id
-                 WHERE l2.challan_id = jc.id AND (b2.bundle_no LIKE ? OR b2.barcode LIKE ?)))`);
+    where.push(`(jc.challan_no LIKE ? OR jc.io_no LIKE ? OR jc.ref_no LIKE ? OR v.party_name LIKE ? OR un.unit_name LIKE ?
+                 OR EXISTS (SELECT 1 FROM trx_jobwork_challan_line l2 LEFT JOIN trx_cutting_bundle b2 ON b2.id = l2.bundle_id
+                 WHERE l2.challan_id = jc.id AND (l2.io_no LIKE ? OR b2.bundle_no LIKE ? OR b2.barcode LIKE ?)))`);
     const q = `%${String(req.query.q)}%`;
-    params.push(q, q, q);
+    params.push(q, q, q, q, q, q, q, q);
   }
   const rows = await query(
     `SELECT jc.id, jc.challan_no, jc.challan_date, jc.status, jc.io_no, jc.expected_return, jc.vehicle_no, jc.vendor_id, jc.stage_id,
@@ -471,7 +479,9 @@ async function loadDc(cid: number, id: number) {
     `SELECT jl.*, cb.bundle_no, cb.barcode, cb.status AS bundle_status, cb.qty AS bundle_qty, cb.io_no AS bundle_io_no,
             COALESCE(jl.io_no, cb.io_no) AS job_io_no, lp.lay_no, c.cut_no, cb.status AS stock_stage, op.op_name AS operation_name,
             COALESCE(jl.part_name, cb.part_name) AS part, st.style_code, col.color_name, sz.size_code, sz.sort_order AS size_sort,
-            ${DC_PENDING('jl.')} AS pending_qty,
+            ${DC_PENDING('jl.')} AS pending_qty, cb.allocated_kg, cb.qty AS bundle_full_qty,
+            (SELECT o2.op_name FROM trx_jobwork_receipt_line rl2 JOIN mst_process_operation o2 ON o2.id = rl2.operation_id
+              WHERE rl2.challan_line_id = jl.id ORDER BY rl2.id DESC LIMIT 1) AS done_operation_name,
             cb.balance_qty, cb.sew_in_qty, cb.sew_good_qty, cb.sew_reject_qty, cb.fin_in_qty, cb.fin_good_qty,
             cb.fin_reject_qty, cb.qc_pass_qty, cb.qc_reject_qty, cb.packed_qty, cb.cut_loss_qty, cb.sewn_loss_qty,
             cb.pack_loss_qty, cb.out_cut_qty, cb.out_sewn_qty, cb.out_pack_qty
@@ -558,6 +568,21 @@ async function loadDc(cid: number, id: number) {
 
 processDcRouter.get('/process-dcs/receipts', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId;
+  const rw = ['r.company_id = ?'];
+  const rp: unknown[] = [cid];
+  if (req.query.group) { rw.push('r.inward_group_no = ?'); rp.push(String(req.query.group)); }
+  if (req.query.stage_id) { rw.push('jc.stage_id = ?'); rp.push(Number(req.query.stage_id)); }
+  if (req.query.from) { rw.push('r.receipt_date >= ?'); rp.push(String(req.query.from)); }
+  if (req.query.to) { rw.push('r.receipt_date <= ?'); rp.push(String(req.query.to)); }
+  if (req.query.q) {
+    // inward / DC / party DC no, contractor / unit, job, bundle
+    const q = `%${String(req.query.q)}%`;
+    rw.push(`(r.receipt_no LIKE ? OR jc.challan_no LIKE ? OR r.party_dc_no LIKE ? OR r.ref_no LIKE ? OR v.party_name LIKE ? OR un.unit_name LIKE ?
+              OR EXISTS (SELECT 1 FROM trx_jobwork_receipt_line rl3 JOIN trx_jobwork_challan_line jl3 ON jl3.id = rl3.challan_line_id
+                          LEFT JOIN trx_cutting_bundle b3 ON b3.id = rl3.bundle_id
+                         WHERE rl3.receipt_id = r.id AND (jl3.io_no LIKE ? OR b3.bundle_no LIKE ? OR b3.barcode LIKE ?)))`);
+    rp.push(q, q, q, q, q, q, q, q, q);
+  }
   const rows = await query(
     `SELECT r.*, jc.challan_no, jc.status AS dc_status, ps.stage_name, COALESCE(v.party_name, un.unit_name) AS vendor_name, jc.unit_id,
             (SELECT COUNT(*) FROM trx_jobwork_receipt_line rl WHERE rl.receipt_id = r.id) AS line_count,
@@ -569,8 +594,8 @@ processDcRouter.get('/process-dcs/receipts', requirePermission('PRODUCTION.VIEW'
        LEFT JOIN cfg_process_stage ps ON ps.id = jc.stage_id
        LEFT JOIN mst_party v ON v.id = r.vendor_id
        LEFT JOIN mst_unit un ON un.id = jc.unit_id
-      WHERE r.company_id = ? ${req.query.group ? 'AND r.inward_group_no = ?' : ''}
-      ORDER BY r.receipt_date DESC, r.id DESC LIMIT 500`, req.query.group ? [cid, String(req.query.group)] : [cid]);
+      WHERE ${rw.join(' AND ')}
+      ORDER BY r.receipt_date DESC, r.id DESC LIMIT 500`, rp);
   res.json({ data: rows });
 }));
 
@@ -617,8 +642,9 @@ const dcSchema = z.object({
   prod_order_id: s.id(),
   cutting_plan_id: s.id(),
   ref_no: s.nullableStr(60),
-  from_warehouse_id: s.id(),
-  to_warehouse_id: s.id(),
+  // compulsory (client call 13-Oct-2026: DCs were being saved with no location)
+  from_warehouse_id: s.idReq(),
+  to_warehouse_id: s.idReq(),
   expected_return: s.date(),
   rate: z.coerce.number().min(0).nullish(),
   vehicle_no: s.nullableStr(30),
@@ -701,8 +727,10 @@ async function prepareLines(tx: Tx, cid: number, st: StageInfo, lines: z.infer<t
     const qty = l.qty ?? avail;
     if (avail <= 0) { problems.push(`${b.bundle_no} has no ${unit}`); continue; }
     if (qty > avail) { problems.push(`${b.bundle_no}: ${qty} PCS requested, only ${avail} ${unit}`); continue; }
+    // bundle weight is fixed when bundles are generated; a part of the bundle takes its share (voice note 13-Oct-2026)
+    const perPc = n(b.allocated_kg) > 0 && n(b.qty) > 0 ? n(b.allocated_kg) / n(b.qty) : null;
     out.push({
-      bundle: b, qty, weight_kg: l.weight_kg ?? null, description: l.description ?? null, remarks: l.remarks ?? null,
+      bundle: b, qty, weight_kg: l.weight_kg ?? (perPc ? Math.round(perPc * qty * 1000) / 1000 : null), description: l.description ?? null, remarks: l.remarks ?? null,
       operation_id: l.operation_id ?? null, operator_line: l.operator_line ?? fl?.line.line_code ?? null, fromLine: fl,
       ownLine: linkProc && ownLines.get(id) ? { proc: linkProc, lineId: ownLines.get(id)!.line_id, line_code: ownLines.get(id)!.line_code } : null,
     });
@@ -750,13 +778,18 @@ function headerFrom(lines: PreparedLine[]) {
  * contractor's rate, else the operation default). Their sum is the DC rate
  * unless a rate / PCS was typed in.
  */
-async function resolveOps(cid: number, st: StageInfo, vendorId: number | null, ops: z.infer<typeof dcSchema>['operations']) {
+async function resolveOps(cid: number, st: StageInfo, vendorId: number | null, ops: z.infer<typeof dcSchema>['operations'], ioNo?: string | null, locked = false) {
   if (!ops.length) return [];
   const known = await contractorRates(cid, vendorId, st.id);
+  const card = ioNo
+    ? new Map((await query<any>(`SELECT operation_id, rate FROM trx_job_op_rate WHERE company_id = ? AND io_no = ?`, [cid, ioNo])).map((c) => [Number(c.operation_id), n(c.rate)]))
+    : new Map<number, number>();
   return ops.map((o) => {
     const k = known.find((x) => Number(x.id) === o.operation_id);
     if (!k) throw BadRequest(`Operation ${o.operation_id} does not belong to ${st.stage_name}`);
-    return { operation_id: o.operation_id, rate: o.rate ?? k.rate };
+    // the job's rate card, else the contractor's rate — on a contractor DC these cannot be overridden (voice note 13-Oct-2026)
+    const master = card.has(o.operation_id) ? card.get(o.operation_id)! : k.contractor_rate != null ? n(k.contractor_rate) : null;
+    return { operation_id: o.operation_id, rate: locked && master != null ? master : (o.rate ?? master ?? n(k.default_rate)) };
   });
 }
 async function writeOps(tx: Tx, challanId: number, ops: { operation_id: number; rate: number }[]) {
@@ -870,7 +903,8 @@ async function checkOrderLine(tx: Tx, req: Request, body: z.infer<typeof dcSchem
     if (!body.outward_override_reason?.trim()) throw BadRequest(`${msg}. Give the override reason.`);
     override = true;
   }
-  if (body.rate == null && !body.operations.length) {
+  // the order line rate (else the process rate master) is the DC rate — not changed on the DC
+  if (!body.operations.length) {
     if (line.rate != null) body.rate = n(line.rate);
     else {
       const r = await resolveJwRate(cid, { vendor_id: body.vendor_id!, stage_id: st.id, style_id: line.order_style_id, buyer_id: line.order_buyer_id, uom: 'PCS', on: body.challan_date });
@@ -888,10 +922,8 @@ processDcRouter.post('/process-dcs', requirePermission('PRODUCTION.CREATE'), ah(
   const party = await partyOf(cid, body);
   await locationCheck(cid, body.from_warehouse_id, body.to_warehouse_id);
   await opsCheck(cid, body.lines.map((l) => l.operation_id));
-  const ops = await resolveOps(cid, st, body.vendor_id ?? null, body.operations);
-  // an in-house unit is not paid per piece: no rate, never on a contractor bill
-  if (party.isUnit) { body.rate = null; ops.forEach((o) => { o.rate = 0; }); body.bill_basis = null; }
-  if (body.rate == null && ops.length && !party.isUnit) body.rate = opsRate(ops);
+  // an in-house unit is never billed: its rate is internal (stock value report), not on the print
+  if (party.isUnit) body.bill_basis = null;
   const vendor = { party_name: party.name };
   // an in-house unit is the line itself: its allocation is kept (booked by the inward), never released
   if (party.isUnit) body.release_line_allocation = false;
@@ -900,8 +932,10 @@ processDcRouter.post('/process-dcs', requirePermission('PRODUCTION.CREATE'), ah(
     const fromLine = await resolveFromLine(tx, cid, st, body.from_line_id);
     const lines = await prepareLines(tx, cid, st, body.lines, undefined, body.release_line_allocation, fromLine, party.isUnit);
     const h = headerFrom(lines);
+    const ops = await resolveOps(cid, st, body.vendor_id ?? null, body.operations, h.io_no, !party.isUnit);
+    if (ops.length && (!party.isUnit || body.rate == null)) body.rate = opsRate(ops);
     const ol = await checkOrderLine(tx, req, body, st, h.total_qty);
-    if (!ol && body.rate == null && !ops.length && body.vendor_id) {
+    if (!ol && !ops.length && body.vendor_id) {
       const r = await resolveJwRate(cid, { vendor_id: body.vendor_id, stage_id: st.id, style_id: h.style_id, uom: 'PCS', on: body.challan_date });
       if (r) body.rate = r.rate;
     }
@@ -944,10 +978,8 @@ processDcRouter.put('/process-dcs/:id', requirePermission('PRODUCTION.UPDATE'), 
   const party = await partyOf(cid, body);
   await locationCheck(cid, body.from_warehouse_id, body.to_warehouse_id);
   await opsCheck(cid, body.lines.map((l) => l.operation_id));
-  const ops = await resolveOps(cid, st, body.vendor_id ?? null, body.operations);
-  // an in-house unit is not paid per piece: no rate, never on a contractor bill
-  if (party.isUnit) { body.rate = null; ops.forEach((o) => { o.rate = 0; }); body.bill_basis = null; }
-  if (body.rate == null && ops.length && !party.isUnit) body.rate = opsRate(ops);
+  // an in-house unit is never billed: its rate is internal (stock value report), not on the print
+  if (party.isUnit) body.bill_basis = null;
   const vendor = { party_name: party.name };
   // an in-house unit is the line itself: its allocation is kept (booked by the inward), never released
   if (party.isUnit) body.release_line_allocation = false;
@@ -959,7 +991,13 @@ processDcRouter.put('/process-dcs/:id', requirePermission('PRODUCTION.UPDATE'), 
     const fromLine = await resolveFromLine(tx, cid, st, body.from_line_id);
     const lines = await prepareLines(tx, cid, st, body.lines, id, body.release_line_allocation, fromLine, party.isUnit);
     const h = headerFrom(lines);
+    const ops = await resolveOps(cid, st, body.vendor_id ?? null, body.operations, h.io_no, !party.isUnit);
+    if (ops.length && (!party.isUnit || body.rate == null)) body.rate = opsRate(ops);
     const ol = await checkOrderLine(tx, req, body, st, h.total_qty, id);
+    if (!ol && !ops.length && body.vendor_id) {
+      const rr = await resolveJwRate(cid, { vendor_id: body.vendor_id, stage_id: st.id, style_id: h.style_id, uom: 'PCS', on: body.challan_date });
+      if (rr) body.rate = rr.rate;
+    }
     const basis = body.vendor_id ? await dcBillBasis(tx, body.vendor_id, body.jw_order_line_id, body.bill_basis) : null;
     await txExecute(tx, `UPDATE trx_jobwork_challan SET jw_order_id = ?, jw_order_line_id = ?, outward_override_reason = ? WHERE id = ?`,
       [ol?.line.order_id ?? null, ol?.line.id ?? null, ol?.override ? body.outward_override_reason : null, id]);
@@ -1134,9 +1172,11 @@ export async function postReceipt(tx: Tx, req: Request, dc: any, body: z.infer<t
       const bno = (await txQueryOne<any>(tx, `SELECT bundle_no FROM trx_cutting_bundle WHERE id = ?`, [line.bundle_id]))?.bundle_no;
       throw BadRequest(`Bundle ${bno ?? line.id}: give the mistake / reject reason for the ${rl.rejected_qty} rejected PCS`);
     }
+    const perPc = n(line.qty) > 0 && n(line.weight_kg) > 0 ? n(line.weight_kg) / n(line.qty) : null;
     picked.push({
       line, good: rl.received_qty, rej: rl.rejected_qty, short: rl.shortage_qty,
-      reason: rl.rejected_qty ? rl.reject_reason ?? null : null, weight: rl.weight_kg ?? null, remarks: rl.remarks ?? null,
+      reason: rl.rejected_qty ? rl.reject_reason ?? null : null,
+      weight: rl.weight_kg ?? (perPc ? Math.round(perPc * (rl.received_qty + rl.rejected_qty) * 1000) / 1000 : null), remarks: rl.remarks ?? null,
       excess: rl.excess_qty, operation_id: rl.operation_id ?? null, operator_line: rl.operator_line ?? null,
       loss: rl.loss_qty, ret: rl.return_qty, rework: rl.rework_qty, reworkReason: rl.rework_qty ? rl.rework_reason ?? null : null,
     });
@@ -1292,7 +1332,7 @@ processDcRouter.post('/process-dcs/receipts/batch', requirePermission('PRODUCTIO
 }));
 
 /** GET /process-dcs/:id/audit — who did what on the DC and its inwards. */
-processDcRouter.get('/process-dcs/:id/audit', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+processDcRouter.get('/process-dcs/:id/audit', requirePermission('AUDIT.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = Number(req.params.id);
   const dc = await queryOne<any>(`SELECT id FROM trx_jobwork_challan WHERE id = ? AND company_id = ?`, [id, cid]);

@@ -8,6 +8,7 @@ import {
 import * as XLSX from 'xlsx';
 import { Card, Badge, Button, Input, Select, Textarea, Modal, DataTable, StatusBadge, SearchInput, useDebounced } from '../../components/ui';
 import { api } from '../../lib/api';
+import { useAuth } from '../../lib/auth';
 import { fmtDate, fmtDateTime, fmtNumber, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
 import { useLookup, toOptions } from '../../hooks/useLookup';
@@ -36,6 +37,8 @@ type Avail = {
   line_alloc?: { allocation_no: string; line_code: string; open_qty: number } | null;
   /** line of the previous process this bundle is allocated to — the DC books that line's output automatically */
   auto_line?: string | null;
+  /** bundle weight per piece (fixed when the bundles were generated) */
+  weight_per_pc?: number | null;
   /** DC "from line": PCS of the bundle still open on that line's allocation. */
   from_line_open_qty?: number | null;
 };
@@ -51,7 +54,9 @@ function sourceProcOf(stage?: Stage | null): 'sewing' | 'checking' | 'ironing' |
   if (stage.kind === 'ROUNDTRIP' && stage.level === 'SEWN') return 'sewing';
   return null;
 }
-type Line = Avail & { issue_qty: number; weight_kg: string; remarks: string; operation_id: string; operator_line: string };
+type Line = Avail & { issue_qty: number; weight_kg: string; remarks: string; operation_id: string; operator_line: string; kg_auto?: boolean };
+/** weight of `qty` PCS of a bundle from its per-piece weight */
+const kgFor = (b: { weight_per_pc?: number | null }, qty: number) => (b.weight_per_pc ? String(Math.round(Number(b.weight_per_pc) * qty * 1000) / 1000) : '');
 type Job = { key: string; io_no: string | null; buyer_name: string | null; buyer_po_no: string | null; style_codes: string[]; order_type?: string | null };
 type Op = { id: number; op_code: string; op_name: string; default_rate: number; contractor_rate: number | null; rate: number; in_job_card?: boolean };
 
@@ -330,6 +335,8 @@ function DcEditor({ id, stages, onClose, onSaved }: {
   const [ops, setOps] = useState<Op[]>([]);
   const [opSel, setOpSel] = useState<Record<number, string>>({});   // operation id → rate (₹ / PCS)
   const [rateTouched, setRateTouched] = useState(false);
+  const [opQ, setOpQ] = useState('');
+  const [masterRate, setMasterRate] = useState<number | null>(null);
   const [head, setHead] = useState<any>({
     challan_no: '', challan_date: today(), stage_id: '', vendor_id: '', from_warehouse_id: '', to_warehouse_id: '',
     ref_no: '', expected_return: '', rate: '', vehicle_no: '', driver_name: '', transporter: '', remarks: '',
@@ -366,6 +373,7 @@ function DcEditor({ id, stages, onClose, onSaved }: {
     ? { ...baseStage, level: pickedSource.level, source: pickedSource.hint, source_level: pickedSource.level } : baseStage;
   const toUnit = head.send_to === 'UNIT';
   const readonlyNo = !!id;
+  const opsChosen = Object.keys(opSel).length > 0;
 
   // Load an existing draft.
   useEffect(() => {
@@ -391,7 +399,8 @@ function DcEditor({ id, stages, onClose, onSaved }: {
         style_code: l.style_code, color_name: l.color_name, size_code: l.size_code, size_sort: l.size_sort,
         qty: l.bundle_qty, status: l.bundle_status, lay_no: l.lay_no, cut_no: l.cut_no, plan_no: '',
         available_qty: l.qty, issue_qty: l.qty, open_dc_no: null, buyer_name: null, buyer_po_no: null, assort_color: l.assort_color,
-        weight_kg: l.weight_kg != null ? String(Number(l.weight_kg)) : '', remarks: l.remarks ?? '',
+        weight_kg: l.weight_kg != null ? String(Number(l.weight_kg)) : '', kg_auto: false, remarks: l.remarks ?? '',
+        weight_per_pc: Number(l.allocated_kg) > 0 && Number(l.bundle_full_qty) > 0 ? Number(l.allocated_kg) / Number(l.bundle_full_qty) : null,
         operation_id: l.operation_id ? String(l.operation_id) : '', operator_line: l.operator_line ?? '',
       })));
     }).catch((e) => toast(errMsg(e), 'error'));
@@ -411,6 +420,15 @@ function DcEditor({ id, stages, onClose, onSaved }: {
       }).catch(() => setOps([]));
   }, [head.stage_id, head.vendor_id, singleIo]);
   const opsTotal = Object.values(opSel).reduce((a, v) => a + num(v), 0);
+  // contractor DC: the process rate master gives the rate — it is not typed over (client call 13-Oct-2026)
+  const firstStyle = lines[0]?.style_code;
+  useEffect(() => {
+    setMasterRate(null);
+    if (!head.stage_id || !head.vendor_id || head.send_to === 'UNIT') return;
+    const styleId = (lines[0] as any)?.style_id;
+    api.get('/job-work/rates/resolve', { params: { vendor_id: head.vendor_id, stage_id: head.stage_id, style_id: styleId || undefined, uom: 'PCS' } })
+      .then((r) => setMasterRate(r.data.data ? Number(r.data.data.rate) : null)).catch(() => setMasterRate(null));
+  }, [head.stage_id, head.vendor_id, head.send_to, firstStyle]);
   useEffect(() => {
     if (!rateTouched && Object.keys(opSel).length) setHead((h: any) => ({ ...h, rate: String(Math.round(opsTotal * 10000) / 10000) }));
   }, [opsTotal, rateTouched]);
@@ -436,7 +454,7 @@ function DcEditor({ id, stages, onClose, onSaved }: {
     const ok = bs.filter((b) => !b.open_dc_no && !inLines.has(b.id) && b.available_qty > 0);
     const skipped = bs.length - ok.length;
     if (ok.length) {
-      setLines((cur) => [...cur, ...ok.map((b) => ({ ...b, issue_qty: b.available_qty, weight_kg: '', remarks: '', operation_id: '', operator_line: '' }))]);
+      setLines((cur) => [...cur, ...ok.map((b) => ({ ...b, issue_qty: b.available_qty, weight_kg: kgFor(b, b.available_qty), kg_auto: true, remarks: '', operation_id: '', operator_line: '' }))]);
       setJobMeta((cur) => {
         const next = { ...cur };
         for (const b of ok) {
@@ -481,6 +499,7 @@ function DcEditor({ id, stages, onClose, onSaved }: {
   const save = async (issue: boolean, print = false) => {
     if (!head.stage_id) { toast('Choose the To process', 'error'); return; }
     if (toUnit ? !head.unit_id : !head.vendor_id) { toast(toUnit ? 'Choose the in-house unit' : 'Choose the contractor', 'error'); return; }
+    if (!head.from_warehouse_id || !head.to_warehouse_id) { toast('Choose the From location and To location', 'error'); return; }
     if (!lines.length) { toast('Add at least one job / bundle', 'error'); return; }
     if (badQty) { toast('Fix the highlighted bundle quantities', 'error'); return; }
     setSaving(true);
@@ -546,15 +565,23 @@ function DcEditor({ id, stages, onClose, onSaved }: {
                 placeholder="— choose unit —" options={units.map((u) => ({ value: u.id, label: u.label }))} />
             : <Select label="Contractor" required id="dc-vendor" value={head.vendor_id} onChange={(e) => setHead({ ...head, vendor_id: e.target.value })}
                 placeholder="— choose —" options={contractors.map((c) => ({ value: c.id, label: c.label }))} />}
-          <Select label="From location" value={head.from_warehouse_id} onChange={(e) => setHead({ ...head, from_warehouse_id: e.target.value })}
+          <Select label="From location" required id="dc-from-loc" value={head.from_warehouse_id} onChange={(e) => setHead({ ...head, from_warehouse_id: e.target.value })}
             placeholder="— store —" options={toOptions(warehouses.data)} />
-          <Select label="To location" value={head.to_warehouse_id} onChange={(e) => setHead({ ...head, to_warehouse_id: e.target.value })}
+          <Select label="To location" required id="dc-to-loc" value={head.to_warehouse_id} onChange={(e) => setHead({ ...head, to_warehouse_id: e.target.value })}
             placeholder="— store —" options={toOptions(warehouses.data)} />
           <Input label="Ref / SR no" value={head.ref_no} onChange={(e) => setHead({ ...head, ref_no: e.target.value })} />
           <Input label="Expected return" type="date" value={head.expected_return} onChange={(e) => setHead({ ...head, expected_return: e.target.value })} />
-          {!toUnit && <Input label="Rate (₹ / PCS)" type="number" min={0} step="0.01" value={head.rate}
-            hint={Object.keys(opSel).length && !rateTouched ? 'Sum of the operations' : undefined}
-            onChange={(e) => { setRateTouched(true); setHead({ ...head, rate: e.target.value }); }} />}
+          {toUnit
+            ? <Input label="Internal rate (₹ / PCS)" type="number" min={0} step="0.01" value={head.rate} id="dc-rate"
+                hint="For the stock value report — not printed, never billed"
+                onChange={(e) => { setRateTouched(true); setHead({ ...head, rate: e.target.value }); }} />
+            : (() => {
+                const locked = opsChosen || !!jwLine || masterRate != null;
+                const shown = opsChosen ? String(Math.round(opsTotal * 10000) / 10000) : jwLine?.rate != null ? String(jwLine.rate) : masterRate != null ? String(masterRate) : head.rate;
+                return <Input label="Rate (₹ / PCS)" type="number" min={0} step="0.01" value={shown} id="dc-rate" disabled={locked}
+                  hint={opsChosen ? 'Sum of the operation rates (rate master)' : jwLine ? 'From the job work order' : masterRate != null ? 'From the process rate master' : 'No rate on file — type it'}
+                  onChange={(e) => { setRateTouched(true); setHead({ ...head, rate: e.target.value }); }} />;
+              })()}
           <Input label="Vehicle no" value={head.vehicle_no} onChange={(e) => setHead({ ...head, vehicle_no: e.target.value.toUpperCase() })} />
           <Input label="Driver" value={head.driver_name} onChange={(e) => setHead({ ...head, driver_name: e.target.value })} />
           {jwLines.length > 0 && (
@@ -607,15 +634,25 @@ function DcEditor({ id, stages, onClose, onSaved }: {
               )}
             </span>
           </div>
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
-            {ops.map((o) => {
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <SearchInput value={opQ} onChange={setOpQ} placeholder="Search operation…" className="w-56" />
+            {Object.keys(opSel).map((oid) => {
+              const o = ops.find((x) => String(x.id) === String(oid));
+              return o ? <span key={oid} className="inline-flex items-center gap-1 rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-semibold text-brand-800">
+                {o.op_name}<button onClick={() => toggleOp(o)} aria-label={`Remove ${o.op_name}`}><X size={11} /></button></span> : null;
+            })}
+          </div>
+          <div className="grid max-h-44 grid-cols-2 gap-2 overflow-y-auto pr-1 md:grid-cols-3 xl:grid-cols-5" id="dc-ops">
+            {ops.filter((o) => !opQ || o.op_name.toLowerCase().includes(opQ.toLowerCase()) || (o.op_code ?? '').toLowerCase().includes(opQ.toLowerCase())).map((o) => {
               const on = o.id in opSel;
+              // contractor: the rate card / contractor rate is fixed; in-house: internal rate, editable
+              const rateLocked = !toUnit && (o.in_job_card || o.contractor_rate != null);
               return (
                 <label key={o.id} className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs ${on ? 'border-brand-300 bg-brand-50' : 'border-slate-200 bg-white'}`}>
                   <input type="checkbox" checked={on} onChange={() => toggleOp(o)} />
                   <span className="flex-1 font-medium text-slate-700">{o.op_name}{o.in_job_card && <span className="ml-1 rounded bg-violet-100 px-1 text-[10px] font-semibold text-violet-700" title="On this job's rate card">job</span>}</span>
                   {on ? (
-                    <input type="number" min={0} step="0.01" value={opSel[o.id]} title="₹ / PCS"
+                    <input type="number" min={0} step="0.01" value={rateLocked ? String(o.rate) : opSel[o.id]} title={rateLocked ? 'Rate master — fixed' : '₹ / PCS'} disabled={rateLocked}
                       onChange={(e) => setOpSel((cur) => ({ ...cur, [o.id]: e.target.value }))}
                       className="input h-6 w-16 px-1 text-right" />
                   ) : (
@@ -723,17 +760,18 @@ function DcEditor({ id, stages, onClose, onSaved }: {
                             <td className="px-2 py-1 text-right text-slate-400">{l.available_qty}</td>
                             <td className="px-2 py-1 text-right">
                               <input type="number" min={1} max={l.available_qty} value={l.issue_qty}
-                                onChange={(e) => setLine(l.id, { issue_qty: Number(e.target.value) })}
+                                onChange={(e) => { const q = Number(e.target.value); setLine(l.id, { issue_qty: q, ...(l.kg_auto !== false ? { weight_kg: kgFor(l, q) } : {}) }); }}
                                 className={`input h-7 w-20 px-1.5 text-right ${bad ? 'input-error' : ''}`} />
                             </td>
                             <td className="px-2 py-1 text-right">
                               <input type="number" min={0} step="0.01" value={l.weight_kg} placeholder="—"
-                                onChange={(e) => setLine(l.id, { weight_kg: e.target.value })}
+                                onChange={(e) => setLine(l.id, { weight_kg: e.target.value, kg_auto: false })}
                                 className="input h-7 w-20 px-1.5 text-right" />
                             </td>
                             <td className="px-2 py-1">
-                              <select value={l.operation_id} onChange={(e) => setLine(l.id, { operation_id: e.target.value })} className="input h-7 w-36 px-1">
-                                <option value="">—</option>
+                              <select value={l.operation_id} onChange={(e) => setLine(l.id, { operation_id: e.target.value })} className="input h-7 w-36 px-1"
+                                title="Blank = every operation ticked at the top; pick one only to change this bundle">
+                                <option value="">{opsChosen ? `All: ${Object.keys(opSel).map((oid) => ops.find((x) => String(x.id) === String(oid))?.op_name).filter(Boolean).join(', ')}` : '—'}</option>
                                 {allOps.map((o) => <option key={o.id} value={o.id}>{o.op_name}</option>)}
                               </select>
                             </td>
@@ -804,6 +842,8 @@ function JobPicker({ stage, excluded, onClose, onAdd }: { stage: Stage; excluded
   const [q, setQ] = useState('');
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState(false);
+  // colours to take from the picked jobs (all by default) — e.g. only Beige (client call 13-Oct-2026)
+  const [colorOff, setColorOff] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     api.get('/bundle-stock/available-jobs', { params: { stage_id: stage.id, source_level: stage.source_level } })
@@ -818,7 +858,7 @@ function JobPicker({ stage, excluded, onClose, onAdd }: { stage: Stage; excluded
       const all: Avail[] = [];
       for (const io of picked) {
         const r = await api.get('/bundle-stock/available', { params: { stage_id: stage.id, source_level: stage.source_level, io_no: io, limit: 2000 } });
-        all.push(...(r.data.data || []).filter((b: Avail) => !excluded.has(b.id)));
+        all.push(...(r.data.data || []).filter((b: Avail) => !excluded.has(b.id) && !colorOff.has(String(b.color_name ?? '—'))));
       }
       onAdd(all);
     } catch (e) { toast(errMsg(e), 'error'); } finally { setAdding(false); }
@@ -829,9 +869,30 @@ function JobPicker({ stage, excluded, onClose, onAdd }: { stage: Stage; excluded
       footer={<>
         <span className="mr-auto self-center text-xs text-slate-500">{stage.source}</span>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button loading={adding} disabled={!picked.size} onClick={add}>Add {picked.size || ''} job(s)</Button>
+        <Button loading={adding} disabled={!picked.size} onClick={add} id="dc-jobs-add">Add {picked.size || ''} job(s)</Button>
       </>}>
       <SearchInput value={q} onChange={setQ} placeholder="IO no, buyer, PO, style…" className="mb-2 w-full" />
+      {(() => {
+        const cols = new Map<string, { bundles: number; qty: number }>();
+        for (const j of jobs.filter((x) => picked.has(x.io_no ?? ''))) for (const c of (j.colors || [])) {
+          const k = String(c.color_name ?? '—'); const x = cols.get(k) ?? { bundles: 0, qty: 0 };
+          x.bundles += c.bundles; x.qty += c.qty; cols.set(k, x);
+        }
+        if (!cols.size) return null;
+        return (
+          <div className="mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs" id="dc-job-colours">
+            <span className="font-semibold text-slate-600">Colours:</span>
+            <button className="text-brand-700 hover:underline" onClick={() => setColorOff(new Set())}>All</button>
+            {[...cols.entries()].map(([k, c]) => (
+              <label key={k} className="inline-flex items-center gap-1">
+                <input type="checkbox" checked={!colorOff.has(k)} data-colour={k}
+                  onChange={() => setColorOff((cur) => { const s2 = new Set(cur); if (s2.has(k)) s2.delete(k); else s2.add(k); return s2; })} />
+                {k} <span className="text-slate-400">({c.bundles} bundles · {fmtNumber(c.qty)} PCS)</span>
+              </label>
+            ))}
+          </div>
+        );
+      })()}
       <table className="w-full text-xs">
         <thead className="bg-slate-50 text-slate-500"><tr>
           <th className="w-8 px-2 py-1.5" /><th className="px-2 py-1.5 text-left">IO / Job no</th><th className="px-2 py-1.5 text-left">Buyer</th>
@@ -1074,6 +1135,8 @@ function lineStatus(l: any, dcStatus: string) {
 function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () => void; onChanged: () => void; onEdit: (id: number) => void }) {
   const toast = useToast();
   const [dc, setDc] = useState<any>(null);
+  // audit trail is for the administrator only (client call 13-Oct-2026)
+  const canAudit = useAuth().can('AUDIT.VIEW');
   const [busy, setBusy] = useState(false);
   const [receiving, setReceiving] = useState(false);
   const [reasonFor, setReasonFor] = useState<'cancel' | 'close' | null>(null);
@@ -1206,7 +1269,7 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
                         <td className="px-2 py-1 text-right text-violet-700">{num(l.rework_open_qty) || '—'}</td>
                         <td className="px-2 py-1 text-right font-semibold">{['DRAFT', 'CANCELLED'].includes(dc.status) ? '—' : num(l.pending_qty)}</td>
                         <td className="px-2 py-1 text-right">{l.weight_kg != null ? Number(l.weight_kg).toFixed(2) : '—'}</td>
-                        <td className="px-2 py-1">{l.operation_name ?? '—'}</td>
+                        <td className="px-2 py-1">{l.done_operation_name ?? l.operation_name ?? ((dc.operations || []).map((o: any) => o.op_name).join(', ') || '—')}</td>
                         <td className="px-2 py-1">{l.operator_line ?? '—'}</td>
                         <td className="px-2 py-1">{lineStatus(l, dc.status)}</td>
                         <td className="px-2 py-1 text-slate-500">{l.remarks ?? ''}</td>
@@ -1265,7 +1328,7 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
       )}
 
       <DcAttachments dcId={id} receipts={dc.receipts} />
-      <DcAudit dcId={id} />
+      {canAudit && <DcAudit dcId={id} />}
 
       {receiving && <InwardModal dcs={[dc]} onClose={() => setReceiving(false)} onDone={() => { setReceiving(false); load(); onChanged(); }} />}
       {returning && <ReturnModal dc={dc} onClose={() => setReturning(false)} onDone={() => { setReturning(false); load(); onChanged(); }} />}
@@ -1451,9 +1514,12 @@ function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void
     .map((l) => ({ ...l, io_no: l.job_io_no, _dc: dc })));
   const jobMeta = new Map<string, any>(dcs.flatMap((dc) => (dc.summary.jobs as any[]).map((j) => [j.io_no ?? '—', j] as [string, any])));
   const blank: InRow = { g: 0, r: 0, s: 0, x: 0, l: 0, t: 0, w: 0, wReason: '', reason: '', kg: '', remarks: '', op: '', operator: '' };
+  // process completed: the bundle's own operation, else the DC's (one operation → filled in for every bundle)
+  const dcOp = (dc: any) => ((dc.operations || []).length === 1 ? String(dc.operations[0].operation_id) : '');
   const [rows, setRows] = useState<Record<number, InRow>>(Object.fromEntries(open.map((l) => [l.id, {
-    ...blank, op: l.operation_id ? String(l.operation_id) : '', operator: l.operator_line ?? '',
+    ...blank, op: l.operation_id ? String(l.operation_id) : dcOp(l._dc), operator: l.operator_line ?? '',
   }])));
+  const setAllOps = (op: string) => setRows((cur) => Object.fromEntries(Object.entries(cur).map(([k, v]) => [k, { ...v, op }])));
   const [head, setHead] = useState({
     receipt_date: today(), party_dc_no: '', party_dc_date: '', ref_no: '', to_warehouse_id: first.to_warehouse_id ?? '', vehicle_no: '', remarks: '',
   });
@@ -1574,6 +1640,12 @@ function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void
 
       <div className="mt-4 flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
         <span className="mr-auto text-sm font-semibold text-slate-800">Job / style details</span>
+        <label className="flex items-center gap-1 text-xs text-slate-600">Process completed (all bundles)
+          <select className="input h-8 w-40 px-1" id="in-op-all" defaultValue="" onChange={(e) => { if (e.target.value !== '__') setAllOps(e.target.value); }}>
+            <option value="__">— set for all —</option><option value="">(none)</option>
+            {allOps.map((o) => <option key={o.id} value={o.id}>{o.op_name}</option>)}
+          </select>
+        </label>
         <Button size="sm" variant="secondary" onClick={() => fillGood(open)}>All pending good</Button>
         <Button size="sm" variant="secondary" onClick={() => restShortage(open)}>Rest as shortage</Button>
       </div>
@@ -1647,7 +1719,9 @@ function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void
                               className={`input h-7 w-32 px-1.5 ${x.w && !x.wReason.trim() ? 'input-error' : ''}`} /></td>
                             <td className="px-2 py-1 text-right"><input type="number" min={0} value={x.x} title="PCS returned beyond the DC qty (recorded only)" onChange={(e) => set(l.id, { x: clampInt(e.target.value) })} className="input h-7 w-14 px-1.5 text-right" /></td>
                             <td className={`px-2 py-1 text-right font-semibold ${diff < 0 ? 'text-red-600' : diff > 0 ? 'text-blue-600' : 'text-slate-500'}`}>{entered(l.id) || x.x ? diff : '—'}</td>
-                            <td className="px-2 py-1 text-right"><input type="number" min={0} step="0.01" value={x.kg} placeholder={l.weight_kg != null ? Number(l.weight_kg).toFixed(2) : '—'} onChange={(e) => set(l.id, { kg: e.target.value })} className="input h-7 w-20 px-1.5 text-right" /></td>
+                            <td className="px-2 py-1 text-right"><input type="number" min={0} step="0.01" value={x.kg}
+                              placeholder={Number(l.weight_kg) > 0 && Number(l.qty) > 0 && x.g + x.r > 0 ? (Number(l.weight_kg) / Number(l.qty) * (x.g + x.r)).toFixed(3) : l.weight_kg != null ? Number(l.weight_kg).toFixed(2) : '—'}
+                              title="Blank = bundle weight per piece × good + rejected PCS" onChange={(e) => set(l.id, { kg: e.target.value })} className="input h-7 w-20 px-1.5 text-right" /></td>
                             <td className="px-2 py-1">
                               <select value={x.op} onChange={(e) => set(l.id, { op: e.target.value })} className="input h-7 w-32 px-1">
                                 <option value="">—</option>
@@ -1737,6 +1811,7 @@ async function printDc(id: number, toast: (m: string, k?: any) => void, autoPrin
           GSTIN: ${esc(d.vendor_gstin || '—')} · Ph: ${esc(va.mobile || va.phone || d.vendor_phone || '—')}</td>
         <td><b>Process:</b> ${esc(d.stage_name)} · <b>Jobs:</b> ${d.summary.jobs.length}<br/>
           ${d.operations?.length ? `<b>Operations:</b> ${esc(d.operations.map((o: any) => o.op_name).join(', '))}<br/>` : ''}
+          ${!d.unit_id && d.rate != null ? `<b>Rate:</b> ₹${Number(d.rate).toFixed(2)} / PCS${d.total_amount != null ? ` · <b>Amount:</b> ₹${Number(d.total_amount).toFixed(2)}` : ''}<br/>` : ''}
           <b>From / to location:</b> ${esc(d.from_location || '—')} → ${esc(d.to_location || '—')}<br/>
           <b>Vehicle:</b> ${esc(d.vehicle_no || '—')} · <b>Driver:</b> ${esc(d.driver_name || '—')}<br/>
           <b>Transporter:</b> ${esc(d.transporter || '—')} · <b>Expected return:</b> ${esc(fmtDate(d.expected_return))}</td>
@@ -1763,12 +1838,17 @@ export function ProcessDcReceiptsPage() {
   const [loading, setLoading] = useState(true);
   const [selecting, setSelecting] = useState(false);
   const [dcs, setDcs] = useState<any[] | null>(null);
+  const [f, setF] = useState({ q: '', stage_id: '', from: '', to: '' });
+  const dq = useDebounced(f.q);
+  const [stages, setStages] = useState<Stage[]>([]);
+  useEffect(() => { api.get('/process-dcs/stages').then((r) => setStages(r.data.data || [])).catch(() => setStages([])); }, []);
   const load = () => {
     setLoading(true);
-    api.get('/process-dcs/receipts').then((r) => setRows(r.data.data || []))
+    api.get('/process-dcs/receipts', { params: { q: dq || undefined, stage_id: f.stage_id || undefined, from: f.from || undefined, to: f.to || undefined } })
+      .then((r) => setRows(r.data.data || []))
       .catch((e) => toast(errMsg(e), 'error')).finally(() => setLoading(false));
   };
-  useEffect(load, []);
+  useEffect(load, [dq, f.stage_id, f.from, f.to]);
 
   const pick = async (ids: number[]) => {
     setSelecting(false);
@@ -1788,6 +1868,13 @@ export function ProcessDcReceiptsPage() {
         </div>
       </div>
       <Card>
+        <div className="flex flex-wrap items-end gap-3 p-3">
+          <SearchInput value={f.q} onChange={(v) => setF({ ...f, q: v })} placeholder="Inward / DC / party DC no, job, contractor, bundle…" className="w-80" />
+          <Select className="w-44" value={f.stage_id} placeholder="All processes" onChange={(e) => setF({ ...f, stage_id: e.target.value })}
+            options={stages.map((s2) => ({ value: s2.id, label: s2.stage_name }))} />
+          <Input type="date" label="From" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} />
+          <Input type="date" label="To" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} />
+        </div>
         <DataTable data={rows} loading={loading} emptyTitle="No inwards yet"
           columns={[
             { key: 'receipt_no', header: 'Inward no', render: (r: any) => <span className="font-mono text-[12px] font-semibold text-brand-700">{r.receipt_no}</span> },
@@ -1815,6 +1902,7 @@ export function ProcessDcReceiptsPage() {
 function SelectDcModal({ onClose, onPick }: { onClose: () => void; onPick: (ids: number[]) => void }) {
   const toast = useToast();
   const contractors = useContractors();
+  const units = useUnits();
   const [stages, setStages] = useState<Stage[]>([]);
   const [stageId, setStageId] = useState('');
   const [vendorId, setVendorId] = useState('');
@@ -1830,7 +1918,8 @@ function SelectDcModal({ onClose, onPick }: { onClose: () => void; onPick: (ids:
   useEffect(() => { api.get('/process-dcs/stages').then((r) => setStages(r.data.data || [])); }, []);
   useEffect(() => {
     setLoading(true);
-    api.get('/process-dcs', { params: { status: 'OPEN', stage_id: stageId || undefined, vendor_id: vendorId || undefined, q: dq || undefined } })
+    api.get('/process-dcs', { params: { status: 'OPEN', stage_id: stageId || undefined, q: dq || undefined,
+      vendor_id: vendorId.startsWith('V') ? vendorId.slice(1) : undefined, unit_id: vendorId.startsWith('U') ? vendorId.slice(1) : undefined } })
       .then((r) => setRows(r.data.data || [])).catch((e) => toast(errMsg(e), 'error')).finally(() => setLoading(false));
   }, [stageId, vendorId, dq]);
 
@@ -1843,8 +1932,9 @@ function SelectDcModal({ onClose, onPick }: { onClose: () => void; onPick: (ids:
       </>}>
       <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-3">
         <Select value={stageId} onChange={(e) => setStageId(e.target.value)} placeholder="All processes" options={stages.map((s) => ({ value: s.id, label: s.stage_name }))} />
-        <Select value={vendorId} onChange={(e) => setVendorId(e.target.value)} placeholder="All contractors" options={contractors.map((c) => ({ value: c.id, label: c.label }))} />
-        <SearchInput value={q} onChange={setQ} placeholder="DC no or bundle no…" />
+        <Select value={vendorId} onChange={(e) => setVendorId(e.target.value)} placeholder="All contractors / units"
+          options={[...contractors.map((c) => ({ value: `V${c.id}`, label: c.label })), ...units.map((u) => ({ value: `U${u.id}`, label: `${u.label} (in-house unit)` }))]} />
+        <SearchInput value={q} onChange={setQ} placeholder="DC no, job, contractor or bundle no…" />
       </div>
       <table className="w-full text-xs">
         <thead className="bg-slate-50 text-slate-500"><tr>

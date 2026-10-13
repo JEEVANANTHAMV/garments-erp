@@ -39,6 +39,7 @@ import { shipmentRouter } from './modules/packing/shipment.routes.js';
 import { productionStagesRouter } from './modules/production/productionStages.routes.js';
 import { productionFloorRouter } from './modules/production/productionFloor.routes.js';
 import { processDcRouter } from './modules/production/processDc.routes.js';
+import { processDcReportsRouter } from './modules/production/processDcReports.routes.js';
 import { processMasterRouter } from './modules/production/processMaster.routes.js';
 import { cuttingExecutionRouter } from './modules/production/cuttingExecution.routes.js';
 import { cuttingReconciliationRouter } from './modules/production/cuttingReconciliation.routes.js';
@@ -135,6 +136,7 @@ export function createApp() {
   api.use('/embroidery', machineProcessRouter('EMBROIDERY')); // embroidery machines, designs, recipes, jobs, material, production, costing, reports
   api.use('/printing', machineProcessRouter('PRINTING'));     // printing machines, recipes (dyes / chemicals), jobs, material, production, costing, reports
   api.use('/', jobWorkRouter);                // /job-work/* (job work orders, fabric DCs, contractor stock, rates), /contractor-credit-notes, /contractor-payments
+  api.use('/', processDcReportsRouter);       // /process-dcs/operation-status, /process-dcs/stock-value (before /process-dcs/:id)
   api.use('/', processDcRouter);              // /process-dcs (bundle DCs: stitching/ironing/packing), /bundle-stock/available
   api.use('/', processMasterRouter);          // /process-master (processes, operations, contractor rates), /contractor-bills
   api.use('/', cuttingExecutionRouter);       // /marker-versions, /size-consumptions, /lay-plans/:id/execute, /cut-outputs

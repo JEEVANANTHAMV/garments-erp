@@ -68,6 +68,7 @@ import { ProcessMasterPage, ContractorBillsPage } from './pages/production/Proce
 import { JobRateCardPage, ContractorAdvancesPage, ContractorDebitNotesPage } from './pages/production/ContractorPages';
 import { JobWorkOrdersPage, JobWorkDashboardPage, JobWorkRatesPage, ContractorAccountsPage } from './pages/production/JobWorkOrdersPage';
 import { EmbroideryMachinePage, PrintingMachinePage } from './pages/production/machineProcess';
+import { OperationStatusPage, WipStockValuePage } from './pages/production/ProcessStatusPages';
 import YarnProcessPage from './pages/production/YarnProcessPage';
 import CollarKnittingPage from './pages/production/CollarKnittingPage';
 import FabricGsmMeterPage from './pages/production/FabricGsmMeterPage';
@@ -362,6 +363,8 @@ export default function App() {
                   <Route path="yarn-substitution" element={<YarnSubstitutionPage />} />
                   <Route path="job-rate-cards" element={<JobRateCardPage />} />
                   <Route path="contractor-advances" element={<ContractorAdvancesPage />} />
+                  <Route path="operation-status" element={<OperationStatusPage />} />
+                  <Route path="wip-stock-value" element={<WipStockValuePage />} />
                   <Route path="embroidery" element={<EmbroideryMachinePage />} />
                   <Route path="printing" element={<PrintingMachinePage />} />
                   <Route path="job-work-orders" element={<JobWorkOrdersPage />} />

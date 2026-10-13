@@ -184,6 +184,8 @@ export const NAV: NavSection[] = [
       { label: 'Job Work Dashboard',   to: '/production/job-work-dashboard', icon: Gauge, perms: ['PRODUCTION.VIEW'] },
       { label: 'Process Outward (DC)', to: '/production/jobwork-challans', icon: Truck, perms: ['PRODUCTION.VIEW'] },
       { label: 'Process Inward',       to: '/production/jobwork-receipts', icon: PackageCheck, perms: ['PRODUCTION.VIEW'] },
+      { label: 'Operation Status',     to: '/production/operation-status', icon: Gauge, perms: ['PRODUCTION.VIEW'] },
+      { label: 'WIP Stock Value',      to: '/production/wip-stock-value', icon: Coins, perms: ['PRODUCTION.VIEW'] },
       { label: 'Job Rate Card',        to: '/production/job-rate-cards', icon: ListChecks, perms: ['PRODUCTION.VIEW'] },
       { label: 'Contractor Bills',     to: '/production/contractor-bills', icon: HandCoins, perms: ['PRODUCTION.VIEW'], hidden: true },
       { label: 'Job Work Rates',       to: '/production/job-work-rates', icon: ListChecks, perms: ['PRODUCTION.VIEW'] },
