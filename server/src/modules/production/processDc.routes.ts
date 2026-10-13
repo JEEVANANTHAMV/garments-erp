@@ -635,10 +635,14 @@ interface PreparedLine {
   operation_id: number | null; operator_line: string | null;
   /** line of the previous process whose output this bundle is (picked on the DC, or found from its allocation) */
   fromLine: FromLine | null;
+  /** in-house unit DC: line of this process whose allocation / daily plan the inward books */
+  ownLine?: { proc: LinkProc; lineId: number; line_code: string } | null;
 }
 
 /** Validate DC lines against bundle balances and other open DCs (bundles locked by the caller). */
-async function prepareLines(tx: Tx, cid: number, st: StageInfo, lines: z.infer<typeof lineSchema>[], challanId?: number, releaseAlloc = false, fromLine: FromLine | null = null) {
+async function prepareLines(tx: Tx, cid: number, st: StageInfo, lines: z.infer<typeof lineSchema>[], challanId?: number, releaseAlloc = false, fromLine: FromLine | null = null,
+  /** DC to an in-house unit: the bundle's line allocation of this process stays — the unit is that line doing the work */
+  keepAlloc = false) {
   const ids: number[] = [];
   const byId = new Map<number, z.infer<typeof lineSchema>>();
   for (const l of lines) {
@@ -651,6 +655,7 @@ async function prepareLines(tx: Tx, cid: number, st: StageInfo, lines: z.infer<t
   const holds = await openDcHolds(tx, cid, st.id, ids, challanId);
   const linkProc = linkProcOf(st);
   const lineAllocs = linkProc ? await openLineAllocations(tx, cid, linkProc, ids) : new Map();
+  const ownLines = keepAlloc && linkProc ? await bundleOpenLines(tx, cid, linkProc, ids) : new Map<number, { line_id: number; line_code: string; line_name: string; open_qty: number }>();
   const strictChk = st.kind === 'FINISHING' && await ironingRequiresChecking(tx, cid);
   const unit = fromLine ? `PCS on ${fromLine.proc} line ${fromLine.line.line_code}`
     : strictChk ? 'checking-passed PCS (checking QC required before ironing)' : LEVEL_LABEL[st.level];
@@ -667,7 +672,7 @@ async function prepareLines(tx: Tx, cid: number, st: StageInfo, lines: z.infer<t
     if (!b.style_id) { problems.push(`${b.bundle_no} has no style`); continue; }
     if (holds.has(id)) { problems.push(`${b.bundle_no} is already on open ${st.stage_name} DC ${holds.get(id)}`); continue; }
     const la = lineAllocs.get(id);
-    if (la && !releaseAlloc) {
+    if (la && !releaseAlloc && !keepAlloc) {
       problems.push(`${b.bundle_no} is allocated to in-house ${linkProc} line ${la.line_code} (${la.allocation_no}, ${la.open_qty} PCS) — tick "Release in-house line allocation" to send it on this DC`);
       continue;
     }
@@ -686,6 +691,7 @@ async function prepareLines(tx: Tx, cid: number, st: StageInfo, lines: z.infer<t
     out.push({
       bundle: b, qty, weight_kg: l.weight_kg ?? null, description: l.description ?? null, remarks: l.remarks ?? null,
       operation_id: l.operation_id ?? null, operator_line: l.operator_line ?? fl?.line.line_code ?? null, fromLine: fl,
+      ownLine: linkProc && ownLines.get(id) ? { proc: linkProc, lineId: ownLines.get(id)!.line_id, line_code: ownLines.get(id)!.line_code } : null,
     });
   }
   if (problems.length) {
@@ -808,6 +814,10 @@ async function postIssue(tx: Tx, req: Request, dc: any, st: StageInfo, lines: Pr
     if (linkProc) await releaseLineAllocation(tx, req, linkProc, l.bundle.id, l.qty, `${st.stage_name} DC ${dc.challan_no}`, Number(dc.id));
     const after = await applyBundle(tx, l.bundle, issueDelta(st, l.qty));
     const lr = lineRows.find((r) => Number(r.bundle_id) === l.bundle.id);
+    if (lr && l.ownLine) {
+      await txExecute(tx, `UPDATE trx_jobwork_challan_line SET own_line_proc = ?, own_line_id = ?, operator_line = COALESCE(operator_line, ?) WHERE id = ?`,
+        [l.ownLine.proc, l.ownLine.lineId, l.ownLine.line_code, lr.id]);
+    }
     await addMovement(tx, req, l.bundle, {
       txn_type: 'DC_ISSUE', from_stage: l.bundle.status, to_stage: after.status, qty: l.qty, good: l.qty,
       destination: vendorName, location: st.stage_name, work_center: vendorName,
@@ -870,10 +880,12 @@ processDcRouter.post('/process-dcs', requirePermission('PRODUCTION.CREATE'), ah(
   if (party.isUnit) { body.rate = null; ops.forEach((o) => { o.rate = 0; }); body.bill_basis = null; }
   if (body.rate == null && ops.length && !party.isUnit) body.rate = opsRate(ops);
   const vendor = { party_name: party.name };
+  // an in-house unit is the line itself: its allocation is kept (booked by the inward), never released
+  if (party.isUnit) body.release_line_allocation = false;
 
   const id = await transaction(async (tx) => {
     const fromLine = await resolveFromLine(tx, cid, st, body.from_line_id);
-    const lines = await prepareLines(tx, cid, st, body.lines, undefined, body.release_line_allocation, fromLine);
+    const lines = await prepareLines(tx, cid, st, body.lines, undefined, body.release_line_allocation, fromLine, party.isUnit);
     const h = headerFrom(lines);
     const ol = await checkOrderLine(tx, req, body, st, h.total_qty);
     if (!ol && body.rate == null && !ops.length && body.vendor_id) {
@@ -924,13 +936,15 @@ processDcRouter.put('/process-dcs/:id', requirePermission('PRODUCTION.UPDATE'), 
   if (party.isUnit) { body.rate = null; ops.forEach((o) => { o.rate = 0; }); body.bill_basis = null; }
   if (body.rate == null && ops.length && !party.isUnit) body.rate = opsRate(ops);
   const vendor = { party_name: party.name };
+  // an in-house unit is the line itself: its allocation is kept (booked by the inward), never released
+  if (party.isUnit) body.release_line_allocation = false;
 
   await transaction(async (tx) => {
     const before = await txQueryOne<any>(tx, `SELECT * FROM trx_jobwork_challan WHERE id = ? AND company_id = ? FOR UPDATE`, [id, cid]);
     if (!before) throw NotFound('DC not found');
     if (before.status !== 'DRAFT') throw BadRequest(`DC ${before.challan_no} is ${before.status} — only a draft DC can be edited`);
     const fromLine = await resolveFromLine(tx, cid, st, body.from_line_id);
-    const lines = await prepareLines(tx, cid, st, body.lines, id, body.release_line_allocation, fromLine);
+    const lines = await prepareLines(tx, cid, st, body.lines, id, body.release_line_allocation, fromLine, party.isUnit);
     const h = headerFrom(lines);
     const ol = await checkOrderLine(tx, req, body, st, h.total_qty, id);
     const basis = body.vendor_id ? await dcBillBasis(tx, body.vendor_id, body.jw_order_line_id, body.bill_basis) : null;
@@ -975,8 +989,8 @@ processDcRouter.post('/process-dcs/:id/issue', requirePermission('PRODUCTION.CRE
     if (cur.some((l) => !l.bundle_id)) throw BadRequest('This DC has lines without bundles — it was not created as a bundle DC');
     const lines = await prepareLines(tx, cid, st, cur.map((l) => ({
       bundle_id: l.bundle_id, qty: l.qty, description: l.description, operation_id: l.operation_id, operator_line: l.operator_line,
-    })), id, !!dc.release_line_alloc, await resolveFromLine(tx, cid, st, dc.from_line_id));
-    await postIssue(tx, req, dc, st, lines, dc.vendor_name ?? 'Vendor', !!dc.release_line_alloc, await resolveFromLine(tx, cid, st, dc.from_line_id));
+    })), id, !dc.unit_id && !!dc.release_line_alloc, await resolveFromLine(tx, cid, st, dc.from_line_id), !!dc.unit_id);
+    await postIssue(tx, req, dc, st, lines, dc.vendor_name ?? 'Vendor', !dc.unit_id && !!dc.release_line_alloc, await resolveFromLine(tx, cid, st, dc.from_line_id));
     await refreshJwOrder(tx, dc.jw_order_id);
     await audit(req, 'trx_jobwork_challan', id, 'UPDATE', { status: 'DRAFT' }, { status: 'ISSUED' }, tx);
   });
@@ -1166,6 +1180,19 @@ export async function postReceipt(tx: Tx, req: Request, dc: any, body: z.infer<t
         ref_table: 'trx_jobwork_receipt_line', ref_id: rr.insertId,
         remarks: `${receiptNo} vs DC ${dc.challan_no}${p.short ? ` · shortage ${p.short}` : ''}${p.loss ? ` · loss ${p.loss}` : ''}${p.reason ? ` · reject: ${p.reason}` : ''}${reworkBack ? ` · ${reworkBack} back from rework` : ''}${p.remarks ? ` · ${p.remarks}` : ''}`.slice(0, 255),
       });
+    }
+    // In-house unit DC: the good PCS are the output of the line the bundle is allocated to — allocation completed,
+    // daily plan achieved; a checking inward also passes checking QC (voice note 13-Oct-2026: no second entry).
+    if (p.line.bundle_id && p.line.own_line_id && p.good > 0) {
+      const proc = p.line.own_line_proc as LinkProc;
+      const ln = await lineInfo(tx, cid, proc, Number(p.line.own_line_id));
+      const ref = `${st.stage_name} inward ${receiptNo} vs DC ${dc.challan_no}`;
+      if (proc === 'checking') {
+        const ready = bundleAvail(await lockBundle(tx, cid, { id: p.line.bundle_id })).checking;
+        const pass = Math.min(p.good, ready);
+        if (pass > 0) await postCheckingQc(tx, req, p.line.bundle_id, { date: body.receipt_date, line_name: ln?.line_code ?? 'CHECKING', good: pass, reject: 0, rework: 0, remarks: ref });
+      }
+      await recordLineOutput(tx, req, proc, Number(p.line.own_line_id), p.line.bundle_id, p.good, body.receipt_date, ref);
     }
     // unprocessed PCS returned: back to our stock at the level they left (doc §14, a separate stock movement)
     if (p.line.bundle_id && p.ret > 0) {
