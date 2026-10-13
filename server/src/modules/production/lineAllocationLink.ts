@@ -243,6 +243,7 @@ export async function stitchDcPending(tx: Tx | null, cid: number, bundleIds: num
                  JOIN cfg_process_stage ps ON ps.id = jc.stage_id
                 WHERE jc.company_id = ? AND jc.status IN ('ISSUED','PARTIAL_RECEIVED')
                   AND UPPER(ps.stage_code) IN ('STITCH','STITCHING','SEW','SEWING') AND jl.bundle_id IN (?)
+                  AND (jl.source_level IS NULL OR jl.source_level = 'CUT')   -- next-operation DCs carry stitched PCS, not sewing WIP
                 GROUP BY jl.bundle_id`;
   const rows = tx ? await txQuery<any>(tx, sql, [cid, bundleIds]) : await query<any>(sql, [cid, bundleIds]);
   for (const r of rows) if (n(r.pending) > 0) map.set(Number(r.bundle_id), n(r.pending));

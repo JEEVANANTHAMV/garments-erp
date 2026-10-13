@@ -124,6 +124,9 @@ async function stageInfo(cid: number, stageId: number): Promise<StageInfo> {
 /** Where a process may take PCS from: out-and-back processes (printing, embroidery, washing …) can take cut panels,
  *  part-stitched PCS or stitched garments; every other process has one fixed source. */
 export function sourcesOf(st: StageInfo): Level[] {
+  // stitching in operations (Power Table → Singer → Trimming, voice note 13-Oct-2026): the first DC takes cut panels,
+  // the next ones take the stitched PCS out for the next operation and bring them back stitched
+  if (st.kind === 'SEWING') return ['CUT', 'SEWN'];
   if (st.kind !== 'ROUNDTRIP' || st.level === 'PACK') return [st.level];
   return ['CUT', 'WIP', 'SEWN'];
 }
@@ -133,13 +136,23 @@ function withSource(st: StageInfo, source?: string | null): StageInfo {
   if (!sourcesOf(st).includes(source as Level)) throw BadRequest(`${st.stage_name} cannot take ${LEVEL_LABEL[source as Level] ?? source}`);
   return { ...st, level: source as Level };
 }
+/** Stitching DC for the next stitching operation (stitched PCS out and back). */
+const nextStitchOp = (st: StageInfo) => st.kind === 'SEWING' && st.level === 'SEWN';
+/** In-house line process this DC competes with — none for a next-operation stitching DC (its line output is already booked). */
+const dcLinkProc = (st: StageInfo) => (nextStitchOp(st) ? null : linkProcOf(st));
+const sourceName = (st: StageInfo, l: Level) => (st.kind === 'SEWING'
+  ? (l === 'CUT' ? 'Cutting (cut panels) — first stitching operation' : 'Stitching — next operation (stitched PCS)')
+  : SOURCE_NAME[l]);
+const sourceHint = (st: StageInfo, l: Level) => (st.kind === 'SEWING' && l === 'SEWN'
+  ? 'stitched PCS — they go out for the next stitching operation (Singer, Trimming …) and come back stitched'
+  : LEVEL_LABEL[l]);
 async function dcStage(cid: number, dc: { stage_id: number; source_level?: string | null }) {
   return withSource(await stageInfo(cid, dc.stage_id), dc.source_level);
 }
 
 /** Ledger deltas for issuing q PCS on a DC of this stage. */
 export function issueDelta(st: StageInfo, q: number): Partial<Record<Counter, number>> {
-  if (st.kind === 'SEWING') return { balance_qty: -q, sew_in_qty: q };
+  if (st.kind === 'SEWING' && st.level === 'CUT') return { balance_qty: -q, sew_in_qty: q };
   if (st.kind === 'FINISHING') return { fin_in_qty: q };
   if (st.level === 'CUT') return { balance_qty: -q, out_cut_qty: q };
   if (st.level === 'WIP') return { out_wip_qty: q };
@@ -147,7 +160,7 @@ export function issueDelta(st: StageInfo, q: number): Partial<Record<Counter, nu
   return { out_pack_qty: q };
 }
 export function receiptDelta(st: StageInfo, good: number, loss: number): Partial<Record<Counter, number>> {
-  if (st.kind === 'SEWING') return { sew_good_qty: good, sew_reject_qty: loss };
+  if (st.kind === 'SEWING' && st.level === 'CUT') return { sew_good_qty: good, sew_reject_qty: loss };
   if (st.kind === 'FINISHING') return { fin_good_qty: good, fin_reject_qty: loss };
   if (st.level === 'CUT') return { out_cut_qty: -(good + loss), balance_qty: good, cut_loss_qty: loss };
   if (st.level === 'WIP') return { out_wip_qty: -(good + loss), wip_loss_qty: loss };
@@ -229,7 +242,7 @@ processDcRouter.get('/process-dcs/stages', requirePermission('PRODUCTION.VIEW'),
   const stages = await bundleStages(req.user!.companyId);
   res.json({ data: stages.map((st) => ({
     ...st, source: LEVEL_LABEL[st.level],
-    sources: sourcesOf(st).map((l) => ({ level: l, label: SOURCE_NAME[l], hint: LEVEL_LABEL[l] })),
+    sources: sourcesOf(st).map((l) => ({ level: l, label: sourceName(st, l), hint: sourceHint(st, l) })),
   })) });
 }));
 
@@ -354,7 +367,7 @@ async function availableBundles(cid: number, qp: z.infer<typeof availQuery>, onl
       LIMIT ${qp.limit}`, params);
   const strictChk = st?.kind === 'FINISHING' && await ironingRequiresChecking(null, cid);
   const holds = st ? await openDcHolds(null, cid, st.id, rows.map((r) => Number(r.id))) : new Map();
-  const linkProc = st ? linkProcOf(st) : null;
+  const linkProc = st ? dcLinkProc(st) : null;
   const lineAllocs = linkProc ? await openLineAllocations(null, cid, linkProc, rows.map((r) => Number(r.id))) : new Map();
   const auto = st && !fromLine ? await autoFromLines(null, cid, st, rows.map((r) => Number(r.id))) : new Map<number, FromLine>();
   const anySewLine = fromLine?.proc === 'sewing' || [...auto.values()].some((f) => f.proc === 'sewing');
@@ -540,7 +553,7 @@ async function loadDc(cid: number, id: number) {
   });
   const st = await stageInfo(cid, dc.stage_id).catch(() => null);  // (detail view)
   return { ...dc, lines, operations, receipts, summary: { sizes, colors, sizeTotals, totals, jobs },
-    send_to: dc.unit_id ? 'UNIT' : 'CONTRACTOR', source_label: st ? LEVEL_LABEL[withSource(st, dc.source_level).level] : null };
+    send_to: dc.unit_id ? 'UNIT' : 'CONTRACTOR', source_label: st ? sourceHint(st, withSource(st, dc.source_level).level) : null };
 }
 
 processDcRouter.get('/process-dcs/receipts', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
@@ -653,7 +666,7 @@ async function prepareLines(tx: Tx, cid: number, st: StageInfo, lines: z.infer<t
   }
   ids.sort((a, b) => a - b);
   const holds = await openDcHolds(tx, cid, st.id, ids, challanId);
-  const linkProc = linkProcOf(st);
+  const linkProc = dcLinkProc(st);
   const lineAllocs = linkProc ? await openLineAllocations(tx, cid, linkProc, ids) : new Map();
   const ownLines = keepAlloc && linkProc ? await bundleOpenLines(tx, cid, linkProc, ids) : new Map<number, { line_id: number; line_code: string; line_name: string; open_qty: number }>();
   const strictChk = st.kind === 'FINISHING' && await ironingRequiresChecking(tx, cid);
@@ -786,7 +799,7 @@ async function locationCheck(cid: number, ...ids: (number | null | undefined)[])
 async function postIssue(tx: Tx, req: Request, dc: any, st: StageInfo, lines: PreparedLine[], vendorName: string, releaseAlloc = false, fromLine: FromLine | null = null) {
   const cid = req.user!.companyId;
   const lineRows = await txQuery<any>(tx, `SELECT id, bundle_id, qty FROM trx_jobwork_challan_line WHERE challan_id = ?`, [dc.id]);
-  const linkProc = releaseAlloc ? linkProcOf(st) : null;
+  const linkProc = releaseAlloc ? dcLinkProc(st) : null;
   const strictChk = st.kind === 'FINISHING' && await ironingRequiresChecking(tx, cid);
   const dcDate = String(dc.challan_date ?? new Date().toISOString()).slice(0, 10);
   for (const l of lines) {

@@ -567,7 +567,7 @@ function DcEditor({ id, stages, onClose, onSaved }: {
               value={head.outward_override_reason} onChange={(e) => setHead({ ...head, outward_override_reason: e.target.value })} />
           )}
         </div>
-        {(stage?.kind === 'SEWING' || stage?.kind === 'FINISHING' || ['PACK', 'PACKING'].includes(String(stage?.stage_code ?? '').toUpperCase())) && (
+        {!toUnit && ((stage?.kind === 'SEWING' && stage?.level === 'CUT') || stage?.kind === 'FINISHING' || ['PACK', 'PACKING'].includes(String(stage?.stage_code ?? '').toUpperCase())) && (
           <label className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-xs ${lines.some((l) => l.line_alloc) ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
             <input type="checkbox" className="mt-0.5" checked={!!head.release_line_allocation}
               onChange={(e) => setHead({ ...head, release_line_allocation: e.target.checked })} />
