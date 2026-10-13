@@ -34,6 +34,8 @@ type Avail = {
   buyer_name: string | null; buyer_po_no: string | null; assort_color?: string | null;
   /** Open in-house line allocation of the bundle for this process (stitching / ironing / packing DC). */
   line_alloc?: { allocation_no: string; line_code: string; open_qty: number } | null;
+  /** line of the previous process this bundle is allocated to — the DC books that line's output automatically */
+  auto_line?: string | null;
   /** DC "from line": PCS of the bundle still open on that line's allocation. */
   from_line_open_qty?: number | null;
 };
@@ -584,6 +586,7 @@ function DcEditor({ id, stages, onClose, onSaved }: {
             <span className="max-w-xl pb-1">
               Bundles are picked from this line's allocation, and issuing the DC <b>is the line's output</b>
               (allocation completed, daily plan achieved{srcProc !== 'ironing' ? `; PCS not yet entered in ${srcProc === 'sewing' ? 'Daily Output' : 'Checking Entry'} are posted as good` : ''}) — no second entry.
+              {' '}<b>No line picked?</b> Each bundle allocated to a {srcProc} line is still booked as that line's output automatically.
             </span>
           </div>
         )}
@@ -709,6 +712,7 @@ function DcEditor({ id, stages, onClose, onSaved }: {
                             <td className="px-2 py-1 font-mono font-semibold text-slate-800">
                               {l.bundle_no}
                               {l.line_alloc && <Badge tone="amber" className="ml-1">line {l.line_alloc.line_code} · {l.line_alloc.allocation_no}</Badge>}
+                              {!head.from_line_id && l.auto_line && <Badge tone="blue" className="ml-1">output of {l.auto_line}</Badge>}
                             </td>
                             <td className="px-2 py-1">{l.lay_no ?? '—'}</td>
                             <td className="px-2 py-1">{l.cut_no ?? '—'}</td>
@@ -1002,6 +1006,7 @@ function BundlePicker({ stage, excluded, fromLineId, onClose, onAdd }: { stage: 
                 {b.lay_no && <span className="text-slate-400">Lay {b.lay_no}</span>}
                 {b.open_dc_no && <Badge tone="amber">on {b.open_dc_no}</Badge>}
                 {b.line_alloc && <Badge tone="violet">in-house line {b.line_alloc.line_code} · {b.line_alloc.allocation_no} ({b.line_alloc.open_qty} PCS)</Badge>}
+                {!fromLineId && b.auto_line && <Badge tone="blue">output of {b.auto_line}</Badge>}
                 <span className="ml-auto font-semibold text-slate-700">{b.available_qty} PCS</span>
               </label>
             ))}

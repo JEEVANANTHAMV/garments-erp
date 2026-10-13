@@ -13,7 +13,7 @@ import {
 } from './bundleLedger.js';
 import {
   linkProcOf, openLineAllocations, releaseLineAllocation, restoreLineAllocations,
-  sourceProcOf, lineInfo, lineOpenBundles, recordLineOutput, stitchDcPending, type LinkProc,
+  sourceProcOf, lineInfo, lineOpenBundles, recordLineOutput, stitchDcPending, bundleOpenLines, openAllocBundlesSql, type LinkProc,
 } from './lineAllocationLink.js';
 import { postBundleSewingOutput, postCheckingQc } from './productionFloor.routes.js';
 import { dcBillBasis } from './billBasis.js';
@@ -34,9 +34,26 @@ function fromLineAvail(b: BundleRow, st: StageInfo, src: LinkProc, strictChk: bo
 }
 type FromLine = { proc: LinkProc; lineId: number; line: { line_code: string; line_name: string } };
 
+/** In-house line process whose output a DC of this stage carries (checking / washing / stitched garments ← sewing …). */
+const lineSourceOf = (st: StageInfo): LinkProc | null => sourceProcOf(st) ?? (st.kind === 'ROUNDTRIP' && st.level === 'SEWN' ? 'sewing' : null);
+
+/**
+ * "From line" found for the user (voice note 13-Oct-2026): a bundle allocated to a line of the previous process
+ * goes out as that line's output — allocation completed and daily plan achieved — even when nobody picked the line,
+ * so checking / ironing plans never need a second entry. Bundles not on any line are left alone.
+ */
+async function autoFromLines(tx: Tx | null, cid: number, st: StageInfo, bundleIds: number[]) {
+  const out = new Map<number, FromLine>();
+  const proc = lineSourceOf(st);
+  if (!proc || !bundleIds.length) return out;
+  const lines = await bundleOpenLines(tx, cid, proc, bundleIds);
+  for (const [bid, l] of lines) out.set(bid, { proc, lineId: l.line_id, line: { line_code: l.line_code, line_name: l.line_name } });
+  return out;
+}
+
 async function resolveFromLine(tx: Tx | null, cid: number, st: StageInfo, lineId: number | null | undefined): Promise<FromLine | null> {
   if (!lineId) return null;
-  const proc = sourceProcOf(st) ?? (st.kind === 'ROUNDTRIP' && st.level === 'SEWN' ? 'sewing' : null);
+  const proc = lineSourceOf(st);
   if (!proc) throw BadRequest(`${st.stage_name} does not follow an in-house line — "From line" is for checking, washing, ironing and packing DCs, or stitched garments`);
   const line = await lineInfo(tx, cid, proc, lineId);
   if (!line) throw BadRequest(`${proc} line #${lineId} not found`);
@@ -315,8 +332,11 @@ async function availableBundles(cid: number, qp: z.infer<typeof availQuery>, onl
   if (qp.size_id) { where.push('cb.size_id = ?'); params.push(qp.size_id); }
   if (qp.q) { where.push('(cb.bundle_no LIKE ? OR cb.barcode LIKE ?)'); params.push(`%${qp.q}%`, `%${qp.q}%`); }
   if (!qp.include_zero && !lineOpen) {
-    where.push(level === 'CUT' ? 'cb.balance_qty > 0' : level === 'SEWN' ? 'cb.sew_good_qty > 0'
-      : level === 'WIP' ? 'cb.sew_in_qty > cb.sew_good_qty + cb.sew_reject_qty + cb.out_wip_qty + cb.wip_loss_qty' : 'cb.fin_good_qty > 0');
+    const has = level === 'CUT' ? 'cb.balance_qty > 0' : level === 'SEWN' ? 'cb.sew_good_qty > 0'
+      : level === 'WIP' ? 'cb.sew_in_qty > cb.sew_good_qty + cb.sew_reject_qty + cb.out_wip_qty + cb.wip_loss_qty' : 'cb.fin_good_qty > 0';
+    // bundles still on a line of the previous process can go too — the DC posts that line's output
+    const src = st ? lineSourceOf(st) : null;
+    where.push(src ? `(${has} OR cb.id IN (${openAllocBundlesSql(src)}))` : has);
   }
   const rows = await query<any>(
     `SELECT cb.*, st.style_code, col.color_name, sz.size_code, sz.sort_order AS size_sort,
@@ -336,7 +356,9 @@ async function availableBundles(cid: number, qp: z.infer<typeof availQuery>, onl
   const holds = st ? await openDcHolds(null, cid, st.id, rows.map((r) => Number(r.id))) : new Map();
   const linkProc = st ? linkProcOf(st) : null;
   const lineAllocs = linkProc ? await openLineAllocations(null, cid, linkProc, rows.map((r) => Number(r.id))) : new Map();
-  const contractorPending = fromLine?.proc === 'sewing' || level === 'WIP' ? await stitchDcPending(null, cid, rows.map((r) => Number(r.id))) : new Map<number, number>();
+  const auto = st && !fromLine ? await autoFromLines(null, cid, st, rows.map((r) => Number(r.id))) : new Map<number, FromLine>();
+  const anySewLine = fromLine?.proc === 'sewing' || [...auto.values()].some((f) => f.proc === 'sewing');
+  const contractorPending = anySewLine || level === 'WIP' ? await stitchDcPending(null, cid, rows.map((r) => Number(r.id))) : new Map<number, number>();
   const jobs = await jobInfo(cid, rows.map((r) => r.io_no));
   const assort = await assortColors(jobs, rows);
   const data = rows.map((b) => ({
@@ -346,8 +368,9 @@ async function availableBundles(cid: number, qp: z.infer<typeof availQuery>, onl
     lay_no: b.lay_no, cut_no: b.cut_no, plan_no: b.plan_no, cutting_plan_id: b.cutting_plan_id_resolved,
     buyer_name: jobs.get(b.io_no)?.buyer_name ?? null, buyer_po_no: jobs.get(b.io_no)?.buyer_po_no ?? null,
     assort_color: assort.get(assortKey(b)) ?? null,
-    available_qty: fromLine
-      ? (() => { const f = fromLineAvail(b, st!, fromLine.proc, strictChk, contractorPending.get(Number(b.id)) ?? 0); return f.base + f.room; })()
+    auto_line: !fromLine && auto.get(Number(b.id)) ? `${auto.get(Number(b.id))!.proc} line ${auto.get(Number(b.id))!.line.line_code}` : null,
+    available_qty: (fromLine ?? auto.get(Number(b.id)))
+      ? (() => { const fl = (fromLine ?? auto.get(Number(b.id)))!; const f = fromLineAvail(b, st!, fl.proc, strictChk, contractorPending.get(Number(b.id)) ?? 0); return f.base + f.room; })()
       : strictChk ? ironingAvail(b, true)
         // part-stitched PCS with a stitching contractor are not on our floor
         : level === 'WIP' ? Math.max(availAt(b, 'WIP') - (contractorPending.get(Number(b.id)) ?? 0), 0) : availAt(b, level),
@@ -610,6 +633,8 @@ const dcSchema = z.object({
 interface PreparedLine {
   bundle: BundleRow; qty: number; weight_kg: number | null; description: string | null; remarks: string | null;
   operation_id: number | null; operator_line: string | null;
+  /** line of the previous process whose output this bundle is (picked on the DC, or found from its allocation) */
+  fromLine: FromLine | null;
 }
 
 /** Validate DC lines against bundle balances and other open DCs (bundles locked by the caller). */
@@ -630,7 +655,9 @@ async function prepareLines(tx: Tx, cid: number, st: StageInfo, lines: z.infer<t
   const unit = fromLine ? `PCS on ${fromLine.proc} line ${fromLine.line.line_code}`
     : strictChk ? 'checking-passed PCS (checking QC required before ironing)' : LEVEL_LABEL[st.level];
   const lineOpen = fromLine ? await lineOpenBundles(tx, cid, fromLine.proc, fromLine.lineId) : null;
-  const contractorPending = fromLine?.proc === 'sewing' || st.level === 'WIP' ? await stitchDcPending(tx, cid, ids) : new Map<number, number>();
+  const auto = fromLine ? new Map<number, FromLine>() : await autoFromLines(tx, cid, st, ids);
+  const anySewLine = fromLine?.proc === 'sewing' || [...auto.values()].some((f) => f.proc === 'sewing');
+  const contractorPending = anySewLine || st.level === 'WIP' ? await stitchDcPending(tx, cid, ids) : new Map<number, number>();
   const out: PreparedLine[] = [];
   const problems: string[] = [];
   for (const id of ids) {
@@ -648,8 +675,9 @@ async function prepareLines(tx: Tx, cid: number, st: StageInfo, lines: z.infer<t
       problems.push(`${b.bundle_no} is not allocated to ${fromLine!.proc} line ${fromLine!.line.line_code}`);
       continue;
     }
-    const avail = fromLine
-      ? (() => { const f = fromLineAvail(b, st, fromLine.proc, strictChk, contractorPending.get(id) ?? 0); return f.base + f.room; })()
+    const fl = fromLine ?? auto.get(id) ?? null;
+    const avail = fl
+      ? (() => { const f = fromLineAvail(b, st, fl.proc, strictChk, contractorPending.get(id) ?? 0); return f.base + f.room; })()
       : strictChk ? ironingAvail(b, true)
         : st.level === 'WIP' ? Math.max(availAt(b, 'WIP') - (contractorPending.get(id) ?? 0), 0) : availAt(b, st.level);
     const qty = l.qty ?? avail;
@@ -657,7 +685,7 @@ async function prepareLines(tx: Tx, cid: number, st: StageInfo, lines: z.infer<t
     if (qty > avail) { problems.push(`${b.bundle_no}: ${qty} PCS requested, only ${avail} ${unit}`); continue; }
     out.push({
       bundle: b, qty, weight_kg: l.weight_kg ?? null, description: l.description ?? null, remarks: l.remarks ?? null,
-      operation_id: l.operation_id ?? null, operator_line: l.operator_line ?? null,
+      operation_id: l.operation_id ?? null, operator_line: l.operator_line ?? fl?.line.line_code ?? null, fromLine: fl,
     });
   }
   if (problems.length) {
@@ -665,6 +693,14 @@ async function prepareLines(tx: Tx, cid: number, st: StageInfo, lines: z.infer<t
       problems.map((message) => ({ message })));
   }
   return out;
+}
+
+/** Line shown on the DC header: the picked one, else the one line every bundle came from (several lines → none). */
+function lineOf(fromLine: FromLine | null, lines: PreparedLine[]) {
+  if (fromLine) return { proc: fromLine.proc, lineId: fromLine.lineId };
+  const ids = new Set(lines.map((l) => (l.fromLine ? `${l.fromLine.proc}|${l.fromLine.lineId}` : '-')));
+  const f = lines[0]?.fromLine;
+  return ids.size === 1 && f ? { proc: f.proc, lineId: f.lineId } : { proc: null, lineId: null };
 }
 
 async function writeLines(tx: Tx, challanId: number, st: StageInfo, lines: PreparedLine[]) {
@@ -748,22 +784,24 @@ async function postIssue(tx: Tx, req: Request, dc: any, st: StageInfo, lines: Pr
   const strictChk = st.kind === 'FINISHING' && await ironingRequiresChecking(tx, cid);
   const dcDate = String(dc.challan_date ?? new Date().toISOString()).slice(0, 10);
   for (const l of lines) {
-    // DC from a line: PCS not yet posted as that line's output are posted now, then booked to its plan.
-    if (fromLine) {
+    // DC from a line (picked, or found from the bundle's allocation): PCS not yet posted as that line's output are
+    // posted now, then booked to its allocation and daily plan — no second entry on the floor.
+    const fl = fromLine ?? l.fromLine;
+    if (fl) {
       const b0 = await lockBundle(tx, cid, { id: l.bundle.id });
-      const short = l.qty - fromLineAvail(b0, st, fromLine.proc, strictChk).base;
-      if (short > 0 && fromLine.proc === 'sewing') {
+      const short = l.qty - fromLineAvail(b0, st, fl.proc, strictChk).base;
+      if (short > 0 && fl.proc === 'sewing') {
         await postBundleSewingOutput(tx, req, b0.id, {
-          date: dcDate, line_name: fromLine.line.line_code, line_aliases: [fromLine.line.line_name],
+          date: dcDate, line_name: fl.line.line_code, line_aliases: [fl.line.line_name],
           good: short, reject: 0, rework: 0, remarks: `Output on ${st.stage_name} DC ${dc.challan_no}`,
         });
-      } else if (short > 0 && fromLine.proc === 'checking') {
+      } else if (short > 0 && fl.proc === 'checking') {
         await postCheckingQc(tx, req, b0.id, {
-          date: dcDate, line_name: fromLine.line.line_code, good: short, reject: 0, rework: 0,
+          date: dcDate, line_name: fl.line.line_code, good: short, reject: 0, rework: 0,
           remarks: `Passed on ${st.stage_name} DC ${dc.challan_no}`,
         });
       }
-      await recordLineOutput(tx, req, fromLine.proc, fromLine.lineId, b0.id, l.qty, dcDate, `${st.stage_name} DC ${dc.challan_no}`);
+      await recordLineOutput(tx, req, fl.proc, fl.lineId, b0.id, l.qty, dcDate, `${st.stage_name} DC ${dc.challan_no}${fromLine ? '' : ' (line found from allocation)'}`);
       l.bundle = await lockBundle(tx, cid, { id: b0.id });
     }
     // PCS leaving on the DC come off the bundle's in-house line allocation / daily plan.
@@ -858,7 +896,7 @@ processDcRouter.post('/process-dcs', requirePermission('PRODUCTION.CREATE'), ah(
        body.expected_return ?? null, body.remarks ?? null, h.io_no, body.cutting_plan_id ?? null, h.style_id,
        body.vehicle_no ?? null, body.driver_name ?? null, body.transporter ?? null, body.ref_no ?? null,
        body.from_warehouse_id ?? null, body.to_warehouse_id ?? null, body.release_line_allocation ? 1 : 0,
-       fromLine?.proc ?? null, fromLine?.lineId ?? null, basis ?? null, body.unit_id ?? null, sourcesOf(st).length > 1 ? st.level : null, req.user!.id]);
+       lineOf(fromLine, lines).proc, lineOf(fromLine, lines).lineId, basis ?? null, body.unit_id ?? null, sourcesOf(st).length > 1 ? st.level : null, req.user!.id]);
     const dc = { id: r.insertId, challan_no: challanNo, challan_date: body.challan_date };
     if (ol) await txExecute(tx, `UPDATE trx_jobwork_challan SET jw_order_id = ?, jw_order_line_id = ?, outward_override_reason = ? WHERE id = ?`,
       [ol.line.order_id, ol.line.id, ol.override ? body.outward_override_reason : null, dc.id]);
@@ -909,7 +947,7 @@ processDcRouter.put('/process-dcs/:id', requirePermission('PRODUCTION.UPDATE'), 
        body.expected_return ?? null, body.remarks ?? null, h.io_no, body.cutting_plan_id ?? null, h.style_id,
        body.vehicle_no ?? null, body.driver_name ?? null, body.transporter ?? null, body.ref_no ?? null,
        body.from_warehouse_id ?? null, body.to_warehouse_id ?? null, body.release_line_allocation ? 1 : 0,
-       fromLine?.proc ?? null, fromLine?.lineId ?? null, basis ?? null, body.unit_id ?? null, sourcesOf(st).length > 1 ? st.level : null, req.user!.id, id]);
+       lineOf(fromLine, lines).proc, lineOf(fromLine, lines).lineId, basis ?? null, body.unit_id ?? null, sourcesOf(st).length > 1 ? st.level : null, req.user!.id, id]);
     // Draft lines have no ledger effect yet, so replacing them is safe.
     await txExecute(tx, `DELETE FROM trx_jobwork_challan_line WHERE challan_id = ?`, [id]);
     await writeLines(tx, id, st, lines);

@@ -157,6 +157,28 @@ export async function lineOpenBundles(tx: Tx | null, cid: number, proc: LinkProc
 }
 
 /**
+ * The line each bundle is allocated to (confirmed allocation, PCS still open) — the line with the most open PCS
+ * when a bundle sits on more than one. Lets a DC book the line's output without the user picking the line.
+ */
+export async function bundleOpenLines(tx: Tx | null, cid: number, proc: LinkProc, bundleIds: number[]) {
+  const map = new Map<number, { line_id: number; line_code: string; line_name: string; open_qty: number }>();
+  if (!bundleIds.length) return map;
+  const t = T[proc];
+  const sql = `SELECT d.bundle_id, d.line_id, l.line_code, l.line_name,
+                      SUM(GREATEST(CAST(d.allocated_qty AS SIGNED) - CAST(d.completed_qty AS SIGNED), 0)) AS open_qty
+                 FROM ${t.allocD} d JOIN ${t.alloc} h ON h.id = d.allocation_id JOIN ${t.line} l ON l.id = d.line_id
+                WHERE h.company_id = ? AND h.status = 'CONFIRMED' AND d.status = 'ALLOCATED' AND d.bundle_id IN (?)
+                GROUP BY d.bundle_id, d.line_id, l.line_code, l.line_name
+                ORDER BY open_qty DESC, d.line_id`;
+  const rows = tx ? await txQuery<any>(tx, sql, [cid, bundleIds]) : await query<any>(sql, [cid, bundleIds]);
+  for (const r of rows) {
+    if (n(r.open_qty) <= 0 || map.has(Number(r.bundle_id))) continue;
+    map.set(Number(r.bundle_id), { line_id: Number(r.line_id), line_code: r.line_code, line_name: r.line_name, open_qty: n(r.open_qty) });
+  }
+  return map;
+}
+
+/**
  * Book `qty` PCS of a bundle as output of a line: allocation completed and the
  * open daily-plan rows (plan date up to the DC date, oldest first) achieved.
  */
@@ -315,4 +337,11 @@ export async function restoreLineAllocations(tx: Tx, req: Request, challanId: nu
   }
   await audit(req, 'trx_dc_alloc_release', challanId, 'UPDATE', undefined, { action: 'RESTORED_ON_DC_CANCEL', challan_id: challanId, result: out }, tx);
   return out;
+}
+
+/** SQL subquery: bundles with an open confirmed allocation on any line of the process (for stock pickers). */
+export function openAllocBundlesSql(proc: LinkProc) {
+  const t = T[proc];
+  return `SELECT d.bundle_id FROM ${t.allocD} d JOIN ${t.alloc} h ON h.id = d.allocation_id
+           WHERE h.status = 'CONFIRMED' AND d.status = 'ALLOCATED' AND d.allocated_qty > d.completed_qty`;
 }
