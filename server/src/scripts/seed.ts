@@ -739,6 +739,10 @@ async function main() {
     ['accounts', 'Ganesh Subramani',  'accounts@ckexports.in', 'ACCOUNTANT'],
     ['fpuser',   'Karthik Process',   'fpuser@ckexports.in',   'PRODUCTION_USER'],
     ['fpmgr',    'Saravanan Process', 'fpmgr@ckexports.in',    'PROCESS_MANAGER'],
+    ['embop',    'Vignesh Embroidery', 'embop@ckexports.in',   'EMBROIDERY_OPERATOR'],
+    ['embsup',   'Dinesh Embroidery',  'embsup@ckexports.in',  'EMBROIDERY_SUPERVISOR'],
+    ['prtop',    'Arun Printing',      'prtop@ckexports.in',   'PRINTING_OPERATOR'],
+    ['prtsup',   'Mohan Printing',     'prtsup@ckexports.in',  'PRINTING_SUPERVISOR'],
   ];
   for (const [username, fullName, email, roleCode] of USERS) {
     await exec(`INSERT INTO mst_user (company_id,username,password_hash,full_name,email,default_branch)

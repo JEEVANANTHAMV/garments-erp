@@ -238,6 +238,19 @@ export function buildPermissions(): [string, string, string][] {
     ['JOB_TRANSFER.APPROVE','Approve job-to-job stock transfers','INVENTORY'],
     ['YARN_SUBSTITUTION.CREATE','Raise yarn substitution requests','PRODUCTION'],
     ['YARN_SUBSTITUTION.APPROVE','Approve yarn substitution / manage substitution rules','PRODUCTION'],
+    // Embroidery / printing machine output & costing (developer docs §27 / §25: operator, supervisor, store, costing, admin)
+    ...(['EMBROIDERY', 'PRINTING'] as const).flatMap((k): [string, string, string][] => {
+      const p = k === 'EMBROIDERY' ? 'Embroidery' : 'Printing';
+      return [
+        [`${k}.VIEW`, `View ${p} jobs, production and reports`, 'PRODUCTION'],
+        [`${k}.CREATE`, `Create ${p} production drafts, output and downtime`, 'PRODUCTION'],
+        [`${k}.SUBMIT`, `Edit / submit ${p} production, create jobs`, 'PRODUCTION'],
+        [`${k}.APPROVE`, `Approve / reject ${p} production and exceptions`, 'PRODUCTION'],
+        [`${k}.STORE`, `${p} material issue and return`, 'PRODUCTION'],
+        [`${k}.COSTING`, `View / validate ${p} costing`, 'PRODUCTION'],
+        [`${k}.MASTER`, `${p} machine / rate / design / recipe masters`, 'PRODUCTION'],
+      ];
+    }),
   ];
   out.push(...extras);
   return out;
@@ -411,6 +424,32 @@ for (const r of ROLES) {
   if (r.permissions === '*') continue;
   if (['PRODUCTION_MANAGER', 'PROCESS_MANAGER'].includes(r.code)) r.permissions.push('JOB_TRANSFER.APPROVE', 'YARN_SUBSTITUTION.CREATE', 'YARN_SUBSTITUTION.APPROVE');
   if (['STORE_KEEPER', 'PRODUCTION_USER', 'FABRIC_STORE'].includes(r.code)) r.permissions.push('YARN_SUBSTITUTION.CREATE');
+}
+
+// Embroidery / printing machine output & costing — role split of the developer docs (§27 / §25).
+for (const k of ['EMBROIDERY', 'PRINTING']) {
+  const p = k === 'EMBROIDERY' ? 'Embroidery' : 'Printing';
+  ROLES.push(
+    { code: `${k}_OPERATOR`, name: `${p} Operator`, description: `${p}: production drafts, output and downtime`,
+      permissions: ['DASHBOARD.VIEW', 'PRODUCTION.VIEW', `${k}.VIEW`, `${k}.CREATE`] },
+    { code: `${k}_SUPERVISOR`, name: `${p} Supervisor`, description: `${p}: jobs, edit / submit / approve production, variance review`,
+      permissions: ['DASHBOARD.VIEW', 'PRODUCTION.VIEW', 'STYLE.VIEW', 'SALES_ORDER.VIEW', 'INVENTORY.VIEW', 'REPORT.VIEW',
+        `${k}.VIEW`, `${k}.CREATE`, `${k}.SUBMIT`, `${k}.APPROVE`, `${k}.COSTING`] },
+  );
+}
+const MP_GRANTS: Record<string, string[]> = {
+  ADMIN: ['*'],
+  PRODUCTION_MANAGER: ['VIEW', 'CREATE', 'SUBMIT', 'APPROVE', 'COSTING'],
+  PROCESS_MANAGER: ['VIEW', 'CREATE', 'SUBMIT', 'APPROVE', 'COSTING', 'MASTER'],
+  PRODUCTION_USER: ['VIEW', 'CREATE'],
+  STORE_KEEPER: ['VIEW', 'STORE'],
+  ACCOUNTANT: ['VIEW', 'COSTING'],
+  VIEWER: ['VIEW'],
+};
+for (const r of ROLES) {
+  const g = MP_GRANTS[r.code];
+  if (!g || r.permissions === '*') continue;
+  for (const k of ['EMBROIDERY', 'PRINTING']) r.permissions.push(...(g[0] === '*' ? [`${k}.*`] : g.map((v) => `${k}.${v}`)));
 }
 
 /** Expand 'MODULE.*' wildcards against the real permission list. */

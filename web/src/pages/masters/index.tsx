@@ -2,6 +2,7 @@ import { CrudPage } from '../../components/CrudPage';
 import { Badge } from '../../components/ui';
 import { fmtDecimal, fmtDate, humanize } from '../../lib/format';
 import { useNavigate } from 'react-router-dom';
+import { TRIM_CERTIFICATIONS } from '../../lib/certifications';
 
 const yesNo = [{ value: 1, label: 'Yes' }, { value: 0, label: 'No' }];
 const activeField = { name: 'is_active', label: 'Active', type: 'checkbox' as const, defaultValue: 1 };
@@ -215,7 +216,9 @@ export { FabricsPage, FabricDetailPage } from './Fabrics';
 
 /* --------------------------------------------------------------- Trims */
 export function TrimsPage() {
-  const TYPES = ['BUTTON','ZIPPER','LABEL','THREAD','ELASTIC','DRAWCORD','HANGTAG','STICKER','POLYBAG','CARTON','HANGER','TAPE','RIVET','VELCRO','LACE','OTHER'];
+  const TYPES = ['BUTTON','ZIPPER','LABEL','THREAD','ELASTIC','DRAWCORD','HANGTAG','STICKER','POLYBAG','CARTON','HANGER','TAPE','RIVET','VELCRO','LACE','OTHER',
+    // embroidery / printing consumables
+    'BOBBIN_THREAD','BACKING','TOPPING','ADHESIVE','NEEDLE','DYE','PIGMENT','INK','BINDER','CHEMICAL'];
   return <CrudPage
     path="trims" title="Trims & Accessories" permission="MATERIAL" singular="Trim"
     subtitle="Labels, threads, buttons, packing materials"
@@ -227,18 +230,19 @@ export function TrimsPage() {
       { key: 'trim_type', header: 'Type', render: (r: any) => <Badge tone="violet">{humanize(r.trim_type)}</Badge> },
       { key: 'specification', header: 'Specification' },
       { key: 'certification', header: 'Certification',
-        render: (r: any) => r.certification ? <Badge tone="emerald">{r.certification}</Badge> : '—' },
+        render: (r: any) => r.certification && r.certification !== 'NONE' ? <Badge tone="emerald">{r.certification}</Badge> : '—' },
       { key: 'uom_code', header: 'UOM' },
       { key: 'std_rate', header: 'Rate', align: 'right', render: (r: any) => fmtDecimal(r.std_rate, 2) },
     ]}
-    filters={[{ name: 'trim_type', label: 'Trim type', options: TYPES.map((v) => ({ value: v, label: humanize(v) })) }]}
+    filters={[{ name: 'trim_type', label: 'Trim type', options: TYPES.map((v) => ({ value: v, label: humanize(v) })) },
+              { name: 'certification', label: 'Certification', options: TRIM_CERTIFICATIONS }]}
     fields={[
       { name: 'trim_code', label: 'Trim code', required: true },
       { name: 'trim_name', label: 'Trim name', required: true },
       { name: 'category_id', label: 'Category', lookup: 'material-categories' },
       { name: 'trim_type', label: 'Trim type', required: true, options: TYPES.map((v) => ({ value: v, label: humanize(v) })) },
       { name: 'specification', label: 'Specification', span: 2 },
-      { name: 'certification', label: 'Certification', placeholder: 'e.g. OEKO-TEX Standard 100, GOTS, GRS, FSC' },
+      { name: 'certification', label: 'Certification', options: TRIM_CERTIFICATIONS, defaultValue: 'NONE' },
       { name: 'hsn_code', label: 'HSN code' },
       { name: 'base_uom', label: 'Base UOM', required: true, lookup: 'uoms' },
       { name: 'std_rate', label: 'Standard rate', type: 'number' },

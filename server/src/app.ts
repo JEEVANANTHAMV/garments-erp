@@ -67,6 +67,7 @@ import { tnaRouter } from './modules/tna/tna.routes.js';
 import { jobworkDivisionRouter } from './modules/production/jobworkDivision.js';
 import { lineAllocationPlanRouter } from './modules/production/lineAllocationPlan.routes.js';
 import { jobWorkRouter } from './modules/production/jobWork.routes.js';
+import { machineProcessRouter } from './modules/machineProcess/machineProcess.routes.js';
 
 export function createApp() {
   const app = express();
@@ -131,6 +132,8 @@ export function createApp() {
   api.use('/', shipmentRouter);               // /packing-lists, /shipments, /dispatches, /available-packages
   api.use('/', productionStagesRouter);       // /fabric-issues, /lay-plans, /cut-piece-qc, /bundles/generate-detailed
   api.use('/', productionFloorRouter);        // /bundles/scan, /sewing, /finishing, /final-qc
+  api.use('/embroidery', machineProcessRouter('EMBROIDERY')); // embroidery machines, designs, recipes, jobs, material, production, costing, reports
+  api.use('/printing', machineProcessRouter('PRINTING'));     // printing machines, recipes (dyes / chemicals), jobs, material, production, costing, reports
   api.use('/', jobWorkRouter);                // /job-work/* (job work orders, fabric DCs, contractor stock, rates), /contractor-credit-notes, /contractor-payments
   api.use('/', processDcRouter);              // /process-dcs (bundle DCs: stitching/ironing/packing), /bundle-stock/available
   api.use('/', processMasterRouter);          // /process-master (processes, operations, contractor rates), /contractor-bills

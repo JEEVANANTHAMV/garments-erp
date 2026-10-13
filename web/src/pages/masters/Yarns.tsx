@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { CERTIFICATIONS } from '../../lib/certifications';
 import { MasterValueSelect, useMasterValues } from '../../components/MasterValueSelect';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -715,14 +716,7 @@ export function YarnDetailPage() {
 
           <Select
             label="Environmental Certification"
-            options={[
-              { value: 'GOTS', label: 'GOTS (Global Organic Textile Standard)' },
-              { value: 'OEKO-TEX', label: 'OEKO-TEX Standard 100' },
-              { value: 'BCI', label: 'BCI (Better Cotton Initiative)' },
-              { value: 'GRS', label: 'GRS (Global Recycled Standard)' },
-              { value: 'OCS', label: 'OCS (Organic Content Standard)' },
-              { value: 'NONE', label: 'None / Standard' },
-            ]}
+            options={CERTIFICATIONS}
             value={head.certification}
             onChange={(e) => setHead((s) => ({ ...s, certification: e.target.value }))}
             disabled={!editable}

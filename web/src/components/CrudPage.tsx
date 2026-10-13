@@ -296,9 +296,13 @@ function FormControl({ field, value, error, onChange }: {
   const statuses = useStatuses(field.statusDomain ?? '');
   const span = field.span === 2 || field.type === 'textarea' ? 'sm:col-span-2' : '';
 
-  const options = field.options
+  let options = field.options
     ?? (field.lookup ? toOptions(lookup.data) : undefined)
     ?? (field.statusDomain ? toPlainOptions(statuses.data) : undefined);
+  // A value saved before the field became a fixed list (typed text on an old record) still shows and is kept.
+  if (field.options && value != null && value !== '' && !field.options.some((o) => String(o.value) === String(value))) {
+    options = [...field.options, { value: value as string | number, label: `${value} (current)` }];
+  }
 
   if (field.type === 'checkbox') {
     return (

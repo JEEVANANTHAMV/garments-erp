@@ -408,13 +408,15 @@ export const masterResources: ResourceConfig[] = [
   {
     path: 'trims', table: 'mst_trim', permission: 'MATERIAL', label: 'Trim',
     searchable: ['trim_code', 'trim_name', 'specification'], sortable: ['trim_code', 'trim_name'],
-    defaultSort: 't.trim_name', filters: ['category_id', 'trim_type'],
+    defaultSort: 't.trim_name', filters: ['category_id', 'trim_type', 'certification'],
     selectExtra: 'u.code AS uom_code, cat.category_name',
     joins: `LEFT JOIN cfg_uom u ON u.id = t.base_uom
             LEFT JOIN mst_material_category cat ON cat.id = t.category_id`,
     fields: [
       f('trim_code', s.strReq(40)), f('trim_name', s.strReq(150)), f('category_id', s.id()),
-      f('trim_type', s.enumReq(['BUTTON','ZIPPER','LABEL','THREAD','ELASTIC','DRAWCORD','HANGTAG','STICKER','POLYBAG','CARTON','HANGER','TAPE','RIVET','VELCRO','LACE','OTHER'])),
+      f('trim_type', s.enumReq(['BUTTON','ZIPPER','LABEL','THREAD','ELASTIC','DRAWCORD','HANGTAG','STICKER','POLYBAG','CARTON','HANGER','TAPE','RIVET','VELCRO','LACE','OTHER',
+        // embroidery / printing consumables (migration 112)
+        'BOBBIN_THREAD','BACKING','TOPPING','ADHESIVE','NEEDLE','DYE','PIGMENT','INK','BINDER','CHEMICAL'])),
       f('specification', s.nullableStr(200)), f('certification', s.nullableStr(150)), f('hsn_code', s.nullableStr(10)),
       f('base_uom', s.idReq()), f('std_rate', s.dec()), f('is_active', s.bool()),
     ],

@@ -23,7 +23,7 @@ uploadRouter.post('/', ah(async (req, res) => {
   const schema = z.object({
     filename: z.string().trim().min(1).default('image.png'),
     data: z.string().min(1), // Data URI (e.g. data:image/jpeg;base64,...) or raw base64
-    folder: z.enum(['styles', 'documents', 'attachments', 'cad']).default('styles'),
+    folder: z.enum(['styles', 'documents', 'attachments', 'cad', 'designs']).default('styles'),
   });
 
   const { filename, data, folder } = schema.parse(req.body);
@@ -47,13 +47,17 @@ uploadRouter.post('/', ah(async (req, res) => {
   // Document folders also take PDF (party DC scans, bills); style images stay image-only.
   // The CAD folder keeps the original marker export a marker import was made from (doc §4.1: stored for audit).
   if (folder === 'cad' && dataUriMatch) extension = path.extname(filename).toLowerCase() || extension;
+  // Embroidery programs (DST / DSB / EMB …) and print artwork are kept as the approved design file (embroidery doc §5).
+  if (folder === 'designs' && dataUriMatch) extension = path.extname(filename).toLowerCase() || extension;
   const allowed = folder === 'styles' ? IMAGE_EXT
     : folder === 'cad' ? ['.csv', '.xlsx', '.xls', '.xml', '.txt', '.dxf', '.plx', '.hpgl', '.plt', '.pdf']
-      : [...IMAGE_EXT, '.pdf'];
+      : folder === 'designs' ? [...IMAGE_EXT, '.pdf', '.dst', '.dsb', '.emb', '.pes', '.exp', '.jef', '.vp3', '.xxx', '.dsz', '.tbf']
+        : [...IMAGE_EXT, '.pdf'];
   if (extension && !allowed.includes(extension)) {
     throw BadRequest(folder === 'styles'
       ? 'Invalid image file format. Supported formats: PNG, JPG, JPEG, WEBP, GIF, SVG.'
       : folder === 'cad' ? 'Invalid CAD file. Supported: CSV, XLSX, XLS, XML, TXT, DXF, PLX, HPGL, PLT, PDF.'
+        : folder === 'designs' ? 'Invalid design file. Supported: DST, DSB, EMB, PES, EXP, JEF, VP3, XXX, DSZ, TBF, PDF, PNG, JPG, SVG.'
         : 'Invalid file format. Supported formats: PDF, PNG, JPG, JPEG, WEBP, GIF, SVG.');
   }
 

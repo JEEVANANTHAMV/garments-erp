@@ -178,6 +178,8 @@ export const NAV: NavSection[] = [
       { label: 'Washing',              to: '/production/washings', icon: Beaker, perms: ['PRODUCTION.VIEW'], hidden: true },
       { label: 'Finishing',            to: '/production/finishings', icon: PackageCheck, perms: ['PRODUCTION.VIEW'], hidden: true },
       { label: 'Process Movements',    to: '/production/process-transactions', icon: GitBranch, perms: ['PRODUCTION.VIEW'], hidden: true },
+      { label: 'Embroidery – Machine Output & Cost', to: '/production/embroidery', icon: Palette, perms: ['EMBROIDERY.VIEW'] },
+      { label: 'Printing – Machine Output & Cost', to: '/production/printing', icon: Palette, perms: ['PRINTING.VIEW'] },
       { label: 'Job Work Orders',      to: '/production/job-work-orders', icon: ClipboardList, perms: ['PRODUCTION.VIEW'] },
       { label: 'Job Work Dashboard',   to: '/production/job-work-dashboard', icon: Gauge, perms: ['PRODUCTION.VIEW'] },
       { label: 'Process Outward (DC)', to: '/production/jobwork-challans', icon: Truck, perms: ['PRODUCTION.VIEW'] },
