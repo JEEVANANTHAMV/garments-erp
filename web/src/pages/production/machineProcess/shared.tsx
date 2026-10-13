@@ -14,12 +14,18 @@ export const ROLES: Record<Kind, string[]> = {
   EMBROIDERY: ['THREAD', 'BOBBIN', 'BACKING', 'TOPPING', 'ADHESIVE', 'OTHER'],
   PRINTING: ['DYE', 'PIGMENT', 'CHEMICAL', 'BINDER', 'INK', 'OTHER'],
 };
+/** Recipe role a trims type suggests. */
+export const ROLE_OF_TYPE: Record<string, string> = {
+  THREAD: 'THREAD', BOBBIN_THREAD: 'BOBBIN', BACKING: 'BACKING', TOPPING: 'TOPPING', ADHESIVE: 'ADHESIVE',
+  DYE: 'DYE', PIGMENT: 'PIGMENT', INK: 'INK', BINDER: 'BINDER', CHEMICAL: 'CHEMICAL',
+};
 export const PRINT_TYPES = ['PIGMENT', 'REACTIVE', 'DISCHARGE', 'DIGITAL', 'SCREEN', 'ROTARY', 'SUBLIMATION', 'RUBBER', 'PUFF', 'FOIL', 'OTHER'];
 
 export const errMsg = (e: any) => e?.message || 'Request failed';
 export const num = (v: unknown) => Number(v ?? 0) || 0;
 export const human = (s: unknown) => String(s ?? '').replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
 export const money = (v: unknown) => (v == null || v === '' ? '—' : `₹${num(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+export const rate4 = (v: unknown) => (v == null || v === '' ? '—' : `₹${num(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`);
 export const qty = (v: unknown, dp = 2) => (v == null || v === '' ? '—' : num(v).toLocaleString('en-IN', { maximumFractionDigits: dp }));
 export const pctTxt = (v: unknown) => (v == null || v === '' ? '—' : `${num(v).toFixed(2)}%`);
 export const ST_TONE: Record<string, string> = {

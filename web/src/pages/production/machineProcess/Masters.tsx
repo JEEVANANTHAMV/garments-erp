@@ -6,7 +6,7 @@ import { fmtDate } from '../../../lib/format';
 import { useToast } from '../../../hooks/useToast';
 import { useLookup, toOptions } from '../../../hooks/useLookup';
 import {
-  type Kind, BASE, LABEL, MACHINE_TYPES, ROLES, PRINT_TYPES, ST_TONE, errMsg, num, human, money, qty, usePerm, useGet, Section, MiniTable, uploadFile,
+  type Kind, BASE, LABEL, MACHINE_TYPES, ROLES, ROLE_OF_TYPE, PRINT_TYPES, ST_TONE, errMsg, num, human, money, qty, usePerm, useGet, Section, MiniTable, uploadFile,
 } from './shared';
 
 /** Masters of the embroidery / printing engine: machines + rates, designs / artwork, recipes, reasons. */
@@ -397,7 +397,7 @@ function RecipeEditor({ kind, row, onClose, onSaved }: { kind: Kind; row: any; o
                 return (
                   <tr key={idx} className="border-t border-slate-100">
                     <td className="px-2 py-1"><select className="input h-8 w-64" id={`mp-recipe-${idx}-trim`} disabled={ro} value={i.trim_id}
-                      onChange={(e) => { const mm = mat(e.target.value); upd(idx, { trim_id: e.target.value, uom_id: i.uom_id || mm?.base_uom || '' }); }}>
+                      onChange={(e) => { const mm = mat(e.target.value); const role = ROLE_OF_TYPE[mm?.trim_type]; upd(idx, { trim_id: e.target.value, uom_id: i.uom_id || mm?.base_uom || '', ...(role && ROLES[kind].includes(role) ? { material_role: role } : {}) }); }}>
                       <option value="">— material —</option>{(materials.data ?? []).map((t: any) => <option key={t.id} value={t.id}>{t.preferred ? '' : '· '}{t.code} · {t.label} ({t.uom_code}, stock {qty(t.stock_qty)})</option>)}</select></td>
                     <td className="px-2 py-1"><select className="input h-8 w-28" disabled={ro} value={i.material_role} onChange={(e) => upd(idx, { material_role: e.target.value })}>{ROLES[kind].map((r) => <option key={r} value={r}>{human(r)}</option>)}</select></td>
                     <td className="px-2 py-1"><select className="input h-8 w-40" id={`mp-recipe-${idx}-basis`} disabled={ro} value={i.basis} onChange={(e) => upd(idx, { basis: e.target.value })}>

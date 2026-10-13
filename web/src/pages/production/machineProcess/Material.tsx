@@ -4,7 +4,7 @@ import { Card, Badge, Button, Input, Select, Modal, DataTable } from '../../../c
 import { api } from '../../../lib/api';
 import { fmtDate } from '../../../lib/format';
 import { useToast } from '../../../hooks/useToast';
-import { type Kind, BASE, ST_TONE, errMsg, num, human, money, qty, usePerm, useGet } from './shared';
+import { type Kind, BASE, ST_TONE, errMsg, num, human, money, rate4, qty, usePerm, useGet } from './shared';
 
 /**
  * Store issue / return of thread, backing, dyes, chemicals … against a job (embroidery doc §8, printing doc §7),
@@ -63,6 +63,7 @@ export function MaterialDialog({ kind, type, jobId, productionId, onClose, onDon
   const [qtys, setQtys] = useState<Record<string, string>>({});
   const [req, setReq] = useState<any>(null);
   const [busy, setBusy] = useState(false);
+  const [all, setAll] = useState(false);
   useEffect(() => {
     setLots([]); setQtys({}); setReq(null);
     if (!job) return;
@@ -88,6 +89,8 @@ export function MaterialDialog({ kind, type, jobId, productionId, onClose, onDon
     const m = req?.materials?.find((x: any) => Number(x.trim_id) === trimId);
     return { need: r ? num(r.stock_qty) : null, net: m ? num(m.net_issued) : 0, balance: m ? num(m.balance) : 0 };
   };
+  const recipeTrims = new Set<number>((req?.requirement ?? []).map((r: any) => Number(r.trim_id)));
+  const shownLots = type === 'ISSUE' && !all && recipeTrims.size ? lots.filter((l) => recipeTrims.has(Number(l.trim_id)) || num(qtys[l.trim_stock_id]) > 0) : lots;
   const lines = useMemo(() => Object.entries(qtys).filter(([, v]) => num(v) > 0).map(([k, v]) => ({ trim_stock_id: Number(k), qty: num(v) })), [qtys]);
   const post = async () => {
     setBusy(true);
@@ -115,7 +118,7 @@ export function MaterialDialog({ kind, type, jobId, productionId, onClose, onDon
               <th className="px-2 py-1 text-right">Job standard</th><th className="px-2 py-1 text-right">Issued so far</th><th className="px-2 py-1 text-right">Unconsumed</th>
               {type === 'ISSUE' && <th className="px-2 py-1 text-right">Rate</th>}<th className="px-2 py-1 text-right">Qty</th>
             </tr></thead>
-            <tbody>{lots.map((l) => {
+            <tbody>{shownLots.map((l) => {
               const n2 = needOf(Number(l.trim_id));
               return (
                 <tr key={l.trim_stock_id} className="border-t border-slate-100">
@@ -125,13 +128,14 @@ export function MaterialDialog({ kind, type, jobId, productionId, onClose, onDon
                   <td className="px-2 py-1 text-right">{n2.need != null ? qty(n2.need, 4) : '—'}</td>
                   <td className="px-2 py-1 text-right">{qty(n2.net, 4)}</td>
                   <td className="px-2 py-1 text-right">{qty(n2.balance, 4)}</td>
-                  {type === 'ISSUE' && <td className="px-2 py-1 text-right">{money(l.unit_cost)}</td>}
+                  {type === 'ISSUE' && <td className="px-2 py-1 text-right">{rate4(l.unit_cost)}</td>}
                   <td className="px-2 py-1 text-right"><input className="input h-8 w-24 text-right" type="number" min={0} step="any" id={`mp-mat-qty-${l.trim_id}`}
-                    value={qtys[l.trim_stock_id] ?? ''} onChange={(e) => setQtys({ ...qtys, [l.trim_stock_id]: e.target.value })} /></td>
+                    value={qtys[l.trim_stock_id] ?? ''} onChange={(e) => { const v = e.target.value; setQtys((q) => ({ ...q, [l.trim_stock_id]: v })); }} /></td>
                 </tr>
               );
             })}</tbody>
           </table>
+          {type === 'ISSUE' && recipeTrims.size > 0 && <label className="mt-2 flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />Show materials outside the job's recipe too ({lots.length - shownLots.length} more lots)</label>}
           {!lots.length && <p className="py-3 text-center text-xs text-slate-400">{type === 'ISSUE' ? 'No trims stock lots (general stock or this job\'s) — receive the material through a Trims GRN first' : 'Nothing issued to this job'}</p>}
           <p className="mt-2 text-[11px] text-slate-500">"Job standard" is the recipe requirement for the planned qty in stock units. Another job's lot must be transferred to this job first (Job Transfer).</p>
         </div>}

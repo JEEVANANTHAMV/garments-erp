@@ -5,7 +5,7 @@ import { api } from '../../../lib/api';
 import { fmtDate, fmtDateTime } from '../../../lib/format';
 import { useToast } from '../../../hooks/useToast';
 import { useLookup } from '../../../hooks/useLookup';
-import { type Kind, BASE, LABEL, ST_TONE, errMsg, num, human, money, qty, pctTxt, usePerm, useGet, Section, Kv, MiniTable } from './shared';
+import { type Kind, BASE, LABEL, ST_TONE, errMsg, num, human, money, rate4, qty, pctTxt, usePerm, useGet, Section, Kv, MiniTable } from './shared';
 import { MaterialDialog } from './Material';
 
 /** Production entries list (machine output by date / shift / machine). */
@@ -213,8 +213,8 @@ export function ProductionForm({ kind, id: id0, jobId, onClose }: { kind: Kind; 
             options={jobOpts.map((j: any) => ({ value: j.id, label: `${j.job_no} · ${j.io_no ?? ''} ${j.style_code ?? ''} · ${qty(j.planned_qty)} ${j.uom ?? ''}` }))} />
           <div className="col-span-2 rounded-lg bg-slate-50 p-2 text-[11px] text-slate-600">
             {job ? <>
-              <div><b>{job.buyer_name ?? '—'}</b> · {job.io_no ?? '—'} · {job.style_code ?? '—'}{job.color_name ? ` · ${job.color_name}` : ''}</div>
-              <div>{kind === 'EMBROIDERY' ? 'Design' : 'Artwork'} {job.design_code ? `${job.design_code} v${job.design_version}` : '—'} · {job.placement ?? '—'}{job.stitches_per_pc ? ` · ${qty(job.stitches_per_pc, 0)} st/pc` : ''}</div>
+              {[job.buyer_name, job.io_no, job.style_code, job.color_name].some(Boolean) && <div><b>{[job.buyer_name, job.io_no, job.style_code, job.color_name].filter(Boolean).join(' · ')}</b></div>}
+              <div>{kind === 'EMBROIDERY' ? 'Design' : 'Artwork'} {job.design_code ? `${job.design_code} v${job.design_version}` : '—'}{job.placement ? ` · ${job.placement}` : ''}{job.stitches_per_pc ? ` · ${qty(job.stitches_per_pc, 0)} st/pc` : ''}</div>
               <div>Done {qty(job.output?.input)} / {qty(job.planned_qty)} {job.uom} · balance {qty(job.output?.balance_to_produce)}</div>
             </> : 'Pick the job'}
           </div>
@@ -312,7 +312,7 @@ export function ProductionForm({ kind, id: id0, jobId, onClose }: { kind: Kind; 
                       onChange={(e) => setOver({ ...over, [cn.trim_id]: { actual_qty: o?.actual_qty ?? String(num(cn.actual_qty)), wastage_qty: e.target.value } })} />}</td>
                     <td className={`px-2 py-1 text-right ${num(cn.variance) > 0 ? 'text-red-600' : 'text-emerald-700'}`}>{qty(cn.variance, 3)}</td>
                     <td className="px-2 py-1 text-right">{pctTxt(cn.variance_pct)}</td>
-                    {p.costing && <><td className="px-2 py-1 text-right">{money(cn.unit_cost)}</td><td className="px-2 py-1 text-right">{money(cn.total_cost)}</td></>}
+                    {p.costing && <><td className="px-2 py-1 text-right">{rate4(cn.unit_cost)}</td><td className="px-2 py-1 text-right">{money(cn.total_cost)}</td></>}
                   </tr>
                 );
               })}</tbody>
