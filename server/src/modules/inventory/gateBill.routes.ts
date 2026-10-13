@@ -65,9 +65,9 @@ async function findDc(cid: number, code: string): Promise<DcHit | null> {
       expected_return_date: null, jobs: pi.jobs };
   }
   const jw = await queryOne<any>(
-    `SELECT jc.id, jc.challan_no, jc.challan_date, jc.status, jc.vendor_id, v.party_name, jc.vehicle_no, jc.total_qty, jc.expected_return, jc.io_no, ps.stage_name,
+    `SELECT jc.id, jc.challan_no, jc.challan_date, jc.status, jc.vendor_id, COALESCE(v.party_name, CONCAT(un.unit_name, ' (in-house unit)')) AS party_name, jc.vehicle_no, jc.total_qty, jc.expected_return, jc.io_no, ps.stage_name,
             (SELECT COUNT(*) FROM trx_jobwork_challan_line l WHERE l.challan_id = jc.id) line_count
-       FROM trx_jobwork_challan jc LEFT JOIN mst_party v ON v.id = jc.vendor_id LEFT JOIN cfg_process_stage ps ON ps.id = jc.stage_id
+       FROM trx_jobwork_challan jc LEFT JOIN mst_party v ON v.id = jc.vendor_id LEFT JOIN mst_unit un ON un.id = jc.unit_id LEFT JOIN cfg_process_stage ps ON ps.id = jc.stage_id
       WHERE jc.company_id = ? AND jc.challan_no = ?`, [cid, c]);
   if (jw) return { dc_type: 'JOBWORK_DC', dc_label: 'Job work DC', ref_type: 'JW_CHALLAN', ref_id: jw.id, dc_no: jw.challan_no, dc_date: jw.challan_date, status: jw.status,
     party_id: jw.vendor_id, party_name: jw.party_name, vehicle_no: jw.vehicle_no, returnable: true, material_type: 'GARMENT',

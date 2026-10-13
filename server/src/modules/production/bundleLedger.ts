@@ -13,7 +13,7 @@ import { audit } from '../../core/audit.js';
  *
  *   qty ─┬─ balance_qty (cut panels still at cutting)
  *        ├─ out_cut_qty (cut panels out on a print/embroidery DC)
- *        └─ sew_in_qty ─┬─ sewing WIP
+ *        └─ sew_in_qty ─┬─ sewing WIP ── out_wip_qty (part-stitched PCS out on a print/embroidery DC, back to WIP) / wip_loss_qty
  *                       ├─ sew_reject_qty
  *                       └─ sew_good_qty ─┬─ out_sewn_qty (washing DC) / sewn_loss_qty
  *                                        │   checking QC: chk_pass_qty / chk_reject_qty (reject leaves stock);
@@ -29,9 +29,11 @@ export const COUNTERS = [
   'packed_qty', 'cut_loss_qty', 'sewn_loss_qty', 'pack_loss_qty',
   'out_cut_qty', 'out_sewn_qty', 'out_pack_qty',
   'chk_pass_qty', 'chk_reject_qty', 'chk_rework_qty',
+  'out_wip_qty', 'wip_loss_qty',
 ] as const;
 export type Counter = typeof COUNTERS[number];
-export type Level = 'CUT' | 'SEWN' | 'FIN' | 'PACK';
+/** CUT cut panels · WIP part-stitched PCS (sewing WIP) · SEWN stitched · FIN finished · PACK ready to pack */
+export type Level = 'CUT' | 'WIP' | 'SEWN' | 'FIN' | 'PACK';
 
 export interface BundleRow {
   id: number; company_id: number; cutting_id: number; bundle_no: string; barcode: string | null;
@@ -74,7 +76,8 @@ export function bundleAvail(b: Record<string, any>, strictQc = false) {
   const qcDone = n(b.qc_pass_qty);
   const packedish = n(b.packed_qty) + n(b.out_pack_qty) + n(b.pack_loss_qty);
   const cut = Math.max(n(b.balance_qty), 0);
-  const sewing_wip = Math.max(n(b.sew_in_qty) - n(b.sew_good_qty) - n(b.sew_reject_qty), 0);
+  // PCS out on a process DC from stitching are not on the line until they come back
+  const sewing_wip = Math.max(n(b.sew_in_qty) - n(b.sew_good_qty) - n(b.sew_reject_qty) - n(b.out_wip_qty) - n(b.wip_loss_qty), 0);
   const sewn = Math.max(n(b.sew_good_qty) - n(b.fin_in_qty) - n(b.out_sewn_qty) - n(b.sewn_loss_qty) - n(b.chk_reject_qty), 0);
   // Sewn PCS that passed checking QC and are still waiting to go on (finishing takes checked PCS first).
   const checked = Math.min(Math.max(n(b.chk_pass_qty) - n(b.fin_in_qty) - n(b.out_sewn_qty), 0), sewn);
@@ -86,18 +89,18 @@ export function bundleAvail(b: Record<string, any>, strictQc = false) {
   const pack = strictQc
     ? Math.max(qcDone - packedish, 0)
     : Math.max(n(b.fin_good_qty) - n(b.qc_reject_qty) - packedish, 0);
-  const rejected = n(b.cut_loss_qty) + n(b.sew_reject_qty) + n(b.sewn_loss_qty) + n(b.chk_reject_qty) + n(b.fin_reject_qty)
+  const rejected = n(b.cut_loss_qty) + n(b.sew_reject_qty) + n(b.wip_loss_qty) + n(b.sewn_loss_qty) + n(b.chk_reject_qty) + n(b.fin_reject_qty)
     + n(b.qc_reject_qty) + n(b.pack_loss_qty);
   const alive = b.status === 'SPLIT' || b.status === 'CLOSED' ? 0 : Math.max(n(b.qty) - rejected, 0);
   return {
-    cut, out_cut: n(b.out_cut_qty), sewing_wip, sewn, checking: sewn - checked, checked, out_sewn: n(b.out_sewn_qty), finishing_wip,
+    cut, out_cut: n(b.out_cut_qty), sewing_wip, out_wip: n(b.out_wip_qty), sewn, checking: sewn - checked, checked, out_sewn: n(b.out_sewn_qty), finishing_wip,
     qc, pack, out_pack: n(b.out_pack_qty), packed: n(b.packed_qty), rejected, alive,
   };
 }
 
 export function availAt(b: Record<string, any>, level: Level, strictQc = false): number {
   const a = bundleAvail(b, strictQc);
-  return level === 'CUT' ? a.cut : level === 'SEWN' ? a.sewn : level === 'FIN' ? a.qc : a.pack;
+  return level === 'CUT' ? a.cut : level === 'WIP' ? a.sewing_wip : level === 'SEWN' ? a.sewn : level === 'FIN' ? a.qc : a.pack;
 }
 
 /** Status implied by the counters (terminal statuses are kept). */
@@ -106,7 +109,7 @@ export function deriveStatus(b: Record<string, any>): string {
   const a = bundleAvail(b);
   if (n(b.packed_qty) > 0 && a.alive > 0 && n(b.packed_qty) >= a.alive) return 'PACKED';
   if (n(b.fin_in_qty) > 0) return 'FINISHING';
-  if (n(b.sew_in_qty) > 0) return a.sewing_wip === 0 && a.cut === 0 && a.out_cut === 0 ? 'COMPLETED' : 'IN_SEWING';
+  if (n(b.sew_in_qty) > 0) return a.sewing_wip === 0 && a.cut === 0 && a.out_cut === 0 && a.out_wip === 0 ? 'COMPLETED' : 'IN_SEWING';
   if (n(b.out_cut_qty) > 0) return 'ISSUED';
   return b.status === 'CHECKED' ? 'CHECKED' : 'GENERATED';
 }

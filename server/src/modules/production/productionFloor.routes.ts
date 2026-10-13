@@ -126,6 +126,10 @@ export async function postSewingOutput(tx: Tx, req: Request, b: BundleRow, input
   if (asked > pending) {
     throw BadRequest(`Input ${input.input_no}: good + reject + rework (${asked} PCS) exceeds the ${pending} PCS still on the line`);
   }
+  // PCS of this bundle out on a print / embroidery DC from stitching are not on the line (voice note 13-Oct-2026)
+  if (n(b.out_wip_qty) > 0 && o.good + o.reject > bundleAvail(b).sewing_wip) {
+    throw BadRequest(`Bundle ${b.bundle_no}: ${n(b.out_wip_qty)} PCS are out on a process DC from stitching — only ${bundleAvail(b).sewing_wip} PCS are on the line`);
+  }
   const outNo = o.output_no || await nextDocNumber(tx, cid, 'SEW_OUT');
   const r = await txExecute(tx,
     `INSERT INTO trx_sewing_output

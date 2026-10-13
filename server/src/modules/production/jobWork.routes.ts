@@ -475,12 +475,12 @@ jobWorkRouter.get('/job-work/contractor-stock', VIEW, ah(async (req, res) => {
   const cid = req.user!.companyId;
   const vid = req.query.vendor_id ? Number(req.query.vendor_id) : null;
   const pcs = await query<any>(
-    `SELECT jc.vendor_id, v.party_name AS vendor_name, jc.id AS challan_id, jc.challan_no, jc.challan_date, jc.expected_return, jc.dc_kind, ps.stage_name,
+    `SELECT jc.vendor_id, jc.unit_id, COALESCE(v.party_name, CONCAT(un.unit_name, ' (in-house unit)')) AS vendor_name, jc.id AS challan_id, jc.challan_no, jc.challan_date, jc.expected_return, jc.dc_kind, ps.stage_name,
             jc.jw_order_id, o.jw_no, jl.io_no, st.style_code, col.color_name, sz.size_code, cb.bundle_no,
             jl.qty, jl.received_qty, jl.rejected_qty, jl.shortage_qty, jl.loss_qty, jl.returned_qty, jl.rework_open_qty, ${DC_PENDING('jl.')} AS pending_qty,
             DATEDIFF(CURDATE(), jc.challan_date) AS days_out
        FROM trx_jobwork_challan jc JOIN trx_jobwork_challan_line jl ON jl.challan_id = jc.id
-       LEFT JOIN mst_party v ON v.id = jc.vendor_id LEFT JOIN cfg_process_stage ps ON ps.id = jc.stage_id
+       LEFT JOIN mst_party v ON v.id = jc.vendor_id LEFT JOIN mst_unit un ON un.id = jc.unit_id LEFT JOIN cfg_process_stage ps ON ps.id = jc.stage_id
        LEFT JOIN trx_jw_order o ON o.id = jc.jw_order_id LEFT JOIN mst_style st ON st.id = jl.style_id
        LEFT JOIN mst_color col ON col.id = jl.color_id LEFT JOIN mst_size sz ON sz.id = jl.size_id LEFT JOIN trx_cutting_bundle cb ON cb.id = jl.bundle_id
       WHERE jc.company_id = ? AND jc.status IN ('ISSUED','PARTIAL_RECEIVED') AND ${DC_PENDING('jl.')} > 0 ${vid ? 'AND jc.vendor_id = ?' : ''}
@@ -491,10 +491,11 @@ jobWorkRouter.get('/job-work/contractor-stock', VIEW, ah(async (req, res) => {
        FROM trx_jw_fabric_issue fi JOIN trx_jobwork_challan jc ON jc.id = fi.challan_id LEFT JOIN mst_party v ON v.id = jc.vendor_id LEFT JOIN trx_jw_order o ON o.id = jc.jw_order_id
       WHERE jc.company_id = ? AND jc.status <> 'CANCELLED' AND fi.issue_kg - fi.consumed_kg - fi.returned_kg - fi.waste_kg > 0.0005 ${vid ? 'AND jc.vendor_id = ?' : ''}
       ORDER BY v.party_name, jc.id`, vid ? [cid, vid] : [cid]);
-  const byVendor = new Map<number, any>();
+  // contractors, and in-house units (DCs to Unit 1 / Unit 2 …) as their own rows
+  const byVendor = new Map<string | number, any>();
   for (const r of pcs) {
-    const k = Number(r.vendor_id);
-    if (!byVendor.has(k)) byVendor.set(k, { vendor_id: k, vendor_name: r.vendor_name, pcs: 0, rework_pcs: 0, kg: 0, dcs: new Set(), overdue_pcs: 0 });
+    const k = r.vendor_id ? Number(r.vendor_id) : `U${r.unit_id}`;
+    if (!byVendor.has(k)) byVendor.set(k, { vendor_id: r.vendor_id ? Number(r.vendor_id) : null, unit_id: r.unit_id ?? null, vendor_name: r.vendor_name, pcs: 0, rework_pcs: 0, kg: 0, dcs: new Set(), overdue_pcs: 0 });
     const x = byVendor.get(k); x.pcs += n(r.pending_qty); x.rework_pcs += n(r.rework_open_qty); x.dcs.add(r.challan_no);
     if (r.expected_return && String(r.expected_return).slice(0, 10) < today()) x.overdue_pcs += n(r.pending_qty);
   }
@@ -510,9 +511,9 @@ jobWorkRouter.get('/job-work/contractor-stock', VIEW, ah(async (req, res) => {
 jobWorkRouter.get('/job-work/dashboard', VIEW, ah(async (req, res) => {
   const cid = req.user!.companyId;
   const [overdue, byProcess, orders, qc, unbilled, losses] = await Promise.all([
-    query<any>(`SELECT jc.id, jc.challan_no, jc.challan_date, jc.expected_return, v.party_name AS vendor_name, ps.stage_name, DATEDIFF(CURDATE(), jc.expected_return) AS days_late,
+    query<any>(`SELECT jc.id, jc.challan_no, jc.challan_date, jc.expected_return, COALESCE(v.party_name, CONCAT(un.unit_name, ' (in-house unit)')) AS vendor_name, ps.stage_name, DATEDIFF(CURDATE(), jc.expected_return) AS days_late,
                        COALESCE(SUM(${DC_PENDING('jl.')}),0) AS pending_pcs
-                  FROM trx_jobwork_challan jc JOIN trx_jobwork_challan_line jl ON jl.challan_id = jc.id LEFT JOIN mst_party v ON v.id = jc.vendor_id LEFT JOIN cfg_process_stage ps ON ps.id = jc.stage_id
+                  FROM trx_jobwork_challan jc JOIN trx_jobwork_challan_line jl ON jl.challan_id = jc.id LEFT JOIN mst_party v ON v.id = jc.vendor_id LEFT JOIN mst_unit un ON un.id = jc.unit_id LEFT JOIN cfg_process_stage ps ON ps.id = jc.stage_id
                  WHERE jc.company_id = ? AND jc.status IN ('ISSUED','PARTIAL_RECEIVED') AND jc.expected_return IS NOT NULL AND jc.expected_return < CURDATE()
                  GROUP BY jc.id HAVING pending_pcs > 0 ORDER BY jc.expected_return LIMIT 200`, [cid]),
     query<any>(`SELECT ps.stage_name, COUNT(DISTINCT jc.id) AS dcs, COALESCE(SUM(${DC_PENDING('jl.')}),0) AS pending_pcs, COALESCE(SUM(jl.rework_open_qty),0) AS rework_pcs

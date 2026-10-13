@@ -112,11 +112,11 @@ export async function buildBundleTrace(cid: number, bundleId: number, strictQc =
       query(`SELECT id, qc_no, qc_date, inspected_qty, passed_qty, reject_qty, rework_qty, hold_qty, qc_status, inspector_name
                FROM trx_final_qc WHERE bundle_id = ? AND company_id = ? ORDER BY id`, [bundleId, cid]),
       query(`SELECT jl.id AS line_id, jc.id AS challan_id, jc.challan_no, jc.challan_date, jc.status, ps.stage_name,
-                    v.party_name AS vendor_name, jl.qty, jl.received_qty, jl.rejected_qty, jl.shortage_qty
+                    COALESCE(v.party_name, CONCAT(un.unit_name, ' (in-house unit)')) AS vendor_name, jl.qty, jl.received_qty, jl.rejected_qty, jl.shortage_qty
                FROM trx_jobwork_challan_line jl
                JOIN trx_jobwork_challan jc ON jc.id = jl.challan_id
                LEFT JOIN cfg_process_stage ps ON ps.id = jc.stage_id
-               LEFT JOIN mst_party v ON v.id = jc.vendor_id
+               LEFT JOIN mst_party v ON v.id = jc.vendor_id LEFT JOIN mst_unit un ON un.id = jc.unit_id
               WHERE jl.bundle_id = ? AND jc.company_id = ? ORDER BY jc.id`, [bundleId, cid]),
       bundleDestinations(cid, [bundleId]),
     ]);

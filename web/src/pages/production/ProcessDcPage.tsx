@@ -20,7 +20,13 @@ import { useLookup, toOptions } from '../../hooks/useLookup';
  * inward both show the bundles job-wise with per-job and DC-level totals.
  */
 
-type Stage = { id: number; stage_code: string; stage_name: string; kind: string; level: string; source: string };
+type Stage = {
+  id: number; stage_code: string; stage_name: string; kind: string; level: string; source: string;
+  /** where this process may take PCS from (printing / embroidery / washing: cutting, stitching in progress, stitched) */
+  sources?: { level: string; label: string; hint: string }[];
+  /** the "From process" chosen on the DC, when it differs from the process default */
+  source_level?: string;
+};
 type Avail = {
   id: number; bundle_no: string; barcode: string; io_no: string | null; part_name: string; style_code: string;
   color_name: string; size_code: string; size_sort: number; qty: number; status: string; lay_no: string | null;
@@ -39,6 +45,8 @@ function sourceProcOf(stage?: Stage | null): 'sewing' | 'checking' | 'ironing' |
   if (['CHECK', 'CHECKING', 'WASH', 'WASHING'].includes(code)) return 'sewing';
   if (stage.kind === 'FINISHING') return 'checking';
   if (['PACK', 'PACKING'].includes(code)) return 'ironing';
+  // printing / embroidery … of stitched garments can be drawn from a stitching line (issuing = that line's output)
+  if (stage.kind === 'ROUNDTRIP' && stage.level === 'SEWN') return 'sewing';
   return null;
 }
 type Line = Avail & { issue_qty: number; weight_kg: string; remarks: string; operation_id: string; operator_line: string };
@@ -49,6 +57,13 @@ type Op = { id: number; op_code: string; op_name: string; default_rate: number; 
 function useAllOperations() {
   const [rows, setRows] = useState<Op[]>([]);
   useEffect(() => { api.get('/process-master/operations').then((r) => setRows(r.data.data || [])).catch(() => setRows([])); }, []);
+  return rows;
+}
+
+/** In-house units (Units master) a DC can go to instead of a contractor. */
+function useUnits() {
+  const [rows, setRows] = useState<{ id: number; label: string; unit_type: string }[]>([]);
+  useEffect(() => { api.get('/process-dcs/units').then((r) => setRows(r.data.data || [])).catch(() => setRows([])); }, []);
   return rows;
 }
 
@@ -216,8 +231,8 @@ export function ProcessDcPage() {
             { key: 'challan_date', header: 'Date', render: (r: any) => fmtDate(r.challan_date) },
             { key: 'stage_name', header: 'To process', render: (r: any) => r.stage_name ? <Badge tone="violet">{r.stage_name}</Badge> : '—' },
             {
-              key: 'vendor_name', header: 'Contractor', render: (r: any) => (
-                <span>{r.vendor_name}{r.is_contractor ? <Badge tone="amber" className="ml-1">In-house</Badge> : null}
+              key: 'vendor_name', header: 'Contractor / unit', render: (r: any) => (
+                <span>{r.vendor_name}{r.is_contractor ? <Badge tone="amber" className="ml-1">In-house</Badge> : null}{r.unit_id ? <Badge tone="blue" className="ml-1">In-house unit</Badge> : null}
                   {r.operations && <span className="block text-[11px] text-slate-400">{r.operations}</span>}</span>
               ),
             },
@@ -308,6 +323,7 @@ function DcEditor({ id, stages, onClose, onSaved }: {
 }) {
   const toast = useToast();
   const contractors = useContractors();
+  const units = useUnits();
   const warehouses = useLookup('warehouses');
   const [ops, setOps] = useState<Op[]>([]);
   const [opSel, setOpSel] = useState<Record<number, string>>({});   // operation id → rate (₹ / PCS)
@@ -316,12 +332,13 @@ function DcEditor({ id, stages, onClose, onSaved }: {
     challan_no: '', challan_date: today(), stage_id: '', vendor_id: '', from_warehouse_id: '', to_warehouse_id: '',
     ref_no: '', expected_return: '', rate: '', vehicle_no: '', driver_name: '', transporter: '', remarks: '',
     release_line_allocation: false, from_line_id: '', jw_order_line_id: '', outward_override_reason: '',
+    send_to: 'CONTRACTOR', unit_id: '', source_level: '',
   });
   const [lines, setLines] = useState<Line[]>([]);
   // Job work order lines (approved orders of this contractor for this process) — DC drawn against the order balance
   const [jwLines, setJwLines] = useState<any[]>([]);
   useEffect(() => {
-    if (!head.stage_id || !head.vendor_id) { setJwLines([]); return; }
+    if (!head.stage_id || !head.vendor_id || head.send_to === 'UNIT') { setJwLines([]); return; }
     api.get('/job-work/orders', { params: { vendor_id: head.vendor_id } }).then((r) => setJwLines((r.data.data || [])
       .filter((o: any) => ['APPROVED', 'PARTIAL_OUTWARD', 'IN_PROCESS', 'PARTIAL_INWARD', 'COMPLETED'].includes(o.status))
       .flatMap((o: any) => (o.lines || []).filter((l: any) => Number(l.stage_id) === Number(head.stage_id) && l.input_kind !== 'FABRIC')
@@ -340,7 +357,12 @@ function DcEditor({ id, stages, onClose, onSaved }: {
   const [saving, setSaving] = useState(false);
   const scanRef = useRef<HTMLInputElement>(null);
   const allOps = useAllOperations();
-  const stage = stages.find((s) => s.id === Number(head.stage_id));
+  const baseStage = stages.find((s) => s.id === Number(head.stage_id));
+  // the process as this DC uses it: "From process" chosen on the DC (cut panels / stitching in progress / stitched)
+  const pickedSource = baseStage?.sources?.find((x) => x.level === head.source_level && x.level !== baseStage.level);
+  const stage: Stage | undefined = baseStage && pickedSource
+    ? { ...baseStage, level: pickedSource.level, source: pickedSource.hint, source_level: pickedSource.level } : baseStage;
+  const toUnit = head.send_to === 'UNIT';
   const readonlyNo = !!id;
 
   // Load an existing draft.
@@ -349,7 +371,8 @@ function DcEditor({ id, stages, onClose, onSaved }: {
     api.get(`/process-dcs/${id}`).then((r) => {
       const d = r.data.data;
       setHead({
-        challan_no: d.challan_no, challan_date: String(d.challan_date).slice(0, 10), stage_id: d.stage_id, vendor_id: d.vendor_id,
+        challan_no: d.challan_no, challan_date: String(d.challan_date).slice(0, 10), stage_id: d.stage_id, vendor_id: d.vendor_id ?? '',
+        send_to: d.unit_id ? 'UNIT' : 'CONTRACTOR', unit_id: d.unit_id ?? '', source_level: d.source_level ?? '',
         from_warehouse_id: d.from_warehouse_id ?? '', to_warehouse_id: d.to_warehouse_id ?? '', ref_no: d.ref_no ?? '',
         expected_return: d.expected_return ? String(d.expected_return).slice(0, 10) : '', rate: d.rate ?? '',
         vehicle_no: d.vehicle_no ?? '', driver_name: d.driver_name ?? '', transporter: d.transporter ?? '', remarks: d.remarks ?? '',
@@ -401,7 +424,7 @@ function DcEditor({ id, stages, onClose, onSaved }: {
   const loadFromLine = async () => {
     if (!head.from_line_id || !stage) { toast('Choose the line the bundles come from', 'error'); return; }
     try {
-      const r = await api.get('/bundle-stock/available', { params: { stage_id: stage.id, from_line_id: head.from_line_id, limit: 2000 } });
+      const r = await api.get('/bundle-stock/available', { params: { stage_id: stage.id, source_level: stage.source_level, from_line_id: head.from_line_id, limit: 2000 } });
       const n = addBundles(r.data.data || []);
       toast(n ? `${n} bundle(s) loaded from the line` : 'Nothing left on that line for this process', n ? 'success' : 'warning');
     } catch (e) { toast(errMsg(e), 'error'); }
@@ -434,7 +457,7 @@ function DcEditor({ id, stages, onClose, onSaved }: {
     if (!head.stage_id) { toast('Choose the To process first', 'error'); return; }
     if (lines.some((l) => l.barcode === code || l.bundle_no === code)) { toast(`${code} is already on this DC`, 'warning'); setScan(''); return; }
     try {
-      const r = await api.get('/bundle-stock/available', { params: { stage_id: head.stage_id, q: code, include_zero: 1 } });
+      const r = await api.get('/bundle-stock/available', { params: { stage_id: head.stage_id, source_level: stage?.source_level, q: code, include_zero: 1 } });
       const hit: Avail | undefined = (r.data.data || []).find((b: Avail) => b.barcode === code || b.bundle_no === code);
       if (!hit) toast(`Bundle ${code} not found`, 'error');
       else if (hit.open_dc_no) toast(`${hit.bundle_no} is already on open DC ${hit.open_dc_no}`, 'error');
@@ -454,16 +477,18 @@ function DcEditor({ id, stages, onClose, onSaved }: {
   const toggle = (set: Set<any>, v: any) => { const s = new Set(set); if (s.has(v)) s.delete(v); else s.add(v); return s; };
 
   const save = async (issue: boolean, print = false) => {
-    if (!head.stage_id || !head.vendor_id) { toast('Choose the To process and contractor', 'error'); return; }
+    if (!head.stage_id) { toast('Choose the To process', 'error'); return; }
+    if (toUnit ? !head.unit_id : !head.vendor_id) { toast(toUnit ? 'Choose the in-house unit' : 'Choose the contractor', 'error'); return; }
     if (!lines.length) { toast('Add at least one job / bundle', 'error'); return; }
     if (badQty) { toast('Fix the highlighted bundle quantities', 'error'); return; }
     setSaving(true);
     const body = {
       ...head, challan_no: readonlyNo ? undefined : head.challan_no || null,
-      stage_id: Number(head.stage_id), vendor_id: Number(head.vendor_id),
+      stage_id: Number(head.stage_id), vendor_id: toUnit ? null : Number(head.vendor_id), unit_id: toUnit ? Number(head.unit_id) : null,
+      source_level: stage?.source_level ?? null, send_to: undefined,
       from_warehouse_id: head.from_warehouse_id ? Number(head.from_warehouse_id) : null,
       to_warehouse_id: head.to_warehouse_id ? Number(head.to_warehouse_id) : null,
-      rate: head.rate === '' ? null : Number(head.rate), expected_return: head.expected_return || null,
+      rate: toUnit || head.rate === '' ? null : Number(head.rate), expected_return: head.expected_return || null,
       operations: Object.entries(opSel).map(([oid, rate]) => ({ operation_id: Number(oid), rate: rate === '' ? null : Number(rate) })),
       lines: lines.map((l) => ({
         bundle_id: l.id, qty: Number(l.issue_qty), weight_kg: l.weight_kg === '' ? null : Number(l.weight_kg), remarks: l.remarks || null,
@@ -471,7 +496,7 @@ function DcEditor({ id, stages, onClose, onSaved }: {
       })),
       issue,
       from_line_id: srcProc && head.from_line_id ? Number(head.from_line_id) : null,
-      jw_order_line_id: head.jw_order_line_id ? Number(head.jw_order_line_id) : null,
+      jw_order_line_id: !toUnit && head.jw_order_line_id ? Number(head.jw_order_line_id) : null,
       outward_override_reason: head.outward_override_reason || null,
     };
     try {
@@ -501,21 +526,33 @@ function DcEditor({ id, stages, onClose, onSaved }: {
           <Input label="DC no" value={head.challan_no} disabled={readonlyNo} placeholder="Auto"
             onChange={(e) => setHead({ ...head, challan_no: e.target.value })} />
           <Input label="Date" type="date" required value={head.challan_date} onChange={(e) => setHead({ ...head, challan_date: e.target.value })} />
-          <Input label="From process" value={stage ? stage.source : ''} disabled placeholder="Set by the To process" />
-          <Select label="To process" required value={head.stage_id}
-            onChange={(e) => { setHead({ ...head, stage_id: e.target.value }); setOpSel({}); if (lines.length) { setLines([]); setJobMeta({}); toast('Process changed — bundle lines cleared', 'info'); } }}
+          {(baseStage?.sources?.length ?? 0) > 1
+            ? <Select label="From process" id="dc-source" value={head.source_level || baseStage!.level}
+                hint={stage?.source}
+                onChange={(e) => { setHead({ ...head, source_level: e.target.value, from_line_id: '' }); if (lines.length) { setLines([]); setJobMeta({}); toast('From process changed — bundle lines cleared', 'info'); } }}
+                options={baseStage!.sources!.map((x) => ({ value: x.level, label: x.label }))} />
+            : <Input label="From process" value={stage ? stage.source : ''} disabled placeholder="Set by the To process" />}
+          <Select label="To process" required id="dc-stage" value={head.stage_id}
+            onChange={(e) => { setHead({ ...head, stage_id: e.target.value, source_level: '', from_line_id: '' }); setOpSel({}); if (lines.length) { setLines([]); setJobMeta({}); toast('Process changed — bundle lines cleared', 'info'); } }}
             placeholder="— choose —" options={stages.map((s) => ({ value: s.id, label: s.stage_name }))} />
-          <Select label="Contractor" required value={head.vendor_id} onChange={(e) => setHead({ ...head, vendor_id: e.target.value })}
-            placeholder="— choose —" options={contractors.map((c) => ({ value: c.id, label: c.label }))} />
+          <Select label="Send to" id="dc-send-to" value={head.send_to}
+            onChange={(e) => setHead({ ...head, send_to: e.target.value, vendor_id: '', unit_id: '', jw_order_line_id: '' })}
+            options={[{ value: 'CONTRACTOR', label: 'Contractor (job work)' }, { value: 'UNIT', label: 'In-house unit' }]} />
+          {toUnit
+            ? <Select label="In-house unit" required id="dc-unit" value={head.unit_id} onChange={(e) => setHead({ ...head, unit_id: e.target.value })}
+                hint="No contractor, no rate — never on a contractor bill"
+                placeholder="— choose unit —" options={units.map((u) => ({ value: u.id, label: u.label }))} />
+            : <Select label="Contractor" required id="dc-vendor" value={head.vendor_id} onChange={(e) => setHead({ ...head, vendor_id: e.target.value })}
+                placeholder="— choose —" options={contractors.map((c) => ({ value: c.id, label: c.label }))} />}
           <Select label="From location" value={head.from_warehouse_id} onChange={(e) => setHead({ ...head, from_warehouse_id: e.target.value })}
             placeholder="— store —" options={toOptions(warehouses.data)} />
           <Select label="To location" value={head.to_warehouse_id} onChange={(e) => setHead({ ...head, to_warehouse_id: e.target.value })}
             placeholder="— store —" options={toOptions(warehouses.data)} />
           <Input label="Ref / SR no" value={head.ref_no} onChange={(e) => setHead({ ...head, ref_no: e.target.value })} />
           <Input label="Expected return" type="date" value={head.expected_return} onChange={(e) => setHead({ ...head, expected_return: e.target.value })} />
-          <Input label="Rate (₹ / PCS)" type="number" min={0} step="0.01" value={head.rate}
+          {!toUnit && <Input label="Rate (₹ / PCS)" type="number" min={0} step="0.01" value={head.rate}
             hint={Object.keys(opSel).length && !rateTouched ? 'Sum of the operations' : undefined}
-            onChange={(e) => { setRateTouched(true); setHead({ ...head, rate: e.target.value }); }} />
+            onChange={(e) => { setRateTouched(true); setHead({ ...head, rate: e.target.value }); }} />}
           <Input label="Vehicle no" value={head.vehicle_no} onChange={(e) => setHead({ ...head, vehicle_no: e.target.value.toUpperCase() })} />
           <Input label="Driver" value={head.driver_name} onChange={(e) => setHead({ ...head, driver_name: e.target.value })} />
           {jwLines.length > 0 && (
@@ -765,7 +802,7 @@ function JobPicker({ stage, excluded, onClose, onAdd }: { stage: Stage; excluded
   const [adding, setAdding] = useState(false);
 
   useEffect(() => {
-    api.get('/bundle-stock/available-jobs', { params: { stage_id: stage.id } })
+    api.get('/bundle-stock/available-jobs', { params: { stage_id: stage.id, source_level: stage.source_level } })
       .then((r) => setJobs(r.data.data || [])).catch((e) => toast(errMsg(e), 'error')).finally(() => setLoading(false));
   }, [stage.id]);
 
@@ -776,7 +813,7 @@ function JobPicker({ stage, excluded, onClose, onAdd }: { stage: Stage; excluded
     try {
       const all: Avail[] = [];
       for (const io of picked) {
-        const r = await api.get('/bundle-stock/available', { params: { stage_id: stage.id, io_no: io, limit: 2000 } });
+        const r = await api.get('/bundle-stock/available', { params: { stage_id: stage.id, source_level: stage.source_level, io_no: io, limit: 2000 } });
         all.push(...(r.data.data || []).filter((b: Avail) => !excluded.has(b.id)));
       }
       onAdd(all);
@@ -849,7 +886,7 @@ function ImportBundlesModal({ stage, excludeChallanId, onClose, onAdd }: {
     if (!codes.length) { toast('Paste or load bundle nos / barcodes first', 'error'); return; }
     setBusy(true);
     try {
-      const r = await api.post('/process-dcs/resolve-bundles', { stage_id: stage.id, codes, exclude_challan_id: excludeChallanId ?? null });
+      const r = await api.post('/process-dcs/resolve-bundles', { stage_id: stage.id, source_level: stage.source_level ?? null, codes, exclude_challan_id: excludeChallanId ?? null });
       setResult(r.data.data || []);
     } catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(false); }
   };
@@ -906,7 +943,7 @@ function BundlePicker({ stage, excluded, fromLineId, onClose, onAdd }: { stage: 
     setLoading(true);
     api.get('/bundle-stock/available', {
       params: {
-        stage_id: stage.id, io_no: dFilters.io_no || undefined, style_id: dFilters.style_id || undefined,
+        stage_id: stage.id, source_level: stage.source_level, io_no: dFilters.io_no || undefined, style_id: dFilters.style_id || undefined,
         color_id: dFilters.color_id || undefined, q: dFilters.q || undefined,
         from_line_id: fromLineId || undefined,
       },
@@ -1082,7 +1119,8 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
       </>}>
       <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4 xl:grid-cols-6">
         <Info label="Status"><StatusChip value={dc.status} /></Info>
-        <Info label="Contractor">{dc.vendor_name}</Info>
+        <Info label={dc.unit_id ? 'In-house unit' : 'Contractor'}>{dc.vendor_name}</Info>
+        {dc.source_label && <Info label="From process">{dc.source_label}</Info>}
         <Info label="DC date">{fmtDate(dc.challan_date)}</Info>
         <Info label="To process">{dc.stage_name}</Info>
         <Info label="From → to location">{dc.from_location ?? '—'} → {dc.to_location ?? '—'}</Info>
@@ -1517,7 +1555,7 @@ function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void
           <Input label={dcs.length > 1 ? 'Source DCs' : 'Source DC no'} value={dcs.map((d) => d.challan_no).join(', ')} disabled />
           <Input label="From process" value={first.stage_name ?? ''} disabled />
           <Input label="Date" type="date" required value={head.receipt_date} onChange={(e) => setHead({ ...head, receipt_date: e.target.value })} />
-          <Input label="Contractor" value={first.vendor_name ?? ''} disabled />
+          <Input label={first.unit_id ? 'In-house unit' : 'Contractor'} value={first.vendor_name ?? ''} disabled />
           <Select label="Receiving location" value={head.to_warehouse_id} onChange={(e) => setHead({ ...head, to_warehouse_id: e.target.value })}
             placeholder="— store —" options={toOptions(warehouses.data)} />
           <Input label="Party DC no" value={head.party_dc_no} onChange={(e) => setHead({ ...head, party_dc_no: e.target.value })} />
@@ -1689,7 +1727,7 @@ async function printDc(id: number, toast: (m: string, k?: any) => void, autoPrin
           ${d.ref_no ? `Ref / SR: ${esc(d.ref_no)}<br/>` : ''}Status: ${esc(human(d.status))}</div></div>
       <h2>DELIVERY CHALLAN — JOB WORK (${esc(String(d.stage_name || '').toUpperCase())})</h2>
       <table class="meta"><tr>
-        <td style="width:50%"><b>To (contractor):</b> ${esc(d.vendor_name)} (${esc(d.vendor_code || '')})<br/>
+        <td style="width:50%"><b>${d.unit_id ? 'To (in-house unit)' : 'To (contractor)'}:</b> ${esc(d.vendor_name)} (${esc(d.vendor_code || '')})<br/>
           ${esc([va.address_line1, va.address_line2, va.address_line3, va.city, va.state, va.pincode].filter(Boolean).join(', '))}<br/>
           GSTIN: ${esc(d.vendor_gstin || '—')} · Ph: ${esc(va.mobile || va.phone || d.vendor_phone || '—')}</td>
         <td><b>Process:</b> ${esc(d.stage_name)} · <b>Jobs:</b> ${d.summary.jobs.length}<br/>
@@ -1752,7 +1790,7 @@ export function ProcessDcReceiptsPage() {
             { key: 'challan_no', header: 'Source DC', render: (r: any) => <Link className="font-mono text-brand-700 hover:underline" to={`/production/jobwork-challans?dc=${r.challan_id}`}>{r.challan_no}</Link> },
             { key: 'party_dc_no', header: 'Party DC / Ref', render: (r: any) => <span className="text-xs">{r.party_dc_no ?? '—'}{r.ref_no ? ` · ${r.ref_no}` : ''}{r.inward_group_no ? <span className="block font-mono text-[10px] text-slate-400">{r.inward_group_no}</span> : null}</span> },
             { key: 'stage_name', header: 'Process', render: (r: any) => r.stage_name ? <Badge tone="violet">{r.stage_name}</Badge> : '—' },
-            { key: 'vendor_name', header: 'Contractor' },
+            { key: 'vendor_name', header: 'Contractor / unit' },
             { key: 'io_list', header: 'Jobs', render: (r: any) => <span className="text-xs">{r.io_list ?? '—'}</span> },
             { key: 'line_count', header: 'Bundles', align: 'right' as const },
             { key: 'received_qty', header: 'Good (PCS)', align: 'right' as const, render: (r: any) => <span className="text-emerald-700">{fmtNumber(r.received_qty)}</span> },
@@ -1780,7 +1818,9 @@ function SelectDcModal({ onClose, onPick }: { onClose: () => void; onPick: (ids:
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [picked, setPicked] = useState<Set<number>>(new Set());
-  const pickedVendor = rows.find((r) => picked.has(r.id))?.vendor_id;
+  // one inward covers DCs of one contractor, or of one in-house unit
+  const partyKey = (r: any) => (r.vendor_id ? `V${r.vendor_id}` : `U${r.unit_id}`);
+  const pickedParty = (() => { const r = rows.find((x) => picked.has(x.id)); return r ? partyKey(r) : null; })();
 
   useEffect(() => { api.get('/process-dcs/stages').then((r) => setStages(r.data.data || [])); }, []);
   useEffect(() => {
@@ -1812,7 +1852,7 @@ function SelectDcModal({ onClose, onPick }: { onClose: () => void; onPick: (ids:
           {loading && <tr><td colSpan={9} className="py-6 text-center text-slate-400">Loading…</td></tr>}
           {!loading && !rows.length && <tr><td colSpan={9} className="py-6 text-center text-slate-400">No DCs pending receipt.</td></tr>}
           {rows.map((r) => {
-            const other = pickedVendor != null && Number(pickedVendor) !== Number(r.vendor_id);
+            const other = pickedParty != null && pickedParty !== partyKey(r);
             return (
             <tr key={r.id} onClick={() => { if (other) return; setPicked((cur) => { const n2 = new Set(cur); if (n2.has(r.id)) n2.delete(r.id); else n2.add(r.id); return n2; }); }}
               className={`border-t border-slate-100 ${other ? 'opacity-40' : 'cursor-pointer hover:bg-brand-50/40'}`}>
