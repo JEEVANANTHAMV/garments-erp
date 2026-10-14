@@ -1024,13 +1024,12 @@ export default function TrimPurchaseOrderDetailPage() {
       <Modal
         open={showQuoteModal}
         onClose={() => setShowQuoteModal(false)}
-        title="Create Trim PO from Trims Quotation"
+        title="Create trim PO from quotation"
+        subtitle="Pick a trims quotation: supplier, IO No, trim items, quantities, confirmed rates and GST are carried into a new trim PO"
         size="lg"
+        footer={<button type="button" className="btn-secondary" onClick={() => setShowQuoteModal(false)}>Cancel</button>}
       >
         <div className="space-y-4">
-          <p className="text-xs text-slate-600">
-            Pick a Trims quotation: supplier, IO No, trim items, quantities, confirmed rates and GST are carried into a new Trim PO.
-          </p>
           <div className="rounded-lg border border-slate-200 overflow-hidden">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">

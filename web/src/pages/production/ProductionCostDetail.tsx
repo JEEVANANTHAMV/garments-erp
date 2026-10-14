@@ -3,13 +3,13 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Save, RefreshCw, Calculator, Lock, CheckCircle,
-  Copy, Printer, ExternalLink, Layers, Factory
+  Copy, Printer, ExternalLink
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { http, ApiError } from '../../lib/api';
 import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
-import { StatusBadge } from '../../components/ui';
+import { StatusBadge, Modal } from '../../components/ui';
 import { fmtDate, fmtNumber, today, toDateInput } from '../../lib/format';
 
 export default function ProductionCostDetailPage() {
@@ -1352,114 +1352,87 @@ export default function ProductionCostDetailPage() {
 
       {/* 4. Traceability Drilldown Modal (Developer Spec Section 27) */}
       {drilldownModalOpen && drilldownData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
-          <div className="w-full max-w-3xl max-h-[85vh] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col">
-            <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 rounded-t-2xl">
-              <div>
-                <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                  <ExternalLink size={16} className="text-brand-600" />
-                  Transaction Traceability & Audit Drilldown
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Trace actual costing back to source Fabric Issues, Rolls, Lots, GRNs and Process Orders
-                </p>
-              </div>
-              <button
-                type="button"
-                className="btn-ghost btn-sm text-slate-400 hover:text-slate-700"
-                onClick={() => setDrilldownModalOpen(false)}
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="p-5 space-y-4 overflow-y-auto">
-              {/* Fabric Issues Drilldown */}
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 mb-2 flex items-center gap-1.5">
-                  <Layers size={14} className="text-indigo-600" /> 1. Fabric Issue → Roll → Lot → GRN → Supplier
-                </h4>
-                <div className="rounded-lg border border-slate-200 overflow-hidden text-xs">
-                  <table className="w-full text-left">
-                    <thead className="bg-slate-100 text-slate-600 text-[11px]">
-                      <tr>
-                        <th className="p-2">Issue No</th>
-                        <th className="p-2">Fabric</th>
-                        <th className="p-2">Roll No</th>
-                        <th className="p-2">Lot No</th>
-                        <th className="p-2">GRN No</th>
-                        <th className="p-2">Supplier</th>
+        <Modal open onClose={() => setDrilldownModalOpen(false)} size="xl"
+          title="Transaction Traceability & Audit Drilldown"
+          subtitle="Trace actual costing back to source Fabric Issues, Rolls, Lots, GRNs and Process Orders"
+          icon={<ExternalLink size={16} />}
+          footer={<button type="button" className="btn-secondary" onClick={() => setDrilldownModalOpen(false)}>Close Drilldown</button>}>
+          <div className="space-y-4">
+          {/* Fabric Issues Drilldown */}
+          <div>
+            <h4 className="mb-2 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">
+              1. Fabric Issue → Roll → Lot → GRN → Supplier
+            </h4>
+            <div className="rounded-lg border border-slate-200 overflow-hidden text-xs">
+              <table className="w-full text-left">
+                <thead className="bg-slate-100 text-slate-600 text-[11px]">
+                  <tr>
+                    <th className="p-2">Issue No</th>
+                    <th className="p-2">Fabric</th>
+                    <th className="p-2">Roll No</th>
+                    <th className="p-2">Lot No</th>
+                    <th className="p-2">GRN No</th>
+                    <th className="p-2">Supplier</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {(drilldownData.fabric || []).length === 0 ? (
+                    <tr><td colSpan={6} className="p-3 text-center text-slate-400">No fabric issue lines found</td></tr>
+                  ) : (
+                    drilldownData.fabric.map((f: any, i: number) => (
+                      <tr key={i} className="hover:bg-slate-50">
+                        <td className="p-2 font-mono font-bold text-brand-700">{f.issue_no}</td>
+                        <td className="p-2">{f.fabric_name}</td>
+                        <td className="p-2 font-mono">{f.roll_no}</td>
+                        <td className="p-2 font-mono">{f.lot_no}</td>
+                        <td className="p-2 font-mono text-emerald-700">{f.grn_no}</td>
+                        <td className="p-2 font-semibold">{f.supplier_name}</td>
                       </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {(drilldownData.fabric || []).length === 0 ? (
-                        <tr><td colSpan={6} className="p-3 text-center text-slate-400">No fabric issue lines found</td></tr>
-                      ) : (
-                        drilldownData.fabric.map((f: any, i: number) => (
-                          <tr key={i} className="hover:bg-slate-50">
-                            <td className="p-2 font-mono font-bold text-brand-700">{f.issue_no}</td>
-                            <td className="p-2">{f.fabric_name}</td>
-                            <td className="p-2 font-mono">{f.roll_no}</td>
-                            <td className="p-2 font-mono">{f.lot_no}</td>
-                            <td className="p-2 font-mono text-emerald-700">{f.grn_no}</td>
-                            <td className="p-2 font-semibold">{f.supplier_name}</td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Process Challans Drilldown */}
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 mb-2 flex items-center gap-1.5">
-                  <Factory size={14} className="text-amber-600" /> 2. Process Challan → Process GRN → Vendor
-                </h4>
-                <div className="rounded-lg border border-slate-200 overflow-hidden text-xs">
-                  <table className="w-full text-left">
-                    <thead className="bg-slate-100 text-slate-600 text-[11px]">
-                      <tr>
-                        <th className="p-2">Challan No</th>
-                        <th className="p-2">Process Stage</th>
-                        <th className="p-2 text-right">Input Qty</th>
-                        <th className="p-2 text-right">Output Qty</th>
-                        <th className="p-2">Receipt No</th>
-                        <th className="p-2">Vendor Name</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {(drilldownData.process || []).length === 0 ? (
-                        <tr><td colSpan={6} className="p-3 text-center text-slate-400">No process jobwork transactions found</td></tr>
-                      ) : (
-                        drilldownData.process.map((p: any, i: number) => (
-                          <tr key={i} className="hover:bg-slate-50">
-                            <td className="p-2 font-mono font-bold text-indigo-700">{p.challan_no}</td>
-                            <td className="p-2">{p.stage_name}</td>
-                            <td className="p-2 text-right font-mono">{p.input_qty}</td>
-                            <td className="p-2 text-right font-mono font-bold text-emerald-700">{p.output_qty}</td>
-                            <td className="p-2 font-mono">{p.receipt_no || '—'}</td>
-                            <td className="p-2 font-semibold">{p.vendor_name || 'In-House'}</td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end rounded-b-2xl">
-              <button
-                type="button"
-                className="btn-secondary btn-sm"
-                onClick={() => setDrilldownModalOpen(false)}
-              >
-                Close Drilldown
-              </button>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
-        </div>
+
+          {/* Process Challans Drilldown */}
+          <div>
+            <h4 className="mb-2 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">
+              2. Process Challan → Process GRN → Vendor
+            </h4>
+            <div className="rounded-lg border border-slate-200 overflow-hidden text-xs">
+              <table className="w-full text-left">
+                <thead className="bg-slate-100 text-slate-600 text-[11px]">
+                  <tr>
+                    <th className="p-2">Challan No</th>
+                    <th className="p-2">Process Stage</th>
+                    <th className="p-2 text-right">Input Qty</th>
+                    <th className="p-2 text-right">Output Qty</th>
+                    <th className="p-2">Receipt No</th>
+                    <th className="p-2">Vendor Name</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {(drilldownData.process || []).length === 0 ? (
+                    <tr><td colSpan={6} className="p-3 text-center text-slate-400">No process jobwork transactions found</td></tr>
+                  ) : (
+                    drilldownData.process.map((p: any, i: number) => (
+                      <tr key={i} className="hover:bg-slate-50">
+                        <td className="p-2 font-mono font-bold text-indigo-700">{p.challan_no}</td>
+                        <td className="p-2">{p.stage_name}</td>
+                        <td className="p-2 text-right font-mono">{p.input_qty}</td>
+                        <td className="p-2 text-right font-mono font-bold text-emerald-700">{p.output_qty}</td>
+                        <td className="p-2 font-mono">{p.receipt_no || '—'}</td>
+                        <td className="p-2 font-semibold">{p.vendor_name || 'In-House'}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+                  </div>
+        </Modal>
       )}
     </div>
   );

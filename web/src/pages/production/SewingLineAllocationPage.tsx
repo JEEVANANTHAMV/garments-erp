@@ -702,6 +702,8 @@ function BundlePicker<T extends BundleInfo & { free_qty: number }>({ open, onClo
   const shown = rows.filter((b) => !search || [b.bundle_no, b.io_no, b.style_no, b.colour, b.size].some((x) => String(x ?? '').toLowerCase().includes(search.toLowerCase())));
   return (
     <Modal open={open} onClose={onClose} title={title} size="lg"
+      subtitle="Unallocated bundles, grouped by job — tick a job to take all its bundles"
+      footerStart={<><b>{sel.size}</b> bundles · <b>{fmtNumber(rows.filter((r) => sel.has(r.bundle_id)).reduce((a, r) => a + r.free_qty, 0))}</b> PCS selected</>}
       footer={<><Button variant="secondary" onClick={onClose}>Close</Button><Button disabled={!sel.size} onClick={() => onPick(rows.filter((r) => sel.has(r.bundle_id)))}>Add {sel.size} bundle(s)</Button></>}>
       <SearchInput value={search} onChange={setSearch} placeholder="Search bundle, job, style…" className="mb-2 w-full" />
       <table className="w-full text-xs">

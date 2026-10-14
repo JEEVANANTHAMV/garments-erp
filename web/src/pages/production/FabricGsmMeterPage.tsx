@@ -5,7 +5,7 @@ import { http, ApiError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { useToast } from '../../hooks/useToast';
 import { useLookup, toOptions } from '../../hooks/useLookup';
-import { PageHeader, Tabs, Input, Select, Button, Modal, LoadingBlock } from '../../components/ui';
+import { PageHeader, Tabs, Input, Select, Button, Modal, FormSection, LoadingBlock } from '../../components/ui';
 import { fmtDate, fmtDecimal, today } from '../../lib/format';
 import { FORM_LABEL, fmtPct, pctCls, type DiaRule } from '../../lib/fabricCalc';
 
@@ -141,18 +141,24 @@ function RulesTab() {
         <Modal open onClose={() => setEdit(null)} title={edit.id ? `Edit rule ${edit.v.rule_code}` : 'New Dia / width rule'} size="md"
           footer={<><Button variant="secondary" onClick={() => setEdit(null)}>Cancel</Button><Button loading={busy} onClick={save} id="btn-save-rule"><Save size={14} className="mr-1" /> Save</Button></>}>
           {edit.approved && <p className="mb-2 rounded bg-amber-50 px-2 py-1 text-[11.5px] text-amber-900">Approved rule: only the end date, active flag and notes can change. For a new factor add a new rule.</p>}
-          <div className="grid grid-cols-2 gap-3">
+          <FormSection title="Rule" cols={2}>
             <Input label="Rule code *" value={edit.v.rule_code} disabled={edit.approved} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, rule_code: e.target.value } })} id="rule-code" />
             <Select label="Fabric form *" value={edit.v.fabric_form} disabled={edit.approved} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, fabric_form: e.target.value } })} options={[{ value: 'TUBULAR', label: 'Tubular' }, { value: 'OPEN_WIDTH', label: 'Open width' }]} id="rule-form" />
-            <Input label='What "Dia" means *' className="col-span-2" value={edit.v.dia_definition} placeholder="e.g. Finished tubular (flat) Dia" onChange={(e) => setEdit({ ...edit, v: { ...edit.v, dia_definition: e.target.value } })} id="rule-def" />
+            <Input label='What "Dia" means *' className="sm:col-span-2" value={edit.v.dia_definition} placeholder="e.g. Finished tubular (flat) Dia" onChange={(e) => setEdit({ ...edit, v: { ...edit.v, dia_definition: e.target.value } })} id="rule-def" />
+          </FormSection>
+          <FormSection title="Formula" cols={2}>
             <Select label="Formula *" value={edit.v.formula_type} disabled={edit.approved} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, formula_type: e.target.value } })} id="rule-formula"
               options={[{ value: 'FACTOR', label: 'FACTOR — width = Dia × factor' }, { value: 'DIRECT', label: 'DIRECT — width = Dia' }, { value: 'CIRCUMFERENCE', label: 'CIRCUMFERENCE — width = Dia × π' }]} />
             <Input label="Factor" type="number" step="0.0001" value={edit.v.factor} disabled={edit.approved || edit.v.formula_type !== 'FACTOR'} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, factor: e.target.value } })} id="rule-factor" />
+          </FormSection>
+          <FormSection title="Validity" cols={3}>
             <Input label="Effective from *" type="date" value={edit.v.effective_from} disabled={edit.approved} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, effective_from: e.target.value } })} id="rule-from" />
             <Input label="Effective to" type="date" value={edit.v.effective_to} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, effective_to: e.target.value } })} id="rule-to" />
-            <Input label="Notes" className="col-span-2" value={edit.v.remarks} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, remarks: e.target.value } })} />
-            <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={edit.v.is_active} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, is_active: e.target.checked } })} /> Active</label>
-          </div>
+            <label className="flex items-center gap-2 self-end pb-2 text-xs"><input type="checkbox" checked={edit.v.is_active} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, is_active: e.target.checked } })} /> Active</label>
+          </FormSection>
+          <FormSection title="Notes" cols={1}>
+            <Input label="Notes" value={edit.v.remarks} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, remarks: e.target.value } })} />
+          </FormSection>
         </Modal>
       )}
     </div>

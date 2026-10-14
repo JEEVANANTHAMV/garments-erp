@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Card, Badge, Button, Input, Select, DataTable, Textarea } from '../../components/ui';
+import { Card, Badge, Button, Input, Select, DataTable, Textarea, Modal, FormSection } from '../../components/ui';
+import { PackageCheck } from 'lucide-react';
 import { api } from '../../lib/api';
 import { fmtDate, fmtNumber, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
@@ -153,124 +154,111 @@ export function FgReceiptsPage() {
       </Card>
 
       {/* Receive FG Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="w-full max-w-3xl bg-white rounded-xl shadow-xl overflow-hidden">
-            <div className="flex items-center justify-between border-b px-6 py-4 bg-slate-50">
-              <h3 className="text-lg font-bold text-slate-800">New Finished Goods Receipt</h3>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 font-bold">✕</button>
-            </div>
+      <Modal open={showModal} onClose={() => setShowModal(false)} title="New Finished Goods Receipt" size="lg"
+        subtitle="Receive inspected finished garments into the FG warehouse against an I/O and style"
+        icon={<PackageCheck size={16} />}
+        footerStart={<><b>{lines.length}</b> line(s) · <b>{fmtNumber(lines.reduce((t, l) => t + (Number(l.good_qty) || 0), 0))}</b> good · <b>{fmtNumber(lines.reduce((t, l) => t + (Number(l.reject_qty) || 0), 0))}</b> reject PCS</>}
+        footer={<>
+          <Button variant="secondary" onClick={() => setShowModal(false)}>Cancel</Button>
+          <Button onClick={handleSave} loading={saving}>Save FG Receipt</Button>
+        </>}>
+        <FormSection cols={3}>
+          <Input label="Receipt Date" type="date" value={header.receipt_date}
+            onChange={e => setHeader({ ...header, receipt_date: e.target.value })} />
+          <JobSelect label="I/O Number" required value={header.io_no} id="fg-io"
+            onPick={(j) => setHeader((h: any) => ({ ...h, io_no: j?.job_no ?? '', style_id: onlyStyle(j) ? String(onlyStyle(j)) : (j && h.style_id && !j.style_ids.includes(Number(h.style_id)) ? '' : h.style_id) }))} />
+          <Select
+            label="Target Style *"
+            value={header.style_id}
+            onChange={e => setHeader({ ...header, style_id: e.target.value })}
+            options={[
+              { value: '', label: '— Select Style —' },
+              ...styles.map(st => ({ value: st.id, label: st.label ? `${st.code} (${st.label})` : String(st.code ?? st.id) })),
+            ]}
+          />
+          <Input label="Source Stage" value={header.source_stage}
+            onChange={e => setHeader({ ...header, source_stage: e.target.value })} />
+          <Select
+            label="FG Warehouse *"
+            value={header.warehouse_id}
+            className="lg:col-span-2"
+            onChange={e => setHeader({ ...header, warehouse_id: e.target.value })}
+            options={[
+              { value: '', label: '— Select FG Warehouse —' },
+              ...warehouses.map(w => ({ value: w.id, label: w.label || w.warehouse_name })),
+            ]}
+          />
+        </FormSection>
 
-            <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
-              <div className="grid grid-cols-3 gap-4">
-                <Input label="Receipt Date" type="date" value={header.receipt_date}
-                  onChange={e => setHeader({ ...header, receipt_date: e.target.value })} />
-                <JobSelect label="I/O Number" required value={header.io_no} id="fg-io"
-                  onPick={(j) => setHeader((h: any) => ({ ...h, io_no: j?.job_no ?? '', style_id: onlyStyle(j) ? String(onlyStyle(j)) : (j && h.style_id && !j.style_ids.includes(Number(h.style_id)) ? '' : h.style_id) }))} />
-                <Select
-                  label="Target Style *"
-                  value={header.style_id}
-                  onChange={e => setHeader({ ...header, style_id: e.target.value })}
-                  options={[
-                    { value: '', label: '— Select Style —' },
-                    ...styles.map(st => ({ value: st.id, label: st.label ? `${st.code} (${st.label})` : String(st.code ?? st.id) })),
-                  ]}
-                />
-              </div>
+        {/* Line Breakdown */}
+        <FormSection title="Colour & Size Breakdown" cols={1}
+          actions={<Button variant="secondary" size="sm" onClick={addLine}>+ Add Line</Button>}>
+          <table className="w-full text-xs text-left border rounded-lg overflow-hidden">
+            <thead className="bg-slate-50 border-b">
+              <tr>
+                <th className="p-2">Colour</th>
+                <th className="p-2">Size</th>
+                <th className="p-2">Good Qty (PCS)</th>
+                <th className="p-2">Reject Qty (PCS)</th>
+                <th className="p-2">Batch No</th>
+                <th className="p-2 w-10"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map((line, idx) => (
+                <tr key={idx} className="border-b">
+                  <td className="p-1.5">
+                    <select className="w-full border rounded px-1.5 py-1" value={line.color_id}
+                      onChange={e => updateLine(idx, 'color_id', e.target.value ? Number(e.target.value) : '')}>
+                      <option value="">— Colour —</option>
+                      {colors.map(c => <option key={c.id} value={c.id}>{c.label || c.color_name}</option>)}
+                    </select>
+                  </td>
+                  <td className="p-1.5">
+                    <select className="w-full border rounded px-1.5 py-1" value={line.size_id}
+                      onChange={e => updateLine(idx, 'size_id', e.target.value ? Number(e.target.value) : '')}>
+                      <option value="">— Size —</option>
+                      {sizes.map(s => <option key={s.id} value={s.id}>{s.size_code || s.code}{s.group_name ? ` (${s.group_name})` : ''}</option>)}
+                    </select>
+                  </td>
+                  <td className="p-1.5">
+                    <input type="number" min={0} className="w-full border rounded px-1.5 py-1" value={line.good_qty}
+                      onChange={e => updateLine(idx, 'good_qty', Number(e.target.value))} />
+                  </td>
+                  <td className="p-1.5">
+                    <input type="number" min={0} className="w-full border rounded px-1.5 py-1" value={line.reject_qty}
+                      onChange={e => updateLine(idx, 'reject_qty', Number(e.target.value))} />
+                  </td>
+                  <td className="p-1.5">
+                    <input className="w-full border rounded px-1.5 py-1" value={line.batch_no}
+                      onChange={e => updateLine(idx, 'batch_no', e.target.value)} placeholder="BATCH" />
+                  </td>
+                  <td className="p-1.5 text-center">
+                    <button onClick={() => removeLine(idx)} className="text-red-500 font-bold">×</button>
+                  </td>
+                </tr>
+              ))}
+              {lines.length === 0 && (
+                <tr><td colSpan={6} className="p-3 text-center text-slate-400">No lines yet — click “+ Add Line”.</td></tr>
+              )}
+            </tbody>
+            {lines.length > 0 && (
+              <tfoot className="bg-slate-50 font-semibold">
+                <tr>
+                  <td className="p-2" colSpan={2}>Total</td>
+                  <td className="p-2">{fmtNumber(lines.reduce((t, l) => t + (Number(l.good_qty) || 0), 0))} PCS</td>
+                  <td className="p-2">{fmtNumber(lines.reduce((t, l) => t + (Number(l.reject_qty) || 0), 0))} PCS</td>
+                  <td colSpan={2} />
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </FormSection>
 
-              <div className="grid grid-cols-2 gap-4">
-                <Select
-                  label="FG Warehouse *"
-                  value={header.warehouse_id}
-                  onChange={e => setHeader({ ...header, warehouse_id: e.target.value })}
-                  options={[
-                    { value: '', label: '— Select FG Warehouse —' },
-                    ...warehouses.map(w => ({ value: w.id, label: w.label || w.warehouse_name })),
-                  ]}
-                />
-                <Input label="Source Stage" value={header.source_stage}
-                  onChange={e => setHeader({ ...header, source_stage: e.target.value })} />
-              </div>
-
-              {/* Line Breakdown */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-semibold text-slate-800">Colour & Size Breakdown</h4>
-                  <Button variant="outline" size="sm" onClick={addLine}>+ Add Line</Button>
-                </div>
-
-                <table className="w-full text-xs text-left border rounded-lg overflow-hidden">
-                  <thead className="bg-slate-50 border-b">
-                    <tr>
-                      <th className="p-2">Colour</th>
-                      <th className="p-2">Size</th>
-                      <th className="p-2">Good Qty (PCS)</th>
-                      <th className="p-2">Reject Qty (PCS)</th>
-                      <th className="p-2">Batch No</th>
-                      <th className="p-2 w-10"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lines.map((line, idx) => (
-                      <tr key={idx} className="border-b">
-                        <td className="p-1.5">
-                          <select className="w-full border rounded px-1.5 py-1" value={line.color_id}
-                            onChange={e => updateLine(idx, 'color_id', e.target.value ? Number(e.target.value) : '')}>
-                            <option value="">— Colour —</option>
-                            {colors.map(c => <option key={c.id} value={c.id}>{c.label || c.color_name}</option>)}
-                          </select>
-                        </td>
-                        <td className="p-1.5">
-                          <select className="w-full border rounded px-1.5 py-1" value={line.size_id}
-                            onChange={e => updateLine(idx, 'size_id', e.target.value ? Number(e.target.value) : '')}>
-                            <option value="">— Size —</option>
-                            {sizes.map(s => <option key={s.id} value={s.id}>{s.size_code || s.code}{s.group_name ? ` (${s.group_name})` : ''}</option>)}
-                          </select>
-                        </td>
-                        <td className="p-1.5">
-                          <input type="number" min={0} className="w-full border rounded px-1.5 py-1" value={line.good_qty}
-                            onChange={e => updateLine(idx, 'good_qty', Number(e.target.value))} />
-                        </td>
-                        <td className="p-1.5">
-                          <input type="number" min={0} className="w-full border rounded px-1.5 py-1" value={line.reject_qty}
-                            onChange={e => updateLine(idx, 'reject_qty', Number(e.target.value))} />
-                        </td>
-                        <td className="p-1.5">
-                          <input className="w-full border rounded px-1.5 py-1" value={line.batch_no}
-                            onChange={e => updateLine(idx, 'batch_no', e.target.value)} placeholder="BATCH" />
-                        </td>
-                        <td className="p-1.5 text-center">
-                          <button onClick={() => removeLine(idx)} className="text-red-500 font-bold">×</button>
-                        </td>
-                      </tr>
-                    ))}
-                    {lines.length === 0 && (
-                      <tr><td colSpan={6} className="p-3 text-center text-slate-400">No lines yet — click “+ Add Line”.</td></tr>
-                    )}
-                  </tbody>
-                  {lines.length > 0 && (
-                    <tfoot className="bg-slate-50 font-semibold">
-                      <tr>
-                        <td className="p-2" colSpan={2}>Total</td>
-                        <td className="p-2">{fmtNumber(lines.reduce((t, l) => t + (Number(l.good_qty) || 0), 0))} PCS</td>
-                        <td className="p-2">{fmtNumber(lines.reduce((t, l) => t + (Number(l.reject_qty) || 0), 0))} PCS</td>
-                        <td colSpan={2} />
-                      </tr>
-                    </tfoot>
-                  )}
-                </table>
-              </div>
-
-              <Textarea label="Remarks" value={header.remarks} onChange={e => setHeader({ ...header, remarks: e.target.value })} rows={2} />
-            </div>
-
-            <div className="flex justify-end gap-2 border-t px-6 py-4 bg-slate-50">
-              <Button variant="ghost" onClick={() => setShowModal(false)}>Cancel</Button>
-              <Button onClick={handleSave} loading={saving}>Save FG Receipt</Button>
-            </div>
-          </div>
-        </div>
-      )}
+        <FormSection title="Remarks" cols={1}>
+          <Textarea label="Remarks" value={header.remarks} onChange={e => setHeader({ ...header, remarks: e.target.value })} rows={2} />
+        </FormSection>
+      </Modal>
     </div>
   );
 }

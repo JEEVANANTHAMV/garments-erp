@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { http } from '../../lib/api';
 import { fmtDecimal, fmtNumber } from '../../lib/format';
-import { Badge, Modal, Input, useDebounced } from '../../components/ui';
+import { Badge, Modal, Input, Button, useDebounced } from '../../components/ui';
 import { useToast } from '../../hooks/useToast';
 
 export default function FabricRollStockPage() {
@@ -387,9 +387,17 @@ export default function FabricRollStockPage() {
       {/* Edit Roll Modal */}
       {editRoll && (
         <Modal
-          title={`Update Roll: ${editRoll.roll_no}`}
+          title={`Edit roll ${editRoll.roll_no}`}
+          subtitle="Update the stock status, QC status and rack / bin of this fabric roll"
           open={!!editRoll}
           onClose={() => setEditRoll(null)}
+          size="sm"
+          footer={<>
+            <Button variant="secondary" onClick={() => setEditRoll(null)}>Cancel</Button>
+            <Button onClick={handleSaveEdit} loading={updating}>
+              {updating ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </>}
         >
           <div className="space-y-4 text-xs">
             <div className="p-3 bg-slate-50 rounded-lg text-slate-700 grid grid-cols-2 gap-2 text-[11px]">
@@ -441,21 +449,6 @@ export default function FabricRollStockPage() {
               />
             </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-              <button
-                onClick={() => setEditRoll(null)}
-                className="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                disabled={updating}
-                className="px-3.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-medium disabled:opacity-50"
-              >
-                {updating ? 'Saving...' : 'Save Changes'}
-              </button>
-            </div>
           </div>
         </Modal>
       )}

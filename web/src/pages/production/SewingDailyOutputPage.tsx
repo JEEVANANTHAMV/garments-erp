@@ -514,6 +514,8 @@ function DailyOutputPage({ proc }: { proc: OutProc }) {
           { key: 'good_qty', header: 'Good' }, { key: 'reject_qty', header: 'Reject' }]} />
 
       <Modal open={picker} onClose={() => setPicker(false)} title="Add bundles from the plan" size="lg"
+        subtitle="Planned bundles of this line not yet in the entry — add a whole job or single bundles"
+        footerStart={<><b>{addable.length}</b> bundles left to add</>}
         footer={<Button variant="secondary" onClick={() => setPicker(false)}>Close</Button>}>
         <table className="w-full text-xs">
           <tbody>

@@ -4,13 +4,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, RefreshCw, CheckCircle, Clock, AlertTriangle,
   Layers, Edit, Save, Copy, Printer,
-  Calendar as CalendarIcon, BarChart2, X
+  Calendar as CalendarIcon, BarChart2
 } from 'lucide-react';
 import { http, ApiError } from '../../lib/api';
 import { fmtDate, fmtNumber } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
 import { useAuth } from '../../lib/auth';
-import { StatusBadge } from '../../components/ui';
+import { StatusBadge, Modal, FormSection } from '../../components/ui';
 
 export default function TnaDetailPage() {
   const { id } = useParams();
@@ -772,187 +772,164 @@ export default function TnaDetailPage() {
         </div>
       )}
 
-      {/* 9. Activity Detail Edit Drawer / Modal */}
+      {/* 9. Activity Detail Edit Modal */}
       {editDrawerOpen && selectedActivity && (
-        <div className="fixed inset-0 z-50 flex items-center justify-end bg-slate-900/50 backdrop-blur-xs">
-          <div className="w-full max-w-md h-full bg-white shadow-2xl p-5 overflow-y-auto flex flex-col justify-between">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                    Seq #{selectedActivity.sequence_no} • {selectedActivity.category}
-                  </span>
-                  <h2 className="text-base font-bold text-slate-900">{selectedActivity.activity_name}</h2>
-                </div>
-                <button
-                  type="button"
-                  className="btn-ghost btn-sm text-slate-400 hover:text-slate-700"
-                  onClick={() => setEditDrawerOpen(false)}
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              <form onSubmit={handleSaveActivity} className="space-y-3.5">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Planned Start</label>
-                    <input
-                      type="date"
-                      value={selectedActivity.planned_start_date}
-                      onChange={(e) => setSelectedActivity({ ...selectedActivity, planned_start_date: e.target.value })}
-                      className="input text-xs w-full"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Planned End</label>
-                    <input
-                      type="date"
-                      value={selectedActivity.planned_end_date}
-                      onChange={(e) => setSelectedActivity({ ...selectedActivity, planned_end_date: e.target.value })}
-                      className="input text-xs w-full"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Actual Start</label>
-                    <input
-                      type="date"
-                      value={selectedActivity.actual_start_date}
-                      onChange={(e) => setSelectedActivity({ ...selectedActivity, actual_start_date: e.target.value })}
-                      className="input text-xs w-full"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Actual End</label>
-                    <input
-                      type="date"
-                      value={selectedActivity.actual_end_date}
-                      onChange={(e) => setSelectedActivity({ ...selectedActivity, actual_end_date: e.target.value })}
-                      className="input text-xs w-full"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Status</label>
-                    <select
-                      value={selectedActivity.status}
-                      onChange={(e) => setSelectedActivity({ ...selectedActivity, status: e.target.value })}
-                      className="input text-xs w-full"
-                    >
-                      <option value="NOT_STARTED">NOT_STARTED</option>
-                      <option value="IN_PROGRESS">IN_PROGRESS</option>
-                      <option value="COMPLETED">COMPLETED</option>
-                      <option value="ON_HOLD">ON_HOLD</option>
-                      <option value="CANCELLED">CANCELLED</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Priority</label>
-                    <select
-                      value={selectedActivity.priority}
-                      onChange={(e) => setSelectedActivity({ ...selectedActivity, priority: e.target.value })}
-                      className="input text-xs w-full"
-                    >
-                      <option value="LOW">LOW</option>
-                      <option value="MEDIUM">MEDIUM</option>
-                      <option value="HIGH">HIGH</option>
-                      <option value="CRITICAL">CRITICAL</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Responsible Department</label>
-                  <input
-                    type="text"
-                    value={selectedActivity.department_name || ''}
-                    onChange={(e) => setSelectedActivity({ ...selectedActivity, department_name: e.target.value })}
-                    className="input text-xs w-full"
-                    placeholder="e.g. Purchase / Merchandising"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Remarks & Status Notes</label>
-                  <textarea
-                    rows={2}
-                    value={selectedActivity.remarks || ''}
-                    onChange={(e) => setSelectedActivity({ ...selectedActivity, remarks: e.target.value })}
-                    className="input text-xs w-full"
-                    placeholder="Notes regarding delay reason or status..."
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                    Reason for Date Change (Audit Log)
-                  </label>
-                  <input
-                    type="text"
-                    value={selectedActivity.reason || ''}
-                    onChange={(e) => setSelectedActivity({ ...selectedActivity, reason: e.target.value })}
-                    className="input text-xs w-full"
-                    placeholder="e.g. Buyer lab dip approval delayed"
-                  />
-                </div>
-
-                <div className="pt-3 border-t border-slate-200 flex items-center justify-between gap-2">
-                  {selectedActivity.status !== 'COMPLETED' && (
-                    <button
-                      type="button"
-                      className="btn-success btn-sm flex items-center gap-1 text-white bg-emerald-600 hover:bg-emerald-700"
-                      onClick={() => handleCompleteActivity(selectedActivity.id)}
-                    >
-                      <CheckCircle size={14} /> Mark Done
-                    </button>
-                  )}
-                  <div className="flex items-center gap-2 ml-auto">
-                    <button
-                      type="button"
-                      className="btn-ghost btn-sm"
-                      onClick={() => setEditDrawerOpen(false)}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="btn-primary btn-sm flex items-center gap-1.5"
-                    >
-                      <Save size={14} /> Save Changes
-                    </button>
-                  </div>
-                </div>
-              </form>
-
-              {/* Activity Change History List */}
-              <div className="pt-4 border-t border-slate-200">
-                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Audit History</h4>
-                <div className="space-y-2 max-h-40 overflow-y-auto">
-                  {(historyQuery.data || []).filter((h) => h.activity_id === selectedActivity.id).length === 0 ? (
-                    <p className="text-[11px] text-slate-400">No revisions logged yet.</p>
-                  ) : (
-                    (historyQuery.data || [])
-                      .filter((h) => h.activity_id === selectedActivity.id)
-                      .map((h, i) => (
-                        <div key={i} className="text-[11px] bg-slate-50 p-2 rounded border border-slate-100">
-                          <div className="font-semibold text-slate-800 flex justify-between">
-                            <span>{h.changed_by_name || 'User'}</span>
-                            <span className="text-slate-400 font-mono">{fmtDate(h.changed_at)}</span>
-                          </div>
-                          <div className="text-slate-600 mt-0.5">{h.reason || 'Status updated'}</div>
-                        </div>
-                      ))
-                  )}
-                </div>
-              </div>
+        <Modal open onClose={() => setEditDrawerOpen(false)} size="md"
+          title={`Edit activity — ${selectedActivity.activity_name}`}
+          subtitle={`Seq #${selectedActivity.sequence_no} • ${selectedActivity.category}`}
+          icon={<CalendarIcon size={16} />}
+          footer={<>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setEditDrawerOpen(false)}
+            >
+              Cancel
+            </button>
+            {selectedActivity.status !== 'COMPLETED' && (
+              <button
+                type="button"
+                className="btn-secondary flex items-center gap-1 text-emerald-700"
+                onClick={() => handleCompleteActivity(selectedActivity.id)}
+              >
+                <CheckCircle size={14} /> Mark Done
+              </button>
+            )}
+            <button
+              type="submit"
+              form="tna-activity-form"
+              className="btn-primary flex items-center gap-1.5"
+            >
+              <Save size={14} /> Save Changes
+            </button>
+          </>}>
+          <form id="tna-activity-form" onSubmit={handleSaveActivity}>
+          <FormSection title="Dates" cols={2}>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">Planned Start</label>
+              <input
+                type="date"
+                value={selectedActivity.planned_start_date}
+                onChange={(e) => setSelectedActivity({ ...selectedActivity, planned_start_date: e.target.value })}
+                className="input text-xs w-full"
+              />
             </div>
-          </div>
-        </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">Planned End</label>
+              <input
+                type="date"
+                value={selectedActivity.planned_end_date}
+                onChange={(e) => setSelectedActivity({ ...selectedActivity, planned_end_date: e.target.value })}
+                className="input text-xs w-full"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">Actual Start</label>
+              <input
+                type="date"
+                value={selectedActivity.actual_start_date}
+                onChange={(e) => setSelectedActivity({ ...selectedActivity, actual_start_date: e.target.value })}
+                className="input text-xs w-full"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">Actual End</label>
+              <input
+                type="date"
+                value={selectedActivity.actual_end_date}
+                onChange={(e) => setSelectedActivity({ ...selectedActivity, actual_end_date: e.target.value })}
+                className="input text-xs w-full"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                Reason for Date Change (Audit Log)
+              </label>
+              <input
+                type="text"
+                value={selectedActivity.reason || ''}
+                onChange={(e) => setSelectedActivity({ ...selectedActivity, reason: e.target.value })}
+                className="input text-xs w-full"
+                placeholder="e.g. Buyer lab dip approval delayed"
+              />
+            </div>
+          </FormSection>
+
+          <FormSection title="Status & ownership" cols={3}>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">Status</label>
+              <select
+                value={selectedActivity.status}
+                onChange={(e) => setSelectedActivity({ ...selectedActivity, status: e.target.value })}
+                className="input text-xs w-full"
+              >
+                <option value="NOT_STARTED">NOT_STARTED</option>
+                <option value="IN_PROGRESS">IN_PROGRESS</option>
+                <option value="COMPLETED">COMPLETED</option>
+                <option value="ON_HOLD">ON_HOLD</option>
+                <option value="CANCELLED">CANCELLED</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">Priority</label>
+              <select
+                value={selectedActivity.priority}
+                onChange={(e) => setSelectedActivity({ ...selectedActivity, priority: e.target.value })}
+                className="input text-xs w-full"
+              >
+                <option value="LOW">LOW</option>
+                <option value="MEDIUM">MEDIUM</option>
+                <option value="HIGH">HIGH</option>
+                <option value="CRITICAL">CRITICAL</option>
+              </select>
+            </div>
+            <div className="sm:col-span-2 lg:col-span-1">
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">Responsible Department</label>
+              <input
+                type="text"
+                value={selectedActivity.department_name || ''}
+                onChange={(e) => setSelectedActivity({ ...selectedActivity, department_name: e.target.value })}
+                className="input text-xs w-full"
+                placeholder="e.g. Purchase / Merchandising"
+              />
+            </div>
+          </FormSection>
+
+          <FormSection title="Remarks" cols={1}>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">Remarks & Status Notes</label>
+              <textarea
+                rows={2}
+                value={selectedActivity.remarks || ''}
+                onChange={(e) => setSelectedActivity({ ...selectedActivity, remarks: e.target.value })}
+                className="input text-xs w-full"
+                placeholder="Notes regarding delay reason or status..."
+              />
+            </div>
+          </FormSection>
+          </form>
+
+          {/* Activity Change History List */}
+          <FormSection title="Audit History" cols={1} className="mt-4">
+            <div className="space-y-2 max-h-40 overflow-y-auto">
+              {(historyQuery.data || []).filter((h) => h.activity_id === selectedActivity.id).length === 0 ? (
+                <p className="text-[11px] text-slate-400">No revisions logged yet.</p>
+              ) : (
+                (historyQuery.data || [])
+                  .filter((h) => h.activity_id === selectedActivity.id)
+                  .map((h, i) => (
+                    <div key={i} className="text-[11px] bg-slate-50 p-2 rounded border border-slate-100">
+                      <div className="font-semibold text-slate-800 flex justify-between">
+                        <span>{h.changed_by_name || 'User'}</span>
+                        <span className="text-slate-400 font-mono">{fmtDate(h.changed_at)}</span>
+                      </div>
+                      <div className="text-slate-600 mt-0.5">{h.reason || 'Status updated'}</div>
+                    </div>
+                  ))
+              )}
+            </div>
+          </FormSection>
+        </Modal>
       )}
     </div>
   );

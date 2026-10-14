@@ -2,12 +2,12 @@ import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Activity, Plus, Search, Eye, Trash2,
-  AlertTriangle, RefreshCw, X, Layers, Box, FileText, Check, Printer
+  AlertTriangle, RefreshCw, Layers, Box, FileText, Check, Printer
 } from 'lucide-react';
 import { http } from '../../lib/api';
 import { fmtDate, fmtDecimal, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
-import { Badge } from '../../components/ui';
+import { Badge, Modal, FormSection } from '../../components/ui';
 import { JobSelect, onlyStyle } from '../../components/JobSelect';
 
 export default function KnittingPage() {
@@ -608,44 +608,38 @@ export default function KnittingPage() {
 
       {/* MANAGE KWO DETAIL MODAL */}
       {activeOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden border border-slate-100 max-h-[92vh] flex flex-col">
-            {/* Header */}
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-base text-slate-900">{activeOrder.kwo_no}</span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-teal-100 text-teal-800">
-                    {activeOrder.sub_process}
-                  </span>
-                  <Badge variant={activeOrder.status === 'COMPLETED' ? 'success' : 'warning'}>
-                    {activeOrder.status}
-                  </Badge>
-                </div>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  I/O No: <span className="font-semibold text-slate-800">{activeOrder.io_no}</span>
-                  {activeOrder.customer_po_no && (
-                    <> | Customer PO: <span className="font-semibold text-teal-700">{activeOrder.customer_po_no}</span></>
-                  )}
-                  {' '}| Style: <span className="font-medium text-slate-800">{activeOrder.style_code || '-'}</span> | Target: <span className="font-medium text-slate-800">{activeOrder.fabric_name} ({activeOrder.dia || '-'}, {activeOrder.gsm || '-'} GSM)</span>
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowPrintVoucher(true)}
-                  className="btn-secondary text-xs flex items-center gap-1.5 py-1 px-3 border border-slate-300 hover:bg-slate-100 shadow-sm"
-                >
-                  <Printer size={14} /> Print Work Order
-                </button>
-                <button onClick={() => setActiveKwoId(null)} className="text-slate-400 hover:text-slate-600">
-                  <X size={20} />
-                </button>
-              </div>
-            </div>
-
+        <Modal open onClose={() => setActiveKwoId(null)} size="lg"
+          title={`Knitting work order ${activeOrder.kwo_no}`}
+          icon={<Activity size={16} />}
+          subtitle={<>
+            <span className="mr-1.5 inline-flex items-center gap-1.5 align-middle">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-teal-100 text-teal-800">
+                {activeOrder.sub_process}
+              </span>
+              <Badge variant={activeOrder.status === 'COMPLETED' ? 'success' : 'warning'}>
+                {activeOrder.status}
+              </Badge>
+            </span>
+            I/O No: <span className="font-semibold text-slate-800">{activeOrder.io_no}</span>
+            {activeOrder.customer_po_no && (
+              <> | Customer PO: <span className="font-semibold text-teal-700">{activeOrder.customer_po_no}</span></>
+            )}
+            {' '}| Style: <span className="font-medium text-slate-800">{activeOrder.style_code || '-'}</span> | Target: <span className="font-medium text-slate-800">{activeOrder.fabric_name} ({activeOrder.dia || '-'}, {activeOrder.gsm || '-'} GSM)</span>
+          </>}
+          footer={<>
+            <button type="button" onClick={() => setActiveKwoId(null)} className="btn-secondary text-xs">
+              Close
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowPrintVoucher(true)}
+              className="btn-primary text-xs flex items-center gap-1.5"
+            >
+              <Printer size={14} /> Print Work Order
+            </button>
+          </>}>
             {/* Production Summary Cards */}
-            <div className="px-6 py-3 bg-slate-100/50 border-b border-slate-100 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+            <div className="mb-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
               <div className="p-2.5 bg-white rounded-xl border border-slate-200/60">
                 <span className="text-slate-400 block text-[10px]">Total Yarn Issued</span>
                 <span className="text-sm font-bold text-indigo-700">
@@ -683,7 +677,7 @@ export default function KnittingPage() {
             </div>
 
             {/* Tab Navigation */}
-            <div className="flex border-b border-slate-200 px-6 pt-2 bg-white gap-4 text-xs font-semibold">
+            <div className="mb-4 flex gap-4 border-b border-slate-200 text-xs font-semibold">
               <button
                 onClick={() => setManageTab('issues')}
                 className={`pb-2.5 flex items-center gap-1.5 border-b-2 transition ${
@@ -707,7 +701,7 @@ export default function KnittingPage() {
             </div>
 
             {/* Tab Content */}
-            <div className="p-6 overflow-y-auto flex-1 space-y-6 text-xs">
+            <div className="space-y-6 text-xs">
               {manageTab === 'issues' ? (
                 /* TAB 1: YARN ISSUE */
                 <div className="space-y-4">
@@ -725,7 +719,7 @@ export default function KnittingPage() {
                     }}
                     className="p-4 bg-indigo-50/40 rounded-xl border border-indigo-100 space-y-3"
                   >
-                    <h4 className="font-semibold text-indigo-950 flex items-center gap-1.5">
+                    <h4 className="flex items-center gap-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">
                       <Plus size={14} /> Record Yarn Issue to Knitting
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
@@ -868,7 +862,7 @@ export default function KnittingPage() {
                     }}
                     className="p-4 bg-teal-50/40 rounded-xl border border-teal-100 space-y-3"
                   >
-                    <h4 className="font-semibold text-teal-950 flex items-center gap-1.5">
+                    <h4 className="flex items-center gap-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">
                       <Plus size={14} /> Record Grey Fabric Roll Output & QC
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -1020,8 +1014,7 @@ export default function KnittingPage() {
                 </div>
               )}
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* PRINTABLE KNITTING WORK ORDER VOUCHER MODAL */}

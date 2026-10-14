@@ -2,12 +2,12 @@ import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { CrudPage } from '../../components/CrudPage';
 import { GateEntryPicker } from '../../components/ProcessPickers';
-import { StatusBadge, Badge, Modal, Input, Select, Button, Spinner } from '../../components/ui';
+import { StatusBadge, Badge, Modal, FormSection, LoadingBlock, Input, Select, Button, Spinner } from '../../components/ui';
 import { fmtDate, fmtDecimal, humanize, today } from '../../lib/format';
 import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
 import { http, ApiError } from '../../lib/api';
-import { Plus, Trash2, CheckCircle2, Sparkles, Layers } from 'lucide-react';
+import { Plus, Trash2, CheckCircle2, Sparkles, Layers, Receipt } from 'lucide-react';
 import { InvoiceSummary } from '../../components/InvoiceSummary';
 import {
   computeInvoice, chargesFromRow, chargesPayload, EMPTY_CHARGES,
@@ -610,37 +610,37 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
     <Modal
       open={open}
       onClose={onClose}
-      title={billId ? `Edit Inward Bill #${billId}` : 'New Inward Bill Entry'}
+      title={billId ? `Edit inward bill #${billId}` : 'New inward bill'}
+      subtitle="Pick the bill type and supplier, link the GRN(s) to pull lines, then check the match and totals"
+      icon={<Receipt size={16} />}
       size="full"
-      footer={
-        <div className="flex items-center justify-between w-full">
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <span>Lines: <strong>{lines.length}</strong></span>
-            <span>•</span>
-            <span>Total Qty: <strong>{fmtDecimal(totals.totalQty, 2)}</strong></span>
-            <span>•</span>
-            <span className="text-brand-700 font-bold">
-              Grand Total: {currencySymbol}{fmtDecimal(totals.inv.net, 2)}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSave}
-              disabled={saving}
-              className="bg-brand-600 hover:bg-brand-700 text-white font-semibold flex items-center gap-1.5"
-            >
-              {saving ? <Spinner size={14} /> : <CheckCircle2 size={15} />}
-              <span>{saving ? 'Saving...' : 'Save Inward Bill'}</span>
-            </Button>
-          </div>
-        </div>
+      footerStart={
+        <span className="flex flex-wrap items-center gap-2">
+          <span>Lines: <strong>{lines.length}</strong></span>
+          <span>•</span>
+          <span>Total Qty: <strong>{fmtDecimal(totals.totalQty, 2)}</strong></span>
+          <span>•</span>
+          <span className="text-brand-700 font-bold">
+            Grand Total: {currencySymbol}{fmtDecimal(totals.inv.net, 2)}
+          </span>
+        </span>
       }
+      footer={<>
+        <Button variant="secondary" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button
+          onClick={handleSave}
+          disabled={saving}
+          className="inline-flex items-center gap-1.5"
+        >
+          {saving ? <Spinner size={14} /> : <CheckCircle2 size={15} />}
+          <span>{saving ? 'Saving...' : 'Save Inward Bill'}</span>
+        </Button>
+      </>}
     >
       {loading ? (
-        <div className="py-20 text-center text-slate-400">Loading bill details...</div>
+        <LoadingBlock label="Loading bill details…" rows={6} />
       ) : (
         <div className="space-y-4">
           {/* Bill Category Selector Tabs */}
@@ -668,9 +668,9 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
             })}
           </div>
 
-          {/* Header Parameters Grid */}
-          <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          {/* Header fields, in the order they are filled */}
+          <div>
+            <FormSection title="Document">
               <Input
                 label="Internal Bill No"
                 value={header.bill_no}
@@ -685,16 +685,6 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                 onChange={(e) => setHeader((p) => ({ ...p, bill_date: e.target.value }))}
               />
 
-              <div className="lg:col-span-2">
-                <Select
-                  label="Supplier / Mill / Processor *"
-                  value={header.supplier_id}
-                  onChange={(e) => setHeader((p) => ({ ...p, supplier_id: e.target.value, gate_inward_id: '', gate_matched: false }))}
-                  options={toOptions(suppliers.data)}
-                  placeholder="Select Supplier"
-                />
-              </div>
-
               <Input
                 label="Supplier Inv / DC No"
                 value={header.supplier_inv_no}
@@ -708,10 +698,43 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                 value={header.supplier_inv_date}
                 onChange={(e) => setHeader((p) => ({ ...p, supplier_inv_date: e.target.value }))}
               />
-            </div>
+            </FormSection>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 pt-2 border-t border-slate-100 items-end">
-              <div className="lg:col-span-2">
+            <FormSection title="Party & references">
+              <div className="sm:col-span-2">
+                <Select
+                  label="Supplier / Mill / Processor *"
+                  value={header.supplier_id}
+                  onChange={(e) => setHeader((p) => ({ ...p, supplier_id: e.target.value, gate_inward_id: '', gate_matched: false }))}
+                  options={toOptions(suppliers.data)}
+                  placeholder="Select Supplier"
+                />
+              </div>
+
+              <Select
+                label="Currency *"
+                value={header.currency_id}
+                onChange={(e) => setHeader((p) => ({ ...p, currency_id: e.target.value }))}
+                options={toOptions(currencies.data)}
+                placeholder="Currency"
+              />
+
+              <Input
+                label="Payment Due Date"
+                type="date"
+                value={header.payment_due_date}
+                onChange={(e) => setHeader((p) => ({ ...p, payment_due_date: e.target.value }))}
+              />
+
+              <Select
+                label="Link Purchase Order"
+                value={header.po_id}
+                onChange={(e) => setHeader((p) => ({ ...p, po_id: e.target.value }))}
+                options={toOptions(purchaseOrders.data)}
+                placeholder="Select PO"
+              />
+
+              <div className="sm:col-span-2">
                 <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                   Link GRN (Select to Auto-Fetch)
                 </label>
@@ -734,7 +757,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                 </select>
               </div>
 
-              <div>
+              <div className="flex items-end">
                 <button
                   type="button"
                   onClick={handleFetchFromGrn}
@@ -746,39 +769,10 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                   <span>{fetchingGrn ? 'Fetching...' : `Sync Lines ${selectedGrnIds.length > 0 ? `(${selectedGrnIds.length})` : ''}`}</span>
                 </button>
               </div>
-
-              <div>
-                <Select
-                  label="Link Purchase Order"
-                  value={header.po_id}
-                  onChange={(e) => setHeader((p) => ({ ...p, po_id: e.target.value }))}
-                  options={toOptions(purchaseOrders.data)}
-                  placeholder="Select PO"
-                />
-              </div>
-
-              <div>
-                <Select
-                  label="Currency *"
-                  value={header.currency_id}
-                  onChange={(e) => setHeader((p) => ({ ...p, currency_id: e.target.value }))}
-                  options={toOptions(currencies.data)}
-                  placeholder="Currency"
-                />
-              </div>
-
-              <div>
-                <Input
-                  label="Payment Due Date"
-                  type="date"
-                  value={header.payment_due_date}
-                  onChange={(e) => setHeader((p) => ({ ...p, payment_due_date: e.target.value }))}
-                />
-              </div>
-            </div>
+            </FormSection>
 
             {billType.startsWith('TRIM') && (
-              <div className="flex flex-wrap items-center gap-2 border-t border-dashed border-amber-200 pt-2">
+              <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-dashed border-amber-200 pt-2">
                 <select value="" onChange={(e) => { if (e.target.value) void handleAddTrimGrn(e.target.value); }} id="sel-trim-grn"
                   className="w-72 rounded-lg border border-amber-300 bg-amber-50/40 px-2 py-1.5 text-xs font-semibold text-amber-900">
                   <option value="">+ Link Trim GRN (pulls accepted lines)…</option>
@@ -796,7 +790,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
 
             {/* Selected Multi-GRN Badges */}
             {selectedGrnIds.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-dashed border-indigo-100">
+              <div className="mt-3 flex flex-wrap items-center gap-2 pt-2 border-t border-dashed border-indigo-100">
                 <span className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
                   <Layers size={13} className="text-indigo-600" /> Linked GRNs ({selectedGrnIds.length}):
                 </span>
@@ -828,7 +822,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
             )}
 
             {/* GST Tax Type & Import Configuration Row */}
-            <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+            <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">GST Tax Nature:</span>
                 <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-50 text-xs">
@@ -877,17 +871,8 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
 
             {/* Import & Customs Parameters Card (Visible if Import or Foreign Currency selected) */}
             {isImport && (
-              <div className="mt-3 p-3 bg-emerald-50/50 border border-emerald-200 rounded-xl space-y-2">
-                <div className="flex items-center justify-between pb-1 border-b border-emerald-200/60">
-                  <h4 className="text-xs font-bold text-emerald-950 uppercase tracking-wider flex items-center gap-1.5">
-                    <span>🚢 Import & Customs Documentation</span>
-                  </h4>
-                  <span className="text-[11px] text-emerald-700 font-medium">
-                    All lines entered in <strong>{selectedCurrency?.code || 'FC'}</strong>, auto-converted to INR for GST & accounts
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-1">
+              <FormSection title="Import & customs documentation" className="mt-4"
+                description={<>All lines entered in <strong>{selectedCurrency?.code || 'FC'}</strong>, auto-converted to INR for GST & accounts</>}>
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                       Exchange Rate (₹ per 1 {selectedCurrency?.code || 'FC'}) *
@@ -922,17 +907,15 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                     onChange={(e) => setHeader((p) => ({ ...p, port_code: e.target.value }))}
                     placeholder="e.g. INMAA1 (Chennai Sea)"
                   />
-                </div>
-              </div>
+              </FormSection>
             )}
           </div>
 
           {/* Line Items Table Customized by Bill Category */}
-          <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs space-y-3">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-end justify-between gap-2 pb-1.5 border-b border-slate-100">
               <div className="flex items-center gap-2">
-                <Layers size={16} className="text-brand-600" />
-                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                <h3 className="text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">
                   Inward Bill Line Items ({lines.length})
                 </h3>
                 <Badge tone={isYarn ? 'indigo' : isFab ? 'purple' : isTrim ? 'amber' : 'slate'}>
@@ -1158,7 +1141,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* 3-Way Match & Status Card */}
             <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 space-y-3">
-              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+              <h4 className="border-b border-slate-200 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">
                 Matching & Verification
               </h4>
 

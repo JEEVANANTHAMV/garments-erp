@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Plus, Save, Ban, CheckCircle2, Lock, Truck, PackageCheck, Trash2, GitBranch } from 'lucide-react';
-import { Card, Badge, Button, Input, Select, Textarea, Modal, DataTable, Tabs } from '../../components/ui';
+import { Plus, Save, Ban, CheckCircle2, Lock, Truck, PackageCheck, Trash2, GitBranch, ClipboardList, BadgeIndianRupee, Wallet } from 'lucide-react';
+import { Card, Badge, Button, Input, Select, Textarea, Modal, FormSection, LoadingBlock, DataTable, Tabs } from '../../components/ui';
 import { api } from '../../lib/api';
 import { fmtDate, fmtNumber, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
@@ -132,22 +132,27 @@ function OrderEditor({ order, onClose, onSaved }: { order: any; onClose: () => v
     } catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(false); }
   };
   return (
-    <Modal open onClose={onClose} size="full" title={order.id ? `Edit ${order.jw_no}` : 'New job work order'}
+    <Modal open onClose={onClose} size="full" title={order.id ? `Edit job work order ${order.jw_no}` : 'New job work order'}
+      subtitle="What a contractor does for a job, by process route — saved as a draft; approve it to send DCs"
+      icon={<ClipboardList size={16} />}
+      footerStart={<><b>{lines.length}</b> process(es) on the route</>}
       footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button loading={busy} id="jw-save" disabled={!h.vendor_id || !lines.length || lines.some((l) => !l.stage_id || !(num(l.planned_input_qty) > 0))} onClick={save}><Save size={13} className="mr-1 inline" />Save draft</Button></>}>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <FormSection title="Order & contractor">
+        <Input label="Order date" type="date" value={h.order_date} onChange={(e) => setH({ ...h, order_date: e.target.value })} />
+        <Input label="Expected return" type="date" value={h.expected_return_date} onChange={(e) => setH({ ...h, expected_return_date: e.target.value })} />
+        <Select label="Contractor" required id="jw-vendor" className="sm:col-span-2" value={h.vendor_id} onChange={(e) => setH({ ...h, vendor_id: e.target.value })} placeholder="— choose —"
+          options={contractors.map((c) => ({ value: c.id, label: c.label }))} />
+      </FormSection>
+      <FormSection title="Job & remarks">
         <JobSelect value={h.so_id} by="so_id" id="jw-job" onPick={(j) => setH({ ...h, so_id: j?.id ?? '', io_no: j?.job_no ?? '', styles: j?.styles ?? [], style_id: j && j.styles.length === 1 ? j.styles[0].style_id : '' })} />
         <Select label="Style" id="jw-style" value={h.style_id} onChange={(e) => setH({ ...h, style_id: e.target.value })} placeholder="— style —"
           options={(h.styles.length ? h.styles : order.style_id ? [{ style_id: order.style_id, style_code: order.style_code }] : []).map((s: any) => ({ value: s.style_id, label: `${s.style_code}${s.style_name ? ` · ${s.style_name}` : ''}` }))} />
-        <Select label="Contractor" required id="jw-vendor" value={h.vendor_id} onChange={(e) => setH({ ...h, vendor_id: e.target.value })} placeholder="— choose —"
-          options={contractors.map((c) => ({ value: c.id, label: c.label }))} />
-        <Input label="Order date" type="date" value={h.order_date} onChange={(e) => setH({ ...h, order_date: e.target.value })} />
-        <Input label="Expected return" type="date" value={h.expected_return_date} onChange={(e) => setH({ ...h, expected_return_date: e.target.value })} />
-        <Input label="Remarks" className="md:col-span-3" value={h.remarks} onChange={(e) => setH({ ...h, remarks: e.target.value })} />
-      </div>
-      <div className="mt-4 flex items-center justify-between">
-        <h4 className="text-sm font-bold text-slate-700">Process route</h4>
-        <Button size="sm" variant="secondary" id="jw-add-line" onClick={() => setLines([...lines, blankLine()])}><Plus size={12} className="mr-1 inline" />Add process</Button>
+        <Input label="Remarks" className="sm:col-span-2" value={h.remarks} onChange={(e) => setH({ ...h, remarks: e.target.value })} />
+      </FormSection>
+      <div className="mt-5 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-1.5">
+        <h3 className="mr-auto text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Process route</h3>
+        <Button size="sm" id="jw-add-line" onClick={() => setLines([...lines, blankLine()])}><Plus size={12} className="mr-1 inline" />Add process</Button>
       </div>
       <div className="mt-2 overflow-x-auto">
         <table className="w-full text-xs">
@@ -205,32 +210,39 @@ function OrderDetail({ id, onClose, onEdit }: { id: number; onClose: () => void;
     setBusy(true);
     try { const r = await fn(); setO(r.data.data); toast(msg); } catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(false); }
   };
-  if (!o) return <Modal open onClose={onClose} title="Job work order"><p className="text-sm text-slate-500">Loading…</p></Modal>;
+  if (!o) return <Modal open onClose={onClose} size="full" title="Job work order" icon={<ClipboardList size={16} />}><LoadingBlock /></Modal>;
   const live = ['APPROVED', 'PARTIAL_OUTWARD', 'IN_PROCESS', 'PARTIAL_INWARD', 'COMPLETED'].includes(o.status);
   return (
     <Modal open onClose={onClose} size="full" title={`Job work order ${o.jw_no}`}
+      subtitle={<>{o.vendor_name} · {o.io_no ?? 'no job'} · {human(o.status)}</>}
+      icon={<ClipboardList size={16} />}
+      footerStart={<>Expected net <b>{money(o.financial.expected_net)}</b> · billed <b>{money(o.financial.billed)}</b></>}
       footer={<>
-        <div className="mr-auto flex gap-2">
-          {!['CLOSED', 'CANCELLED'].includes(o.status) && <Button variant="danger" disabled={busy} onClick={() => { setReason(''); setReasonFor('cancel'); }}><Ban size={13} className="mr-1 inline" />Cancel</Button>}
-          {live && <Button variant="secondary" id="jw-close" disabled={busy} onClick={() => { setReason(''); setReasonFor('close'); }}><Lock size={13} className="mr-1 inline" />Close order</Button>}
-        </div>
+        {!['CLOSED', 'CANCELLED'].includes(o.status) && <Button variant="danger" disabled={busy} onClick={() => { setReason(''); setReasonFor('cancel'); }}><Ban size={13} className="mr-1 inline" />Cancel</Button>}
+        {live && <Button variant="secondary" id="jw-close" disabled={busy} onClick={() => { setReason(''); setReasonFor('close'); }}><Lock size={13} className="mr-1 inline" />Close order</Button>}
         {o.status === 'DRAFT' && <Button variant="secondary" onClick={() => onEdit(o)}>Edit draft</Button>}
-        {o.status === 'DRAFT' && <Button id="jw-approve" loading={busy} onClick={() => act(() => api.post(`/job-work/orders/${id}/approve`), `${o.jw_no} approved — DCs can now be sent`)}><CheckCircle2 size={13} className="mr-1 inline" />Approve</Button>}
         {live && <Link to="/production/jobwork-challans" className="btn-secondary"><Truck size={13} className="mr-1 inline" />Bundle DC (Process Outward)</Link>}
+        {o.status === 'DRAFT' && <Button id="jw-approve" loading={busy} onClick={() => act(() => api.post(`/job-work/orders/${id}/approve`), `${o.jw_no} approved — DCs can now be sent`)}><CheckCircle2 size={13} className="mr-1 inline" />Approve</Button>}
       </>}>
-      <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4 xl:grid-cols-6">
-        <Info label="Status"><Badge tone={ST_TONE[o.status] as any}>{human(o.status)}</Badge></Info>
-        <Info label="Contractor">{o.vendor_name}</Info>
-        <Info label="Job">{o.io_no ?? '—'}{o.buyer_po_no ? ` · PO ${o.buyer_po_no}` : ''}</Info>
-        <Info label="Style">{o.style_code ?? '—'}</Info>
-        <Info label="Buyer">{o.buyer_name ?? '—'}</Info>
-        <Info label="Order / expected back">{fmtDate(o.order_date)} → {fmtDate(o.expected_return_date)}</Info>
-        <Info label="Approved">{o.approved_by_name ?? '—'}</Info>
-        <Info label="Estimated gross">{money(o.financial.estimated_gross)}</Info>
-        <Info label="Billed">{money(o.financial.billed)}</Info>
-        <Info label="Debit / credit notes">{money(o.financial.debit_notes)} / {money(o.financial.credit_notes)}</Info>
-        <Info label="Expected net">{money(o.financial.expected_net)}</Info>
-        <Info label="Remarks">{o.remarks ?? '—'}</Info>
+      <div className="text-sm">
+        <FormSection title="Order & contractor">
+          <Info label="Status"><Badge tone={ST_TONE[o.status] as any}>{human(o.status)}</Badge></Info>
+          <Info label="Order / expected back">{fmtDate(o.order_date)} → {fmtDate(o.expected_return_date)}</Info>
+          <Info label="Approved">{o.approved_by_name ?? '—'}</Info>
+          <Info label="Contractor">{o.vendor_name}</Info>
+        </FormSection>
+        <FormSection title="Job & remarks">
+          <Info label="Job">{o.io_no ?? '—'}{o.buyer_po_no ? ` · PO ${o.buyer_po_no}` : ''}</Info>
+          <Info label="Style">{o.style_code ?? '—'}</Info>
+          <Info label="Buyer">{o.buyer_name ?? '—'}</Info>
+          <Info label="Remarks">{o.remarks ?? '—'}</Info>
+        </FormSection>
+        <FormSection title="Financials">
+          <Info label="Estimated gross">{money(o.financial.estimated_gross)}</Info>
+          <Info label="Billed">{money(o.financial.billed)}</Info>
+          <Info label="Debit / credit notes">{money(o.financial.debit_notes)} / {money(o.financial.credit_notes)}</Info>
+          <Info label="Expected net">{money(o.financial.expected_net)}</Info>
+        </FormSection>
       </div>
       {(o.close_reason || o.cancel_reason) && <p className="mt-2 rounded bg-slate-50 px-3 py-2 text-xs text-slate-600">{o.cancel_reason ? `Cancelled: ${o.cancel_reason}` : `Closed: ${o.close_reason}`}</p>}
       <div className="mt-4">
@@ -303,7 +315,7 @@ function OrderDetail({ id, onClose, onEdit }: { id: number; onClose: () => void;
             <p className="text-[11px] text-slate-500">Bundle DCs are inwarded (good / reject / loss / return / rework, QC) from <Link className="text-brand-700 underline" to="/production/jobwork-challans">Process Outward</Link>; bills from <Link className="text-brand-700 underline" to="/production/process-master">Contractor Bills</Link>.</p>
           </div>
         )}
-        {tab === 'genealogy' && (gen ? <Genealogy g={gen} /> : <p className="text-sm text-slate-500">Loading…</p>)}
+        {tab === 'genealogy' && (gen ? <Genealogy g={gen} /> : <LoadingBlock rows={3} />)}
         {tab === 'ledger' && (ledger ? (
           <table className="w-full text-xs" id="jw-ledger">
             <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-1 text-left">Date</th><th className="px-2 py-1 text-left">Movement</th><th className="px-2 py-1 text-left">Ref</th><th className="px-2 py-1 text-left">Detail</th></tr></thead>
@@ -312,13 +324,14 @@ function OrderDetail({ id, onClose, onEdit }: { id: number; onClose: () => void;
                 <td className="px-2 py-1 text-slate-600">{Object.entries(r).filter(([k, v]) => !['date', 'type', 'ref'].includes(k) && v != null && v !== 0).map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`).join(' · ')}</td></tr>
             ))}</tbody>
           </table>
-        ) : <p className="text-sm text-slate-500">Loading…</p>)}
+        ) : <LoadingBlock rows={3} />)}
       </div>
       {reasonFor && (
         <Modal open onClose={() => setReasonFor(null)} size="sm" title={reasonFor === 'close' ? `Close ${o.jw_no}` : `Cancel ${o.jw_no}`}
+          subtitle={reasonFor === 'close' ? 'An order closes only when the contractor holds nothing: every DC received, returned or closed, every fabric roll reconciled.' : 'Only an order without DCs can be cancelled.'}
+          icon={reasonFor === 'close' ? <Lock size={16} /> : <Ban size={16} />}
           footer={<><Button variant="secondary" onClick={() => setReasonFor(null)}>Back</Button>
             <Button variant="danger" id="jw-reason-confirm" disabled={reason.trim().length < 3} onClick={() => { const f = reasonFor; setReasonFor(null); void act(() => api.post(`/job-work/orders/${id}/${f}`, { reason }), f === 'close' ? 'Order closed' : 'Order cancelled'); }}>Confirm</Button></>}>
-          <p className="mb-2 text-xs text-slate-600">{reasonFor === 'close' ? 'An order closes only when the contractor holds nothing: every DC received, returned or closed, every fabric roll reconciled.' : 'Only an order without DCs can be cancelled.'}</p>
           <Textarea label="Reason" id="jw-reason" required value={reason} onChange={(e) => setReason(e.target.value)} />
         </Modal>
       )}
@@ -382,21 +395,24 @@ function FabricOutwardModal({ order, line, onClose, onDone }: { order: any; line
     } catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(false); }
   };
   return (
-    <Modal open onClose={onClose} size="full" title={`Fabric outward — ${order.jw_no} · ${line.stage_name} · ${order.vendor_name}`}
-      footer={<><span className="mr-auto self-center text-xs text-slate-600">{totalKg.toFixed(3)} KG · {totalPcs} PCS expected back · order {fmtNumber(line.outward)} of {fmtNumber(line.planned)} KG sent</span>
+    <Modal open onClose={onClose} size="full" title={`New fabric DC — ${order.jw_no} · ${line.stage_name}`}
+      subtitle={`Fabric rolls out to ${order.vendor_name}, with the garments (colour × size) expected back`}
+      icon={<Truck size={16} />}
+      footerStart={<><b>{totalKg.toFixed(3)}</b> KG · <b>{totalPcs}</b> PCS expected back · order {fmtNumber(line.outward)} of {fmtNumber(line.planned)} KG sent</>}
+      footer={<>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button loading={busy} id="jwf-save" disabled={!totalKg || !totalPcs || overRoll || (over && h.override_reason.trim().length < 3)} onClick={save}><Truck size={13} className="mr-1 inline" />Issue fabric DC</Button></>}>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <FormSection>
         <Input label="DC date" type="date" value={h.dc_date} onChange={(e) => setH({ ...h, dc_date: e.target.value })} />
         <Input label="Expected return" type="date" value={h.expected_return} onChange={(e) => setH({ ...h, expected_return: e.target.value })} />
         <Input label="Vehicle no" value={h.vehicle_no} onChange={(e) => setH({ ...h, vehicle_no: e.target.value.toUpperCase() })} />
         <Input label="Remarks" value={h.remarks} onChange={(e) => setH({ ...h, remarks: e.target.value })} />
-        {over && <Input label="Over the planned KG — manager override reason" id="jwf-override" className="md:col-span-4" value={h.override_reason} onChange={(e) => setH({ ...h, override_reason: e.target.value })} />}
-      </div>
-      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
+        {over && <Input label="Over the planned KG — manager override reason" id="jwf-override" className="sm:col-span-2 lg:col-span-4" value={h.override_reason} onChange={(e) => setH({ ...h, override_reason: e.target.value })} />}
+      </FormSection>
+      <div className="mt-5 grid grid-cols-1 items-start gap-5 xl:grid-cols-2">
         <div>
-          <h4 className="mb-1 text-sm font-bold text-slate-700">Fabric rolls (free stock of the job)</h4>
-          {!opts ? <p className="text-xs text-slate-500">Loading…</p> : opts.rolls.length === 0 ? <p className="text-xs text-slate-500">No free QC-accepted roll for this job.</p> : (
+          <h3 className="mb-2.5 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Fabric rolls (free stock of the job)</h3>
+          {!opts ? <LoadingBlock rows={3} /> : opts.rolls.length === 0 ? <p className="text-xs text-slate-500">No free QC-accepted roll for this job.</p> : (
             <table className="w-full text-xs">
               <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-1 text-left">Roll</th><th className="px-2 py-1 text-left">Lot</th><th className="px-2 py-1 text-left">Fabric</th>
                 <th className="px-2 py-1 text-right">Free KG</th><th className="px-2 py-1 text-right">Issue KG</th></tr></thead>
@@ -413,7 +429,7 @@ function FabricOutwardModal({ order, line, onClose, onDone }: { order: any; line
           )}
         </div>
         <div>
-          <h4 className="mb-1 text-sm font-bold text-slate-700">Garments expected back (colour × size)</h4>
+          <h3 className="mb-2.5 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Garments expected back (colour × size)</h3>
           {!opts ? null : opts.skus.length === 0 ? <p className="text-xs text-slate-500">The style has no SKUs — generate them on the style first.</p> : (
             <table className="w-full text-xs">
               <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-1 text-left">Colour</th>{sizes.map((s) => <th key={s.size_id} className="px-2 py-1 text-right">{s.size_code}</th>)}</tr></thead>
@@ -453,20 +469,22 @@ function FabricInwardModal({ dcId, onClose, onDone }: { dcId: number; onClose: (
       toast(`Inward ${d.inward_no}: ${d.good} good PCS${d.fg_receipt_id ? ' into FG stock' : ''} · fabric used ${d.used_kg} KG, back ${d.returned_kg} KG, waste ${d.waste_kg} KG`); onDone();
     } catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(false); }
   };
-  if (!dc) return <Modal open onClose={onClose} title="Fabric inward"><p className="text-sm text-slate-500">Loading…</p></Modal>;
+  if (!dc) return <Modal open onClose={onClose} size="full" title="Fabric DC inward" icon={<PackageCheck size={16} />}><LoadingBlock /></Modal>;
   return (
-    <Modal open onClose={onClose} size="full" title={`Fabric DC inward — ${dc.challan_no} · ${dc.vendor_name}`}
+    <Modal open onClose={onClose} size="full" title={`New fabric inward — DC ${dc.challan_no}`}
+      subtitle={`Garments and fabric back from ${dc.vendor_name} — good / reject per colour × size, used / returned / waste per roll`}
+      icon={<PackageCheck size={16} />}
       footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={busy} id="jwfi-save" onClick={save}><PackageCheck size={13} className="mr-1 inline" />Save inward</Button></>}>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+      <FormSection cols={3}>
         <Input label="Inward date" type="date" value={h.inward_date} onChange={(e) => setH({ ...h, inward_date: e.target.value })} />
-        <Select label="Receiving store" value={h.warehouse_id} onChange={(e) => setH({ ...h, warehouse_id: e.target.value })} placeholder="— store —" options={toOptions(warehouses.data)} />
         <Input label="Party DC no" value={h.party_dc_no} onChange={(e) => setH({ ...h, party_dc_no: e.target.value })} />
-        <Input label="Remarks" value={h.remarks} onChange={(e) => setH({ ...h, remarks: e.target.value })} />
-        <label className="mt-6 flex items-center gap-2 text-xs"><input type="checkbox" checked={h.to_fg} onChange={(e) => setH({ ...h, to_fg: e.target.checked })} />Good garments into FG stock</label>
-      </div>
-      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Select label="Receiving store" value={h.warehouse_id} onChange={(e) => setH({ ...h, warehouse_id: e.target.value })} placeholder="— store —" options={toOptions(warehouses.data)} />
+        <label className="flex items-center gap-2 text-xs sm:mt-6"><input type="checkbox" checked={h.to_fg} onChange={(e) => setH({ ...h, to_fg: e.target.checked })} />Good garments into FG stock</label>
+        <Input label="Remarks" className="lg:col-span-2" value={h.remarks} onChange={(e) => setH({ ...h, remarks: e.target.value })} />
+      </FormSection>
+      <div className="mt-5 grid grid-cols-1 items-start gap-5 xl:grid-cols-2">
         <div>
-          <h4 className="mb-1 text-sm font-bold text-slate-700">Garments received</h4>
+          <h3 className="mb-2.5 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Garments received</h3>
           <table className="w-full text-xs">
             <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-1 text-left">Colour</th><th className="px-2 py-1 text-left">Size</th><th className="px-2 py-1 text-right">Expected</th>
               <th className="px-2 py-1 text-right">Pending</th><th className="px-2 py-1 text-right">Good</th><th className="px-2 py-1 text-right">Reject</th><th className="px-2 py-1 text-left">Reject reason</th></tr></thead>
@@ -481,7 +499,7 @@ function FabricInwardModal({ dcId, onClose, onDone }: { dcId: number; onClose: (
           </table>
         </div>
         <div>
-          <h4 className="mb-1 text-sm font-bold text-slate-700">Fabric reconciliation per roll (KG)</h4>
+          <h3 className="mb-2.5 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Fabric reconciliation per roll (KG)</h3>
           <table className="w-full text-xs">
             <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-1 text-left">Roll</th><th className="px-2 py-1 text-right">Issued</th><th className="px-2 py-1 text-right">With contractor</th>
               <th className="px-2 py-1 text-right">Used</th><th className="px-2 py-1 text-right">Returned</th><th className="px-2 py-1 text-right">Waste</th></tr></thead>
@@ -623,20 +641,24 @@ export function JobWorkRatesPage() {
         ]} />
       </Card>
       {edit && (
-        <Modal open onClose={() => setEdit(null)} title={edit.id ? 'Edit rate' : 'New rate'}
+        <Modal open onClose={() => setEdit(null)} title={edit.id ? 'Edit job work rate' : 'New job work rate'}
+          subtitle="The most specific valid rate (contractor + process, optionally style / buyer) fills the order / DC"
+          icon={<BadgeIndianRupee size={16} />}
           footer={<><Button variant="secondary" onClick={() => setEdit(null)}>Cancel</Button><Button id="jwr-save" disabled={!edit.vendor_id || !edit.stage_id || edit.rate === ''} onClick={save}><Save size={13} className="mr-1 inline" />Save</Button></>}>
-          <div className="grid grid-cols-2 gap-3">
+          <FormSection title="Rate for" cols={2}>
             <Select label="Contractor" required value={edit.vendor_id} onChange={(e) => setEdit({ ...edit, vendor_id: e.target.value })} placeholder="— choose —" options={contractors.map((c) => ({ value: c.id, label: c.label }))} />
             <Select label="Process" required value={edit.stage_id} onChange={(e) => setEdit({ ...edit, stage_id: e.target.value })} placeholder="— choose —" options={toOptions(stages.data)} />
             <Select label="Style (optional)" value={edit.style_id} onChange={(e) => setEdit({ ...edit, style_id: e.target.value })} placeholder="Any style" options={toOptions(styles.data)} />
             <Select label="Buyer (optional)" value={edit.buyer_id} onChange={(e) => setEdit({ ...edit, buyer_id: e.target.value })} placeholder="Any buyer" options={toOptions(buyers.data)} />
+          </FormSection>
+          <FormSection title="Rate & validity" cols={4}>
             <Input label="Rate (₹)" type="number" min={0} step="0.01" value={edit.rate} onChange={(e) => setEdit({ ...edit, rate: e.target.value })} />
             <Select label="Per" value={edit.uom} onChange={(e) => setEdit({ ...edit, uom: e.target.value })} options={['PCS', 'KG', 'M', 'BUNDLE', 'CARTON'].map((u) => ({ value: u, label: u }))} />
             <Input label="Effective from" type="date" value={edit.effective_from} onChange={(e) => setEdit({ ...edit, effective_from: e.target.value })} />
             <Input label="Effective to" type="date" value={edit.effective_to} onChange={(e) => setEdit({ ...edit, effective_to: e.target.value })} />
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={edit.is_active} onChange={(e) => setEdit({ ...edit, is_active: e.target.checked })} />Active</label>
-            <Input label="Remarks" value={edit.remarks} onChange={(e) => setEdit({ ...edit, remarks: e.target.value })} />
-          </div>
+            <label className="flex items-center gap-2 text-sm sm:mt-6"><input type="checkbox" checked={edit.is_active} onChange={(e) => setEdit({ ...edit, is_active: e.target.checked })} />Active</label>
+            <Input label="Remarks" className="lg:col-span-3" value={edit.remarks} onChange={(e) => setEdit({ ...edit, remarks: e.target.value })} />
+          </FormSection>
         </Modal>
       )}
     </div>
@@ -732,28 +754,33 @@ export function ContractorAccountsPage() {
       </Card>
       {adding && (
         <Modal open onClose={() => setAdding(null)} title={adding === 'cn' ? 'New contractor credit note' : 'New contractor payment'}
+          subtitle={adding === 'cn' ? 'Adds to what we owe the contractor' : 'Reduces what we owe the contractor'}
+          icon={adding === 'cn' ? <BadgeIndianRupee size={16} /> : <Wallet size={16} />}
           footer={<><Button variant="secondary" onClick={() => setAdding(null)}>Cancel</Button>
             <Button id="ca-save" disabled={!f.vendor_id || !(num(f.amount) > 0) || (adding === 'cn' && (f.reason ?? '').trim().length < 3)} onClick={save}><Save size={13} className="mr-1 inline" />Save</Button></>}>
-          <div className="grid grid-cols-2 gap-3">
-            <Select label="Contractor" required className="col-span-2" value={f.vendor_id} onChange={(e) => setF({ ...f, vendor_id: e.target.value })} placeholder="— choose —" options={contractors.map((c) => ({ value: c.id, label: c.label }))} />
+          <FormSection title="Document" cols={3}>
+            {adding === 'cn'
+              ? <Input label="Date" type="date" value={f.cn_date} onChange={(e) => setF({ ...f, cn_date: e.target.value })} />
+              : <Input label="Date" type="date" value={f.payment_date} onChange={(e) => setF({ ...f, payment_date: e.target.value })} />}
+            <Select label="Contractor" required className="sm:col-span-1 lg:col-span-2" value={f.vendor_id} onChange={(e) => setF({ ...f, vendor_id: e.target.value })} placeholder="— choose —" options={contractors.map((c) => ({ value: c.id, label: c.label }))} />
+          </FormSection>
+          <FormSection title="Details" cols={3}>
             {adding === 'cn' ? (<>
-              <Input label="Date" type="date" value={f.cn_date} onChange={(e) => setF({ ...f, cn_date: e.target.value })} />
               <Input label="Job (optional)" value={f.io_no} onChange={(e) => setF({ ...f, io_no: e.target.value })} />
               <Input label="Amount (₹)" type="number" min={0} step="0.01" id="ca-amount" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} />
               <Input label="Tax (₹)" type="number" min={0} step="0.01" value={f.tax} onChange={(e) => setF({ ...f, tax: e.target.value })} />
-              <Textarea label="Reason" required className="col-span-2" id="ca-reason" value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} />
+              <Textarea label="Reason" required className="sm:col-span-2 lg:col-span-3" id="ca-reason" value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} />
             </>) : (<>
-              <Input label="Date" type="date" value={f.payment_date} onChange={(e) => setF({ ...f, payment_date: e.target.value })} />
               <Input label="Amount (₹)" type="number" min={0} step="0.01" id="ca-amount" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} />
               <Select label="Mode" value={f.mode} onChange={(e) => setF({ ...f, mode: e.target.value })} options={['BANK', 'CASH', 'UPI', 'CHEQUE'].map((v) => ({ value: v, label: v }))} />
               <Input label="Ref / cheque no" value={f.reference_no} onChange={(e) => setF({ ...f, reference_no: e.target.value })} />
-              <Textarea label="Remarks" className="col-span-2" value={f.remarks} onChange={(e) => setF({ ...f, remarks: e.target.value })} />
+              <Textarea label="Remarks" className="sm:col-span-2 lg:col-span-3" value={f.remarks} onChange={(e) => setF({ ...f, remarks: e.target.value })} />
             </>)}
-          </div>
+          </FormSection>
         </Modal>
       )}
       {cancel && (
-        <Modal open onClose={() => setCancel(null)} size="sm" title={`Cancel ${cancel.cn_no ?? cancel.payment_no}`}
+        <Modal open onClose={() => setCancel(null)} size="sm" title={`Cancel ${cancel.cn_no ?? cancel.payment_no}`} icon={<Ban size={16} />}
           footer={<><Button variant="secondary" onClick={() => setCancel(null)}>Back</Button><Button variant="danger" disabled={reason.trim().length < 3} onClick={doCancel}>Cancel it</Button></>}>
           <Textarea label="Reason" required value={reason} onChange={(e) => setReason(e.target.value)} />
         </Modal>

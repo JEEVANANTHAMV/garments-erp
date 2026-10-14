@@ -8,7 +8,7 @@ import { useToast } from '../../hooks/useToast';
 import { DataTable } from '../../components/DataTable';
  '../../components/CrudPage';
 import {
-  PageHeader, SearchInput, Select, Input, Modal, Spinner, Badge, Textarea, useDebounced
+  PageHeader, SearchInput, Select, Input, Modal, FormSection, Spinner, Badge, Textarea, useDebounced
 } from '../../components/ui';
 import { fmtDecimal, fmtDateTime, humanize } from '../../lib/format';
 
@@ -114,14 +114,15 @@ function AdjustModal({ open, onClose, onDone }: { open: boolean; onClose: () => 
                 : v.material_type === 'FABRIC' ? toOptions(fabrics.data) : toOptions(trims.data);
 
   return (
-    <Modal open={open} onClose={onClose} title="Stock adjustment" size="md"
+    <Modal open={open} onClose={onClose} title="Stock adjustment" size="md" icon={<ArrowDownUp size={16} />}
+      subtitle="Correct the book stock of one material in a warehouse"
       footer={<>
         <button className="btn-secondary" onClick={onClose} disabled={busy}>Cancel</button>
         <button className="btn-primary" onClick={() => void submit()} disabled={busy}>
           {busy && <Spinner size={14} />}Post adjustment
         </button>
       </>}>
-      <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2">
+      <FormSection cols={2}>
         <Select label="Warehouse" required options={toOptions(warehouses.data)} placeholder="— Select —"
           value={v.warehouse_id ?? ''} onChange={(e) => setV((s) => ({ ...s, warehouse_id: e.target.value }))} />
         <Select label="Material type" required
@@ -142,7 +143,7 @@ function AdjustModal({ open, onClose, onDone }: { open: boolean; onClose: () => 
         <Textarea className="sm:col-span-2" label="Reason" required
           placeholder="e.g. Cycle count correction, batch 2601"
           value={v.remarks ?? ''} onChange={(e) => setV((s) => ({ ...s, remarks: e.target.value }))} />
-      </div>
+      </FormSection>
     </Modal>
   );
 }

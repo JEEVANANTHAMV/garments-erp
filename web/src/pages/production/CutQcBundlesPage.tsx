@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Card, Badge, Button, Input, Select, DataTable } from '../../components/ui';
+import { Card, Badge, Button, Input, Select, DataTable, Modal, FormSection } from '../../components/ui';
+import { Boxes, ClipboardCheck } from 'lucide-react';
 import { api } from '../../lib/api';
 import { fmtDate, fmtNumber, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
@@ -557,13 +558,18 @@ export function CutQcBundlesPage() {
 
       {/* Generate Bundles Modal */}
       {showBundleModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 overflow-y-auto">
-          <div className="w-full max-w-3xl bg-white rounded-xl shadow-xl my-8">
-            <div className="flex items-center justify-between border-b px-6 py-4 bg-slate-50">
-              <h3 className="text-lg font-bold text-slate-800">Generate Bundles</h3>
-              <button onClick={() => setShowBundleModal(false)} className="text-slate-400 font-bold">✕</button>
-            </div>
-            <div className="flex gap-2 border-b px-6 pt-3 text-xs font-semibold">
+        <Modal open onClose={() => setShowBundleModal(false)} title="Generate Bundles" size="lg"
+          subtitle="Split cut pieces into numbered bundles with piece tickets"
+          icon={<Boxes size={16} />}
+          footerStart={genMode === 'LEGACY'
+            ? <>Will create <b>{Math.ceil(bundleForm.total_qty / (bundleForm.bundle_size || 1))}</b> bundles for <b>Part: {bundleForm.part_name === 'CUSTOM' ? bundleForm.custom_part || 'CUSTOM' : bundleForm.part_name || 'TOP'}</b>
+                {' '}<span className="rounded bg-blue-100 px-2 py-0.5 font-mono text-[11px] font-bold text-blue-800">B01 to B{String(Math.ceil(bundleForm.total_qty / (bundleForm.bundle_size || 1))).padStart(2, '0')}</span></>
+            : preview ? <><b>{preview.bundle_count}</b> bundles · <b>{fmtNumber(preview.qty)}</b> PCS</> : null}
+          footer={<>
+            <Button variant="secondary" onClick={() => setShowBundleModal(false)}>Cancel</Button>
+            <Button onClick={genMode === 'OUTPUT' ? handleGenerateFromOutput : handleGenerateBundles} loading={saving}>Generate</Button>
+          </>}>
+            <div className="-mt-1 mb-4 flex gap-4 border-b border-slate-100 text-xs font-semibold">
               <button className={`pb-2 ${genMode === 'OUTPUT' ? 'border-b-2 border-brand-600 text-brand-700' : 'text-slate-500'}`} onClick={() => setGenMode('OUTPUT')}>From cut output (lay)</button>
               <button className={`pb-2 ${genMode === 'LEGACY' ? 'border-b-2 border-brand-600 text-brand-700' : 'text-slate-500'}`} onClick={() => setGenMode('LEGACY')}>Legacy cutting entry</button>
             </div>
@@ -571,8 +577,8 @@ export function CutQcBundlesPage() {
             {genMode === 'OUTPUT' ? (() => {
               const co = cutOutputs.find((c: any) => String(c.id) === String(genOutput.cut_output_id));
               return (
-                <div className="p-6 space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-4">
+                  <FormSection title="Cut output" cols={2}>
                     <SearchSelect label="Cut output" required value={genOutput.cut_output_id}
                       onChange={v => setGenOutput({ ...genOutput, cut_output_id: v, qty: '' })}
                       placeholder={cutOutputs.length ? 'Select size-wise cut output' : 'No open cut output — execute a lay first'}
@@ -586,8 +592,8 @@ export function CutQcBundlesPage() {
                       if (!hit) { toast(`Cut output ${code} not found or fully bundled`, 'error'); return; }
                       setGenOutput({ ...genOutput, cut_output_id: String(hit.id), qty: '' });
                     }} />
-                  </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  </FormSection>
+                  <FormSection title="Bundling">
                     <Input label="Bundle size (PCS / bundle)" type="number" min={1} value={genOutput.bundle_size}
                       onChange={e => setGenOutput({ ...genOutput, bundle_size: e.target.value })} />
                     <Input label={`PCS to bundle${co ? ` (max ${co.remaining_qty} PCS)` : ''}`} type="number" min={1}
@@ -597,7 +603,7 @@ export function CutQcBundlesPage() {
                       onChange={e => setGenOutput({ ...genOutput, part_name: e.target.value.toUpperCase() })} />
                     <Input label="Components (comma separated)" placeholder="FRONT,BACK,SLEEVE" value={genOutput.components}
                       onChange={e => setGenOutput({ ...genOutput, components: e.target.value })} />
-                  </div>
+                  </FormSection>
                   {co && Number(genOutput.qty) > Number(co.remaining_qty) && (
                     <p className="text-xs font-semibold text-red-600">Bundle quantity cannot exceed the cut output balance of {co.remaining_qty} PCS.</p>
                   )}
@@ -615,8 +621,8 @@ export function CutQcBundlesPage() {
                 </div>
               );
             })() : (
-            <div className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+            <div>
+              <FormSection title="Cutting entry" cols={2}>
                 <Select
                   label="Cutting Transaction *"
                   value={bundleForm.cutting_id}
@@ -627,10 +633,10 @@ export function CutQcBundlesPage() {
                   ]}
                 />
                 <Input label="I/O No" value={bundleForm.io_no} disabled />
-              </div>
+              </FormSection>
 
               {/* Garment Part Selector */}
-              <div className="grid grid-cols-2 gap-4 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+              <FormSection title="Garment part" cols={2}>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Garment Part *</label>
                   <select
@@ -661,55 +667,37 @@ export function CutQcBundlesPage() {
                     </div>
                   </div>
                 )}
-              </div>
+              </FormSection>
 
-              <div className="grid grid-cols-2 gap-4">
+              <FormSection title="Bundling" cols={2}>
                 <Input label="Total Cutting Qty (PCS)" type="number" value={bundleForm.total_qty}
                   onChange={e => setBundleForm({ ...bundleForm, total_qty: Number(e.target.value) })} />
                 <Input label="Bundle Size (Pcs per bundle)" type="number" value={bundleForm.bundle_size}
                   onChange={e => setBundleForm({ ...bundleForm, bundle_size: Number(e.target.value) })} />
-              </div>
-
-              <div>
+                <div className="sm:col-span-2">
                 <Input
                   label="Garment Components (Comma-separated)"
                   value={bundleForm.components}
                   onChange={e => setBundleForm({ ...bundleForm, components: e.target.value })}
                 />
                 <p className="text-[11px] text-slate-400 mt-1">Each bundle will create piece tickets for every listed component.</p>
-              </div>
-
-              <div className="p-3 bg-blue-50/70 border border-blue-100 rounded-lg text-xs text-blue-800 flex justify-between items-center">
-                <span>
-                  Will create <strong>{Math.ceil(bundleForm.total_qty / (bundleForm.bundle_size || 1))}</strong> bundles for <strong>Part: {bundleForm.part_name === 'CUSTOM' ? bundleForm.custom_part || 'CUSTOM' : bundleForm.part_name || 'TOP'}</strong>.
-                </span>
-                <span className="font-mono bg-blue-100 px-2 py-0.5 rounded text-[11px] font-bold">
-                  B01 to B{String(Math.ceil(bundleForm.total_qty / (bundleForm.bundle_size || 1))).padStart(2, '0')}
-                </span>
-              </div>
+                </div>
+              </FormSection>
             </div>
 
             )}
-
-            <div className="flex justify-end gap-2 border-t px-6 py-4 bg-slate-50">
-              <Button variant="ghost" onClick={() => setShowBundleModal(false)}>Cancel</Button>
-              <Button onClick={genMode === 'OUTPUT' ? handleGenerateFromOutput : handleGenerateBundles} loading={saving}>Generate</Button>
-            </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Record Cut QC Modal */}
       {showQcModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="w-full max-w-2xl bg-white rounded-xl shadow-xl overflow-hidden">
-            <div className="flex items-center justify-between border-b px-6 py-4 bg-slate-50">
-              <h3 className="text-lg font-bold text-slate-800">Record Cut Piece QC</h3>
-              <button onClick={() => setShowQcModal(false)} className="text-slate-400 font-bold">✕</button>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <div className="grid grid-cols-3 gap-4">
+        <Modal open onClose={() => setShowQcModal(false)} title="Record Cut Piece QC" size="lg"
+          icon={<ClipboardCheck size={16} />}
+          footer={<>
+            <Button variant="secondary" onClick={() => setShowQcModal(false)}>Cancel</Button>
+            <Button onClick={handleSaveQc} loading={saving}>Save Cut QC</Button>
+          </>}>
+              <FormSection title="Document">
                 <Input label="Date" type="date" value={qcForm.qc_date}
                   onChange={e => setQcForm({ ...qcForm, qc_date: e.target.value })} />
                 <Select
@@ -725,27 +713,22 @@ export function CutQcBundlesPage() {
                   ]}
                 />
                 <Input label="I/O No" value={qcForm.io_no} disabled />
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
                 <Input label="Component" value={qcForm.component}
                   onChange={e => setQcForm({ ...qcForm, component: e.target.value })} placeholder="FRONT / BACK" />
+              </FormSection>
+
+              <FormSection title="Quantities">
                 <Input label="Cut Qty" type="number" value={qcForm.cut_qty}
                   onChange={e => setQcForm({ ...qcForm, cut_qty: Number(e.target.value) })} />
                 <Input label="Accepted Qty" type="number" value={qcForm.accepted_qty}
                   onChange={e => setQcForm({ ...qcForm, accepted_qty: Number(e.target.value) })} />
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
                 <Input label="Reject Qty" type="number" value={qcForm.reject_qty}
                   onChange={e => setQcForm({ ...qcForm, reject_qty: Number(e.target.value) })} />
                 <Input label="Recut Qty" type="number" value={qcForm.recut_qty}
                   onChange={e => setQcForm({ ...qcForm, recut_qty: Number(e.target.value) })} />
-                <Input label="Defect Reason" value={qcForm.reject_reason}
-                  onChange={e => setQcForm({ ...qcForm, reject_reason: e.target.value })} />
-              </div>
+              </FormSection>
 
-              <div className="grid grid-cols-2 gap-4">
+              <FormSection title="Result" cols={3}>
                 <Select label="QC Status" value={qcForm.qc_status}
                   onChange={e => setQcForm({ ...qcForm, qc_status: e.target.value })}
                   options={[
@@ -755,15 +738,10 @@ export function CutQcBundlesPage() {
                   ]} />
                 <Input label="Inspector" value={qcForm.inspector_name}
                   onChange={e => setQcForm({ ...qcForm, inspector_name: e.target.value })} />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 border-t px-6 py-4 bg-slate-50">
-              <Button variant="ghost" onClick={() => setShowQcModal(false)}>Cancel</Button>
-              <Button onClick={handleSaveQc} loading={saving}>Save Cut QC</Button>
-            </div>
-          </div>
-        </div>
+                <Input label="Defect Reason" value={qcForm.reject_reason}
+                  onChange={e => setQcForm({ ...qcForm, reject_reason: e.target.value })} />
+              </FormSection>
+        </Modal>
       )}
     </div>
   );

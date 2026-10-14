@@ -8,7 +8,7 @@ import { http } from '../../lib/api';
 import { useDiaRules, previewRoll } from '../../lib/fabricCalc';
 import { fmtDate, fmtDecimal, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
-import { Modal, PageHeader, Input, Spinner, LoadingBlock } from '../../components/ui';
+import { Modal, FormSection, PageHeader, Input, Spinner, LoadingBlock } from '../../components/ui';
 import { useQuery as useQ } from '@tanstack/react-query';
 import {
   KNIT_DC_READY, KnittingDcModal, KnittingDcPrint, KnittingInwardModal, KnittingDcInwardTab,
@@ -694,16 +694,23 @@ export default function KnittingProgramPage() {
       </div>
 
       {/* Create / Edit Modal */}
-      <Modal open={showForm} onClose={() => setShowForm(false)} title={editId ? 'Edit Knitting Program' : 'New Knitting Program'} size="xl">
-        <div className="space-y-5 max-h-[80vh] overflow-y-auto pr-1">
+      <Modal open={showForm} onClose={() => setShowForm(false)} size="full"
+        title={editId ? `Edit Knitting Program${form.program_no ? ` ${form.program_no}` : ''}` : 'New Knitting Program'}
+        subtitle="Fabric to knit for a job — from its CAD or direct — with the job's yarn lots"
+        icon={<Layers size={16} />}
+        footerStart={<><b>{form.yarns.length}</b> yarn line{form.yarns.length !== 1 ? 's' : ''}{totalPlannedKg > 0 ? <> · <b>{fmtDecimal(totalPlannedKg, 2)}</b> KG planned</> : null}</>}
+        footer={<>
+          <button className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+          <button className="btn-primary" onClick={save} disabled={saving} id="btn-save-knitting-program">
+            {saving ? <Spinner size={14} /> : <Save size={14} />}
+            {editId ? 'Update Program' : 'Create Program'}
+          </button>
+        </>}>
+        <div className="space-y-5">
 
           {/* Header fields */}
           <div>
-            <h4 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-brand-500 inline-block" />
-              Program Details
-            </h4>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            <FormSection title="Document" cols={4}>
               <Input label="Program No" placeholder="Auto-generate" value={form.program_no}
                 onChange={(e) => setF('program_no', e.target.value)} id="kp-program-no" />
               <Input label="Program Date" type="date" value={form.program_date}
@@ -716,6 +723,12 @@ export default function KnittingProgramPage() {
                       {src === 'CAD' ? 'From CAD' : 'Direct'}
                     </button>))}
                 </div></label>
+              <label className="block"><span className="label">Status</span>
+              <select className="input" value={form.status} onChange={(e) => setF('status', e.target.value)} id="kp-status">
+                {STATUS_LIST.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+              </select></label>
+            </FormSection>
+            <FormSection title="Order & part" cols={3}>
               <label className="block"><span className="label">I/O Number *</span>
                 <select className="input" value={form.io_no} onChange={(e) => pickJob(e.target.value)} id="kp-io-no">
                   <option value="">— Select I/O —</option>
@@ -724,15 +737,18 @@ export default function KnittingProgramPage() {
                 </select></label>
               <Input label="Buyer PO No (auto)" value={form.buyer_po_no}
                 onChange={(e) => setF('buyer_po_no', e.target.value)} id="kp-buyer-po" />
+              <label className="block"><span className="label">Style *</span>
               <select className="input" value={form.style_id} onChange={(e) => setF('style_id', e.target.value ? Number(e.target.value) : '')} id="kp-style">
                 <option value="">— Style (required) —</option>
                 {(jobStyles.length ? jobStyles.map((st: any) => ({ id: st.style_id, style_code: st.style_code, label: st.style_name })) : styles).map((s: any) => <option key={s.id} value={s.id}>{s.style_code} — {s.label}</option>)}
-              </select>
+              </select></label>
+              <label className="block"><span className="label">SO line / part</span>
               <select className="input" value={form.so_line_id} onChange={(e) => onSoLineSelect(e.target.value)} id="kp-so-line">
                 <option value="">— SO line / part (optional) —</option>
                 {soLines.filter((l: any) => form.so_id === '' || Number(l.so_id) === Number(form.so_id)).map((l: any) => <option key={l.id} value={l.id}>{l.label}</option>)}
-              </select>
+              </select></label>
               <div>
+                <span className="label">Part</span>
                 <select className="input w-full" value={form.part_name}
                   onChange={(e) => setF('part_name', e.target.value)}
                   disabled={linkedPart !== null} id="kp-part">
@@ -742,23 +758,18 @@ export default function KnittingProgramPage() {
                   <p className="mt-1 text-[10px] text-slate-500">Part follows the linked Sales Order line</p>
                 )}
               </div>
+              <label className="block"><span className="label">Knitting type</span>
               <select className="input" value={form.knitting_type} onChange={(e) => setF('knitting_type', e.target.value)} id="kp-knitting-type">
                 {KNITTING_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
-              </select>
-              <select className="input" value={form.status} onChange={(e) => setF('status', e.target.value)} id="kp-status">
-                {STATUS_LIST.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
-              </select>
-            </div>
+              </select></label>
+            </FormSection>
           </div>
 
           {/* Fabric specification */}
           <div>
-            <h4 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />
-              Fabric Specification
-            </h4>
+            <FormSection title="Fabric specification" cols={4}>
             {form.program_source === 'CAD' && (
-              <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50/60 p-2.5 text-[12px]" id="kp-cad-box">
+              <div className="sm:col-span-2 lg:col-span-4 rounded-lg border border-emerald-200 bg-emerald-50/60 p-2.5 text-[12px]" id="kp-cad-box">
                 {!form.io_no ? <span className="text-slate-600">Select the I/O — its CAD fabric program loads here.</span>
                   : !cadFetched ? <span className="text-slate-500">Loading the CAD…</span>
                   : !cadFab ? <span className="text-amber-800" id="kp-cad-none">No CAD for {form.io_no}{form.style_id ? ' / this style' : ''} — make the CAD first, or switch to <b>Direct</b>.</span>
@@ -775,41 +786,45 @@ export default function KnittingProgramPage() {
                     </div>)}
               </div>
             )}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              <label className="block sm:col-span-2"><span className="label">Fabric</span>
               <select className="input" value={form.fabric_id} onChange={(e) => void pickFabric(e.target.value)} id="kp-fabric">
                 <option value="">— Fabric —</option>
                 {fabrics.map((f: any) => <option key={f.id} value={f.id}>{f.fabric_code} — {f.label}</option>)}
-              </select>
+              </select></label>
               <Input label="Fabric Type" placeholder="e.g. Single Jersey, Rib" value={form.fabric_type}
                 onChange={(e) => setF('fabric_type', e.target.value)} id="kp-fabric-type" />
-              <Input label="GSM (Target)" value={form.gsm}
-                onChange={(e) => setF('gsm', e.target.value)} id="kp-gsm" />
-              <Input label="Dia (Target)" value={form.dia}
-                onChange={(e) => setF('dia', e.target.value)} id="kp-dia" />
               <label className="block"><span className="label">Fabric form</span>
                 <select className="input" value={form.fabric_form} onChange={(e) => setF('fabric_form', e.target.value)} id="kp-form">
                   <option value="">— Tubular / open —</option><option value="TUBULAR">Tubular</option><option value="OPEN_WIDTH">Open width</option>
                 </select></label>
+              <Input label="GSM (Target)" value={form.gsm}
+                onChange={(e) => setF('gsm', e.target.value)} id="kp-gsm" />
+              <Input label="Dia (Target)" value={form.dia}
+                onChange={(e) => setF('dia', e.target.value)} id="kp-dia" />
               <Input label="Gauge" placeholder="e.g. 24 GG" value={form.gauge}
                 onChange={(e) => setF('gauge', e.target.value)} id="kp-gauge" />
               <Input label="Loop Length" value={form.loop_length}
                 onChange={(e) => setF('loop_length', e.target.value)} id="kp-loop-length" />
+            </FormSection>
+            <FormSection title="Quantity & job work" cols={4}>
               <Input label="Required Qty (KG)" type="number" step="0.001" value={form.required_qty_kg}
                 onChange={(e) => setF('required_qty_kg', e.target.value === '' ? '' : Number(e.target.value))} id="kp-req-qty"
                 hint={estMeters ? `≈ ${fmtDecimal(estMeters, 1)} m fabric (KG × 1000 ÷ GSM × width)` : undefined} />
               <Input label="Required Date" type="date" value={form.required_date}
                 onChange={(e) => setF('required_date', e.target.value)} id="kp-req-date" />
+              <label className="block"><span className="label">Job work type</span>
               <select className="input" value={form.job_work_type} onChange={(e) => setF('job_work_type', e.target.value)} id="kp-job-type">
                 <option value="INTERNAL">Internal</option>
                 <option value="JOB_WORK">Job Work</option>
-              </select>
+              </select></label>
               {form.job_work_type === 'JOB_WORK' && (
+                <label className="block"><span className="label">Vendor</span>
                 <select className="input" value={form.vendor_id} onChange={(e) => setF('vendor_id', e.target.value ? Number(e.target.value) : '')} id="kp-vendor">
                   <option value="">— Vendor —</option>
                   {parties.map((p: any) => <option key={p.id} value={p.id}>{p.label}</option>)}
-                </select>
+                </select></label>
               )}
-            </div>
+            </FormSection>
           </div>
 
           {/* Tabs: Yarn Combination | Stripe Pattern */}
@@ -835,9 +850,9 @@ export default function KnittingProgramPage() {
             {activeTab === 'yarns' && (
               <div>
                 {/* Header */}
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center justify-between mb-2 border-b border-slate-100 pb-1.5">
                   <div className="flex items-center gap-3">
-                    <p className="text-[12px] font-semibold text-slate-700">
+                    <p className="text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">
                       {form.yarns.length} Yarn Line{form.yarns.length !== 1 ? 's' : ''}
                     </p>
                     {totalPlannedKg > 0 && (
@@ -971,8 +986,8 @@ export default function KnittingProgramPage() {
             {/* Stripe Pattern Tab */}
             {activeTab === 'stripes' && isStripeType && (
               <div>
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[12px] font-semibold text-slate-700">
+                <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-1.5">
+                  <p className="text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">
                     Course-based stripe sequence (repeats continuously)
                   </p>
                   <button className="btn-secondary btn-sm" onClick={addStripeLine} id="btn-add-stripe">
@@ -1071,29 +1086,30 @@ export default function KnittingProgramPage() {
           </div>
 
           {/* Remarks */}
-          <div>
-            <label className="block text-[12px] font-medium text-slate-700 mb-1">Remarks</label>
-            <textarea className="input w-full h-16 resize-none" value={form.remarks}
+          <FormSection title="Remarks" cols={1}>
+            <textarea className="input w-full h-16 resize-none" value={form.remarks} aria-label="Remarks"
               onChange={(e) => setF('remarks', e.target.value)} id="kp-remarks" />
-          </div>
-
-          {/* Save buttons */}
-          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-            <button className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
-            <button className="btn-primary" onClick={save} disabled={saving} id="btn-save-knitting-program">
-              {saving ? <Spinner size={14} /> : <Save size={14} />}
-              {editId ? 'Update Program' : 'Create Program'}
-            </button>
-          </div>
+          </FormSection>
         </div>
       </Modal>
 
       {/* Detail Drawer */}
-      <Modal open={!!detailId} onClose={() => setDetailId(null)} title="Knitting Program Detail" size="xl">
+      <Modal open={!!detailId} onClose={() => setDetailId(null)} size="xl"
+        title={detail?.program_no ? `Knitting Program ${detail.program_no}` : 'Knitting Program'}
+        subtitle="Yarns, stripes, issues and the knitting DC / grey inward for this program"
+        icon={<Layers size={16} />}
+        footer={<>
+          <button className="btn-secondary" onClick={() => setDetailId(null)}>Close</button>
+          {detail && (
+            <button className="btn-primary" onClick={() => { openEdit(detail); setDetailId(null); }} id="btn-edit-from-detail">
+              <FileText size={14} /> Edit Program
+            </button>
+          )}
+        </>}>
         {detailLoading ? (
           <LoadingBlock rows={5} />
         ) : detail ? (
-          <DetailView prog={detail} onEdit={() => { openEdit(detail); setDetailId(null); }} />
+          <DetailView prog={detail} />
         ) : null}
       </Modal>
 
@@ -1133,11 +1149,11 @@ function StatusPill({ status }: { status: string }) {
 /* ─────────────────────────────────────────────────────────────────
    Detail View inside the drawer
 ───────────────────────────────────────────────────────────────── */
-function DetailView({ prog, onEdit }: { prog: any; onEdit: () => void }) {
+function DetailView({ prog }: { prog: any }) {
   const [tab, setTab] = useState<'yarns' | 'stripes' | 'issues' | 'dc'>('yarns');
 
   return (
-    <div className="space-y-4 max-h-[80vh] overflow-y-auto pr-1">
+    <div className="space-y-4">
       {/* Program info grid */}
       <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4 text-[12px] sm:grid-cols-3 lg:grid-cols-4">
         <InfoRow label="Program No" value={<span className="font-mono font-bold text-brand-700">{prog.program_no}</span>} />
@@ -1316,12 +1332,6 @@ function DetailView({ prog, onEdit }: { prog: any; onEdit: () => void }) {
             )}
           </div>
         )}
-      </div>
-
-      <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-        <button className="btn-primary" onClick={onEdit} id="btn-edit-from-detail">
-          <FileText size={14} /> Edit Program
-        </button>
       </div>
     </div>
   );

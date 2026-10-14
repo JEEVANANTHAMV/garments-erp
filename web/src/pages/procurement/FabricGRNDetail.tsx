@@ -4,12 +4,12 @@ import { GrnPrintButton } from '../../components/GrnPrintButton';
 import { useQuery } from '@tanstack/react-query';
 import {
   ArrowLeft, Save, PackageCheck, Plus, Trash2, Layers,
-  Boxes, Sparkles, Info
+  Boxes, Sparkles
 } from 'lucide-react';
 import { http, ApiError } from '../../lib/api';
 import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
-import { Input, Select, Badge, Modal } from '../../components/ui';
+import { Input, Select, Badge, Modal, FormSection, Button } from '../../components/ui';
 import { fmtDecimal, today } from '../../lib/format';
 import { useDiaRules, useFabricSpec, previewRoll, pctCls, fmtPct } from '../../lib/fabricCalc';
 import { InvoiceSummary } from '../../components/InvoiceSummary';
@@ -1463,19 +1463,18 @@ export default function FabricGRNDetailPage() {
       {/* Auto-Generate Rolls Modal */}
       {genModalOpen && (
         <Modal
-          title="Auto-Generate Physical Fabric Rolls"
+          title="Auto-generate fabric rolls"
+          subtitle="Specify the number of rolls and average length / weight. This populates the roll sub-grid with unique roll numbers for barcode tagging."
           open={genModalOpen}
           onClose={() => setGenModalOpen(false)}
+          footerStart={<>Calculated Total: <strong>{genRollCount * genMetersPerRoll} m</strong> · Total Weight: <strong>{genRollCount * genWeightPerRoll} kg</strong></>}
+          footer={<>
+            <Button variant="secondary" onClick={() => setGenModalOpen(false)}>Cancel</Button>
+            <Button onClick={executeAutoGenerateRolls}>Generate {genRollCount} Rolls</Button>
+          </>}
         >
-          <div className="space-y-4 text-xs">
-            <div className="p-3 bg-sky-50 rounded-lg text-sky-800 flex items-start gap-2">
-              <Info size={16} className="mt-0.5 shrink-0" />
-              <span>
-                Specify the number of rolls and average length/weight. This will populate the roll sub-grid with unique roll numbers for barcode tagging.
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
+          <div className="text-xs">
+            <FormSection cols={2}>
               <Input
                 label="Number of Rolls"
                 type="number"
@@ -1500,27 +1499,7 @@ export default function FabricGRNDetailPage() {
                 value={genWeightPerRoll}
                 onChange={(e) => setGenWeightPerRoll(parseFloat(e.target.value) || 0)}
               />
-            </div>
-
-            <div className="p-3 bg-slate-50 rounded-lg text-slate-700 text-[11px] flex justify-between">
-              <span>Calculated Total: <strong>{genRollCount * genMetersPerRoll} m</strong></span>
-              <span>Total Weight: <strong>{genRollCount * genWeightPerRoll} kg</strong></span>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                onClick={() => setGenModalOpen(false)}
-                className="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={executeAutoGenerateRolls}
-                className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-medium"
-              >
-                Generate {genRollCount} Rolls
-              </button>
-            </div>
+            </FormSection>
           </div>
         </Modal>
       )}

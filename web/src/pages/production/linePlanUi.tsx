@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { Badge, Button, Modal, SearchInput, StatusBadge, useDebounced } from '../../components/ui';
+import { Badge, Button, LoadingBlock, Modal, SearchInput, StatusBadge, useDebounced } from '../../components/ui';
 import { api } from '../../lib/api';
 import { fmtDate, fmtNumber } from '../../lib/format';
 
@@ -200,8 +200,9 @@ export function DocumentsModal({ open, onClose, url, title, noKey, dateKey, onPi
   }, [open, url]);
   const shown = useMemo(() => rows.filter((r) => !dq || String(r[noKey]).toLowerCase().includes(dq.toLowerCase())), [rows, dq, noKey]);
   return (
-    <Modal open={open} onClose={onClose} title={title} size="lg">
+    <Modal open={open} onClose={onClose} title={title} size="xl" subtitle="Pick a saved document to open it">
       <SearchInput value={search} onChange={setSearch} placeholder="Search document no…" className="mb-3 w-full" />
+      {loading && !rows.length ? <LoadingBlock /> : (
       <table className="w-full text-xs">
         <thead className="bg-slate-50 text-slate-500">
           <tr>
@@ -227,6 +228,7 @@ export function DocumentsModal({ open, onClose, url, title, noKey, dateKey, onPi
           {!shown.length && <tr><td colSpan={6 + (columns?.length ?? 0)} className="px-3 py-8 text-center text-slate-400">{loading ? 'Loading…' : 'No documents yet'}</td></tr>}
         </tbody>
       </table>
+      )}
     </Modal>
   );
 }

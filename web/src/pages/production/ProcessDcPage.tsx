@@ -1508,7 +1508,7 @@ function DcAudit({ dcId }: { dcId: number }) {
       <summary className="cursor-pointer text-sm font-semibold text-slate-700"><History size={13} className="inline mr-1" />Audit trail</summary>
       <table className="mt-2 w-full text-xs">
         <tbody>
-          {rows == null && <tr><td className="py-2 text-slate-400">Loading…</td></tr>}
+          {rows == null && <tr><td><LoadingBlock rows={2} /></td></tr>}
           {rows?.length === 0 && <tr><td className="py-2 text-slate-400">No audit entries.</td></tr>}
           {rows?.map((a) => (
             <tr key={a.id} className="border-t border-slate-100 align-top">

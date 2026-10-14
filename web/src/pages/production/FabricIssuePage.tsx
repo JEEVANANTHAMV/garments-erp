@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Card, Badge, Button, Input, DataTable, Textarea, Modal } from '../../components/ui';
+import { Card, Badge, Button, Input, DataTable, Textarea, Modal, FormSection } from '../../components/ui';
 import { api } from '../../lib/api';
 import { fmtDate, fmtNumber, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
@@ -138,20 +138,22 @@ function NewDcModal({ plans, onClose, onSaved }: { plans: any[]; onClose: () => 
   };
 
   return (
-    <Modal open onClose={onClose} title="New Fabric DC (roll-wise)" size="xl"
+    <Modal open onClose={onClose} title="New Fabric DC" size="xl"
+      subtitle="Roll-wise issue of fabric stock to a cut order — pick the cut order, then add or scan rolls"
+      footerStart={<><b>{lines.length}</b> rolls · <b>{fmtNumber(totalKg, 3)}</b> KG</>}
       footer={<>
-        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button onClick={save} loading={saving} disabled={!lines.length}>Post DC · {fmtNumber(totalKg, 3)} KG</Button>
       </>}>
       <div className="space-y-5">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <FormSection>
+          <Input label="DC Date" type="date" value={header.issue_date} onChange={e => setHeader({ ...header, issue_date: e.target.value })} />
           <SearchSelect label="Cut Order" required value={header.cutting_plan_id}
             onChange={v => setHeader({ ...header, cutting_plan_id: v })}
             options={openPlans.map(p => ({ value: p.id, label: `${p.plan_no} · ${p.io_no} · ${p.style_code || ''}`, sub: p.fabric_name, right: p.status }))} />
-          <Input label="DC Date" type="date" value={header.issue_date} onChange={e => setHeader({ ...header, issue_date: e.target.value })} />
           <Input label="From Location (store)" value={header.from_location} onChange={e => setHeader({ ...header, from_location: e.target.value })} />
           <Input label="To Location (cutting)" value={header.to_location} onChange={e => setHeader({ ...header, to_location: e.target.value })} />
-        </div>
+        </FormSection>
         {plan && (
           <div className="flex flex-wrap gap-4 rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-xs text-indigo-900">
             <span>I/O <b className="font-mono">{plan.io_no}</b></span>
@@ -162,8 +164,9 @@ function NewDcModal({ plans, onClose, onSaved }: { plans: any[]; onClose: () => 
           </div>
         )}
 
+        <h3 className="border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Rolls</h3>
         {header.cutting_plan_id && (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-x-4 gap-y-3 md:grid-cols-2">
             <SearchSelect label={`Pick roll from stock (${stock.length} issuable)`} value=""
               onChange={v => addRoll(stock.find(r => String(r.id) === v))} options={rollOptions}
               placeholder="Search roll no / lot / GRN…" />
@@ -242,7 +245,7 @@ function DcDetailModal({ dc, onClose, onChanged }: { dc: any; onClose: () => voi
   return (
     <Modal open onClose={onClose} title={`Fabric DC ${dc.issue_no}`} size="xl"
       footer={<>
-        <Button variant="ghost" onClick={onClose}>Close</Button>
+        <Button variant="secondary" onClick={onClose}>Close</Button>
         {!closed && <Button onClick={submitReturn} loading={saving}>Post Fabric Return</Button>}
       </>}>
       <div className="space-y-4">
@@ -297,7 +300,7 @@ function DcDetailModal({ dc, onClose, onChanged }: { dc: any; onClose: () => voi
         </div>
         {dc.returns?.length > 0 && (
           <div>
-            <h4 className="mb-1 text-xs font-semibold text-slate-600">Returns</h4>
+            <h3 className="mb-2 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Returns</h3>
             <ul className="space-y-0.5 text-xs text-slate-600">
               {dc.returns.map((r: any) => (
                 <li key={r.id}><span className="font-mono">{r.return_no}</span> · {fmtDate(r.return_date)} · <Qty v={r.return_kg} uom="KG" dp={3} /> · {r.reason || '—'} · {r.created_by_name}</li>

@@ -684,6 +684,8 @@ function PendingPicker({ picker, onClose, rows, lineCode, onPick }: {
   const toggle = (ids: number[], on: boolean) => setSel((x) => { const y = new Set(x); ids.forEach((i) => (on ? y.add(i) : y.delete(i))); return y; });
   return (
     <Modal open onClose={onClose} title={`${picker.mode === 'job' ? 'Add Job' : 'Add Bundle'} — ${lineCode}`} size="lg"
+      subtitle={picker.mode === 'job' ? 'Whole jobs allocated to this line and not yet planned' : 'Single bundles allocated to this line and not yet planned'}
+      footerStart={<><b>{sel.size}</b> bundles · <b>{fmtNumber(mine.filter((r) => sel.has(r.allocation_detail_id)).reduce((a, r) => a + r.free_qty, 0))}</b> PCS selected</>}
       footer={<><Button variant="secondary" onClick={onClose}>Close</Button><Button disabled={!sel.size} onClick={() => onPick(mine.filter((r) => sel.has(r.allocation_detail_id)))}>Add {sel.size} bundle(s)</Button></>}>
       <SearchInput value={search} onChange={setSearch} placeholder="Search bundle, job, style…" className="mb-2 w-full" />
       {!mine.length && <p className="py-8 text-center text-sm text-slate-400">Nothing allocated to {lineCode} is left to plan.</p>}
