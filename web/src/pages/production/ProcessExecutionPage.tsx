@@ -8,7 +8,7 @@ import { http } from '../../lib/api';
 import { fmtDate, fmtDecimal, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
 import {
-  PageHeader, Input, Select, Textarea, Modal, EmptyState, Badge, Tabs,
+  PageHeader, Input, Select, Textarea, Modal, FormSection, EmptyState, Badge, Tabs,
 } from '../../components/ui';
 
 /**
@@ -304,27 +304,31 @@ function IssueModal({ open, onClose, srcType, srcId, yarns, warehouses, onSaved 
 
   return (
     <Modal open={open} onClose={onClose} title="Issue Material" size="md"
+      subtitle="Yarn issued from store to this process document"
+      icon={<PackageMinus size={16} />}
       footer={<Footer saving={saving} onClose={onClose} onSave={save} label="Issue" id="btn-save-issue" />}>
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div>
+        <FormSection title="Issue" cols={3}>
           <Input label="Issue Date" type="date" value={f.issue_date}
             onChange={(e) => setF({ ...f, issue_date: e.target.value })} id="is-date" />
           <Select label="Yarn" required value={f.yarn_id} placeholder="— Select —"
             onChange={(e) => setF({ ...f, yarn_id: e.target.value })} id="is-yarn">
             {yarns.map((y: any) => <option key={y.id} value={y.id}>{y.code} — {y.label}</option>)}
           </Select>
-          <Select label="Warehouse" required value={f.warehouse_id} placeholder="— Select —"
-            onChange={(e) => setF({ ...f, warehouse_id: e.target.value })} id="is-wh">
-            {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.label}</option>)}
-          </Select>
-        </div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <Input label="Issue Qty (KG)" type="number" step="0.001" value={f.issued_qty_kg}
+            onChange={(e) => setF({ ...f, issued_qty_kg: e.target.value })} id="is-qty" />
+        </FormSection>
+        <FormSection title="Lot & store" cols={3}>
           <Input label="Lot No" value={f.lot_no}
             onChange={(e) => setF({ ...f, lot_no: e.target.value })} id="is-lot" />
           <Input label="Yarn PO No" value={f.yarn_po_no}
             onChange={(e) => setF({ ...f, yarn_po_no: e.target.value })} id="is-po" />
-          <Input label="Issue Qty (KG)" type="number" step="0.001" value={f.issued_qty_kg}
-            onChange={(e) => setF({ ...f, issued_qty_kg: e.target.value })} id="is-qty" />
+          <Select label="Warehouse" required value={f.warehouse_id} placeholder="— Select —"
+            onChange={(e) => setF({ ...f, warehouse_id: e.target.value })} id="is-wh">
+            {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.label}</option>)}
+          </Select>
+        </FormSection>
         </div>
         <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
           <label className="flex items-center gap-2 text-[12px] text-slate-700">
@@ -380,30 +384,35 @@ function ReceiptModal({ open, onClose, srcType, srcId, warehouses, onSaved }: an
 
   return (
     <Modal open={open} onClose={onClose} title="Record Output Receipt" size="md"
+      subtitle="Output received back from the process; loss is derived"
+      icon={<PackagePlus size={16} />}
+      footerStart={<>
+        <span className="font-semibold text-slate-600">Process loss (derived): </span>
+        <span className="font-mono font-bold text-slate-900">{fmtDecimal(loss, 3)}</span>
+        <span className="ml-2 text-[10px] text-slate-500">input − output − rejected</span>
+      </>}
       footer={<Footer saving={saving} onClose={onClose} onSave={save} label="Record" id="btn-save-receipt" />}>
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div>
+        <FormSection title="Document" cols={2}>
           <Input label="Receipt Date" type="date" value={f.receipt_date}
             onChange={(e) => setF({ ...f, receipt_date: e.target.value })} id="rc-date" />
+          <Input label="Output Lot No" value={f.output_lot_no} placeholder="Auto-generated if blank"
+            onChange={(e) => setF({ ...f, output_lot_no: e.target.value })} id="rc-lot" />
+        </FormSection>
+        <FormSection title="Quantities" cols={3}>
           <Input label="Input Qty" type="number" step="0.001" value={f.input_qty}
             onChange={(e) => setF({ ...f, input_qty: e.target.value })} id="rc-input" />
           <Input label="Output Qty" type="number" step="0.001" value={f.output_qty}
             onChange={(e) => setF({ ...f, output_qty: e.target.value })} id="rc-output" />
           <Input label="Rejected Qty" type="number" step="0.001" value={f.rejected_qty}
             onChange={(e) => setF({ ...f, rejected_qty: e.target.value })} id="rc-rejected" />
-          <Input label="Output Lot No" value={f.output_lot_no} placeholder="Auto-generated if blank"
-            onChange={(e) => setF({ ...f, output_lot_no: e.target.value })} id="rc-lot" />
+        </FormSection>
+        <FormSection title="Store & QC" cols={3}>
           <Select label="Warehouse" required value={f.warehouse_id} placeholder="— Select —"
             onChange={(e) => setF({ ...f, warehouse_id: e.target.value })} id="rc-wh">
             {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.label}</option>)}
           </Select>
-        </div>
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-[12px]">
-          <span className="font-semibold text-slate-600">Process loss (derived): </span>
-          <span className="font-mono font-bold text-slate-900">{fmtDecimal(loss, 3)}</span>
-          <span className="ml-2 text-[10px] text-slate-500">input − output − rejected</span>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
           <Select label="QC Status" value={f.qc_status}
             onChange={(e) => setF({ ...f, qc_status: e.target.value })} id="rc-qc">
             {['PENDING', 'PASSED', 'HOLD', 'REJECTED'].map((q) => <option key={q} value={q}>{q}</option>)}
@@ -416,6 +425,7 @@ function ReceiptModal({ open, onClose, srcType, srcId, warehouses, onSaved }: an
               {f.qc_status !== 'PASSED' && <span className="text-[10px] text-slate-400">(needs QC passed)</span>}
             </label>
           </div>
+        </FormSection>
         </div>
         <Textarea label="Remarks" value={f.remarks}
           onChange={(e) => setF({ ...f, remarks: e.target.value })} id="rc-remarks" />
@@ -466,9 +476,11 @@ function QcModal({ open, onClose, srcType, srcId, receipts, onSaved }: any) {
 
   return (
     <Modal open={open} onClose={onClose} title="Record QC" size="lg"
+      subtitle="Parameter-wise QC result for this document or one of its receipts"
+      icon={<ClipboardCheck size={16} />}
       footer={<Footer saving={saving} onClose={onClose} onSave={save} label="Record QC" id="btn-save-qc" />}>
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <FormSection cols={3}>
           <Input label="QC Date" type="date" value={f.qc_date}
             onChange={(e) => setF({ ...f, qc_date: e.target.value })} id="qc-date" />
           <Select label="Against Receipt" value={f.receipt_id} placeholder="— Whole document —"
@@ -483,11 +495,11 @@ function QcModal({ open, onClose, srcType, srcId, receipts, onSaved }: any) {
             onChange={(e) => setF({ ...f, overall_status: e.target.value })} id="qc-status">
             {['PENDING', 'PASSED', 'HOLD', 'REJECTED'].map((q) => <option key={q} value={q}>{q}</option>)}
           </Select>
-        </div>
+        </FormSection>
 
         <div>
-          <div className="mb-2 flex items-center justify-between">
-            <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+          <div className="mb-2 flex items-center justify-between border-b border-slate-100 pb-1.5">
+            <h4 className="text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">
               QC Parameters
             </h4>
             <button className="btn-secondary btn-sm"
@@ -579,6 +591,8 @@ function RevisionModal({ open, onClose, srcType, srcId, onSaved }: any) {
 
   return (
     <Modal open={open} onClose={onClose} title="Raise a Revision" size="md"
+      subtitle="Snapshot the current state, record why it changed and bump the revision number"
+      icon={<History size={16} />}
       footer={<Footer saving={saving} onClose={onClose} onSave={save} label="Raise Revision" id="btn-save-revision" />}>
       <div className="space-y-3">
         <p className="rounded-lg border border-amber-200 bg-amber-50/60 p-2 text-[11px] text-amber-900">
@@ -590,8 +604,8 @@ function RevisionModal({ open, onClose, srcType, srcId, onSaved }: any) {
           onChange={(e) => setReason(e.target.value)} id="rev-reason" />
 
         <div>
-          <div className="mb-2 flex items-center justify-between">
-            <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+          <div className="mb-2 flex items-center justify-between border-b border-slate-100 pb-1.5">
+            <h4 className="text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">
               Field changes (optional)
             </h4>
             <button className="btn-secondary btn-sm"
@@ -631,12 +645,12 @@ function RevisionModal({ open, onClose, srcType, srcId, onSaved }: any) {
 /* ── shared bits ────────────────────────────────────────────────── */
 function Footer({ saving, onClose, onSave, label, id }: any) {
   return (
-    <div className="flex justify-end gap-2">
+    <>
       <button className="btn-secondary" onClick={onClose}><X size={14} /> Cancel</button>
       <button className="btn-primary" disabled={saving} onClick={() => void onSave()} id={id}>
         <Save size={14} /> {saving ? 'Saving…' : label}
       </button>
-    </div>
+    </>
   );
 }
 

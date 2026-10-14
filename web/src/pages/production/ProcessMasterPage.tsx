@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Pencil, Save, Printer, CheckCircle2, Ban } from 'lucide-react';
-import { Card, Badge, Button, Input, Select, Textarea, Modal, DataTable } from '../../components/ui';
+import { Plus, Pencil, Save, Printer, CheckCircle2, Ban, Workflow, Wrench, ReceiptText } from 'lucide-react';
+import { Card, Badge, Button, Input, Select, Textarea, Modal, FormSection, LoadingBlock, DataTable } from '../../components/ui';
 import { api } from '../../lib/api';
 import { fmtDate, fmtNumber, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
@@ -126,10 +126,11 @@ function StageModal({ stage, onClose, onSaved }: { stage: Partial<Stage>; onClos
     } catch (e) { toast(errMsg(e), 'error'); } finally { setSaving(false); }
   };
   return (
-    <Modal open onClose={onClose} size="sm" title={stage.id ? `Edit ${stage.stage_name}` : 'New process'}
+    <Modal open onClose={onClose} size="sm" title={stage.id ? `Edit process ${stage.stage_name}` : 'New process'}
+      icon={<Workflow size={16} />}
       footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={saving} onClick={save}><Save size={13} className="inline mr-1" />Save</Button></>}>
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3">
           <Input label="Code" required value={f.stage_code} onChange={(e) => setF({ ...f, stage_code: e.target.value.toUpperCase() })} />
           <Input label="Sequence" type="number" value={f.sort_order} onChange={(e) => setF({ ...f, sort_order: e.target.value })} />
         </div>
@@ -160,13 +161,14 @@ function OperationModal({ op, stages, onClose, onSaved }: { op: Partial<Operatio
     } catch (e) { toast(errMsg(e), 'error'); } finally { setSaving(false); }
   };
   return (
-    <Modal open onClose={onClose} size="sm" title={op.id ? `Edit ${op.op_name}` : 'New operation'}
+    <Modal open onClose={onClose} size="sm" title={op.id ? `Edit operation ${op.op_name}` : 'New operation'}
+      icon={<Wrench size={16} />}
       footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={saving} onClick={save}><Save size={13} className="inline mr-1" />Save</Button></>}>
       <div className="space-y-3">
         <Select label="Process" required value={f.stage_id} onChange={(e) => setF({ ...f, stage_id: e.target.value })}
           options={stages.map((s) => ({ value: s.id, label: s.stage_name }))} />
         <Input label="Operation name" required value={f.op_name} placeholder="e.g. Neck Folding" onChange={(e) => setF({ ...f, op_name: e.target.value })} />
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-x-4 gap-y-3">
           <Input label="Code" value={f.op_code} placeholder="Auto" onChange={(e) => setF({ ...f, op_code: e.target.value.toUpperCase() })} />
           <Input label="Default rate (₹ / PCS)" type="number" min={0} step="0.01" value={f.default_rate} onChange={(e) => setF({ ...f, default_rate: e.target.value })} />
           <Input label="Sequence" type="number" value={f.sort_order} onChange={(e) => setF({ ...f, sort_order: e.target.value })} />
@@ -388,42 +390,49 @@ function BillEditor({ billId, onClose, onSaved }: { billId?: number; onClose: ()
 
   return (
     <Modal open onClose={onClose} size="full" title={billId ? 'Revise contractor bill' : 'New contractor bill'}
+      subtitle="Pass the contractor's process inwards for payment — enter the contractor's rate per inward; any excess over our rate needs a decision"
+      icon={<ReceiptText size={16} />}
+      footerStart={<>
+        {priced.length} inwards · Gross <b>{money(gross)}</b> · Net <b>{money(net)}</b>
+        {undecided > 0 && <span className="ml-2 text-red-600">{undecided} line(s) billed above our rate need a decision</span>}
+        {toRevise > 0 && <span className="ml-2 text-amber-700">{toRevise} line(s) held for revision — the bill can't be approved until revised</span>}
+      </>}
       footer={<>
-        <span className="mr-auto self-center text-sm text-slate-600">
-          {priced.length} inwards · Gross <b>{money(gross)}</b> · Net <b>{money(net)}</b>
-          {undecided > 0 && <span className="ml-2 text-red-600">{undecided} line(s) billed above our rate need a decision</span>}
-          {toRevise > 0 && <span className="ml-2 text-amber-700">{toRevise} line(s) held for revision — the bill can't be approved until revised</span>}
-        </span>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button loading={saving} disabled={!priced.length || net < 0} onClick={save}><Save size={13} className="inline mr-1" />{billId ? 'Save revision' : 'Save bill'}</Button>
       </>}>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+      <FormSection title="Document" cols={3}>
+        <Input label="Bill date" type="date" value={f.bill_date} onChange={(e) => setF({ ...f, bill_date: e.target.value })} />
+        <Input label="Inwards from" type="date" value={f.period_from} onChange={(e) => setF({ ...f, period_from: e.target.value })} />
+        <Input label="Inwards to" type="date" value={f.period_to} onChange={(e) => setF({ ...f, period_to: e.target.value })} />
+      </FormSection>
+      <FormSection title="Contractor & basis" cols={2}>
         <Select label="Contractor" required value={f.vendor_id} disabled={!!billId} onChange={(e) => setF({ ...f, vendor_id: e.target.value })}
-          placeholder="— choose —" options={contractors.map((c) => ({ value: c.id, label: c.label }))} className="md:col-span-2" />
+          placeholder="— choose —" options={contractors.map((c) => ({ value: c.id, label: c.label }))} />
         <Select label="Billing basis" id="bill-basis-select" value={f.bill_basis} onChange={(e) => setF({ ...f, bill_basis: e.target.value })}
           options={[
             { value: '', label: 'As per DC / process default' },
             { value: 'GOOD', label: 'Good PCS received (deduct mistakes)' },
             { value: 'ISSUED', label: 'Full DC qty sent (100% issued basis)' },
             { value: 'GOOD_MISTAKE', label: 'Good + mistake PCS' },
-          ]} className="md:col-span-2" />
-        <Input label="Bill date" type="date" value={f.bill_date} onChange={(e) => setF({ ...f, bill_date: e.target.value })} />
-        <Input label="Inwards from" type="date" value={f.period_from} onChange={(e) => setF({ ...f, period_from: e.target.value })} />
-        <Input label="Inwards to" type="date" value={f.period_to} onChange={(e) => setF({ ...f, period_to: e.target.value })} />
+          ]} />
+      </FormSection>
+      <FormSection title="Tax & deductions">
         <Select label="GST % (job work)" value={f.gst_pct} onChange={(e) => setF({ ...f, gst_pct: e.target.value })}
           options={['0', '5', '12', '18'].map((v) => ({ value: v, label: v === '0' ? 'No GST' : `${v}%` }))} />
-        <Input label="TDS %" type="number" min={0} step="0.01" value={f.tds_pct} hint="194C: 1% individual / 2% others" onChange={(e) => setF({ ...f, tds_pct: e.target.value })} />
-        <Input label="Deduction %" type="number" min={0} max={50} step="0.01" value={f.deduction_pct} hint="% of gross (retention / quality)" onChange={(e) => setF({ ...f, deduction_pct: e.target.value })} />
-        <Input label="Deduction % label" value={f.deduction_label} placeholder="e.g. Retention" onChange={(e) => setF({ ...f, deduction_label: e.target.value })} />
-        <Input label={`Advance adjust (₹)${adv ? ` · open ${money(adv.balance)}` : ''}`} type="number" min={0} step="0.01" value={f.advance_adjust}
-          onChange={(e) => setF({ ...f, advance_adjust: e.target.value })} />
-        <Input label="Other deduction" value={f.other_deduction_label} placeholder="Label" onChange={(e) => setF({ ...f, other_deduction_label: e.target.value })} />
-        <Input label="Other deduction (₹)" type="number" min={0} step="0.01" value={f.other_deduction} onChange={(e) => setF({ ...f, other_deduction: e.target.value })} />
-        <label className="flex items-end gap-2 pb-2 text-sm text-slate-700">
+        <label className="flex items-center gap-2 text-sm text-slate-700 sm:mt-6">
           <input type="checkbox" checked={!!f.is_interstate} onChange={(e) => setF({ ...f, is_interstate: e.target.checked })} />Inter-state (IGST)
         </label>
-      </div>
-      <table className="mt-3 w-full text-xs">
+        <Input label="TDS %" type="number" min={0} step="0.01" value={f.tds_pct} hint="194C: 1% individual / 2% others" onChange={(e) => setF({ ...f, tds_pct: e.target.value })} />
+        <Input label={`Advance adjust (₹)${adv ? ` · open ${money(adv.balance)}` : ''}`} type="number" min={0} step="0.01" value={f.advance_adjust}
+          onChange={(e) => setF({ ...f, advance_adjust: e.target.value })} />
+        <Input label="Deduction %" type="number" min={0} max={50} step="0.01" value={f.deduction_pct} hint="% of gross (retention / quality)" onChange={(e) => setF({ ...f, deduction_pct: e.target.value })} />
+        <Input label="Deduction % label" value={f.deduction_label} placeholder="e.g. Retention" onChange={(e) => setF({ ...f, deduction_label: e.target.value })} />
+        <Input label="Other deduction" value={f.other_deduction_label} placeholder="Label" onChange={(e) => setF({ ...f, other_deduction_label: e.target.value })} />
+        <Input label="Other deduction (₹)" type="number" min={0} step="0.01" value={f.other_deduction} onChange={(e) => setF({ ...f, other_deduction: e.target.value })} />
+      </FormSection>
+      <h3 className="mt-5 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Inwards to bill</h3>
+      <table className="mt-2.5 w-full text-xs">
         <thead className="bg-slate-50 text-slate-500"><tr>
           <th className="w-8 px-2 py-1.5">
             <input type="checkbox" checked={rows.length > 0 && picked.size === rows.length}
@@ -474,8 +483,8 @@ function BillEditor({ billId, onClose, onSaved }: { billId?: number; onClose: ()
         </tbody>
       </table>
       {dns.length > 0 && (
-        <div className="mt-3 rounded-lg border border-slate-200 p-2 text-xs">
-          <p className="mb-1 font-semibold text-slate-700">Debit notes to deduct</p>
+        <div className="mt-5 text-xs">
+          <h3 className="mb-2 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Debit notes to deduct</h3>
           {dns.map((d) => (
             <label key={d.id} className="flex items-center gap-2 py-0.5">
               <input type="checkbox" checked={dnSel.has(Number(d.id))} onChange={() => setDnSel((cur) => { const s2 = new Set(cur); s2.has(Number(d.id)) ? s2.delete(Number(d.id)) : s2.add(Number(d.id)); return s2; })} />
@@ -514,23 +523,27 @@ function BillDetail({ id, onClose, onChanged, onRevise }: { id: number; onClose:
     catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(false); }
   };
 
-  if (!b) return <Modal open onClose={onClose} title="Contractor bill"><p className="text-sm text-slate-500">Loading…</p></Modal>;
+  if (!b) return <Modal open onClose={onClose} size="xl" title="Contractor bill" icon={<ReceiptText size={16} />}><LoadingBlock /></Modal>;
   return (
     <Modal open onClose={onClose} size="xl" title={`Contractor bill ${b.bill_no}`}
+      subtitle={<>{b.vendor_name} · {fmtDate(b.bill_date)}</>}
+      icon={<ReceiptText size={16} />}
+      footerStart={<>Net payable <b>{money(b.net_amount)}</b></>}
       footer={<>
-        {b.status !== 'CANCELLED' && <Button variant="danger" className="mr-auto" disabled={busy} onClick={() => { setReason(''); setCancelling(true); }}><Ban size={13} className="inline mr-1" />Cancel bill</Button>}
+        {b.status !== 'CANCELLED' && <Button variant="danger" disabled={busy} onClick={() => { setReason(''); setCancelling(true); }}><Ban size={13} className="inline mr-1" />Cancel bill</Button>}
         <Button variant="secondary" onClick={() => printBill(b)}><Printer size={13} className="inline mr-1" />Print</Button>
         {b.status === 'DRAFT' && <Button variant="secondary" disabled={busy} onClick={() => onRevise(b.id)}><Pencil size={13} className="inline mr-1" />Revise</Button>}
         {b.status === 'DRAFT' && <Button loading={busy} onClick={() => act('approve', {}, 'Bill approved')}><CheckCircle2 size={13} className="inline mr-1" />Approve</Button>}
       </>}>
-      <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm md:grid-cols-4">
         <div><p className="text-[11px] uppercase text-slate-400">Contractor</p><p className="font-medium">{b.vendor_name}</p></div>
         <div><p className="text-[11px] uppercase text-slate-400">Bill date</p><p className="font-medium">{fmtDate(b.bill_date)}</p></div>
         <div><p className="text-[11px] uppercase text-slate-400">Status</p><Badge tone={BILL_TONE[b.status] ?? 'slate'}>{b.status}</Badge></div>
         <div><p className="text-[11px] uppercase text-slate-400">Approved</p><p className="font-medium">{b.approved_by_name ?? '—'}</p></div>
       </div>
       {b.cancel_reason && <p className="mt-2 rounded bg-red-50 px-3 py-1.5 text-xs text-red-700">Cancelled: {b.cancel_reason}</p>}
-      <table className="mt-3 w-full text-xs">
+      <h3 className="mt-5 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Inwards on this bill</h3>
+      <table className="mt-2.5 w-full text-xs">
         <thead className="bg-slate-50 text-slate-500"><tr>
           <th className="px-2 py-1.5 text-left">Inward</th><th className="px-2 py-1.5 text-left">Date</th><th className="px-2 py-1.5 text-left">DC</th>
           <th className="px-2 py-1.5 text-left">Process / operations</th><th className="px-2 py-1.5 text-left">Jobs</th>
@@ -570,7 +583,8 @@ function BillDetail({ id, onClose, onChanged, onRevise }: { id: number; onClose:
         <div className="flex justify-between border-t border-slate-200 pt-1 font-bold"><span>Net payable</span><span>{money(b.net_amount)}</span></div>
       </div>
       {cancelling && (
-        <Modal open onClose={() => setCancelling(false)} size="sm" title={`Cancel bill ${b.bill_no}`}
+        <Modal open onClose={() => setCancelling(false)} size="sm" title={`Cancel bill ${b.bill_no}`} icon={<Ban size={16} />}
+          subtitle="Its inwards can be billed again"
           footer={<><Button variant="secondary" onClick={() => setCancelling(false)}>Back</Button>
             <Button variant="danger" disabled={reason.trim().length < 3} onClick={() => { setCancelling(false); act('cancel', { reason }, 'Bill cancelled — its inwards can be billed again'); }}>Confirm</Button></>}>
           <Textarea label="Reason" required value={reason} onChange={(e) => setReason(e.target.value)} />

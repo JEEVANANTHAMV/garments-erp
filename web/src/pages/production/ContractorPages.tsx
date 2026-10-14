@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Save, Ban, Search } from 'lucide-react';
-import { Card, Badge, Button, Input, Select, Textarea, Modal, DataTable } from '../../components/ui';
+import { Plus, Save, Ban, Search, Wallet, FileMinus } from 'lucide-react';
+import { Card, Badge, Button, Input, Select, Textarea, Modal, FormSection, DataTable } from '../../components/ui';
 import { api } from '../../lib/api';
 import { fmtDate, fmtNumber, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
@@ -200,20 +200,24 @@ export function ContractorAdvancesPage() {
       </Card>
       {adding && (
         <Modal open onClose={() => setAdding(false)} title="New contractor advance"
+          subtitle="Advance paid to a contractor — recovered on contractor bills"
+          icon={<Wallet size={16} />}
           footer={<><Button variant="secondary" onClick={() => setAdding(false)}>Cancel</Button><Button disabled={!f.vendor_id || !(num(f.amount) > 0)} onClick={save}><Save size={13} className="mr-1 inline" />Save</Button></>}>
-          <div className="grid grid-cols-2 gap-3">
-            <Select label="Contractor" required value={f.vendor_id} onChange={(e) => setF({ ...f, vendor_id: e.target.value })} placeholder="— choose —"
-              options={contractors.map((c) => ({ value: c.id, label: c.label }))} className="col-span-2" />
+          <FormSection title="Document" cols={3}>
             <Input label="Date" type="date" value={f.advance_date} onChange={(e) => setF({ ...f, advance_date: e.target.value })} />
+            <Select label="Contractor" required value={f.vendor_id} onChange={(e) => setF({ ...f, vendor_id: e.target.value })} placeholder="— choose —"
+              options={contractors.map((c) => ({ value: c.id, label: c.label }))} className="lg:col-span-2" />
+          </FormSection>
+          <FormSection title="Payment" cols={3}>
             <Input label="Amount (₹)" type="number" min={0} step="0.01" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} />
             <Select label="Mode" value={f.pay_mode} onChange={(e) => setF({ ...f, pay_mode: e.target.value })} options={['CASH', 'BANK', 'UPI', 'CHEQUE'].map((v) => ({ value: v, label: v }))} />
             <Input label="Ref / cheque no" value={f.ref_no} onChange={(e) => setF({ ...f, ref_no: e.target.value })} />
-            <Textarea label="Remarks" value={f.remarks} onChange={(e) => setF({ ...f, remarks: e.target.value })} className="col-span-2" rows={2} />
-          </div>
+            <Textarea label="Remarks" value={f.remarks} onChange={(e) => setF({ ...f, remarks: e.target.value })} className="sm:col-span-2 lg:col-span-3" rows={2} />
+          </FormSection>
         </Modal>
       )}
       {cancelRow && (
-        <Modal open onClose={() => setCancelRow(null)} size="sm" title={`Cancel advance ${cancelRow.advance_no}`}
+        <Modal open onClose={() => setCancelRow(null)} size="sm" title={`Cancel advance ${cancelRow.advance_no}`} icon={<Ban size={16} />}
           footer={<><Button variant="secondary" onClick={() => setCancelRow(null)}>Back</Button><Button variant="danger" disabled={reason.trim().length < 3} onClick={cancel}>Cancel advance</Button></>}>
           <Textarea label="Reason" required value={reason} onChange={(e) => setReason(e.target.value)} />
         </Modal>
@@ -283,22 +287,29 @@ export function ContractorDebitNotesPage() {
       </Card>
       {adding && (
         <Modal open onClose={() => setAdding(false)} title="New contractor debit note"
+          subtitle="Charge a contractor for defective work — deducted on a contractor bill"
+          icon={<FileMinus size={16} />}
+          footerStart={<>Debit amount <b>{money(amount)}</b></>}
           footer={<><Button variant="secondary" onClick={() => setAdding(false)}>Cancel</Button><Button disabled={!f.vendor_id || f.reason.trim().length < 3 || !(amount > 0)} onClick={save}><Save size={13} className="mr-1 inline" />Save</Button></>}>
-          <div className="grid grid-cols-2 gap-3">
-            <Select label="Contractor" required value={f.vendor_id} onChange={(e) => setF({ ...f, vendor_id: e.target.value })} placeholder="— choose —"
-              options={contractors.map((c) => ({ value: c.id, label: c.label }))} className="col-span-2" />
+          <FormSection title="Document" cols={3}>
             <Input label="Date" type="date" value={f.dn_date} onChange={(e) => setF({ ...f, dn_date: e.target.value })} />
+            <Select label="Contractor" required value={f.vendor_id} onChange={(e) => setF({ ...f, vendor_id: e.target.value })} placeholder="— choose —"
+              options={contractors.map((c) => ({ value: c.id, label: c.label }))} className="lg:col-span-2" />
+          </FormSection>
+          <FormSection title="Job & reason" cols={3}>
             <JobSelect label="Job (IO no)" value={f.io_no} id="dn-job" onPick={(j) => setF({ ...f, io_no: j?.job_no ?? '' })} />
-            <Input label="Reason" required value={f.reason} placeholder="e.g. Wrong stitching — 40 PCS" onChange={(e) => setF({ ...f, reason: e.target.value })} className="col-span-2" />
+            <Input label="Reason" required value={f.reason} placeholder="e.g. Wrong stitching — 40 PCS" onChange={(e) => setF({ ...f, reason: e.target.value })} className="lg:col-span-2" />
+          </FormSection>
+          <FormSection title="Amount" cols={3}>
             <Input label="PCS" type="number" min={0} value={f.qty} onChange={(e) => setF({ ...f, qty: e.target.value })} />
             <Input label="Rate (₹ / PCS)" type="number" min={0} step="0.01" value={f.rate} onChange={(e) => setF({ ...f, rate: e.target.value })} />
             <Input label="Amount (₹)" type="number" min={0} step="0.01" value={f.amount} hint={`Blank = PCS × rate (${money(num(f.qty) * num(f.rate))})`}
-              onChange={(e) => setF({ ...f, amount: e.target.value })} className="col-span-2" />
-          </div>
+              onChange={(e) => setF({ ...f, amount: e.target.value })} />
+          </FormSection>
         </Modal>
       )}
       {cancelRow && (
-        <Modal open onClose={() => setCancelRow(null)} size="sm" title={`Cancel debit note ${cancelRow.dn_no}`}
+        <Modal open onClose={() => setCancelRow(null)} size="sm" title={`Cancel debit note ${cancelRow.dn_no}`} icon={<Ban size={16} />}
           footer={<><Button variant="secondary" onClick={() => setCancelRow(null)}>Back</Button><Button variant="danger" disabled={reason.trim().length < 3} onClick={cancel}>Cancel debit note</Button></>}>
           <Textarea label="Reason" required value={reason} onChange={(e) => setReason(e.target.value)} />
         </Modal>

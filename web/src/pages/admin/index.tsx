@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Trash2, Save } from 'lucide-react';
+import { Plus, Pencil, Trash2, Save, UserCog, ShieldCheck } from 'lucide-react';
 import { DataTable } from '../../components/DataTable';
 import {
-  PageHeader, Modal, ConfirmDialog, Input, Checkbox, Spinner,
+  PageHeader, Modal, FormSection, ConfirmDialog, Input, Checkbox, Spinner,
   Badge, LoadingBlock, ErrorState, Tabs,
 } from '../../components/ui';
 import { useList, useRemove, useListState } from '../../hooks/useResource';
@@ -93,38 +93,39 @@ export function UsersPage() {
         emptyTitle="No users found" />
 
       <Modal open={open} onClose={() => setOpen(false)} title={editId ? 'Edit user' : 'New user'} size="md"
+        icon={<UserCog size={16} />}
         footer={<>
           <button className="btn-secondary" onClick={() => setOpen(false)} disabled={busy}>Cancel</button>
           <button className="btn-primary" onClick={() => void submit()} disabled={busy}>
             {busy && <Spinner size={14} />}{editId ? 'Save changes' : 'Create user'}
           </button>
         </>}>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
+        <FormSection title="Account" cols={2}>
           <Input label="Username" required value={v.username ?? ''} error={errors.username}
             onChange={(e) => setV((s) => ({ ...s, username: e.target.value }))} />
           <Input label="Full name" required value={v.full_name ?? ''} error={errors.full_name}
             onChange={(e) => setV((s) => ({ ...s, full_name: e.target.value }))} />
           <Input label="Email" type="email" value={v.email ?? ''} error={errors.email}
-            className="col-span-2" onChange={(e) => setV((s) => ({ ...s, email: e.target.value }))} />
+            onChange={(e) => setV((s) => ({ ...s, email: e.target.value }))} />
+          <div className="flex items-end pb-1.5">
+            <Checkbox label="Active" checked={!!v.is_active} onChange={(checked) => setV((s) => ({ ...s, is_active: checked ? 1 : 0 }))} />
+          </div>
           {!editId && (
             <Input label="Password" type="password" required value={v.password ?? ''} error={errors.password}
-              className="col-span-2" onChange={(e) => setV((s) => ({ ...s, password: e.target.value }))} />
+              className="sm:col-span-2" onChange={(e) => setV((s) => ({ ...s, password: e.target.value }))} />
           )}
-          <div className="col-span-2">
-            <label className="label">Roles</label>
-            <div className="grid grid-cols-2 gap-2">
-              {(roles.data ?? []).map((r: any) => (
-                <Checkbox key={r.id} label={r.label} disabled={busy}
-                  checked={(v.role_ids ?? []).includes(r.id)}
-                  onChange={(checked) => {
-                    const cur: number[] = v.role_ids ?? [];
-                    setV((s) => ({ ...s, role_ids: checked ? [...cur, r.id] : cur.filter((x) => x !== r.id) }));
-                  }} />
-              ))}
-            </div>
-          </div>
-          <Checkbox label="Active" checked={!!v.is_active} onChange={(checked) => setV((s) => ({ ...s, is_active: checked ? 1 : 0 }))} />
-        </div>
+        </FormSection>
+        <FormSection title="Roles" cols={2}>
+          {roles.isLoading ? <div className="sm:col-span-2"><LoadingBlock label="Loading roles…" rows={2} /></div>
+            : (roles.data ?? []).map((r: any) => (
+              <Checkbox key={r.id} label={r.label} disabled={busy}
+                checked={(v.role_ids ?? []).includes(r.id)}
+                onChange={(checked) => {
+                  const cur: number[] = v.role_ids ?? [];
+                  setV((s) => ({ ...s, role_ids: checked ? [...cur, r.id] : cur.filter((x) => x !== r.id) }));
+                }} />
+            ))}
+        </FormSection>
       </Modal>
 
       <ConfirmDialog open={!!deleting} title="Delete user?" busy={del.isPending}
@@ -215,7 +216,9 @@ export function RolesPage() {
         )}
       </div>
 
-      <Modal open={open} onClose={() => setOpen(false)} title={editId ? 'Edit role' : 'New role'} size="xl"
+      <Modal open={open} onClose={() => setOpen(false)} title={editId ? `Edit role ${v.role_code ?? ''}` : 'New role'} size="lg"
+        icon={<ShieldCheck size={16} />}
+        footerStart={<><b>{permIds.length}</b> permission{permIds.length === 1 ? '' : 's'} selected</>}
         footer={<>
           <button className="btn-secondary" onClick={() => setOpen(false)} disabled={busy}>Cancel</button>
           <button className="btn-primary" onClick={() => void submit()} disabled={busy}>
@@ -226,34 +229,33 @@ export function RolesPage() {
           tabs={[{ key: 'details', label: 'Details' }, { key: 'permissions', label: `Permissions (${permIds.length})` }]} />
 
         {tab === 'details' ? (
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
+          <FormSection cols={3}>
             <Input label="Role code" required value={v.role_code ?? ''}
               onChange={(e) => setV((s) => ({ ...s, role_code: e.target.value }))} />
             <Input label="Role name" required value={v.role_name ?? ''}
               onChange={(e) => setV((s) => ({ ...s, role_name: e.target.value }))} />
-            <Input label="Description" value={v.description ?? ''} className="col-span-2"
+            <div className="flex items-end pb-1.5">
+              <Checkbox label="Active" checked={!!v.is_active} onChange={(c) => setV((s) => ({ ...s, is_active: c ? 1 : 0 }))} />
+            </div>
+            <Input label="Description" value={v.description ?? ''} className="sm:col-span-2 lg:col-span-3"
               onChange={(e) => setV((s) => ({ ...s, description: e.target.value }))} />
-            <Checkbox label="Active" checked={!!v.is_active} onChange={(c) => setV((s) => ({ ...s, is_active: c ? 1 : 0 }))} />
-          </div>
-        ) : (
+          </FormSection>
+        ) : perms.isLoading ? <LoadingBlock label="Loading permissions…" rows={6} /> : (
           <div className="space-y-4">
-            <div className="flex gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button className="btn-ghost btn-sm" onClick={() => setPermIds([])}>Clear all</button>
               <button className="btn-secondary btn-sm" onClick={() => setPermIds((perms.data ?? []).map((p) => p.id))}>
                 Select all
               </button>
-              <button className="btn-ghost btn-sm" onClick={() => setPermIds([])}>Clear all</button>
             </div>
             {Object.entries(permsByModule).map(([mod, ps]) => (
-              <div key={mod}>
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">{mod.replace(/_/g, ' ')}</p>
-                <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                  {ps.map((p) => (
-                    <Checkbox key={p.id} label={p.label ?? p.permission_code} disabled={busy}
-                      checked={permIds.includes(p.id)}
-                      onChange={(c) => setPermIds((cur) => c ? [...cur, p.id] : cur.filter((x) => x !== p.id))} />
-                  ))}
-                </div>
-              </div>
+              <FormSection key={mod} title={mod.replace(/_/g, ' ')} cols={3}>
+                {ps.map((p) => (
+                  <Checkbox key={p.id} label={p.label ?? p.permission_code} disabled={busy}
+                    checked={permIds.includes(p.id)}
+                    onChange={(c) => setPermIds((cur) => c ? [...cur, p.id] : cur.filter((x) => x !== p.id))} />
+                ))}
+              </FormSection>
             ))}
           </div>
         )}

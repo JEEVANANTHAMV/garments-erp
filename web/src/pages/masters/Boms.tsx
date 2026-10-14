@@ -246,24 +246,20 @@ function TrimMatrixModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={`Configure Matrix Breakdown: ${materialName || 'Component'}`}
+      title={`Matrix breakdown — ${materialName || 'Component'}`}
+      subtitle="Set the consumption per size and / or colour; applying expands this component into per-size / colour BOM lines"
+      icon={<Grid size={16} />}
       size="xl"
-      footer={
-        <div className="flex items-center justify-between w-full">
-          <div className="text-xs text-slate-500">
-            Mode: <strong>{humanize(currentMode)}</strong> • Applying will expand component into per-size/color BOM lines
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button onClick={handleApply} disabled={!!missing} className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5">
-              <Sparkles size={14} />
-              <span>Apply Matrix to BOM</span>
-            </Button>
-          </div>
-        </div>
-      }
+      footerStart={<>Mode: <strong>{humanize(currentMode)}</strong></>}
+      footer={<>
+        <Button variant="secondary" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button onClick={handleApply} disabled={!!missing} className="inline-flex items-center gap-1.5">
+          <Sparkles size={14} />
+          <span>Apply Matrix to BOM</span>
+        </Button>
+      </>}
     >
       <div className="space-y-4">
         {missing && (
@@ -1658,126 +1654,115 @@ export function BomDetailPage() {
 
       {/* CAD Sourcing Plan Modal */}
       {cadModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-start justify-between border-b pb-3 border-slate-100">
-              <div>
-                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                  <Sparkles size={18} className="text-emerald-600" />
-                  CAD Auto-Consumption — Material Sourcing Plan
-                </h3>
-                <p className="text-xs text-slate-500 mt-1">
-                  How will fabric and raw yarn requirements be fulfilled for this job? (Job-Wise Source Planning)
+        <Modal
+          open={cadModalOpen}
+          onClose={() => setCadModalOpen(false)}
+          title="CAD material sourcing plan"
+          subtitle="How will fabric and raw yarn requirements be fulfilled for this job? (job-wise source planning)"
+          icon={<Sparkles size={16} />}
+          size="md"
+          footer={<>
+            <button
+              type="button"
+              onClick={() => setCadModalOpen(false)}
+              className="btn-secondary"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={executeCadSync}
+              disabled={syncingCad}
+              className="btn-primary flex items-center gap-1.5"
+            >
+              {syncingCad ? <Spinner size={13} /> : <Check size={14} />}
+              <span>Apply CAD Sourcing Plan</span>
+            </button>
+          </>}
+        >
+          <div className="space-y-3">
+            <label
+              className={`flex items-start gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition ${
+                cadSourcingPlan === 'YARN_PURCHASE'
+                  ? 'border-emerald-500 bg-emerald-50/40 text-emerald-950 shadow-xs'
+                  : 'border-slate-200 hover:border-slate-300 bg-white'
+              }`}
+            >
+              <input
+                type="radio"
+                name="cadSourcingPlan"
+                value="YARN_PURCHASE"
+                checked={cadSourcingPlan === 'YARN_PURCHASE'}
+                onChange={() => setCadSourcingPlan('YARN_PURCHASE')}
+                className="mt-1"
+              />
+              <div className="text-xs">
+                <div className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
+                  🧶 Yarn Purchase + Knitting (In-House &amp; Job Work DC)
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                    Standard / Recommended (95%+)
+                  </span>
+                </div>
+                <p className="text-slate-600 mt-1 leading-relaxed">
+                  • <b>Yarn is Purchased (PO)</b>: {fmtDecimal(latestCad?.yarn_req_per_pc, 4)} kg/pc demand generated.<br/>
+                  • <b>Fabric is Produced (Knitting)</b>: {fmtDecimal(latestCad?.fabric_consumption_per_pc, 4)} kg/pc routed to Knitting Program &amp; Delivery Challan (DC) for In-House or Outside Job Work, NOT direct purchase.<br/>
+                  • <b>Zero Double-Costing</b>: Fabric purchase rate is excluded from garment material cost (captured via Yarn).
                 </p>
               </div>
-              <button onClick={() => setCadModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1">
-                ✕
-              </button>
-            </div>
+            </label>
 
-            <div className="my-4 space-y-3">
-              <label
-                className={`flex items-start gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition ${
-                  cadSourcingPlan === 'YARN_PURCHASE'
-                    ? 'border-emerald-500 bg-emerald-50/40 text-emerald-950 shadow-xs'
-                    : 'border-slate-200 hover:border-slate-300 bg-white'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="cadSourcingPlan"
-                  value="YARN_PURCHASE"
-                  checked={cadSourcingPlan === 'YARN_PURCHASE'}
-                  onChange={() => setCadSourcingPlan('YARN_PURCHASE')}
-                  className="mt-1"
-                />
-                <div className="text-xs">
-                  <div className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
-                    🧶 Yarn Purchase + Knitting (In-House &amp; Job Work DC)
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                      Standard / Recommended (95%+)
-                    </span>
-                  </div>
-                  <p className="text-slate-600 mt-1 leading-relaxed">
-                    • <b>Yarn is Purchased (PO)</b>: {fmtDecimal(latestCad?.yarn_req_per_pc, 4)} kg/pc demand generated.<br/>
-                    • <b>Fabric is Produced (Knitting)</b>: {fmtDecimal(latestCad?.fabric_consumption_per_pc, 4)} kg/pc routed to Knitting Program &amp; Delivery Challan (DC) for In-House or Outside Job Work, NOT direct purchase.<br/>
-                    • <b>Zero Double-Costing</b>: Fabric purchase rate is excluded from garment material cost (captured via Yarn).
-                  </p>
+            <label
+              className={`flex items-start gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition ${
+                cadSourcingPlan === 'FABRIC_PURCHASE'
+                  ? 'border-emerald-500 bg-emerald-50/40 text-emerald-950 shadow-xs'
+                  : 'border-slate-200 hover:border-slate-300 bg-white'
+              }`}
+            >
+              <input
+                type="radio"
+                name="cadSourcingPlan"
+                value="FABRIC_PURCHASE"
+                checked={cadSourcingPlan === 'FABRIC_PURCHASE'}
+                onChange={() => setCadSourcingPlan('FABRIC_PURCHASE')}
+                className="mt-1"
+              />
+              <div className="text-xs">
+                <div className="font-bold text-sm text-slate-900">
+                  🧵 Direct Fabric Purchase (Buy Finished Fabric)
                 </div>
-              </label>
+                <p className="text-slate-600 mt-1 leading-relaxed">
+                  • <b>Finished Fabric is Purchased (PO)</b>: {fmtDecimal(latestCad?.fabric_consumption_per_pc, 4)} kg/pc.<br/>
+                  • <b>Raw Yarn is NOT Purchased</b>: Eliminates unused yarn purchase demand and mismatches.
+                </p>
+              </div>
+            </label>
 
-              <label
-                className={`flex items-start gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition ${
-                  cadSourcingPlan === 'FABRIC_PURCHASE'
-                    ? 'border-emerald-500 bg-emerald-50/40 text-emerald-950 shadow-xs'
-                    : 'border-slate-200 hover:border-slate-300 bg-white'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="cadSourcingPlan"
-                  value="FABRIC_PURCHASE"
-                  checked={cadSourcingPlan === 'FABRIC_PURCHASE'}
-                  onChange={() => setCadSourcingPlan('FABRIC_PURCHASE')}
-                  className="mt-1"
-                />
-                <div className="text-xs">
-                  <div className="font-bold text-sm text-slate-900">
-                    🧵 Direct Fabric Purchase (Buy Finished Fabric)
-                  </div>
-                  <p className="text-slate-600 mt-1 leading-relaxed">
-                    • <b>Finished Fabric is Purchased (PO)</b>: {fmtDecimal(latestCad?.fabric_consumption_per_pc, 4)} kg/pc.<br/>
-                    • <b>Raw Yarn is NOT Purchased</b>: Eliminates unused yarn purchase demand and mismatches.
-                  </p>
+            <label
+              className={`flex items-start gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition ${
+                cadSourcingPlan === 'BOTH'
+                  ? 'border-emerald-500 bg-emerald-50/40 text-emerald-950 shadow-xs'
+                  : 'border-slate-200 hover:border-slate-300 bg-white'
+              }`}
+            >
+              <input
+                type="radio"
+                name="cadSourcingPlan"
+                value="BOTH"
+                checked={cadSourcingPlan === 'BOTH'}
+                onChange={() => setCadSourcingPlan('BOTH')}
+                className="mt-1"
+              />
+              <div className="text-xs">
+                <div className="font-bold text-sm text-slate-900">
+                  📦 Both Fabric & Yarn Purchase (Custom / Mixed)
                 </div>
-              </label>
-
-              <label
-                className={`flex items-start gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition ${
-                  cadSourcingPlan === 'BOTH'
-                    ? 'border-emerald-500 bg-emerald-50/40 text-emerald-950 shadow-xs'
-                    : 'border-slate-200 hover:border-slate-300 bg-white'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="cadSourcingPlan"
-                  value="BOTH"
-                  checked={cadSourcingPlan === 'BOTH'}
-                  onChange={() => setCadSourcingPlan('BOTH')}
-                  className="mt-1"
-                />
-                <div className="text-xs">
-                  <div className="font-bold text-sm text-slate-900">
-                    📦 Both Fabric & Yarn Purchase (Custom / Mixed)
-                  </div>
-                  <p className="text-slate-600 mt-1 leading-relaxed">
-                    • Both Fabric and Yarn purchase requirements are generated for procurement.
-                  </p>
-                </div>
-              </label>
-            </div>
-
-            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setCadModalOpen(false)}
-                className="btn-secondary text-xs"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={executeCadSync}
-                disabled={syncingCad}
-                className="btn-primary text-xs flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700"
-              >
-                {syncingCad ? <Spinner size={13} /> : <Check size={14} />}
-                <span>Apply CAD Sourcing Plan</span>
-              </button>
-            </div>
+                <p className="text-slate-600 mt-1 leading-relaxed">
+                  • Both Fabric and Yarn purchase requirements are generated for procurement.
+                </p>
+              </div>
+            </label>
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* Trim / Accessory Matrix Modal */}

@@ -2,7 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { createPortal } from 'react-dom';
 import { http } from '../../lib/api';
 import { fmtDate, fmtDecimal, fmtNumber } from '../../lib/format';
-import { Button, Modal } from '../../components/ui';
+import { Printer } from 'lucide-react';
+import { Button, Modal, LoadingBlock } from '../../components/ui';
 
 /**
  * Printable Job Work Invoice. The header carries the billing DIVISION name
@@ -173,9 +174,11 @@ export function JobWorkInvoicePrintModal({ id, onClose }: { id: number | null; o
     enabled: !!id,
   });
   return (
-    <Modal open={!!id} onClose={onClose} title="Job work invoice — print view" size="lg"
-      footer={<><Button variant="ghost" onClick={onClose}>Close</Button><Button onClick={() => window.print()} disabled={!q.data}>Print</Button></>}>
-      {q.isLoading && <div className="p-6 text-sm text-slate-500">Loading…</div>}
+    <Modal open={!!id} onClose={onClose} title={q.data?.invoice?.invoice_no ? `Job work invoice ${q.data.invoice.invoice_no}` : 'Job work invoice'} size="lg"
+      subtitle="Print preview"
+      icon={<Printer size={16} />}
+      footer={<><Button variant="secondary" onClick={onClose}>Close</Button><Button onClick={() => window.print()} disabled={!q.data}><Printer size={13} className="inline mr-1" />Print</Button></>}>
+      {q.isLoading && <LoadingBlock />}
       {q.error && <div className="p-6 text-sm text-red-600">{(q.error as Error).message}</div>}
       {q.data && <JobWorkInvoiceDocument d={q.data} />}
       {q.data && <JobWorkInvoicePrintPortal d={q.data} />}

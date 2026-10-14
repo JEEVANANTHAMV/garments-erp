@@ -8,7 +8,7 @@ import { http, ApiError } from '../../lib/api';
 import { fmtDate, fmtDecimal, fmtNumber, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
 import {
-  Modal, PageHeader, Input, Select, Textarea, LoadingBlock, EmptyState,
+  Modal, FormSection, PageHeader, Input, Select, Textarea, LoadingBlock, EmptyState,
   SearchInput, Badge, Pager,
 } from '../../components/ui';
 
@@ -344,27 +344,35 @@ export default function CollarKnittingPage() {
 
       {/* ── Create program ─────────────────────────────── */}
       <Modal open={open} onClose={() => setOpen(false)} size="lg" title="New Collar Knitting Program"
-        footer={
-          <div className="flex justify-end gap-2">
-            <button className="btn-secondary" onClick={() => setOpen(false)}><X size={14} /> Cancel</button>
-            <button className="btn-primary" disabled={saving} onClick={() => void save()} id="btn-save-collar">
-              <Save size={14} /> {saving ? 'Saving…' : 'Create Program'}
-            </button>
-          </div>
-        }>
+        subtitle="Flat-knit collars / cuffs for a job, planned size-wise in pieces and yarn KG"
+        icon={<Shirt size={16} />}
+        footerStart={<><b>{fmtNumber(totals.pcs)}</b> pcs · <b>{fmtDecimal(totals.kg, 3)}</b> KG yarn</>}
+        footer={<>
+          <button className="btn-secondary" onClick={() => setOpen(false)}><X size={14} /> Cancel</button>
+          <button className="btn-primary" disabled={saving} onClick={() => void save()} id="btn-save-collar">
+            <Save size={14} /> {saving ? 'Saving…' : 'Create Program'}
+          </button>
+        </>}>
         <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div>
+          <FormSection title="Document" cols={4}>
             <Input label="Program Date" type="date" value={form.program_date}
               onChange={(e) => setF('program_date', e.target.value)} id="c-date" />
             <Select label="I/O Number" required value={form.io_no} error={errs.io_no} placeholder="— Select IO no —"
               onChange={(e) => onJob(e.target.value)} id="c-io">
               {jobs.map((j: any) => <option key={j.id} value={j.job_no}>{j.job_no}{j.buyer_name ? ` · ${j.buyer_name}` : ''}</option>)}
             </Select>
+            <Select label="Style" required value={form.style_id} placeholder="— Select style —" error={errs.style_id}
+              onChange={(e) => { const v = e.target.value ? Number(e.target.value) : ''; setF('style_id', v); if (form.io_no) void loadCad(form.io_no, v); }} id="c-style">
+              {jobStyles.length
+                ? jobStyles.map((s: any) => <option key={s.style_id} value={s.style_id}>{s.style_code} — {s.style_name}</option>)
+                : styles.map((s: any) => <option key={s.id} value={s.id}>{s.code} — {s.label}</option>)}
+            </Select>
             <Select label="Sales Order line" value={form.so_line_id} placeholder="— Not linked —"
               onChange={(e) => onSoLine(e.target.value)} id="c-soline">
               {soLines.filter((l: any) => form.so_id === '' || Number(l.so_id) === Number(form.so_id)).map((l: any) => <option key={l.id} value={l.id}>{l.label}</option>)}
             </Select>
-          </div>
+          </FormSection>
           {form.io_no && cadPlan === null && (
             <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11.5px] text-amber-900" id="c-cad-none">
               No CAD with a flat-knit collar / cuff spec for {form.io_no}{form.style_id !== '' ? ' and this style' : ''} — enter the sizes below.
@@ -385,7 +393,7 @@ export default function CollarKnittingPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+          <FormSection title="Collar & yarn" cols={3} className="mt-4">
             <Select label="Collar (BOM)" value={form.collar_id} placeholder="— Select collar —"
               onChange={(e) => onCollarSelect(e.target.value)} id="c-collar">
               {collars.map((c: any) => (
@@ -400,37 +408,30 @@ export default function CollarKnittingPage() {
               onChange={(e) => setF('yarn_id', e.target.value ? Number(e.target.value) : '')} id="c-yarn">
               {yarns.map((y: any) => <option key={y.id} value={y.id}>{y.code} — {y.label}</option>)}
             </Select>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-            <Select label="Style" required value={form.style_id} placeholder="— Select style —" error={errs.style_id}
-              onChange={(e) => { const v = e.target.value ? Number(e.target.value) : ''; setF('style_id', v); if (form.io_no) void loadCad(form.io_no, v); }} id="c-style">
-              {jobStyles.length
-                ? jobStyles.map((s: any) => <option key={s.style_id} value={s.style_id}>{s.style_code} — {s.style_name}</option>)
-                : styles.map((s: any) => <option key={s.id} value={s.id}>{s.code} — {s.label}</option>)}
-            </Select>
             <Input label="Gauge / Needle" value={form.gauge_needle}
               onChange={(e) => setF('gauge_needle', e.target.value)} id="c-gauge" />
             <Input label="Required Date" type="date" value={form.required_date}
               onChange={(e) => setF('required_date', e.target.value)} id="c-reqdate" />
+          </FormSection>
+          <FormSection title="Knitting unit" cols={2}>
             <Select label="Unit" value={form.job_work_type}
               onChange={(e) => setF('job_work_type', e.target.value)} id="c-jobwork">
               <option value="INTERNAL">Internal</option>
               <option value="JOB_WORK">Job Work</option>
             </Select>
+            {form.job_work_type === 'JOB_WORK' && (
+              <Select label="Vendor" required value={form.vendor_id} placeholder="— Select vendor —"
+                onChange={(e) => setF('vendor_id', e.target.value ? Number(e.target.value) : '')} id="c-vendor">
+                {parties.map((p: any) => <option key={p.id} value={p.id}>{p.label}</option>)}
+              </Select>
+            )}
+          </FormSection>
           </div>
-
-          {form.job_work_type === 'JOB_WORK' && (
-            <Select label="Vendor" required value={form.vendor_id} placeholder="— Select vendor —"
-              onChange={(e) => setF('vendor_id', e.target.value ? Number(e.target.value) : '')} id="c-vendor">
-              {parties.map((p: any) => <option key={p.id} value={p.id}>{p.label}</option>)}
-            </Select>
-          )}
 
           {/* Size-wise planning grid */}
           <div>
-            <div className="mb-2 flex items-center justify-between">
-              <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            <div className="mb-2 flex items-center justify-between border-b border-slate-100 pb-1.5">
+              <h4 className="text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">
                 Size-wise Planning (PCS → KG)
               </h4>
               <button className="btn-secondary btn-sm"
@@ -546,8 +547,9 @@ export default function CollarKnittingPage() {
 
       {/* ── Detail ─────────────────────────────────────── */}
       <Modal open={detailId != null} onClose={() => setDetailId(null)} size="lg"
-        title={detail ? `${detail.program_no} — Collar Program` : 'Collar Program'}>
-        {!detail ? <LoadingBlock label="Loading…" /> : (
+        title={detail ? `Collar Program ${detail.program_no}` : 'Collar Program'}
+        subtitle="Plan, production, stock receipts and yarn issues" icon={<Shirt size={16} />}>
+        {!detail ? <LoadingBlock /> : (
           <div className="space-y-4 text-[12px]">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Info label="Status" value={<Badge tone={STATUS_TONE[detail.status] ?? 'slate'}>{detail.status.replace(/_/g, ' ')}</Badge>} />
@@ -685,17 +687,18 @@ function ProductionModal({ program, sizes, onClose, onSaved }: {
 
   return (
     <Modal open={program != null} onClose={onClose} size="md"
-      title={program ? `Production — ${program.program_no}` : 'Production'}
-      footer={
-        <div className="flex justify-end gap-2">
-          <button className="btn-secondary" onClick={onClose}><X size={14} /> Cancel</button>
-          <button className="btn-primary" disabled={saving} onClick={() => void save()} id="btn-save-collar-prod">
-            <Save size={14} /> {saving ? 'Saving…' : 'Record Production'}
-          </button>
-        </div>
-      }>
+      title={program ? `New Collar Production — ${program.program_no}` : 'New Collar Production'}
+      subtitle="Pieces knitted and yarn actually used — gm/pc is derived"
+      icon={<Factory size={16} />}
+      footerStart={<>Good <b>{fmtNumber(good)}</b> PCS · {actualGm != null ? <><b>{fmtDecimal(actualGm, 3)}</b> gm/pc</> : '— gm/pc'}</>}
+      footer={<>
+        <button className="btn-secondary" onClick={onClose}><X size={14} /> Cancel</button>
+        <button className="btn-primary" disabled={saving} onClick={() => void save()} id="btn-save-collar-prod">
+          <Save size={14} /> {saving ? 'Saving…' : 'Record Production'}
+        </button>
+      </>}>
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <FormSection cols={3}>
           <Input label="Production Date" type="date" value={f.production_date}
             onChange={(e) => setF((s) => ({ ...s, production_date: e.target.value }))} id="cp-date" />
           <Select label="Size" value={f.size_id} placeholder="— Any —"
@@ -705,8 +708,8 @@ function ProductionModal({ program, sizes, onClose, onSaved }: {
           </Select>
           <Input label="Shift" value={f.shift}
             onChange={(e) => setF((s) => ({ ...s, shift: e.target.value }))} id="cp-shift" />
-        </div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        </FormSection>
+        <FormSection title="Quantities" cols={4}>
           <Input label="Planned PCS" type="number" value={f.planned_pcs}
             onChange={(e) => setF((s) => ({ ...s, planned_pcs: e.target.value === '' ? '' : Number(e.target.value) }))}
             id="cp-planned" />
@@ -719,7 +722,7 @@ function ProductionModal({ program, sizes, onClose, onSaved }: {
           <Input label="Actual Yarn (KG)" type="number" step="0.001" value={f.actual_yarn_kg}
             onChange={(e) => setF((s) => ({ ...s, actual_yarn_kg: e.target.value === '' ? '' : Number(e.target.value) }))}
             id="cp-yarn" />
-        </div>
+        </FormSection>
 
         <div className="grid grid-cols-2 gap-3 rounded-lg border border-indigo-200 bg-indigo-50/60 p-3">
           <Info label="Good PCS" value={<span className="font-bold">{fmtNumber(good)}</span>} />
@@ -788,16 +791,17 @@ function ReceiptModal({ program, sizes, warehouses, onClose, onSaved }: {
   return (
     <Modal open={program != null} onClose={onClose} size="md"
       title={program ? `Receive Collars — ${program.program_no}` : 'Receive Collars'}
-      footer={
-        <div className="flex justify-end gap-2">
-          <button className="btn-secondary" onClick={onClose}><X size={14} /> Cancel</button>
-          <button className="btn-primary" disabled={saving} onClick={() => void save()} id="btn-save-collar-rcpt">
-            <Save size={14} /> {saving ? 'Saving…' : 'Record Receipt'}
-          </button>
-        </div>
-      }>
+      subtitle="Finished collars into stock as pieces; yarn KG is a costing reference"
+      icon={<PackageCheck size={16} />}
+      footerStart={<>Good <b>{fmtNumber(good)}</b> PCS into stock</>}
+      footer={<>
+        <button className="btn-secondary" onClick={onClose}><X size={14} /> Cancel</button>
+        <button className="btn-primary" disabled={saving} onClick={() => void save()} id="btn-save-collar-rcpt">
+          <Save size={14} /> {saving ? 'Saving…' : 'Record Receipt'}
+        </button>
+      </>}>
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <FormSection cols={3}>
           <Input label="Receipt Date" type="date" value={f.receipt_date}
             onChange={(e) => setF((s) => ({ ...s, receipt_date: e.target.value }))} id="cr-date" />
           <Select label="Size" value={f.size_id} placeholder="— Any —"
@@ -813,9 +817,9 @@ function ReceiptModal({ program, sizes, warehouses, onClose, onSaved }: {
             id="cr-wh">
             {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.label}</option>)}
           </Select>
-        </div>
+        </FormSection>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <FormSection title="Quantities" cols={3}>
           <Input label="Received PCS" type="number" value={f.received_pcs}
             onChange={(e) => setF((s) => ({ ...s, received_pcs: e.target.value === '' ? '' : Number(e.target.value) }))}
             id="cr-received" />
@@ -826,7 +830,7 @@ function ReceiptModal({ program, sizes, warehouses, onClose, onSaved }: {
             hint="Costing reference only — stock is counted in pieces"
             onChange={(e) => setF((s) => ({ ...s, yarn_kg_ref: e.target.value === '' ? '' : Number(e.target.value) }))}
             id="cr-yarnkg" />
-        </div>
+        </FormSection>
 
         <div className="grid grid-cols-2 gap-3 rounded-lg border border-emerald-200 bg-emerald-50/60 p-3">
           <Info label="Good PCS into stock"
@@ -835,7 +839,7 @@ function ReceiptModal({ program, sizes, warehouses, onClose, onSaved }: {
             value={gmPerPc != null ? `${fmtDecimal(gmPerPc, 3)} gm/pc` : '—'} />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <FormSection title="QC & stock" cols={2}>
           <Select label="QC Status" value={f.qc_status}
             onChange={(e) => setF((s) => ({ ...s, qc_status: e.target.value }))} id="cr-qc">
             {['PENDING', 'PASSED', 'HOLD', 'REJECTED'].map((q) => <option key={q} value={q}>{q}</option>)}
@@ -852,7 +856,7 @@ function ReceiptModal({ program, sizes, warehouses, onClose, onSaved }: {
               )}
             </label>
           </div>
-        </div>
+        </FormSection>
 
         <Textarea label="Remarks" value={f.remarks}
           onChange={(e) => setF((s) => ({ ...s, remarks: e.target.value }))} id="cr-remarks" />
@@ -872,7 +876,7 @@ function Info({ label, value }: { label: string; value: React.ReactNode }) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h4 className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">{title}</h4>
+      <h4 className="mb-2 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">{title}</h4>
       {children}
     </div>
   );

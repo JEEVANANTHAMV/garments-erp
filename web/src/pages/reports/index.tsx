@@ -3,7 +3,7 @@ import { Download, Loader2 } from 'lucide-react';
 import { useList, useListState } from '../../hooks/useResource';
 import { DataTable } from '../../components/DataTable';
 import {
-  PageHeader, SearchInput, Select, Badge, useDebounced,
+  PageHeader, SearchInput, Select, Badge, Modal, useDebounced,
 } from '../../components/ui';
 import { fmtDateTime } from '../../lib/format';
 import { api, tokenStore } from '../../lib/api';
@@ -74,7 +74,6 @@ export function ReportsPage() {
 }
 
 /* ---------------------------------------------------------- Audit trail */
-import { Modal } from '../../components/ui';
 
 export function AuditPage() {
   const { page, setPage, search, setSearch } = useListState({ key: 'id', dir: 'desc' });
@@ -177,7 +176,8 @@ export function AuditPage() {
         <Modal
           open={!!inspectRow}
           onClose={() => setInspectRow(null)}
-          title={`Audit Entry #${inspectRow.id} — ${inspectRow.action} on ${inspectRow.table_name} (#${inspectRow.record_id})`}
+          title={`Audit entry #${inspectRow.id}`}
+          subtitle={`${inspectRow.action} on ${inspectRow.table_name} (record #${inspectRow.record_id})`}
           size="lg"
           footer={<button className="btn-secondary" onClick={() => setInspectRow(null)}>Close</button>}>
           <div className="space-y-4 text-xs">
@@ -205,7 +205,7 @@ export function AuditPage() {
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               {inspectRow.old_values && (
                 <div>
-                  <h4 className="mb-1.5 font-semibold text-slate-700">Previous Values (Before)</h4>
+                  <h4 className="mb-2 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Previous Values (Before)</h4>
                   <pre className="max-h-80 overflow-auto rounded-lg bg-slate-900 p-3 font-mono text-[11px] leading-relaxed text-slate-200">
                     {formatJson(inspectRow.old_values)}
                   </pre>
@@ -213,7 +213,7 @@ export function AuditPage() {
               )}
               {inspectRow.new_values && (
                 <div className={inspectRow.old_values ? '' : 'lg:col-span-2'}>
-                  <h4 className="mb-1.5 font-semibold text-slate-700">New Values (After)</h4>
+                  <h4 className="mb-2 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">New Values (After)</h4>
                   <pre className="max-h-80 overflow-auto rounded-lg bg-slate-900 p-3 font-mono text-[11px] leading-relaxed text-emerald-300">
                     {formatJson(inspectRow.new_values)}
                   </pre>
