@@ -203,7 +203,7 @@ export default function AppLayout() {
         )}
         {sections.map((section) => {
           // searching opens every step; a one-screen step (Overview) has no header
-          const single = section.items.length === 1;
+          const single = (steps.find((s) => s.label === section.label)?.items.length ?? 0) === 1; // by the full step, not the search hits
           const open = !!filter || single || openSecs.includes(section.label);
           return (
             <div key={section.label} className={clsx('mb-1 rounded-lg', open && !single && 'bg-white/[0.03]')}>
