@@ -6,7 +6,7 @@ import { http } from '../../../lib/api';
 import { useLookup, toOptions } from '../../../hooks/useLookup';
 import { useToast } from '../../../hooks/useToast';
 import { useAuth } from '../../../lib/auth';
-import { Button, Input, Select, Textarea, LoadingBlock, Modal } from '../../../components/ui';
+import { Button, Input, Select, Textarea, LoadingBlock, Modal, FormSection } from '../../../components/ui';
 import { fmtDate, fmtDecimal, today } from '../../../lib/format';
 import { FpTitle, FpStatus, useProcessTypes, useReasons, errText, kg, n, r3, type StoreRoll } from './shared';
 
@@ -210,12 +210,17 @@ function ReprocessView({ id, onBack }: { id: number; onBack: () => void }) {
         {r.fpo_id && ['IN_PROCESS'].includes(r.status) && can('FABRIC_PROCESS.CREATE') && <Button onClick={() => nav(`/production/fabric-process/inward?fpo=${r.fpo_id}`)}>Receive reprocess (GRN)</Button>}
       </div>
       {edit && b && (
-        <Modal open onClose={() => setEdit(false)} size="xl" title={`Change billing — ${r.reprocess_no}`}
+        <Modal open onClose={() => setEdit(false)} size="lg" title={`Change billing — ${r.reprocess_no}`}
+          subtitle="The old and new billing type and the reason are logged. A reprocess already on a contractor bill needs the bill cancelled first."
+          icon={<Pencil size={16} />}
           footer={<><Button variant="secondary" onClick={() => setEdit(false)}>Cancel</Button>
             <Button loading={busy} disabled={why.trim().length < 3} onClick={() => act(async () => { const x = await http.post(`/fabric-process/reprocess/${id}/billing`, { ...billingPayload(b), change_reason: why }); setEdit(false); return x; })}>Save change</Button></>}>
-          <p className="mb-3 text-xs text-slate-600">The old and new billing type and the reason are logged. A reprocess already on a contractor bill needs the bill cancelled first.</p>
-          <BillingFields b={b} setB={(p: any) => setBState((x: any) => ({ ...x, ...p }))} qty={n(r.total_kg)} reasons={(reasons.data ?? []).filter((x) => x.kind !== 'RETURN')} />
-          <Input className="mt-3" label="Reason for the change *" value={why} onChange={(e) => setWhy(e.target.value)} />
+          <FormSection title="Billing" cols={1}>
+            <BillingFields b={b} setB={(p: any) => setBState((x: any) => ({ ...x, ...p }))} qty={n(r.total_kg)} reasons={(reasons.data ?? []).filter((x) => x.kind !== 'RETURN')} />
+          </FormSection>
+          <FormSection title="Change" cols={1}>
+            <Input label="Reason for the change *" value={why} onChange={(e) => setWhy(e.target.value)} />
+          </FormSection>
         </Modal>
       )}
     </div>

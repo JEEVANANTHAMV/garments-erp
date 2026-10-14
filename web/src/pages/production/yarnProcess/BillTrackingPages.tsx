@@ -6,7 +6,7 @@ import { http } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth';
 import { useLookup, toOptions } from '../../../hooks/useLookup';
 import { useToast } from '../../../hooks/useToast';
-import { Button, Input, Select, Tabs, LoadingBlock, Modal, Checkbox } from '../../../components/ui';
+import { Button, Input, Select, Tabs, LoadingBlock, Modal, Checkbox, FormSection } from '../../../components/ui';
 import { ContractorBillEditor } from '../../../components/ContractorBillEditor';
 import { ProcessBillTotalsView, processBillFacts } from '../../../components/ProcessBillParts';
 import { fmtDate, fmtDecimal } from '../../../lib/format';
@@ -270,7 +270,7 @@ export function YarnProcessTypesPage() {
       )}
       {t && (
         <Modal open onClose={() => setT(null)} size="lg" title={t.id ? `Edit ${t.code}` : 'New yarn process type'} footer={<><Button variant="secondary" onClick={() => setT(null)}>Cancel</Button><Button loading={busy} onClick={saveType}>Save</Button></>}>
-          <div className="grid grid-cols-3 gap-3">
+          <FormSection title="Process type" cols={4}>
             <Input label="Code *" value={t.code} disabled={!!t.id} onChange={(e) => setT({ ...t, code: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_') })} />
             <Input label="Name *" value={t.name} onChange={(e) => setT({ ...t, name: e.target.value })} />
             <Select label="Base process *" value={t.base_process} onChange={(e) => setT({ ...t, base_process: e.target.value })} options={[{ value: 'YARN_DYEING', label: 'Yarn dyeing' }, { value: 'WINDING', label: 'Winding' }, { value: 'TWISTING', label: 'Twisting' }]} />
@@ -279,27 +279,28 @@ export function YarnProcessTypesPage() {
             <Input label="Allowed ply (e.g. 2,3,4)" value={t.ply_options} onChange={(e) => setT({ ...t, ply_options: e.target.value })} />
             <Input label="Loss tolerance %" type="number" step="0.01" value={t.loss_tolerance_pct} onChange={(e) => setT({ ...t, loss_tolerance_pct: e.target.value })} />
             <Input label="Sort order" type="number" value={t.sort_order} onChange={(e) => setT({ ...t, sort_order: e.target.value })} />
-            <div />
+          </FormSection>
+          <FormSection title="Options" cols={3}>
             <Checkbox label="Changes shade (dyeing)" checked={t.changes_shade} onChange={(v) => setT({ ...t, changes_shade: v })} />
             <Checkbox label="GRN requires QC before posting" checked={t.requires_qc} onChange={(v) => setT({ ...t, requires_qc: v })} />
             <Checkbox label="Billable (contractor charge)" checked={t.billable} onChange={(v) => setT({ ...t, billable: v })} />
             <Checkbox label="Allow reprocess" checked={t.allow_reprocess} onChange={(v) => setT({ ...t, allow_reprocess: v })} />
             <Checkbox label="Is a reprocess type" checked={t.is_reprocess} onChange={(v) => setT({ ...t, is_reprocess: v })} />
             <Checkbox label="Active" checked={t.is_active} onChange={(v) => setT({ ...t, is_active: v })} />
-          </div>
+          </FormSection>
         </Modal>
       )}
       {p && (
         <Modal open onClose={() => setP(null)} size="md" title={`${p.id ? 'Edit' : 'New'} QC parameter — ${p.process_code}`} footer={<><Button variant="secondary" onClick={() => setP(null)}>Cancel</Button><Button loading={busy} onClick={saveParam}>Save</Button></>}>
-          <div className="grid grid-cols-3 gap-3">
-            <Input label="Parameter *" className="col-span-2" value={p.param_name} onChange={(e) => setP({ ...p, param_name: e.target.value })} />
+          <FormSection cols={3}>
+            <Input label="Parameter *" className="sm:col-span-2" value={p.param_name} onChange={(e) => setP({ ...p, param_name: e.target.value })} />
             <Input label="UOM" value={p.uom} onChange={(e) => setP({ ...p, uom: e.target.value })} />
             <Input label="Min" type="number" step="0.001" value={p.min_value} onChange={(e) => setP({ ...p, min_value: e.target.value })} />
             <Input label="Target" type="number" step="0.001" value={p.target_value} onChange={(e) => setP({ ...p, target_value: e.target.value })} />
             <Input label="Max" type="number" step="0.001" value={p.max_value} onChange={(e) => setP({ ...p, max_value: e.target.value })} />
             <Checkbox label="Mandatory" checked={p.is_mandatory} onChange={(v) => setP({ ...p, is_mandatory: v })} />
             <Checkbox label="Active" checked={p.is_active} onChange={(v) => setP({ ...p, is_active: v })} />
-          </div>
+          </FormSection>
         </Modal>
       )}
     </div>

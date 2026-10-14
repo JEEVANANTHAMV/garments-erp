@@ -6,7 +6,7 @@ import { http } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth';
 import { useLookup, toOptions } from '../../../hooks/useLookup';
 import { useToast } from '../../../hooks/useToast';
-import { Button, Input, Select, Textarea, LoadingBlock, Modal } from '../../../components/ui';
+import { Button, Input, Select, Textarea, LoadingBlock, Modal, FormSection } from '../../../components/ui';
 import { fmtDate, fmtDecimal, today } from '../../../lib/format';
 import { YpTitle, YpStatus, useReasons, useYarnTypes, errText, kg, n, r3 } from './shared';
 
@@ -315,12 +315,17 @@ function ReprocessView({ id, onBack }: { id: number; onBack: () => void }) {
       </div>
       {r.billing_remarks && <pre className="card mt-3 whitespace-pre-wrap p-3 text-[11.5px] text-slate-600">{r.billing_remarks}</pre>}
       {edit && b && (
-        <Modal open onClose={() => setEdit(false)} size="xl" title={`Change billing — ${r.reprocess_no}`}
+        <Modal open onClose={() => setEdit(false)} size="lg" title={`Change billing — ${r.reprocess_no}`}
+          subtitle="Old value, new value, reason and approver are kept in the audit trail."
+          icon={<Pencil size={16} />}
           footer={<><Button variant="secondary" onClick={() => setEdit(false)}>Cancel</Button>
             <Button loading={busy} disabled={why.trim().length < 3} onClick={() => act(async () => { const x = await http.post(`/yarn-process/reprocess/${id}/billing`, { ...billingPayload(b), change_reason: why }); setEdit(false); return x; })}>Save change</Button></>}>
-          <BillingFields b={b} setB={(p) => setBState((x: any) => ({ ...x, ...p }))} qty={n(r.total_kg)} reasons={(reasons.data ?? []).filter((x) => x.kind !== 'RETURN')} />
-          <Input label="Reason for the change *" className="mt-3" value={why} onChange={(e) => setWhy(e.target.value)} />
-          <p className="mt-2 text-[11.5px] text-slate-500">Old value, new value, reason and approver are kept in the audit trail.</p>
+          <FormSection title="Billing" cols={1}>
+            <BillingFields b={b} setB={(p) => setBState((x: any) => ({ ...x, ...p }))} qty={n(r.total_kg)} reasons={(reasons.data ?? []).filter((x) => x.kind !== 'RETURN')} />
+          </FormSection>
+          <FormSection title="Change" cols={1}>
+            <Input label="Reason for the change *" value={why} onChange={(e) => setWhy(e.target.value)} />
+          </FormSection>
         </Modal>
       )}
     </div>

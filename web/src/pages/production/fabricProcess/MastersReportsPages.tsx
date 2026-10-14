@@ -5,7 +5,7 @@ import { http } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth';
 import { useToast } from '../../../hooks/useToast';
 import { useLookup, toOptions } from '../../../hooks/useLookup';
-import { Button, Input, Select, Tabs, LoadingBlock, Modal, Checkbox } from '../../../components/ui';
+import { Button, Input, Select, Tabs, LoadingBlock, Modal, Checkbox, FormSection } from '../../../components/ui';
 import { fmtDate, fmtDecimal } from '../../../lib/format';
 import { FpTitle, FpStatus, useProcessTypes, errText, kg } from './shared';
 
@@ -92,25 +92,28 @@ function TypesTab() {
       {type && (
         <Modal open onClose={() => setType(null)} title={type.id ? `Edit ${type.code}` : 'New process type'} size="md"
           footer={<><Button variant="secondary" onClick={() => setType(null)}>Cancel</Button><Button loading={busy} onClick={saveType}>Save</Button></>}>
-          <div className="grid grid-cols-2 gap-3">
+          <FormSection title="Process type" cols={2}>
             <Input label="Code *" value={type.code} disabled={!!type.id} onChange={(e) => setType({ ...type, code: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_') })} />
             <Input label="Name *" value={type.name} onChange={(e) => setType({ ...type, name: e.target.value })} />
             <Select label="Output state *" value={type.output_state} onChange={(e) => setType({ ...type, output_state: e.target.value })} options={STATES.map((x) => ({ value: x, label: x }))} />
             <Input label="Sort order" type="number" value={type.sort_order} onChange={(e) => setType({ ...type, sort_order: e.target.value })} />
+          </FormSection>
+          <FormSection title="Options" cols={2}>
             <Checkbox label="GRN requires QC before posting" checked={type.requires_qc} onChange={(v) => setType({ ...type, requires_qc: v })} />
             <Checkbox label="Changes colour" checked={type.changes_colour} onChange={(v) => setType({ ...type, changes_colour: v })} />
             <Checkbox label="Allow reprocess" checked={type.allow_reprocess} onChange={(v) => setType({ ...type, allow_reprocess: v })} />
             <Checkbox label="Allow roll split" checked={type.allow_split} onChange={(v) => setType({ ...type, allow_split: v })} />
             <Checkbox label="Is a reprocess type" checked={type.is_reprocess} onChange={(v) => setType({ ...type, is_reprocess: v })} />
             <Checkbox label="Active" checked={type.is_active} onChange={(v) => setType({ ...type, is_active: v })} />
-          </div>
+          </FormSection>
         </Modal>
       )}
       {param && (
         <Modal open onClose={() => setParam(null)} title={`${param.id ? 'Edit' : 'New'} QC parameter — ${param.process_code}`} size="md"
+          subtitle="A value outside min – max fails the parameter; a roll with a failed parameter cannot be accepted (hold or reject it)."
           footer={<><Button variant="secondary" onClick={() => setParam(null)}>Cancel</Button><Button loading={busy} onClick={saveParam}>Save</Button></>}>
-          <div className="grid grid-cols-3 gap-3">
-            <Input label="Parameter *" className="col-span-2" value={param.param_name} onChange={(e) => setParam({ ...param, param_name: e.target.value })} />
+          <FormSection cols={3}>
+            <Input label="Parameter *" className="sm:col-span-2" value={param.param_name} onChange={(e) => setParam({ ...param, param_name: e.target.value })} />
             <Input label="UOM" value={param.uom} onChange={(e) => setParam({ ...param, uom: e.target.value })} />
             <Input label="Min" type="number" step="0.001" value={param.min_value} onChange={(e) => setParam({ ...param, min_value: e.target.value })} />
             <Input label="Target" type="number" step="0.001" value={param.target_value} onChange={(e) => setParam({ ...param, target_value: e.target.value })} />
@@ -118,8 +121,7 @@ function TypesTab() {
             <Input label="Sort order" type="number" value={param.sort_order} onChange={(e) => setParam({ ...param, sort_order: e.target.value })} />
             <Checkbox label="Mandatory" checked={param.is_mandatory} onChange={(v) => setParam({ ...param, is_mandatory: v })} />
             <Checkbox label="Active" checked={param.is_active} onChange={(v) => setParam({ ...param, is_active: v })} />
-          </div>
-          <p className="mt-3 text-[11.5px] text-slate-500">A value outside min – max fails the parameter; a roll with a failed parameter cannot be accepted (hold or reject it).</p>
+          </FormSection>
         </Modal>
       )}
     </>
@@ -159,13 +161,13 @@ function ReasonsTab() {
       {r && (
         <Modal open onClose={() => setR(null)} title={r.id ? `Edit ${r.code}` : 'New reason'} size="md"
           footer={<><Button variant="secondary" onClick={() => setR(null)}>Cancel</Button><Button loading={busy} onClick={save}>Save</Button></>}>
-          <div className="grid grid-cols-2 gap-3">
+          <FormSection cols={2}>
             <Input label="Code *" value={r.code} disabled={!!r.id} onChange={(e) => setR({ ...r, code: e.target.value.toUpperCase() })} />
             <Select label="Used for *" value={r.kind} onChange={(e) => setR({ ...r, kind: e.target.value })} options={[{ value: 'RETURN', label: 'Return / reject' }, { value: 'BILLING', label: 'Reprocess billing' }, { value: 'BOTH', label: 'Both' }]} />
-            <Input label="Reason *" className="col-span-2" value={r.reason} onChange={(e) => setR({ ...r, reason: e.target.value })} />
+            <Input label="Reason *" className="sm:col-span-2" value={r.reason} onChange={(e) => setR({ ...r, reason: e.target.value })} />
             <Select label="Default billing" value={r.default_billing} placeholder="—" onChange={(e) => setR({ ...r, default_billing: e.target.value })} options={BILLING.map((b) => ({ value: b, label: b.replace('_', ' ') }))} />
             <Checkbox label="Active" checked={r.is_active} onChange={(v) => setR({ ...r, is_active: v })} />
-          </div>
+          </FormSection>
         </Modal>
       )}
     </>
