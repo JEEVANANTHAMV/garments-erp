@@ -1,11 +1,11 @@
 import { useState, useMemo, useEffect } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Menu, X, LogOut, ChevronDown, Search, Bell, Building2,
+  Menu, X, LogOut, ChevronDown, ChevronRight, Search, Bell, Building2, Star, Clock,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../lib/auth';
-import { NAV } from '../lib/nav';
+import { NAV, NAV_BY_PATH, PROCESS_TABS, type NavItem } from '../lib/nav';
 import { initials } from '../lib/format';
 import { useQuery } from '@tanstack/react-query';
 import { http } from '../lib/api';
@@ -30,10 +30,42 @@ export default function AppLayout() {
     .map((s) => ({ ...s, items: s.items.filter((i) => !i.hidden && canAny(...i.perms)) }))
     .filter((s) => s.items.length)
     .map((s) => filter
-      ? { ...s, items: s.items.filter((i) => i.label.toLowerCase().includes(filter.toLowerCase())) }
+      ? { ...s, items: s.items.filter((i) => i.label.toLowerCase().includes(filter.toLowerCase()) || s.label.toLowerCase().includes(filter.toLowerCase())) }
       : s)
     .filter((s) => s.items.length),
     [canAny, filter, user]);
+
+  // per-user sidebar memory: open steps, favourites, recent screens (browser storage, best effort)
+  const uid = user?.id ?? 0;
+  const load = <T,>(k: string, d: T): T => { try { const v = localStorage.getItem(`erp.nav.${k}.${uid}`); return v ? JSON.parse(v) as T : d; } catch { return d; } };
+  const save = (k: string, v: unknown) => { try { localStorage.setItem(`erp.nav.${k}.${uid}`, JSON.stringify(v)); } catch { /* storage blocked */ } };
+  const [openSecs, setOpenSecs] = useState<string[]>(() => load('open', []));
+  const [favs, setFavs] = useState<string[]>(() => load('favs', []));
+  const [recent, setRecent] = useState<string[]>(() => load('recent', []));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setOpenSecs(load('open', [])); setFavs(load('favs', [])); setRecent(load('recent', [])); }, [uid]);
+  // the step of the page you are on opens by itself; the visit goes to "Recent"
+  const currentSection = sections.find((s) => s.items.some((i) => i.to !== '/' && (location.pathname === i.to || location.pathname.startsWith(`${i.to}/`))))?.label;
+  useEffect(() => {
+    if (currentSection) setOpenSecs((o) => { if (o.includes(currentSection)) return o; const next = [...o, currentSection]; save('open', next); return next; });
+    if (NAV_BY_PATH.has(location.pathname) && location.pathname !== '/') {
+      setRecent((r) => { const next = [location.pathname, ...r.filter((p) => p !== location.pathname)].slice(0, 6); save('recent', next); return next; });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, currentSection]);
+  const toggleSec = (label: string) => {
+    const next = openSecs.includes(label) ? openSecs.filter((x) => x !== label) : [...openSecs, label];
+    setOpenSecs(next); save('open', next);
+  };
+  const toggleFav = (to: string) => {
+    const next = favs.includes(to) ? favs.filter((x) => x !== to) : [...favs, to];
+    setFavs(next); save('favs', next);
+  };
+  const allowed = (to: string) => { const i = NAV_BY_PATH.get(to); return i && canAny(...i.perms) ? i : null; };
+  const reachable = (to: string) => { const i = allowed(to); return i && !i.hidden ? i : null; };
+  const favItems = favs.map(reachable).filter(Boolean) as NavItem[];
+  const recentItems = (recent.filter((p) => !favs.includes(p)).map(reachable).filter(Boolean) as NavItem[]).slice(0, 5);
+  const tabGroup = PROCESS_TABS.find((g) => g.tabs.some((t) => t.to === location.pathname));
 
   const { data: notifications } = useQuery({
     queryKey: ['notifications'],
@@ -49,6 +81,29 @@ export default function AppLayout() {
   const [bellOpen, setBellOpen] = useState(false);
   const goto = useNavigate();
   const unread = (notifications ?? []).filter((n) => !n.is_read).length + (alerts ?? []).length;
+
+  const navLink = (item: NavItem, isFav: boolean) => (
+    <div key={item.to} className="group relative">
+      <NavLink to={item.to} end={item.to === '/'}
+        onClick={() => setMobileOpen(false)}
+        className={({ isActive }) => clsx(
+          'flex items-center gap-2.5 rounded-lg py-[7px] pl-2.5 pr-7 text-[12.5px] transition-colors',
+          isActive
+            ? 'bg-brand-600 font-medium text-white'
+            : 'text-slate-400 hover:bg-white/5 hover:text-slate-100')}>
+        <item.icon size={15} className="shrink-0" />
+        <span className="truncate">{item.label}</span>
+      </NavLink>
+      {item.to !== '/' && (
+        <button type="button" onClick={() => toggleFav(item.to)} data-fav={item.to}
+          title={isFav ? 'Remove from favourites' : 'Add to favourites'} aria-label={isFav ? `Unpin ${item.label}` : `Pin ${item.label}`}
+          className={clsx('absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 transition-opacity',
+            isFav ? 'text-amber-400' : 'text-slate-500 opacity-0 hover:text-amber-300 focus:opacity-100 group-hover:opacity-100')}>
+          <Star size={12} fill={isFav ? 'currentColor' : 'none'} />
+        </button>
+      )}
+    </div>
+  );
 
   const sidebar = (
     <div className="flex h-full flex-col bg-slate-900 text-slate-300">
@@ -77,28 +132,38 @@ export default function AppLayout() {
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-2.5 pb-4">
-        {sections.map((section) => (
-          <div key={section.label} className="mb-3">
-            <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-              {section.label}
-            </p>
-            <div className="space-y-0.5">
-              {section.items.map((item) => (
-                <NavLink key={item.to} to={item.to} end={item.to === '/'}
-                  onClick={() => setMobileOpen(false)}
-                  className={({ isActive }) => clsx(
-                    'flex items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[12.5px] transition-colors',
-                    isActive
-                      ? 'bg-brand-600 font-medium text-white'
-                      : 'text-slate-400 hover:bg-white/5 hover:text-slate-100')}>
-                  <item.icon size={15} className="shrink-0" />
-                  <span className="truncate">{item.label}</span>
-                </NavLink>
-              ))}
-            </div>
+      <nav className="flex-1 overflow-y-auto px-2.5 pb-4" id="side-nav">
+        {!filter && favItems.length > 0 && (
+          <div className="mb-2">
+            <p className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400/90"><Star size={11} /> Favourites</p>
+            <div className="space-y-0.5" id="nav-favs">{favItems.map((item) => navLink(item, true))}</div>
           </div>
-        ))}
+        )}
+        {!filter && recentItems.length > 0 && (
+          <div className="mb-2">
+            <p className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500"><Clock size={11} /> Recent</p>
+            <div className="space-y-0.5" id="nav-recent">{recentItems.map((item) => navLink(item, false))}</div>
+          </div>
+        )}
+        {sections.map((section) => {
+          // searching opens every step; a one-screen step (Overview) has no header
+          const single = section.items.length === 1;
+          const open = !!filter || single || openSecs.includes(section.label);
+          return (
+            <div key={section.label} className="mb-1">
+              {!single && (
+                <button onClick={() => toggleSec(section.label)} aria-expanded={open} data-section={section.label}
+                  className={clsx('flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-[10.5px] font-semibold uppercase tracking-wider hover:bg-white/5',
+                    section.label === currentSection ? 'text-white' : 'text-slate-400')}>
+                  {open ? <ChevronDown size={12} className="shrink-0" /> : <ChevronRight size={12} className="shrink-0" />}
+                  <span className="flex-1 truncate">{section.label}</span>
+                  <span className="rounded-full bg-white/5 px-1.5 text-[9.5px] font-medium text-slate-500">{section.items.length}</span>
+                </button>
+              )}
+              {open && <div className="mb-2 mt-0.5 space-y-0.5">{section.items.map((item) => navLink(item, favs.includes(item.to)))}</div>}
+            </div>
+          );
+        })}
         {!sections.length && (
           <p className="px-3 py-6 text-center text-xs text-slate-500">No matching screens</p>
         )}
@@ -248,6 +313,17 @@ export default function AppLayout() {
 
         <main key={location.pathname} className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-[1600px] p-4 sm:p-6">
+            {tabGroup && (
+              // Sewing / Checking / Ironing / Packing versions of the same screen, one click apart
+              <div className="mb-4 flex gap-1 overflow-x-auto border-b border-surface-border" id="process-tabs">
+                {tabGroup.tabs.filter((t) => allowed(t.to)).map((t) => (
+                  <NavLink key={t.to} to={t.to} className={({ isActive }) => clsx('-mb-px whitespace-nowrap border-b-2 px-3.5 py-2 text-[13px] font-medium',
+                    isActive ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-800')}>
+                    {t.label}
+                  </NavLink>
+                ))}
+              </div>
+            )}
             <Outlet />
           </div>
         </main>
