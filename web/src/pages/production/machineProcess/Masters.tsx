@@ -1,13 +1,18 @@
 import { useState } from 'react';
 import { Plus, Save, CheckCircle2, Copy, Ban, Trash2, Upload, Calculator } from 'lucide-react';
-import { Card, Badge, Button, Input, Select, Textarea, Modal, DataTable, Tabs, Checkbox } from '../../../components/ui';
+import { Card, Badge, Button, Input, Select, Textarea, Modal, DataTable, Tabs, Checkbox, FormSection } from '../../../components/ui';
 import { api } from '../../../lib/api';
 import { fmtDate } from '../../../lib/format';
 import { useToast } from '../../../hooks/useToast';
 import { useLookup, toOptions } from '../../../hooks/useLookup';
 import {
-  type Kind, BASE, LABEL, MACHINE_TYPES, ROLES, ROLE_OF_TYPE, PRINT_TYPES, ST_TONE, errMsg, num, human, money, qty, usePerm, useGet, Section, MiniTable, uploadFile,
+  type Kind, BASE, LABEL, MACHINE_TYPES, ROLES, ROLE_OF_TYPE, PRINT_TYPES, ST_TONE, errMsg, num, human, money, qty, usePerm, useGet, MiniTable, uploadFile,
 } from './shared';
+
+/** Titled block inside a popup — the shared popup section style (FormSection heading), one column. */
+function Section({ title, children, actions }: { title: string; children: React.ReactNode; actions?: React.ReactNode }) {
+  return <FormSection title={title} actions={actions} cols={1}><div className="min-w-0">{children}</div></FormSection>;
+}
 
 /** Masters of the embroidery / printing engine: machines + rates, designs / artwork, recipes, reasons. */
 export function MastersTab({ kind }: { kind: Kind }) {
@@ -129,12 +134,17 @@ function MachineEditor({ kind, row, onClose, onSaved }: { kind: Kind; row: any; 
   const set = (p2: any) => setM({ ...m, ...p2 });
   return (
     <Modal open size="xl" onClose={onClose} title={row.id ? `Machine ${row.machine_code}` : `New ${LABEL[kind].toLowerCase()} machine`}
+      subtitle="Machine master, standard capacity and its effective-dated costing rates"
       footer={<><Button variant="secondary" onClick={onClose}>Close</Button>{!ro && <Button loading={busy} id="mp-machine-save" onClick={save}><Save size={13} className="mr-1 inline" />Save machine</Button>}</>}>
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div>
+        <FormSection title="Machine" cols={4}>
           <Input label="Machine code" required id="mp-machine-code" disabled={ro} value={m.machine_code} onChange={(e) => set({ machine_code: e.target.value })} />
           <Input label="Machine name" required id="mp-machine-name" disabled={ro} value={m.machine_name} onChange={(e) => set({ machine_name: e.target.value })} />
           <Select label="Machine type" disabled={ro} value={m.machine_type} onChange={(e) => set({ machine_type: e.target.value })} options={MACHINE_TYPES[kind].map((t) => ({ value: t, label: human(t) }))} />
+          <Input label="Location" disabled={ro} value={m.location} onChange={(e) => set({ location: e.target.value })} />
+        </FormSection>
+        <FormSection title="Capacity" cols={kind === 'EMBROIDERY' ? 3 : 4}>
           {kind === 'EMBROIDERY' ? <>
             <Input label="Heads" type="number" id="mp-machine-heads" disabled={ro} value={m.head_count} onChange={(e) => set({ head_count: e.target.value })} />
             <Input label="Needles per head" type="number" required id="mp-machine-needles" disabled={ro} value={m.needle_count} onChange={(e) => set({ needle_count: e.target.value })} />
@@ -146,9 +156,11 @@ function MachineEditor({ kind, row, onClose, onSaved }: { kind: Kind; row: any; 
             <Select label="Capacity UOM" disabled={ro} value={m.capacity_uom} onChange={(e) => set({ capacity_uom: e.target.value })} options={['PCS', 'KG', 'MTR'].map((u) => ({ value: u, label: u }))} />
           </>}
           <Input label="Std setup (min)" type="number" disabled={ro} value={m.setup_time_minutes} onChange={(e) => set({ setup_time_minutes: e.target.value })} />
-          <Input label="Location" disabled={ro} value={m.location} onChange={(e) => set({ location: e.target.value })} />
-          <Input label="Remarks" className="md:col-span-2" disabled={ro} value={m.remarks} onChange={(e) => set({ remarks: e.target.value })} />
+        </FormSection>
+        <FormSection title="Remarks" cols={4}>
+          <Input label="Remarks" className="sm:col-span-2 lg:col-span-3" disabled={ro} value={m.remarks} onChange={(e) => set({ remarks: e.target.value })} />
           <div className="flex items-end pb-1.5"><Checkbox label="Active" checked={!!num(m.is_active)} disabled={ro} onChange={(v) => set({ is_active: v ? 1 : 0 })} /></div>
+        </FormSection>
         </div>
         {!row.id && <Section title="Costing rates (effective dated)"><RateFields kind={kind} r={rate} set={(p2) => setRate({ ...rate, ...p2 })} /></Section>}
         {row.id && <Section title="Rate history">
@@ -238,6 +250,7 @@ function DesignEditor({ kind, row, onClose, onSaved }: { kind: Kind; row: any; o
   };
   return (
     <Modal open size="xl" onClose={onClose} title={row.id ? `${cur.design_code} v${d0.version_no ?? 1} · ${human(status)}` : `New ${kind === 'EMBROIDERY' ? 'design' : 'artwork'}`}
+      subtitle={kind === 'EMBROIDERY' ? 'Embroidery design / program with its thread colours — approved versions are locked' : 'Print artwork with its ink colours — approved versions are locked'}
       footer={<>
         <Button variant="secondary" onClick={onClose}>Close</Button>
         {row.id && status === 'DRAFT' && (p.master || p.approve) && <Button variant="secondary" loading={busy} id="mp-design-approve" onClick={() => act(() => api.post(`${BASE[kind]}/designs/${row.id}/approve`), 'Design approved')}><CheckCircle2 size={13} className="mr-1 inline" />Approve</Button>}
@@ -247,30 +260,36 @@ function DesignEditor({ kind, row, onClose, onSaved }: { kind: Kind; row: any; o
       </>}>
       <div className="space-y-4">
         {ro && row.id && <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-800">This version is {human(status).toLowerCase()} and cannot be changed{p.master ? ' — use "New version"' : ''}.</p>}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div>
+        <FormSection title={kind === 'EMBROIDERY' ? 'Design' : 'Artwork'} cols={4}>
           <Input label="Design code" required id="mp-design-code" disabled={ro || !!row.id} value={cur.design_code} onChange={(e) => set({ design_code: e.target.value })} />
-          <Input label="Design name" required id="mp-design-name" className="md:col-span-2" disabled={ro} value={cur.design_name} onChange={(e) => set({ design_name: e.target.value })} />
+          <Input label="Design name" required id="mp-design-name" className="sm:col-span-2" disabled={ro} value={cur.design_name} onChange={(e) => set({ design_name: e.target.value })} />
           <Input label="Placement" placeholder="Chest / Sleeve / Back" disabled={ro} value={cur.placement} onChange={(e) => set({ placement: e.target.value })} />
           <Select label="Style (optional)" disabled={ro} value={cur.style_id} placeholder="— any style —" onChange={(e) => set({ style_id: e.target.value })} options={toOptions(styles.data)} />
           <Select label="Buyer (optional)" disabled={ro} value={cur.buyer_id} placeholder="— any buyer —" onChange={(e) => set({ buyer_id: e.target.value })} options={toOptions(buyers.data)} />
+        </FormSection>
+        <FormSection title={kind === 'EMBROIDERY' ? 'Embroidery spec' : 'Print spec'} cols={kind === 'EMBROIDERY' ? 3 : 2}>
           {kind === 'EMBROIDERY' ? <>
             <Input label="Total stitches" type="number" required id="mp-design-stitches" disabled={ro} value={cur.total_stitches} onChange={(e) => set({ total_stitches: e.target.value })} />
             <Input label="Std machine min / pc (per head)" type="number" disabled={ro} value={cur.std_minutes_per_pc} onChange={(e) => set({ std_minutes_per_pc: e.target.value })} />
             <Input label="Hoop / frame size" disabled={ro} value={cur.hoop_size} onChange={(e) => set({ hoop_size: e.target.value })} />
             <Input label="Backing type" placeholder="Cut-away / Tear-away / Water soluble" disabled={ro} value={cur.backing_type} onChange={(e) => set({ backing_type: e.target.value })} />
-            <Input label="Needle sequence" className="md:col-span-2" placeholder="1-2-3-1-4" disabled={ro} value={cur.needle_sequence} onChange={(e) => set({ needle_sequence: e.target.value })} />
+            <Input label="Needle sequence" className="sm:col-span-2" placeholder="1-2-3-1-4" disabled={ro} value={cur.needle_sequence} onChange={(e) => set({ needle_sequence: e.target.value })} />
           </> : <>
             <Select label="Print type" disabled={ro} value={cur.print_type} placeholder="— choose —" onChange={(e) => set({ print_type: e.target.value })} options={PRINT_TYPES.map((t) => ({ value: t, label: human(t) }))} />
             <Input label="No. of colours" type="number" disabled={ro} value={cur.no_of_colors} onChange={(e) => set({ no_of_colors: e.target.value })} />
           </>}
-          <div className="col-span-2 md:col-span-4">
+        </FormSection>
+        <FormSection title="File & remarks" cols={1}>
+          <div>
             <span className="label">{kind === 'EMBROIDERY' ? 'Design file (DST / DSB / EMB / PDF / image)' : 'Artwork file (PDF / image)'}</span>
             <div className="flex items-center gap-3">
               {!ro && <label className="btn-secondary cursor-pointer text-xs"><Upload size={12} className="mr-1 inline" />Upload<input type="file" className="hidden" id="mp-design-file" onChange={(e) => void onFile(e.target.files?.[0])} /></label>}
               {cur.file_url ? <a href={cur.file_url} target="_blank" rel="noreferrer" className="text-xs text-brand-700 underline">{cur.file_name || cur.file_url}</a> : <span className="text-xs text-slate-400">No file</span>}
             </div>
           </div>
-          <Textarea label="Remarks" className="col-span-2 md:col-span-4" disabled={ro} value={cur.remarks} onChange={(e) => set({ remarks: e.target.value })} />
+          <Textarea label="Remarks" disabled={ro} value={cur.remarks} onChange={(e) => set({ remarks: e.target.value })} />
+        </FormSection>
         </div>
         <Section title={kind === 'EMBROIDERY' ? 'Thread colours / needle sequence' : 'Ink colours'}
           actions={!ro && <Button size="sm" variant="secondary" onClick={() => set({ colors: [...cur.colors, { needle_no: '', color_name: '', trim_id: '', stitches: '' }] })}><Plus size={12} className="mr-1 inline" />Add colour</Button>}>
@@ -365,6 +384,7 @@ function RecipeEditor({ kind, row, onClose, onSaved }: { kind: Kind; row: any; o
   const upd = (i: number, x: any) => set({ items: cur.items.map((y: any, j: number) => (j === i ? { ...y, ...x } : y)) });
   return (
     <Modal open size="full" onClose={onClose} title={row.id ? `Recipe ${cur.recipe_no} v${r0.version_no ?? 1} · ${human(status)}` : 'New recipe'}
+      subtitle="Standard materials per piece / base qty — approved versions are locked"
       footer={<>
         <Button variant="secondary" onClick={onClose}>Close</Button>
         {row.id && status === 'DRAFT' && (p.master || p.approve) && <Button variant="secondary" loading={busy} id="mp-recipe-approve" onClick={() => act(() => api.post(`${BASE[kind]}/recipes/${row.id}/approve`), 'Recipe approved')}><CheckCircle2 size={13} className="mr-1 inline" />Approve</Button>}
@@ -374,16 +394,16 @@ function RecipeEditor({ kind, row, onClose, onSaved }: { kind: Kind; row: any; o
       </>}>
       <div className="space-y-4">
         {ro && row.id && <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-800">This version is {human(status).toLowerCase()} and cannot be changed{p.master ? ' — use "New version"' : ''}.</p>}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+        <FormSection title="Recipe" cols={4}>
           <Input label="Recipe no" placeholder="Auto" disabled={ro || !!row.id} value={cur.recipe_no} onChange={(e) => set({ recipe_no: e.target.value })} />
-          <Input label="Recipe name" required id="mp-recipe-name" className="md:col-span-2" disabled={ro} value={cur.recipe_name} onChange={(e) => set({ recipe_name: e.target.value })} />
-          <Select label="Design (optional)" disabled={ro} value={cur.design_id} placeholder="— any —" onChange={(e) => set({ design_id: e.target.value })}
+          <Input label="Effective from" type="date" disabled={ro} value={cur.effective_from ?? ''} onChange={(e) => set({ effective_from: e.target.value })} />
+          <Input label="Recipe name" required id="mp-recipe-name" className="sm:col-span-2" disabled={ro} value={cur.recipe_name} onChange={(e) => set({ recipe_name: e.target.value })} />
+          <Select label="Design (optional)" className="sm:col-span-2" disabled={ro} value={cur.design_id} placeholder="— any —" onChange={(e) => set({ design_id: e.target.value })}
             options={(designs.data ?? []).map((x: any) => ({ value: x.id, label: `${x.design_code} v${x.version_no}${x.total_stitches ? ` · ${qty(x.total_stitches, 0)} st` : ''}` }))} />
           <Input label="Base qty (per-base lines)" type="number" disabled={ro} value={cur.base_qty} onChange={(e) => set({ base_qty: e.target.value })} />
           <Select label="Base UOM" disabled={ro} value={cur.base_uom} onChange={(e) => set({ base_uom: e.target.value })} options={['PCS', 'KG', 'MTR'].map((u) => ({ value: u, label: u }))} />
-          <Input label="Effective from" type="date" disabled={ro} value={cur.effective_from ?? ''} onChange={(e) => set({ effective_from: e.target.value })} />
-          <Input label="Remarks" className="md:col-span-5" disabled={ro} value={cur.remarks} onChange={(e) => set({ remarks: e.target.value })} />
-        </div>
+          <Input label="Remarks" className="sm:col-span-2 lg:col-span-4" disabled={ro} value={cur.remarks} onChange={(e) => set({ remarks: e.target.value })} />
+        </FormSection>
         <Section title="Materials" actions={!ro && <Button size="sm" variant="secondary" id="mp-recipe-add-line" onClick={() => set({ items: [...cur.items, blank()] })}><Plus size={12} className="mr-1 inline" />Add material</Button>}>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -457,18 +477,19 @@ function Reasons({ kind }: { kind: Kind }) {
           { key: 'needs_approval', header: 'Needs approval', render: (r: any) => (r.needs_approval ? 'Yes' : '—') },
           { key: 'is_active', header: 'Status', render: (r: any) => r.is_active ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Inactive</Badge> },
         ]} />
-      {edit && <Modal open onClose={() => setEdit(null)} title={edit.id ? `Reason ${edit.reason_code}` : 'New reason'}
+      {edit && <Modal open onClose={() => setEdit(null)} title={edit.id ? `Edit reason ${edit.reason_code}` : 'New reason'}
+        subtitle="Downtime or reject / rework reason"
         footer={<><Button variant="secondary" onClick={() => setEdit(null)}>Cancel</Button><Button onClick={save}><Save size={13} className="mr-1 inline" />Save</Button></>}>
-        <div className="grid grid-cols-2 gap-3">
+        <FormSection cols={2}>
           <Select label="Type" value={edit.reason_type} onChange={(e) => setEdit({ ...edit, reason_type: e.target.value })} options={[{ value: 'DOWNTIME', label: 'Downtime' }, { value: 'REJECT', label: 'Reject / rework' }]} />
           <Input label="Code" required value={edit.reason_code} onChange={(e) => setEdit({ ...edit, reason_code: e.target.value })} />
-          <Input label="Reason" required className="col-span-2" value={edit.reason_name} onChange={(e) => setEdit({ ...edit, reason_name: e.target.value })} />
+          <Input label="Reason" required className="sm:col-span-2" value={edit.reason_name} onChange={(e) => setEdit({ ...edit, reason_name: e.target.value })} />
           <Input label="Sort order" type="number" value={edit.sort_order} onChange={(e) => setEdit({ ...edit, sort_order: e.target.value })} />
           <div className="flex items-end gap-4 pb-1.5">
             <Checkbox label="Needs approval" checked={!!num(edit.needs_approval)} onChange={(v) => setEdit({ ...edit, needs_approval: v ? 1 : 0 })} />
             <Checkbox label="Active" checked={!!num(edit.is_active)} onChange={(v) => setEdit({ ...edit, is_active: v ? 1 : 0 })} />
           </div>
-        </div>
+        </FormSection>
       </Modal>}
     </Card>
   );

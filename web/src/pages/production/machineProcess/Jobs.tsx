@@ -1,13 +1,18 @@
 import { useState } from 'react';
 import { Plus, Save, Play, CheckCircle2, Ban, PackageMinus, PackagePlus, Pencil, Factory } from 'lucide-react';
-import { Card, Badge, Button, Input, Select, Textarea, Modal, DataTable } from '../../../components/ui';
+import { Card, Badge, Button, Input, Select, Textarea, Modal, DataTable, FormSection, LoadingBlock } from '../../../components/ui';
 import { api } from '../../../lib/api';
 import { fmtDate } from '../../../lib/format';
 import { useToast } from '../../../hooks/useToast';
 import { useLookup, toOptions } from '../../../hooks/useLookup';
 import { JobSelect } from '../../../components/JobSelect';
-import { type Kind, BASE, LABEL, PRINT_TYPES, ST_TONE, errMsg, num, human, money, qty, pctTxt, usePerm, useGet, Section, Kv, MiniTable } from './shared';
+import { type Kind, BASE, LABEL, PRINT_TYPES, ST_TONE, errMsg, num, human, money, qty, pctTxt, usePerm, useGet, Kv, MiniTable } from './shared';
 import { MaterialDialog } from './Material';
+
+/** Titled block inside a popup — the shared popup section style (FormSection heading), one column. */
+function Section({ title, children, actions }: { title: string; children: React.ReactNode; actions?: React.ReactNode }) {
+  return <FormSection title={title} actions={actions} cols={1}><div className="min-w-0">{children}</div></FormSection>;
+}
 
 /** Embroidery / printing job (program): order, style, approved design + recipe, planned qty, machine, DC link (doc §7 / §5). */
 export function JobsTab({ kind, onNewProduction, onOpenProduction }: { kind: Kind; onNewProduction: (jobId: number) => void; onOpenProduction: (id: number) => void }) {
@@ -84,31 +89,40 @@ function JobEditor({ kind, job, onClose, onSaved }: { kind: Kind; job: any; onCl
   };
   return (
     <Modal open size="xl" onClose={onClose} title={job.id ? `Edit ${job.job_no}` : `New ${LABEL[kind].toLowerCase()} job`}
+      subtitle="Only approved design / recipe versions can be chosen. Once production or material is posted the design, recipe and UOM of the job are locked."
+      icon={<Factory size={16} />}
       footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={busy} id="mp-job-save" disabled={!(num(h.planned_qty) > 0)} onClick={save}><Save size={13} className="mr-1 inline" />Save</Button></>}>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <FormSection title="Order" cols={4}>
         <Input label="Job date" type="date" value={h.job_date} onChange={(e) => set({ job_date: e.target.value })} />
         <JobSelect value={h.so_id} by="so_id" label="Buyer order (IO)" id="mp-job-so" onPick={(j) => set({ so_id: j?.id ?? '', io_no: j?.job_no ?? '', styles: j?.styles ?? [], style_id: j && j.styles.length === 1 ? j.styles[0].style_id : '' })} />
         <Select label="Style" id="mp-job-style" value={h.style_id} placeholder="— style —" onChange={(e) => set({ style_id: e.target.value })}
           options={(h.styles.length ? h.styles : job.style_id ? [{ style_id: job.style_id, style_code: job.style_code }] : []).map((s: any) => ({ value: s.style_id, label: `${s.style_code}${s.style_name ? ` · ${s.style_name}` : ''}` }))} />
         <Select label="Colour" value={h.color_id} placeholder="— colour —" onChange={(e) => set({ color_id: e.target.value })} options={toOptions(colors.data)} />
+      </FormSection>
+      <FormSection title={kind === 'EMBROIDERY' ? 'Design & recipe' : 'Artwork & recipe'} cols={kind === 'PRINTING' ? 4 : 3}>
         <Select label={kind === 'EMBROIDERY' ? 'Approved design' : 'Approved artwork'} id="mp-job-design" value={h.design_id} placeholder="— choose —"
           onChange={(e) => { const d = designOpts.find((x) => String(x.id) === e.target.value); set({ design_id: e.target.value, placement: h.placement || d?.placement || '', print_type: h.print_type || d?.print_type || '' }); }}
           options={designOpts.map((d: any) => ({ value: d.id, label: `${d.design_code} v${d.version_no}${d.total_stitches ? ` · ${qty(d.total_stitches, 0)} st` : ''}${d.design_name ? ` · ${d.design_name}` : ''}` }))} />
         <Select label="Approved recipe" id="mp-job-recipe" value={h.recipe_id} placeholder="— choose —" onChange={(e) => set({ recipe_id: e.target.value })}
           options={recipeOpts.map((r: any) => ({ value: r.id, label: `${r.recipe_no} v${r.version_no}${r.recipe_name ? ` · ${r.recipe_name}` : ''}` }))} />
-        <Select label="Machine (planned)" id="mp-job-machine" value={h.machine_id} placeholder="— any —" onChange={(e) => set({ machine_id: e.target.value })} options={(machines.data ?? []).map((m: any) => ({ value: m.id, label: `${m.machine_code} · ${m.machine_name}` }))} />
-        <Select label="Process DC (came on)" value={h.challan_id} placeholder="— none / in-house —" onChange={(e) => set({ challan_id: e.target.value })}
-          options={(dcs.data ?? []).map((d: any) => ({ value: d.id, label: `${d.challan_no} · ${fmtDate(d.challan_date)} · ${d.io_no ?? ''} ${d.style_code ?? ''} · ${d.vendor_name ?? ''}` }))} />
         <Input label="Placement" placeholder="Chest / Sleeve / Back / Panel" value={h.placement} onChange={(e) => set({ placement: e.target.value })} />
         {kind === 'PRINTING' && <Select label="Print type" value={h.print_type} placeholder="—" onChange={(e) => set({ print_type: e.target.value })} options={PRINT_TYPES.map((t) => ({ value: t, label: human(t) }))} />}
+      </FormSection>
+      <FormSection title="Quantity & schedule" cols={3}>
         <Select label="Input" value={h.input_type} onChange={(e) => set({ input_type: e.target.value })} options={['CUT_PANEL', 'GARMENT', 'FABRIC', 'OTHER'].map((t) => ({ value: t, label: human(t) }))} />
         <Input label="Planned qty" type="number" required id="mp-job-qty" value={h.planned_qty} onChange={(e) => set({ planned_qty: e.target.value })} />
         <Select label="UOM" value={h.uom} onChange={(e) => set({ uom: e.target.value })} options={['PCS', 'KG', 'MTR'].map((u) => ({ value: u, label: u }))} />
         <Input label="Planned start" type="date" value={h.planned_start} onChange={(e) => set({ planned_start: e.target.value })} />
         <Input label="Planned end" type="date" value={h.planned_end} onChange={(e) => set({ planned_end: e.target.value })} />
-        <Textarea label="Remarks" className="col-span-2 md:col-span-4" value={h.remarks} onChange={(e) => set({ remarks: e.target.value })} />
-      </div>
-      <p className="mt-2 text-[11px] text-slate-500">Only approved design / recipe versions can be chosen. Once production or material is posted the design, recipe and UOM of the job are locked.</p>
+      </FormSection>
+      <FormSection title="Machine & DC" cols={2}>
+        <Select label="Machine (planned)" id="mp-job-machine" value={h.machine_id} placeholder="— any —" onChange={(e) => set({ machine_id: e.target.value })} options={(machines.data ?? []).map((m: any) => ({ value: m.id, label: `${m.machine_code} · ${m.machine_name}` }))} />
+        <Select label="Process DC (came on)" value={h.challan_id} placeholder="— none / in-house —" onChange={(e) => set({ challan_id: e.target.value })}
+          options={(dcs.data ?? []).map((d: any) => ({ value: d.id, label: `${d.challan_no} · ${fmtDate(d.challan_date)} · ${d.io_no ?? ''} ${d.style_code ?? ''} · ${d.vendor_name ?? ''}` }))} />
+      </FormSection>
+      <FormSection title="Remarks" cols={1}>
+        <Textarea label="Remarks" value={h.remarks} onChange={(e) => set({ remarks: e.target.value })} />
+      </FormSection>
     </Modal>
   );
 }
@@ -141,17 +155,19 @@ export function JobDetail({ kind, id, onClose, onEdit, onNewProduction, onOpenPr
   };
   return (
     <Modal open size="full" onClose={onClose} title={j ? `${LABEL[kind]} job ${j.job_no}` : 'Job'}
+      icon={<Factory size={16} />}
+      subtitle={j ? <span className="inline-flex flex-wrap items-center gap-2"><Badge tone={ST_TONE[j.status]}>{human(j.status)}</Badge>{j.io_no ?? ''}{j.style_code ? ` · ${j.style_code}` : ''} · planned {qty(j.planned_qty)} {j.uom}</span> : undefined}
       footer={j && <>
         <Button variant="secondary" onClick={onClose}>Close</Button>
         {p.submit && ['DRAFT', 'PLANNED', 'RUNNING'].includes(j.status) && <Button variant="secondary" onClick={() => onEdit(j)}><Pencil size={13} className="mr-1 inline" />Edit</Button>}
-        {p.submit && j.status === 'DRAFT' && <Button loading={busy} id="mp-job-plan" onClick={() => act('plan', {}, 'Job planned — released to the floor')}><Play size={13} className="mr-1 inline" />Plan / release</Button>}
         {p.store && ['PLANNED', 'RUNNING'].includes(j.status) && <Button variant="secondary" id="mp-job-issue" onClick={() => setMat('ISSUE')}><PackageMinus size={13} className="mr-1 inline" />Issue material</Button>}
         {p.store && j.status !== 'CANCELLED' && j.materials?.length > 0 && <Button variant="secondary" onClick={() => setMat('RETURN')}><PackagePlus size={13} className="mr-1 inline" />Return material</Button>}
-        {(p.create || p.submit) && ['PLANNED', 'RUNNING'].includes(j.status) && <Button id="mp-job-new-prod" onClick={() => onNewProduction(j.id)}><Factory size={13} className="mr-1 inline" />New production entry</Button>}
         {p.submit && ['PLANNED', 'RUNNING'].includes(j.status) && <Button variant="secondary" loading={busy} id="mp-job-complete" onClick={complete}><CheckCircle2 size={13} className="mr-1 inline" />Complete</Button>}
         {p.submit && ['DRAFT', 'PLANNED', 'RUNNING'].includes(j.status) && <Button variant="danger" loading={busy} onClick={cancel}><Ban size={13} className="mr-1 inline" />Cancel job</Button>}
+        {p.submit && j.status === 'DRAFT' && <Button loading={busy} id="mp-job-plan" onClick={() => act('plan', {}, 'Job planned — released to the floor')}><Play size={13} className="mr-1 inline" />Plan / release</Button>}
+        {(p.create || p.submit) && ['PLANNED', 'RUNNING'].includes(j.status) && <Button id="mp-job-new-prod" onClick={() => onNewProduction(j.id)}><Factory size={13} className="mr-1 inline" />New production entry</Button>}
       </>}>
-      {!j ? <p className="text-sm text-slate-500">{d.error ?? 'Loading…'}</p> : (
+      {!j ? (d.error ? <p className="text-sm text-slate-500">{d.error}</p> : <LoadingBlock />) : (
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-3">
             <Section title="Job">

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { PackageMinus, PackagePlus, Ban } from 'lucide-react';
-import { Card, Badge, Button, Input, Select, Modal, DataTable } from '../../../components/ui';
+import { Card, Badge, Button, Input, Select, Modal, DataTable, FormSection } from '../../../components/ui';
 import { api } from '../../../lib/api';
 import { fmtDate } from '../../../lib/format';
 import { useToast } from '../../../hooks/useToast';
@@ -101,16 +101,19 @@ export function MaterialDialog({ kind, type, jobId, productionId, onClose, onDon
   };
   return (
     <Modal open size="xl" onClose={onClose} title={type === 'ISSUE' ? 'Issue material to job' : 'Return unused material to store'}
+      icon={type === 'ISSUE' ? <PackageMinus size={16} /> : <PackagePlus size={16} />}
+      subtitle={type === 'ISSUE' ? "Pick the stock lots and quantities to issue against the job's recipe" : 'Unconsumed material held by the job goes back to its stock lot'}
+      footerStart={job ? <><b>{lines.length}</b> lot(s) to post</> : undefined}
       footer={<><Button variant="secondary" onClick={onClose}>Close</Button><Button loading={busy} id="mp-mat-post" disabled={!job || !lines.length} onClick={post}>{type === 'ISSUE' ? 'Post issue' : 'Post return'}</Button></>}>
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <FormSection cols={2}>
+          <Input label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           {jobId ? <Input label="Job" disabled value={req?.job_no ?? ''} /> :
             <Select label="Job" required id="mp-mat-job" value={job} placeholder="— planned / running job —" onChange={(e) => setJob(e.target.value)}
               options={(jobs.data ?? []).filter((j: any) => ['PLANNED', 'RUNNING'].includes(j.status) || type === 'RETURN').map((j: any) => ({ value: j.id, label: `${j.job_no} · ${j.io_no ?? ''} ${j.style_code ?? ''} · ${human(j.status)}` }))} />}
-          <Input label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          <Input label="Remarks" className="md:col-span-2" value={remarks} onChange={(e) => setRemarks(e.target.value)} />
-        </div>
+        </FormSection>
         {job && <div className="overflow-x-auto">
+          <h3 className="mb-2 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">{type === 'ISSUE' ? 'Stock lots' : 'Lots held by the job'}</h3>
           <table className="w-full text-xs">
             <thead className="bg-slate-50 text-slate-500"><tr>
               <th className="px-2 py-1 text-left">Material</th><th className="px-2 py-1 text-left">Lot</th><th className="px-2 py-1 text-left">Store</th>
@@ -139,6 +142,9 @@ export function MaterialDialog({ kind, type, jobId, productionId, onClose, onDon
           {!lots.length && <p className="py-3 text-center text-xs text-slate-400">{type === 'ISSUE' ? 'No trims stock lots (general stock or this job\'s) — receive the material through a Trims GRN first' : 'Nothing issued to this job'}</p>}
           <p className="mt-2 text-[11px] text-slate-500">"Job standard" is the recipe requirement for the planned qty in stock units. Another job's lot must be transferred to this job first (Job Transfer).</p>
         </div>}
+        <FormSection cols={1}>
+          <Input label="Remarks" value={remarks} onChange={(e) => setRemarks(e.target.value)} />
+        </FormSection>
       </div>
     </Modal>
   );

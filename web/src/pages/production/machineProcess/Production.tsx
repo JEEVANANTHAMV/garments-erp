@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Save, Send, CheckCircle2, XCircle, Ban, Trash2, PackageMinus } from 'lucide-react';
-import { Card, Badge, Button, Input, Select, Textarea, Modal, DataTable } from '../../../components/ui';
+import { Card, Badge, Button, Input, Select, Textarea, Modal, DataTable, FormSection } from '../../../components/ui';
 import { api } from '../../../lib/api';
 import { fmtDate, fmtDateTime } from '../../../lib/format';
 import { useToast } from '../../../hooks/useToast';
 import { useLookup } from '../../../hooks/useLookup';
-import { type Kind, BASE, LABEL, ST_TONE, errMsg, num, human, money, rate4, qty, pctTxt, usePerm, useGet, Section, Kv, MiniTable } from './shared';
+import { type Kind, BASE, LABEL, ST_TONE, errMsg, num, human, money, rate4, qty, pctTxt, usePerm, useGet, Kv, MiniTable } from './shared';
 import { MaterialDialog } from './Material';
+
+/** Titled block inside a popup — the shared popup section style (FormSection heading), one column. */
+function Section({ title, children, actions }: { title: string; children: React.ReactNode; actions?: React.ReactNode }) {
+  return <FormSection title={title} actions={actions} cols={1}><div className="min-w-0">{children}</div></FormSection>;
+}
 
 /** Production entries list (machine output by date / shift / machine). */
 export function ProductionTab({ kind, onOpen }: { kind: Kind; onOpen: (o: { id?: number; jobId?: number }) => void }) {
@@ -188,30 +193,31 @@ export function ProductionForm({ kind, id: id0, jobId, onClose }: { kind: Kind; 
 
   return (
     <Modal open size="full" onClose={onClose} title={entry ? `${LABEL[kind]} production ${entry.production_no}` : `New ${LABEL[kind].toLowerCase()} production entry`}
+      subtitle="Machine output for one shift — standard consumption and cost are calculated by the server"
+      footerStart={entry ? <span className="flex items-center gap-2 text-xs"><Badge tone={ST_TONE[status]}>{human(status)}</Badge>{entry.over_plan ? <Badge tone="amber">over plan</Badge> : null}</span> : undefined}
       footer={<>
-        {entry && <span className="mr-auto flex items-center gap-2 text-xs"><Badge tone={ST_TONE[status]}>{human(status)}</Badge>{entry.over_plan ? <Badge tone="amber">over plan</Badge> : null}</span>}
         <Button variant="secondary" onClick={onClose}>Close</Button>
-        {entry && !['CANCELLED'].includes(status) && (status === 'APPROVED' ? p.approve : status === 'SUBMITTED' ? p.submit : (p.create || p.submit)) &&
-          <Button variant="danger" loading={busy} id="mp-prod-cancel" onClick={cancel}><Ban size={13} className="mr-1 inline" />{status === 'APPROVED' ? 'Reverse' : 'Cancel entry'}</Button>}
         {p.store && entry && ['DRAFT', 'SUBMITTED', 'REJECTED'].includes(status) && <Button variant="secondary" onClick={() => setMat(true)}><PackageMinus size={13} className="mr-1 inline" />Issue material</Button>}
         {!ro && <Button variant="secondary" loading={busy} id="mp-prod-save" onClick={() => save(false)}><Save size={13} className="mr-1 inline" />{status === 'SUBMITTED' ? 'Save changes' : 'Save draft'}</Button>}
+        {status === 'SUBMITTED' && p.approve && <Button variant="secondary" loading={busy} id="mp-prod-reject" onClick={reject}><XCircle size={13} className="mr-1 inline" />Reject</Button>}
+        {entry && !['CANCELLED'].includes(status) && (status === 'APPROVED' ? p.approve : status === 'SUBMITTED' ? p.submit : (p.create || p.submit)) &&
+          <Button variant="danger" loading={busy} id="mp-prod-cancel" onClick={cancel}><Ban size={13} className="mr-1 inline" />{status === 'APPROVED' ? 'Reverse' : 'Cancel entry'}</Button>}
         {!ro && p.submit && status !== 'SUBMITTED' && <Button loading={busy} id="mp-prod-submit" onClick={() => save(true)}><Send size={13} className="mr-1 inline" />Save & submit</Button>}
-        {status === 'SUBMITTED' && p.approve && <>
-          <Button variant="secondary" loading={busy} id="mp-prod-reject" onClick={reject}><XCircle size={13} className="mr-1 inline" />Reject</Button>
-          <Button loading={busy} id="mp-prod-approve" onClick={approve}><CheckCircle2 size={13} className="mr-1 inline" />Approve</Button>
-        </>}
+        {status === 'SUBMITTED' && p.approve && <Button loading={busy} id="mp-prod-approve" onClick={approve}><CheckCircle2 size={13} className="mr-1 inline" />Approve</Button>}
       </>}>
       <div className="space-y-4">
         {entry?.status === 'REJECTED' && <p className="rounded-lg bg-red-50 p-2 text-xs text-red-700">Rejected by {entry.rejected_by_name}: {entry.reject_remarks} — correct and save; it goes back to draft.</p>}
         {entry?.status === 'CANCELLED' && <p className="rounded-lg bg-slate-100 p-2 text-xs text-slate-700">Cancelled by {entry.cancelled_by_name}: {entry.cancel_reason}</p>}
-        {/* Header */}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+        {/* Header + job context box */}
+        <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-3">
+        <FormSection title="Entry" cols={4} className="xl:col-span-2">
           <Input label="Date" type="date" disabled={ro} value={f.prod_date} onChange={(e) => set({ prod_date: e.target.value })} />
           <Select label="Shift" required id="mp-prod-shift" disabled={ro} value={f.shift_id} placeholder="— shift —" onChange={(e) => pickShift(e.target.value)}
             options={(shifts.data ?? []).map((s: any) => ({ value: s.id, label: `${s.code} · ${s.label}` }))} />
-          <Select label="Job" required id="mp-prod-job" className="md:col-span-2" disabled={ro || !!entry} value={f.job_id} placeholder="— planned / running job —" onChange={(e) => set({ job_id: e.target.value })}
+          <Select label="Job" required id="mp-prod-job" className="sm:col-span-2" disabled={ro || !!entry} value={f.job_id} placeholder="— planned / running job —" onChange={(e) => set({ job_id: e.target.value })}
             options={jobOpts.map((j: any) => ({ value: j.id, label: `${j.job_no} · ${j.io_no ?? ''} ${j.style_code ?? ''} · ${qty(j.planned_qty)} ${j.uom ?? ''}` }))} />
-          <div className="col-span-2 rounded-lg bg-slate-50 p-2 text-[11px] text-slate-600">
+        </FormSection>
+          <div className="rounded-lg bg-slate-50 p-2 text-[11px] text-slate-600">
             {job ? <>
               {[job.buyer_name, job.io_no, job.style_code, job.color_name].some(Boolean) && <div><b>{[job.buyer_name, job.io_no, job.style_code, job.color_name].filter(Boolean).join(' · ')}</b></div>}
               <div>{kind === 'EMBROIDERY' ? 'Design' : 'Artwork'} {job.design_code ? `${job.design_code} v${job.design_version}` : '—'}{job.placement ? ` · ${job.placement}` : ''}{job.stitches_per_pc ? ` · ${qty(job.stitches_per_pc, 0)} st/pc` : ''}</div>
@@ -222,8 +228,8 @@ export function ProductionForm({ kind, id: id0, jobId, onClose }: { kind: Kind; 
 
         <div className="grid gap-4 lg:grid-cols-2">
           <Section title="Machine">
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              <Select label="Machine" required id="mp-prod-machine" disabled={ro} value={f.machine_id} placeholder="— machine —" onChange={(e) => set({ machine_id: e.target.value })}
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3 md:grid-cols-4">
+              <Select label="Machine" required id="mp-prod-machine" className={kind === 'PRINTING' ? 'col-span-2' : undefined} disabled={ro} value={f.machine_id} placeholder="— machine —" onChange={(e) => set({ machine_id: e.target.value })}
                 options={(machines.data ?? []).map((m: any) => ({ value: m.id, label: `${m.machine_code}${kind === 'EMBROIDERY' ? ` · ${m.head_count} heads` : ''}` }))} />
               {kind === 'EMBROIDERY' && <Input label={`Heads used${machine ? ` (of ${machine.head_count})` : ''}`} type="number" id="mp-prod-heads" disabled={ro} value={f.heads_used} onChange={(e) => set({ heads_used: e.target.value })} />}
               <Input label="Operator" id="mp-prod-operator" disabled={ro} value={f.operator_name} onChange={(e) => set({ operator_name: e.target.value })} />
@@ -256,7 +262,7 @@ export function ProductionForm({ kind, id: id0, jobId, onClose }: { kind: Kind; 
           </Section>
 
           <Section title="Output">
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3 md:grid-cols-4">
               <Input label="Input qty" type="number" required id="mp-prod-input" disabled={ro} value={f.input_qty} onChange={(e) => set({ input_qty: e.target.value })} />
               <Input label="Good" type="number" id="mp-prod-good" disabled={ro} value={f.good_qty} onChange={(e) => set({ good_qty: e.target.value })} />
               <Input label="Reject" type="number" id="mp-prod-reject-qty" disabled={ro} value={f.reject_qty} onChange={(e) => set({ reject_qty: e.target.value })} />
