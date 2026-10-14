@@ -7,7 +7,7 @@ import { useToast } from '../../hooks/useToast';
 import {
   type BlockS, type ItemS, type PlType, type RowS,
   blocksFromServer, blocksToPayload, calcList, emptyItem, newBlock, newRowAfter, parseHeaders,
-  shippedGroups, STANDARD_PRESETS, uid,
+  normKey, shippedGroups, STANDARD_PRESETS, uid,
 } from './packingListModel';
 import { PackingListDocument, PackingListPrintPortal } from './PackingListPrint';
 import { JobSelect } from '../../components/JobSelect';
@@ -79,6 +79,20 @@ const EMPTY_HEADER = {
 };
 type Header = typeof EMPTY_HEADER;
 
+/** One style + colour of the sales order with its size breakdown (from /packing-lists/prefill). */
+interface OrderLine {
+  style_id: number | null; style_code: string | null; style_name: string | null;
+  color_id: number | null; color_name: string | null; sizes: { size_code: string; qty: number }[];
+}
+const DEFAULT_SIZES = ['S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
+/** Sizes of the order lines in their size order (each line is already sorted). */
+const orderSizes = (lines: OrderLine[]) => {
+  const out: string[] = [];
+  for (const l of lines) for (const s of l.sizes) if (!out.includes(s.size_code)) out.push(s.size_code);
+  return out;
+};
+const orderNoOf = (d: { buyer_order_no?: string | null; so_no?: string | null }) => d.buyer_order_no || d.so_no || '';
+
 export function PackingListDetailPage() {
   const { id } = useParams();
   const nav = useNavigate();
@@ -86,7 +100,8 @@ export function PackingListDetailPage() {
   const isNew = !id || id === 'new';
 
   const [header, setHeader] = useState<Header>(EMPTY_HEADER);
-  const [sizeHeaders, setSizeHeaders] = useState<string[]>(['S', 'M', 'L', 'XL', 'XXL', 'XXXL']);
+  const [sizeHeaders, setSizeHeaders] = useState<string[]>(DEFAULT_SIZES);
+  const [orderLines, setOrderLines] = useState<OrderLine[]>([]);
   const [blocks, setBlocks] = useState<BlockS[]>([newBlock()]);
   const [manualOrder, setManualOrder] = useState<Record<string, Record<string, string>>>({});
   const [saved, setSaved] = useState<any>(null);            // last server copy (for print / summary / cartons)
@@ -141,8 +156,65 @@ export function PackingListDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, isNew]);
 
+  // Style / colour / size breakdown of the linked sales order — feeds the row pickers and "Add rows from order".
+  useEffect(() => {
+    if (!header.so_id) { setOrderLines([]); return; }
+    api.get('/packing-lists/prefill', { params: { so_id: header.so_id } })
+      .then((r) => setOrderLines(r.data.data.order_lines || [])).catch(() => setOrderLines([]));
+  }, [header.so_id]);
+
   const setField = (k: keyof Header, v: any) => { setHeader((p) => ({ ...p, [k]: v })); setDirty(true); };
   const mutateBlocks = (fn: (b: BlockS[]) => BlockS[]) => { setBlocks((prev) => fn(structuredClone(prev))); setDirty(true); };
+
+  /* ---------- style / colour pickers on the carton rows */
+  const itemFromLine = (l: OrderLine) => ({
+    style_id: l.style_id, style_no: l.style_code ?? '', style_name: l.style_name ?? '', color_id: l.color_id, colour: l.color_name ?? '',
+  });
+  const pickStyle = (bi: number, ri: number, ii: number, v: string) => mutateBlocks((b) => {
+    const it = b[bi].rows[ri].items[ii];
+    const hit = orderLines.filter((l) => normKey(l.style_code) === normKey(v));
+    it.style_no = v; it.style_id = hit[0]?.style_id ?? null;
+    if (hit.length) {
+      it.style_name = hit[0].style_name ?? it.style_name;
+      // only one colour of this style on the order → take it; a colour the style does not have is cleared
+      if (hit.length === 1) { it.colour = hit[0].color_name ?? ''; it.color_id = hit[0].color_id; }
+      else if (it.colour && !hit.some((l) => normKey(l.color_name) === normKey(it.colour))) { it.colour = ''; it.color_id = null; }
+    }
+    return b;
+  });
+  const pickColour = (bi: number, ri: number, ii: number, v: string) => mutateBlocks((b) => {
+    const it = b[bi].rows[ri].items[ii];
+    const hit = orderLines.find((l) => normKey(l.color_name) === normKey(v) && (!it.style_no || normKey(l.style_code) === normKey(it.style_no)));
+    it.colour = v; it.color_id = hit?.color_id ?? null;
+    return b;
+  });
+  /** Order line a shipped group (order no | style | colour key) belongs to. */
+  const lineOfGroup = (key: string) => {
+    const [, style, colour] = key.split('|');
+    return orderLines.find((l) => (normKey(l.style_code) === style || normKey(l.style_name) === style) && normKey(l.color_name) === colour);
+  };
+
+  /* ---------- one carton row per style / colour of the order, with the order qty */
+  const addRowsFromOrder = () => {
+    if (!orderLines.length) return;
+    const hasRows = blocks.some((b) => b.rows.some((r) => r.items.some((it) => Object.values(it.size_qty).some((v) => Number(v) > 0))));
+    if (hasRows && !window.confirm('Replace the current carton rows with rows from the sales order?')) return;
+    const orderNo = orderNoOf({ buyer_order_no: header.buyer_order_no, so_no: lk.so.find((s: any) => s.id === header.so_id)?.code });
+    const solid = header.pl_type === 'SOLID';
+    const rows: RowS[] = [];
+    for (const l of orderLines) {
+      const base = { ...emptyItem({ order_no: orderNo, so_id: header.so_id }), ...itemFromLine(l) };
+      const parts = solid ? l.sizes.filter((s) => s.qty > 0).map((s) => [s]) : [l.sizes.filter((s) => s.qty > 0)];
+      for (const p of parts) {
+        if (!p.length) continue;
+        rows.push({ ...newRowAfter(), items: [{ ...base, key: uid(), size_qty: Object.fromEntries(p.map((s) => [s.size_code, String(s.qty)])) }] });
+      }
+    }
+    setSizeHeaders((h) => { const sz = orderSizes(orderLines); return hasRows ? [...h, ...sz.filter((s) => !h.includes(s))] : sz; });
+    setBlocks([{ ...newBlock(), rows }]);
+    setDirty(true);
+    toast(`${rows.length} row(s) added with the order qty — split them into cartons and delete what is not packed`);
+  };
 
   const calc = useMemo(() => calcList(header.pl_type, sizeHeaders, blocks), [header.pl_type, sizeHeaders, blocks]);
   const groups = useMemo(() => shippedGroups(blocks, calc), [blocks, calc]);
@@ -163,8 +235,26 @@ export function PackingListDetailPage() {
         }
         return next;
       });
-      setDirty(true);
-      toast('Header filled from the sales order');
+      // carton rows: order no of the sales order on rows that have none, size columns from the order
+      const lines: OrderLine[] = d.order_lines || [];
+      const orderNo = orderNoOf(d);
+      const noQty = !blocks.some((b) => b.rows.some((r) => r.items.some((it) => Object.values(it.size_qty).some((v) => Number(v) > 0))));
+      const sizes = orderSizes(lines);
+      const styles = [...new Set(lines.map((l) => l.style_code))];
+      if (sizes.length && (noQty || !onlyEmpty)) setSizeHeaders(sizes);
+      mutateBlocks((b) => {
+        for (const bl of b) for (const r of bl.rows) for (const it of r.items) {
+          if (!it.order_no.trim() && orderNo) it.order_no = orderNo;
+          if (!it.so_id) it.so_id = soId;
+          // one style on the order → fill it; one style + colour → fill the colour too
+          if (styles.length === 1 && !it.style_no.trim()) {
+            const l = lines[0];
+            Object.assign(it, lines.length === 1 ? itemFromLine(l) : { style_id: l.style_id, style_no: l.style_code ?? '', style_name: l.style_name ?? '' });
+          }
+        }
+        return b;
+      });
+      toast('Header and carton defaults filled from the sales order');
     } catch (e) { toast(errMsg(e), 'error'); }
   };
 
@@ -377,18 +467,35 @@ export function PackingListDetailPage() {
               onChange={(e) => setField('carton_tare_kg', e.target.value)} placeholder="e.g. 1.1" />
             <Checkbox label="Allow carton-number gaps" checked={header.allow_ctn_gaps} onChange={(v) => setField('allow_ctn_gaps', v)} disabled={ro} />
             {!ro && header.packing_id && <Button variant="outline" size="sm" onClick={buildFromPacking}>Build rows from packing cartons</Button>}
+            {!ro && orderLines.length > 0 && (
+              <Button variant="outline" size="sm" onClick={addRowsFromOrder} title="One row per style / colour (per size for Solid) with the sales order qty">
+                Add rows from order
+              </Button>
+            )}
           </fieldset>
         </div>
       </Card>
 
       {/* ---------- carton rows */}
+      <datalist id="pl-order-styles">
+        {[...new Map(orderLines.map((l) => [l.style_code, l])).values()].map((l) => <option key={l.style_code ?? ''} value={l.style_code ?? ''}>{l.style_name}</option>)}
+      </datalist>
+      {[...new Set(orderLines.map((l) => l.style_code))].map((sc) => (
+        <datalist key={sc ?? ''} id={`pl-order-colours-${normKey(sc)}`}>
+          {orderLines.filter((l) => l.style_code === sc).map((l) => <option key={l.color_name ?? ''} value={l.color_name ?? ''} />)}
+        </datalist>
+      ))}
+      <datalist id="pl-order-colours-">
+        {[...new Set(orderLines.map((l) => l.color_name))].map((c) => <option key={c ?? ''} value={c ?? ''} />)}
+      </datalist>
       {blocks.map((b, bi) => (
         <BlockEditor key={b.key} block={b} bi={bi} ro={ro} plType={header.pl_type} calc={calc.blocks[bi]} listHeaders={sizeHeaders} presets={presets}
           onLabel={(v) => mutateBlocks((x) => { x[bi].label = v; return x; })}
           onHeaders={(v) => mutateBlocks((x) => { x[bi].size_headers = v; return x; })}
           onRemove={blocks.length > 1 ? () => mutateBlocks((x) => { x.splice(bi, 1); return x; }) : undefined}
           updRow={updRow} updItem={updItem} setQty={setQty} addRow={addRow} dupRow={dupRow} delRow={delRow} moveRow={moveRow}
-          addItem={addItem} delItem={delItem} grossChanged={grossChanged} />
+          addItem={addItem} delItem={delItem} grossChanged={grossChanged} pickStyle={pickStyle} pickColour={pickColour}
+          hasOrder={orderLines.length > 0} />
       ))}
       {!ro && (
         <div className="no-print">
@@ -422,9 +529,14 @@ export function PackingListDetailPage() {
           {groups.length === 0 && <p className="text-sm text-slate-500">No carton rows yet.</p>}
           {groups.map((g) => {
             const sg = serverGroup(g.key);
-            const fromSo = sg?.order_source === 'SALES_ORDER' && !dirty;
-            const sizes = [...g.sizes, ...((sg?.sizes || []) as string[]).filter((s) => !g.sizes.includes(s))];
-            const order = (s: string) => (fromSo ? Number(sg.order[s] || 0) : Number(manualOrder[g.key]?.[s] || 0));
+            // order qty: the saved server figure, else live from the sales order lines (matched on style + colour)
+            const live = lineOfGroup(g.key);
+            const hasManual = Object.values(manualOrder[g.key] || {}).some((v) => v !== '');
+            const fromSo = (sg?.order_source === 'SALES_ORDER' && !dirty) || (!!live && !hasManual);
+            const soQty: Record<string, number> = sg?.order_source === 'SALES_ORDER' && !dirty ? sg.order
+              : Object.fromEntries((live?.sizes || []).map((s) => [s.size_code, s.qty]));
+            const sizes = [...g.sizes, ...Object.keys(soQty), ...((sg?.sizes || []) as string[])].filter((s, i, a) => a.indexOf(s) === i);
+            const order = (s: string) => (fromSo ? Number(soQty[s] || 0) : Number(manualOrder[g.key]?.[s] || 0));
             const orderTotal = sizes.reduce((a, s) => a + order(s), 0);
             return (
               <table key={g.key} className="min-w-max border-collapse text-xs">
@@ -559,6 +671,9 @@ function BlockEditor(p: {
   moveRow: (bi: number, ri: number, d: -1 | 1) => void;
   addItem: (bi: number, ri: number) => void; delItem: (bi: number, ri: number, ii: number) => void;
   grossChanged: (bi: number, ri: number, v: string) => void;
+  pickStyle: (bi: number, ri: number, ii: number, v: string) => void;
+  pickColour: (bi: number, ri: number, ii: number, v: string) => void;
+  hasOrder: boolean;
 }) {
   const { block: b, bi, ro, plType, calc: c } = p;
   const heads = c.headers;
@@ -629,9 +744,11 @@ function BlockEditor(p: {
                     </td>
                   </>}
                   <td className={td + ' w-24'}><input className={cellIn} disabled={ro} value={it.order_no} onChange={(e) => p.updItem(bi, ri, ii, { order_no: e.target.value })} /></td>
-                  <td className={td + ' w-28'}><input className={cellIn} disabled={ro} value={it.style_no} onChange={(e) => p.updItem(bi, ri, ii, { style_no: e.target.value, style_id: null })} /></td>
+                  <td className={td + ' w-28'}><input className={cellIn} disabled={ro} value={it.style_no} list={p.hasOrder ? 'pl-order-styles' : undefined}
+                    placeholder={p.hasOrder && !ro ? 'Pick…' : undefined} onChange={(e) => p.pickStyle(bi, ri, ii, e.target.value)} /></td>
                   <td className={td + ' w-40'}><input className={cellIn} disabled={ro} value={it.style_name} onChange={(e) => p.updItem(bi, ri, ii, { style_name: e.target.value })} /></td>
-                  <td className={td + ' w-28'}><input className={cellIn} disabled={ro} value={it.colour} onChange={(e) => p.updItem(bi, ri, ii, { colour: e.target.value, color_id: null })} /></td>
+                  <td className={td + ' w-28'}><input className={cellIn} disabled={ro} value={it.colour} list={p.hasOrder ? `pl-order-colours-${normKey(it.style_no)}` : undefined}
+                    placeholder={p.hasOrder && !ro ? 'Pick…' : undefined} onChange={(e) => p.pickColour(bi, ri, ii, e.target.value)} /></td>
                   {heads.map((h) => (
                     <td key={h} className={td + ' w-12'}>
                       <input className={numIn} disabled={ro} inputMode="numeric" value={it.size_qty[h] ?? ''} onChange={(e) => p.setQty(bi, ri, ii, h, e.target.value)} />

@@ -257,7 +257,7 @@ shipmentRouter.get('/packing-lists/prefill', requirePermission('PACKING.VIEW'), 
         WHERE so.id = ? AND so.company_id = ?`, [soId, cid]);
     if (!so) throw NotFound('Sales order not found');
     Object.assign(out, {
-      so_id: so.id, io_no: so.io_no, buyer_id: so.buyer_id, consignee_id: so.buyer_id,
+      so_id: so.id, so_no: so.so_no, io_no: so.io_no, buyer_id: so.buyer_id, consignee_id: so.buyer_id,
       buyer_order_no: so.buyer_po_no, buyer_order_date: so.buyer_po_date ? String(so.buyer_po_date instanceof Date ? so.buyer_po_date.toISOString() : so.buyer_po_date).slice(0, 10) : null,
       port_of_loading: so.port_of_loading, port_of_discharge: so.destination_port,
       country_of_destination: so.dest_country ? String(so.dest_country).toUpperCase() : null,
@@ -273,6 +273,27 @@ shipmentRouter.get('/packing-lists/prefill', requirePermission('PACKING.VIEW'), 
          LEFT JOIN mst_color col ON col.id = l.color_id WHERE l.so_id = ?`, [soId]);
     out.styles = lines;
     for (const l of lines) if (l.size_group_id) groupIds.add(Number(l.size_group_id));
+    // Style + colour + size qty of the order, for the carton-row pickers and "Add rows from order".
+    // The colour sits on the SKU when the order line has none (one line, several colours).
+    const skus = await query<any>(
+      `SELECT l.style_id, st.style_code, st.style_name, col.id AS color_id, col.color_name, sz.size_code, sz.sort_order, SUM(sk.qty) AS qty
+         FROM trx_sales_order_line l
+         JOIN trx_sales_order_sku sk ON sk.so_line_id = l.id
+         JOIN mst_style_sku k ON k.id = sk.sku_id
+         JOIN mst_size sz ON sz.id = k.size_id
+         LEFT JOIN mst_style st ON st.id = l.style_id
+         LEFT JOIN mst_color col ON col.id = COALESCE(l.color_id, k.color_id)
+        WHERE l.so_id = ?
+        GROUP BY l.style_id, st.style_code, st.style_name, col.id, col.color_name, sz.size_code, sz.sort_order
+        ORDER BY st.style_code, col.color_name, sz.sort_order`, [soId]);
+    const byKey = new Map<string, any>();
+    for (const r of skus) {
+      const key = `${r.style_id}|${r.color_id}`;
+      const g = byKey.get(key) ?? { style_id: r.style_id, style_code: r.style_code, style_name: r.style_name, color_id: r.color_id, color_name: r.color_name, sizes: [] as { size_code: string; qty: number }[] };
+      g.sizes.push({ size_code: r.size_code, qty: Number(r.qty) || 0 });
+      byKey.set(key, g);
+    }
+    out.order_lines = [...byKey.values()];
   }
   if (styleId) {
     const st = await queryOne<any>(`SELECT size_group_id FROM mst_style WHERE id = ? AND company_id = ?`, [styleId, cid]);
