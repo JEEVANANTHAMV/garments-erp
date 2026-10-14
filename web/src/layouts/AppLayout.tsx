@@ -64,7 +64,7 @@ export default function AppLayout() {
   const allowed = (to: string) => { const i = NAV_BY_PATH.get(to); return i && canAny(...i.perms) ? i : null; };
   const reachable = (to: string) => { const i = allowed(to); return i && !i.hidden ? i : null; };
   const favItems = favs.map(reachable).filter(Boolean) as NavItem[];
-  const recentItems = (recent.filter((p) => !favs.includes(p)).map(reachable).filter(Boolean) as NavItem[]).slice(0, 5);
+  const recentItems = (recent.filter((p) => !favs.includes(p) && p !== location.pathname).map(reachable).filter(Boolean) as NavItem[]).slice(0, 5);
   const tabGroup = PROCESS_TABS.find((g) => g.tabs.some((t) => t.to === location.pathname));
 
   const { data: notifications } = useQuery({
