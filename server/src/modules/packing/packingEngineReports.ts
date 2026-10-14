@@ -190,5 +190,8 @@ packingReportsRouter.get('/reports/:key', requirePermission('PACKING.VIEW'), ah(
     default:
       throw NotFound('Unknown packing report');
   }
+  // SUM() comes back as a decimal string — hand numbers to the screens
+  const NUMERIC = /^(planned|packed|unposted|cartons|orders|finished|ready|qc|stock|consumed|reversed|standard|variance|full|partial|pieces|dispatched|pending|polybags|balance|net|gross|cbm)/;
+  rows = rows.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, typeof v === 'string' && NUMERIC.test(k) && /^-?\d+(\.\d+)?$/.test(v) ? Number(v) : v])));
   res.json({ data: rows });
 }));

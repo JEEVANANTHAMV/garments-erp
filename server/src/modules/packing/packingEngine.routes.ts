@@ -166,8 +166,8 @@ const ORDER_SELECT = `SELECT p.*, so.so_no, COALESCE(NULLIF(so.io_no,''), so.so_
        b.party_name buyer_name, st.style_code, st.style_name, w.warehouse_name, u.full_name approved_by_name,
        (SELECT COUNT(*) FROM trx_carton c WHERE c.packing_id = p.id AND c.carton_status <> 'VOID') cartons_total,
        (SELECT COUNT(*) FROM trx_carton c WHERE c.packing_id = p.id AND c.carton_status <> 'VOID' AND c.is_posted = 1) cartons_posted,
-       (SELECT COALESCE(SUM(c.pieces_total),0) FROM trx_carton c WHERE c.packing_id = p.id AND c.carton_status <> 'VOID' AND c.is_posted = 1) pieces_posted,
-       (SELECT COALESCE(SUM(c.pieces_total),0) FROM trx_carton c WHERE c.packing_id = p.id AND c.carton_status <> 'VOID' AND c.is_posted = 0) pieces_unposted
+       CAST((SELECT COALESCE(SUM(c.pieces_total),0) FROM trx_carton c WHERE c.packing_id = p.id AND c.carton_status <> 'VOID' AND c.is_posted = 1) AS SIGNED) pieces_posted,
+       CAST((SELECT COALESCE(SUM(c.pieces_total),0) FROM trx_carton c WHERE c.packing_id = p.id AND c.carton_status <> 'VOID' AND c.is_posted = 0) AS SIGNED) pieces_unposted
   FROM trx_packing p
   JOIN trx_sales_order so ON so.id = p.so_id
   LEFT JOIN mst_party b ON b.id = COALESCE(p.buyer_id, so.buyer_id)

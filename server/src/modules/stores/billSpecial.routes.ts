@@ -264,6 +264,6 @@ billSpecialRouter.post('/special-requests/:id/cancel', SR_CREATE, ah(async (req,
 
 billSpecialRouter.get('/reports/special-requests', requireAny('PURCHASE.VIEW', 'REPORT.VIEW'), ah(async (req, res) => {
   const q = listQuery.parse(req.query);
-  const w = listWhere(cidOf(req), q, 'req_date', ['h.req_no', 'h.reason']);
+  const w = listWhere(cidOf(req), q, 'req_date', ['h.req_no', 'h.reason', 'h.item_description', 'so.io_no', 'so.so_no']);
   res.json({ data: await query<any>(srSql(w.where.replace(/\bh\./g, 'r.')) + ' ORDER BY r.req_date, r.id LIMIT 5000', w.params) });
 }));

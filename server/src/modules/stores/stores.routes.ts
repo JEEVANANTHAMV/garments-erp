@@ -15,5 +15,5 @@ storesRouter.use(openingAuditRouter);
 storesRouter.use(deliveryRouter);
 storesRouter.use(billSpecialRouter);
 storesRouter.use(scrapRouter);
-storesRouter.delete('*', (_req, _res, next) =>
+storesRouter.delete('/{*rest}', (_req, _res, next) =>
   next(BadRequest('Stores documents are never deleted. Cancel a draft with a reason; posted documents stay as they are (correct stock with a Stock Audit).')));

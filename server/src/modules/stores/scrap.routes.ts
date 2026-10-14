@@ -184,7 +184,7 @@ scrapRouter.post('/scrap-rejections/:id/cancel', CREATE, ah(async (req, res) => 
 
 scrapRouter.get('/reports/scrap-rejections', requireAny('INVENTORY.VIEW', 'REPORT.VIEW', 'QC.VIEW'), ah(async (req, res) => {
   const q = listQuery.extend({ kind: z.enum(['SCRAP', 'REJECTION']).optional() }).parse(req.query);
-  const w = listWhere(cidOf(req), { ...q, status: q.status ?? 'POSTED' }, 'doc_date', ['h.doc_no', 'h.stage']);
+  const w = listWhere(cidOf(req), { ...q, status: q.status ?? 'POSTED' }, 'doc_date', ['h.doc_no', 'h.stage', 'h.remarks', 'l.item_description']);
   if (q.kind) { w.where += ' AND h.entry_kind = ?'; w.params.push(q.kind); }
   res.json({ data: await query<any>(
     `SELECT h.entry_kind, h.doc_no, h.doc_date, h.stage, h.process_name, w.warehouse_name location, rw.warehouse_name rejection_godown,

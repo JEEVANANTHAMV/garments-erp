@@ -320,7 +320,8 @@ clientReportsARouter.get('/budget-vs-actuals', VIEW, ah(async (req, res) => {
   type Row = Record<string, any>;
   const rows: Row[] = sos.map((s) => {
     const b = B.get(Number(s.so_id)); const a = A.get(Number(s.so_id)); const iv = I.get(Number(s.so_id));
-    const soFx = s.currency === 'INR' ? 1 : n(s.exchange_rate) || null;
+    // A foreign-currency order saved with rate ≤ 1 has no real rate: use the latest exchange-rate entry, else blank.
+    const soFx = s.currency === 'INR' ? 1 : n(s.exchange_rate) > 1 ? n(s.exchange_rate) : latestXr.get(Number(s.currency_id)) ?? null;
     let costFx: number | null = null;
     if (b) {
       if (b.cost_currency === 'INR') costFx = 1;
@@ -383,7 +384,7 @@ clientReportsARouter.get('/budget-vs-actuals', VIEW, ah(async (req, res) => {
   } else data = rows.map(finish);
 
   res.json({ data, meta: { footnotes: [
-    'Budget = latest APPROVED pre-costing of each style × order qty of the sales-order lines, in INR (costing currency × SO exchange rate, or the latest exchange-rate entry). Orders whose style has no approved pre-costing show a blank budget.',
+    'Budget = latest APPROVED pre-costing of each style × order qty of the sales-order lines, in INR (costing currency × SO exchange rate, or the latest exchange-rate entry; a foreign-currency order without a rate above 1 shows blank INR values). Orders whose style has no approved pre-costing show a blank budget.',
     'Budget heads: Yarn-to-Fab = fabric + yarn + knitting + dyeing; CMT = cutting + stitching + finishing + washing + printing + embroidery; Sew trims = trims; Pack trims = packing; Variable OH = testing + freight + commission + finance + other direct; Fixed OH = overhead.',
     'Actual = production costing sheets of the order\'s production orders (latest approved per production order): Yarn-to-Fab = material less the Trims head; CMT = labour + job work + process; Sew trims = Trims head; Pack trims = packing; Fixed OH = overhead + machine.',
     'Sale value actual and actual exchange rate come from the commercial invoices of the order (value × invoice exchange rate). Blank when not yet invoiced.',
@@ -480,7 +481,7 @@ clientReportsARouter.get('/production-output', VIEW, ah(async (req, res) => {
              WHEN 'PRINT' THEN pc.printing_cost WHEN 'EMB' THEN pc.embroidery_cost WHEN 'STITCH' THEN pc.stitching_cost
              WHEN 'WASH' THEN pc.washing_cost WHEN 'PACK' THEN pc.packing_cost
              WHEN 'FINISH' THEN pc.finishing_cost WHEN 'IRON' THEN pc.finishing_cost WHEN 'CHECK' THEN pc.finishing_cost END
-             * CASE WHEN pc.cost_currency = 'INR' THEN 1 WHEN pc.currency_id = so.currency_id THEN so.exchange_rate END, 4) AS budget_rate,
+             * CASE WHEN pc.cost_currency = 'INR' THEN 1 WHEN pc.currency_id = so.currency_id AND so.exchange_rate > 1 THEN so.exchange_rate END, 4) AS budget_rate,
            u.bill_rate, u.bill_amount, u.production_unit
       FROM (${parts.join(' UNION ALL ')}) u
       LEFT JOIN ${IOMAP} m ON m.company_id = ? AND m.k = u.job_key
