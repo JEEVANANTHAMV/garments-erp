@@ -356,7 +356,8 @@ function LotPicker({ mode, jobs, taken, onClose, onAdd }: {
       onAdd([{ lot: l, kg: l.available_kg }], job);
     };
     return (
-      <Modal open onClose={onClose} title="Scan cone / lot" size="md" footer={<><Button variant="secondary" onClick={onClose}>Close</Button><Button onClick={scan}>Add</Button></>}>
+      <Modal open onClose={onClose} title="Scan cone / lot" size="sm" icon={<ScanLine size={16} />}
+        subtitle="Scan or type a lot / cone no — its available KG is added to the DC" footer={<><Button variant="secondary" onClick={onClose}>Close</Button><Button onClick={scan}>Add</Button></>}>
         <div className="grid gap-3">
           <Select label="Job" value={jobId} placeholder="— General stock —" onChange={(e) => setJobId(e.target.value)} options={jobs.map((j) => ({ value: j.id, label: j.job_no }))} />
           <Input label="Lot no / cone no / barcode" autoFocus value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') scan(); }} />
@@ -367,8 +368,10 @@ function LotPicker({ mode, jobs, taken, onClose, onAdd }: {
   const picked = shown.filter((l) => sel[K(l)]);
   return (
     <Modal open onClose={onClose} size="xl" title={mode === 'import' ? 'Import every yarn lot of a job' : 'Add job — pick its yarn lots / cones'}
+      icon={mode === 'import' ? <Download size={16} /> : <Plus size={16} />}
+      subtitle={mode === 'import' ? 'All yarn lots the job holds are added at their available KG' : "Tick the lots / cones to send and set the KG — the job's own lots plus general stock"}
+      footerStart={mode === 'import' ? `${forJob.length} lot(s), ${kg(forJob.reduce((a, l) => a + l.available_kg, 0))} KG` : `${picked.length} selected · ${kg(picked.reduce((a, l) => a + n(sel[K(l)].kg), 0))} KG`}
       footer={<>
-        <span className="mr-auto self-center text-xs text-slate-600">{mode === 'import' ? `${forJob.length} lot(s), ${kg(forJob.reduce((a, l) => a + l.available_kg, 0))} KG` : `${picked.length} selected · ${kg(picked.reduce((a, l) => a + n(sel[K(l)].kg), 0))} KG`}</span>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button disabled={!job || (mode === 'import' ? !forJob.length : !picked.length)}
           onClick={() => onAdd(mode === 'import' ? forJob.map((l) => ({ lot: l, kg: l.available_kg })) : picked.map((l) => ({ lot: l, kg: sel[K(l)].kg, cone_no: sel[K(l)].cone, cones: sel[K(l)].cones })), job)}>
@@ -385,7 +388,7 @@ function LotPicker({ mode, jobs, taken, onClose, onAdd }: {
           <thead className="sticky top-0 bg-slate-50 text-slate-500"><tr>{[mode === 'job' ? '' : null, 'Lot', 'Yarn', 'Shade', 'Held by', 'GRN', 'PO', 'Supplier', 'Store', 'Available KG', mode === 'job' ? 'Send KG' : null, mode === 'job' ? 'Cone no' : null, mode === 'job' ? 'Cones' : null].filter((x) => x !== null).map((h, i) => <th key={i} className={`px-2 py-1.5 ${/KG|Cones/.test(String(h)) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
           <tbody>
             {!job && <tr><td colSpan={13} className="px-2 py-6 text-center text-slate-400">Choose the job first</td></tr>}
-            {job && lots.isLoading && <tr><td colSpan={13} className="px-2 py-6 text-center text-slate-400">Loading…</td></tr>}
+            {job && lots.isLoading && <tr><td colSpan={13} className="px-2 py-2"><LoadingBlock rows={3} /></td></tr>}
             {job && shown.map((l) => {
               const on = !!sel[K(l)];
               return (

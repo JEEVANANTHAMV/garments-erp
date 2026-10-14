@@ -9,7 +9,7 @@ import { JobSelect, onlyStyle } from '../../components/JobSelect';
 import { fmtDate, fmtDecimal, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
 import {
-  Modal, PageHeader, Input, Select, Textarea, LoadingBlock, EmptyState,
+  Modal, FormSection, PageHeader, Input, Select, Textarea, LoadingBlock, EmptyState,
   SearchInput, Badge, Pager,
 } from '../../components/ui';
 
@@ -327,35 +327,32 @@ export default function YarnProcessPage() {
       {/* ── Create ─────────────────────────────────────────── */}
       <Modal open={open} onClose={() => setOpen(false)} size="lg"
         title={`New ${PROC_LABEL[form.process_type]} Process`}
-        footer={
-          <div className="flex justify-end gap-2">
-            <button className="btn-secondary" onClick={() => setOpen(false)}><X size={14} /> Cancel</button>
-            <button className="btn-primary" disabled={saving} onClick={() => void save()} id="btn-save-process">
-              <Save size={14} /> {saving ? 'Saving…' : 'Create Process'}
-            </button>
-          </div>
-        }>
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        subtitle="Yarn dyeing, winding or twisting for a job — in-house or on job work"
+        icon={<Beaker size={16} />}
+        footerStart={<>Expected output <b>{fmtDecimal(expectedOut, 3)}</b> KG</>}
+        footer={<>
+          <button className="btn-secondary" onClick={() => setOpen(false)}><X size={14} /> Cancel</button>
+          <button className="btn-primary" disabled={saving} onClick={() => void save()} id="btn-save-process">
+            <Save size={14} /> {saving ? 'Saving…' : 'Create Process'}
+          </button>
+        </>}>
+        <div>
+          <FormSection title="Document" cols={3}>
+            <Input label="Process Date" type="date" value={form.process_date}
+              onChange={(e) => setF('process_date', e.target.value)} id="p-date" />
             <Select label="Process Type" value={form.process_type}
               onChange={(e) => setF('process_type', e.target.value)} id="p-type">
               {(Object.keys(PROC_LABEL) as ProcType[]).map((p) => (
                 <option key={p} value={p}>{PROC_LABEL[p]}</option>
               ))}
             </Select>
-            <Input label="Process Date" type="date" value={form.process_date}
-              onChange={(e) => setF('process_date', e.target.value)} id="p-date" />
             <Select label="Process Route" value={form.route_id} placeholder="— None —"
               onChange={(e) => setF('route_id', e.target.value ? Number(e.target.value) : '')} id="p-route">
               {routes.map((r: any) => <option key={r.id} value={r.id}>{r.route_code} — {r.route_name}</option>)}
             </Select>
-          </div>
+          </FormSection>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Select label="Sales Order line" value={form.so_line_id} placeholder="— Not linked —"
-              onChange={(e) => onSoLine(e.target.value)} id="p-soline">
-              {soLines.filter((l: any) => !form.io_no || (l.io_no || l.so_no) === form.io_no).map((l: any) => <option key={l.id} value={l.id}>{l.label}</option>)}
-            </Select>
+          <FormSection title="Order" cols={4}>
             <JobSelect label="I/O Number" required value={form.io_no} id="p-io"
               onPick={(j) => setForm((s) => {
                 const line = soLines.find((l: any) => l.id === Number(s.so_line_id));
@@ -366,14 +363,18 @@ export default function YarnProcessPage() {
               onChange={(e) => setF('style_id', e.target.value ? Number(e.target.value) : '')} id="p-style">
               {styles.map((st: any) => <option key={st.id} value={st.id}>{st.code} — {st.label}</option>)}
             </Select>
+            <Select label="Sales Order line" value={form.so_line_id} placeholder="— Not linked —"
+              onChange={(e) => onSoLine(e.target.value)} id="p-soline">
+              {soLines.filter((l: any) => !form.io_no || (l.io_no || l.so_no) === form.io_no).map((l: any) => <option key={l.id} value={l.id}>{l.label}</option>)}
+            </Select>
             <Input label="Part" value={linkedPart ?? form.part_name}
               readOnly={linkedPart !== null}
               hint={linkedPart ? 'Follows the linked Sales Order line' : undefined}
               onChange={(e) => setF('part_name', e.target.value)} id="p-part" />
-          </div>
+          </FormSection>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Select label="Yarn" required value={form.yarn_id} placeholder="— Select yarn —"
+          <FormSection title="Yarn & plan" cols={4}>
+            <Select label="Yarn" required className="sm:col-span-2" value={form.yarn_id} placeholder="— Select yarn —"
               onChange={(e) => setF('yarn_id', e.target.value ? Number(e.target.value) : '')} id="p-yarn">
               {yarns.map((y: any) => <option key={y.id} value={y.id}>{y.code} — {y.label}</option>)}
             </Select>
@@ -384,41 +385,36 @@ export default function YarnProcessPage() {
               hint={`Expected output: ${fmtDecimal(expectedOut, 3)} KG`}
               onChange={(e) => setF('expected_loss_pct', e.target.value === '' ? '' : Number(e.target.value))}
               id="p-loss" />
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
             <Input label="Required Date" type="date" value={form.required_date}
               onChange={(e) => setF('required_date', e.target.value)} id="p-reqdate" />
             <Select label="Priority" value={form.priority}
               onChange={(e) => setF('priority', e.target.value)} id="p-priority">
               {['NORMAL', 'URGENT', 'HOLD'].map((p) => <option key={p} value={p}>{p}</option>)}
             </Select>
+          </FormSection>
+
+          <FormSection title="Unit & store" cols={3}>
             <Select label="Unit" value={form.job_work_type}
               onChange={(e) => setF('job_work_type', e.target.value)} id="p-jobwork">
               <option value="INTERNAL">Internal</option>
               <option value="JOB_WORK">Job Work</option>
             </Select>
+            {form.job_work_type === 'JOB_WORK' && (
+              <Select label="Vendor" required value={form.vendor_id} placeholder="— Select vendor —"
+                onChange={(e) => setF('vendor_id', e.target.value ? Number(e.target.value) : '')} id="p-vendor">
+                {parties.map((p: any) => <option key={p.id} value={p.id}>{p.label}</option>)}
+              </Select>
+            )}
             <Select label="Warehouse" required value={form.warehouse_id} placeholder="— Select —"
               onChange={(e) => setF('warehouse_id', e.target.value ? Number(e.target.value) : '')} id="p-wh">
               {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.label}</option>)}
             </Select>
-          </div>
-
-          {form.job_work_type === 'JOB_WORK' && (
-            <Select label="Vendor" required value={form.vendor_id} placeholder="— Select vendor —"
-              onChange={(e) => setF('vendor_id', e.target.value ? Number(e.target.value) : '')} id="p-vendor">
-              {parties.map((p: any) => <option key={p.id} value={p.id}>{p.label}</option>)}
-            </Select>
-          )}
+          </FormSection>
 
           {/* Process-specific attributes */}
-          <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
-            <h4 className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              {PROC_LABEL[form.process_type]} details
-            </h4>
-
+          <FormSection title={`${PROC_LABEL[form.process_type]} details`} cols={3}>
             {form.process_type === 'YARN_DYEING' && (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <>
                 <Input label="Colour" value={form.colour_name}
                   onChange={(e) => setF('colour_name', e.target.value)} id="d-colour" />
                 <Input label="Shade Code" value={form.shade_code}
@@ -432,11 +428,11 @@ export default function YarnProcessPage() {
                   id="d-dur" />
                 <Input label="Liquor Ratio" value={form.liquor_ratio} placeholder="e.g. 1:8"
                   onChange={(e) => setF('liquor_ratio', e.target.value)} id="d-liquor" />
-              </div>
+              </>
             )}
 
             {form.process_type === 'WINDING' && (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <>
                 <Input label="Cone Type" value={form.cone_type}
                   onChange={(e) => setF('cone_type', e.target.value)} id="w-cone" />
                 <Input label="Target Cone Weight (KG)" type="number" step="0.001"
@@ -450,11 +446,11 @@ export default function YarnProcessPage() {
                   onChange={(e) => setF('operator', e.target.value)} id="w-op" />
                 <Input label="Shift" value={form.shift}
                   onChange={(e) => setF('shift', e.target.value)} id="w-shift" />
-              </div>
+              </>
             )}
 
             {form.process_type === 'TWISTING' && (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <>
                 <Select label="Twist Direction" value={form.twist_type}
                   onChange={(e) => setF('twist_type', e.target.value)} id="t-twist">
                   <option value="S">S</option>
@@ -470,19 +466,22 @@ export default function YarnProcessPage() {
                   onChange={(e) => setF('spindle_speed', e.target.value)} id="t-spindle" />
                 <Input label="Operator" value={form.operator}
                   onChange={(e) => setF('operator', e.target.value)} id="t-op" />
-              </div>
+              </>
             )}
-          </div>
+          </FormSection>
 
-          <Textarea label="Remarks" value={form.remarks}
-            onChange={(e) => setF('remarks', e.target.value)} id="p-remarks" />
+          <FormSection cols={1}>
+            <Textarea label="Remarks" value={form.remarks}
+              onChange={(e) => setF('remarks', e.target.value)} id="p-remarks" />
+          </FormSection>
         </div>
       </Modal>
 
       {/* ── Detail ─────────────────────────────────────────── */}
       <Modal open={detailId != null} onClose={() => setDetailId(null)} size="lg"
-        title={detail ? `${detail.process_no} — ${PROC_LABEL[detail.process_type as ProcType]}` : 'Process'}>
-        {!detail ? <LoadingBlock label="Loading…" /> : (
+        title={detail ? `${PROC_LABEL[detail.process_type as ProcType]} Process ${detail.process_no}` : 'Process'}
+        subtitle="Reservations, DCs, issues, receipts and QC" icon={<Beaker size={16} />}>
+        {!detail ? <LoadingBlock /> : (
           <div className="space-y-4 text-[12px]">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Info label="Status" value={<Badge tone={STATUS_TONE[detail.status] ?? 'slate'}>{detail.status.replace(/_/g, ' ')}</Badge>} />
@@ -592,7 +591,7 @@ function Info({ label, value }: { label: string; value: React.ReactNode }) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h4 className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">{title}</h4>
+      <h4 className="mb-2 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">{title}</h4>
       {children}
     </div>
   );

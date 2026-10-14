@@ -4,7 +4,7 @@ import { Plus, Trash2, Save, X, Route as RouteIcon, Pencil } from 'lucide-react'
 import { http } from '../../lib/api';
 import { useToast } from '../../hooks/useToast';
 import {
-  Modal, PageHeader, Input, Select, Textarea, Checkbox, LoadingBlock,
+  Modal, FormSection, PageHeader, Input, Select, Textarea, Checkbox, LoadingBlock,
   EmptyState, SearchInput, Badge,
 } from '../../components/ui';
 
@@ -217,19 +217,20 @@ export default function ProcessRoutePage() {
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title={editId ? 'Edit Process Route' : 'New Process Route'}
+        title={editId ? `Edit process route ${form.route_code}` : 'New process route'}
+        subtitle="The process sequence a yarn / fabric runs through, with default loss % and allowed unit per step"
+        icon={<RouteIcon size={16} />}
         size="lg"
-        footer={
-          <div className="flex justify-end gap-2">
-            <button className="btn-secondary" onClick={() => setOpen(false)}><X size={14} /> Cancel</button>
-            <button className="btn-primary" disabled={saving} onClick={() => void save()} id="btn-save-route">
-              <Save size={14} /> {saving ? 'Saving…' : 'Save Route'}
-            </button>
-          </div>
-        }
+        footerStart={<><b>{form.lines.length}</b> step(s)</>}
+        footer={<>
+          <button className="btn-secondary" onClick={() => setOpen(false)}><X size={14} /> Cancel</button>
+          <button className="btn-primary" disabled={saving} onClick={() => void save()} id="btn-save-route">
+            <Save size={14} /> {saving ? 'Saving…' : 'Save Route'}
+          </button>
+        </>}
       >
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <FormSection cols={2}>
             <Input label="Route Code" required value={form.route_code}
               placeholder="e.g. R-DYE-WND-KNT"
               onChange={(e) => setF('route_code', e.target.value)} id="route-code" />
@@ -244,14 +245,14 @@ export default function ProcessRoutePage() {
               onChange={(e) => setF('fabric_id', e.target.value ? Number(e.target.value) : '')} id="route-fabric">
               {fabrics.map((f: any) => <option key={f.id} value={f.id}>{f.code} — {f.label}</option>)}
             </Select>
-          </div>
+          </FormSection>
 
-          <div>
-            <div className="mb-2 flex items-center justify-between">
-              <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+          <div className="mt-5">
+            <div className="mb-2.5 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-1.5">
+              <h3 className="mr-auto text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">
                 Process Sequence
-              </h4>
-              <button className="btn-secondary btn-sm"
+              </h3>
+              <button className="btn-primary btn-sm"
                 onClick={() => setForm((s) => ({ ...s, lines: [...s.lines, newStep(s.lines.length + 1)] }))}
                 id="btn-add-step">
                 <Plus size={13} /> Add Step
@@ -323,9 +324,11 @@ export default function ProcessRoutePage() {
             )}
           </div>
 
-          <Textarea label="Remarks" value={form.remarks}
-            onChange={(e) => setF('remarks', e.target.value)} id="route-remarks" />
-          <Checkbox label="Active" checked={form.is_active} onChange={(v) => setF('is_active', v)} />
+          <FormSection cols={1} className="mt-5">
+            <Checkbox label="Active" checked={form.is_active} onChange={(v) => setF('is_active', v)} />
+            <Textarea label="Remarks" value={form.remarks}
+              onChange={(e) => setF('remarks', e.target.value)} id="route-remarks" />
+          </FormSection>
         </div>
       </Modal>
     </div>

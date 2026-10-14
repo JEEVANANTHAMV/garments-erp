@@ -383,7 +383,8 @@ function RollPicker({ mode, jobs, warehouseId, quotationId, taken, onClose, onAd
       onAdd([r], j, (x) => x.balance_kg);
     };
     return (
-      <Modal open onClose={onClose} title="Scan roll" size="md" footer={<><Button variant="secondary" onClick={onClose}>Close</Button><Button onClick={scan}>Add roll</Button></>}>
+      <Modal open onClose={onClose} title="Scan roll" size="sm" icon={<ScanLine size={16} />}
+        subtitle="Scan or type a roll no — its balance KG is added to the DC" footer={<><Button variant="secondary" onClick={onClose}>Close</Button><Button onClick={scan}>Add roll</Button></>}>
         <div className="grid gap-3">
           <Input label="Roll no / barcode" autoFocus value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') scan(); }} />
           <Select label="Job (for rolls without a job)" value={jobId} placeholder="— roll's own job —" onChange={(e) => setJobId(e.target.value)} options={jobs.map((j) => ({ value: j.id, label: j.job_no }))} />
@@ -394,8 +395,10 @@ function RollPicker({ mode, jobs, warehouseId, quotationId, taken, onClose, onAd
   const picked = shown.filter((r) => sel[r.id] !== undefined);
   return (
     <Modal open onClose={onClose} size="xl" title={mode === 'import' ? 'Import all store rolls of a job' : 'Add job — pick its rolls from the store'}
+      icon={mode === 'import' ? <Download size={16} /> : <Plus size={16} />}
+      subtitle={mode === 'import' ? "All of the job's rolls in the store are added at their balance KG" : 'Tick the rolls to send and set the KG — the job\'s rolls plus rolls without a job'}
+      footerStart={mode === 'import' ? `${forJob.length} roll(s), ${kg(forJob.reduce((a, r) => a + r.balance_kg, 0))} KG` : `${picked.length} selected · ${kg(picked.reduce((a, r) => a + n(sel[r.id]), 0))} KG`}
       footer={<>
-        <span className="mr-auto self-center text-xs text-slate-600">{mode === 'import' ? `${forJob.length} roll(s), ${kg(forJob.reduce((a, r) => a + r.balance_kg, 0))} KG` : `${picked.length} selected · ${kg(picked.reduce((a, r) => a + n(sel[r.id]), 0))} KG`}</span>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button disabled={!job || (mode === 'import' ? !forJob.length : !picked.length)}
           onClick={() => (mode === 'import' ? onAdd(forJob, job, (r) => r.balance_kg) : onAdd(picked, job, (r) => n(sel[r.id]) || r.balance_kg))}>
@@ -412,7 +415,7 @@ function RollPicker({ mode, jobs, warehouseId, quotationId, taken, onClose, onAd
           <thead className="sticky top-0 bg-slate-50 text-slate-500"><tr>{[mode === 'job' ? '' : null, 'Roll', 'Lot', 'Fabric', 'Job', 'State', 'Colour', 'GSM', 'Dia', 'GRN', 'Store', 'In store KG', mode === 'job' ? 'Send KG' : null].filter((x) => x !== null).map((h, i) => <th key={i} className={`px-2 py-1.5 ${/KG/.test(String(h)) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
           <tbody>
             {!job && <tr><td colSpan={13} className="px-2 py-6 text-center text-slate-400">Choose the job first</td></tr>}
-            {job && rolls.isLoading && <tr><td colSpan={13} className="px-2 py-6 text-center text-slate-400">Loading…</td></tr>}
+            {job && rolls.isLoading && <tr><td colSpan={13} className="px-2 py-2"><LoadingBlock rows={3} /></td></tr>}
             {job && shown.map((r) => {
               const on = sel[r.id] !== undefined;
               return (

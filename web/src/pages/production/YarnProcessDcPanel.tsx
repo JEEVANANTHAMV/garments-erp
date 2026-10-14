@@ -4,7 +4,7 @@ import { Plus, Trash2, Truck, PackageCheck, Printer } from 'lucide-react';
 import { http } from '../../lib/api';
 import { fmtDate, fmtDecimal, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
-import { Modal, Input, Select, Button, Badge, Checkbox } from '../../components/ui';
+import { Modal, FormSection, Input, Select, Button, Badge, Checkbox } from '../../components/ui';
 
 /**
  * Yarn process outward DC and inward (client voice note 1): like the knitting
@@ -163,13 +163,22 @@ export function YarnProcessDcPanel({ process, yarns, parties, warehouses, onChan
         </tbody>
       </table>
 
-      <Modal open={outOpen} onClose={() => setOutOpen(false)} title={`Outward DC — ${jobs.map((j) => j.process_no).join(', ') || process.process_no}`} size="xl"
+      <Modal open={outOpen} onClose={() => setOutOpen(false)} title={`New yarn outward DC — ${jobs.map((j) => j.process_no).join(', ') || process.process_no}`} size="full"
+        subtitle="Yarn out to the dyer / winder / twister — one DC may carry several jobs of the same process to one processor"
+        icon={<Truck size={16} />}
+        footerStart={<><b>{jobs.length}</b> job(s) · <b>{fmtDecimal(jobs.reduce((a, j) => a + j.lines.reduce((b, l) => b + (Number(l.issued_qty_kg) || 0), 0), 0), 3)}</b> KG</>}
         footer={<><Button variant="secondary" onClick={() => setOutOpen(false)}>Cancel</Button><Button loading={saving} onClick={saveOutward}>Save DC</Button></>}>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <FormSection title="Document & processor">
           <Input label="DC date *" type="date" value={out.dc_date} onChange={(e) => setOut({ ...out, dc_date: e.target.value })} />
           <Select label="Processor (Supplier / Vendor) *" value={out.vendor_id} onChange={(e) => setOut({ ...out, vendor_id: e.target.value })} placeholder="Select" options={vendorOpts} />
           <Select label="From store *" value={out.warehouse_id} onChange={(e) => setOut({ ...out, warehouse_id: e.target.value })} placeholder="Select" options={whOpts} />
           <Input label="Vehicle no" value={out.vehicle_no} onChange={(e) => setOut({ ...out, vehicle_no: e.target.value })} />
+        </FormSection>
+        <div className="mt-5 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-1.5">
+          <h3 className="mr-auto text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Jobs & yarn</h3>
+          <Select label="Add another job (same process) to this DC" className="w-80" value={addId} placeholder="— Released job —" onChange={(e) => setAddId(e.target.value)}
+            options={others.filter((p) => !jobs.some((j) => j.process_id === p.id)).map((p) => ({ value: p.id, label: `${p.process_no} · ${p.io_no ?? 'stock'}` }))} />
+          <Button size="sm" disabled={!addId} onClick={addJob}><Plus size={12} className="mr-1" /> Add job</Button>
         </div>
         {jobs.map((j, ji) => (
           <div key={j.process_id} className="mt-3 rounded border border-slate-200">
@@ -201,36 +210,36 @@ export function YarnProcessDcPanel({ process, yarns, parties, warehouses, onChan
             <Button size="sm" variant="secondary" className="m-2" onClick={() => setJobs(jobs.map((x, a) => (a !== ji ? x : { ...x, lines: [...x.lines, blankLine()] })))}><Plus size={12} className="mr-1" /> Add yarn line</Button>
           </div>
         ))}
-        <div className="mt-3 flex items-end gap-2">
-          <Select label="Add another job (same process) to this DC" className="w-80" value={addId} placeholder="— Released job —" onChange={(e) => setAddId(e.target.value)}
-            options={others.filter((p) => !jobs.some((j) => j.process_id === p.id)).map((p) => ({ value: p.id, label: `${p.process_no} · ${p.io_no ?? 'stock'}` }))} />
-          <Button size="sm" variant="secondary" disabled={!addId} onClick={addJob}><Plus size={12} className="mr-1" /> Add job</Button>
-        </div>
-        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Input label="Remarks" value={out.remarks} onChange={(e) => setOut({ ...out, remarks: e.target.value })} />
+        <FormSection title="Override & remarks" cols={2} className="mt-5">
           <div className="space-y-2">
             <Checkbox label="Issue beyond free stock (needs right)" checked={out.allow_override} onChange={(v: boolean) => setOut({ ...out, allow_override: v })} />
             {out.allow_override && <Input label="Override reason" value={out.override_reason} onChange={(e) => setOut({ ...out, override_reason: e.target.value })} />}
           </div>
-        </div>
+          <Input label="Remarks" value={out.remarks} onChange={(e) => setOut({ ...out, remarks: e.target.value })} />
+        </FormSection>
       </Modal>
 
-      <Modal open={!!inDc} onClose={() => setInDc(null)} title={`Inward against DC ${inDc?.dc_no ?? ''}`}
+      <Modal open={!!inDc} onClose={() => setInDc(null)} title={`New yarn inward — DC ${inDc?.dc_no ?? ''}`} size="lg"
+        subtitle={<>Sent {fmtDecimal(inDc?.issued_kg, 3)} KG · received {fmtDecimal(inDc?.received_kg, 3)} KG · <b>pending {fmtDecimal(inDc?.pending_kg, 3)} KG</b>. Loss = received − output − rejected.</>}
+        icon={<PackageCheck size={16} />}
         footer={<><Button variant="secondary" onClick={() => setInDc(null)}>Cancel</Button><Button loading={saving} onClick={saveInward}>Save Inward</Button></>}>
-        <p className="mb-3 text-xs text-slate-600">Sent {fmtDecimal(inDc?.issued_kg, 3)} KG · received {fmtDecimal(inDc?.received_kg, 3)} KG · <b>pending {fmtDecimal(inDc?.pending_kg, 3)} KG</b>. Loss = received − output − rejected.</p>
-        <div className="grid grid-cols-2 gap-3">
+        <FormSection title="Document" cols={2}>
           <Input label="Inward date *" type="date" value={inw.receipt_date} onChange={(e) => setInw({ ...inw, receipt_date: e.target.value })} />
           <Input label="Processor DC no" value={inw.party_dc_no} onChange={(e) => setInw({ ...inw, party_dc_no: e.target.value })} />
+        </FormSection>
+        <FormSection title="Quantities (KG)">
           <Input label="Yarn received against DC (KG) *" type="number" value={inw.input_qty} onChange={(e) => setInw({ ...inw, input_qty: e.target.value })} />
           <Input label="Output KG (good)" type="number" value={inw.output_qty} onChange={(e) => setInw({ ...inw, output_qty: e.target.value })} />
           <Input label="Rejected KG" type="number" value={inw.rejected_qty} onChange={(e) => setInw({ ...inw, rejected_qty: e.target.value })} />
           <Input label="Output lot no" value={inw.output_lot_no} onChange={(e) => setInw({ ...inw, output_lot_no: e.target.value })} />
+        </FormSection>
+        <FormSection title="Store & QC">
           <Select label="To store *" value={inw.warehouse_id} onChange={(e) => setInw({ ...inw, warehouse_id: e.target.value })} placeholder="Select" options={whOpts} />
           <Input label="Vehicle no" value={inw.vehicle_no} onChange={(e) => setInw({ ...inw, vehicle_no: e.target.value })} />
           <Select label="QC status" value={inw.qc_status} onChange={(e) => setInw({ ...inw, qc_status: e.target.value, post_stock: e.target.value === 'PASSED' ? inw.post_stock : false })}
             options={['PENDING', 'PASSED', 'HOLD', 'REJECTED'].map((v) => ({ value: v, label: v }))} />
-          <div className="pt-6"><Checkbox label="Post to yarn stock now (QC passed)" checked={inw.post_stock} disabled={inw.qc_status !== 'PASSED'} onChange={(v: boolean) => setInw({ ...inw, post_stock: v })} /></div>
-        </div>
+          <div className="sm:pt-6"><Checkbox label="Post to yarn stock now (QC passed)" checked={inw.post_stock} disabled={inw.qc_status !== 'PASSED'} onChange={(v: boolean) => setInw({ ...inw, post_stock: v })} /></div>
+        </FormSection>
       </Modal>
     </div>
   );
