@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Plus, Trash2, Save, CheckCircle2, Sparkles, Check, X, PackageSearch, Layers, PlayCircle, ExternalLink, AlertCircle, CheckCircle, FileText } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Save, CheckCircle2, Sparkles, Check, X, PackageSearch, Layers, PlayCircle, ExternalLink, AlertCircle, CheckCircle, FileText, FilePlus2, Lock } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { AddOrderSize } from './AddOrderSize';
+import { AmendOrderModal, AmendmentRequirementModal, AmendmentsTab, CloseOrderModal, CLOSURE_LABEL } from './SalesOrderAmendments';
 import { http, ApiError } from '../../lib/api';
 import { useLookup, toOptions, useStyleColors, useStyleSkus, useStatuses, toPlainOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
@@ -39,6 +40,10 @@ interface Line {
    * size in every colour of the line); '' / absent = use the line / header %.
    */
   sku_excess: Record<number, number | ''>;
+  /** Added by an ADDITIONAL amendment (A1, A2 …) — read-only tag */
+  is_additional?: number;
+  amendment_no?: string | null;
+  cancelled_qty?: number;
 }
 
 let keySeq = 0;
@@ -97,6 +102,9 @@ export default function SalesOrderDetail() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [stateModal, setStateModal] = useState(false);
+  const [amendOpen, setAmendOpen] = useState(false);
+  const [closeOpen, setCloseOpen] = useState(false);
+  const [postedAmendment, setPostedAmendment] = useState<{ id: number; amendment_no: string; amendment_type: string } | null>(null);
 
   const buyers = useLookup('buyers');
   const agents = useLookup('agents');
@@ -153,6 +161,8 @@ export default function SalesOrderDetail() {
       excess_pct: l.excess_pct !== null && l.excess_pct !== undefined ? Number(l.excess_pct) : '',
       plan_cut_qty: Number(l.plan_cut_qty || 0),
       ship_date: toDateInput(l.ship_date),
+      is_additional: Number(l.is_additional || 0), amendment_no: l.amendment_no ?? null,
+      cancelled_qty: Number(l.cancelled_qty || 0),
       skus: Object.fromEntries((l.skus ?? []).map((s: any) => [s.sku_id, Number(s.qty)])),
       sku_excess: Object.fromEntries((l.skus ?? [])
         .filter((s: any) => s.excess_pct !== null && s.excess_pct !== undefined)
@@ -188,6 +198,9 @@ export default function SalesOrderDetail() {
 
   const locked = !isNew && ['APPROVED', 'CLOSED', 'CANCELLED'].includes(head.approval_state);
   const editable = (isNew ? can('SALES_ORDER.CREATE') : can('SALES_ORDER.UPDATE')) && !locked;
+  /** A running (approved / on-hold) order is amended (additional / cancelled qty), never edited. */
+  const canAmend = !isNew && can('SALES_ORDER.UPDATE') && ['APPROVED', 'ON_HOLD'].includes(head.approval_state);
+  const canClose = !isNew && can('SALES_ORDER.APPROVE') && !['CLOSED', 'CANCELLED'].includes(head.approval_state);
 
   const setH = (k: string, v: unknown) => setHead((s) => ({ ...s, [k]: v }));
   const setLine = (key: string, patch: Partial<Line>) =>
@@ -315,6 +328,16 @@ export default function SalesOrderDetail() {
           <button className="btn-secondary" onClick={() => nav('/sales/orders')}>
             <ArrowLeft size={15} /> Back
           </button>
+          {canClose && (
+            <button id="so-close-order" className="btn-secondary" onClick={() => setCloseOpen(true)}>
+              <Lock size={15} /> Close order
+            </button>
+          )}
+          {canAmend && (
+            <button id="so-amend-order" className="btn-primary" onClick={() => setAmendOpen(true)}>
+              <FilePlus2 size={15} /> Amend order
+            </button>
+          )}
           {!isNew && can('SALES_ORDER.APPROVE') && (
             <button className="btn-secondary" onClick={() => setStateModal(true)}>
               <CheckCircle2 size={15} /> Change state
@@ -336,7 +359,12 @@ export default function SalesOrderDetail() {
       {locked && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[13px] text-amber-900">
           This order is <strong>{head.approval_state?.toLowerCase()}</strong> and is locked for editing.
-          Change its state to make further changes.
+          {canAmend ? <> Use <strong>Amend order</strong> to add or cancel quantity.</> : ' Change its state to make further changes.'}
+          {d?.closure_type && (
+            <div id="so-closure" className="mt-1 text-[12.5px]">
+              {CLOSURE_LABEL[d.closure_type] ?? d.closure_type} on {fmtDate(d.closed_date)}{d.close_reason ? ` — ${d.close_reason}` : ''}
+            </div>
+          )}
         </div>
       )}
 
@@ -414,6 +442,7 @@ export default function SalesOrderDetail() {
               { value: 'PROJECTION', label: 'Projection' },
               { value: 'DOMESTIC', label: 'Domestic' },
               { value: 'EXPORT', label: 'Export' },
+              { value: 'JOB_WORK', label: 'Job work' },
             ]}
             value={head.order_type ?? 'EXPORT'}
             onChange={(e) => setH('order_type', e.target.value)}
@@ -531,6 +560,7 @@ export default function SalesOrderDetail() {
           { key: 'lines', label: 'Order Lines', count: lines.length },
           { key: 'bom', label: 'Bill of Materials' },
           { key: 'requirements', label: 'Material Requirements' },
+          { key: 'amendments', label: 'Amendments', count: d?.amendments?.length ?? 0 },
           { key: 'production', label: 'Production', count: d?.production_orders?.length ?? 0 },
           { key: 'invoices', label: 'Invoices', count: d?.invoices?.length ?? 0 },
         ]} />
@@ -715,6 +745,12 @@ export default function SalesOrderDetail() {
         <BomTab lines={lines} soId={Number(id)} />
       )}
 
+      {!isNew && tab === 'amendments' && (
+        <AmendmentsTab soId={Number(id)} amendments={d?.amendments ?? []} canAmend={canAmend}
+          onAmend={() => setAmendOpen(true)}
+          onChanged={() => { void detail.refetch(); void qc.invalidateQueries({ queryKey: ['sales-orders'] }); }} />
+      )}
+
       {!isNew && tab === 'requirements' && (
         <RequirementsTab soId={Number(id)} soNo={d?.so_no ?? ''} />
       )}
@@ -798,6 +834,25 @@ export default function SalesOrderDetail() {
             </div>
           )}
         </div>
+      )}
+
+      {amendOpen && d && (
+        <AmendOrderModal soId={Number(id)} soNo={d.so_no} lines={d.lines ?? []}
+          onClose={() => setAmendOpen(false)}
+          onPosted={(a) => {
+            setAmendOpen(false);
+            setPostedAmendment(a);
+            void detail.refetch();
+            void qc.invalidateQueries({ queryKey: ['sales-orders'] });
+          }} />
+      )}
+      {postedAmendment && (
+        <AmendmentRequirementModal soId={Number(id)} amendment={postedAmendment} onClose={() => setPostedAmendment(null)} />
+      )}
+      {closeOpen && d && (
+        <CloseOrderModal soId={Number(id)} soNo={d.so_no} state={head.approval_state}
+          onClose={() => setCloseOpen(false)}
+          onDone={() => { setCloseOpen(false); void detail.refetch(); void qc.invalidateQueries({ queryKey: ['sales-orders'] }); }} />
       )}
 
       <Modal open={stateModal} onClose={() => setStateModal(false)} title="Change order state" size="sm"
@@ -1639,8 +1694,20 @@ function LineCard({
   return (
     <div className="card p-4">
       <div className="mb-3 flex items-center justify-between">
-        <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
-          Line {index + 1}
+        <span className="flex items-center gap-1.5">
+          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+            Line {index + 1}
+          </span>
+          {line.is_additional ? (
+            <span data-additional-tag className="rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+              Additional · {line.amendment_no ?? 'A?'}
+            </span>
+          ) : null}
+          {line.cancelled_qty ? (
+            <span className="rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+              {fmtNumber(line.cancelled_qty)} cancelled
+            </span>
+          ) : null}
         </span>
         {editable && canRemove && (
           <button onClick={onRemove} className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"

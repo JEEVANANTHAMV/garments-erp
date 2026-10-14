@@ -263,6 +263,135 @@ processMasterRouter.put('/job-rate-cards', requirePermission('PRODUCTION.UPDATE'
   res.json({ data: await jobRateCard(cid, b.io_no, b.stage_id) });
 }));
 
+// ------------------------------------------------------------
+// Job rate card from the pre-costing (client call 14-Oct-2026: "if the costing
+// is saved, take that amount as the rate per piece — power table, singer …
+// in-house rates come from the costing"). The job's style's latest APPROVED
+// pre-costing (else the latest) gives a rate per operation row:
+//   Sewing (SMV) row → SMV × the costing's ₹ / min · Cutting row → rate ·
+//   Processes row → its ₹ / PC (per-KG rows: kg / pc × rate).
+// Rows are matched to the operations master by name or op code (case-insensitive,
+// trimmed); confirm upserts trx_job_op_rate for the IO, which in-house unit DCs
+// and contractor bills already read.
+// ------------------------------------------------------------
+const opKey = (v: unknown) => String(v ?? '').trim().toLowerCase().replace(/[\s_\-]+/g, ' ');
+
+async function jobOfIo(cid: number, ioNo: string) {
+  const so = await queryOne<any>(
+    `SELECT so.id, (SELECT sol.style_id FROM trx_sales_order_line sol WHERE sol.so_id = so.id ORDER BY sol.id LIMIT 1) AS style_id
+       FROM trx_sales_order so WHERE so.company_id = ? AND so.io_no = ? AND so.is_deleted = 0 ORDER BY so.id DESC LIMIT 1`, [cid, ioNo]);
+  const cut = so?.style_id ? null
+    : await queryOne<any>(`SELECT style_id FROM trx_cutting_bundle WHERE company_id = ? AND io_no = ? AND style_id IS NOT NULL LIMIT 1`, [cid, ioNo]);
+  const anyCut = so || cut ? true : !!(await queryOne(`SELECT id FROM trx_cutting_bundle WHERE company_id = ? AND io_no = ? LIMIT 1`, [cid, ioNo]));
+  if (!so && !anyCut) throw BadRequest(`Job ${ioNo} not found (no sales order or cutting with that IO no)`);
+  return { styleId: so?.style_id ? Number(so.style_id) : cut?.style_id ? Number(cut.style_id) : null };
+}
+
+async function costingRatePreview(cid: number, ioNo: string, costingId?: number | null) {
+  const { styleId } = await jobOfIo(cid, ioNo);
+  const costing = costingId
+    ? await queryOne<any>(
+      `SELECT c.*, st.code AS status_code, sty.style_code FROM trx_costing c
+         LEFT JOIN cfg_status st ON st.id = c.status_id LEFT JOIN mst_style sty ON sty.id = c.style_id
+        WHERE c.id = ? AND c.company_id = ? AND c.is_deleted = 0`, [costingId, cid])
+    : styleId ? await queryOne<any>(
+      `SELECT c.*, st.code AS status_code, sty.style_code FROM trx_costing c
+         LEFT JOIN cfg_status st ON st.id = c.status_id LEFT JOIN mst_style sty ON sty.id = c.style_id
+        WHERE c.company_id = ? AND c.style_id = ? AND c.is_deleted = 0 AND c.costing_type = 'PRE_COSTING'
+        ORDER BY (st.code = 'APPROVED') DESC, c.version DESC, COALESCE(c.updated_at, c.created_at) DESC, c.id DESC LIMIT 1`, [cid, styleId])
+      : null;
+  if (costingId && !costing) throw NotFound('Costing not found');
+  const ops = await query<any>(
+    `SELECT o.id, o.op_code, o.op_name, o.stage_id, o.default_rate, ps.stage_name
+       FROM mst_process_operation o LEFT JOIN cfg_process_stage ps ON ps.id = o.stage_id
+      WHERE o.company_id = ? AND o.is_active = 1 ORDER BY ps.sort_order, o.sort_order, o.op_name`, [cid]);
+  const card = await query<any>(`SELECT operation_id, rate FROM trx_job_op_rate WHERE company_id = ? AND io_no = ?`, [cid, ioNo]);
+  const cardRate = new Map(card.map((c) => [Number(c.operation_id), n(c.rate)]));
+  const operations = ops.map((o) => ({ id: Number(o.id), op_code: o.op_code, op_name: o.op_name, stage_id: Number(o.stage_id), stage_name: o.stage_name,
+    current_rate: cardRate.has(Number(o.id)) ? cardRate.get(Number(o.id))! : null }));
+  if (!costing) return { style_id: styleId, costing: null, rows: [], operations };
+
+  let dj: any = {};
+  try { dj = typeof costing.data_json === 'string' ? JSON.parse(costing.data_json || '{}') : (costing.data_json ?? {}); } catch { dj = {}; }
+  const perMin = n(costing.smv_rate_per_min);
+  const r4 = (v: number) => Math.round(v * 10000) / 10000;
+  const src: { source: 'SEWING' | 'CUTTING' | 'PROCESS'; name: string; smv?: number; costing_rate: number }[] = [];
+  for (const r of Array.isArray(dj.sewingOps) ? dj.sewingOps : []) {
+    if (String(r?.operation ?? '').trim()) src.push({ source: 'SEWING', name: String(r.operation).trim(), smv: n(r.smv), costing_rate: r4(n(r.smv) * perMin) });
+  }
+  for (const r of Array.isArray(dj.cuttingOps) ? dj.cuttingOps : []) {
+    if (String(r?.operation ?? '').trim()) src.push({ source: 'CUTTING', name: String(r.operation).trim(), costing_rate: r4(n(r.rate)) });
+  }
+  for (const r of Array.isArray(dj.processes) ? dj.processes : []) {
+    if (!String(r?.process_name ?? '').trim()) continue;
+    const basis = String(r?.basis ?? '').toUpperCase().replace(/[\s-]/g, '_');
+    const rate = basis === 'PER_KG' || basis === 'KG' ? n(r.consumption) * n(r.rate) : n(r.rate);
+    src.push({ source: 'PROCESS', name: String(r.process_name).trim(), costing_rate: r4(rate) });
+  }
+  const rows = src.map((r) => {
+    const k = opKey(r.name);
+    const op = ops.find((o) => opKey(o.op_name) === k) ?? ops.find((o) => opKey(o.op_code) === k);
+    const current = op && cardRate.has(Number(op.id)) ? cardRate.get(Number(op.id))! : null;
+    return {
+      ...r,
+      operation_id: op ? Number(op.id) : null,
+      op_name: op?.op_name ?? null, op_code: op?.op_code ?? null, stage_name: op?.stage_name ?? null,
+      current_rate: current,
+      action: !op ? 'NO_MATCH' : current == null ? 'NEW' : Math.abs(current - r.costing_rate) < 0.00005 ? 'SAME' : 'UPDATE',
+    };
+  });
+  return {
+    style_id: styleId,
+    costing: { id: Number(costing.id), costing_no: costing.costing_no, version: costing.version, status: costing.status_code ?? 'DRAFT',
+      style_code: costing.style_code, smv_rate_per_min: perMin, use_flat_sewing_rate: dj.useFlatSewingRate === true },
+    rows, operations,
+  };
+}
+
+/** GET /job-rate-cards/from-costing?io_no=&costing_id= — preview of the job's costing rates against its rate card. */
+processMasterRouter.get('/job-rate-cards/from-costing', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  const qp = z.object({ io_no: z.string().trim().min(1).max(40), costing_id: s.id() }).parse(req.query);
+  res.json({ data: await costingRatePreview(req.user!.companyId, qp.io_no, qp.costing_id ?? null) });
+}));
+
+/**
+ * POST /job-rate-cards/from-costing — upsert the job's rate card from its costing.
+ * Body rows = the confirmed preview ({operation_id, rate}); rows mapped to the same
+ * operation are added together. Without rows every matched preview row is applied.
+ * Operations not in the costing keep their card rate.
+ */
+processMasterRouter.post('/job-rate-cards/from-costing', requirePermission('PRODUCTION.UPDATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const b = z.object({
+    io_no: z.string().trim().min(1).max(40),
+    costing_id: s.id(),
+    rows: z.array(z.object({ operation_id: s.idReq(), rate: z.coerce.number().min(0).max(100000) })).max(500).optional(),
+  }).parse(req.body);
+  const pv = await costingRatePreview(cid, b.io_no, b.costing_id ?? null);
+  if (!pv.costing) throw BadRequest(`No pre-costing found for the style of job ${b.io_no}`);
+  const picked = b.rows ?? pv.rows.filter((r) => r.operation_id).map((r) => ({ operation_id: r.operation_id!, rate: r.costing_rate }));
+  if (!picked.length) throw BadRequest('No costing row is mapped to an operation');
+  const sum = new Map<number, number>();
+  for (const r of picked) sum.set(r.operation_id, (sum.get(r.operation_id) ?? 0) + r.rate);
+  const ids = [...sum.keys()];
+  const ops = await query<any>(`SELECT id, stage_id FROM mst_process_operation WHERE company_id = ? AND id IN (?)`, [cid, ids]);
+  if (ops.length !== ids.length) throw BadRequest('Operation not found');
+  const stageOf = new Map(ops.map((o) => [Number(o.id), Number(o.stage_id)]));
+  const remarks = `From costing ${pv.costing.costing_no}`.slice(0, 255);
+  await transaction(async (tx) => {
+    const before = await txQuery<any>(tx, `SELECT operation_id, rate FROM trx_job_op_rate WHERE company_id = ? AND io_no = ? AND operation_id IN (?)`, [cid, b.io_no, ids]);
+    for (const [opId, rate] of sum) {
+      await txExecute(tx,
+        `INSERT INTO trx_job_op_rate (company_id, io_no, style_id, stage_id, operation_id, rate, remarks, created_by) VALUES (?,?,?,?,?,?,?,?)
+         ON DUPLICATE KEY UPDATE rate = VALUES(rate), stage_id = VALUES(stage_id), style_id = COALESCE(VALUES(style_id), style_id), remarks = VALUES(remarks)`,
+        [cid, b.io_no, pv.style_id, stageOf.get(opId), opId, Math.round(rate * 10000) / 10000, remarks, req.user!.id]);
+    }
+    await audit(req, 'trx_job_op_rate', 0, 'UPDATE', { io_no: b.io_no, operations: before },
+      { io_no: b.io_no, costing_id: pv.costing!.id, operations: [...sum].map(([operation_id, rate]) => ({ operation_id, rate })) }, tx);
+  });
+  res.json({ data: { io_no: b.io_no, costing: pv.costing, applied: sum.size, stages: [...new Set(ops.map((o) => Number(o.stage_id)))] } });
+}));
+
 /**
  * Our piece rate for PCS of a job on a DC: the job's rate card for the DC's
  * operations (or all the job's operations of that process when the DC names

@@ -8,7 +8,17 @@ import {
 import { useItem, useSave } from '../../hooks/useResource';
 import { useLookup } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
-import { Spinner } from '../../components/ui';
+import { Spinner, FormSection } from '../../components/ui';
+import { toDateInput } from '../../lib/format';
+
+/** Indian bank IFSC: 4 letters, a zero, then 6 letters / digits (e.g. HDFC0001234). */
+const IFSC_RE = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+const TDS_CATEGORIES = [
+  { value: 'COMPANY', label: 'Company' },
+  { value: 'INDIVIDUAL_HUF', label: 'Individual / HUF' },
+  { value: 'FIRM', label: 'Partnership firm / LLP' },
+  { value: 'OTHERS', label: 'Others (AOP / Trust …)' },
+];
 import { http } from '../../lib/api';
 
 interface AddressItem {
@@ -105,6 +115,7 @@ export function PartyDetailPage() {
   const [form, setForm] = useState<any>({
     party_code: '',
     io_prefix: '',
+    short_code: '',
     party_name: '',
     legal_name: '',
     short_name: '',
@@ -122,11 +133,13 @@ export function PartyDetailPage() {
     tan: '',
     cin: '',
     tax_id_foreign: '',
+    msme_applicable: 0,
     msme_type: 'NA',
     udyam_no: '',
     udyam_date: '',
     iec_no: '',
     tds_applicable: 0,
+    tds_category: '',
     tds_section: '',
     tds_rate: 0,
     tcs_applicable: 0,
@@ -222,6 +235,7 @@ export function PartyDetailPage() {
       const d = itemQuery.data.data;
       setForm({
         ...d,
+        udyam_date: toDateInput(d.udyam_date),
         addresses: d.addresses || [],
         contacts: d.contacts || [],
         banks: d.banks || [],
@@ -442,6 +456,28 @@ export function PartyDetailPage() {
         return;
       }
 
+      // Bank & statutory: IFSC format; MSME details only when MSME applies.
+      for (let i = 0; i < (form.banks || []).length; i++) {
+        const ifsc = String(form.banks[i].ifsc_code || '').trim().toUpperCase();
+        if (ifsc && !IFSC_RE.test(ifsc)) {
+          toast(`Bank ${i + 1}: IFSC must be 11 characters — 4 letters, 0, then 6 letters / digits (e.g. HDFC0001234)`, 'error');
+          setTab('statutory');
+          return;
+        }
+      }
+      if (form.short_code && !/^[A-Z0-9]{3}$/.test(form.short_code)) {
+        toast('Buyer short code must be exactly 3 letters, e.g. ACT', 'error');
+        setTab('general');
+        return;
+      }
+      if (Number(form.msme_applicable) === 1) {
+        if (!form.msme_type || form.msme_type === 'NA' || !String(form.udyam_no || '').trim() || !form.udyam_date) {
+          toast('MSME is applicable — enter the MSME category, number and valid-from date', 'error');
+          setTab('statutory');
+          return;
+        }
+      }
+
       // Address checks. State and pincode are mandatory only for Indian
       // addresses (GST place-of-supply / e-way bill); foreign buyers often
       // have neither in the Indian sense.
@@ -469,6 +505,11 @@ export function PartyDetailPage() {
         party_name: name || code,
         is_draft: isDraft ? 1 : 0,
         tds_rate: form.tds_applicable ? (Number(form.tds_rate) || 0) : 0,
+        short_code: form.short_code ? String(form.short_code).trim().toUpperCase() : null,
+        msme_applicable: Number(form.msme_applicable) ? 1 : 0,
+        msme_type: Number(form.msme_applicable) ? (form.msme_type || 'NA') : 'NA',
+        udyam_date: form.udyam_date || null,
+        banks: (form.banks || []).filter((b: BankItem) => b.bank_name?.trim() || b.account_no?.trim() || b.ifsc_code?.trim()).map((b: BankItem) => ({ ...b, ifsc_code: b.ifsc_code ? String(b.ifsc_code).trim().toUpperCase() : null })),
         tcs_rate: form.tcs_applicable ? (Number(form.tcs_rate) || 0) : 0,
         payment_terms: isMerchandiserOnly ? null : (form.payment_terms || null),
         credit_limit: isMerchandiserOnly ? 0 : (Number(form.credit_limit) || 0),
@@ -601,6 +642,29 @@ export function PartyDetailPage() {
       return { ...prev, banks: updated };
     });
   };
+
+  // Primary bank (Bank & statutory section): the default account, else the first; created on first entry.
+  const primaryBankIdx = (() => {
+    const i = (form.banks || []).findIndex((b: BankItem) => !!b.is_default);
+    return i >= 0 ? i : (form.banks || []).length ? 0 : -1;
+  })();
+  const primaryBank: BankItem | null = primaryBankIdx >= 0 ? form.banks[primaryBankIdx] : null;
+  const setPrimaryBank = (key: keyof BankItem, val: any) => {
+    setForm((prev: any) => {
+      const banks = [...(prev.banks || [])];
+      let i = banks.findIndex((b: BankItem) => !!b.is_default);
+      if (i < 0) i = banks.length ? 0 : -1;
+      if (i < 0) {
+        banks.push({ bank_name: '', branch_name: '', account_name: prev.party_name, account_type: 'CURRENT', account_no: '', ifsc_code: '', swift_code: '', is_default: 1 } as BankItem);
+        i = banks.length - 1;
+      }
+      banks[i] = { ...banks[i], [key]: val };
+      return { ...prev, banks };
+    });
+  };
+  const primaryIfsc = String(primaryBank?.ifsc_code || '');
+  const ifscInvalid = !!primaryIfsc && !IFSC_RE.test(primaryIfsc);
+  const msmeYes = Number(form.msme_applicable) === 1;
 
   // Contact helpers
   const addContact = () => {
@@ -906,8 +970,18 @@ export function PartyDetailPage() {
                     onChange={(e) => handleField('io_prefix', e.target.value.toUpperCase())}
                     placeholder="e.g. ZARA, HM, or BYR"
                   />
-                  <div className="sm:col-span-2 text-[12px] text-slate-500">
-                    Prefix used when auto-generating Sales Internal Orders (e.g. <span className="font-mono font-bold text-brand-700">{form.io_prefix || 'PREFIX'}-IO-2026-001</span>).
+                  <input
+                    id="party-short-code"
+                    className="input font-mono font-semibold text-brand-700 uppercase tracking-wide bg-white"
+                    value={form.short_code || ''}
+                    maxLength={3}
+                    title="3-letter buyer code used in the SO number (G01 E 26 ACT 0001)"
+                    onChange={(e) => handleField('short_code', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3))}
+                    placeholder="Short code, e.g. ACT"
+                  />
+                  <div className="text-[12px] text-slate-500">
+                    Prefix used when auto-generating Sales Internal Orders (e.g. <span className="font-mono font-bold text-brand-700">{form.io_prefix || 'PREFIX'}-IO-2026-001</span>);
+                    the 3-letter short code is the buyer block of the SO number (<span className="font-mono font-bold text-brand-700">G01E26{form.short_code || 'ACT'}0001</span>).
                   </div>
                 </div>
               </div>
@@ -1557,6 +1631,92 @@ export function PartyDetailPage() {
       {/* Tab 4: Statutory & Taxes */}
       {tab === 'statutory' && (
         <div className="card p-5 space-y-6">
+          <div id="party-bank-statutory">
+            <FormSection title="Bank & statutory" cols={4}
+              description="Primary bank account (more accounts on the Bank tab), MSME applicability and TDS category">
+              <div>
+                <label className="label">Bank Name</label>
+                <input id="party-bank-name" className="input" value={primaryBank?.bank_name || ''}
+                  onChange={(e) => setPrimaryBank('bank_name', e.target.value)} placeholder="e.g. HDFC Bank Ltd." />
+              </div>
+              <div>
+                <label className="label">IFSC Code</label>
+                <input id="party-bank-ifsc" className={`input font-mono ${ifscInvalid ? 'input-error' : ''}`} maxLength={11}
+                  value={primaryIfsc} onChange={(e) => setPrimaryBank('ifsc_code', e.target.value.toUpperCase().replace(/\s/g, ''))}
+                  placeholder="HDFC0001234" />
+                {ifscInvalid
+                  ? <p className="mt-1 text-[11.5px] text-red-600" id="party-ifsc-error">11 characters: 4 letters, 0, then 6 letters / digits</p>
+                  : <p className="mt-1 text-[11px] text-slate-400">e.g. HDFC0001234</p>}
+              </div>
+              <div>
+                <label className="label">Account Number</label>
+                <input id="party-bank-account" className="input font-mono" value={primaryBank?.account_no || ''}
+                  onChange={(e) => setPrimaryBank('account_no', e.target.value.replace(/\s/g, ''))} placeholder="Bank account number" />
+              </div>
+              <div>
+                <label className="label">Account Type</label>
+                <select id="party-bank-type" className="input" value={primaryBank?.account_type || 'CURRENT'}
+                  onChange={(e) => setPrimaryBank('account_type', e.target.value)}>
+                  <option value="CURRENT">Current</option>
+                  <option value="SAVINGS">Savings</option>
+                  <option value="EEFC">EEFC</option>
+                  <option value="OD">Overdraft / Cash credit</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="label">MSME Applicable</label>
+                <select id="party-msme-applicable" className="input" value={msmeYes ? '1' : '0'}
+                  onChange={(e) => {
+                    const yes = e.target.value === '1';
+                    handleField('msme_applicable', yes ? 1 : 0);
+                    if (!yes) handleField('msme_type', 'NA');
+                  }}>
+                  <option value="0">No</option>
+                  <option value="1">Yes</option>
+                </select>
+              </div>
+              {msmeYes ? (
+                <>
+                  <div>
+                    <label className="label">MSME Category *</label>
+                    <select id="party-msme-category" className="input" value={form.msme_type && form.msme_type !== 'NA' ? form.msme_type : ''}
+                      onChange={(e) => handleField('msme_type', e.target.value || 'NA')}>
+                      <option value="">Select category</option>
+                      <option value="MICRO">Micro</option>
+                      <option value="SMALL">Small</option>
+                      <option value="MEDIUM">Medium</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label">MSME Number (Udyam) *</label>
+                    <input id="party-msme-number" className="input font-mono" value={form.udyam_no || ''}
+                      onChange={(e) => handleField('udyam_no', e.target.value.toUpperCase())} placeholder="UDYAM-TN-02-0001234" />
+                  </div>
+                  <div>
+                    <label className="label">Valid From *</label>
+                    <input id="party-msme-valid-from" type="date" className="input" value={form.udyam_date || ''}
+                      onChange={(e) => handleField('udyam_date', e.target.value)} />
+                  </div>
+                </>
+              ) : (
+                <p className="self-end pb-2 text-[12px] text-slate-400 sm:col-span-1 lg:col-span-3">Not an MSME — category, number and valid-from are not needed.</p>
+              )}
+
+              <div>
+                <label className="label">TDS Category</label>
+                <select id="party-tds-category" className="input" value={form.tds_category || ''}
+                  onChange={(e) => handleField('tds_category', e.target.value)}>
+                  <option value="">Select category</option>
+                  {TDS_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+              </div>
+              <div className="sm:col-span-1 lg:col-span-3 self-end pb-2 text-[12px] text-slate-500">
+                GSTIN / PAN are under <strong>GST &amp; Direct Tax</strong>; TDS section and rate under <strong>TDS &amp; TCS Applicability</strong> below.
+              </div>
+            </FormSection>
+          </div>
+
           <div>
             <h3 className="text-sm font-bold text-slate-800 border-b border-surface-border pb-2">
               GST & Direct Tax Details (Domestic & Overseas)
@@ -1606,31 +1766,9 @@ export function PartyDetailPage() {
 
           <div>
             <h3 className="text-sm font-bold text-slate-800 border-b border-surface-border pb-2">
-              MSME / Udyam & Export Registration
+              Export & Company Registration
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 pt-3">
-              <div>
-                <label className="label">MSME Type (Section 43B-h)</label>
-                <select
-                  className="input"
-                  value={form.msme_type || 'NA'}
-                  onChange={(e) => handleField('msme_type', e.target.value)}
-                >
-                  <option value="NA">Not Applicable / Large</option>
-                  <option value="MICRO">Micro Enterprise</option>
-                  <option value="SMALL">Small Enterprise</option>
-                  <option value="MEDIUM">Medium Enterprise</option>
-                </select>
-              </div>
-              <div>
-                <label className="label">Udyam Registration No.</label>
-                <input
-                  className="input font-mono"
-                  value={form.udyam_no || ''}
-                  onChange={(e) => handleField('udyam_no', e.target.value)}
-                  placeholder="UDYAM-TN-02-0001234"
-                />
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3">
               <div>
                 <label className="label">IEC No. (Import Export Code)</label>
                 <input

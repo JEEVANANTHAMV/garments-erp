@@ -132,6 +132,77 @@ function groupByJob<T extends { io_no?: string | null; color_name: string; size_
   }));
 }
 
+/**
+ * Filter on the bundle lines of a DC / inward — colour, size, part and bundle no
+ * (client call 14-Oct-2026: "filter one colour, select those bundles in one click,
+ * then remove selected or keep only those").
+ */
+type LineFilter = { color: string; size: string; part: string; q: string };
+const LF_NONE: LineFilter = { color: '', size: '', part: '', q: '' };
+type FilterableLine = { color_name?: string | null; size_code?: string | null; size_sort?: number | null; part_name?: string | null; part?: string | null; bundle_no?: string | null; barcode?: string | null };
+const partOf = (l: FilterableLine) => String(l.part_name ?? l.part ?? '') || '—';
+const lfActive = (f: LineFilter) => !!(f.color || f.size || f.part || f.q.trim());
+function lineMatches(l: FilterableLine, f: LineFilter) {
+  if (f.color && (l.color_name || '—') !== f.color) return false;
+  if (f.size && (l.size_code || '—') !== f.size) return false;
+  if (f.part && partOf(l) !== f.part) return false;
+  const q = f.q.trim().toLowerCase();
+  if (q && !String(l.bundle_no ?? '').toLowerCase().includes(q) && !String(l.barcode ?? '').toLowerCase().includes(q)) return false;
+  return true;
+}
+
+/** Compact filter bar (Colour / Size / Part from the lines present + bundle no search). */
+function LineFilterBar({ idPrefix, rows, value, onChange, shown, children }: {
+  idPrefix: string; rows: FilterableLine[]; value: LineFilter; onChange: (f: LineFilter) => void; shown: number; children?: React.ReactNode;
+}) {
+  const colors = [...new Set(rows.map((l) => l.color_name || '—'))].sort((a, b) => a.localeCompare(b));
+  const sizeOrder = new Map<string, number>();
+  for (const l of rows) sizeOrder.set(l.size_code || '—', Number(l.size_sort ?? 0));
+  const sizes = [...sizeOrder.entries()].sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0])).map(([k]) => k);
+  const parts = [...new Set(rows.map(partOf))].sort((a, b) => a.localeCompare(b));
+  const active = lfActive(value);
+  const sel = 'input h-8 w-36 px-1.5 text-xs';
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs" id={`${idPrefix}-filters`}>
+      <span className="font-semibold text-slate-600">Filter:</span>
+      <select className={sel} id={`${idPrefix}-f-colour`} value={value.color} onChange={(e) => onChange({ ...value, color: e.target.value })}>
+        <option value="">All colours</option>{colors.map((c) => <option key={c} value={c}>{c}</option>)}
+      </select>
+      <select className={`${sel} !w-28`} id={`${idPrefix}-f-size`} value={value.size} onChange={(e) => onChange({ ...value, size: e.target.value })}>
+        <option value="">All sizes</option>{sizes.map((s) => <option key={s} value={s}>{s}</option>)}
+      </select>
+      {parts.length > 1 && (
+        <select className={sel} id={`${idPrefix}-f-part`} value={value.part} onChange={(e) => onChange({ ...value, part: e.target.value })}>
+          <option value="">All parts</option>{parts.map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
+      )}
+      <input className="input h-8 w-40 px-2 text-xs" id={`${idPrefix}-f-q`} placeholder="Bundle no…" value={value.q}
+        onChange={(e) => onChange({ ...value, q: e.target.value })} />
+      {active && (
+        <>
+          <span className="text-slate-500"><b>{shown}</b> of {rows.length} bundles shown</span>
+          <button className="font-semibold text-brand-700 hover:underline" onClick={() => onChange(LF_NONE)}>Clear filter</button>
+        </>
+      )}
+      {children && <span className="ml-auto flex flex-wrap items-center gap-2">{children}</span>}
+    </div>
+  );
+}
+
+/** Bundles the server hid because they have not come through the previous process (DC_REQUIRES_LINE_ALLOCATION). */
+type AvailMeta = { line_allocation_required?: string | null; hidden_not_through?: number };
+function HiddenNote({ meta }: { meta: AvailMeta | null }) {
+  const n = Number(meta?.hidden_not_through ?? 0);
+  if (!n) return null;
+  const proc = meta?.line_allocation_required || 'the previous process';
+  return (
+    <p className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900" id="dc-hidden-note">
+      <b>{fmtNumber(n)}</b> bundle(s) hidden — not yet through {proc}. Allocate them to a {proc} line first
+      (Admin → Settings: DC_REQUIRES_LINE_ALLOCATION).
+    </p>
+  );
+}
+
 function jobTitle(j: { io_no: string | null; buyer_name?: string | null; buyer_po_no?: string | null; style_codes?: string[]; order_type?: string | null }) {
   return (
     <>
@@ -494,6 +565,23 @@ function DcEditor({ id, stages, onClose, onSaved }: {
   const badQty = lines.some((l) => !(l.issue_qty > 0) || l.issue_qty > l.available_qty);
   const setLine = (bid: number, patch: Partial<Line>) => setLines((cur) => cur.map((x) => (x.id === bid ? { ...x, ...patch } : x)));
   const removeIds = (ids: Set<number>) => { setLines((cur) => cur.filter((x) => !ids.has(x.id))); setChecked(new Set()); };
+  // filter on the lines — selection, "select all shown" and remove act on the shown (filtered) bundles only
+  const [lf, setLf] = useState<LineFilter>(LF_NONE);
+  const filtering = lfActive(lf);
+  const shownLines = filtering ? lines.filter((l) => lineMatches(l, lf)) : lines;
+  const shownIds = new Set(shownLines.map((l) => l.id));
+  const checkedShown = new Set([...checked].filter((x) => shownIds.has(x)));
+  const allShownChecked = shownLines.length > 0 && shownLines.every((l) => checked.has(l.id));
+  const keepOnlyShown = () => {
+    const drop = lines.length - shownLines.length;
+    if (!drop) { toast('Every bundle on the DC matches the filter', 'info'); return; }
+    if (!window.confirm(`Keep only the ${shownLines.length} bundle(s) shown and remove the other ${drop} from this DC?`)) return;
+    setLines((cur) => cur.filter((l) => lineMatches(l, lf)));
+    setChecked(new Set()); setLf(LF_NONE);
+    toast(`${drop} bundle(s) removed — ${shownLines.length} kept`);
+  };
+  // "Process completed" lists the operations of this DC's process; any process when it has none
+  const lineOps = ops.length ? ops : allOps;
   const toggle = (set: Set<any>, v: any) => { const s = new Set(set); if (s.has(v)) s.delete(v); else s.add(v); return s; };
 
   const save = async (issue: boolean, print = false) => {
@@ -534,7 +622,7 @@ function DcEditor({ id, stages, onClose, onSaved }: {
     <Modal open onClose={onClose} title={id ? `Edit draft DC ${head.challan_no}` : 'New Process Outward DC'} size="full"
       subtitle="One DC can carry several jobs / styles — pick the process and party, then add bundles"
       icon={<Send size={16} />}
-      footerStart={<><b>{jobs.length}</b> jobs · <b>{lines.length}</b> bundles · <b>{fmtNumber(total)}</b> PCS{totalKg ? <> · <b>{totalKg.toFixed(2)}</b> KG</> : null}</>}
+      footerStart={<span id="dc-footer-totals"><b>{jobs.length}</b> jobs · <b>{lines.length}</b> bundles{filtering && <> ({shownLines.length} shown)</>} · <b>{fmtNumber(total)}</b> PCS{totalKg ? <> · <b>{totalKg.toFixed(2)}</b> KG</> : null}</span>}
       footer={<>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button variant="secondary" loading={saving} onClick={() => save(false)}>Save draft</Button>
@@ -643,16 +731,21 @@ function DcEditor({ id, stages, onClose, onSaved }: {
               )}
             </span>
           </div>
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <SearchInput value={opQ} onChange={setOpQ} placeholder="Search operation…" className="w-56" />
-            {Object.keys(opSel).map((oid) => {
-              const o = ops.find((x) => String(x.id) === String(oid));
-              return o ? <span key={oid} className="inline-flex items-center gap-1 rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-semibold text-brand-800">
-                {o.op_name}<button onClick={() => toggleOp(o)} aria-label={`Remove ${o.op_name}`}><X size={11} /></button></span> : null;
-            })}
-          </div>
-          <div className="grid max-h-44 grid-cols-2 gap-2 overflow-y-auto pr-1 md:grid-cols-3 xl:grid-cols-5" id="dc-ops">
-            {ops.filter((o) => !opQ || o.op_name.toLowerCase().includes(opQ.toLowerCase()) || (o.op_code ?? '').toLowerCase().includes(opQ.toLowerCase())).map((o) => {
+          {/* a short list (e.g. Ironing with one operation) needs no search box or chip row */}
+          {ops.length > 6 && (
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <SearchInput value={opQ} onChange={setOpQ} placeholder="Search operation…" className="w-56" />
+              {Object.keys(opSel).map((oid) => {
+                const o = ops.find((x) => String(x.id) === String(oid));
+                return o ? <span key={oid} className="inline-flex items-center gap-1 rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-semibold text-brand-800">
+                  {o.op_name}<button onClick={() => toggleOp(o)} aria-label={`Remove ${o.op_name}`}><X size={11} /></button></span> : null;
+              })}
+            </div>
+          )}
+          <div className={ops.length > 3
+            ? 'grid max-h-44 grid-cols-2 gap-2 overflow-y-auto pr-1 md:grid-cols-3 xl:grid-cols-5'
+            : 'grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:max-w-4xl'} id="dc-ops">
+            {ops.filter((o) => ops.length <= 6 || !opQ || o.op_name.toLowerCase().includes(opQ.toLowerCase()) || (o.op_code ?? '').toLowerCase().includes(opQ.toLowerCase())).map((o) => {
               const on = o.id in opSel;
               // contractor: the rate card / contractor rate is fixed; in-house: internal rate, editable
               const rateLocked = !toUnit && (o.in_job_card || o.contractor_rate != null);
@@ -677,11 +770,6 @@ function DcEditor({ id, stages, onClose, onSaved }: {
       {/* Toolbar */}
       <div className="mt-5 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-1.5">
         <h3 className="mr-auto text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Jobs & bundles</h3>
-        {checked.size > 0 && (
-          <Button size="sm" variant="danger" onClick={() => removeIds(checked)}>
-            <Trash2 size={13} className="inline mr-1" />Remove selected ({checked.size})
-          </Button>
-        )}
         <Button size="sm" variant="secondary" disabled={!head.stage_id} onClick={() => setPicker('import')}>
           <FileSpreadsheet size={13} className="inline mr-1" />Import from Excel
         </Button>
@@ -690,9 +778,33 @@ function DcEditor({ id, stages, onClose, onSaved }: {
         </Button>
         <Button size="sm" disabled={!head.stage_id} onClick={() => setPicker('jobs')}><Plus size={13} className="inline mr-1" />Add job</Button>
       </div>
+      {lines.length > 0 && (
+        <LineFilterBar idPrefix="dc" rows={lines} value={lf} onChange={(f) => { setLf(f); setChecked(new Set()); }} shown={shownLines.length}>
+          <button id="dc-select-shown" disabled={!shownLines.length}
+            className="rounded border border-slate-300 bg-white px-2 py-1 font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+            onClick={() => {
+              const s = new Set(checked);
+              for (const l of shownLines) { if (allShownChecked) s.delete(l.id); else s.add(l.id); }
+              setChecked(s);
+            }}>
+            {allShownChecked ? 'Unselect all shown' : filtering ? `Select all shown (${shownLines.length})` : `Select all (${lines.length})`}
+          </button>
+          {checkedShown.size > 0 && (
+            <Button size="sm" variant="danger" id="dc-remove-selected" onClick={() => removeIds(checkedShown)}>
+              <Trash2 size={13} className="inline mr-1" />Remove selected ({checkedShown.size})
+            </Button>
+          )}
+          {filtering && (
+            <Button size="sm" variant="secondary" id="dc-keep-shown" onClick={keepOnlyShown}>Keep only shown ({shownLines.length})</Button>
+          )}
+        </LineFilterBar>
+      )}
 
       {/* Job sections */}
       <div className="mt-3 space-y-3">
+        {filtering && lines.length > 0 && !shownLines.length && (
+          <p className="rounded-xl border border-dashed border-slate-300 py-6 text-center text-sm text-slate-400">No bundles match the filter.</p>
+        )}
         {!lines.length && (
           <p className="rounded-xl border border-dashed border-slate-300 py-14 text-center text-sm text-slate-400">
             {head.stage_id ? 'Add a job, load pending bundles or scan bundle barcodes.' : 'Choose the To process to add jobs.'}
@@ -703,16 +815,19 @@ function DcEditor({ id, stages, onClose, onSaved }: {
           const jQty = j.rows.reduce((a, l) => a + (Number(l.issue_qty) || 0), 0);
           const jKg = j.rows.reduce((a, l) => a + num(l.weight_kg), 0);
           const isCollapsed = collapsed.has(j.key);
-          const allChecked = j.rows.every((l) => checked.has(l.id));
+          // totals stay the whole job; the table and the job checkbox work on the shown bundles
+          const jShown = filtering ? j.rows.filter((l) => shownIds.has(l.id)) : j.rows;
+          if (filtering && !jShown.length) return null;
+          const allChecked = jShown.length > 0 && jShown.every((l) => checked.has(l.id));
           return (
-            <div key={j.key} className="overflow-hidden rounded-xl border border-slate-200">
+            <div key={j.key} className="overflow-hidden rounded-xl border border-slate-200" data-job={j.key}>
               <div className={`flex flex-wrap items-center gap-x-5 gap-y-1 border-b px-3 py-2 text-sm ${JOB_TONES[ji % JOB_TONES.length]}`}>
                 <button onClick={() => setCollapsed(toggle(collapsed, j.key))} className="text-slate-600" aria-label="Collapse">
                   {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
                 </button>
                 <span className="mr-auto font-bold text-slate-800">{ji + 1}. {jobTitle(meta)}</span>
-                <span className="text-xs text-slate-600">Total bundles: <b>{j.rows.length}</b></span>
-                <span className="text-xs text-slate-600">Total qty: <b>{fmtNumber(jQty)} PCS</b></span>
+                <span className="text-xs text-slate-600 job-bundles">Total bundles: <b>{j.rows.length}</b>{filtering && <> ({jShown.length} shown)</>}</span>
+                <span className="text-xs text-slate-600 job-qty">Total qty: <b>{fmtNumber(jQty)} PCS</b></span>
                 <span className="text-xs text-slate-600">Total weight: <b>{kg(jKg)}</b></span>
                 <button onClick={() => removeIds(new Set(j.rows.map((l) => l.id)))}
                   className="rounded border border-red-200 bg-white px-2 py-0.5 text-xs font-semibold text-red-600 hover:bg-red-50">
@@ -725,9 +840,9 @@ function DcEditor({ id, stages, onClose, onSaved }: {
                     <thead className="bg-slate-50 text-slate-500">
                       <tr>
                         <th className="w-8 px-2 py-1.5">
-                          <input type="checkbox" checked={allChecked} onChange={() => {
+                          <input type="checkbox" checked={allChecked} title={filtering ? 'Select the shown bundles of this job' : 'Select every bundle of this job'} onChange={() => {
                             const s = new Set(checked);
-                            for (const l of j.rows) { if (allChecked) s.delete(l.id); else s.add(l.id); }
+                            for (const l of jShown) { if (allChecked) s.delete(l.id); else s.add(l.id); }
                             setChecked(s);
                           }} />
                         </th>
@@ -749,10 +864,10 @@ function DcEditor({ id, stages, onClose, onSaved }: {
                       </tr>
                     </thead>
                     <tbody>
-                      {j.rows.map((l, i) => {
+                      {jShown.map((l, i) => {
                         const bad = !(l.issue_qty > 0) || l.issue_qty > l.available_qty;
                         return (
-                          <tr key={l.id} className="border-t border-slate-100">
+                          <tr key={l.id} className="border-t border-slate-100" data-bundle={l.bundle_no}>
                             <td className="px-2 py-1 text-center">
                               <input type="checkbox" checked={checked.has(l.id)} onChange={() => setChecked(toggle(checked, l.id))} />
                             </td>
@@ -780,10 +895,14 @@ function DcEditor({ id, stages, onClose, onSaved }: {
                                 className="input h-7 w-20 px-1.5 text-right" />
                             </td>
                             <td className="px-2 py-1">
-                              <select value={l.operation_id} onChange={(e) => setLine(l.id, { operation_id: e.target.value })} className="input h-7 w-36 px-1"
+                              <select value={l.operation_id} onChange={(e) => setLine(l.id, { operation_id: e.target.value })} className="input h-7 w-36 px-1 dc-line-op"
                                 title="Blank = every operation ticked at the top; pick one only to change this bundle">
                                 <option value="">{opsChosen ? `All: ${Object.keys(opSel).map((oid) => ops.find((x) => String(x.id) === String(oid))?.op_name).filter(Boolean).join(', ')}` : '—'}</option>
-                                {allOps.map((o) => <option key={o.id} value={o.id}>{o.op_name}</option>)}
+                                {lineOps.map((o) => <option key={o.id} value={o.id}>{o.op_name}</option>)}
+                                {/* an operation saved earlier that is not of this process stays visible */}
+                                {l.operation_id && !lineOps.some((o) => String(o.id) === l.operation_id) && (
+                                  <option value={l.operation_id}>{allOps.find((o) => String(o.id) === l.operation_id)?.op_name ?? `Operation ${l.operation_id}`}</option>
+                                )}
                               </select>
                             </td>
                             <td className="px-2 py-1">
@@ -854,25 +973,55 @@ function JobPicker({ stage, excluded, onClose, onAdd }: { stage: Stage; excluded
   const [adding, setAdding] = useState(false);
   // colours to take from the picked jobs (all by default) — e.g. only Beige (client call 13-Oct-2026)
   const [colorOff, setColorOff] = useState<Set<string>>(new Set());
+  // sizes to take, likewise (client call 14-Oct-2026)
+  const [sizeOff, setSizeOff] = useState<Set<string>>(new Set());
+  // free bundles of each picked job (loaded on pick — gives the size strip, reused by Add)
+  const [jobBundles, setJobBundles] = useState<Record<string, Avail[]>>({});
+  const fetchJob = async (io: string) => {
+    const r = await api.get('/bundle-stock/available', { params: { stage_id: stage.id, source_level: stage.source_level, io_no: io, limit: 2000 } });
+    const bs: Avail[] = r.data.data || [];
+    setJobBundles((cur) => ({ ...cur, [io]: bs }));
+    return bs;
+  };
+  useEffect(() => {
+    for (const io of picked) if (!(io in jobBundles)) fetchJob(io).catch((e) => toast(errMsg(e), 'error'));
+  }, [picked]);
 
   useEffect(() => {
     api.get('/bundle-stock/available-jobs', { params: { stage_id: stage.id, source_level: stage.source_level } })
-      .then((r) => setJobs(r.data.data || [])).catch((e) => toast(errMsg(e), 'error')).finally(() => setLoading(false));
+      .then((r) => { setJobs(r.data.data || []); setAvailMeta(r.data.meta ?? null); }).catch((e) => toast(errMsg(e), 'error')).finally(() => setLoading(false));
   }, [stage.id]);
+  const [availMeta, setAvailMeta] = useState<AvailMeta | null>(null);
 
   const shown = jobs.filter((j) => !q || [j.io_no, j.buyer_name, j.buyer_po_no, ...(j.style_codes || [])].some((v) => String(v ?? '').toLowerCase().includes(q.toLowerCase())));
+  const takeable = (b: Avail) => !excluded.has(b.id) && !b.open_dc_no && b.available_qty > 0;
 
   const add = async () => {
     setAdding(true);
     try {
       const all: Avail[] = [];
       for (const io of picked) {
-        const r = await api.get('/bundle-stock/available', { params: { stage_id: stage.id, source_level: stage.source_level, io_no: io, limit: 2000 } });
-        all.push(...(r.data.data || []).filter((b: Avail) => !excluded.has(b.id) && !colorOff.has(String(b.color_name ?? '—'))));
+        const bs = jobBundles[io] ?? await fetchJob(io);
+        all.push(...bs.filter((b: Avail) => !excluded.has(b.id) && !colorOff.has(String(b.color_name ?? '—')) && !sizeOff.has(String(b.size_code ?? '—'))));
       }
       onAdd(all);
     } catch (e) { toast(errMsg(e), 'error'); } finally { setAdding(false); }
   };
+  // size strip of the picked jobs (after the colour choice), sizes in size order
+  const sizeStrip = (() => {
+    const m = new Map<string, { sort: number; bundles: number; qty: number }>();
+    for (const io of picked) for (const b of jobBundles[io] ?? []) {
+      if (!takeable(b) || colorOff.has(String(b.color_name ?? '—'))) continue;
+      const k = String(b.size_code ?? '—'); const x = m.get(k) ?? { sort: Number(b.size_sort ?? 0), bundles: 0, qty: 0 };
+      x.bundles++; x.qty += b.available_qty; m.set(k, x);
+    }
+    return [...m.entries()].sort((a, b) => a[1].sort - b[1].sort || a[0].localeCompare(b[0]));
+  })();
+  const pickedLoading = [...picked].some((io) => !(io in jobBundles));
+  const allNone = (keys: string[], off: Set<string>, set: (s: Set<string>) => void) => (
+    <button className="font-semibold text-brand-700 hover:underline" data-toggle="all-none"
+      onClick={() => set(off.size === 0 ? new Set(keys) : new Set())}>{off.size === 0 ? 'None' : 'All'}</button>
+  );
 
   return (
     <Modal open onClose={onClose} size="xl" title={`Add job — ${stage.stage_name}`}
@@ -883,6 +1032,7 @@ function JobPicker({ stage, excluded, onClose, onAdd }: { stage: Stage; excluded
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button loading={adding} disabled={!picked.size} onClick={add} id="dc-jobs-add">Add {picked.size || ''} job(s)</Button>
       </>}>
+      <HiddenNote meta={availMeta} />
       <SearchInput value={q} onChange={setQ} placeholder="IO no, buyer, PO, style…" className="mb-2 w-full" />
       {(() => {
         const cols = new Map<string, { bundles: number; qty: number }>();
@@ -894,7 +1044,7 @@ function JobPicker({ stage, excluded, onClose, onAdd }: { stage: Stage; excluded
         return (
           <div className="mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs" id="dc-job-colours">
             <span className="font-semibold text-slate-600">Colours:</span>
-            <button className="text-brand-700 hover:underline" onClick={() => setColorOff(new Set())}>All</button>
+            {allNone([...cols.keys()], colorOff, setColorOff)}
             {[...cols.entries()].map(([k, c]) => (
               <label key={k} className="inline-flex items-center gap-1">
                 <input type="checkbox" checked={!colorOff.has(k)} data-colour={k}
@@ -905,6 +1055,20 @@ function JobPicker({ stage, excluded, onClose, onAdd }: { stage: Stage; excluded
           </div>
         );
       })()}
+      {picked.size > 0 && (sizeStrip.length > 0 || pickedLoading) && (
+        <div className="mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs" id="dc-job-sizes">
+          <span className="font-semibold text-slate-600">Sizes:</span>
+          {sizeStrip.length > 0 && allNone(sizeStrip.map(([k]) => k), sizeOff, setSizeOff)}
+          {sizeStrip.map(([k, c]) => (
+            <label key={k} className="inline-flex items-center gap-1">
+              <input type="checkbox" checked={!sizeOff.has(k)} data-size={k}
+                onChange={() => setSizeOff((cur) => { const s2 = new Set(cur); if (s2.has(k)) s2.delete(k); else s2.add(k); return s2; })} />
+              <b>{k}</b> <span className="text-slate-400">({c.bundles} · {fmtNumber(c.qty)} PCS)</span>
+            </label>
+          ))}
+          {pickedLoading && <span className="text-slate-400">Loading sizes…</span>}
+        </div>
+      )}
       <table className="w-full text-xs">
         <thead className="bg-slate-50 text-slate-500"><tr>
           <th className="w-8 px-2 py-1.5" /><th className="px-2 py-1.5 text-left">IO / Job no</th><th className="px-2 py-1.5 text-left">Buyer</th>
@@ -1026,10 +1190,11 @@ function BundlePicker({ stage, excluded, fromLineId, onClose, onAdd }: { stage: 
         color_id: dFilters.color_id || undefined, q: dFilters.q || undefined,
         from_line_id: fromLineId || undefined,
       },
-    }).then((r) => setAvail(r.data.data || []))
+    }).then((r) => { setAvail(r.data.data || []); setAvailMeta(r.data.meta ?? null); })
       .catch((e) => toast(errMsg(e), 'error'))
       .finally(() => setLoading(false));
   }, [stage.id, dFilters.io_no, dFilters.style_id, dFilters.color_id, dFilters.q, fromLineId]);
+  const [availMeta, setAvailMeta] = useState<AvailMeta | null>(null);
 
   const shown = avail.filter((b) => !excluded.has(b.id) && (!filters.size || b.size_code === filters.size));
   const sizesShown = [...new Set(avail.map((b) => b.size_code))];
@@ -1045,6 +1210,7 @@ function BundlePicker({ stage, excluded, fromLineId, onClose, onAdd }: { stage: 
         <Button variant="secondary" disabled={!free.length} onClick={() => onAdd(free)}>Add all shown ({free.length})</Button>
         <Button disabled={!checked.size} onClick={() => onAdd(shown.filter((b) => checked.has(b.id)))}>Add selected ({checked.size})</Button>
       </>}>
+      <HiddenNote meta={availMeta} />
       <div className="mb-3 grid grid-cols-2 gap-x-4 gap-y-3 md:grid-cols-4">
         <Input placeholder="IO / job no" value={filters.io_no} onChange={(e) => setFilters({ ...filters, io_no: e.target.value })} />
         <Input placeholder="Bundle no / barcode" value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} />
@@ -1547,12 +1713,33 @@ function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void
     .map((l) => ({ ...l, io_no: l.job_io_no, _dc: dc })));
   const jobMeta = new Map<string, any>(dcs.flatMap((dc) => (dc.summary.jobs as any[]).map((j) => [j.io_no ?? '—', j] as [string, any])));
   const blank: InRow = { g: 0, r: 0, s: 0, x: 0, l: 0, t: 0, w: 0, wReason: '', reason: '', kg: '', remarks: '', op: '', operator: '' };
-  // process completed: the bundle's own operation, else the DC's (one operation → filled in for every bundle)
-  const dcOp = (dc: any) => ((dc.operations || []).length === 1 ? String(dc.operations[0].operation_id) : '');
+  // process completed: the bundle's own operation, else blank = "All: <the DC's operations>" — operation_id null
+  // on the receipt line means the DC-level operations apply, as on the DC line (client call 14-Oct-2026)
   const [rows, setRows] = useState<Record<number, InRow>>(Object.fromEntries(open.map((l) => [l.id, {
-    ...blank, op: l.operation_id ? String(l.operation_id) : dcOp(l._dc), operator: l.operator_line ?? '',
+    ...blank, op: l.operation_id ? String(l.operation_id) : '', operator: l.operator_line ?? '',
   }])));
-  const setAllOps = (op: string) => setRows((cur) => Object.fromEntries(Object.entries(cur).map(([k, v]) => [k, { ...v, op }])));
+  const dcOpsLabel = (dc: any) => ((dc.operations || []).length ? `All: ${(dc.operations as any[]).map((o) => o.op_name).join(', ')}` : '—');
+  // operations of the DCs' processes (falls back to every operation when the process has none)
+  const [stageOps, setStageOps] = useState<Record<string, Op[]>>({});
+  useEffect(() => {
+    for (const sid of [...new Set(dcs.map((d) => d.stage_id).filter(Boolean))]) {
+      api.get('/process-master/operations', { params: { stage_id: sid } })
+        .then((r) => setStageOps((cur) => ({ ...cur, [sid]: r.data.data || [] }))).catch(() => undefined);
+    }
+  }, []);
+  const opsOf = (dc: any): Op[] => (stageOps[dc.stage_id]?.length ? stageOps[dc.stage_id] : allOps);
+  const unionOps = (() => {
+    const m = new Map<number, Op>();
+    for (const dc of dcs) for (const o of opsOf(dc)) m.set(o.id, o);
+    return [...m.values()];
+  })();
+  const anyDcOps = dcs.some((d) => (d.operations || []).length);
+  const [lf, setLf] = useState<LineFilter>(LF_NONE);
+  const filtering = lfActive(lf);
+  const shownOpen = filtering ? open.filter((l) => lineMatches(l, lf)) : open;
+  const shownIds = new Set(shownOpen.map((l) => l.id));
+  // "set for all" acts on the shown (filtered) bundles
+  const setAllOps = (op: string) => setRows((cur) => Object.fromEntries(Object.entries(cur).map(([k, v]) => [k, shownIds.has(Number(k)) ? { ...v, op } : v])));
   const [head, setHead] = useState({
     receipt_date: today(), party_dc_no: '', party_dc_date: '', ref_no: '', to_warehouse_id: first.to_warehouse_id ?? '', vehicle_no: '', remarks: '',
   });
@@ -1606,6 +1793,8 @@ function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void
   }));
 
   const save = async () => {
+    // the receiving location is required for single and batch inward alike
+    if (!head.to_warehouse_id) { toast('Choose the Receiving location — the store the goods come back into', 'error'); return; }
     const perDc = dcs.map((dc) => ({ challan_id: dc.id, lines: linesOf(dc) })).filter((d) => d.lines.length);
     if (!perDc.length) { toast('Enter quantities for at least one bundle', 'error'); return; }
     if (noReason) { toast('Give the mistake / reject reason for every rejected bundle', 'error'); return; }
@@ -1673,7 +1862,8 @@ function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void
             <Input label="Party DC date" type="date" value={head.party_dc_date} onChange={(e) => setHead({ ...head, party_dc_date: e.target.value })} />
           </FormSection>
           <FormSection title="Movement & remarks">
-            <Select label="Receiving location" value={head.to_warehouse_id} onChange={(e) => setHead({ ...head, to_warehouse_id: e.target.value })}
+            <Select label="Receiving location" required id="in-to-loc" value={head.to_warehouse_id}
+              error={!head.to_warehouse_id ? 'Required' : undefined} onChange={(e) => setHead({ ...head, to_warehouse_id: e.target.value })}
               placeholder="— store —" options={toOptions(warehouses.data)} />
             <Input label="Vehicle no" value={head.vehicle_no} onChange={(e) => setHead({ ...head, vehicle_no: e.target.value.toUpperCase() })} />
             <Input label="Remarks" value={head.remarks} onChange={(e) => setHead({ ...head, remarks: e.target.value })} className="sm:col-span-2" />
@@ -1687,19 +1877,26 @@ function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void
       {/* Toolbar */}
       <div className="mt-5 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-1.5">
         <h3 className="mr-auto text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Jobs & bundles</h3>
-        <label className="flex items-center gap-1 text-xs text-slate-600">Process completed (all bundles)
-          <select className="input h-8 w-40 px-1" id="in-op-all" defaultValue="" onChange={(e) => { if (e.target.value !== '__') setAllOps(e.target.value); }}>
-            <option value="__">— set for all —</option><option value="">(none)</option>
-            {allOps.map((o) => <option key={o.id} value={o.id}>{o.op_name}</option>)}
+        <label className="flex items-center gap-1 text-xs text-slate-600">Process completed ({filtering ? 'shown' : 'all'} bundles)
+          <select className="input h-8 w-48 px-1" id="in-op-all" value="__" onChange={(e) => { if (e.target.value !== '__') setAllOps(e.target.value); }}>
+            <option value="__">— set for all —</option>
+            <option value="">{anyDcOps ? (dcs.length === 1 ? dcOpsLabel(first) : 'All: each DC\'s operations') : '(none)'}</option>
+            {unionOps.map((o) => <option key={o.id} value={o.id}>{o.op_name}</option>)}
           </select>
         </label>
-        <Button size="sm" variant="secondary" onClick={() => restShortage(open)}>Rest as shortage</Button>
-        <Button size="sm" variant="secondary" onClick={() => fillGood(open)}><CheckCircle2 size={13} className="inline mr-1" />All pending good</Button>
+        <Button size="sm" variant="secondary" onClick={() => restShortage(shownOpen)}>Rest as shortage{filtering ? ' (shown)' : ''}</Button>
+        <Button size="sm" variant="secondary" onClick={() => fillGood(shownOpen)}><CheckCircle2 size={13} className="inline mr-1" />{filtering ? 'Shown pending good' : 'All pending good'}</Button>
       </div>
+      {open.length > 0 && <LineFilterBar idPrefix="in" rows={open} value={lf} onChange={setLf} shown={shownOpen.length} />}
 
       <div className="mt-3 space-y-3">
+        {filtering && !shownOpen.length && (
+          <p className="rounded-xl border border-dashed border-slate-300 py-6 text-center text-sm text-slate-400">No bundles match the filter.</p>
+        )}
         {sections.map((j, ji) => {
           const key = `${j.dc.id}|${j.key}`;
+          const jShown = filtering ? j.rows.filter((l: any) => shownIds.has(l.id)) : j.rows;
+          if (filtering && !jShown.length) return null;
           const m = jobMeta.get(j.key) ?? { io_no: j.key };
           const jp = j.rows.reduce((a: number, l: any) => a + num(l.pending_qty), 0);
           const jg = j.rows.reduce((a: number, l: any) => a + rows[l.id].g, 0);
@@ -1713,11 +1910,11 @@ function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void
                 <span className="mr-auto font-bold text-slate-800">
                   {ji + 1}. {dcs.length > 1 && <span className="font-mono text-xs text-slate-500">DC {j.dc.challan_no} · </span>}{jobTitle(m)}
                 </span>
-                <span className="text-xs text-slate-600">Bundles: <b>{j.rows.length}</b></span>
+                <span className="text-xs text-slate-600">Bundles: <b>{j.rows.length}</b>{filtering && <> ({jShown.length} shown)</>}</span>
                 <span className="text-xs text-slate-600">Sent (pending): <b>{fmtNumber(jp)}</b></span>
                 <span className="text-xs text-slate-600">Received: <b>{fmtNumber(jg)}</b></span>
                 <span className="text-xs text-slate-600">Balance: <b>{fmtNumber(jp - jg)}</b></span>
-                <button onClick={() => fillGood(j.rows)} className="rounded border border-emerald-200 bg-white px-2 py-0.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
+                <button onClick={() => fillGood(jShown)} className="rounded border border-emerald-200 bg-white px-2 py-0.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
                   Job all good
                 </button>
               </div>
@@ -1741,7 +1938,7 @@ function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void
                       <th className="px-2 py-1.5 text-left">Status</th><th className="px-2 py-1.5 text-left">Remarks</th>
                     </tr></thead>
                     <tbody>
-                      {j.rows.map((l: any, i: number) => {
+                      {jShown.map((l: any, i: number) => {
                         const x = rows[l.id]; const p = num(l.pending_qty); const diff = x.g + x.x - p;
                         const bad = entered(l.id) + x.w > p || (x.x > 0 && entered(l.id) !== p);
                         return (
@@ -1770,9 +1967,13 @@ function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void
                               placeholder={Number(l.weight_kg) > 0 && Number(l.qty) > 0 && x.g + x.r > 0 ? (Number(l.weight_kg) / Number(l.qty) * (x.g + x.r)).toFixed(3) : l.weight_kg != null ? Number(l.weight_kg).toFixed(2) : '—'}
                               title="Blank = bundle weight per piece × good + rejected PCS" onChange={(e) => set(l.id, { kg: e.target.value })} className="input h-7 w-20 px-1.5 text-right" /></td>
                             <td className="px-2 py-1">
-                              <select value={x.op} onChange={(e) => set(l.id, { op: e.target.value })} className="input h-7 w-32 px-1">
-                                <option value="">—</option>
-                                {allOps.map((o) => <option key={o.id} value={o.id}>{o.op_name}</option>)}
+                              <select value={x.op} onChange={(e) => set(l.id, { op: e.target.value })} className="input h-7 w-40 px-1 in-line-op"
+                                title="Blank = the DC's operations; pick one only to change this bundle">
+                                <option value="">{dcOpsLabel(l._dc)}</option>
+                                {opsOf(l._dc).map((o) => <option key={o.id} value={o.id}>{o.op_name}</option>)}
+                                {x.op && !opsOf(l._dc).some((o) => String(o.id) === x.op) && (
+                                  <option value={x.op}>{allOps.find((o) => String(o.id) === x.op)?.op_name ?? `Operation ${x.op}`}</option>
+                                )}
                               </select>
                             </td>
                             <td className="px-2 py-1"><input value={x.operator} onChange={(e) => set(l.id, { operator: e.target.value.toUpperCase() })} className="input h-7 w-24 px-1.5" /></td>
@@ -1969,6 +2170,32 @@ function SelectDcModal({ onClose, onPick }: { onClose: () => void; onPick: (ids:
       .then((r) => setRows(r.data.data || [])).catch((e) => toast(errMsg(e), 'error')).finally(() => setLoading(false));
   }, [stageId, vendorId, dq]);
 
+  // Scan / type a DC no + Enter (barcode scanners send the number + Enter): an exact DC no is ticked,
+  // and when it is then the only DC ticked the inward opens straight away.
+  const searchRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { const t = setTimeout(() => searchRef.current?.focus(), 50); return () => clearTimeout(t); }, []);
+  const onSearchEnter = async () => {
+    const code = q.trim();
+    if (!code) return;
+    const same = (r: any) => String(r.challan_no ?? '').toLowerCase() === code.toLowerCase();
+    let hit = rows.find(same);
+    if (!hit) {
+      // the list may still be on the previous search (debounce) — ask the server for this DC no
+      try {
+        const r = await api.get('/process-dcs', { params: { status: 'OPEN', q: code } });
+        hit = (r.data.data || []).find(same);
+        if (hit) setRows((cur) => (cur.some((x) => x.id === hit.id) ? cur : [hit, ...cur]));
+      } catch (e) { toast(errMsg(e), 'error'); return; }
+    }
+    if (!hit) { toast(`DC ${code} is not pending receipt`, 'error'); return; }
+    if (pickedParty != null && pickedParty !== partyKey(hit)) { toast(`DC ${hit.challan_no} is for another contractor / unit — one inward covers one party`, 'error'); return; }
+    const next = new Set(picked); next.add(hit.id);
+    setPicked(next);
+    if (next.size === 1) { onPick([hit.id]); return; }
+    toast(`DC ${hit.challan_no} ticked — ${next.size} DCs picked`);
+    setQ('');
+  };
+
   return (
     <Modal open onClose={onClose} size="xl" title="Select DC(s) to receive against"
       subtitle="Tick several DCs of the same contractor for one inward (one party DC / vehicle)"
@@ -1982,7 +2209,16 @@ function SelectDcModal({ onClose, onPick }: { onClose: () => void; onPick: (ids:
         <Select value={stageId} onChange={(e) => setStageId(e.target.value)} placeholder="All processes" options={stages.map((s) => ({ value: s.id, label: s.stage_name }))} />
         <Select value={vendorId} onChange={(e) => setVendorId(e.target.value)} placeholder="All contractors / units"
           options={[...contractors.map((c) => ({ value: `V${c.id}`, label: c.label })), ...units.map((u) => ({ value: `U${u.id}`, label: `${u.label} (in-house unit)` }))]} />
-        <SearchInput value={q} onChange={setQ} placeholder="DC no, job, contractor or bundle no…" />
+        <div className="relative">
+          <ScanLine size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-brand-600" />
+          <input ref={searchRef} id="in-dc-search" value={q} onChange={(e) => setQ(e.target.value)} autoFocus
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onSearchEnter(); } }}
+            placeholder="Scan / type DC no + Enter, or search job, contractor, bundle…" className="input pl-9" />
+          {q && (
+            <button onClick={() => setQ('')} aria-label="Clear search"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-600"><X size={14} /></button>
+          )}
+        </div>
       </div>
       <table className="w-full text-xs">
         <thead className="bg-slate-50 text-slate-500"><tr>

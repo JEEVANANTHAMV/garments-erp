@@ -11,9 +11,9 @@ import { useToast } from '../../hooks/useToast';
 import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useAuth } from '../../lib/auth';
 import {
-  type Proc, type BundleInfo, PROC_LABEL, n, pct, groupByJob, JobHeaderRow, SummaryCard, UtilBar, distinct,
-  EMPTY_FILTERS, applyFilters, summarize, SummaryTable, DocumentsModal, DocStatus, printDocument, printRowsByJob,
-  type RowFilters,
+  type Proc, type BundleInfo, PROC_LABEL, n, pct, groupByJob, JobHeaderRow, SummaryCard, UtilBar,
+  applyFilters, summarize, SummaryTable, DocumentsModal, DocStatus, printDocument, printRowsByJob,
+  useCascadingFilters, CascadingFilterBar, SelectShown, toggleShown,
 } from './linePlanUi';
 
 /**
@@ -71,7 +71,6 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
   const [saving, setSaving] = useState(false);
 
   const [tab, setTab] = useState<TabKey>('line');
-  const [filters, setFilters] = useState<RowFilters>(EMPTY_FILTERS);
   const [openLines, setOpenLines] = useState<Set<number>>(new Set());
   const [sel, setSel] = useState<Set<number>>(new Set());          // selected plan rows (allocation_detail_id)
   const [selPending, setSelPending] = useState<Set<number>>(new Set());
@@ -142,6 +141,13 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
     .map((p) => ({ ...p, free_qty: p.pending_qty - (planned.get(p.allocation_detail_id) ?? 0) }))
     .filter((p) => p.free_qty > 0), [pending, planned]);
 
+  // Filter options over pending stock + plan rows (one entry per allocation row).
+  const filterSource = useMemo(() => {
+    const seen = new Set(pending.map((p) => p.allocation_detail_id));
+    return [...pending, ...rows.filter((r) => !seen.has(r.allocation_detail_id))];
+  }, [pending, rows]);
+  const cf = useCascadingFilters(filterSource);
+  const filters = cf.filters;
   const shownRows = useMemo(() => applyFilters(rows, filters), [rows, filters]);
   const shownPending = useMemo(() => applyFilters(freePending, filters), [freePending, filters]);
 
@@ -337,20 +343,7 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
           </div>
           <Button variant="secondary" className="!h-10 ml-auto" onClick={() => load(docId)} loading={loading}><Search size={14} className="mr-1" /> Load Pending</Button>
         </div>
-        <div className="mt-2 flex flex-wrap items-end gap-2 border-t border-slate-100 pt-2">
-          {([
-            ['job', 'Job No', distinct([...pending, ...rows], (b) => b.io_no)],
-            ['po', 'PO No', distinct([...pending, ...rows], (b) => b.po_no)],
-            ['style', 'Style No', distinct([...pending, ...rows], (b) => b.style_no)],
-            ['buyer', 'Buyer', distinct([...pending, ...rows], (b) => b.buyer)],
-            ['colour', 'Colour', distinct([...pending, ...rows], (b) => b.colour)],
-            ['size', 'Size', distinct([...pending, ...rows], (b) => b.size)],
-          ] as const).map(([k, lbl, opts]) => (
-            <Select key={k} label={lbl} className="w-36" value={filters[k]} placeholder="All" options={opts as any}
-              onChange={(e) => setFilters((f) => ({ ...f, [k]: e.target.value }))} />
-          ))}
-          {Object.values(filters).some(Boolean) && <Button size="sm" variant="ghost" onClick={() => setFilters(EMPTY_FILTERS)}>Clear filters</Button>}
-        </div>
+        <CascadingFilterBar cf={cf} />
       </Card>
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
@@ -460,7 +453,8 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
                     <span className="ml-2 font-normal text-slate-600">(Target: {fmtNumber(s.target)} PCS | Assigned: {fmtNumber(s.assigned)} PCS)</span>
                   </span>
                   {editable && (
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <SelectShown shown={ids} selected={sel} onChange={setSel} />
                       <Button size="sm" onClick={() => setPicker({ lineId: l.id, mode: 'job' })}><Plus size={12} className="mr-1" /> Add Job</Button>
                       <Button size="sm" variant="secondary" onClick={() => setPicker({ lineId: l.id, mode: 'bundle' })}><Plus size={12} className="mr-1" /> Add Bundle</Button>
                       <Button size="sm" variant="danger" disabled={!selHere.length} onClick={() => removeRows(selHere)}>Remove Selected</Button>
@@ -543,13 +537,19 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
       {tab === 'size' && <Card><SummaryTable keyLabel="Size" data={summarize(shownRows, (r) => r.size ?? '', qtyOf)} /></Card>}
       {tab === 'pending' && (
         <Card title="Pending stock (confirmed allocation, not yet planned)"
-          actions={editable && <Button size="sm" disabled={!selPending.size} onClick={() => { addRows(shownPending.filter((p) => selPending.has(p.allocation_detail_id))); setSelPending(new Set()); }}>
-            <Plus size={12} className="mr-1" /> Add {selPending.size || ''} to plan</Button>}>
+          actions={editable && <span className="flex flex-wrap items-center gap-3">
+            <SelectShown shown={shownPending.map((p) => p.allocation_detail_id)} selected={selPending} onChange={setSelPending} />
+            <Button size="sm" disabled={!selPending.size} onClick={() => { addRows(shownPending.filter((p) => selPending.has(p.allocation_detail_id))); setSelPending(new Set()); }}>
+            <Plus size={12} className="mr-1" /> Add {selPending.size || ''} to plan</Button></span>}>
           <div className="max-h-[60vh] overflow-auto">
             <table className="w-full text-xs">
               <thead className="sticky top-0 bg-slate-50 text-slate-500">
                 <tr>
-                  <th className="w-8 px-2 py-2" />
+                  <th className="w-8 px-2 py-2">
+                    <input type="checkbox" data-header-check disabled={!editable} title="Tick / untick every row shown (filtered)"
+                      checked={shownPending.length > 0 && shownPending.every((p) => selPending.has(p.allocation_detail_id))}
+                      onChange={() => setSelPending((x) => toggleShown(x, shownPending.map((p) => p.allocation_detail_id)))} />
+                  </th>
                   <th className="px-2 py-2 text-left">Line</th>
                   <th className="px-2 py-2 text-left">Bundle ID</th>
                   <th className="px-2 py-2 text-left">Colour</th>

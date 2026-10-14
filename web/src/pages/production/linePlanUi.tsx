@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { Badge, Button, LoadingBlock, Modal, SearchInput, StatusBadge, useDebounced } from '../../components/ui';
+import { Badge, Button, LoadingBlock, Modal, SearchInput, Select, StatusBadge, useDebounced } from '../../components/ui';
 import { api } from '../../lib/api';
 import { fmtDate, fmtNumber } from '../../lib/format';
 
@@ -125,6 +125,171 @@ export const EMPTY_FILTERS: RowFilters = { job: '', po: '', style: '', buyer: ''
 export function applyFilters<T extends Partial<BundleInfo>>(rows: T[], f: RowFilters) {
   return rows.filter((r) => (!f.job || r.io_no === f.job) && (!f.po || r.po_no === f.po) && (!f.style || r.style_no === f.style)
     && (!f.buyer || r.buyer === f.buyer) && (!f.colour || r.colour === f.colour) && (!f.size || r.size === f.size));
+}
+
+/* ── Cascading filters (client call 14-Oct-2026) ──────────────────────────
+ * "When I choose the job, everything else should load automatically." Each
+ * dropdown lists only the values found in rows that match every OTHER active
+ * filter; when that narrowing leaves a single buyer / PO / style it is picked
+ * automatically (colour and size never are). Pure functions first so they can
+ * be tested without React. */
+
+export type FilterKey = keyof RowFilters;
+export const FILTER_FIELDS: { key: FilterKey; label: string; get: (r: Partial<BundleInfo>) => string | null | undefined }[] = [
+  { key: 'job', label: 'Job No', get: (r) => r.io_no },
+  { key: 'po', label: 'PO No', get: (r) => r.po_no },
+  { key: 'style', label: 'Style No', get: (r) => r.style_no },
+  { key: 'buyer', label: 'Buyer', get: (r) => r.buyer },
+  { key: 'colour', label: 'Colour', get: (r) => r.colour },
+  { key: 'size', label: 'Size', get: (r) => r.size },
+];
+/** Filters filled in by themselves when only one value is left. */
+export const AUTO_FILTER_KEYS: FilterKey[] = ['buyer', 'po', 'style'];
+export interface FilterOption { value: string; label: string; count: number }
+
+const matchesExcept = (r: Partial<BundleInfo>, f: RowFilters, skip: FilterKey) =>
+  FILTER_FIELDS.every((d) => d.key === skip || !f[d.key] || d.get(r) === f[d.key]);
+
+/** Options for every filter, each computed over the rows matching all the other filters. */
+export function cascadeOptions<T extends Partial<BundleInfo>>(rows: T[], f: RowFilters): Record<FilterKey, FilterOption[]> {
+  const out = {} as Record<FilterKey, FilterOption[]>;
+  for (const d of FILTER_FIELDS) {
+    const counts = new Map<string, number>();
+    for (const r of rows) {
+      if (!matchesExcept(r, f, d.key)) continue;
+      const v = d.get(r);
+      if (v) counts.set(v, (counts.get(v) ?? 0) + 1);
+    }
+    out[d.key] = [...counts.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }))
+      .map(([value, count]) => ({ value, label: `${value} (${count})`, count }));
+  }
+  return out;
+}
+
+export interface FilterState { filters: RowFilters; auto: FilterKey[] }
+
+/**
+ * Bring filters back in line with the rows after a change.
+ * - `changed`: the filter the user just set. Every auto-picked value is dropped
+ *   first and re-derived, so clearing the job clears the buyer it implied.
+ * - `suppress`: auto keys the user deliberately emptied — not refilled.
+ * A chosen value that no longer exists under the other filters goes back to All.
+ */
+export function reconcileFilters<T extends Partial<BundleInfo>>(rows: T[], state: FilterState, changed?: FilterKey, suppress: FilterKey[] = []): FilterState {
+  const f: RowFilters = { ...state.filters };
+  const auto = new Set(state.auto);
+  if (changed) {
+    auto.delete(changed);
+    for (const k of auto) f[k] = '';
+    auto.clear();
+  }
+  for (let guard = 0; guard < 12; guard++) {
+    const opts = cascadeOptions(rows, f);
+    let moved = false;
+    for (const d of FILTER_FIELDS) {
+      const k = d.key;
+      if (f[k] && k !== changed && !opts[k].some((o) => o.value === f[k])) { f[k] = ''; auto.delete(k); moved = true; }
+    }
+    if (moved) continue;
+    const hasManual = FILTER_FIELDS.some((d) => f[d.key] && !auto.has(d.key));
+    if (!hasManual) {
+      for (const k of auto) f[k] = '';
+      auto.clear();
+      break;
+    }
+    for (const k of AUTO_FILTER_KEYS) {
+      if (!f[k] && !suppress.includes(k) && opts[k].length === 1) { f[k] = opts[k][0].value; auto.add(k); moved = true; }
+    }
+    if (!moved) break;
+  }
+  return { filters: f, auto: FILTER_FIELDS.map((d) => d.key).filter((k) => auto.has(k)) };
+}
+
+const sameState = (a: FilterState, b: FilterState) =>
+  FILTER_FIELDS.every((d) => a.filters[d.key] === b.filters[d.key]) && a.auto.join() === b.auto.join();
+
+/**
+ * Cascading job / PO / style / buyer / colour / size filters over `rows`
+ * (the full list the screen can show). Used by line allocation (all four
+ * processes), daily plans and daily output.
+ */
+export function useCascadingFilters<T extends Partial<BundleInfo>>(rows: T[]) {
+  const [state, setState] = useState<FilterState>({ filters: EMPTY_FILTERS, auto: [] });
+  const [suppress, setSuppress] = useState<FilterKey[]>([]);
+
+  // Rows reloaded (stock refreshed, bundles allocated): drop values that vanished.
+  useEffect(() => {
+    if (!rows.length) return;
+    setState((s) => { const next = reconcileFilters(rows, s, undefined, suppress); return sameState(s, next) ? s : next; });
+  }, [rows, suppress]);
+
+  const setFilter = useCallback((k: FilterKey, v: string) => {
+    const sup = !v && AUTO_FILTER_KEYS.includes(k) ? [k] : [];
+    setSuppress(sup);
+    setState((s) => reconcileFilters(rows, { ...s, filters: { ...s.filters, [k]: v } }, k, sup));
+  }, [rows]);
+  const clear = useCallback(() => { setSuppress([]); setState({ filters: EMPTY_FILTERS, auto: [] }); }, []);
+  const options = useMemo(() => {
+    const o = cascadeOptions(rows, state.filters);
+    // Keep a chosen value listed even while rows are reloading.
+    for (const d of FILTER_FIELDS) {
+      const v = state.filters[d.key];
+      if (v && !o[d.key].some((x) => x.value === v)) o[d.key] = [{ value: v, label: `${v} (0)`, count: 0 }, ...o[d.key]];
+    }
+    return o;
+  }, [rows, state.filters]);
+  const active = FILTER_FIELDS.some((d) => state.filters[d.key]);
+  return { filters: state.filters, auto: state.auto, options, setFilter, clear, active };
+}
+export type CascadingFilters = ReturnType<typeof useCascadingFilters>;
+
+/** The filter dropdowns + "Clear filters" link for a cascading filter set. */
+export function CascadingFilterBar({ cf, width = 'w-36', children }: { cf: CascadingFilters; width?: string; children?: ReactNode }) {
+  return (
+    <div className="mt-2 flex flex-wrap items-end gap-2 border-t border-slate-100 pt-2" data-filter-bar>
+      {FILTER_FIELDS.map((d) => {
+        const isAuto = cf.auto.includes(d.key);
+        return (
+          <Select key={d.key} label={isAuto ? `${d.label} · auto` : d.label} className={width} value={cf.filters[d.key]} placeholder="All"
+            options={cf.options[d.key]} data-filter={d.key} data-auto={isAuto ? '1' : undefined}
+            title={isAuto ? 'Filled in automatically from the other filters — choose All to clear' : undefined}
+            onChange={(e) => cf.setFilter(d.key, e.target.value)} />
+        );
+      })}
+      {children}
+      {cf.active && (
+        <button type="button" data-clear-filters onClick={cf.clear}
+          className="mb-2.5 text-xs font-medium text-brand-600 hover:text-brand-800 hover:underline">Clear filters</button>
+      )}
+    </div>
+  );
+}
+
+/** "Select all shown" / "Clear" links over a checkbox grid. Only touches the shown rows. */
+export function SelectShown<K>({ shown, selected, onChange, disabled }: {
+  shown: K[]; selected: Set<K>; onChange: (next: Set<K>) => void; disabled?: boolean;
+}) {
+  const picked = shown.filter((k) => selected.has(k)).length;
+  return (
+    <span className="flex items-center gap-2 text-xs">
+      <button type="button" data-select-shown disabled={disabled || !shown.length || picked === shown.length}
+        className="font-medium text-brand-600 hover:underline disabled:cursor-not-allowed disabled:text-slate-400"
+        onClick={() => onChange(new Set([...selected, ...shown]))}>Select all shown ({shown.length})</button>
+      {selected.size > 0 && (
+        <button type="button" data-clear-selection disabled={disabled} className="text-slate-500 hover:underline"
+          onClick={() => onChange(new Set())}>Clear selection ({selected.size})</button>
+      )}
+    </span>
+  );
+}
+
+/** Header-checkbox toggle limited to the shown rows (others keep their state). */
+export function toggleShown<K>(selected: Set<K>, shown: K[]): Set<K> {
+  const all = shown.length > 0 && shown.every((k) => selected.has(k));
+  const next = new Set(selected);
+  shown.forEach((k) => (all ? next.delete(k) : next.add(k)));
+  return next;
 }
 
 /** Summary by any key (job / style / colour / size) for the summary tabs. */

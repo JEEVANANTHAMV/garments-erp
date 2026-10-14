@@ -45,6 +45,7 @@ export default function SalesOrdersPage() {
           { value: 'PROJECTION', label: 'Projection' },
           { value: 'DOMESTIC', label: 'Domestic' },
           { value: 'EXPORT', label: 'Export' },
+          { value: 'JOB_WORK', label: 'Job work' },
         ]}
           value={orderType} onChange={(e) => { setOrderType(e.target.value); setPage(1); }} />
         <Select placeholder="All states" options={STATES.map((s) => ({ value: s, label: s.replace(/_/g, ' ') }))}
@@ -111,7 +112,13 @@ export default function SalesOrdersPage() {
             render: (r: any) => <span className="font-medium tabular-nums">
               {r.currency_code} {fmtDecimal(r.total_amount, 2)}</span> },
           { key: 'ship_date', header: 'Ship date', sortable: true, render: (r: any) => fmtDate(r.ship_date) },
-          { key: 'approval_state', header: 'State', render: (r: any) => <StatusBadge value={r.approval_state} /> },
+          { key: 'approval_state', header: 'State', render: (r: any) => (
+            <div>
+              <StatusBadge value={r.approval_state} />
+              {r.closure_type === 'SHORT_CLOSED' && <p className="mt-0.5 text-[10.5px] text-slate-500">Short closed {fmtDate(r.closed_date)}</p>}
+              {Number(r.additional_qty) > 0 && <p className="mt-0.5 text-[10.5px] text-emerald-700">+{fmtNumber(r.additional_qty)} additional</p>}
+              {Number(r.cancelled_qty) > 0 && <p className="mt-0.5 text-[10.5px] text-red-700">−{fmtNumber(r.cancelled_qty)} cancelled</p>}
+            </div>) },
         ]}
         rows={list.data?.data ?? []}
         loading={list.isLoading} error={list.error} onRetry={() => void list.refetch()}

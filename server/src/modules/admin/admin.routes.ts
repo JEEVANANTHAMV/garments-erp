@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { query, queryOne, transaction, txExecute, txQueryOne } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
 import { NotFound, BadRequest, Forbidden, Conflict } from '../../core/errors.js';
-import { requirePermission } from '../../middleware/auth.js';
+import { requirePermission, requireAny } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { env } from '../../config/env.js';
 import { s } from '../resources/schemas.js';
@@ -376,7 +376,18 @@ adminRouter.post('/notifications/read-all', ah(async (req, res) => {
 }));
 
 // ======================================================== SYSTEM SETTINGS
-adminRouter.get('/settings', requirePermission('COMPANY.VIEW'), ah(async (req, res) => {
+/** Menu switches every signed-in user's sidebar needs (MENU_* settings, e.g. MENU_SHOW_LINE_QC) — no admin right needed. */
+adminRouter.get('/ui-flags', ah(async (req, res) => {
+  const rows = await query<{ k: string; v: string | null }>(
+    `SELECT setting_key AS k, setting_value AS v FROM cfg_system_setting
+      WHERE (company_id = ? OR company_id IS NULL) AND setting_key LIKE 'MENU\\_%' ORDER BY company_id IS NULL`, [req.user!.companyId]);
+  const flags: Record<string, boolean> = {};
+  for (const r of rows) if (!(r.k in flags)) flags[r.k] = String(r.v ?? '').trim() === '1';
+  res.json({ data: flags });
+}));
+
+// the Settings menu needs SETTINGS.VIEW, the API used to need COMPANY.VIEW — either opens it
+adminRouter.get('/settings', requireAny('COMPANY.VIEW', 'SETTINGS.VIEW'), ah(async (req, res) => {
   const rows = await query(
     `SELECT id, setting_key AS \`key\`, setting_value AS value, description, is_editable
        FROM cfg_system_setting
@@ -386,7 +397,7 @@ adminRouter.get('/settings', requirePermission('COMPANY.VIEW'), ah(async (req, r
   res.json({ data: rows });
 }));
 
-adminRouter.put('/settings', requirePermission('COMPANY.UPDATE'), ah(async (req, res) => {
+adminRouter.put('/settings', requireAny('COMPANY.UPDATE', 'SETTINGS.UPDATE'), ah(async (req, res) => {
   const { settings } = z.object({
     settings: z.array(z.object({
       key: z.string().trim().min(1),

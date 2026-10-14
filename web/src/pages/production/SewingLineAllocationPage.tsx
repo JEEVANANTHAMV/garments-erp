@@ -12,9 +12,9 @@ import { useToast } from '../../hooks/useToast';
 import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useAuth } from '../../lib/auth';
 import {
-  type Proc, type BundleInfo, PROC_LABEL, PROC_SOURCE, n, pct, groupByJob, JobHeaderRow, SummaryCard, UtilBar, distinct,
-  EMPTY_FILTERS, applyFilters, summarize, SummaryTable, DocumentsModal, DocStatus, printDocument, printRowsByJob,
-  type RowFilters,
+  type Proc, type BundleInfo, PROC_LABEL, PROC_SOURCE, n, pct, groupByJob, JobHeaderRow, SummaryCard, UtilBar,
+  applyFilters, summarize, SummaryTable, DocumentsModal, DocStatus, printDocument, printRowsByJob,
+  useCascadingFilters, CascadingFilterBar, SelectShown, toggleShown,
 } from './linePlanUi';
 
 /**
@@ -75,13 +75,15 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
   const [openLines, setOpenLines] = useState<Set<number>>(new Set());
   const [closedJobs, setClosedJobs] = useState<Set<string>>(new Set());
   const [tab, setTab] = useState('line');
-  const [filters, setFilters] = useState<RowFilters>(EMPTY_FILTERS);
   const [search, setSearch] = useState('');
   const dq = useDebounced(search);
   const [showDocs, setShowDocs] = useState(false);
   const [pickerLine, setPickerLine] = useState<number | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
+
+  const cf = useCascadingFilters(stock);
+  const filters = cf.filters;
 
   const loadStock = useCallback(async (excludeId: number | null, date: string) => {
     setLoading(true);
@@ -351,20 +353,7 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
             <Search size={14} className="mr-1" /> Load Pending
           </Button>
         </div>
-        <div className="mt-2 flex flex-wrap items-end gap-2 border-t border-slate-100 pt-2">
-          {([
-            ['job', 'Job No', distinct(stock, (b) => b.io_no)],
-            ['po', 'PO No', distinct(stock, (b) => b.po_no)],
-            ['style', 'Style No', distinct(stock, (b) => b.style_no)],
-            ['buyer', 'Buyer', distinct(stock, (b) => b.buyer)],
-            ['colour', 'Colour', distinct(stock, (b) => b.colour)],
-            ['size', 'Size', distinct(stock, (b) => b.size)],
-          ] as const).map(([k, lbl, opts]) => (
-            <Select key={k} label={lbl} className="w-36" value={filters[k]} placeholder="All" options={opts as any}
-              onChange={(e) => setFilters((f) => ({ ...f, [k]: e.target.value }))} />
-          ))}
-          {Object.values(filters).some(Boolean) && <Button size="sm" variant="ghost" onClick={() => setFilters(EMPTY_FILTERS)}>Clear filters</Button>}
-        </div>
+        <CascadingFilterBar cf={cf} />
       </Card>
 
       {/* Summary + capacity */}
@@ -414,7 +403,7 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
                         <input type="checkbox" checked={selJobs.has(j.io_no)} onChange={() => setSelJobs((s) => { const x = new Set(s); x.has(j.io_no) ? x.delete(j.io_no) : x.add(j.io_no); return x; })} />
                       </td>
                       <td className="px-2 py-1.5 font-mono font-semibold text-brand-700">
-                        <button className="hover:underline" onClick={() => setFilters((f) => ({ ...f, job: f.job === j.io_no ? '' : j.io_no }))}>{j.io_no}</button>
+                        <button className="hover:underline" onClick={() => cf.setFilter('job', filters.job === j.io_no ? '' : j.io_no)}>{j.io_no}</button>
                       </td>
                       <td className="px-2 py-1.5">{j.buyer || '—'}</td>
                       <td className="px-2 py-1.5">{j.po_no || '—'}</td>
@@ -432,7 +421,9 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
           </Card>
 
           <Card title={`Unallocated Bundles (${PROC_SOURCE[proc]})`}
-            actions={<span className="text-xs text-slate-500">{filtered.length} bundle(s) · {fmtNumber(filtered.reduce((a, b) => a + b.free_qty, 0))} PCS</span>}>
+            actions={<span className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+              <SelectShown shown={filtered.map((b) => b.bundle_id)} selected={selBundles} onChange={setSelBundles} disabled={!editable} />
+              <span>{filtered.length} bundle(s) · {fmtNumber(filtered.reduce((a, b) => a + b.free_qty, 0))} PCS</span></span>}>
             <div className="border-b border-slate-100 p-2">
               <SearchInput value={search} onChange={setSearch} placeholder="Search bundle, barcode, job, style, colour…" className="w-full" />
             </div>
@@ -441,8 +432,8 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
                 <thead className="sticky top-0 z-10 bg-slate-50 text-slate-500">
                   <tr>
                     <th className="w-8 px-2 py-2">
-                      <input type="checkbox" checked={filtered.length > 0 && filtered.every((b) => selBundles.has(b.bundle_id))}
-                        onChange={() => setSelBundles(filtered.every((b) => selBundles.has(b.bundle_id)) ? new Set() : new Set(filtered.map((b) => b.bundle_id)))} />
+                      <input type="checkbox" data-header-check title="Tick / untick every bundle shown (filtered)" checked={filtered.length > 0 && filtered.every((b) => selBundles.has(b.bundle_id))}
+                        onChange={() => setSelBundles((s) => toggleShown(s, filtered.map((b) => b.bundle_id)))} />
                     </th>
                     <th className="px-2 py-2 text-left">Bundle ID</th>
                     <th className="px-2 py-2 text-left">Colour</th>

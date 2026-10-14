@@ -14,6 +14,7 @@ import {
 import {
   linkProcOf, openLineAllocations, releaseLineAllocation, restoreLineAllocations,
   sourceProcOf, lineInfo, lineOpenBundles, recordLineOutput, stitchDcPending, bundleOpenLines, openAllocBundlesSql, type LinkProc,
+  dcRequiresLineAllocation, cameThroughProc,
 } from './lineAllocationLink.js';
 import { postBundleSewingOutput, postCheckingQc } from './productionFloor.routes.js';
 import { dcBillBasis } from './billBasis.js';
@@ -327,6 +328,18 @@ processDcRouter.get('/bundle-stock/available-jobs', requirePermission('PRODUCTIO
   });
 }));
 
+/**
+ * Previous process a checking / ironing / packing DC must follow while line allocation is required
+ * (DC_REQUIRES_LINE_ALLOCATION): checking ← sewing, ironing ← checking, packing ← ironing. null = no rule.
+ */
+async function requiredSourceProc(tx: Tx | null, cid: number, st: StageInfo): Promise<LinkProc | null> {
+  const own = dcLinkProc(st);
+  if (!own || own === 'sewing') return null;
+  const src = lineSourceOf(st);
+  if (!src) return null;
+  return (await dcRequiresLineAllocation(tx, cid)) ? src : null;
+}
+
 async function availableBundles(cid: number, qp: z.infer<typeof availQuery>, onlyIds?: number[]) {
   const st = qp.stage_id ? withSource(await stageInfo(cid, qp.stage_id), qp.source_level) : null;
   const level: Level = st?.level ?? qp.level ?? 'CUT';
@@ -398,7 +411,14 @@ async function availableBundles(cid: number, qp: z.infer<typeof availQuery>, onl
     line_alloc: lineAllocs.get(Number(b.id)) ?? null,
     from_line_open_qty: lineOpen?.get(Number(b.id))?.open_qty ?? null,
   })).filter((b) => qp.include_zero || b.available_qty > 0);
-  return { data, meta: { level, stage: st, from_line: fromLine } };
+  // line allocation required: bundles that skipped the previous process (no line plan, no DC) are not offered
+  const reqSrc = st && !lineOpen ? await requiredSourceProc(null, cid, st) : null;
+  if (reqSrc && data.length) {
+    const through = await cameThroughProc(null, cid, reqSrc, data.map((b) => Number(b.id)));
+    const kept = data.filter((b) => through.has(Number(b.id)));
+    return { data: kept, meta: { level, stage: st, from_line: fromLine, line_allocation_required: reqSrc, hidden_not_through: data.length - kept.length } };
+  }
+  return { data, meta: { level, stage: st, from_line: fromLine, line_allocation_required: reqSrc } };
 }
 
 // ============================================================
@@ -480,7 +500,13 @@ async function loadDc(cid: number, id: number) {
             COALESCE(jl.io_no, cb.io_no) AS job_io_no, lp.lay_no, c.cut_no, cb.status AS stock_stage, op.op_name AS operation_name,
             COALESCE(jl.part_name, cb.part_name) AS part, st.style_code, col.color_name, sz.size_code, sz.sort_order AS size_sort,
             ${DC_PENDING('jl.')} AS pending_qty, cb.allocated_kg, cb.qty AS bundle_full_qty,
-            (SELECT o2.op_name FROM trx_jobwork_receipt_line rl2 JOIN mst_process_operation o2 ON o2.id = rl2.operation_id
+            -- latest inward's "Process completed"; blank there means all of the DC's operations ("All: …")
+            (SELECT CASE WHEN rl2.operation_id IS NOT NULL
+                         THEN (SELECT o2.op_name FROM mst_process_operation o2 WHERE o2.id = rl2.operation_id)
+                         ELSE (SELECT GROUP_CONCAT(o3.op_name ORDER BY o3.sort_order SEPARATOR ', ')
+                                 FROM trx_jobwork_challan_op co3 JOIN mst_process_operation o3 ON o3.id = co3.operation_id
+                                WHERE co3.challan_id = jl.challan_id) END
+               FROM trx_jobwork_receipt_line rl2
               WHERE rl2.challan_line_id = jl.id ORDER BY rl2.id DESC LIMIT 1) AS done_operation_name,
             cb.balance_qty, cb.sew_in_qty, cb.sew_good_qty, cb.sew_reject_qty, cb.fin_in_qty, cb.fin_good_qty,
             cb.fin_reject_qty, cb.qc_pass_qty, cb.qc_reject_qty, cb.packed_qty, cb.cut_loss_qty, cb.sewn_loss_qty,
@@ -704,10 +730,16 @@ async function prepareLines(tx: Tx, cid: number, st: StageInfo, lines: z.infer<t
   const contractorPending = anySewLine || st.level === 'WIP' ? await stitchDcPending(tx, cid, ids) : new Map<number, number>();
   const out: PreparedLine[] = [];
   const problems: string[] = [];
+  const reqSrc = lineOpen ? null : await requiredSourceProc(tx, cid, st);
+  const through = reqSrc ? await cameThroughProc(tx, cid, reqSrc, ids) : null;
   for (const id of ids) {
     const b = await lockBundle(tx, cid, { id });
     const l = byId.get(id)!;
     if (TERMINAL.includes(b.status)) { problems.push(`${b.bundle_no} is ${b.status}`); continue; }
+    if (through && !through.has(id)) {
+      problems.push(`${b.bundle_no} has not come through ${reqSrc} — allocate it to a ${reqSrc} line (or receive it from a ${reqSrc} DC) first`);
+      continue;
+    }
     if (!b.style_id) { problems.push(`${b.bundle_no} has no style`); continue; }
     if (holds.has(id)) { problems.push(`${b.bundle_no} is already on open ${st.stage_name} DC ${holds.get(id)}`); continue; }
     const la = lineAllocs.get(id);
@@ -1099,7 +1131,8 @@ const receiptSchema = z.object({
   gate_inward_id: s.id(),
   party_dc_no: s.nullableStr(60),
   party_dc_date: s.date(),
-  to_warehouse_id: s.id(),
+  // receiving store is compulsory (call 14-Oct-2026); the screen defaults it to the DC's to-location
+  to_warehouse_id: s.idReq(),
   vehicle_no: s.nullableStr(30),
   ref_no: s.nullableStr(60),
   inward_group_no: s.nullableStr(40),
@@ -1246,6 +1279,17 @@ export async function postReceipt(tx: Tx, req: Request, dc: any, body: z.infer<t
         if (pass > 0) await postCheckingQc(tx, req, p.line.bundle_id, { date: body.receipt_date, line_name: ln?.line_code ?? 'CHECKING', good: pass, reject: 0, rework: 0, remarks: ref });
       }
       await recordLineOutput(tx, req, proc, Number(p.line.own_line_id), p.line.bundle_id, p.good, body.receipt_date, ref);
+    } else if (p.line.bundle_id && p.good > 0 && dcLinkProc(st) === 'checking') {
+      // Checking done on a contractor / unit DC is checking done: the good PCS received back are checking-passed,
+      // exactly as if entered on a checking line — else ironing (strict checking) never sees them (call 14-Oct-2026).
+      const ready = bundleAvail(await lockBundle(tx, cid, { id: p.line.bundle_id })).checking;
+      const pass = Math.min(p.good, ready);
+      if (pass > 0) {
+        await postCheckingQc(tx, req, p.line.bundle_id, {
+          date: body.receipt_date, line_name: String(dc.vendor_name ?? 'CHECKING DC').slice(0, 60), good: pass, reject: 0, rework: 0,
+          remarks: `${st.stage_name} inward ${receiptNo} vs DC ${dc.challan_no}`,
+        });
+      }
     }
     // unprocessed PCS returned: back to our stock at the level they left (doc §14, a separate stock movement)
     if (p.line.bundle_id && p.ret > 0) {

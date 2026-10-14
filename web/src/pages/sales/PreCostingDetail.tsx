@@ -3,8 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Save, RefreshCw, CheckCircle,
-  Plus, Trash2
+  Plus, Trash2, BadgeCheck
 } from 'lucide-react';
+import { CERTIFICATIONS, TRIM_CERTIFICATIONS } from '../../lib/certifications';
 import { http, ApiError } from '../../lib/api';
 import { useLookup, useStatuses, toOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
@@ -44,6 +45,65 @@ const OTHER_BASIS_OPTIONS = [
   { value: 'PCT_FOB', label: '% of FOB' },
   { value: 'PCT_DIRECT', label: '% of Direct' },
 ];
+
+/** Certification dropdowns on the Fabric / Yarn / Trims rows (client call 14-Oct-2026). */
+const certOptions = (list: { value: string; label: string }[]) => [
+  { value: '', label: '—' },
+  ...list.map((c) => ({ value: c.value, label: c.value === 'NONE' ? 'None' : c.value })),
+];
+const CERT_OPTIONS = certOptions(CERTIFICATIONS);
+const TRIM_CERT_OPTIONS = certOptions(TRIM_CERTIFICATIONS);
+const EMB_TYPE_OPTIONS = [
+  { value: 'PRINTING', label: 'Printing' },
+  { value: 'EMBROIDERY', label: 'Embroidery' },
+];
+
+type CertGroup = { certification: string; materials: { type: 'FABRIC' | 'YARN' | 'TRIM'; name: string }[] };
+/**
+ * "Certifications required" of the sheet — every Fabric / Yarn / Trim row with a
+ * certification other than None, grouped by certification. Saved as data_json
+ * `cert_summary`; the cost roll-up never reads it. Mirrors certSummary() in
+ * server/src/modules/costing/preCostingCalc.ts.
+ */
+function certSummary(dj: { fabrics?: any[]; yarns?: any[]; trims?: any[] }): CertGroup[] {
+  const out = new Map<string, CertGroup>();
+  const add = (type: CertGroup['materials'][number]['type'], rows: any[] | undefined, name: (r: any) => unknown) => {
+    for (const r of Array.isArray(rows) ? rows : []) {
+      const cert = String(r?.certification ?? '').trim().toUpperCase();
+      if (!cert || cert === 'NONE') continue;
+      const nm = String(name(r) ?? '').trim() || `${type.toLowerCase()} row`;
+      const g = out.get(cert) ?? { certification: cert, materials: [] };
+      if (!g.materials.some((m) => m.type === type && m.name === nm)) g.materials.push({ type, name: nm });
+      out.set(cert, g);
+    }
+  };
+  add('FABRIC', dj.fabrics, (r) => r?.fabric_name || r?.component);
+  add('YARN', dj.yarns, (r) => r?.yarn_name || r?.yarn_count);
+  add('TRIM', dj.trims, (r) => r?.description || r?.trim_code);
+  return [...out.values()].sort((a, b) => a.certification.localeCompare(b.certification));
+}
+
+/**
+ * Rows from a grid whose master-pick column changed: fill the row from the master
+ * (name, rate, certification …). Rows are matched by position (same length only —
+ * a delete never re-fills).
+ */
+function withMasterPick(next: any[], prev: any[], idKey: string, fill: (row: any, id: string) => any) {
+  if (next.length !== prev.length) return next;
+  return next.map((r, i) => {
+    const id = String(r?.[idKey] ?? '');
+    return id && id !== String(prev[i]?.[idKey] ?? '') ? fill(r, id) : r;
+  });
+}
+
+/** "Add …" button shown above a long grid (the grid has its own at the bottom). */
+function TopAddButton({ label, onClick, testId }: { label: string; onClick: () => void; testId?: string }) {
+  return (
+    <button type="button" data-add-top={testId} className="btn-secondary btn-xs flex items-center gap-1" onClick={onClick}>
+      <Plus size={13} /> {label}
+    </button>
+  );
+}
 
 /** Process type for a row saved before the type column existed. */
 const inferProcessType = (row: any) => {
@@ -86,6 +146,15 @@ export default function PreCostingDetailPage() {
   const buyers = useLookup('buyers');
   const currencies = useLookup('currencies');
   const fabricMaster = useLookup('fabrics');
+  const yarnMaster = useLookup('yarns');
+  const trimMaster = useLookup('trims');
+  // Certification of each material master (fabric / yarn from their base) — the row default.
+  const materialCerts = useQuery({
+    queryKey: ['pre-costings', 'material-certs'],
+    queryFn: async () => (await http.get<{ data: { fabrics: Record<string, string>; yarns: Record<string, string>; trims: Record<string, string> } }>('/pre-costings/material-certs')).data,
+    staleTime: 60 * 1000,
+  });
+  const certOf = (kind: 'fabrics' | 'yarns' | 'trims', id: unknown) => (id ? materialCerts.data?.[kind]?.[String(id)] ?? '' : '');
   const costingStatuses = useStatuses('COSTING');
   // Keys of data_json this screen does not own (e.g. the Classic sheet's `classic` block)
   // are kept so saving here never wipes them.
@@ -369,6 +438,82 @@ export default function PreCostingDetailPage() {
       : { basis: 'PER_PIECE', rate: stored.overhead_cost ?? 0, pct: 5.0 });
   }, [costingQuery.data]);
 
+  // Rows saved / defaulted before the Certification column existed take the master's certification.
+  useEffect(() => {
+    if (!materialCerts.data) return;
+    const fill = (kind: 'fabrics' | 'yarns' | 'trims', idKey: string) => (prev: any[]) => {
+      let changed = false;
+      const next = prev.map((r) => {
+        if (r?.certification !== undefined || !r?.[idKey]) return r;
+        changed = true;
+        return { ...r, certification: certOf(kind, r[idKey]) };
+      });
+      return changed ? next : prev;
+    };
+    setFabrics(fill('fabrics', 'fabric_id'));
+    setYarns(fill('yarns', 'yarn_id'));
+    setTrims(fill('trims', 'trim_id'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [materialCerts.data, costingQuery.data]);
+
+  const newFabricRow = () => ({
+    _key: `fab_${Date.now()}`,
+    component: 'Body',
+    fabric_id: '',
+    fabric_name: '',
+    color: 'Assorted',
+    size: 'All',
+    consumption: 0.20,
+    wastage_pct: 5,
+    rate: 420,
+    amount: 88.2,
+    rate_source: 'Manual Rate',
+    certification: '',
+  });
+  const newYarnRow = () => ({
+    yarn_id: '', yarn_count: '', yarn_name: '', composition: '100% Cotton',
+    consumption: 0.15, wastage_pct: 3, rate: '', rate_source: 'Manual Rate', certification: '',
+  });
+  const newTrimRow = () => ({
+    trim_id: '', trim_code: '', description: '', size: 'Standard', color: '',
+    consumption: 1, uom: 'Nos', wastage_pct: 2, rate: '', certification: '',
+  });
+  const newEmbRow = () => ({ type: 'PRINTING', method: '', artwork: '', position: '', colors: '', rate: '' });
+  /** Append a row from the top "Add" button (the grid's own button is at the bottom). */
+  const addTop = (setter: (fn: (prev: any[]) => any[]) => void, gridId: string, row: any) =>
+    setter((prev) => [...prev, { _key: `${gridId}_${Date.now()}`, ...row }]);
+
+  const pickYarn = (row: any, id: string) => {
+    const m: any = yarnMaster.data?.find((y) => String(y.id) === id);
+    if (!m) return row;
+    const std = Number(m.std_rate) || 0;
+    return {
+      ...row,
+      yarn_name: m.label,
+      yarn_count: m.count_value ? `${m.count_value}${m.count_type ? ` ${m.count_type}` : ''}` : row.yarn_count,
+      rate: std > 0 ? std : row.rate,
+      rate_source: std > 0 ? 'Yarn Master Std Rate' : row.rate_source,
+      certification: certOf('yarns', id) || row.certification || '',
+    };
+  };
+  const pickTrim = (row: any, id: string) => {
+    const m: any = trimMaster.data?.find((t) => String(t.id) === id);
+    if (!m) return row;
+    const std = Number(m.std_rate) || 0;
+    return {
+      ...row,
+      trim_code: m.code ?? row.trim_code,
+      description: m.label,
+      uom: m.base_uom || row.uom,
+      rate: std > 0 ? std : row.rate,
+      certification: certOf('trims', id) || row.certification || '',
+    };
+  };
+  const masterOptions = (items: any[] | undefined, manual: string) => [
+    { value: '', label: manual },
+    ...(items ?? []).map((m) => ({ value: String(m.id), label: m.code ? `${m.code} — ${m.label}` : String(m.label) })),
+  ];
+
   // Load Style BOM & Rates
   const handleLoadStyleBOM = async (styleIdOverride?: string) => {
     const sId = styleIdOverride || head.style_id;
@@ -435,6 +580,7 @@ export default function PreCostingDetailPage() {
             rate: rate,
             amount: cons * (1 + wastage / 100) * rate,
             rate_source: l.rate_source || 'Style BOM',
+            certification: l.certification || '',
           });
         } else if (l.material_type === 'TRIM') {
           const cons = perGarment(l) || 1;
@@ -452,6 +598,7 @@ export default function PreCostingDetailPage() {
             wastage_pct: wastage,
             rate: rate,
             amount: cons * (1 + wastage / 100) * rate,
+            certification: l.certification || '',
           });
         } else if (l.material_type === 'YARN') {
           const cons = perGarment(l) || 0.23;
@@ -467,6 +614,7 @@ export default function PreCostingDetailPage() {
             rate: rate,
             amount: cons * 1.03 * rate,
             rate_source: l.rate_source || 'Style BOM',
+            certification: l.certification || '',
           });
         }
       });
@@ -502,6 +650,8 @@ export default function PreCostingDetailPage() {
     useFlatSewingRate,
     flatSewingRate,
     flatSewingDesc,
+    // Certification requirement summary ("generate certificate" on save) — not used by the calc.
+    cert_summary: certSummary({ fabrics, yarns, trims }),
   }), [fabrics, yarns, trims, embellishments, processes, cuttingOps, sewingOps, finishingItems,
     otherDirect, overhead, useYarnRecipe, useFlatSewingRate, flatSewingRate, flatSewingDesc]);
 
@@ -846,30 +996,7 @@ export default function PreCostingDetailPage() {
                   />
                   <span>Derive from In-House Yarn Recipe</span>
                 </label>
-                <button
-                  type="button"
-                  className="btn-secondary btn-xs flex items-center gap-1"
-                  onClick={() => {
-                    setFabrics([
-                      ...fabrics,
-                      {
-                        _key: `fab_${Date.now()}`,
-                        component: 'Body',
-                        fabric_id: '',
-                        fabric_name: '',
-                        color: 'Assorted',
-                        size: 'All',
-                        consumption: 0.20,
-                        wastage_pct: 5,
-                        rate: 420,
-                        amount: 88.2,
-                        rate_source: 'Manual Rate',
-                      },
-                    ]);
-                  }}
-                >
-                  <Plus size={13} /> Add Fabric Line
-                </button>
+                <TopAddButton testId="fabric" label="Add Fabric Line" onClick={() => setFabrics((prev) => [...prev, newFabricRow()])} />
               </div>
             </div>
 
@@ -886,6 +1013,7 @@ export default function PreCostingDetailPage() {
                     <th className="py-2.5 px-3">Component</th>
                     <th className="py-2.5 px-3">Fabric Description</th>
                     <th className="py-2.5 px-3">Color</th>
+                    <th className="py-2.5 px-3">Certification</th>
                     <th className="py-2.5 px-3 text-right">Cons/Pc (KG)</th>
                     <th className="py-2.5 px-3 text-right">Wastage %</th>
                     <th className="py-2.5 px-3 text-right">Gross Cons</th>
@@ -901,7 +1029,18 @@ export default function PreCostingDetailPage() {
                     const lineAmt = gross * (Number(f.rate) || 0);
                     return (
                       <tr key={f._key || i}>
-                        <td className="py-2 px-3 font-sans font-semibold text-slate-800">{f.component}</td>
+                        <td className="py-1 px-2 font-sans">
+                          <input
+                            type="text"
+                            value={f.component ?? ''}
+                            placeholder="Component"
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setFabrics((prev) => prev.map((row, idx) => idx === i ? { ...row, component: val } : row));
+                            }}
+                            className="w-28 rounded border border-slate-200 px-1.5 py-0.5 text-xs font-semibold text-slate-800"
+                          />
+                        </td>
                         <td className="py-2 px-3 font-sans font-bold text-slate-900 min-w-[220px]">
                           <FabricPicker
                             fabricId={f.fabric_id}
@@ -915,11 +1054,35 @@ export default function PreCostingDetailPage() {
                                 fabric_name: m.label,
                                 rate: stdRate > 0 ? stdRate : row.rate,
                                 rate_source: stdRate > 0 ? 'Fabric Master Std Rate' : row.rate_source,
+                                certification: certOf('fabrics', m.id) || row.certification || '',
                               } : row));
                             }}
                           />
                         </td>
-                        <td className="py-2 px-3 font-sans text-slate-600">{f.color}</td>
+                        <td className="py-1 px-2 font-sans">
+                          <input
+                            type="text"
+                            value={f.color ?? ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setFabrics((prev) => prev.map((row, idx) => idx === i ? { ...row, color: val } : row));
+                            }}
+                            className="w-24 rounded border border-slate-200 px-1.5 py-0.5 text-xs text-slate-600"
+                          />
+                        </td>
+                        <td className="py-1 px-2 font-sans">
+                          <select
+                            data-cert-fabric={i}
+                            value={f.certification ?? ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setFabrics((prev) => prev.map((row, idx) => idx === i ? { ...row, certification: val } : row));
+                            }}
+                            className="w-28 rounded border border-slate-200 px-1.5 py-0.5 text-xs"
+                          >
+                            {CERT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          </select>
+                        </td>
                         <td className="py-2 px-3 text-right">
                           <input
                             type="number"
@@ -980,12 +1143,17 @@ export default function PreCostingDetailPage() {
                 </tbody>
                 <tfoot className="bg-slate-50 font-bold border-t border-slate-200">
                   <tr>
-                    <td colSpan={7} className="py-2.5 px-3 text-right font-sans">Total Fabric Cost Per Piece:</td>
+                    <td colSpan={8} className="py-2.5 px-3 text-right font-sans">Total Fabric Cost Per Piece:</td>
                     <td className="py-2.5 px-3 text-right text-brand-900 font-black">₹{totalFabricCostPerPc.toFixed(2)}</td>
                     <td colSpan={2} />
                   </tr>
                 </tfoot>
               </table>
+            </div>
+            <div className="flex justify-end">
+              <button type="button" className="btn-secondary btn-xs flex items-center gap-1" onClick={() => setFabrics((prev) => [...prev, newFabricRow()])}>
+                <Plus size={13} /> Add Fabric Line
+              </button>
             </div>
           </div>
         )}
@@ -997,74 +1165,36 @@ export default function PreCostingDetailPage() {
               <div>
                 <h3 className="text-sm font-bold text-slate-900">Yarn Recipe Breakdown (In-House Fabric)</h3>
                 <p className="text-xs text-slate-500">
-                  Derive spinning/knitting costs from Yarn Counts, Wastage % and Approved Supplier Quotes
+                  Pick a yarn from the master (rate and certification default from it) or type a manual line. Cost = Cons × (1 + Wastage %) × Rate.
                 </p>
               </div>
-              <button
-                type="button"
-                className="btn-secondary btn-xs flex items-center gap-1"
-                onClick={() => {
-                  setYarns([
-                    ...yarns,
-                    {
-                      _key: `yrn_${Date.now()}`,
-                      yarn_count: '24s Combed',
-                      yarn_name: 'Cotton Yarn',
-                      composition: '100% Cotton',
-                      consumption: 0.15,
-                      wastage_pct: 3,
-                      rate: 265,
-                      amount: 40.94,
-                    },
-                  ]);
-                }}
-              >
-                <Plus size={13} /> Add Yarn Line
-              </button>
+              <TopAddButton testId="yarns" label="Add Yarn Line" onClick={() => addTop(setYarns, 'yarns', newYarnRow())} />
             </div>
-
-            <div className="overflow-x-auto rounded-lg border border-slate-200">
-              <table className="w-full text-left text-xs font-mono">
-                <thead className="bg-slate-50 text-slate-700 font-sans font-bold border-b border-slate-200">
-                  <tr>
-                    <th className="py-2.5 px-3">Yarn Count</th>
-                    <th className="py-2.5 px-3">Description</th>
-                    <th className="py-2.5 px-3">Composition</th>
-                    <th className="py-2.5 px-3 text-right">Cons / Pc (KG)</th>
-                    <th className="py-2.5 px-3 text-right">Wastage %</th>
-                    <th className="py-2.5 px-3 text-right">Rate / KG (₹)</th>
-                    <th className="py-2.5 px-3 text-right">Cost / Pc (₹)</th>
-                    <th className="py-2.5 px-2 text-center">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {yarns.map((y, i) => {
-                    const gross = (Number(y.consumption) || 0) * (1 + (Number(y.wastage_pct) || 0) / 100);
-                    const lineAmt = gross * (Number(y.rate) || 0);
-                    return (
-                      <tr key={y._key || i}>
-                        <td className="py-2 px-3 font-sans font-bold text-brand-700">{y.yarn_count}</td>
-                        <td className="py-2 px-3 font-sans text-slate-900">{y.yarn_name}</td>
-                        <td className="py-2 px-3 font-sans text-slate-600">{y.composition}</td>
-                        <td className="py-2 px-3 text-right">{y.consumption} kg</td>
-                        <td className="py-2 px-3 text-right">{y.wastage_pct}%</td>
-                        <td className="py-2 px-3 text-right font-bold">₹{y.rate}</td>
-                        <td className="py-2 px-3 text-right font-black text-brand-900">₹{lineAmt.toFixed(2)}</td>
-                        <td className="py-2 px-2 text-center">
-                          <button
-                            type="button"
-                            className="text-slate-400 hover:text-rose-600"
-                            onClick={() => setYarns(yarns.filter((_, idx) => idx !== i))}
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <PreCostingRowTable
+              gridId="yarns"
+              rows={yarns}
+              onChange={(rows) => setYarns((prev) => withMasterPick(rows, prev, 'yarn_id', pickYarn))}
+              columns={[
+                { key: 'yarn_id', label: 'Yarn (master)', type: 'select', options: masterOptions(yarnMaster.data, '— manual —'), width: 'w-44' },
+                { key: 'yarn_name', label: 'Description', type: 'text', placeholder: 'e.g. 30s Combed Cotton' },
+                { key: 'yarn_count', label: 'Count', type: 'text', width: 'w-24' },
+                { key: 'composition', label: 'Composition', type: 'text', width: 'w-28' },
+                { key: 'certification', label: 'Certification', type: 'select', options: CERT_OPTIONS, width: 'w-24' },
+                { key: 'consumption', label: 'Cons / Pc (KG)', type: 'number', step: '0.001', width: 'w-20' },
+                { key: 'wastage_pct', label: 'Wastage %', type: 'number', step: '0.5', width: 'w-16' },
+                { key: 'rate', label: 'Rate / KG (₹)', type: 'number', step: '0.01', width: 'w-20' },
+              ]}
+              newRow={newYarnRow}
+              amount={(r) => (Number(r.consumption) || 0) * (1 + (Number(r.wastage_pct) || 0) / 100) * (Number(r.rate) || 0)}
+              totalLabel="Total Yarn Cost Per Piece:"
+              total={useYarnRecipe ? totalYarnCostPerPc : yarns.reduce((a, r) => a + (Number(r.consumption) || 0) * (1 + (Number(r.wastage_pct) || 0) / 100) * (Number(r.rate) || 0), 0)}
+              addLabel="Add Yarn Line"
+            />
+            {!useYarnRecipe && (
+              <div className="rounded-lg bg-slate-50 border border-slate-200 p-2.5 text-xs text-slate-600">
+                Yarn recipe is off (Fabric tab): these lines are kept for reference and certification, but the fabric rows carry the cost.
+              </div>
+            )}
           </div>
         )}
 
@@ -1074,82 +1204,33 @@ export default function PreCostingDetailPage() {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold text-slate-900">Trims & Accessories</h3>
-                <p className="text-xs text-slate-500">Labels, Buttons, Zippers, Hangtags, Sewing Threads</p>
+                <p className="text-xs text-slate-500">
+                  Labels, buttons, zippers, hangtags, threads — add as many lines as the style needs. Pick from the master (rate and certification default) or type a manual line.
+                </p>
               </div>
-              <button
-                type="button"
-                className="btn-secondary btn-xs flex items-center gap-1"
-                onClick={() => {
-                  setTrims([
-                    ...trims,
-                    {
-                      _key: `trm_${Date.now()}`,
-                      trim_code: 'TR-NEW',
-                      description: 'New Trim Item',
-                      size: 'Standard',
-                      color: 'Black',
-                      consumption: 1,
-                      uom: 'Nos',
-                      wastage_pct: 2,
-                      rate: 1.5,
-                      amount: 1.53,
-                    },
-                  ]);
-                }}
-              >
-                <Plus size={13} /> Add Trim Line
-              </button>
+              <TopAddButton testId="trims" label="Add Trim Line" onClick={() => addTop(setTrims, 'trims', newTrimRow())} />
             </div>
-
-            <div className="overflow-x-auto rounded-lg border border-slate-200">
-              <table className="w-full text-left text-xs font-mono">
-                <thead className="bg-slate-50 text-slate-700 font-sans font-bold border-b border-slate-200">
-                  <tr>
-                    <th className="py-2.5 px-3">Code</th>
-                    <th className="py-2.5 px-3">Description</th>
-                    <th className="py-2.5 px-3">UOM</th>
-                    <th className="py-2.5 px-3 text-right">Cons / Pc</th>
-                    <th className="py-2.5 px-3 text-right">Wastage %</th>
-                    <th className="py-2.5 px-3 text-right">Rate (₹)</th>
-                    <th className="py-2.5 px-3 text-right">Amount (₹)</th>
-                    <th className="py-2.5 px-2 text-center">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {trims.map((t, i) => {
-                    const gross = (Number(t.consumption) || 0) * (1 + (Number(t.wastage_pct) || 0) / 100);
-                    const lineAmt = gross * (Number(t.rate) || 0);
-                    return (
-                      <tr key={t._key || i}>
-                        <td className="py-2 px-3 font-bold text-brand-700">{t.trim_code}</td>
-                        <td className="py-2 px-3 font-sans font-semibold text-slate-900">{t.description}</td>
-                        <td className="py-2 px-3 font-sans text-slate-600">{t.uom}</td>
-                        <td className="py-2 px-3 text-right">{t.consumption}</td>
-                        <td className="py-2 px-3 text-right">{t.wastage_pct}%</td>
-                        <td className="py-2 px-3 text-right font-bold">₹{t.rate}</td>
-                        <td className="py-2 px-3 text-right font-black text-brand-900">₹{lineAmt.toFixed(2)}</td>
-                        <td className="py-2 px-2 text-center">
-                          <button
-                            type="button"
-                            className="text-slate-400 hover:text-rose-600"
-                            onClick={() => setTrims(trims.filter((_, idx) => idx !== i))}
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-                <tfoot className="bg-slate-50 font-bold border-t border-slate-200">
-                  <tr>
-                    <td colSpan={6} className="py-2.5 px-3 text-right font-sans">Total Trims Cost Per Piece:</td>
-                    <td className="py-2.5 px-3 text-right text-brand-900 font-black">₹{totalTrimsCostPerPc.toFixed(2)}</td>
-                    <td />
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
+            <PreCostingRowTable
+              gridId="trims"
+              rows={trims}
+              onChange={(rows) => setTrims((prev) => withMasterPick(rows, prev, 'trim_id', pickTrim))}
+              columns={[
+                { key: 'trim_id', label: 'Trim (master)', type: 'select', options: masterOptions(trimMaster.data, '— manual —'), width: 'w-44' },
+                { key: 'trim_code', label: 'Code', type: 'text', width: 'w-24' },
+                { key: 'description', label: 'Description', type: 'text', placeholder: 'e.g. Woven main label' },
+                { key: 'uom', label: 'UOM', type: 'text', width: 'w-14' },
+                { key: 'certification', label: 'Certification', type: 'select', options: TRIM_CERT_OPTIONS, width: 'w-24' },
+                { key: 'consumption', label: 'Cons / Pc', type: 'number', step: '0.001', width: 'w-20' },
+                { key: 'wastage_pct', label: 'Wastage %', type: 'number', step: '0.5', width: 'w-16' },
+                { key: 'rate', label: 'Rate (₹)', type: 'number', step: '0.01', width: 'w-20' },
+              ]}
+              newRow={newTrimRow}
+              amount={(r) => (Number(r.consumption) || 0) * (1 + (Number(r.wastage_pct) || 0) / 100) * (Number(r.rate) || 0)}
+              amountLabel="Amount (₹)"
+              totalLabel="Total Trims Cost Per Piece:"
+              total={totalTrimsCostPerPc}
+              addLabel="Add Trim Line"
+            />
           </div>
         )}
 
@@ -1159,62 +1240,28 @@ export default function PreCostingDetailPage() {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold text-slate-900">Printing & Embroidery Embellishments</h3>
-                <p className="text-xs text-slate-500">Artwork, Screen/Rotary Printing, Multi-head Embroidery</p>
+                <p className="text-xs text-slate-500">Artwork, screen / rotary printing, multi-head embroidery — rate per piece. Embroidery rows → Embroidery head, the rest → Printing.</p>
               </div>
-              <button
-                type="button"
-                className="btn-secondary btn-xs flex items-center gap-1"
-                onClick={() => {
-                  setEmbellishments([
-                    ...embellishments,
-                    {
-                      _key: `emb_${Date.now()}`,
-                      type: 'PRINTING',
-                      method: 'Chest Print',
-                      artwork: 'New Design',
-                      position: 'Chest',
-                      colors: 2,
-                      rate: 5.0,
-                    },
-                  ]);
-                }}
-              >
-                <Plus size={13} /> Add Embellishment
-              </button>
+              <TopAddButton testId="emb" label="Add Embellishment" onClick={() => addTop(setEmbellishments, 'emb', newEmbRow())} />
             </div>
-
-            <div className="overflow-x-auto rounded-lg border border-slate-200">
-              <table className="w-full text-left text-xs font-mono">
-                <thead className="bg-slate-50 text-slate-700 font-sans font-bold border-b border-slate-200">
-                  <tr>
-                    <th className="py-2.5 px-3">Type</th>
-                    <th className="py-2.5 px-3">Artwork / Description</th>
-                    <th className="py-2.5 px-3">Position</th>
-                    <th className="py-2.5 px-3 text-right">Rate / Pc (₹)</th>
-                    <th className="py-2.5 px-2 text-center">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {embellishments.map((e, i) => (
-                    <tr key={e._key || i}>
-                      <td className="py-2 px-3 font-sans font-bold text-brand-700">{e.type}</td>
-                      <td className="py-2 px-3 font-sans text-slate-900">{e.artwork}</td>
-                      <td className="py-2 px-3 font-sans text-slate-600">{e.position}</td>
-                      <td className="py-2 px-3 text-right font-black text-slate-900">₹{fmtDecimal(e.rate, 2)}</td>
-                      <td className="py-2 px-2 text-center">
-                        <button
-                          type="button"
-                          className="text-slate-400 hover:text-rose-600"
-                          onClick={() => setEmbellishments(embellishments.filter((_, idx) => idx !== i))}
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <PreCostingRowTable
+              gridId="emb"
+              rows={embellishments}
+              onChange={setEmbellishments}
+              columns={[
+                { key: 'type', label: 'Type → Head', type: 'select', options: EMB_TYPE_OPTIONS, width: 'w-32' },
+                { key: 'method', label: 'Method', type: 'text', placeholder: 'e.g. Screen Print', width: 'w-32' },
+                { key: 'artwork', label: 'Artwork / Description', type: 'text', placeholder: 'e.g. Chest logo 3 colours' },
+                { key: 'position', label: 'Position', type: 'text', width: 'w-28' },
+                { key: 'colors', label: 'Colours', type: 'number', step: '1', width: 'w-14' },
+                { key: 'rate', label: 'Rate / Pc (₹)', type: 'number', step: '0.01', width: 'w-20' },
+              ]}
+              newRow={newEmbRow}
+              amount={(r) => Number(r.rate) || 0}
+              totalLabel="Total Printing & Embroidery Per Piece:"
+              total={H.printing_cost + H.embroidery_cost}
+              addLabel="Add Embellishment"
+            />
           </div>
         )}
 
@@ -1294,6 +1341,7 @@ export default function PreCostingDetailPage() {
                 <div className="flex items-center justify-between p-2 rounded bg-slate-50 border border-slate-200 text-xs">
                   <span>SMV Calculation: Total SMV ({totalSmv.toFixed(2)} mins) × Rate/Min</span>
                   <div className="flex items-center gap-2">
+                    <TopAddButton testId="sewing" label="Add Operation" onClick={addSewingOp} />
                     <span className="font-bold">Rate / Min (₹):</span>
                     <input
                       type="number"
@@ -1373,7 +1421,7 @@ export default function PreCostingDetailPage() {
                 </tfoot>
               </table>
               <div className="flex items-center justify-between text-[11px] text-slate-500">
-                <span>Press Enter in the last row's SMV to add the next operation.</span>
+                <span>Press Enter in the last row's SMV to add the next operation. Name operations as in Process &amp; Operations (Power Table, Singer …) so the Job Rate Card can load these rates.</span>
                 <button type="button" className="btn-secondary btn-xs flex items-center gap-1" onClick={addSewingOp}>
                   <Plus size={13} /> Add Operation
                 </button>
@@ -1504,6 +1552,39 @@ export default function PreCostingDetailPage() {
                 </div>
               </div>
             </div>
+
+            {/* Certification requirement summary (saved as data_json.cert_summary) */}
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-4" id="pc-cert-summary">
+              <div className="flex items-center gap-2">
+                <BadgeCheck size={16} className="text-emerald-700" />
+                <h4 className="font-bold text-sm text-emerald-950">Certifications required</h4>
+              </div>
+              <p className="mt-0.5 text-[11px] text-emerald-800">
+                From the Certification column of the Fabric, Yarn and Trims rows. Saved with the costing; source certified materials for each.
+              </p>
+              {sheetJson.cert_summary.length === 0 ? (
+                <p className="mt-2 text-xs text-slate-500">No certified material on this sheet.</p>
+              ) : (
+                <table className="mt-2 w-full text-left text-xs">
+                  <thead className="text-slate-500"><tr><th className="py-1 pr-3 w-32">Certification</th><th className="py-1">Materials</th></tr></thead>
+                  <tbody className="divide-y divide-emerald-100">
+                    {sheetJson.cert_summary.map((g) => (
+                      <tr key={g.certification} data-cert={g.certification}>
+                        <td className="py-1.5 pr-3 font-bold text-emerald-900">{g.certification}</td>
+                        <td className="py-1.5">
+                          {g.materials.map((m, i) => (
+                            <span key={`${m.type}-${m.name}`}>
+                              {i > 0 && ', '}
+                              <span className="text-slate-500">{m.type === 'FABRIC' ? 'Fabric' : m.type === 'YARN' ? 'Yarn' : 'Trim'}</span> {m.name}
+                            </span>
+                          ))}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
         )}
 
@@ -1522,6 +1603,7 @@ export default function PreCostingDetailPage() {
                 <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1">Knitting ₹{H.knitting_cost.toFixed(2)}</span>
                 <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1">Dyeing ₹{H.dyeing_cost.toFixed(2)}</span>
                 <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1">Washing/Other ₹{H.washing_cost.toFixed(2)}</span>
+                <TopAddButton testId="processes" label="Add Process" onClick={() => addTop(setProcesses, 'processes', { process_name: '', process_type: 'DYEING', basis: 'PER_KG', consumption: '', rate: '' })} />
               </div>
             </div>
             <PreCostingRowTable
@@ -1552,9 +1634,12 @@ export default function PreCostingDetailPage() {
         {/* TAB 6: CUTTING */}
         {activeTab === 'Cutting' && (
           <div className="space-y-4">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900">Cutting Operations</h3>
-              <p className="text-xs text-slate-500">Spreading, cutting, numbering / bundling — rate per piece. Total → Cutting head.</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Cutting Operations</h3>
+                <p className="text-xs text-slate-500">Spreading, cutting, numbering / bundling — rate per piece. Total → Cutting head.</p>
+              </div>
+              <TopAddButton testId="cutting" label="Add Operation" onClick={() => addTop(setCuttingOps, 'cutting', { operation: '', rate: '' })} />
             </div>
             <PreCostingRowTable
               gridId="cutting"
@@ -1586,6 +1671,7 @@ export default function PreCostingDetailPage() {
               <div className="flex gap-2 font-mono text-[11px]">
                 <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1">Finishing ₹{finishingCostPerPc.toFixed(2)}</span>
                 <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1">Packing ₹{packingCostPerPc.toFixed(2)}</span>
+                <TopAddButton testId="finishing" label="Add Item" onClick={() => addTop(setFinishingItems, 'finishing', { item: '', cost_type: 'FINISHING', qty_per_pc: 1, rate: '' })} />
               </div>
             </div>
             <PreCostingRowTable
@@ -1610,12 +1696,15 @@ export default function PreCostingDetailPage() {
         {/* TAB 9: OTHER DIRECT */}
         {activeTab === 'Other Direct' && (
           <div className="space-y-4">
-            <div>
+            <div className="flex items-start justify-between gap-2">
+              <div>
               <h3 className="text-sm font-bold text-slate-900">Other Direct Charges</h3>
               <p className="text-xs text-slate-500">
                 ₹ per PC, % of FOB (e.g. agent commission, finance) or % of direct manufacturing cost
                 (₹{calc.manufacturing_direct.toFixed(2)}). % of FOB is solved with the margin: FOB = (Direct + Overhead) ÷ (1 − Margin% − ΣFOB%).
               </p>
+              </div>
+              <TopAddButton testId="other" label="Add Charge" onClick={() => addTop(setOtherDirect, 'other', { charge_type: 'OTHER', description: '', basis: 'PER_PC', value: '' })} />
             </div>
             <PreCostingRowTable
               gridId="other"

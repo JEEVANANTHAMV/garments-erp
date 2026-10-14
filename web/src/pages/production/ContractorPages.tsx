@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Save, Ban, Search, Wallet, FileMinus } from 'lucide-react';
+import { Plus, Save, Ban, Search, Wallet, FileMinus, Calculator } from 'lucide-react';
 import { Card, Badge, Button, Input, Select, Textarea, Modal, FormSection, DataTable } from '../../components/ui';
 import { api } from '../../lib/api';
 import { fmtDate, fmtNumber, today } from '../../lib/format';
@@ -37,6 +37,7 @@ export function JobRateCardPage() {
   const [edit, setEdit] = useState<Record<number, { on: boolean; rate: string; remarks: string }>>({});
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [fromCosting, setFromCosting] = useState(false);
 
   const loadCards = () => api.get('/job-rate-cards').then((r) => setCards(r.data.data || [])).catch(() => setCards([]));
   useEffect(() => {
@@ -97,7 +98,15 @@ export function JobRateCardPage() {
             <Select label="Process" className="w-44" value={stageId} onChange={(e) => { setStageId(e.target.value); setLoaded(false); }}
               options={stages.map((s) => ({ value: s.id, label: s.stage_name }))} />
             <Button variant="secondary" className="!h-10" onClick={() => loadCard()}><Search size={14} className="mr-1 inline" />Load</Button>
+            <Button variant="secondary" className="!h-10" id="rc-from-costing" disabled={!ioNo.trim()} onClick={() => setFromCosting(true)}>
+              <Calculator size={14} className="mr-1 inline" />Load rates from costing
+            </Button>
           </div>
+          <p className="px-3 pb-2 text-[11px] text-slate-500">
+            "Load rates from costing" takes the rate per piece of each operation from the style's approved pre-costing
+            (Sewing: SMV × ₹ / min · Cutting and Processes: the row rate). In-house unit DCs and contractor bills use this
+            rate card, so they pick up the costing rates.
+          </p>
           {loaded && (
             <>
               <table className="w-full text-xs">
@@ -135,7 +144,104 @@ export function JobRateCardPage() {
           )}
         </Card>
       </div>
+      {fromCosting && (
+        <CostingRatesModal ioNo={ioNo.trim()} onClose={() => setFromCosting(false)}
+          onApplied={(stage) => { setFromCosting(false); loadCards(); const st = stage ? String(stage) : stageId; setStageId(st); loadCard(ioNo, st); }} />
+      )}
     </div>
+  );
+}
+
+type CostRow = {
+  source: 'SEWING' | 'CUTTING' | 'PROCESS'; name: string; smv?: number; costing_rate: number;
+  operation_id: number | null; op_name: string | null; current_rate: number | null; action: 'UPDATE' | 'NEW' | 'SAME' | 'NO_MATCH';
+};
+type CostOp = { id: number; op_code: string; op_name: string; stage_id: number; stage_name: string | null; current_rate: number | null };
+
+/** Preview of a job's costing rates (Operation | Costing rate | Current card rate | Action) and confirm. */
+function CostingRatesModal({ ioNo, onClose, onApplied }: { ioNo: string; onClose: () => void; onApplied: (stageId: number | null) => void }) {
+  const toast = useToast();
+  const [data, setData] = useState<{ costing: any; rows: CostRow[]; operations: CostOp[] } | null>(null);
+  const [map, setMap] = useState<Record<number, string>>({});
+  const [on, setOn] = useState<Record<number, boolean>>({});
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    api.get('/job-rate-cards/from-costing', { params: { io_no: ioNo } }).then((r) => {
+      const d = r.data.data;
+      setData(d);
+      setMap(Object.fromEntries((d.rows as CostRow[]).map((x, i) => [i, x.operation_id ? String(x.operation_id) : ''])));
+      setOn(Object.fromEntries((d.rows as CostRow[]).map((x, i) => [i, !!x.operation_id])));
+    }).catch((e) => { toast(errMsg(e), 'error'); onClose(); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ioNo]);
+
+  const opById = useMemo(() => new Map((data?.operations ?? []).map((o) => [o.id, o])), [data]);
+  const picked = (data?.rows ?? []).map((r, i) => ({ r, i, opId: Number(map[i]) || 0 })).filter((x) => on[x.i] && x.opId);
+  const actionOf = (r: CostRow, i: number) => {
+    const op = opById.get(Number(map[i]) || 0);
+    if (!op) return 'NO_MATCH';
+    if (op.current_rate == null) return 'NEW';
+    return Math.abs(op.current_rate - r.costing_rate) < 0.00005 ? 'SAME' : 'UPDATE';
+  };
+  const tone: Record<string, any> = { NEW: 'green', UPDATE: 'amber', SAME: 'slate', NO_MATCH: 'red' };
+  const label: Record<string, string> = { NEW: 'New', UPDATE: 'Update', SAME: 'No change', NO_MATCH: 'No match' };
+
+  const apply = async () => {
+    setBusy(true);
+    try {
+      const rows = picked.map((x) => ({ operation_id: x.opId, rate: x.r.costing_rate }));
+      const r = await api.post('/job-rate-cards/from-costing', { io_no: ioNo, costing_id: data?.costing?.id, rows });
+      toast(`Rate card of ${ioNo} updated from ${data?.costing?.costing_no} — ${r.data.data.applied} operation(s)`);
+      onApplied(r.data.data.stages?.[0] ?? null);
+    } catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(false); }
+  };
+
+  const c = data?.costing;
+  return (
+    <Modal open onClose={onClose} size="xl" icon={<Calculator size={18} />} title="Load rates from costing"
+      subtitle={c ? `${ioNo} · ${c.costing_no} v${c.version} (${c.status})${c.style_code ? ` · style ${c.style_code}` : ''} · ₹${num(c.smv_rate_per_min).toFixed(2)} / min` : ioNo}
+      footerStart={data ? <span className="text-sm">{picked.length} row(s) to apply · <b>₹{picked.reduce((a, x) => a + x.r.costing_rate, 0).toFixed(2)} / PCS</b></span> : null}
+      footer={<>
+        <Button variant="secondary" onClick={onClose}>Cancel</Button>
+        <Button id="rc-costing-apply" loading={busy} disabled={!picked.length} onClick={apply}><Save size={13} className="mr-1 inline" />Apply {picked.length} rate(s)</Button>
+      </>}>
+      {!data ? <p className="p-4 text-sm text-slate-500">Loading…</p>
+        : !c ? <p className="p-4 text-sm text-slate-500">No pre-costing found for the style of job {ioNo}. Save a pre-costing for the style first.</p>
+          : (
+            <div className="space-y-2">
+              {c.use_flat_sewing_rate && <p className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">The costing uses a flat sewing rate; sewing rows below are still priced SMV × ₹ / min.</p>}
+              <table className="w-full text-xs" id="rc-costing-preview">
+                <thead className="bg-slate-50 text-slate-500"><tr>
+                  <th className="w-8 px-2 py-2" /><th className="px-2 py-2 text-left">Costing row</th><th className="px-2 py-2 text-left">Operation</th>
+                  <th className="px-2 py-2 text-right">Costing rate</th><th className="px-2 py-2 text-right">Current card rate</th><th className="px-2 py-2 text-left">Action</th>
+                </tr></thead>
+                <tbody>
+                  {data.rows.map((r, i) => {
+                    const op = opById.get(Number(map[i]) || 0);
+                    const act = actionOf(r, i);
+                    return (
+                      <tr key={i} className="border-t border-slate-100" data-action={act}>
+                        <td className="px-2 py-1.5 text-center"><input type="checkbox" checked={!!on[i]} disabled={!op} onChange={() => setOn((m) => ({ ...m, [i]: !m[i] }))} /></td>
+                        <td className="px-2 py-1.5"><Badge tone={r.source === 'SEWING' ? 'blue' : r.source === 'CUTTING' ? 'violet' : 'slate'}>{r.source === 'SEWING' ? 'Sewing' : r.source === 'CUTTING' ? 'Cutting' : 'Process'}</Badge> <span className="font-medium">{r.name}</span>{r.smv != null && <span className="text-slate-400"> · {r.smv} SMV</span>}</td>
+                        <td className="px-2 py-1.5">
+                          <select className="input !h-8 !py-0 w-52 text-xs" value={map[i] ?? ''} onChange={(e) => { const v = e.target.value; setMap((m) => ({ ...m, [i]: v })); setOn((m) => ({ ...m, [i]: !!v })); }}>
+                            <option value="">— not mapped —</option>
+                            {data.operations.map((o) => <option key={o.id} value={o.id}>{o.op_name}{o.stage_name ? ` (${o.stage_name})` : ''}</option>)}
+                          </select>
+                        </td>
+                        <td className="px-2 py-1.5 text-right font-semibold">{r.costing_rate.toFixed(4)}</td>
+                        <td className="px-2 py-1.5 text-right text-slate-500">{op?.current_rate != null ? op.current_rate.toFixed(4) : '—'}</td>
+                        <td className="px-2 py-1.5"><Badge tone={tone[act]}>{label[act]}</Badge></td>
+                      </tr>
+                    );
+                  })}
+                  {!data.rows.length && <tr><td colSpan={6} className="px-2 py-6 text-center text-slate-400">The costing has no sewing, cutting or process rows.</td></tr>}
+                </tbody>
+              </table>
+              <p className="text-[11px] text-slate-500">Rows mapped to the same operation are added together. Operations not in the costing keep their current card rate.</p>
+            </div>
+          )}
+    </Modal>
   );
 }
 

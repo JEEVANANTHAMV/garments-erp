@@ -39,6 +39,9 @@ async function recalcPacking(tx: any, packingId: number) {
        JOIN trx_carton c ON c.id = cc.carton_id
       WHERE c.packing_id = ?`, [packingId]);
   await txExecute(tx,
+    `UPDATE trx_carton c SET c.pieces_total = (SELECT COALESCE(SUM(cc.qty),0) FROM trx_carton_content cc WHERE cc.carton_id = c.id), c.company_id = COALESCE(c.company_id, ?)
+      WHERE c.packing_id = ?`, [(await txQueryOne<any>(tx, `SELECT company_id FROM trx_packing WHERE id = ?`, [packingId]))?.company_id ?? null, packingId]);
+  await txExecute(tx,
     `UPDATE trx_packing SET total_cartons = ?, total_qty = ?, net_weight_kg = ?, gross_weight_kg = ?
       WHERE id = ?`,
     [agg?.cartons ?? 0, qty?.q ?? 0, agg?.net ?? 0, agg?.gross ?? 0, packingId]);
@@ -54,6 +57,19 @@ async function companyPacking(packingId: number, cid: number) {
   const p = await queryOne<any>(`SELECT * FROM trx_packing WHERE id = ? AND company_id = ?`, [packingId, cid]);
   if (!p) throw NotFound('Packing record not found');
   return p;
+}
+
+/**
+ * Packing orders of the packing engine (is_engine = 1) take cartons only through /packing/orders/:id/cartons
+ * (rule checks, draft → verify → seal → post). These legacy endpoints keep serving old packing records.
+ */
+function assertLegacy(p: any) {
+  if (p.is_engine) throw BadRequest(`${p.pack_no} is a packing-engine order — add / change its cartons on the Carton Entry screen`);
+}
+
+/** Legacy cartons also take their number in the never-reuse registry (packing engine, migration 121). */
+async function registerCartonNo(tx: any, cid: number, cartonNo: string, cartonId: number) {
+  await txExecute(tx, `INSERT IGNORE INTO trx_carton_no_registry (company_id, carton_no, carton_id) VALUES (?,?,?)`, [cid, cartonNo, cartonId]);
 }
 
 /**
@@ -76,9 +92,9 @@ cartonRouter.get('/packings/:packingId/cartons', requirePermission('PACKING.VIEW
     c.contents = await query(
       `SELECT cc.*, k.sku_code, col.color_name, sz.size_code, sz.size_label
          FROM trx_carton_content cc
-         JOIN mst_style_sku k ON k.id = cc.sku_id
-         JOIN mst_color col ON col.id = k.color_id
-         JOIN mst_size sz ON sz.id = k.size_id
+         LEFT JOIN mst_style_sku k ON k.id = cc.sku_id
+         LEFT JOIN mst_color col ON col.id = COALESCE(cc.color_id, k.color_id)
+         LEFT JOIN mst_size sz ON sz.id = COALESCE(cc.size_id, k.size_id)
         WHERE cc.carton_id = ? ORDER BY sz.sort_order`, [c.id]);
   }
   res.json({ data: cartons });
@@ -88,7 +104,7 @@ cartonRouter.post('/packings/:packingId/cartons', requirePermission('PACKING.CRE
   const packingId = Number(req.params.packingId);
   const body = cartonSchema.parse(req.body);
 
-  await companyPacking(packingId, req.user!.companyId);
+  assertLegacy(await companyPacking(packingId, req.user!.companyId));
   await assertPackingOpen(packingId, req.user!.companyId);
 
   const created = await transaction(async (tx) => {
@@ -101,10 +117,13 @@ cartonRouter.post('/packings/:packingId/cartons', requirePermission('PACKING.CRE
        body.gross_weight_kg ?? null, cbmOf(body.length_cm, body.width_cm, body.height_cm),
        body.barcode ?? null]);
     const cartonId = r.insertId;
+    await registerCartonNo(tx, req.user!.companyId, body.carton_no, cartonId);
 
     for (const c of body.contents) {
-      await txExecute(tx, `INSERT INTO trx_carton_content (carton_id, sku_id, qty) VALUES (?,?,?)`,
-        [cartonId, c.sku_id, c.qty]);
+      const ins = await txExecute(tx, `INSERT INTO trx_carton_content (carton_id, sku_id, qty, color_id, size_id, style_id)
+         SELECT ?, k.id, ?, k.color_id, k.size_id, k.style_id FROM mst_style_sku k WHERE k.id = ?`,
+        [cartonId, c.qty, c.sku_id]);
+      if (!ins.affectedRows) throw BadRequest(`SKU #${c.sku_id} not found`);
     }
     await recalcPacking(tx, packingId);
     return txQueryOne(tx, `SELECT * FROM trx_carton WHERE id = ?`, [cartonId]);
@@ -132,7 +151,7 @@ cartonRouter.post('/packings/:packingId/cartons/bulk', requirePermission('PACKIN
   const packingId = Number(req.params.packingId);
   const body = bulkSchema.parse(req.body);
 
-  await companyPacking(packingId, req.user!.companyId);
+  assertLegacy(await companyPacking(packingId, req.user!.companyId));
   await assertPackingOpen(packingId, req.user!.companyId);
 
   const count = await transaction(async (tx) => {
@@ -146,9 +165,12 @@ cartonRouter.post('/packings/:packingId/cartons/bulk', requirePermission('PACKIN
         [packingId, cartonNo, body.carton_type ?? null, body.length_cm ?? null,
          body.width_cm ?? null, body.height_cm ?? null, body.net_weight_kg ?? null,
          body.gross_weight_kg ?? null, cbm]);
+      await registerCartonNo(tx, req.user!.companyId, cartonNo, r.insertId);
       for (const c of body.contents) {
-        await txExecute(tx, `INSERT INTO trx_carton_content (carton_id, sku_id, qty) VALUES (?,?,?)`,
-          [r.insertId, c.sku_id, c.qty]);
+        const ins = await txExecute(tx, `INSERT INTO trx_carton_content (carton_id, sku_id, qty, color_id, size_id, style_id)
+         SELECT ?, k.id, ?, k.color_id, k.size_id, k.style_id FROM mst_style_sku k WHERE k.id = ?`,
+        [r.insertId, c.qty, c.sku_id]);
+        if (!ins.affectedRows) throw BadRequest(`SKU #${c.sku_id} not found`);
       }
     }
     await recalcPacking(tx, packingId);
@@ -176,6 +198,8 @@ cartonRouter.delete('/cartons/:id', requirePermission('PACKING.DELETE'), ah(asyn
          JOIN trx_packing p ON p.id = c.packing_id
         WHERE c.id = ? AND p.company_id = ? FOR UPDATE`, [id, cid]);
     if (!carton) throw NotFound('Carton not found');
+    const pk = await txQueryOne<any>(tx, `SELECT pack_no, is_engine FROM trx_packing WHERE id = ?`, [carton.packing_id]);
+    if (pk?.is_engine) throw BadRequest(`Carton ${carton.carton_no} belongs to packing order ${pk.pack_no} — void it on the Carton Entry screen (cartons are never deleted)`);
 
     const pl = await txQueryOne<any>(tx,
       `SELECT pl_no, status FROM trx_packing_list
@@ -219,7 +243,7 @@ cartonRouter.get('/packings/:packingId/summary', requirePermission('PACKING.VIEW
        JOIN mst_style_sku k ON k.id = cc.sku_id
        JOIN mst_color col ON col.id = k.color_id
        JOIN mst_size sz ON sz.id = k.size_id
-      WHERE c.packing_id = ?
+      WHERE c.packing_id = ? AND c.carton_status <> 'VOID'
       GROUP BY k.id, k.sku_code, col.color_name, sz.size_code, sz.sort_order
       ORDER BY col.color_name, sz.sort_order`, [packingId]);
   res.json({ data: rows });

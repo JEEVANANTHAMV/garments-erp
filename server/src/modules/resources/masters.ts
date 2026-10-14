@@ -8,6 +8,9 @@ import { BadRequest } from '../../core/errors.js';
  * Each entry becomes a full REST resource: list/get/create/update/delete
  * with RBAC, tenant scoping, soft delete, search, filters and audit.
  */
+/** Indian bank IFSC: 4 letters, a zero, then 6 letters / digits. */
+const IFSC_RE = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+
 export const masterResources: ResourceConfig[] = [
   // ------------------------------------------------ Organisation
   {
@@ -86,7 +89,37 @@ export const masterResources: ResourceConfig[] = [
     joins: 'LEFT JOIN cfg_country c ON c.id = t.country_id LEFT JOIN cfg_currency cur ON cur.id = t.currency_id',
     // Every address of a completed (non-draft) partner must name its country —
     // buyers abroad have no Indian state/pincode, so country is what identifies it.
-    beforeWrite: (req, data) => {
+    beforeWrite: (req, data, before) => {
+      // Bank IFSC: 4 letters, 0, then 6 letters / digits (e.g. HDFC0001234) — checked on drafts too.
+      const banks = req.body?.banks;
+      if (Array.isArray(banks)) {
+        banks.forEach((b: any, i: number) => {
+          const ifsc = String(b?.ifsc_code ?? '').trim().toUpperCase();
+          if (ifsc && !IFSC_RE.test(ifsc)) {
+            throw BadRequest(`Bank ${i + 1}${b?.bank_name ? ` (${b.bank_name})` : ''}: IFSC "${ifsc}" is not valid — 11 characters, e.g. HDFC0001234`,
+              [{ field: 'ifsc_code', message: 'IFSC must be 4 letters, 0, then 6 letters / digits' }]);
+          }
+          if (ifsc) b.ifsc_code = ifsc;
+        });
+      }
+      if (data.short_code !== undefined && data.short_code !== null) {
+        const sc = String(data.short_code).trim().toUpperCase();
+        if (sc && !/^[A-Z0-9]{3}$/.test(sc)) throw BadRequest('Short code must be exactly 3 letters / digits, e.g. ACT', [{ field: 'short_code', message: 'Use 3 letters, e.g. ACT' }]);
+        data.short_code = sc || null;
+      }
+      // MSME: category, number and valid-from are required only when MSME applies.
+      const msme = data.msme_applicable !== undefined ? Number(data.msme_applicable) : Number(before?.msme_applicable ?? 0);
+      if (msme === 1 && !data.is_draft) {
+        const v = (k: string) => (data[k] !== undefined ? data[k] : before?.[k]);
+        const miss: string[] = [];
+        if (!v('msme_type') || v('msme_type') === 'NA') miss.push('MSME category');
+        if (!String(v('udyam_no') ?? '').trim()) miss.push('MSME (Udyam) number');
+        if (!v('udyam_date')) miss.push('MSME valid from');
+        if (miss.length) throw BadRequest(`MSME is applicable — enter ${miss.join(', ')}`,
+          miss.map((m) => ({ field: m === 'MSME category' ? 'msme_type' : m.startsWith('MSME (') ? 'udyam_no' : 'udyam_date', message: `${m} is required` })));
+      } else if (data.msme_applicable !== undefined && msme === 0) {
+        data.msme_type = 'NA';
+      }
       if (data.is_draft) return;
       const addrs = req.body?.addresses;
       if (!Array.isArray(addrs)) return;
@@ -133,6 +166,8 @@ export const masterResources: ResourceConfig[] = [
     ],
     fields: [
       f('party_code', s.strReq(30)), f('io_prefix', s.nullableStr(30)), f('party_name', s.strReq(200)),
+      // 3-letter buyer code — the buyer block of the SO number (SO_NUMBER_FORMAT = TEAM_TYPE_FY_BUYER_JOB)
+      f('short_code', s.nullableStr(3)),
       f('legal_name', s.nullableStr(200)), f('short_name', s.nullableStr(80)),
       f('is_customer', s.bool()), f('is_buyer', s.bool()), f('is_supplier', s.bool()),
       f('is_vendor', s.bool()), f('is_agent', s.bool()), f('is_contractor', s.bool()),
@@ -142,10 +177,14 @@ export const masterResources: ResourceConfig[] = [
       f('gstin', s.nullableStr(15)), f('pan', s.nullableStr(10)),
       f('tan', s.nullableStr(15)), f('cin', s.nullableStr(30)),
       f('tax_id_foreign', s.nullableStr(40)),
+      // MSME applicability (Yes / No); category = msme_type, number = udyam_no, valid from = udyam_date
+      f('msme_applicable', s.bool()),
       f('msme_type', s.enum(['MICRO','SMALL','MEDIUM','NA'])),
       f('udyam_no', s.nullableStr(30)), f('udyam_date', s.date()),
       f('iec_no', s.nullableStr(20)),
       f('tds_applicable', s.bool()), f('tds_section', s.nullableStr(30)), f('tds_rate', s.dec()),
+      // TDS deductee category: COMPANY / INDIVIDUAL_HUF / FIRM / OTHERS
+      f('tds_category', s.nullableStr(30)),
       f('tcs_applicable', s.bool()), f('tcs_section', s.nullableStr(30)), f('tcs_rate', s.dec()),
       f('payment_terms', s.nullableStr(120)),
       f('default_incoterm', s.enum(['FOB','CIF','CFR','EXW','DDP','DAP','FCA'])),

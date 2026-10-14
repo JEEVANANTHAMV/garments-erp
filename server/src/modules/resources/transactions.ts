@@ -15,7 +15,7 @@ const invoiceSummaryFields = () => [
   f('cgst_amount', s.dec()), f('sgst_amount', s.dec()), f('igst_amount', s.dec()),
 ];
 import { jobworkInBeforeCreate, jobworkInvoiceBeforeCreate } from '../production/jobworkDivision.js';
-import { computePreCosting, PRE_COST_HEADS } from '../costing/preCostingCalc.js';
+import { computePreCosting, PRE_COST_HEADS, certSummary } from '../costing/preCostingCalc.js';
 import { assertPurchaseExcess, poItemKeys } from '../../core/purchaseExcess.js';
 import { checkSupplierBill } from '../../core/supplierBillRules.js';
 import { quotationAfterWriteTx } from '../stock/genealogy.routes.js';
@@ -63,6 +63,11 @@ function preCostingBeforeWrite(data: Record<string, unknown>, before?: any) {
   data.smv = r.smv;
   data.total_cost = r.total_cost;
   data.fob_price = r.fob_price;
+  // "Certifications required" is derived from the rows on every save — never trusted from the client (call 14-Oct-2026)
+  if (data.data_json !== undefined && dj && typeof dj === 'object') {
+    const withCerts = { ...dj, cert_summary: certSummary(dj) };
+    data.data_json = typeof data.data_json === 'string' ? JSON.stringify(withCerts) : withCerts;
+  }
 }
 
 /** Cutting records that already produced bundles / cut output are never deleted or rewritten (doc §19). */

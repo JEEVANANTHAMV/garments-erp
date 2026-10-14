@@ -113,6 +113,9 @@ export function PackingListDetailPage() {
   const [reopenOpen, setReopenOpen] = useState(false);
   const [reopenReason, setReopenReason] = useState('');
   const [lk, setLk] = useState<{ so: any[]; packings: any[]; parties: any[]; invoices: any[] }>({ so: [], packings: [], parties: [], invoices: [] });
+  const [cartonInfo, setCartonInfo] = useState<Record<number, CartonInfo>>({});   // posted cartons behind built rows
+  const [packSum, setPackSum] = useState<any>(null);                               // Order | Packed | On this list | Balance
+  const [req, setReq] = useState<Record<string, { ppb: string; bpc: string; ppc: string }>>({}); // carton requirement inputs per row
 
   const ro = !isNew && header.status !== 'DRAFT';
 
@@ -140,6 +143,8 @@ export function PackingListDetailPage() {
     const mo: Record<string, Record<string, string>> = {};
     for (const g of d.order_summary || []) if (g.order_source === 'MANUAL') mo[g.group_key] = Object.fromEntries(Object.entries(g.order).map(([k, v]) => [k, String(v)]));
     setManualOrder(mo);
+    setCartonInfo(d.carton_info || {});
+    if (d.pack_summary) setPackSum(d.pack_summary);
     setDirty(false);
     setServerErrors([]);
   };
@@ -162,6 +167,13 @@ export function PackingListDetailPage() {
     api.get('/packing-lists/prefill', { params: { so_id: header.so_id } })
       .then((r) => setOrderLines(r.data.data.order_lines || [])).catch(() => setOrderLines([]));
   }, [header.so_id]);
+
+  // Packed (posted cartons) / order qty / packaging stock for the order or job
+  useEffect(() => {
+    if (!header.so_id && !header.io_no) { setPackSum(null); return; }
+    api.get('/packing-lists/pack-summary', { params: { so_id: header.so_id || undefined, io_no: header.io_no || undefined, pl_id: isNew ? undefined : id } })
+      .then((r) => setPackSum(r.data.data)).catch(() => {});
+  }, [header.so_id, header.io_no, id, isNew, saved]);
 
   const setField = (k: keyof Header, v: any) => { setHeader((p) => ({ ...p, [k]: v })); setDirty(true); };
   const mutateBlocks = (fn: (b: BlockS[]) => BlockS[]) => { setBlocks((prev) => fn(structuredClone(prev))); setDirty(true); };
@@ -220,6 +232,32 @@ export function PackingListDetailPage() {
   const groups = useMemo(() => shippedGroups(blocks, calc), [blocks, calc]);
   const serverGroup = (key: string) => (saved?.order_summary || []).find((g: any) => g.group_key === key);
 
+  /* ---------- rows from packed cartons vs rows typed by hand / from the order */
+  const flatRows = useMemo(() => blocks.flatMap((b, bi) => b.rows.map((r, ri) => ({ r, bi, ri, rc: calc.blocks[bi].rows[ri] }))), [blocks, calc]);
+  const handRows = flatRows.filter((x) => !x.r.source_carton_ids?.length && x.rc.total_qty > 0);
+  const listCartons = useMemo(() => {
+    const ids = flatRows.flatMap((x) => x.r.source_carton_ids ?? []);
+    const info = ids.map((cid) => cartonInfo[cid]).filter(Boolean);
+    return { count: ids.length, full: info.filter((c) => !c.is_partial).length, partial: info.filter((c) => c.is_partial).length,
+             polybags: info.reduce((a, c) => a + (c.polybag_qty || 0), 0), qty: info.reduce((a, c) => a + (c.qty || 0), 0) };
+  }, [flatRows, cartonInfo]);
+  const handPolybags = handRows.reduce((a, x) => a + (x.rc.packed ? Math.trunc(Number(x.r.packs_per_ctn) || 0) * x.rc.ctns : 0), 0);
+
+  /* ---------- carton requirement helper (rows typed from the order): pcs / polybag × polybags / carton */
+  const [reqDefault, setReqDefault] = useState({ ppb: '', bpc: '', ppc: '' });
+  const reqCalc = handRows.map((x) => {
+    const own = req[x.r.key] ?? { ppb: '', bpc: '', ppc: '' };
+    const ppb = Number(own.ppb || reqDefault.ppb) || 0, bpc = Number(own.bpc || reqDefault.bpc) || 0;
+    const ppc = Number(own.ppc || reqDefault.ppc) || (ppb && bpc ? ppb * bpc : 0);
+    const qty = x.rc.total_qty;
+    const cartons = ppc ? Math.ceil(qty / ppc) : 0;
+    const full = ppc ? Math.floor(qty / ppc) : 0;
+    return { ...x, own, ppb, bpc, ppc, qty, cartons, full, loose: ppc ? qty - full * ppc : 0, polybags: ppb ? Math.ceil(qty / ppb) : 0 };
+  });
+  const reqTotals = { cartons: reqCalc.reduce((a, x) => a + x.cartons, 0), polybags: reqCalc.reduce((a, x) => a + x.polybags, 0), qty: reqCalc.reduce((a, x) => a + x.qty, 0) };
+  const setReqField = (key: string, k: 'ppb' | 'bpc' | 'ppc', v: string) =>
+    setReq((m) => ({ ...m, [key]: { ...(m[key] ?? { ppb: '', bpc: '', ppc: '' }), [k]: v.replace(/[^0-9]/g, '') } }));
+
   /* ---------- sales order prefill */
   const fillFromSo = async (soId: number | null, onlyEmpty = true) => {
     if (!soId) return;
@@ -258,19 +296,25 @@ export function PackingListDetailPage() {
     } catch (e) { toast(errMsg(e), 'error'); }
   };
 
-  /* ---------- build rows from the physical cartons of the linked packing */
+  /* ---------- build rows from the posted (verified / sealed) cartons of the packing, order or job */
+  const canBuild = Boolean(header.packing_id || header.so_id || header.io_no);
   const buildFromPacking = async () => {
-    if (!header.packing_id) return;
+    if (!canBuild) return;
     const hasRows = blocks.some((b) => b.rows.some((r) => r.items.some((it) => Object.values(it.size_qty).some((v) => Number(v) > 0))));
-    if (hasRows && !window.confirm('Replace the current carton rows with rows built from the packing cartons?')) return;
+    if (hasRows && !window.confirm('Replace the current carton rows with rows built from the packed cartons?')) return;
     try {
-      const r = await api.get('/packing-lists/build-rows', { params: { packing_id: header.packing_id } });
+      const params = header.packing_id ? { packing_id: header.packing_id } : header.so_id ? { so_id: header.so_id } : { io_no: header.io_no };
+      const r = await api.get('/packing-lists/build-rows', { params: { ...params, pl_id: isNew ? undefined : id } });
       const d = r.data.data;
       setSizeHeaders(d.size_headers);
       setBlocks(blocksFromServer(d.blocks));
-      setHeader((h) => ({ ...h, pl_type: d.pl_type }));
+      setCartonInfo(d.carton_info || {});
+      setHeader((h) => ({ ...h, pl_type: d.pl_type, allow_ctn_gaps: h.allow_ctn_gaps || Boolean(d.has_gaps) }));
       setDirty(true);
-      toast(`Built ${d.blocks[0].rows.length} carton range(s) from the packing${d.empty_cartons ? ` (${d.empty_cartons} empty carton(s) skipped)` : ''}`);
+      const sk = d.skipped || {};
+      const skipped = [sk.not_ready ? `${sk.not_ready} not posted / verified` : '', sk.on_other_list ? `${sk.on_other_list} on another list` : '', sk.shipped ? `${sk.shipped} shipped` : '']
+        .filter(Boolean).join(', ');
+      toast(`Built ${d.blocks[0].rows.length} carton range(s) from the packed cartons${d.empty_cartons ? ` (${d.empty_cartons} empty carton(s) skipped)` : ''}${skipped ? ` — skipped ${skipped}` : ''}`);
     } catch (e) { toast(errMsg(e), 'error'); }
   };
 
@@ -396,6 +440,34 @@ export function PackingListDetailPage() {
         </div>
       )}
 
+      {/* ---------- packed vs order (posted cartons) */}
+      {(packSum || listCartons.count > 0 || handRows.length > 0) && (
+        <div id="pl-pack-summary"><Card title="Packing status" subtitle="Order qty vs posted cartons (verified / sealed) and what is on this list">
+          <div className="grid grid-cols-2 gap-4 p-4 text-center md:grid-cols-4">
+            <Stat label="Order qty (PCS)" value={packSum?.order_qty != null ? fmtNumber(packSum.order_qty) : '—'} />
+            <Stat label={`Packed — posted cartons${packSum?.packed ? ` (${fmtNumber(packSum.packed.cartons)} CTNS)` : ''}`} value={packSum?.packed ? fmtNumber(packSum.packed.qty) : '—'} tone="text-emerald-700" />
+            <Stat label={`On this list (${fmtNumber(calc.totals.ctns)} CTNS)`} value={fmtNumber(calc.totals.qty)} tone="text-blue-700" />
+            <Stat label="Balance to pack (order − packed)" value={packSum?.balance_to_pack != null ? fmtNumber(packSum.balance_to_pack) : '—'}
+              tone={packSum?.balance_to_pack > 0 ? 'text-amber-700' : 'text-slate-800'} />
+          </div>
+          <div className="flex flex-wrap gap-x-6 gap-y-1 border-t border-surface-border px-4 py-2 text-xs text-slate-600">
+            <span data-testid="pl-sum-cartons">Cartons on this list: <b>{fmtNumber(calc.totals.ctns)}</b>
+              {listCartons.count > 0 && <> — from packed cartons {fmtNumber(listCartons.count)} (full <b>{listCartons.full}</b> · partial <b>{listCartons.partial}</b>)</>}
+              {handRows.length > 0 && <> · typed {fmtNumber(handRows.reduce((a, x) => a + x.rc.ctns, 0))}</>}
+            </span>
+            <span data-testid="pl-sum-polybags">Polybags: <b>{fmtNumber(listCartons.polybags + handPolybags)}</b></span>
+            {packSum?.ready_unlisted && <span>Ready cartons not on any list: <b>{fmtNumber(packSum.ready_unlisted.cartons)}</b> ({fmtNumber(packSum.ready_unlisted.qty)} PCS)</span>}
+            {saved?.shipment && <span>Shipment: <b>{saved.shipment.shipment_no}</b></span>}
+          </div>
+          {handRows.length > 0 && (
+            <div className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800" data-testid="pl-hand-warning">
+              ⚠ {handRows.length} row(s) not from packed cartons — typed by hand or from the order. Totals of these rows are not checked against posted cartons;
+              {canBuild ? ' use "Build rows from packed cartons" once the cartons are sealed.' : ' link a sales order / job to build rows from packed cartons.'}
+            </div>
+          )}
+        </Card></div>
+      )}
+
       {/* ---------- general */}
       <Card title="Packing list">
         <fieldset disabled={ro} className="grid grid-cols-1 gap-4 p-4 md:grid-cols-4">
@@ -466,7 +538,12 @@ export function PackingListDetailPage() {
             <Input label="Carton tare (KG) — net = gross − tare" type="number" step="0.001" min="0" value={header.carton_tare_kg}
               onChange={(e) => setField('carton_tare_kg', e.target.value)} placeholder="e.g. 1.1" />
             <Checkbox label="Allow carton-number gaps" checked={header.allow_ctn_gaps} onChange={(v) => setField('allow_ctn_gaps', v)} disabled={ro} />
-            {!ro && header.packing_id && <Button variant="outline" size="sm" onClick={buildFromPacking}>Build rows from packing cartons</Button>}
+            {!ro && canBuild && (
+              <Button variant="outline" size="sm" onClick={buildFromPacking} id="pl-build-from-cartons"
+                title="Rows from the posted (verified / sealed) cartons of the source packing, else of the sales order / job, that are not on another list">
+                Build rows from packed cartons
+              </Button>
+            )}
             {!ro && orderLines.length > 0 && (
               <Button variant="outline" size="sm" onClick={addRowsFromOrder} title="One row per style / colour (per size for Solid) with the sales order qty">
                 Add rows from order
@@ -495,7 +572,7 @@ export function PackingListDetailPage() {
           onRemove={blocks.length > 1 ? () => mutateBlocks((x) => { x.splice(bi, 1); return x; }) : undefined}
           updRow={updRow} updItem={updItem} setQty={setQty} addRow={addRow} dupRow={dupRow} delRow={delRow} moveRow={moveRow}
           addItem={addItem} delItem={delItem} grossChanged={grossChanged} pickStyle={pickStyle} pickColour={pickColour}
-          hasOrder={orderLines.length > 0} />
+          hasOrder={orderLines.length > 0} cartonInfo={cartonInfo} />
       ))}
       {!ro && (
         <div className="no-print">
@@ -503,6 +580,63 @@ export function PackingListDetailPage() {
             + Add block (new style / colour / size set)
           </Button>
         </div>
+      )}
+
+      {/* ---------- carton requirement (pieces per box) for rows typed from the order */}
+      {handRows.length > 0 && (
+        <div id="pl-carton-req"><Card title="Carton requirement"
+          subtitle="Pieces per polybag × polybags per carton (or pieces per carton) → cartons and polybags needed for the rows typed from the order">
+          <div className="space-y-3 overflow-x-auto p-4">
+            <div className="flex flex-wrap items-end gap-3 text-xs">
+              <span className="font-medium text-slate-600">Same for all rows:</span>
+              <ReqInput label="Pcs / polybag" value={reqDefault.ppb} onChange={(v) => setReqDefault((d) => ({ ...d, ppb: v }))} id="req-all-ppb" />
+              <ReqInput label="Polybags / carton" value={reqDefault.bpc} onChange={(v) => setReqDefault((d) => ({ ...d, bpc: v }))} id="req-all-bpc" />
+              <ReqInput label="or Pcs / carton" value={reqDefault.ppc} onChange={(v) => setReqDefault((d) => ({ ...d, ppc: v }))} id="req-all-ppc" />
+            </div>
+            <table className="min-w-max border-collapse text-xs">
+              <thead>
+                <tr className="bg-slate-50 text-[10px] uppercase text-slate-600">
+                  {['Row', 'Style / colour', 'Qty (PCS)', 'Pcs / polybag', 'Polybags / ctn', 'Pcs / ctn', 'Cartons needed', 'Full + loose', 'Polybags needed'].map((h) =>
+                    <th key={h} className="border border-slate-200 px-2 py-1">{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {reqCalc.map((x, i) => (
+                  <tr key={x.r.key}>
+                    <td className="border border-slate-200 px-2 py-1 text-slate-500">{i + 1} (ctn {x.rc.ctn_from}-{x.rc.ctn_to})</td>
+                    <td className="border border-slate-200 px-2 py-1">{x.r.items.map((it) => [it.style_no || it.style_name, it.colour].filter(Boolean).join(' / ')).join(' + ') || '—'}</td>
+                    <td className="border border-slate-200 px-2 py-1 text-right tabular-nums">{fmtNumber(x.qty)}</td>
+                    {(['ppb', 'bpc', 'ppc'] as const).map((k) => (
+                      <td key={k} className="border border-slate-200 p-0">
+                        <input className="w-20 bg-transparent px-1 py-0.5 text-right text-xs tabular-nums focus:bg-white focus:outline-none" inputMode="numeric"
+                          value={x.own[k]} placeholder={k === 'ppc' ? (x.ppc ? String(x.ppc) : '') : (reqDefault[k] || '')}
+                          onChange={(e) => setReqField(x.r.key, k, e.target.value)} />
+                      </td>
+                    ))}
+                    <td className="border border-slate-200 px-2 py-1 text-right font-semibold text-blue-700 tabular-nums">{x.ppc ? fmtNumber(x.cartons) : '—'}</td>
+                    <td className="border border-slate-200 px-2 py-1 text-right tabular-nums text-slate-600">{x.ppc ? `${fmtNumber(x.full)}${x.loose ? ` + ${x.loose} pcs` : ''}` : '—'}</td>
+                    <td className="border border-slate-200 px-2 py-1 text-right tabular-nums">{x.ppb ? fmtNumber(x.polybags) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-slate-50 font-semibold">
+                  <td className="border border-slate-200 px-2 py-1" colSpan={2}>Total</td>
+                  <td className="border border-slate-200 px-2 py-1 text-right">{fmtNumber(reqTotals.qty)}</td>
+                  <td className="border border-slate-200" colSpan={3} />
+                  <td className="border border-slate-200 px-2 py-1 text-right text-blue-700" data-testid="req-total-cartons">{fmtNumber(reqTotals.cartons)}</td>
+                  <td className="border border-slate-200" />
+                  <td className="border border-slate-200 px-2 py-1 text-right" data-testid="req-total-polybags">{fmtNumber(reqTotals.polybags)}</td>
+                </tr>
+              </tfoot>
+            </table>
+            <div className="flex flex-wrap gap-x-6 text-sm" data-testid="req-stock">
+              <span>Cartons needed <b>{fmtNumber(reqTotals.cartons)}</b>{packSum?.packaging_stock && <> · in stock <b className={reqTotals.cartons > packSum.packaging_stock.CARTON ? 'text-red-600' : 'text-emerald-700'}>{fmtNumber(packSum.packaging_stock.CARTON)}</b></>}</span>
+              <span>Polybags needed <b>{fmtNumber(reqTotals.polybags)}</b>{packSum?.packaging_stock && <> · in stock <b className={reqTotals.polybags > packSum.packaging_stock.POLYBAG ? 'text-red-600' : 'text-emerald-700'}>{fmtNumber(packSum.packaging_stock.POLYBAG)}</b></>}</span>
+            </div>
+            {!packSum?.packaging_stock && <p className="text-[11px] text-slate-400">Pick the sales order / job to compare with carton and polybag stock.</p>}
+          </div>
+        </Card></div>
       )}
 
       {/* ---------- grand totals */}
@@ -611,6 +745,16 @@ export function PackingListDetailPage() {
   );
 }
 
+interface CartonInfo { carton_no: string; pack_no: string; status: string; is_partial: boolean; polybag_qty: number; qty: number }
+
+function ReqInput({ label, value, onChange, id }: { label: string; value: string; onChange: (v: string) => void; id: string }) {
+  return (
+    <label className="flex flex-col gap-0.5 text-[11px] text-slate-500">{label}
+      <input id={id} className="input h-7 w-24 py-0 text-right text-xs" inputMode="numeric" value={value} onChange={(e) => onChange(e.target.value.replace(/[^0-9]/g, ''))} />
+    </label>
+  );
+}
+
 function Stat({ label, value, tone = 'text-slate-800' }: { label: string; value: string; tone?: string }) {
   return <div><p className={`text-xl font-bold ${tone}`}>{value}</p><p className="text-xs text-slate-500">{label}</p></div>;
 }
@@ -674,6 +818,7 @@ function BlockEditor(p: {
   pickStyle: (bi: number, ri: number, ii: number, v: string) => void;
   pickColour: (bi: number, ri: number, ii: number, v: string) => void;
   hasOrder: boolean;
+  cartonInfo: Record<number, CartonInfo>;
 }) {
   const { block: b, bi, ro, plType, calc: c } = p;
   const heads = c.headers;
@@ -723,6 +868,7 @@ function BlockEditor(p: {
               <th className={th}>Total net KG</th>
               <th className={th}>Total gross KG</th>
               <th className={th}>L × W × H CM</th>
+              <th className={th}>Packed cartons</th>
               {!ro && <th className={th} />}
             </tr>
           </thead>
@@ -781,6 +927,9 @@ function BlockEditor(p: {
                         ))}
                       </div>
                     </td>
+                    <td className={tdN + ' whitespace-nowrap text-left'} rowSpan={span}>
+                      <PackedCell ids={r.source_carton_ids} info={p.cartonInfo} />
+                    </td>
                   </>}
                   {!ro && (
                     <td className="border border-slate-200 px-1 text-[11px] whitespace-nowrap">
@@ -814,6 +963,7 @@ function BlockEditor(p: {
               <td className={tdN}>{fmtDecimal(c.net, 2)}</td>
               <td className={tdN}>{fmtDecimal(c.gross, 2)}</td>
               <td className={tdN}>{fmtDecimal(c.cbm, 3)} CBM</td>
+              <td className="border border-slate-200" />
               {!ro && <td className="border border-slate-200" />}
             </tr>
           </tfoot>
@@ -830,5 +980,18 @@ function BlockEditor(p: {
         </div>
       )}
     </Card>
+  );
+}
+
+/** Source of a carton row: posted cartons (with polybags, partial count) or a warning for typed rows. */
+function PackedCell({ ids, info }: { ids?: number[] | null; info: Record<number, CartonInfo> }) {
+  if (!ids?.length) return <span className="text-[10px] font-medium text-amber-700" data-testid="row-not-packed" title="Typed by hand or from the order — not checked against posted cartons">⚠ not from packed cartons</span>;
+  const cs = ids.map((i) => info[i]).filter(Boolean);
+  const bags = [...new Set(cs.map((c) => c.polybag_qty))];
+  const partial = cs.filter((c) => c.is_partial).length;
+  return (
+    <span className="text-[10px] text-emerald-700" data-testid="row-packed" title={cs.map((c) => `${c.pack_no} ${c.carton_no}: ${c.qty} pcs, ${c.polybag_qty} polybag(s), ${c.status}`).join('\n')}>
+      ✓ {ids.length} ctn{bags.length === 1 && bags[0] ? ` · ${bags[0]} polybag${bags[0] > 1 ? 's' : ''}/ctn` : ''}{partial ? ` · ${partial} partial` : ''}
+    </span>
   );
 }

@@ -341,6 +341,45 @@ export async function restoreLineAllocations(tx: Tx, req: Request, challanId: nu
 }
 
 /** SQL subquery: bundles with an open confirmed allocation on any line of the process (for stock pickers). */
+/** Stage codes of each line process on Process DCs (mirrors processDc classify / linkProcOf). */
+const DC_STAGE_CODES: Record<LinkProc, string[]> = {
+  sewing: ['STITCH', 'STITCHING', 'SEW', 'SEWING'],
+  checking: ['CHECK', 'CHECKING'],
+  ironing: ['IRON', 'IRONING', 'FINISH', 'FINISHING', 'PRESS'],
+  packing: ['PACK', 'PACKING'],
+};
+
+/**
+ * Whether checking / ironing / packing DCs take only bundles that came through the previous process
+ * (cfg_system_setting DC_REQUIRES_LINE_ALLOCATION, default on — client call 14-Oct-2026: "line allocation is the method;
+ * one rule for everyone, switchable from admin").
+ */
+export async function dcRequiresLineAllocation(tx: Tx | null, cid: number): Promise<boolean> {
+  const sql = `SELECT setting_value FROM cfg_system_setting WHERE company_id = ? AND setting_key = 'DC_REQUIRES_LINE_ALLOCATION'`;
+  const rows = tx ? await txQuery<any>(tx, sql, [cid]) : await query<any>(sql, [cid]);
+  return String(rows[0]?.setting_value ?? '1').trim() !== '0';
+}
+
+/**
+ * Bundles that went through `proc`: allocated to one of its in-house lines (confirmed or later — the line plan) or
+ * received back from a DC of that process (done by a contractor / unit). Anything else has skipped the step.
+ */
+export async function cameThroughProc(tx: Tx | null, cid: number, proc: LinkProc, bundleIds: number[]): Promise<Set<number>> {
+  const out = new Set<number>();
+  if (!bundleIds.length) return out;
+  const t = T[proc];
+  const viaLine = `SELECT DISTINCT d.bundle_id FROM ${t.allocD} d JOIN ${t.alloc} h ON h.id = d.allocation_id
+                    WHERE h.company_id = ? AND h.status NOT IN ('DRAFT','SAVED','CANCELLED') AND d.status <> 'CANCELLED' AND d.bundle_id IN (?)`;
+  const viaDc = `SELECT DISTINCT jcl.bundle_id FROM trx_jobwork_challan_line jcl
+                   JOIN trx_jobwork_challan jc ON jc.id = jcl.challan_id
+                   JOIN cfg_process_stage ps ON ps.id = jc.stage_id
+                  WHERE jc.company_id = ? AND jcl.received_qty > 0 AND UPPER(ps.stage_code) IN (?) AND jcl.bundle_id IN (?)`;
+  const a = tx ? await txQuery<any>(tx, viaLine, [cid, bundleIds]) : await query<any>(viaLine, [cid, bundleIds]);
+  const b = tx ? await txQuery<any>(tx, viaDc, [cid, DC_STAGE_CODES[proc], bundleIds]) : await query<any>(viaDc, [cid, DC_STAGE_CODES[proc], bundleIds]);
+  for (const r of [...a, ...b]) out.add(Number(r.bundle_id));
+  return out;
+}
+
 export function openAllocBundlesSql(proc: LinkProc) {
   const t = T[proc];
   return `SELECT d.bundle_id FROM ${t.allocD} d JOIN ${t.alloc} h ON h.id = d.allocation_id

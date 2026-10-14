@@ -25,10 +25,12 @@ export function ShipmentPlanPage() {
   const [selectedPkgs, setSelectedPkgs] = useState<number[]>([]);
   const [buyers, setBuyers] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
+  const [readyLists, setReadyLists] = useState<any[]>([]);      // CONFIRMED packing lists not yet shipped
   const toast = useToast();
   const nav = useNavigate();
 
   const [form, setForm] = useState<any>({
+    packing_list_id: '',
     planned_date: today(),
     buyer_id: '',
     shipment_type: 'DOMESTIC',
@@ -49,11 +51,23 @@ export function ShipmentPlanPage() {
     Promise.all([
       api.get('/available-packages'),
       api.get('/lookups/parties'),
-    ]).then(([pk, pt]) => {
+      api.get('/packing-lists', { params: { for_shipment: 1 } }),
+    ]).then(([pk, pt, pl]) => {
       setAvailablePkgs(pk.data.data || []);
       setBuyers(pt.data.data || []);
+      setReadyLists(pl.data.data || []);
     });
   }, []);
+
+  const planPl = readyLists.find((p) => String(p.id) === String(form.packing_list_id));
+  /** Picking a confirmed packing list takes its cartons (all pre-selected) or, for a hand-made list, its row totals. */
+  const pickPlanList = async (v: string) => {
+    const pl = readyLists.find((p) => String(p.id) === v);
+    setForm((f: any) => ({ ...f, packing_list_id: v, ...(pl ? { buyer_id: pl.buyer_id ?? f.buyer_id, shipment_type: pl.shipment_type || f.shipment_type, destination: pl.destination || f.destination } : {}) }));
+    const r = await api.get('/available-packages', { params: v ? { packing_list_id: v } : {} });
+    setAvailablePkgs(r.data.data || []);
+    setSelectedPkgs(v ? (r.data.data || []).map((c: any) => c.id) : []);
+  };
 
   const handleCreatePlan = async () => {
     setSaving(true);
@@ -61,6 +75,7 @@ export function ShipmentPlanPage() {
       await api.post('/shipment-plans', {
         ...form,
         buyer_id: form.buyer_id ? Number(form.buyer_id) : null,
+        packing_list_id: form.packing_list_id ? Number(form.packing_list_id) : null,
         package_ids: selectedPkgs,
       });
       toast('Shipment plan created');
@@ -101,6 +116,8 @@ export function ShipmentPlanPage() {
             { key: 'plan_no', header: 'Plan No', sortable: true, render: (r: any) => <span className="font-mono text-xs font-bold text-brand-700">{r.plan_no}</span> },
             { key: 'planned_date', header: 'Planned Date', sortable: true, render: (r: any) => fmtDate(r.planned_date) },
             { key: 'buyer_name', header: 'Buyer' },
+            { key: 'packing_list_no', header: 'Packing list', render: (r: any) => r.packing_list_no
+              ? <span className="text-xs">{r.packing_list_no}{r.package_basis === 'PACKING_LIST' && <Badge color="amber" className="ml-1">list totals</Badge>}</span> : '—' },
             { key: 'shipment_type', header: 'Type', render: (r: any) => <Badge color={r.shipment_type === 'EXPORT' ? 'blue' : 'slate'}>{r.shipment_type}</Badge> },
             { key: 'mode', header: 'Mode', render: (r: any) => <Badge variant="outline">{r.mode}</Badge> },
             { key: 'total_packages', header: 'Packages', align: 'right' as const, render: (r: any) => fmtNumber(r.total_packages) },
@@ -119,12 +136,18 @@ export function ShipmentPlanPage() {
       <Modal open={showModal} onClose={() => setShowModal(false)} title="New Shipment Plan" size="lg"
         subtitle="Plan a shipment from confirmed packages, then convert it to a shipment"
         icon={<Ship size={16} />}
-        footerStart={<><b>{selectedPkgs.length}</b> package(s) selected</>}
+        footerStart={planPl && !selectedPkgs.length
+          ? <>List totals: <b>{fmtNumber(planPl.total_cartons)}</b> ctns · <b>{fmtNumber(planPl.total_qty)}</b> pcs</>
+          : <><b>{selectedPkgs.length}</b> package(s) selected · <b>{fmtNumber(availablePkgs.filter((p) => selectedPkgs.includes(p.id)).reduce((a, p) => a + Number(p.content_qty || 0), 0))}</b> pcs</>}
         footer={<>
           <Button variant="secondary" onClick={() => setShowModal(false)}>Cancel</Button>
           <Button onClick={handleCreatePlan} loading={saving}>Create Plan</Button>
         </>}>
         <FormSection title="Plan" cols={3}>
+          <Select label="From packing list (confirmed)" value={form.packing_list_id} id="plan-pl" className="lg:col-span-3"
+            onChange={e => void pickPlanList(e.target.value)}
+            options={[{ value: '', label: '— None: pick cartons below —' }, ...readyLists.map((p: any) => ({ value: p.id,
+              label: `${p.pl_no} · ${p.io_no || p.so_no || '—'} · ${fmtNumber(p.total_cartons)} ctns / ${fmtNumber(p.total_qty)} pcs${Number(p.linked_cartons) ? '' : ' (list totals)'}` }))]} />
           <Input label="Planned Date" type="date" value={form.planned_date}
             onChange={e => setForm({ ...form, planned_date: e.target.value })} />
           <Select label="Buyer" value={form.buyer_id}
@@ -140,7 +163,12 @@ export function ShipmentPlanPage() {
             onChange={e => setForm({ ...form, destination: e.target.value })} />
         </FormSection>
 
-        <FormSection title={`Confirmed packages (${selectedPkgs.length} selected)`} cols={1}>
+        <FormSection title={`Ready cartons — posted, verified / sealed (${selectedPkgs.length} selected)`} cols={1}>
+          {planPl && !Number(planPl.linked_cartons) && (
+            <p className="rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">
+              {planPl.pl_no} is a hand-made list (not built from packed cartons): the plan takes its row totals — {fmtNumber(planPl.total_cartons)} cartons, {fmtNumber(planPl.total_qty)} pcs, {fmtDecimal(planPl.gross_weight_kg)} kg.
+            </p>
+          )}
           <div className="border rounded-lg max-h-48 overflow-y-auto p-2 divide-y">
             {availablePkgs.map(p => (
               <label key={p.id} className="flex items-center gap-3 p-2 hover:bg-slate-50 cursor-pointer text-xs">
@@ -153,8 +181,11 @@ export function ShipmentPlanPage() {
                 <span className="text-slate-500">Pack: {p.pack_no}</span>
                 <span className="text-blue-700 font-bold">{p.content_qty} PCS</span>
                 <span className="text-slate-400">{p.gross_weight_kg} KG</span>
+                {p.pl_no && <span className="text-slate-400">PL {p.pl_no}</span>}
+                {Number(p.is_partial) === 1 && <Badge color="amber">partial</Badge>}
               </label>
             ))}
+            {!availablePkgs.length && <p className="p-2 text-xs italic text-slate-400">No ready cartons</p>}
           </div>
         </FormSection>
 
@@ -266,7 +297,7 @@ export function ShipmentDetailPage() {
   useEffect(() => {
     Promise.all([
       api.get('/lookups/sales-orders'),
-      api.get('/packing-lists'),
+      api.get('/packing-lists', { params: isNew ? { for_shipment: 1 } : {} }),
       api.get('/lookups/parties'),
     ]).then(([so, pl, pt]) => {
       setSalesOrders(so.data.data || []);
@@ -311,10 +342,15 @@ export function ShipmentDetailPage() {
       destination: pl?.destination || prev.destination,
       shipment_type: pl?.shipment_type || prev.shipment_type,
     }));
-    if (pl?.packing_id) {
-      api.get(`/available-packages?packing_id=${pl.packing_id}`).then(r => setAvailablePackages(r.data.data || []));
-    }
+    // a confirmed list brings its packed cartons (all selected); a hand-made list ships its row totals
+    api.get('/available-packages', { params: plId ? { packing_list_id: plId } : {} }).then(r => {
+      const rows = r.data.data || [];
+      setAvailablePackages(rows);
+      setSelectedPkgs(plId ? rows.map((c: any) => c.id) : []);
+    });
   };
+  const pickedPl = packingLists.find(p => p.id === header.packing_list_id);
+  const listBased = Boolean(pickedPl && !Number(pickedPl.linked_cartons));
 
   const handleSave = async () => {
     setSaving(true);
@@ -427,9 +463,13 @@ export function ShipmentDetailPage() {
             {header.packing_list_id && <span className="text-[10px] text-indigo-600 font-medium">🔒 Inherited from Packing List</span>}
           </div>
 
-          <Select label="Packing List Source" value={header.packing_list_id || ''}
-            onChange={e => handlePlSelect(e.target.value)}
-            options={[{ value: '', label: '— Select Packing List —' }, ...packingLists.map((p: any) => ({ value: p.id, label: `${p.pl_no} (I/O: ${p.io_no || 'N/A'})` }))]} />
+          <div>
+            <Select label="Packing List Source" value={header.packing_list_id || ''} id="shp-pl" disabled={!isNew}
+              onChange={e => handlePlSelect(e.target.value)}
+              options={[{ value: '', label: isNew ? '— Select confirmed packing list —' : '—' }, ...packingLists.map((p: any) => ({ value: p.id,
+                label: `${p.pl_no} (I/O: ${p.io_no || 'N/A'}) · ${fmtNumber(p.total_cartons)} ctns / ${fmtNumber(p.total_qty)} pcs` }))]} />
+            {!isNew && header.package_basis === 'PACKING_LIST' && <span className="text-[10px] font-medium text-amber-700">Totals from the packing list rows (hand-made list, no physical cartons)</span>}
+          </div>
 
           <Select label="Sales Order" value={header.so_id || ''}
             onChange={e => {
@@ -518,8 +558,17 @@ export function ShipmentDetailPage() {
       )}
 
       {/* Package Selection (New Shipment) */}
-      {isNew && (
-        <Card title={`Select Packages to Allocate (${selectedPkgs.length} selected)`}>
+      {isNew && listBased && pickedPl && (
+        <Card title="Ships the packing list totals">
+          <div className="p-4 text-sm text-amber-800" data-testid="shp-list-based">
+            {pickedPl.pl_no} is not built from packed cartons. The shipment takes its row totals:
+            <b> {fmtNumber(pickedPl.total_cartons)}</b> cartons · <b>{fmtNumber(pickedPl.total_qty)}</b> pcs · <b>{fmtDecimal(pickedPl.gross_weight_kg)}</b> kg gross · <b>{fmtDecimal(pickedPl.total_cbm, 3)}</b> CBM.
+          </div>
+        </Card>
+      )}
+
+      {isNew && !listBased && (
+        <Card title={`Select Packages to Allocate (${selectedPkgs.length} selected · ${fmtNumber(availablePackages.filter(p => selectedPkgs.includes(p.id)).reduce((a, p) => a + Number(p.content_qty || 0), 0))} pcs)`}>
           <div className="p-4 max-h-72 overflow-y-auto">
             {availablePackages.length > 0 ? (
               <table className="w-full text-sm">
@@ -554,14 +603,16 @@ export function ShipmentDetailPage() {
                   ))}
                 </tbody>
               </table>
-            ) : <p className="text-xs text-slate-400 italic">No available packages found</p>}
+            ) : <p className="text-xs text-slate-400 italic">No ready cartons (posted, verified / sealed) found</p>}
           </div>
         </Card>
       )}
 
       {/* Allocated Packages (Existing) */}
       {!isNew && (
-        <Card title={`Allocated Cartons (${packages.length})`}>
+        <Card title={header.package_basis === 'PACKING_LIST'
+          ? `Packing list totals — ${fmtNumber(header.total_packages)} cartons · ${fmtNumber(header.total_qty)} pcs (no physical cartons)`
+          : `Allocated Cartons (${packages.length})`}>
           <div className="p-4">
             <table className="w-full text-sm">
               <thead>
@@ -571,6 +622,7 @@ export function ShipmentDetailPage() {
                   <th className="pb-2 text-right">Gross Wt</th>
                   <th className="pb-2 text-right">CBM</th>
                   <th className="pb-2">Status</th>
+                  <th className="pb-2">Carton</th>
                 </tr>
               </thead>
               <tbody>
@@ -581,6 +633,7 @@ export function ShipmentDetailPage() {
                     <td className="py-1.5 text-right">{fmtDecimal(p.carton_gross)}</td>
                     <td className="py-1.5 text-right">{fmtDecimal(p.carton_cbm, 3)}</td>
                     <td className="py-1.5"><Badge color={p.status === 'DELIVERED' ? 'emerald' : p.status === 'DISPATCHED' ? 'amber' : 'blue'}>{p.status}</Badge></td>
+                    <td className="py-1.5 text-xs text-slate-500">{p.carton_status || '—'}</td>
                   </tr>
                 ))}
               </tbody>

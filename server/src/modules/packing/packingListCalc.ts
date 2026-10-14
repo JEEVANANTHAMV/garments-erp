@@ -372,6 +372,8 @@ export interface CartonForBuild {
   id: number; carton_no: string;
   net_weight_kg: number | null; gross_weight_kg: number | null;
   length_cm: number | null; width_cm: number | null; height_cm: number | null;
+  /** polybags in the carton (packing engine) — cartons with a different polybag count never share a row */
+  polybag_qty?: number | null;
   contents: { style_id: number; style_code: string; style_name: string | null; color_id: number; color_name: string; size_code: string; qty: number }[];
 }
 
@@ -391,7 +393,7 @@ export function groupCartons(cartons: CartonForBuild[], orderNo: string | null, 
     [...c.contents].sort((a, b) => `${a.style_id}|${a.color_id}|${a.size_code}`.localeCompare(`${b.style_id}|${b.color_id}|${b.size_code}`))
       .map((x) => [x.style_id, x.color_id, x.size_code, Number(x.qty)]),
     Number(c.net_weight_kg ?? 0), Number(c.gross_weight_kg ?? 0),
-    Number(c.length_cm ?? 0), Number(c.width_cm ?? 0), Number(c.height_cm ?? 0)]);
+    Number(c.length_cm ?? 0), Number(c.width_cm ?? 0), Number(c.height_cm ?? 0), Number(c.polybag_qty ?? 0)]);
 
   const rows: (RowIn & { ctn_from: number })[] = [];
   let prevSig = '', prevN = -1;
@@ -428,3 +430,23 @@ export function groupCartons(cartons: CartonForBuild[], orderNo: string | null, 
   }
   return rows;
 }
+
+
+/**
+ * Polybag arithmetic on rows built from cartons (MIXED lists only, where a row
+ * may be PCS/PACK × PACK/CTN): a carton of N polybags whose every size qty
+ * divides by N becomes N packs of (size qty / N). Other list types keep the
+ * per-carton size quantities; the polybag count is shown beside the row.
+ */
+export function applyPolybagPacks(rows: RowIn[], polybagsOf: (row: RowIn) => number) {
+  for (const r of rows) {
+    const bags = polybagsOf(r);
+    if (!(bags > 1)) continue;
+    const all = r.items.flatMap((it) => Object.values(it.size_qty));
+    if (!all.length || all.some((q) => q % bags !== 0)) continue;
+    for (const it of r.items) for (const k of Object.keys(it.size_qty)) it.size_qty[k] = it.size_qty[k] / bags;
+    r.packs_per_ctn = bags;
+  }
+  return rows;
+}
+

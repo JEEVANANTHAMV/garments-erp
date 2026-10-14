@@ -25,8 +25,11 @@ import { salesOrderRouter } from './modules/sales/salesOrder.routes.js';
 import { inventoryRouter } from './modules/inventory/inventory.routes.js';
 import { mrpRouter } from './modules/mrp/mrp.routes.js';
 import { cartonRouter } from './modules/packing/packing.routes.js';
+import { packingEngineRouter } from './modules/packing/packingEngine.routes.js';
 import { dashboardRouter } from './modules/dashboard/dashboard.routes.js';
 import { reportsRouter } from './modules/reports/reports.routes.js';
+import { clientReportsARouter } from './modules/reports/clientReportsA.routes.js';
+import { clientReportsBRouter } from './modules/reports/clientReportsB.routes.js';
 import { uploadRouter } from './modules/upload/upload.routes.js';
 import { gstRouter } from './modules/gst/gst.routes.js';
 import { wipRouter } from './modules/production/wip.routes.js';
@@ -110,6 +113,8 @@ export function createApp() {
   api.use('/lookup', lookupRouter);
   api.use('/dashboard', dashboardRouter);
   api.use('/reports', reportsRouter);
+  api.use('/client-reports', clientReportsARouter); // client's own report set A (orders, budget, production, logistics)
+  api.use('/client-reports', clientReportsBRouter);   // client report set B: /client-reports/b/* (purchase, stores, gate, bills, users)
 
   // Hand-built modules with domain logic.
   api.use('/styles', styleRouter);
@@ -124,6 +129,7 @@ export function createApp() {
   api.use('/uploads', uploadRouter);
   api.use('/gst', gstRouter);
   api.use('/', cartonRouter);          // /packings/:id/cartons, /cartons/:id
+  api.use('/packing', packingEngineRouter); // packing engine: /packing/rules, /packing/orders, /packing/cartons, /packing/reports
   api.use('/production', wipRouter);   // /production/wip-summary, /production/daily-dashboard, etc.
   api.use('/', costingRouter);          // /production-costs/order-data/:id, /pre-costings/style-data/:id, etc.
   api.use('/', cadRouter);              // /cad-requirements, /cad-requirements/:id/calculate, etc.

@@ -4,7 +4,7 @@ import { Plus, Pencil, Trash2, Save, UserCog, ShieldCheck } from 'lucide-react';
 import { DataTable } from '../../components/DataTable';
 import {
   PageHeader, Modal, FormSection, ConfirmDialog, Input, Checkbox, Spinner,
-  Badge, LoadingBlock, ErrorState, Tabs,
+  Badge, LoadingBlock, ErrorState, Tabs, SearchInput,
 } from '../../components/ui';
 import { useList, useRemove, useListState } from '../../hooks/useResource';
 import { http, ApiError } from '../../lib/api';
@@ -345,6 +345,7 @@ export function SettingsPage() {
 
   const [vals, setVals] = useState<Record<string, string>>({});
   const [loaded, setLoaded] = useState(false);
+  const [find, setFind] = useState('');
 
   if (settings.data && !loaded) {
     const m: Record<string, string> = {};
@@ -372,20 +373,37 @@ export function SettingsPage() {
           {busy && <Spinner size={14} />}<Save size={15} /> Save all
         </button>} />
 
+      <SearchInput value={find} onChange={setFind} placeholder="Find a setting (key or description)…" className="mb-3 w-full max-w-md" />
       <div className="card p-5">
-        <div className="divide-y divide-surface-border">
-          {(settings.data ?? []).map((s: any) => (
-            <div key={s.key} className="flex flex-wrap items-center gap-4 py-3.5 first:pt-0 last:pb-0">
-              <div className="min-w-0 flex-1">
-                <p className="font-mono text-[12.5px] font-medium text-brand-700">{s.key}</p>
-                {s.description && <p className="text-[11.5px] text-slate-500">{s.description}</p>}
+        <div className="divide-y divide-surface-border" id="settings-list">
+          {(settings.data ?? []).filter((s: any) => !find || `${s.key} ${s.description ?? ''}`.toLowerCase().includes(find.toLowerCase())).map((s: any) => {
+            // 0 / 1 switches ("1 = … ; 0 = …") show as ON / OFF so nobody has to remember what 1 means (call 14-Oct-2026)
+            const isFlag = /(^|[;\s(])1 = /.test(String(s.description ?? '')) && ['0', '1', ''].includes(String(vals[s.key] ?? '').trim());
+            const on = String(vals[s.key] ?? '').trim() === '1';
+            return (
+              <div key={s.key} className="flex flex-wrap items-center gap-4 py-3.5 first:pt-0 last:pb-0" data-setting={s.key}>
+                <div className="min-w-0 flex-1">
+                  <p className="font-mono text-[12.5px] font-medium text-brand-700">{s.key}</p>
+                  {s.description && <p className="text-[11.5px] text-slate-500">{s.description}</p>}
+                </div>
+                <div className="w-full sm:w-64">
+                  {isFlag ? (
+                    <button type="button" role="switch" aria-checked={on} disabled={!s.is_editable && s.is_editable !== undefined && s.is_editable !== null && Number(s.is_editable) === 0}
+                      onClick={() => setVals((cur) => ({ ...cur, [s.key]: on ? '0' : '1' }))}
+                      className={`flex items-center gap-2 rounded-full px-1 py-1 pr-3 text-[12px] font-semibold transition-colors ${on ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
+                      <span className={`h-5 w-9 rounded-full p-0.5 transition-colors ${on ? 'bg-emerald-500' : 'bg-slate-300'}`}>
+                        <span className={`block h-4 w-4 rounded-full bg-white shadow transition-transform ${on ? 'translate-x-4' : ''}`} />
+                      </span>
+                      {on ? 'ON (1)' : 'OFF (0)'}
+                    </button>
+                  ) : (
+                    <input className="input" value={vals[s.key] ?? ''}
+                      onChange={(e) => setVals((cur) => ({ ...cur, [s.key]: e.target.value }))} />
+                  )}
+                </div>
               </div>
-              <div className="w-full sm:w-64">
-                <input className="input" value={vals[s.key] ?? ''}
-                  onChange={(e) => setVals((cur) => ({ ...cur, [s.key]: e.target.value }))} />
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </>

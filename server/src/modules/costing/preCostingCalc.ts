@@ -262,3 +262,31 @@ export function computePreCosting(dataJson: any, input: PreCostInput = {}): PreC
     error,
   };
 }
+
+// ------------------------------------------------------------------ Certifications
+/**
+ * "Certifications required" of a sheet (client call 14-Oct-2026): every fabric /
+ * yarn / trim row with a certification (other than NONE), grouped by certification.
+ * Stored in data_json as `cert_summary`; the cost roll-up above never reads it.
+ * web/src/pages/sales/PreCostingDetail.tsx `certSummary` mirrors this.
+ */
+export interface CertSummaryRow { certification: string; materials: { type: 'FABRIC' | 'YARN' | 'TRIM'; name: string }[] }
+
+export function certSummary(dataJson: any): CertSummaryRow[] {
+  const dj = dataJson && typeof dataJson === 'object' ? dataJson : {};
+  const out = new Map<string, CertSummaryRow>();
+  const add = (type: 'FABRIC' | 'YARN' | 'TRIM', rows: unknown, name: (r: any) => unknown) => {
+    for (const r of arr(rows)) {
+      const cert = String(r?.certification ?? '').trim().toUpperCase();
+      if (!cert || cert === 'NONE') continue;
+      const nm = String(name(r) ?? '').trim() || `${type.toLowerCase()} row`;
+      const g = out.get(cert) ?? { certification: cert, materials: [] };
+      if (!g.materials.some((m) => m.type === type && m.name === nm)) g.materials.push({ type, name: nm });
+      out.set(cert, g);
+    }
+  };
+  add('FABRIC', dj.fabrics, (r) => r?.fabric_name || r?.component);
+  add('YARN', dj.yarns, (r) => r?.yarn_name || r?.yarn_count);
+  add('TRIM', dj.trims, (r) => r?.description || r?.trim_code);
+  return [...out.values()].sort((a, b) => a.certification.localeCompare(b.certification));
+}

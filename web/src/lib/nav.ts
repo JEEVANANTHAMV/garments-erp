@@ -18,6 +18,8 @@ export interface NavItem {
   hidden?: boolean;
   /** Hidden screen that is part of a menu screen (a tab of it): the sidebar and step bar show that screen. */
   parent?: string;
+  /** Shown only when this admin menu switch (cfg_system_setting MENU_*) is on. */
+  flag?: string;
 }
 export interface NavSection {
   label: string;
@@ -138,6 +140,8 @@ export const NAV: NavSection[] = [
       { label: 'Checking Line Allocation', to: '/production/checking-line-allocation', icon: GitBranch, perms: ['PRODUCTION.VIEW'] },
       { label: 'Checking Daily Plan',      to: '/production/checking-daily-plan', icon: CalendarClock, perms: ['PRODUCTION.VIEW'] },
       { label: 'Checking Entry (QC)',      to: '/production/checking-qc-entry', icon: ClipboardCheck, perms: ['PRODUCTION.VIEW'] },
+      // random AQL line checks — kept off until the client needs it (Admin → Settings → MENU_SHOW_LINE_QC)
+      { label: 'Line QC (AQL)',            to: '/quality/inspections', icon: ClipboardCheck, perms: ['QC.VIEW'], flag: 'MENU_SHOW_LINE_QC' },
       { label: 'Ironing Line Allocation',  to: '/production/ironing-line-allocation', icon: GitBranch, perms: ['PRODUCTION.VIEW'] },
       { label: 'Ironing Daily Plan',       to: '/production/ironing-daily-plan', icon: CalendarClock, perms: ['PRODUCTION.VIEW'] },
       { label: 'Packing Line Allocation',  to: '/production/packing-line-allocation', icon: GitBranch, perms: ['PRODUCTION.VIEW'] },
@@ -270,7 +274,6 @@ export const NAV: NavSection[] = [
       // Duplicates removed from the menu 14-Oct-2026 (each replaced by the screen in brackets)
       { label: 'General POs',        to: '/procurement/general-orders', icon: ShoppingCart, perms: ['PURCHASE.VIEW'], hidden: true, parent: '/procurement/general-purchases' }, // PO tab
       { label: 'Production Plans',   to: '/production/plans', icon: CalendarClock, perms: ['PRODUCTION.VIEW'], hidden: true },          // T&A Order Tracking
-      { label: 'QC Inspections',     to: '/quality/inspections', icon: ClipboardCheck, perms: ['QC.VIEW'], hidden: true },              // Checking Entry (QC)
       { label: 'WIP Dashboard',      to: '/production/wip', icon: BarChart3, perms: ['PRODUCTION.VIEW'], hidden: true },                // WIP Stock Value / Operation Status
       { label: 'Sewing Operations',  to: '/production/sewing-operations', icon: Scissors, perms: ['PRODUCTION.VIEW'], hidden: true },  // Process & Operations
     ],

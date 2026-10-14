@@ -7,7 +7,7 @@ import { NotFound, BadRequest } from '../../core/errors.js';
 import { requirePermission } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
-import { computePreCosting, PRE_COST_HEADS } from './preCostingCalc.js';
+import { computePreCosting, PRE_COST_HEADS, certSummary } from './preCostingCalc.js';
 
 export const costingRouter = Router();
 
@@ -961,11 +961,15 @@ costingRouter.get('/pre-costings/style-data/:styleId', requirePermission('COSTIN
            y.yarn_name, y.yarn_code, y.std_rate AS yarn_std_rate,
            fb.fabric_name, fb.fabric_code, fb.std_rate AS fabric_std_rate,
            tr.trim_name, tr.trim_code, tr.std_rate AS trim_std_rate,
+           CASE l.material_type WHEN 'FABRIC' THEN fbase.certification WHEN 'YARN' THEN ybase.certification
+                                WHEN 'TRIM' THEN tr.certification END AS certification,
            c.color_name, sz.size_code, u.code AS uom_code
       FROM trx_bom b
       JOIN trx_bom_line l ON l.bom_id = b.id
       LEFT JOIN mst_yarn y ON y.id = l.yarn_id
+      LEFT JOIN mst_yarn_base ybase ON ybase.id = y.yarn_base_id
       LEFT JOIN mst_fabric fb ON fb.id = l.fabric_id
+      LEFT JOIN mst_fabric_base fbase ON fbase.id = fb.fabric_base_id
       LEFT JOIN mst_trim tr ON tr.id = l.trim_id
       LEFT JOIN mst_color c ON c.id = l.color_id
       LEFT JOIN mst_size sz ON sz.id = l.size_id
@@ -1000,6 +1004,24 @@ costingRouter.get('/pre-costings/style-data/:styleId', requirePermission('COSTIN
 }));
 
 /**
+ * GET /api/pre-costings/material-certs — certification of every fabric / yarn /
+ * trim master (fabric & yarn from their base), so a row picked by hand on the
+ * sheet defaults its Certification (client call 14-Oct-2026).
+ */
+costingRouter.get('/pre-costings/material-certs', requirePermission('COSTING.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const toMap = (rows: any[]) => Object.fromEntries(rows.filter((r) => r.certification).map((r) => [String(r.id), String(r.certification)]));
+  const [fabrics, yarns, trims] = await Promise.all([
+    query<any>(`SELECT f.id, fb.certification FROM mst_fabric f LEFT JOIN mst_fabric_base fb ON fb.id = f.fabric_base_id
+                 WHERE f.company_id = ? AND f.is_deleted = 0`, [cid]),
+    query<any>(`SELECT y.id, yb.certification FROM mst_yarn y LEFT JOIN mst_yarn_base yb ON yb.id = y.yarn_base_id
+                 WHERE y.company_id = ? AND y.is_deleted = 0`, [cid]),
+    query<any>(`SELECT id, certification FROM mst_trim WHERE company_id = ? AND is_deleted = 0`, [cid]),
+  ]);
+  res.json({ data: { fabrics: toMap(fabrics), yarns: toMap(yarns), trims: toMap(trims) } });
+}));
+
+/**
  * 6. POST /api/pre-costings/calculate
  * Pre-costing roll-up without saving — the same computePreCosting() the costings
  * resource runs on create / update. Body: the sheet's data_json shape
@@ -1028,6 +1050,7 @@ costingRouter.post('/pre-costings/calculate', requirePermission('COSTING.VIEW'),
       total_order_cost: r.total_cost * orderQty,
       total_order_fob: r.fob_price * orderQty,
       total_order_profit: r.profit_per_pc * orderQty,
+      cert_summary: certSummary(b),
     },
   });
 });

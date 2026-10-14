@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { query, queryOne, transaction, txQueryOne, txExecute } from '../../config/db.js';
+import { query, queryOne, transaction, txQuery, txQueryOne, txExecute } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
 import { NotFound, BadRequest } from '../../core/errors.js';
 import { requirePermission } from '../../middleware/auth.js';
@@ -8,7 +8,7 @@ import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
 import {
-  PL_TYPES, blockSchema, computePackingList, normaliseSizeHeaders, groupCartons, type ComputedList,
+  PL_TYPES, blockSchema, computePackingList, normaliseSizeHeaders, groupCartons, applyPolybagPacks, type ComputedList,
 } from './packingListCalc.js';
 import {
   asJson, loadStructure, writeStructure, buildSummary, companyExporterDetails, partyAddressBlock,
@@ -167,6 +167,124 @@ const headerValues = (b: PackingListBody) => HEADER_COLS.map((k) => {
   return v === undefined ? null : v;
 });
 
+/* ------------------------------------------------------------------
+   Posted cartons (packing engine contract, db/118):
+   READY = posted and verified / sealed; dispatch sets DISPATCHED.
+   A carton sits on at most one packing list (trx_packing_list_carton)
+   and on at most one active shipment (trx_shipment_package not CANCELLED).
+------------------------------------------------------------------ */
+const READY_SQL = `c.is_posted = 1 AND c.carton_status IN ('VERIFIED','SEALED')`;
+const ACTIVE_SHIP_SQL = `COALESCE(sh.remarks,'') NOT LIKE '%[CANCELLED]%'`;
+const r3 = (n: number) => Math.round(n * 1000) / 1000;
+const r5 = (n: number) => Math.round(n * 100000) / 100000;
+
+/** Content qty of each carton (one query). */
+async function cartonQtyMap(db: { tx?: any }, ids: number[]) {
+  const out = new Map<number, number>();
+  if (!ids.length) return out;
+  const sql = `SELECT carton_id, COALESCE(SUM(qty),0) AS q FROM trx_carton_content WHERE carton_id IN (?) GROUP BY carton_id`;
+  const rows = db.tx ? await txQuery<any>(db.tx, sql, [ids]) : await query<any>(sql, [ids]);
+  for (const r of rows) out.set(Number(r.carton_id), Number(r.q));
+  return out;
+}
+
+/** Carton facts the editor shows next to rows built from cartons, keyed by carton id. */
+async function cartonInfo(cid: number, ids: number[]) {
+  const info: Record<number, any> = {};
+  if (!ids.length) return info;
+  const rows = await query<any>(
+    `SELECT c.id, c.carton_no, c.carton_status, c.is_posted, c.is_partial, c.polybag_qty, c.pieces_total,
+            c.net_weight_kg, c.gross_weight_kg, c.cbm, p.pack_no, COALESCE(SUM(cc.qty),0) AS qty
+       FROM trx_carton c JOIN trx_packing p ON p.id = c.packing_id AND p.company_id = ?
+       LEFT JOIN trx_carton_content cc ON cc.carton_id = c.id
+      WHERE c.id IN (?) GROUP BY c.id`, [cid, ids]);
+  for (const r of rows) info[r.id] = {
+    carton_no: r.carton_no, pack_no: r.pack_no, status: r.carton_status, is_posted: Boolean(r.is_posted),
+    is_partial: Boolean(r.is_partial), polybag_qty: Number(r.polybag_qty || 0), qty: Number(r.qty || 0),
+    net_weight_kg: r.net_weight_kg == null ? null : Number(r.net_weight_kg),
+    gross_weight_kg: r.gross_weight_kg == null ? null : Number(r.gross_weight_kg), cbm: r.cbm == null ? null : Number(r.cbm),
+  };
+  return info;
+}
+
+const cartonAgg = (rows: { qty: number; polybag_qty: number; is_partial: boolean }[]) => ({
+  cartons: rows.length, qty: rows.reduce((a, r) => a + r.qty, 0),
+  polybags: rows.reduce((a, r) => a + r.polybag_qty, 0),
+  partial: rows.filter((r) => r.is_partial).length, full: rows.filter((r) => !r.is_partial).length,
+});
+
+/**
+ * Header panel: Order qty | Packed (posted cartons) | On this list | Balance,
+ * full vs partial cartons, polybags, and carton / polybag trim stock.
+ */
+async function packSummary(cid: number, soId: number | null, ioNo: string | null, plId: number | null) {
+  const out: any = { order_qty: null, packed: null, ready_unlisted: null, this_pl: null, balance_to_pack: null, packaging_stock: null };
+  if (soId) {
+    const o = await queryOne<any>(
+      `SELECT COALESCE(SUM(sk.qty),0) AS q FROM trx_sales_order_line l JOIN trx_sales_order so ON so.id = l.so_id AND so.company_id = ?
+         JOIN trx_sales_order_sku sk ON sk.so_line_id = l.id WHERE l.so_id = ?`, [cid, soId]);
+    out.order_qty = Number(o?.q || 0);
+  }
+  if (soId || ioNo) {
+    const where = soId ? `p.so_id = ?` : `p.io_no = ?`;
+    const rows = await query<any>(
+      `SELECT c.id, c.carton_status, c.is_partial, c.polybag_qty,
+              (SELECT COALESCE(SUM(cc.qty),0) FROM trx_carton_content cc WHERE cc.carton_id = c.id) AS qty,
+              (SELECT plc.packing_list_id FROM trx_packing_list_carton plc WHERE plc.carton_id = c.id) AS pl_id
+         FROM trx_carton c JOIN trx_packing p ON p.id = c.packing_id AND p.company_id = ?
+        WHERE ${where} AND c.is_posted = 1 AND c.carton_status IN ('VERIFIED','SEALED','DISPATCHED')`, [cid, soId ?? ioNo]);
+    const norm = rows.map((r: any) => ({ ...r, qty: Number(r.qty), polybag_qty: Number(r.polybag_qty || 0), is_partial: Boolean(r.is_partial) }));
+    out.packed = cartonAgg(norm);
+    out.ready_unlisted = cartonAgg(norm.filter((r) => r.carton_status !== 'DISPATCHED' && !r.pl_id));
+    if (out.order_qty != null) out.balance_to_pack = out.order_qty - out.packed.qty;
+  }
+  if (plId) {
+    const rows = await query<any>(
+      `SELECT c.id, c.is_partial, c.polybag_qty, (SELECT COALESCE(SUM(cc.qty),0) FROM trx_carton_content cc WHERE cc.carton_id = c.id) AS qty
+         FROM trx_packing_list_carton plc JOIN trx_carton c ON c.id = plc.carton_id
+        WHERE plc.packing_list_id = ? AND plc.company_id = ?`, [plId, cid]);
+    out.this_pl = cartonAgg(rows.map((r: any) => ({ qty: Number(r.qty), polybag_qty: Number(r.polybag_qty || 0), is_partial: Boolean(r.is_partial) })));
+  }
+  // packaging trims in stock (carton boxes / polybags): free = stock − allocated; job-specific stock is counted for that job only
+  const stock = await query<any>(
+    `SELECT t.trim_type, COALESCE(SUM(s2.stock_qty - s2.allocated_qty),0) AS free
+       FROM trx_trim_stock s2 JOIN mst_trim t ON t.id = s2.trim_id
+      WHERE s2.company_id = ? AND t.trim_type IN ('CARTON','POLYBAG') AND (s2.so_id IS NULL OR s2.so_id = ?)
+      GROUP BY t.trim_type`, [cid, soId ?? 0]);
+  out.packaging_stock = { CARTON: 0, POLYBAG: 0 };
+  for (const s2 of stock) out.packaging_stock[s2.trim_type] = Math.max(0, Number(s2.free));
+  return out;
+}
+
+/**
+ * Keep trx_packing_list_carton in step with the rows' source cartons.
+ * Every source carton must be READY and not on another packing list.
+ */
+async function syncCartonLinks(tx: any, cid: number, plId: number, computed: ComputedList | null) {
+  const ids = (computed?.blocks ?? []).flatMap((b) => b.rows.flatMap((r) => r.source_carton_ids ?? []));
+  const uniq = [...new Set(ids)];
+  if (uniq.length !== ids.length) throw BadRequest('The same carton is used on two rows of this packing list');
+  await txExecute(tx, `DELETE FROM trx_packing_list_carton WHERE packing_list_id = ?`, [plId]);
+  if (!uniq.length) return;
+  const rows = await txQuery<any>(tx,
+    `SELECT c.id, c.carton_no, c.is_posted, c.carton_status, plc.packing_list_id AS other_pl, pl.pl_no AS other_pl_no
+       FROM trx_carton c JOIN trx_packing p ON p.id = c.packing_id AND p.company_id = ?
+       LEFT JOIN trx_packing_list_carton plc ON plc.carton_id = c.id AND plc.packing_list_id <> ?
+       LEFT JOIN trx_packing_list pl ON pl.id = plc.packing_list_id
+      WHERE c.id IN (?) FOR UPDATE`, [cid, plId, uniq]);
+  if (rows.length !== uniq.length) throw BadRequest(`${uniq.length - rows.length} carton(s) these rows were built from no longer exist; rebuild the rows from the packed cartons`);
+  const notReady = rows.filter((r: any) => !(Number(r.is_posted) === 1 && ['VERIFIED', 'SEALED'].includes(r.carton_status)));
+  if (notReady.length) throw BadRequest(`Carton(s) ${notReady.map((r: any) => `${r.carton_no} (${r.carton_status}${Number(r.is_posted) ? '' : ', not posted'})`).join(', ')} are not ready — only posted, verified / sealed cartons go on a packing list`);
+  const taken = rows.filter((r: any) => r.other_pl);
+  if (taken.length) throw BadRequest(`Carton(s) ${taken.map((r: any) => `${r.carton_no} → ${r.other_pl_no}`).join(', ')} are already on another packing list`);
+  try {
+    await txQuery(tx, `INSERT INTO trx_packing_list_carton (company_id, packing_list_id, carton_id) VALUES ?`, [uniq.map((c) => [cid, plId, c])]);
+  } catch (e: any) {
+    if (e?.code === 'ER_DUP_ENTRY') throw BadRequest('A carton on this list was just put on another packing list; rebuild the rows');
+    throw e;
+  }
+}
+
 /** Full packing list payload: header, blocks/rows/items, totals, summary, legacy carton view. */
 async function loadPackingList(cid: number, id: number) {
   const row = await queryOne<any>(
@@ -213,8 +331,18 @@ async function loadPackingList(cid: number, id: number) {
         GROUP BY col.color_name, sz.size_code, sz.sort_order
         ORDER BY col.color_name, sz.sort_order`, [cid, row.packing_id]);
   }
+  // rows built from posted cartons vs rows typed by hand / from the order
+  const srcIds = [...new Set(structure.blocks.flatMap((b) => b.rows.flatMap((r) => r.source_carton_ids ?? [])))];
+  const allRows = structure.blocks.flatMap((b) => b.rows);
+  const handRows = allRows.filter((r) => !r.source_carton_ids?.length).length;
+  const ship = await queryOne<any>(
+    `SELECT sh.id, sh.shipment_no FROM trx_shipment sh WHERE sh.packing_list_id = ? AND sh.company_id = ? AND ${ACTIVE_SHIP_SQL} LIMIT 1`, [id, cid]);
   return { ...row, blocks: structure.blocks, totals: structure.totals, measurements: structure.measurements,
-           order_summary: summary, cartons, summary: cartonSummary };
+           order_summary: summary, cartons, summary: cartonSummary,
+           carton_info: await cartonInfo(cid, srcIds), hand_rows: handRows, carton_rows: allRows.length - handRows,
+           source: !allRows.length ? 'NONE' : !handRows ? 'CARTONS' : handRows === allRows.length ? 'MANUAL' : 'MIXED',
+           shipment: ship ?? null,
+           pack_summary: await packSummary(cid, row.so_id ? Number(row.so_id) : null, row.io_no ?? null, id) };
 }
 
 /** GET /packing-lists — All packing lists */
@@ -226,7 +354,10 @@ shipmentRouter.get('/packing-lists', requirePermission('PACKING.VIEW'), ah(async
             pl.total_qty, pl.net_weight_kg, pl.gross_weight_kg, pl.total_cbm, pl.invoice_no, pl.buyer_order_no,
             pl.style_summary, pl.created_at, pl.confirmed_at,
             p.pack_no, so.so_no, b.party_name AS buyer_name, con.party_name AS consignee_name,
-            (SELECT COUNT(*) FROM trx_packing_list_row r WHERE r.packing_list_id = pl.id) AS row_count
+            (SELECT COUNT(*) FROM trx_packing_list_row r WHERE r.packing_list_id = pl.id) AS row_count,
+            (SELECT COUNT(*) FROM trx_packing_list_carton plc WHERE plc.packing_list_id = pl.id) AS linked_cartons,
+            (SELECT sh.shipment_no FROM trx_shipment sh WHERE sh.packing_list_id = pl.id AND sh.company_id = pl.company_id
+                AND ${ACTIVE_SHIP_SQL} ORDER BY sh.id DESC LIMIT 1) AS shipment_no
        FROM trx_packing_list pl
        LEFT JOIN trx_packing p ON p.id = pl.packing_id
        LEFT JOIN trx_sales_order so ON so.id = pl.so_id
@@ -234,7 +365,9 @@ shipmentRouter.get('/packing-lists', requirePermission('PACKING.VIEW'), ah(async
        LEFT JOIN mst_party con ON con.id = pl.consignee_id
       WHERE pl.company_id = ?
       ORDER BY pl.pl_date DESC, pl.id DESC`, [cid]);
-  res.json({ data: rows });
+  // ?for_shipment=1 → only CONFIRMED lists not yet on an active shipment (Shipment / Shipment Planning pickers)
+  const forShip = req.query.for_shipment === '1' || req.query.for_shipment === 'true';
+  res.json({ data: forShip ? rows.filter((r: any) => r.status === 'CONFIRMED' && !r.shipment_no) : rows });
 }));
 
 /**
@@ -323,41 +456,94 @@ shipmentRouter.get('/packing-lists/prefill', requirePermission('PACKING.VIEW'), 
   res.json({ data: out });
 }));
 
+/** GET /packing-lists/pack-summary?so_id=&io_no=&pl_id= — Order | Packed | On this list | Balance + packaging stock */
+shipmentRouter.get('/packing-lists/pack-summary', requirePermission('PACKING.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const soId = req.query.so_id ? Number(req.query.so_id) : null;
+  const ioNo = req.query.io_no ? String(req.query.io_no).slice(0, 40) : null;
+  const plIdQ = req.query.pl_id ? Number(req.query.pl_id) : null;
+  if (plIdQ && !(await queryOne(`SELECT id FROM trx_packing_list WHERE id = ? AND company_id = ?`, [plIdQ, cid]))) throw NotFound('Packing list not found');
+  res.json({ data: await packSummary(cid, soId && soId > 0 ? soId : null, ioNo, plIdQ && plIdQ > 0 ? plIdQ : null) });
+}));
+
 /**
- * GET /packing-lists/build-rows?packing_id= — carton rows built from the
- * physical cartons of a packing: identical consecutive cartons become one
- * carton-number range. Preview only; the user saves the list afterwards.
+ * GET /packing-lists/build-rows?packing_id= | so_id= | io_no= [&pl_id=] — carton rows
+ * built from the READY cartons (posted, verified / sealed) of a packing, sales order
+ * or job that are not on another packing list nor on an active shipment.
+ * Identical consecutive cartons become one carton-number range.
+ * Preview only; the user saves the list afterwards.
  */
 shipmentRouter.get('/packing-lists/build-rows', requirePermission('PACKING.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId;
-  const packingId = Number(req.query.packing_id);
-  if (!Number.isInteger(packingId) || packingId <= 0) throw BadRequest('packing_id is required');
-  const packing = await queryOne<any>(
-    `SELECT p.id, p.so_id, so.buyer_po_no, so.so_no FROM trx_packing p LEFT JOIN trx_sales_order so ON so.id = p.so_id
-      WHERE p.id = ? AND p.company_id = ?`, [packingId, cid]);
-  if (!packing) throw NotFound('Packing record not found');
-  const cartons = await query<any>(
-    `SELECT id, carton_no, net_weight_kg, gross_weight_kg, length_cm, width_cm, height_cm FROM trx_carton WHERE packing_id = ?`, [packingId]);
-  if (!cartons.length) throw BadRequest('This packing has no cartons yet');
+  const packingId = req.query.packing_id ? Number(req.query.packing_id) : null;
+  const soId = req.query.so_id ? Number(req.query.so_id) : null;
+  const ioNo = req.query.io_no ? String(req.query.io_no).trim().slice(0, 40) : null;
+  const ownPl = req.query.pl_id ? Number(req.query.pl_id) : 0;
+  if (!packingId && !soId && !ioNo) throw BadRequest('Pick a packing, sales order or job to build rows from');
+  if (packingId != null && (!Number.isInteger(packingId) || packingId <= 0)) throw BadRequest('Invalid packing_id');
+  let orderNo: string | null = null, orderSoId: number | null = soId;
+  if (packingId) {
+    const packing = await queryOne<any>(
+      `SELECT p.id, p.so_id, so.buyer_po_no, so.so_no FROM trx_packing p LEFT JOIN trx_sales_order so ON so.id = p.so_id
+        WHERE p.id = ? AND p.company_id = ?`, [packingId, cid]);
+    if (!packing) throw NotFound('Packing record not found');
+    orderNo = packing.buyer_po_no ?? packing.so_no ?? null; orderSoId = packing.so_id ?? null;
+  } else if (soId) {
+    const so = await queryOne<any>(`SELECT id, buyer_po_no, so_no FROM trx_sales_order WHERE id = ? AND company_id = ?`, [soId, cid]);
+    if (!so) throw NotFound('Sales order not found');
+    orderNo = so.buyer_po_no ?? so.so_no ?? null;
+  }
+  const where = packingId ? 'c.packing_id = ?' : soId ? 'p.so_id = ?' : 'p.io_no = ?';
+  const all = await query<any>(
+    `SELECT c.id, c.carton_no, c.carton_status, c.is_posted, c.net_weight_kg, c.gross_weight_kg, c.length_cm, c.width_cm, c.height_cm,
+            c.polybag_qty, p.so_id, so.buyer_po_no, so.so_no,
+            (SELECT pl.pl_no FROM trx_packing_list_carton plc JOIN trx_packing_list pl ON pl.id = plc.packing_list_id
+              WHERE plc.carton_id = c.id AND plc.packing_list_id <> ? LIMIT 1) AS other_pl,
+            (SELECT sh.shipment_no FROM trx_shipment_package sp JOIN trx_shipment sh ON sh.id = sp.shipment_id
+              WHERE sp.carton_id = c.id AND sp.status <> 'CANCELLED' LIMIT 1) AS shipment_no
+       FROM trx_carton c JOIN trx_packing p ON p.id = c.packing_id AND p.company_id = ?
+       LEFT JOIN trx_sales_order so ON so.id = p.so_id
+      WHERE ${where}`, [ownPl, cid, packingId ?? soId ?? ioNo]);
+  if (!all.length) throw BadRequest('No cartons are packed for this yet');
+  const isReady = (c: any) => Number(c.is_posted) === 1 && ['VERIFIED', 'SEALED'].includes(c.carton_status);
+  const cartons = all.filter((c: any) => isReady(c) && !c.other_pl && !c.shipment_no);
+  const skipped = {
+    not_ready: all.filter((c: any) => !isReady(c) && c.carton_status !== 'DISPATCHED' && c.carton_status !== 'VOID').length,
+    on_other_list: all.filter((c: any) => isReady(c) && c.other_pl).length,
+    shipped: all.filter((c: any) => c.carton_status === 'DISPATCHED' || (isReady(c) && !c.other_pl && c.shipment_no)).length,
+  };
+  if (!cartons.length) throw BadRequest(`No ready cartons to list: ${skipped.not_ready} not yet posted / verified, ${skipped.on_other_list} already on another packing list, ${skipped.shipped} shipped`);
+  if (!orderNo) { const f = cartons[0]; orderNo = f.buyer_po_no ?? f.so_no ?? null; orderSoId = orderSoId ?? f.so_id ?? null; }
+  const ids = cartons.map((c: any) => c.id);
   const contents = await query<any>(
-    `SELECT cc.carton_id, k.style_id, st.style_code, st.style_name, k.color_id, col.color_name, sz.size_code, sz.sort_order, cc.qty
+    `SELECT cc.carton_id, st.id AS style_id, st.style_code, st.style_name, col.id AS color_id, col.color_name,
+            sz.size_code, sz.sort_order, SUM(cc.qty) AS qty
        FROM trx_carton_content cc
-       JOIN trx_carton c ON c.id = cc.carton_id
-       JOIN mst_style_sku k ON k.id = cc.sku_id
-       JOIN mst_style st ON st.id = k.style_id
-       JOIN mst_color col ON col.id = k.color_id
-       JOIN mst_size sz ON sz.id = k.size_id
-      WHERE c.packing_id = ? ORDER BY sz.sort_order`, [packingId]);
+       LEFT JOIN mst_style_sku k ON k.id = cc.sku_id
+       JOIN mst_style st ON st.id = COALESCE(cc.style_id, k.style_id)
+       JOIN mst_color col ON col.id = COALESCE(cc.color_id, k.color_id)
+       JOIN mst_size sz ON sz.id = COALESCE(cc.size_id, k.size_id)
+      WHERE cc.carton_id IN (?)
+      GROUP BY cc.carton_id, st.id, st.style_code, st.style_name, col.id, col.color_name, sz.size_code, sz.sort_order
+      ORDER BY sz.sort_order`, [ids]);
   const sizeOrder: string[] = [];
   for (const x of [...contents].sort((a, b) => a.sort_order - b.sort_order)) if (!sizeOrder.includes(x.size_code)) sizeOrder.push(x.size_code);
   const byCarton = new Map<number, any[]>();
-  for (const x of contents) { const a = byCarton.get(x.carton_id) ?? []; a.push(x); byCarton.set(x.carton_id, a); }
-  const rows = groupCartons(cartons.map((c: any) => ({ ...c, contents: byCarton.get(c.id) ?? [] }))
-    .filter((c: any) => c.contents.length), packing.buyer_po_no ?? packing.so_no ?? null, packing.so_id ?? null);
+  for (const x of contents) { const a = byCarton.get(x.carton_id) ?? []; a.push({ ...x, qty: Number(x.qty) }); byCarton.set(x.carton_id, a); }
+  const rows = groupCartons(cartons.map((c: any) => ({ ...c, polybag_qty: Number(c.polybag_qty || 0), contents: byCarton.get(c.id) ?? [] }))
+    .filter((c: any) => c.contents.length), orderNo, orderSoId);
   const empty = cartons.length - rows.reduce((a, r) => a + r.no_of_ctns, 0);
   const types = new Set(rows.map((r) => (r.items.length > 1 ? 'MIXED' : Object.keys(r.items[0].size_qty).length === 1 ? 'SOLID' : 'ASSORTED')));
   const plType = types.has('MIXED') ? 'MIXED' : types.size === 1 && types.has('SOLID') ? 'SOLID' : types.has('ASSORTED') && types.has('SOLID') ? 'ASSORTED' : [...types][0] ?? 'ASSORTED';
-  res.json({ data: { size_headers: sizeOrder, pl_type: plType, blocks: [{ label: null, size_headers: null, rows }], empty_cartons: empty } });
+  const bagsOf = new Map<number, number>(cartons.map((c: any) => [c.id, Number(c.polybag_qty || 0)]));
+  if (plType === 'MIXED') applyPolybagPacks(rows, (r) => bagsOf.get(r.source_carton_ids?.[0] ?? 0) ?? 0);
+  // physical carton numbers are kept; a subset (others listed / not ready) leaves gaps
+  const sorted = [...rows].sort((a, b) => a.ctn_from - b.ctn_from);
+  const hasGaps = sorted.some((r, i) => i > 0 && r.ctn_from !== sorted[i - 1].ctn_from + sorted[i - 1].no_of_ctns);
+  res.json({ data: {
+    size_headers: sizeOrder, pl_type: plType, blocks: [{ label: null, size_headers: null, rows }], empty_cartons: empty,
+    has_gaps: hasGaps, skipped, carton_info: await cartonInfo(cid, ids),
+  } });
 }));
 
 /** GET /packing-lists/:id — header + carton rows + totals + Order/Shipped/Diff summary */
@@ -400,6 +586,7 @@ shipmentRouter.post('/packing-lists', requirePermission('PACKING.CREATE'), ah(as
       [cid, plNo, ...headerValues(body), headers ? JSON.stringify(headers) : null,
        t.total_cartons, t.total_qty, t.net_weight_kg, t.gross_weight_kg, t.total_cbm, t.style_summary, req.user!.id]);
     if (computed) await writeStructure(tx, cid, r.insertId, computed);
+    await syncCartonLinks(tx, cid, r.insertId, computed);
     await writeManualOrderQty(tx, cid, r.insertId, body.manual_order_qty);
     return r.insertId;
   });
@@ -439,6 +626,7 @@ shipmentRouter.put('/packing-lists/:id', requirePermission('PACKING.UPDATE'), ah
       await txExecute(tx, `DELETE FROM trx_packing_list_row WHERE packing_list_id = ?`, [id]);
       await txExecute(tx, `DELETE FROM trx_packing_list_block WHERE packing_list_id = ?`, [id]);
     }
+    await syncCartonLinks(tx, cid, id, computed);
     await writeManualOrderQty(tx, cid, id, body.manual_order_qty);
     return pl;
   });
@@ -463,14 +651,33 @@ shipmentRouter.post('/packing-lists/:id/confirm', requirePermission('PACKING.UPD
     if (!rows.length && !pl.packing_id) throw BadRequest('Add carton rows (or link a packing) before confirming');
     const noWeight = rows.filter((r) => !r.gross_wt_per_ctn);
     if (noWeight.length) throw BadRequest(`Gross weight per carton is missing on cartons ${noWeight.map((r) => `${r.ctn_from}-${r.ctn_to}`).join(', ')}`);
-    // rows built from physical cartons must still match them (a draft carton may have been deleted since)
+    // rows built from posted cartons: list totals must equal the cartons' totals (developer doc §17 / §20)
     const srcIds = [...new Set(rows.flatMap((r) => r.source_carton_ids ?? []))];
     if (srcIds.length) {
-      const found = await txQueryOne<any>(tx,
-        `SELECT COUNT(*) AS n FROM trx_carton c JOIN trx_packing p ON p.id = c.packing_id AND p.company_id = ?
-          WHERE c.id IN (${srcIds.map(() => '?').join(',')})`, [cid, ...srcIds]);
-      if (Number(found?.n || 0) !== srcIds.length)
-        throw BadRequest(`${srcIds.length - Number(found?.n || 0)} carton(s) these rows were built from no longer exist; rebuild the rows from the packing before confirming`);
+      const cs = await txQuery<any>(tx,
+        `SELECT c.id, c.carton_no, c.is_posted, c.carton_status, plc.packing_list_id AS pl_link
+           FROM trx_carton c JOIN trx_packing p ON p.id = c.packing_id AND p.company_id = ?
+           LEFT JOIN trx_packing_list_carton plc ON plc.carton_id = c.id
+          WHERE c.id IN (?) FOR UPDATE`, [cid, srcIds]);
+      if (cs.length !== srcIds.length)
+        throw BadRequest(`${srcIds.length - cs.length} carton(s) these rows were built from no longer exist; rebuild the rows from the packed cartons before confirming`);
+      const notReady = cs.filter((c: any) => !(Number(c.is_posted) === 1 && ['VERIFIED', 'SEALED'].includes(c.carton_status)));
+      if (notReady.length) throw BadRequest(`Carton(s) ${notReady.map((c: any) => `${c.carton_no} (${c.carton_status})`).join(', ')} are no longer posted / sealed; rebuild the rows before confirming`);
+      const elsewhere = cs.filter((c: any) => Number(c.pl_link) !== id);
+      if (elsewhere.length) throw BadRequest(`Carton(s) ${elsewhere.map((c: any) => c.carton_no).join(', ')} are not linked to this packing list; save the list again`);
+      const qty = await cartonQtyMap({ tx }, srcIds);
+      const bad: string[] = [];
+      let listQty = 0, cartonQty = 0, listCtns = 0;
+      for (const r of rows) {
+        const ids = r.source_carton_ids ?? [];
+        if (!ids.length) continue;
+        const q = ids.reduce((a, c) => a + (qty.get(c) ?? 0), 0);
+        listQty += r.total_qty; cartonQty += q; listCtns += r.no_of_ctns;
+        if (ids.length !== r.no_of_ctns) bad.push(`cartons ${r.ctn_from}-${r.ctn_to}: ${r.no_of_ctns} carton(s) on the list, ${ids.length} packed`);
+        else if (q !== r.total_qty) bad.push(`cartons ${r.ctn_from}-${r.ctn_to}: ${r.total_qty} pcs on the list, ${q} pcs in the packed cartons`);
+      }
+      if (bad.length || listQty !== cartonQty || listCtns !== srcIds.length)
+        throw BadRequest(`Packing list totals do not match the posted cartons (list ${listCtns} ctns / ${listQty} pcs, cartons ${srcIds.length} / ${cartonQty} pcs)${bad.length ? `: ${bad.slice(0, 5).join('; ')}` : ''}. Rebuild the rows from the packed cartons`);
     }
     await txExecute(tx, `UPDATE trx_packing_list SET status = 'CONFIRMED', confirmed_by = ?, confirmed_at = NOW() WHERE id = ?`, [req.user!.id, id]);
     await audit(req, 'trx_packing_list', id, 'UPDATE', { status: pl.status }, { status: 'CONFIRMED', totals: st.totals }, tx);
@@ -538,7 +745,7 @@ const shipmentSchema = z.object({
   notify_party_id: s.id(),
   shipment_type: z.enum(SHIP_TYPES).default('DOMESTIC'),
   mode: z.enum(MODES).default('ROAD'),
-  incoterm: z.enum(INCOTERMS).nullish(),
+  incoterm: z.preprocess((v) => (v === '' ? null : v), z.enum(INCOTERMS).nullish()),   // the form's blank option sends ''
   destination: s.nullableStr(120),
   country_id: s.id(),
   freight_terms: s.nullableStr(80),
@@ -560,6 +767,81 @@ const shipmentSchema = z.object({
   // Packages to allocate
   package_ids: z.array(z.coerce.number().int().positive()).default([]),
 });
+
+/** Next SHIPMENT number, moving past numbers already used (the series can lag hand-typed / seeded numbers). */
+async function nextShipmentNo(tx: any, cid: number) {
+  let no = await nextDocNumber(tx, cid, 'SHIPMENT');
+  for (let i = 0; i < 200 && await txQueryOne(tx, `SELECT id FROM trx_shipment WHERE company_id = ? AND shipment_no = ?`, [cid, no]); i++)
+    no = await nextDocNumber(tx, cid, 'SHIPMENT');
+  return no;
+}
+
+type ShipCarton = { id: number; packing_id: number; carton_no: string; qty: number; net: number; gross: number; cbm: number };
+
+/** A carton that can go on a shipment: same company, READY, not on another active shipment. Locks the row. */
+async function lockShippableCarton(tx: any, cid: number, cartonId: number, exceptShipmentId = 0): Promise<ShipCarton> {
+  const c = await txQueryOne<any>(tx,
+    `SELECT c.id, c.packing_id, c.carton_no, c.is_posted, c.carton_status, c.net_weight_kg, c.gross_weight_kg, c.cbm
+       FROM trx_carton c JOIN trx_packing p ON p.id = c.packing_id AND p.company_id = ?
+      WHERE c.id = ? FOR UPDATE`, [cid, cartonId]);
+  if (!c) throw BadRequest(`Carton #${cartonId} not found`);
+  if (!(Number(c.is_posted) === 1 && ['VERIFIED', 'SEALED'].includes(c.carton_status)))
+    throw BadRequest(`Carton ${c.carton_no} is ${c.carton_status}${Number(c.is_posted) ? '' : ' (not posted)'} — only posted, verified / sealed cartons can be shipped`);
+  const other = await txQueryOne<any>(tx,
+    `SELECT sh.shipment_no FROM trx_shipment_package sp JOIN trx_shipment sh ON sh.id = sp.shipment_id
+      WHERE sp.carton_id = ? AND sp.status <> 'CANCELLED' AND sp.shipment_id <> ? LIMIT 1`, [cartonId, exceptShipmentId]);
+  if (other) throw BadRequest(`Carton ${c.carton_no} is already on shipment ${other.shipment_no}`);
+  const q = await txQueryOne<any>(tx, `SELECT COALESCE(SUM(qty),0) AS q FROM trx_carton_content WHERE carton_id = ?`, [cartonId]);
+  return { id: c.id, packing_id: c.packing_id, carton_no: c.carton_no, qty: Number(q?.q || 0),
+           net: Number(c.net_weight_kg || 0), gross: Number(c.gross_weight_kg || 0), cbm: Number(c.cbm || 0) };
+}
+
+/**
+ * What a shipment / plan carries:
+ *  - from a CONFIRMED packing list built from cartons → its READY cartons (packages, qty, weights, CBM);
+ *  - from a hand-made CONFIRMED list (no cartons) → the list's row totals, basis PACKING_LIST;
+ *  - without a list → the picked cartons (each READY and not on another active shipment).
+ */
+async function resolveShipmentSource(tx: any, cid: number, plId: number | null | undefined, packageIds: number[], opts: { forPlan?: boolean } = {}) {
+  let pl: any = null;
+  let ids = [...new Set(packageIds)];
+  if (plId) {
+    pl = await txQueryOne<any>(tx, `SELECT * FROM trx_packing_list WHERE id = ? AND company_id = ? FOR UPDATE`, [plId, cid]);
+    if (!pl) throw BadRequest(`Packing list #${plId} not found`);
+    if (pl.status !== 'CONFIRMED') throw BadRequest(`Packing list ${pl.pl_no} is ${pl.status} — confirm it before creating a shipment from it`);
+    const ship = await txQueryOne<any>(tx,
+      `SELECT sh.shipment_no FROM trx_shipment sh WHERE sh.packing_list_id = ? AND sh.company_id = ? AND ${ACTIVE_SHIP_SQL} LIMIT 1`, [plId, cid]);
+    if (ship) throw BadRequest(`Packing list ${pl.pl_no} is already on shipment ${ship.shipment_no}`);
+    if (opts.forPlan) {
+      const plan = await txQueryOne<any>(tx,
+        `SELECT plan_no FROM trx_shipment_plan WHERE packing_list_id = ? AND company_id = ? AND status IN ('DRAFT','CONFIRMED') LIMIT 1`, [plId, cid]);
+      if (plan) throw BadRequest(`Packing list ${pl.pl_no} is already planned on ${plan.plan_no}`);
+    }
+    const linked = (await txQuery<any>(tx, `SELECT carton_id FROM trx_packing_list_carton WHERE packing_list_id = ?`, [plId]))
+      .map((r: any) => Number(r.carton_id));
+    if (linked.length) {
+      const set = new Set(linked);
+      const stray = ids.filter((i) => !set.has(i));
+      if (stray.length) throw BadRequest(`${stray.length} picked carton(s) are not on packing list ${pl.pl_no}`);
+      if (!ids.length) ids = linked;
+    } else if (ids.length) {
+      throw BadRequest(`Packing list ${pl.pl_no} is not built from packed cartons — ship it as a list (no cartons picked)`);
+    }
+  }
+  if (pl && !ids.length) {
+    const t = { packages: Number(pl.total_cartons || 0), qty: Number(pl.total_qty || 0), net: Number(pl.net_weight_kg || 0),
+                gross: Number(pl.gross_weight_kg || 0), cbm: Number(pl.total_cbm || 0) };
+    if (!t.packages || !t.qty) throw BadRequest(`Packing list ${pl.pl_no} has no cartons / quantity to ship`);
+    return { pl, basis: 'PACKING_LIST' as const, cartons: [] as ShipCarton[], totals: t };
+  }
+  const cartons: ShipCarton[] = [];
+  for (const id of ids) cartons.push(await lockShippableCarton(tx, cid, id));
+  const totals = {
+    packages: cartons.length, qty: cartons.reduce((a, c) => a + c.qty, 0), net: r3(cartons.reduce((a, c) => a + c.net, 0)),
+    gross: r3(cartons.reduce((a, c) => a + c.gross, 0)), cbm: r5(cartons.reduce((a, c) => a + c.cbm, 0)),
+  };
+  return { pl, basis: 'CARTONS' as const, cartons, totals };
+}
 
 /** GET /shipments — List all shipments */
 shipmentRouter.get('/shipments', requirePermission('PACKING.VIEW'), ah(async (req, res) => {
@@ -589,7 +871,7 @@ shipmentRouter.get('/shipments/:id', requirePermission('PACKING.VIEW'), ah(async
 
   const row = await queryOne(
     `SELECT sh.*,
-            pl.pl_no AS packing_list_no,
+            pl.pl_no AS packing_list_no, pl.status AS packing_list_status,
             b.party_name AS buyer_name,
             con.party_name AS consignee_name,
             so.so_no,
@@ -608,7 +890,7 @@ shipmentRouter.get('/shipments/:id', requirePermission('PACKING.VIEW'), ah(async
   // Allocated packages
   const packages = await query(
     `SELECT sp.*, c.carton_no, c.carton_type, c.net_weight_kg AS carton_net, c.gross_weight_kg AS carton_gross,
-            c.cbm AS carton_cbm, p.pack_no
+            c.cbm AS carton_cbm, c.carton_status, p.pack_no
        FROM trx_shipment_package sp
        JOIN trx_carton c ON c.id = sp.carton_id
        LEFT JOIN trx_packing p ON p.id = sp.packing_id
@@ -642,62 +924,39 @@ shipmentRouter.post('/shipments', requirePermission('PACKING.CREATE'), ah(async 
   const body = shipmentSchema.parse(req.body);
 
   const result = await transaction(async (tx) => {
-    const shipNo = body.shipment_no || await nextDocNumber(tx, cid, 'SHIPMENT');
-
+    const src = await resolveShipmentSource(tx, cid, body.packing_list_id, body.package_ids);
+    const pl = src.pl;
+    // a shipment from a packing list carries its order / job / parties unless typed
+    const pick = <T,>(v: T | null | undefined, fromPl: any) => (v != null && v !== '' ? v : (fromPl ?? null));
+    const shipNo = body.shipment_no || await nextShipmentNo(tx, cid);
     const r = await txExecute(tx,
       `INSERT INTO trx_shipment
         (company_id, shipment_no, io_no, so_id, packing_list_id, buyer_id, consignee_id,
          notify_party_id, shipment_type, mode, incoterm, destination, country_id, freight_terms,
          invoice_id, dispatch_id, shipping_bill_id, forwarder_id, shipping_line, vessel_name,
-         voyage_no, bl_no, bl_date, etd, eta, pol, pod, remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [cid, shipNo, body.io_no ?? null, body.so_id ?? null, body.packing_list_id ?? null,
-       body.buyer_id ?? null, body.consignee_id ?? null, body.notify_party_id ?? null,
-       body.shipment_type, body.mode, body.incoterm ?? null, body.destination ?? null,
+         voyage_no, bl_no, bl_date, etd, eta, pol, pod, remarks, created_by, package_basis)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [cid, shipNo, pick(body.io_no, pl?.io_no), pick(body.so_id, pl?.so_id), body.packing_list_id ?? null,
+       pick(body.buyer_id, pl?.buyer_id), pick(body.consignee_id, pl?.consignee_id), body.notify_party_id ?? null,
+       pl && !req.body?.shipment_type ? (pl.shipment_type ?? body.shipment_type) : body.shipment_type,
+       body.mode, body.incoterm ?? null, pick(body.destination, pl?.destination ?? pl?.final_destination),
        body.country_id ?? null, body.freight_terms ?? null,
-       body.invoice_id ?? null, body.dispatch_id ?? null, body.shipping_bill_id ?? null,
+       pick(body.invoice_id, pl?.invoice_id), body.dispatch_id ?? null, body.shipping_bill_id ?? null,
        body.forwarder_id ?? null, body.shipping_line ?? null, body.vessel_name ?? null,
        body.voyage_no ?? null, body.bl_no ?? null, body.bl_date ?? null,
-       body.etd ?? null, body.eta ?? null, body.pol ?? null, body.pod ?? null,
-       body.remarks ?? null, req.user!.id]);
-
+       body.etd ?? null, body.eta ?? null, pick(body.pol, pl?.port_of_loading), pick(body.pod, pl?.port_of_discharge),
+       body.remarks ?? null, req.user!.id, src.basis]);
     const shipmentId = r.insertId;
 
-    // Allocate packages (cartons)
-    let totalPkgs = 0, totalQty = 0, totalNet = 0, totalGross = 0, totalCbm = 0;
-    for (const cartonId of body.package_ids) {
-      // Check carton is not already allocated to another active shipment
-      const existing = await txQueryOne<any>(tx,
-        `SELECT sp.id FROM trx_shipment_package sp
-           JOIN trx_shipment s ON s.id = sp.shipment_id
-          WHERE sp.carton_id = ? AND sp.status != 'CANCELLED'`, [cartonId]);
-      if (existing) continue; // skip already allocated
-
-      const carton = await txQueryOne<any>(tx,
-        `SELECT c.*, COALESCE(SUM(cc.qty), 0) AS content_qty
-           FROM trx_carton c
-           LEFT JOIN trx_carton_content cc ON cc.carton_id = c.id
-          WHERE c.id = ? GROUP BY c.id`, [cartonId]);
-      if (!carton) continue;
-
+    for (const c of src.cartons) {
       await txExecute(tx,
         `INSERT INTO trx_shipment_package (shipment_id, carton_id, packing_id, package_no, allocated_qty, gross_weight_kg, cbm)
-         VALUES (?,?,?,?,?,?,?)`,
-        [shipmentId, cartonId, carton.packing_id, carton.carton_no,
-         carton.content_qty, carton.gross_weight_kg, carton.cbm]);
-
-      totalPkgs++;
-      totalQty += Number(carton.content_qty || 0);
-      totalNet += Number(carton.net_weight_kg || 0);
-      totalGross += Number(carton.gross_weight_kg || 0);
-      totalCbm += Number(carton.cbm || 0);
+         VALUES (?,?,?,?,?,?,?)`, [shipmentId, c.id, c.packing_id, c.carton_no, c.qty, c.gross, c.cbm]);
     }
-
-    // Update shipment totals
+    const t = src.totals;
     await txExecute(tx,
-      `UPDATE trx_shipment SET total_packages = ?, total_qty = ?, net_weight_kg = ?, gross_weight_kg = ?, total_cbm = ?
-       WHERE id = ?`,
-      [totalPkgs, totalQty, totalNet, totalGross, totalCbm, shipmentId]);
+      `UPDATE trx_shipment SET total_packages = ?, total_qty = ?, net_weight_kg = ?, gross_weight_kg = ?, total_cbm = ? WHERE id = ?`,
+      [t.packages, t.qty, t.net, t.gross, t.cbm, shipmentId]);
 
     return txQueryOne(tx, `SELECT * FROM trx_shipment WHERE id = ?`, [shipmentId]);
   });
@@ -716,36 +975,31 @@ shipmentRouter.post('/shipments/:id/allocate-packages', requirePermission('PACKI
 
   const shipment = await queryOne<any>(`SELECT * FROM trx_shipment WHERE id = ? AND company_id = ?`, [shipmentId, cid]);
   if (!shipment) throw NotFound('Shipment not found');
+  if (String(shipment.remarks || '').includes('[CANCELLED]')) throw BadRequest(`Shipment ${shipment.shipment_no} is cancelled`);
+  if (shipment.package_basis === 'PACKING_LIST') throw BadRequest(`Shipment ${shipment.shipment_no} ships packing list totals (no physical cartons); cartons cannot be added`);
 
   let allocated = 0;
   await transaction(async (tx) => {
-    for (const cartonId of package_ids) {
-      const existing = await txQueryOne<any>(tx,
-        `SELECT id FROM trx_shipment_package WHERE carton_id = ? AND status != 'CANCELLED'`, [cartonId]);
-      if (existing) continue;
-
-      const carton = await txQueryOne<any>(tx,
-        `SELECT c.*, COALESCE(SUM(cc.qty), 0) AS content_qty
-           FROM trx_carton c LEFT JOIN trx_carton_content cc ON cc.carton_id = c.id
-          WHERE c.id = ? GROUP BY c.id`, [cartonId]);
-      if (!carton) continue;
-
+    for (const cartonId of [...new Set(package_ids)]) {
+      const mine = await txQueryOne<any>(tx,
+        `SELECT id FROM trx_shipment_package WHERE carton_id = ? AND shipment_id = ? AND status != 'CANCELLED'`, [cartonId, shipmentId]);
+      if (mine) continue;                                   // already on this shipment
+      const c = await lockShippableCarton(tx, cid, cartonId);
       await txExecute(tx,
         `INSERT INTO trx_shipment_package (shipment_id, carton_id, packing_id, package_no, allocated_qty, gross_weight_kg, cbm)
-         VALUES (?,?,?,?,?,?,?)`,
-        [shipmentId, cartonId, carton.packing_id, carton.carton_no,
-         carton.content_qty, carton.gross_weight_kg, carton.cbm]);
+         VALUES (?,?,?,?,?,?,?)`, [shipmentId, c.id, c.packing_id, c.carton_no, c.qty, c.gross, c.cbm]);
       allocated++;
     }
 
     // Recalculate shipment totals
     const agg = await txQueryOne<any>(tx,
-      `SELECT COUNT(*) AS pkgs, COALESCE(SUM(allocated_qty),0) AS qty,
-              COALESCE(SUM(gross_weight_kg),0) AS gross, COALESCE(SUM(cbm),0) AS cbm
-         FROM trx_shipment_package WHERE shipment_id = ? AND status != 'CANCELLED'`, [shipmentId]);
+      `SELECT COUNT(*) AS pkgs, COALESCE(SUM(sp.allocated_qty),0) AS qty, COALESCE(SUM(c.net_weight_kg),0) AS net,
+              COALESCE(SUM(sp.gross_weight_kg),0) AS gross, COALESCE(SUM(sp.cbm),0) AS cbm
+         FROM trx_shipment_package sp JOIN trx_carton c ON c.id = sp.carton_id
+        WHERE sp.shipment_id = ? AND sp.status != 'CANCELLED'`, [shipmentId]);
     await txExecute(tx,
-      `UPDATE trx_shipment SET total_packages = ?, total_qty = ?, gross_weight_kg = ?, total_cbm = ? WHERE id = ?`,
-      [agg?.pkgs || 0, agg?.qty || 0, agg?.gross || 0, agg?.cbm || 0, shipmentId]);
+      `UPDATE trx_shipment SET total_packages = ?, total_qty = ?, net_weight_kg = ?, gross_weight_kg = ?, total_cbm = ? WHERE id = ?`,
+      [agg?.pkgs || 0, agg?.qty || 0, agg?.net || 0, agg?.gross || 0, agg?.cbm || 0, shipmentId]);
   });
 
   res.json({ data: { allocated } });
@@ -830,6 +1084,11 @@ shipmentRouter.post('/dispatches', requirePermission('PACKING.CREATE'), ah(async
   const body = dispatchSchema.parse(req.body);
 
   const result = await transaction(async (tx) => {
+    if (body.shipment_id) {
+      const sh = await txQueryOne<any>(tx, `SELECT id, shipment_no, remarks FROM trx_shipment WHERE id = ? AND company_id = ? FOR UPDATE`, [body.shipment_id, cid]);
+      if (!sh) throw BadRequest('Shipment not found');
+      if (String(sh.remarks || '').includes('[CANCELLED]')) throw BadRequest(`Shipment ${sh.shipment_no} is cancelled`);
+    }
     const dispNo = body.dispatch_no || await nextDocNumber(tx, cid, 'DISPATCH');
 
     const r = await txExecute(tx,
@@ -846,17 +1105,19 @@ shipmentRouter.post('/dispatches', requirePermission('PACKING.CREATE'), ah(async
        body.mode, body.total_cartons, body.total_qty, body.gross_weight_kg ?? null,
        body.total_cbm ?? null, body.status_id ?? null, body.remarks ?? null, req.user!.id]);
 
+    // Shipment packages → DISPATCHED, and their physical cartons too (packing contract, db/118)
+    if (body.shipment_id) {
+      await txExecute(tx,
+        `UPDATE trx_shipment_package SET status = 'DISPATCHED' WHERE shipment_id = ? AND status = 'ALLOCATED'`, [body.shipment_id]);
+      await txExecute(tx,
+        `UPDATE trx_carton c JOIN trx_shipment_package sp ON sp.carton_id = c.id
+            SET c.carton_status = 'DISPATCHED'
+          WHERE sp.shipment_id = ? AND sp.status = 'DISPATCHED' AND c.carton_status <> 'DISPATCHED'`, [body.shipment_id]);
+      await txExecute(tx, `UPDATE trx_shipment SET tracking_status = 'GATED_IN' WHERE id = ?`, [body.shipment_id]);
+    }
+
     return txQueryOne(tx, `SELECT * FROM trx_dispatch WHERE id = ?`, [r.insertId]);
   });
-
-  // Update shipment package statuses
-  if (body.shipment_id) {
-    await query(
-      `UPDATE trx_shipment_package SET status = 'DISPATCHED' WHERE shipment_id = ? AND status = 'ALLOCATED'`,
-      [body.shipment_id]);
-    await query(
-      `UPDATE trx_shipment SET tracking_status = 'GATED_IN' WHERE id = ?`, [body.shipment_id]);
-  }
 
   await audit(req, 'trx_dispatch', (result as any).id, 'INSERT', undefined, result);
   res.status(201).json({ data: result });
@@ -867,21 +1128,27 @@ shipmentRouter.post('/dispatches', requirePermission('PACKING.CREATE'), ah(async
 // AVAILABLE PACKAGES FOR SHIPMENT
 // ============================================================
 
-/** GET /available-packages — Get cartons not yet allocated to any active shipment */
+/**
+ * GET /available-packages?packing_id=&packing_list_id= — READY cartons (posted, verified / sealed)
+ * not on any active shipment; with packing_list_id only that list's cartons.
+ */
 shipmentRouter.get('/available-packages', requirePermission('PACKING.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const packingId = req.query.packing_id ? Number(req.query.packing_id) : null;
+  const plIdQ = req.query.packing_list_id ? Number(req.query.packing_list_id) : null;
 
-  let sql = `SELECT c.*, p.pack_no, p.so_id,
+  let sql = `SELECT c.*, p.pack_no, p.so_id, p.io_no, pl.pl_no,
                     COALESCE(SUM(cc.qty), 0) AS content_qty,
                     GROUP_CONCAT(DISTINCT CONCAT(col.color_name, ' ', sz.size_code) SEPARATOR ', ') AS sku_summary
                FROM trx_carton c
                JOIN trx_packing p ON p.id = c.packing_id
+               LEFT JOIN trx_packing_list_carton plc ON plc.carton_id = c.id
+               LEFT JOIN trx_packing_list pl ON pl.id = plc.packing_list_id
                LEFT JOIN trx_carton_content cc ON cc.carton_id = c.id
                LEFT JOIN mst_style_sku k ON k.id = cc.sku_id
-               LEFT JOIN mst_color col ON col.id = k.color_id
-               LEFT JOIN mst_size sz ON sz.id = k.size_id
-              WHERE p.company_id = ?
+               LEFT JOIN mst_color col ON col.id = COALESCE(cc.color_id, k.color_id)
+               LEFT JOIN mst_size sz ON sz.id = COALESCE(cc.size_id, k.size_id)
+              WHERE p.company_id = ? AND ${READY_SQL}
                 AND c.id NOT IN (
                   SELECT sp.carton_id FROM trx_shipment_package sp WHERE sp.status != 'CANCELLED'
                 )`;
@@ -890,6 +1157,10 @@ shipmentRouter.get('/available-packages', requirePermission('PACKING.VIEW'), ah(
   if (packingId) {
     sql += ` AND c.packing_id = ?`;
     params.push(packingId);
+  }
+  if (plIdQ) {
+    sql += ` AND plc.packing_list_id = ?`;
+    params.push(plIdQ);
   }
   sql += ` GROUP BY c.id ORDER BY c.carton_no`;
 
@@ -939,9 +1210,10 @@ shipmentRouter.post('/shipments/:id/documents', requirePermission('PACKING.UPDAT
 shipmentRouter.get('/shipment-plans', requirePermission('PACKING.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const rows = await query(
-    `SELECT sp.*, b.party_name AS buyer_name
+    `SELECT sp.*, b.party_name AS buyer_name, pl.pl_no AS packing_list_no
        FROM trx_shipment_plan sp
        LEFT JOIN mst_party b ON b.id = sp.buyer_id
+       LEFT JOIN trx_packing_list pl ON pl.id = sp.packing_list_id
       WHERE sp.company_id = ?
       ORDER BY sp.planned_date DESC, sp.id DESC`, [cid]);
   res.json({ data: rows });
@@ -952,9 +1224,10 @@ shipmentRouter.get('/shipment-plans/:id', requirePermission('PACKING.VIEW'), ah(
   const cid = req.user!.companyId;
   const id = Number(req.params.id);
   const row = await queryOne(
-    `SELECT sp.*, b.party_name AS buyer_name
+    `SELECT sp.*, b.party_name AS buyer_name, pl.pl_no AS packing_list_no
        FROM trx_shipment_plan sp
        LEFT JOIN mst_party b ON b.id = sp.buyer_id
+       LEFT JOIN trx_packing_list pl ON pl.id = sp.packing_list_id
       WHERE sp.id = ? AND sp.company_id = ?`, [id, cid]);
   if (!row) throw NotFound('Shipment plan not found');
 
@@ -968,13 +1241,14 @@ shipmentRouter.get('/shipment-plans/:id', requirePermission('PACKING.VIEW'), ah(
   res.json({ data: { ...(row as any), packages } });
 }));
 
-/** POST /shipment-plans */
+/** POST /shipment-plans — from picked READY cartons, or from a CONFIRMED packing list */
 shipmentRouter.post('/shipment-plans', requirePermission('PACKING.CREATE'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const body = z.object({
     plan_no: s.nullableStr(40),
     planned_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     buyer_id: s.id(),
+    packing_list_id: s.id(),
     shipment_type: z.enum(['DOMESTIC','EXPORT']).default('DOMESTIC'),
     mode: z.enum(MODES).default('ROAD'),
     destination: s.nullableStr(120),
@@ -983,34 +1257,24 @@ shipmentRouter.post('/shipment-plans', requirePermission('PACKING.CREATE'), ah(a
   }).parse(req.body);
 
   const result = await transaction(async (tx) => {
+    const src = await resolveShipmentSource(tx, cid, body.packing_list_id, body.package_ids, { forPlan: true });
+    const pl = src.pl;
     const planNo = body.plan_no || await nextDocNumber(tx, cid, 'SHIP_PLAN');
-
-    let totalGross = 0, totalCbm = 0, totalQty = 0;
-    for (const pkgId of body.package_ids) {
-      const c = await txQueryOne<any>(tx,
-        `SELECT c.*, COALESCE(SUM(cc.qty),0) AS qty
-           FROM trx_carton c LEFT JOIN trx_carton_content cc ON cc.carton_id = c.id
-          WHERE c.id = ? GROUP BY c.id`, [pkgId]);
-      if (c) {
-        totalGross += Number(c.gross_weight_kg || 0);
-        totalCbm += Number(c.cbm || 0);
-        totalQty += Number(c.qty || 0);
-      }
-    }
-
+    const t = src.totals;
     const r = await txExecute(tx,
       `INSERT INTO trx_shipment_plan
         (company_id, plan_no, planned_date, buyer_id, shipment_type, mode, destination,
-         total_packages, total_qty, gross_weight_kg, total_cbm, status, remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [cid, planNo, body.planned_date, body.buyer_id ?? null, body.shipment_type, body.mode,
-       body.destination ?? null, body.package_ids.length, totalQty, totalGross, totalCbm,
-       'DRAFT', body.remarks ?? null, req.user!.id]);
+         total_packages, total_qty, net_weight_kg, gross_weight_kg, total_cbm, status, remarks, created_by,
+         packing_list_id, so_id, io_no, package_basis)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [cid, planNo, body.planned_date, body.buyer_id ?? pl?.buyer_id ?? null,
+       pl && !req.body?.shipment_type ? (pl.shipment_type ?? body.shipment_type) : body.shipment_type, body.mode,
+       body.destination ?? pl?.destination ?? pl?.final_destination ?? null, t.packages, t.qty, t.net, t.gross, t.cbm,
+       'DRAFT', body.remarks ?? null, req.user!.id, pl?.id ?? null, pl?.so_id ?? null, pl?.io_no ?? null, src.basis]);
 
     const planId = r.insertId;
-    for (const pkgId of body.package_ids) {
-      await txExecute(tx,
-        `INSERT INTO trx_shipment_plan_package (plan_id, carton_id) VALUES (?,?)`, [planId, pkgId]);
+    for (const c of src.cartons) {
+      await txExecute(tx, `INSERT INTO trx_shipment_plan_package (plan_id, carton_id) VALUES (?,?)`, [planId, c.id]);
     }
     return txQueryOne(tx, `SELECT * FROM trx_shipment_plan WHERE id = ?`, [planId]);
   });
@@ -1023,43 +1287,36 @@ shipmentRouter.post('/shipment-plans/:id/convert', requirePermission('PACKING.CR
   const cid = req.user!.companyId;
   const planId = Number(req.params.id);
 
-  const plan = await queryOne<any>(
-    `SELECT * FROM trx_shipment_plan WHERE id = ? AND company_id = ?`, [planId, cid]);
-  if (!plan) throw NotFound('Shipment plan not found');
-
-  const pkgs = await query<any>(
-    `SELECT carton_id FROM trx_shipment_plan_package WHERE plan_id = ?`, [planId]);
-  const packageIds = pkgs.map(p => p.carton_id);
-
   const shipment = await transaction(async (tx) => {
-    const shipNo = await nextDocNumber(tx, cid, 'SHIPMENT');
+    const plan = await txQueryOne<any>(tx,
+      `SELECT * FROM trx_shipment_plan WHERE id = ? AND company_id = ? FOR UPDATE`, [planId, cid]);
+    if (!plan) throw NotFound('Shipment plan not found');
+    if (plan.status === 'CONVERTED' || plan.status === 'CANCELLED') throw BadRequest(`Plan ${plan.plan_no} is already ${plan.status}`);
+    const pkgs = await txQuery<any>(tx, `SELECT carton_id FROM trx_shipment_plan_package WHERE plan_id = ?`, [planId]);
+    // re-checked now: list still CONFIRMED, cartons still READY and not shipped elsewhere
+    const src = await resolveShipmentSource(tx, cid, plan.packing_list_id, pkgs.map((p: any) => Number(p.carton_id)));
+    const pl = src.pl;
+    const t = src.totals;
+    const shipNo = await nextShipmentNo(tx, cid);
     const r = await txExecute(tx,
       `INSERT INTO trx_shipment
         (company_id, shipment_no, buyer_id, shipment_type, mode, destination,
-         total_packages, total_qty, gross_weight_kg, total_cbm, remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [cid, shipNo, plan.buyer_id, plan.shipment_type, plan.mode, plan.destination,
-       plan.total_packages, plan.total_qty, plan.gross_weight_kg, plan.total_cbm,
-       `Converted from Plan ${plan.plan_no}`, req.user!.id]);
-
+         total_packages, total_qty, net_weight_kg, gross_weight_kg, total_cbm, remarks, created_by,
+         packing_list_id, so_id, io_no, consignee_id, invoice_id, pol, pod, package_basis)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [cid, shipNo, plan.buyer_id ?? pl?.buyer_id ?? null, plan.shipment_type, plan.mode, plan.destination,
+       t.packages, t.qty, t.net, t.gross, t.cbm, `Converted from Plan ${plan.plan_no}`, req.user!.id,
+       pl?.id ?? null, plan.so_id ?? pl?.so_id ?? null, plan.io_no ?? pl?.io_no ?? null, pl?.consignee_id ?? null,
+       pl?.invoice_id ?? null, pl?.port_of_loading ?? null, pl?.port_of_discharge ?? null, src.basis]);
     const shipId = r.insertId;
 
-    for (const cartonId of packageIds) {
-      const carton = await txQueryOne<any>(tx,
-        `SELECT c.*, COALESCE(SUM(cc.qty), 0) AS content_qty
-           FROM trx_carton c LEFT JOIN trx_carton_content cc ON cc.carton_id = c.id
-          WHERE c.id = ? GROUP BY c.id`, [cartonId]);
-      if (!carton) continue;
-
+    for (const c of src.cartons) {
       await txExecute(tx,
         `INSERT INTO trx_shipment_package (shipment_id, carton_id, packing_id, package_no, allocated_qty, gross_weight_kg, cbm)
-         VALUES (?,?,?,?,?,?,?)`,
-        [shipId, cartonId, carton.packing_id, carton.carton_no,
-         carton.content_qty, carton.gross_weight_kg, carton.cbm]);
+         VALUES (?,?,?,?,?,?,?)`, [shipId, c.id, c.packing_id, c.carton_no, c.qty, c.gross, c.cbm]);
     }
 
     await txExecute(tx, `UPDATE trx_shipment_plan SET status = 'CONVERTED' WHERE id = ?`, [planId]);
-
     return txQueryOne(tx, `SELECT * FROM trx_shipment WHERE id = ?`, [shipId]);
   });
 
@@ -1128,7 +1385,8 @@ shipmentRouter.post('/shipments/:id/ready-to-dispatch', requirePermission('PACKI
 
   const pkgCount = await queryOne<any>(
     `SELECT COUNT(*) AS c FROM trx_shipment_package WHERE shipment_id = ? AND status != 'CANCELLED'`, [id]);
-  if (!pkgCount?.c) throw BadRequest('Cannot release shipment without allocated packages');
+  const listBased = ship.package_basis === 'PACKING_LIST' && Number(ship.total_packages || 0) > 0;
+  if (!pkgCount?.c && !listBased) throw BadRequest('Cannot release shipment without allocated packages');
 
   await query(`UPDATE trx_shipment SET tracking_status = 'BOOKED' WHERE id = ?`, [id]);
   res.json({ data: { id, status: 'READY_TO_DISPATCH' } });
@@ -1193,6 +1451,11 @@ shipmentRouter.post('/shipments/:id/cancel', requirePermission('PACKING.UPDATE')
 
   const ship = await queryOne<any>(`SELECT * FROM trx_shipment WHERE id = ? AND company_id = ?`, [id, cid]);
   if (!ship) throw NotFound('Shipment not found');
+  // dispatched cartons need a return / reversal, not a cancel (developer doc §20)
+  const gone = await queryOne<any>(
+    `SELECT COUNT(*) AS n FROM trx_shipment_package WHERE shipment_id = ? AND status IN ('DISPATCHED','DELIVERED')`, [id]);
+  const disp = await queryOne<any>(`SELECT dispatch_no FROM trx_dispatch WHERE shipment_id = ? AND company_id = ? LIMIT 1`, [id, cid]);
+  if (Number(gone?.n || 0) > 0 || disp) throw BadRequest(`Shipment ${ship.shipment_no} is already dispatched${disp ? ` (${disp.dispatch_no})` : ''} and cannot be cancelled`);
 
   await transaction(async (tx) => {
     await txExecute(tx,

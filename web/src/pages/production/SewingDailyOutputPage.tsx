@@ -11,8 +11,8 @@ import { useToast } from '../../hooks/useToast';
 import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useAuth } from '../../lib/auth';
 import {
-  type BundleInfo, n, pct, groupByJob, JobHeaderRow, SummaryCard, distinct, EMPTY_FILTERS, applyFilters,
-  summarize, SummaryTable, DocumentsModal, DocStatus, printDocument, printRowsByJob, type RowFilters,
+  type BundleInfo, n, pct, groupByJob, JobHeaderRow, SummaryCard, distinct, applyFilters, useCascadingFilters, CascadingFilterBar,
+  summarize, SummaryTable, DocumentsModal, DocStatus, printDocument, printRowsByJob,
 } from './linePlanUi';
 
 /**
@@ -74,7 +74,6 @@ function DailyOutputPage({ proc }: { proc: OutProc }) {
   const [supervisor, setSupervisor] = useState('');
   const [remarks, setRemarks] = useState('');
   const [rows, setRows] = useState<Row[]>([]);
-  const [filters, setFilters] = useState<RowFilters>(EMPTY_FILTERS);
   const [operatorFilter, setOperatorFilter] = useState('');
   const [tab, setTab] = useState('bundle');
   const [scan, setScan] = useState('');
@@ -207,6 +206,8 @@ function DailyOutputPage({ proc }: { proc: OutProc }) {
   };
 
   const patch = (id: number, p: Partial<Row>) => setRows((x) => x.map((r) => (r.bundle_id === id ? { ...r, ...p } : r)));
+  const cf = useCascadingFilters(rows);
+  const filters = cf.filters;
   const shown = useMemo(() => applyFilters(rows, filters).filter((r) => !operatorFilter || r.operator_name === operatorFilter), [rows, filters, operatorFilter]);
 
   const totals = useMemo(() => {
@@ -316,17 +317,9 @@ function DailyOutputPage({ proc }: { proc: OutProc }) {
           </div>
           <Input label="Supervisor" className="w-40" value={supervisor} disabled={!editable} onChange={(e) => setSupervisor(e.target.value)} />
         </div>
-        <div className="mt-2 flex flex-wrap items-end gap-2 border-t border-slate-100 pt-2">
-          {([
-            ['job', 'Job No', distinct(rows, (b) => b.io_no)], ['po', 'PO No', distinct(rows, (b) => b.po_no)],
-            ['style', 'Style No', distinct(rows, (b) => b.style_no)], ['buyer', 'Buyer', distinct(rows, (b) => b.buyer)],
-            ['colour', 'Colour', distinct(rows, (b) => b.colour)], ['size', 'Size', distinct(rows, (b) => b.size)],
-          ] as const).map(([k, lbl, opts]) => (
-            <Select key={k} label={lbl} className="w-32" value={filters[k]} placeholder="All" options={opts as any}
-              onChange={(e) => setFilters((f) => ({ ...f, [k]: e.target.value }))} />
-          ))}
+        <CascadingFilterBar cf={cf} width="w-32">
           <Select label="Operator" className="w-32" value={operatorFilter} placeholder="All" options={distinct(rows, (r) => r.operator_name)} onChange={(e) => setOperatorFilter(e.target.value)} />
-        </div>
+        </CascadingFilterBar>
       </Card>
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1fr_2fr_1fr]">

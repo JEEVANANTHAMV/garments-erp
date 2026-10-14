@@ -146,6 +146,8 @@ import {
 
 /* Reports */
 import { ReportsPage, AuditPage } from './pages/reports';
+import ClientReportsAPage from './pages/reports/ClientReportsA';
+import ClientReportsBPage from './pages/reports/ClientReportsB';
 
 /* Admin */
 import { UsersPage, RolesPage, CompanyPage, SettingsPage } from './pages/admin';
@@ -451,6 +453,8 @@ export default function App() {
                 {/* Reports */}
                 <Route path="reports" element={<ReportsPage />} />
                 <Route path="reports/audit" element={<AuditPage />} />
+                <Route path="reports/client-a" element={<ClientReportsAPage />} />
+                <Route path="reports/client-b" element={<ClientReportsBPage />} />
 
                 {/* Admin */}
                 <Route path="admin">

@@ -5,6 +5,7 @@ import rateLimit from 'express-rate-limit';
 import { query, queryOne, execute } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
 import { Unauthorized, BadRequest } from '../../core/errors.js';
+import { env } from '../../config/env.js';
 import {
   authenticate, loadAuthUser, signAccessToken, signRefreshToken, verifyRefreshToken,
 } from '../../middleware/auth.js';
@@ -16,6 +17,8 @@ const loginLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  // brute-force guard is for production; local development runs many automated logins
+  skip: () => !env.isProd,
   message: { error: { code: 'RATE_LIMITED', message: 'Too many login attempts. Try again in 15 minutes.' } },
 });
 

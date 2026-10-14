@@ -26,10 +26,18 @@ export default function AppLayout() {
   }, [textSize]);
 
   // The steps the user can reach (the step bar walks these), and the same filtered by the sidebar search.
+  // admin menu switches (MENU_* settings) — e.g. Line QC stays off until the client turns it on
+  const { data: uiFlags } = useQuery({
+    queryKey: ['ui-flags'],
+    queryFn: async () => (await http.get<{ data: Record<string, boolean> }>('/admin/ui-flags')).data ?? {},
+    staleTime: 5 * 60_000,
+  });
+  const flagOn = (i: NavItem) => !i.flag || !!uiFlags?.[i.flag];
   const steps = useMemo(() => NAV
-    .map((s) => ({ ...s, items: s.items.filter((i) => !i.hidden && canAny(...i.perms)) }))
+    .map((s) => ({ ...s, items: s.items.filter((i) => !i.hidden && flagOn(i) && canAny(...i.perms)) }))
     .filter((s) => s.items.length),
-    [canAny, user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [canAny, user, uiFlags]);
   const sections = useMemo(() => steps
     .map((s) => filter
       ? { ...s, items: s.items.filter((i) => i.label.toLowerCase().includes(filter.toLowerCase()) || s.label.toLowerCase().includes(filter.toLowerCase())) }
@@ -71,7 +79,7 @@ export default function AppLayout() {
     setFavs(next); save('favs', next);
   };
   const allowed = (to: string) => { const i = NAV_BY_PATH.get(to); return i && canAny(...i.perms) ? i : null; };
-  const reachable = (to: string) => { const i = allowed(to); return i && !i.hidden ? i : null; };
+  const reachable = (to: string) => { const i = allowed(to); return i && !i.hidden && flagOn(i) ? i : null; };
   const favItems = favs.map(reachable).filter(Boolean) as NavItem[];
   const recentItems = (recent.filter((p) => !favs.includes(p) && p !== location.pathname).map(reachable).filter(Boolean) as NavItem[]).slice(0, 5);
   const tabGroup = PROCESS_TABS.find((g) => g.tabs.some((t) => t.to === location.pathname));
@@ -162,7 +170,7 @@ export default function AppLayout() {
   );
 
   const sidebar = (
-    <div className="flex h-full flex-col bg-slate-900 text-slate-300">
+    <div className="flex h-full flex-col bg-gradient-to-b from-[#16225a] via-[#111b47] to-[#0c1434] text-slate-300">
       <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-white/10 px-4">
         <div className="grid h-8 w-8 place-items-center rounded-lg bg-brand-600 text-sm font-bold text-white">
           {company ? initials(company.trade_name || company.legal_name) : 'ER'}
