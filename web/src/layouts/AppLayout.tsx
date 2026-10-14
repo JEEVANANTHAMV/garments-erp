@@ -41,11 +41,11 @@ export default function AppLayout() {
   const uid = user?.id ?? 0;
   const load = <T,>(k: string, d: T): T => { try { const v = localStorage.getItem(`erp.nav.${k}.${uid}`); return v ? JSON.parse(v) as T : d; } catch { return d; } };
   const save = (k: string, v: unknown) => { try { localStorage.setItem(`erp.nav.${k}.${uid}`, JSON.stringify(v)); } catch { /* storage blocked */ } };
-  const [openSecs, setOpenSecs] = useState<string[]>(() => load('open', []));
+  const [openSecs, setOpenSecs] = useState<string[]>(() => load<string[]>('open', []).slice(-1));
   const [favs, setFavs] = useState<string[]>(() => load('favs', []));
   const [recent, setRecent] = useState<string[]>(() => load('recent', []));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { setOpenSecs(load('open', [])); setFavs(load('favs', [])); setRecent(load('recent', [])); }, [uid]);
+  useEffect(() => { setOpenSecs(load<string[]>('open', []).slice(-1)); setFavs(load('favs', [])); setRecent(load('recent', [])); }, [uid]);
   // the step of the page you are on opens by itself; the visit goes to "Recent"
   // exactly one menu screen is "the page you are on" (longest matching path; a hidden tab screen → its parent)
   const match = matchNav(location.pathname);
