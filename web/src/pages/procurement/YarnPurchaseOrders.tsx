@@ -15,7 +15,7 @@ export default function YarnPurchaseOrdersPage() {
   const { data: pos = [], isLoading } = useQuery({
     queryKey: ['yarn-purchase-orders'],
     queryFn: async () => {
-      const res = await http.get<{ data: any[] }>('/purchase-orders?po_type=MATERIAL');
+      const res = await http.get<{ data: any[] }>('/purchase-orders?po_type=MATERIAL&material_type=YARN');
       return res.data || [];
     },
   });

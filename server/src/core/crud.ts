@@ -49,6 +49,8 @@ export interface ResourceConfig {
   joins?: string;
   /** Equality filters accepted as query params. */
   filters?: string[];
+  /** Custom filters: query param → SQL condition with one `?` (e.g. a match on a child table). */
+  filterSql?: Record<string, string>;
   /** Auto-generate this column from a number series if not supplied. */
   autoNumber?: { column: string; docType: string };
   /** Child collections written together with the parent. */
@@ -127,7 +129,7 @@ export function buildResourceRouter(cfg: ResourceConfig): Router {
     softDelete = true,
     hasIsActive = true,
     hasAuditCols = true,
-    searchable = [], sortable = [], filters = [],
+    searchable = [], sortable = [], filters = [], filterSql = {},
     selectExtra = '', joins = '',
     defaultSort = 't.id',
     children = [],
@@ -159,6 +161,13 @@ export function buildResourceRouter(cfg: ResourceConfig): Router {
       if (raw === 'null') { where.push(`t.${f} IS NULL`); continue; }
       where.push(`t.${f} = ?`);
       params.push(raw);
+    }
+
+    for (const [k, cond] of Object.entries(filterSql)) {
+      const raw = req.query[k];
+      if (raw === undefined || raw === '') continue;
+      where.push(`(${cond})`);
+      params.push(String(raw));
     }
 
     // Generic date-range support: ?dateFrom / ?dateTo against ?dateField

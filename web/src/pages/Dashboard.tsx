@@ -159,7 +159,7 @@ export default function Dashboard() {
         <div className="card p-4">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-[14px] font-semibold text-slate-800">Live Stage WIP</h3>
-            <Link to="/production/wip" className="text-xs font-medium text-brand-600 hover:text-brand-700 flex items-center gap-1">
+            <Link to="/production/wip-stock-value" className="text-xs font-medium text-brand-600 hover:text-brand-700 flex items-center gap-1">
               WIP View <ArrowRight size={12} />
             </Link>
           </div>

@@ -610,7 +610,18 @@ export default function CollarKnittingPage() {
                     <span className="font-semibold text-emerald-700">{fmtNumber(r.good_pcs)}</span>,
                     fmtDecimal(r.yarn_kg_ref, 3),
                     <Badge tone={r.qc_status === 'PASSED' ? 'emerald' : 'amber'}>{r.qc_status}</Badge>,
-                    r.is_stock_posted ? 'Yes' : 'No',
+                    r.is_stock_posted ? 'Yes' : r.qc_status === 'PASSED' ? (
+                      // QC passed later (on "Collar – Yarn Issue / QC") → post the good PCS now
+                      <button className="btn-secondary !px-2 !py-0.5 text-[11px]" data-post-receipt={r.id}
+                        onClick={async () => {
+                          try {
+                            await http.post(`/collar-receipts/${r.id}/post-stock`, {});
+                            toast(`${r.receipt_no}: ${fmtNumber(r.good_pcs)} PCS posted to stock`, 'success');
+                            void qc.invalidateQueries({ queryKey: ['collar-program'] });
+                            void qc.invalidateQueries({ queryKey: ['collar-programs'] });
+                          } catch (e) { toast(e instanceof ApiError ? e.message : 'Could not post stock', 'error'); }
+                        }}>Post stock</button>
+                    ) : <span className="text-slate-400" title="QC this receipt on Collar – Yarn Issue / QC">No · QC pending</span>,
                   ])} />
               )}
             </Section>

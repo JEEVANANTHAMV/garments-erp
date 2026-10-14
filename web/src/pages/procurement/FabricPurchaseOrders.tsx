@@ -15,7 +15,7 @@ export default function FabricPurchaseOrdersPage() {
   const { data: pos = [], isLoading } = useQuery({
     queryKey: ['fabric-purchase-orders'],
     queryFn: async () => {
-      const res = await http.get<{ data: any[] }>('/purchase-orders?po_type=MATERIAL');
+      const res = await http.get<{ data: any[] }>('/purchase-orders?po_type=MATERIAL&material_type=FABRIC');
       // Filter fabric orders
       return res.data || [];
     },

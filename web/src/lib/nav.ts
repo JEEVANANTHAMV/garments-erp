@@ -39,14 +39,12 @@ export const NAV: NavSection[] = [
     items: [
       { label: 'Enquiries',          to: '/sales/enquiries', icon: FileText, perms: ['ENQUIRY.VIEW'] },
       { label: 'Samples',            to: '/sales/samples', icon: Beaker, perms: ['SAMPLE.VIEW'] },
-      { label: 'Pre-Costing (V2)',   to: '/sales/pre-costings', icon: Layers, perms: ['COSTING.VIEW'] },
-      { label: 'Costings (Classic)', to: '/sales/costings', icon: Calculator, perms: ['COSTING.VIEW'] },
+      { label: 'Pre-Costing',        to: '/sales/pre-costings', icon: Calculator, perms: ['COSTING.VIEW'] },
       { label: 'Quotations',         to: '/sales/quotations', icon: FileSpreadsheet, perms: ['QUOTATION.VIEW'] },
       { label: 'Sales Orders',       to: '/sales/orders', icon: ShoppingCart, perms: ['SALES_ORDER.VIEW'] },
       { label: 'Bill of Materials',  to: '/masters/boms', icon: Layers, perms: ['BOM.VIEW'] },
       { label: 'T&A Order Tracking', to: '/tna', icon: CalendarClock, perms: ['SALES_ORDER.VIEW', 'PRODUCTION.VIEW'] },
       { label: 'T&A Risk Dashboard', to: '/tna/dashboard', icon: ShieldAlert, perms: ['SALES_ORDER.VIEW', 'PRODUCTION.VIEW'] },
-      { label: 'Production Plans',   to: '/production/plans', icon: CalendarClock, perms: ['PRODUCTION.VIEW'] },
       { label: 'Production Orders',  to: '/production/orders', icon: Factory, perms: ['PRODUCTION.VIEW'] },
     ],
   },
@@ -60,8 +58,7 @@ export const NAV: NavSection[] = [
       { label: 'Fabric GRN & Rolls',   to: '/procurement/fabric/grn', icon: PackageCheck, perms: ['GRN.VIEW'] },
       { label: 'Trim POs',             to: '/procurement/trim/orders', icon: Scissors, perms: ['PURCHASE.VIEW'] },
       { label: 'Trim GRN & Stock',     to: '/procurement/trim/grn', icon: PackageCheck, perms: ['GRN.VIEW'] },
-      { label: 'General POs',          to: '/procurement/general-orders', icon: ShoppingCart, perms: ['PURCHASE.VIEW'] },
-      { label: 'General GRN & Inward', to: '/procurement/general-purchases', icon: Receipt, perms: ['PURCHASE.VIEW'] },
+      { label: 'General PO & GRN',     to: '/procurement/general-purchases', icon: Receipt, perms: ['PURCHASE.VIEW'] },
       { label: 'Purchase Orders (All)', to: '/procurement/purchase-orders', icon: ShoppingCart, perms: ['PURCHASE.VIEW'] },
       { label: 'Goods Receipt (All)',  to: '/procurement/grns', icon: PackageCheck, perms: ['GRN.VIEW'] },
       { label: 'Bills Inward',         to: '/procurement/supplier-bills', icon: Receipt, perms: ['PURCHASE.VIEW'] },
@@ -96,7 +93,7 @@ export const NAV: NavSection[] = [
       { label: 'Yarn Cone / Lot Tracking',     to: '/production/yarn-process/cone-tracking', icon: History, perms: ['YARN_PROCESS.VIEW'] },
       { label: 'Yarn Substitution',            to: '/production/yarn-substitution', icon: GitBranch, perms: ['PRODUCTION.VIEW', 'INVENTORY.VIEW'] },
       { label: 'Collar Knitting',              to: '/production/collar-knitting', icon: Shirt, perms: ['PRODUCTION.VIEW'] },
-      { label: 'Collar – Yarn Issue / Output / QC', to: '/production/process-execution', icon: ClipboardCheck, perms: ['PRODUCTION.VIEW'] },
+      { label: 'Collar – Yarn Issue / QC', to: '/production/process-execution', icon: ClipboardCheck, perms: ['PRODUCTION.VIEW'] },
     ],
   },
   {
@@ -143,7 +140,6 @@ export const NAV: NavSection[] = [
       { label: 'Ironing Daily Plan',       to: '/production/ironing-daily-plan', icon: CalendarClock, perms: ['PRODUCTION.VIEW'] },
       { label: 'Packing Line Allocation',  to: '/production/packing-line-allocation', icon: GitBranch, perms: ['PRODUCTION.VIEW'] },
       { label: 'Packing Daily Plan',       to: '/production/packing-daily-plan', icon: CalendarClock, perms: ['PRODUCTION.VIEW'] },
-      { label: 'QC Inspections',           to: '/quality/inspections', icon: ClipboardCheck, perms: ['QC.VIEW'] },
       { label: 'FG Receipts',              to: '/production/fg-receipts', icon: PackageCheck, perms: ['PRODUCTION.VIEW'] },
       { label: 'Packing',                  to: '/logistics/packings', icon: PackageCheck, perms: ['PACKING.VIEW'] },
       { label: 'Packing Lists',            to: '/logistics/packing-lists', icon: FileCheck2, perms: ['PACKING.VIEW', 'EXPORT.VIEW'] },
@@ -192,7 +188,6 @@ export const NAV: NavSection[] = [
   {
     label: '13 · Reports',
     items: [
-      { label: 'WIP Dashboard',          to: '/production/wip', icon: BarChart3, perms: ['PRODUCTION.VIEW'] },
       { label: 'WIP Stock Value',        to: '/production/wip-stock-value', icon: Coins, perms: ['PRODUCTION.VIEW'] },
       { label: 'Production Costing',     to: '/production/costs', icon: Calculator, perms: ['PRODUCTION.VIEW'] },
       { label: 'Planning Reports',       to: '/production/planning-reports', icon: BarChart3, perms: ['PRODUCTION.VIEW'] },
@@ -228,7 +223,6 @@ export const NAV: NavSection[] = [
       { label: 'Divisions',          to: '/masters/divisions', icon: Building2, perms: ['UNIT.VIEW'] },
       { label: 'Production Lines',   to: '/production/sewing-lines', icon: SlidersHorizontal, perms: ['PRODUCTION.VIEW'] },
       { label: 'Process & Operations', to: '/production/process-master', icon: ListChecks, perms: ['PRODUCTION.VIEW'] },
-      { label: 'Sewing Operations',  to: '/production/sewing-operations', icon: Scissors, perms: ['PRODUCTION.VIEW'] },
       { label: 'Job Rate Card',      to: '/production/job-rate-cards', icon: ListChecks, perms: ['PRODUCTION.VIEW'] },
       { label: 'Job Work Rates',     to: '/production/job-work-rates', icon: ListChecks, perms: ['PRODUCTION.VIEW'] },
       { label: 'Yarn Process Types', to: '/production/yarn-process/types', icon: SlidersHorizontal, perms: ['YARN_PROCESS.VIEW'] },
@@ -271,6 +265,12 @@ export const NAV: NavSection[] = [
       { label: 'Finishing',          to: '/production/finishings', icon: PackageCheck, perms: ['PRODUCTION.VIEW'], hidden: true },
       { label: 'Process Movements',  to: '/production/process-transactions', icon: GitBranch, perms: ['PRODUCTION.VIEW'], hidden: true },
       { label: 'Contractor Bills',   to: '/production/contractor-bills', icon: HandCoins, perms: ['PRODUCTION.VIEW'], hidden: true },
+      // Duplicates removed from the menu 14-Oct-2026 (each replaced by the screen in brackets)
+      { label: 'General POs',        to: '/procurement/general-orders', icon: ShoppingCart, perms: ['PURCHASE.VIEW'], hidden: true },   // General PO & GRN, PO tab
+      { label: 'Production Plans',   to: '/production/plans', icon: CalendarClock, perms: ['PRODUCTION.VIEW'], hidden: true },          // T&A Order Tracking
+      { label: 'QC Inspections',     to: '/quality/inspections', icon: ClipboardCheck, perms: ['QC.VIEW'], hidden: true },              // Checking Entry (QC)
+      { label: 'WIP Dashboard',      to: '/production/wip', icon: BarChart3, perms: ['PRODUCTION.VIEW'], hidden: true },                // WIP Stock Value / Operation Status
+      { label: 'Sewing Operations',  to: '/production/sewing-operations', icon: Scissors, perms: ['PRODUCTION.VIEW'], hidden: true },  // Process & Operations
     ],
   },
 ];

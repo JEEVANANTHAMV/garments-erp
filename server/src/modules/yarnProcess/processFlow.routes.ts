@@ -248,6 +248,10 @@ processFlowRouter.post('/process-receipts', requirePermission('PROCESS.PRODUCTIO
   const uid = req.user!.id;
   const body = receiptSchema.parse(req.body);
 
+  // Collar output is received once, on Collar Knitting (PCS by size, capped by production) — 14-Oct-2026.
+  if (body.src_type === 'COLLAR_PROGRAM') {
+    throw BadRequest('Receive collar output on Collar Knitting → Receipts (PCS by size), then QC it here against that receipt');
+  }
   const src = await loadSrc(body.src_type, body.src_id, cid);
   assertEditable(src.status, SRC_TABLE[body.src_type].label);
 
@@ -356,6 +360,7 @@ processFlowRouter.post('/process-receipts/:id/post-stock', requirePermission('PR
     `SELECT * FROM trx_process_receipt WHERE id = ? AND company_id = ?`, [id, cid]);
   if (!rc) throw NotFound('Receipt not found');
   if (rc.is_stock_posted) throw BadRequest('Stock has already been posted for this receipt');
+  if (rc.src_type === 'COLLAR_PROGRAM') throw BadRequest('Collar stock is posted from Collar Knitting → Receipts (PCS by size)');
   if (rc.qc_status !== 'PASSED') throw BadRequest('QC must be PASSED before stock can be posted');
 
   const src = await loadSrc(rc.src_type as SrcType, rc.src_id, cid);
@@ -407,6 +412,8 @@ const qcSchema = z.object({
   src_type: z.enum(SRC_TYPES),
   src_id: s.idReq(),
   receipt_id: s.id(),
+  /** Collar programs: the Collar Knitting receipt this QC passes / fails. */
+  collar_receipt_id: s.id(),
   qc_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   process_type: s.nullableStr(40),
   overall_status: z.enum(['PENDING', 'PASSED', 'HOLD', 'REJECTED']).default('PENDING'),
@@ -424,14 +431,22 @@ processFlowRouter.post('/process-qc', requirePermission('PROCESS.QC'), ah(async 
   const cid = req.user!.companyId;
   const body = qcSchema.parse(req.body);
   await loadSrc(body.src_type, body.src_id, cid);
+  const collarRc = body.src_type === 'COLLAR_PROGRAM' ? body.collar_receipt_id ?? null : null;
+  if (body.src_type === 'COLLAR_PROGRAM' && body.receipt_id) throw BadRequest('Collar QC is recorded against a Collar Knitting receipt');
+  if (collarRc) {
+    const rc = await queryOne<any>(
+      `SELECT program_id, is_stock_posted FROM trx_collar_receipt WHERE id = ? AND company_id = ?`, [collarRc, cid]);
+    if (!rc || Number(rc.program_id) !== Number(body.src_id)) throw BadRequest('That collar receipt does not belong to this program');
+    if (rc.is_stock_posted) throw BadRequest('That collar receipt is already posted to stock — its QC can no longer change');
+  }
 
   const result = await transaction(async (tx) => {
     const r = await txExecute(tx,
       `INSERT INTO trx_process_qc
-         (company_id, src_type, src_id, receipt_id, qc_date, process_type,
+         (company_id, src_type, src_id, receipt_id, collar_receipt_id, qc_date, process_type,
           overall_status, checked_by, remarks)
-       VALUES (?,?,?,?,?,?,?,?,?)`,
-      [cid, body.src_type, body.src_id, body.receipt_id ?? null, body.qc_date,
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      [cid, body.src_type, body.src_id, body.receipt_id ?? null, collarRc, body.qc_date,
        body.process_type ?? null, body.overall_status, req.user!.id, body.remarks ?? null]);
     const qcId = r.insertId;
 
@@ -445,6 +460,10 @@ processFlowRouter.post('/process-qc', requirePermission('PROCESS.QC'), ah(async 
     }
 
     // The QC verdict propagates to the receipt it was performed against.
+    if (collarRc) {
+      await txExecute(tx, `UPDATE trx_collar_receipt SET qc_status = ? WHERE id = ? AND company_id = ?`,
+        [body.overall_status, collarRc, cid]);
+    }
     if (body.receipt_id) {
       await txExecute(tx,
         `UPDATE trx_process_receipt SET qc_status = ? WHERE id = ? AND company_id = ?`,
@@ -494,9 +513,13 @@ processFlowRouter.post('/process-complete', requirePermission('PROCESS.COMPLETE'
   const src = await loadSrc(src_type, src_id, cid);
   assertEditable(src.status, SRC_TABLE[src_type].label);
 
+  // collar output lives on Collar Knitting receipts; older collar process receipts still count
+  const collar = src_type === 'COLLAR_PROGRAM';
   const receipts = await query<any>(
     `SELECT qc_status, is_stock_posted FROM trx_process_receipt
-      WHERE src_type = ? AND src_id = ? AND company_id = ?`, [src_type, src_id, cid]);
+      WHERE src_type = ? AND src_id = ? AND company_id = ?
+     ${collar ? `UNION ALL SELECT qc_status, is_stock_posted FROM trx_collar_receipt WHERE program_id = ? AND company_id = ?` : ''}`,
+    collar ? [src_type, src_id, cid, src_id, cid] : [src_type, src_id, cid]);
   if (!receipts.length) throw BadRequest('Cannot complete: no output receipt has been recorded');
 
   const pendingQc = receipts.filter((r) => r.qc_status !== 'PASSED');

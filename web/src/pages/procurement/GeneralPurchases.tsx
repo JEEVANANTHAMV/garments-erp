@@ -31,7 +31,9 @@ export function GeneralPurchasesPage() {
     q: debounced || undefined,
     supplier_id: supplierFilter || undefined,
     purchase_type: typeFilter || undefined,
-    approval_state: statusFilter || (isPoMode ? undefined : undefined),
+    approval_state: statusFilter || undefined,
+    // the PO tab lists POs, the GRN tab GRNs (both menus used to show the same list — 14-Oct-2026)
+    doc_kind: isPoMode ? 'PO' : 'GRN',
   });
 
   const getPurchaseTypeTone = (type: string) => {

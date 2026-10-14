@@ -78,8 +78,8 @@ export function GeneralPurchaseDetailPage() {
   const { data: generalPos = [] } = useQuery({
     queryKey: ['general-pos-for-grn'],
     queryFn: async () => {
-      const res = await http.get<any>('/general-purchases?limit=50');
-      return (res.data || []).filter((p: any) => !p.gate_inward_id);
+      const res = await http.get<any>('/general-purchases?pageSize=100&doc_kind=PO');
+      return res.data || [];
     },
     enabled: !isPoMode && isNew,
   });
@@ -147,6 +147,11 @@ export function GeneralPurchaseDetailPage() {
   useEffect(() => {
     if (purchaseQuery.data) {
       const p = purchaseQuery.data;
+      // a PO always opens as a PO, a GRN as a GRN, whichever tab / old link it came from
+      if (p.doc_kind && (p.doc_kind === 'PO') !== isPoMode) {
+        nav(`/procurement/${p.doc_kind === 'PO' ? 'general-orders' : 'general-purchases'}/${p.id}`, { replace: true });
+        return;
+      }
       setHead({
         purchase_no: p.purchase_no || '',
         grn_no: p.grn_no || '',
@@ -442,6 +447,7 @@ export function GeneralPurchaseDetailPage() {
       const payload = {
         purchase_no: isPoMode ? (head.purchase_no || undefined) : undefined,
         grn_no: !isPoMode ? (head.grn_no || undefined) : undefined,
+        ...(isNew ? { doc_kind: isPoMode ? 'PO' : 'GRN' } : {}),
         purchase_date: head.purchase_date,
         supplier_id: Number(head.supplier_id),
         purchase_type: head.purchase_type,

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Trash2, PlayCircle, Truck } from 'lucide-react';
 import { http, ApiError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -257,6 +258,7 @@ function MrpDetailModal({ id, onClose }: { id: number | null; onClose: () => voi
 /* ------------------------------------------------------------------ GRN */
 export function GrnPage() {
   const { can } = useAuth();
+  const nav = useNavigate();
   const qc = useQueryClient();
   const { page, setPage, search, setSearch } = useListState();
   const debounced = useDebounced(search);
@@ -271,9 +273,14 @@ export function GrnPage() {
 
   return (
     <>
-      <PageHeader title="Goods Receipt Notes" subtitle="Receive material against purchase orders into stock"
+      {/* All yarn / fabric GRNs in one list. New GRNs are made on Yarn GRN / Fabric GRN & Rolls, which create the
+          yarn lots and fabric rolls — a GRN made here had neither (removed 14-Oct-2026). */}
+      <PageHeader title="Goods Receipt Notes (All)" subtitle="Every yarn and fabric GRN in one list — receive new material on Yarn GRN or Fabric GRN & Rolls"
         actions={can('GRN.CREATE') && (
-          <button className="btn-primary" onClick={() => setOpen(true)}><Plus size={15} /> New GRN</button>)} />
+          <div className="flex gap-2">
+            <button className="btn-secondary" onClick={() => nav('/procurement/yarn/grn')}><Plus size={15} /> Yarn GRN</button>
+            <button className="btn-secondary" onClick={() => nav('/procurement/fabric/grn')}><Plus size={15} /> Fabric GRN</button>
+          </div>)} />
 
       <SearchInput value={search} onChange={setSearch} placeholder="Search GRN, DC or invoice number…"
         className="mb-3 w-full max-w-sm" />

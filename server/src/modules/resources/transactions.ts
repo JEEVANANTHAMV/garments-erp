@@ -271,6 +271,8 @@ export const transactionResources: ResourceConfig[] = [
     searchable: ['po_no', 'remarks'], sortable: ['po_no', 'po_date', 'delivery_date'],
     defaultSort: 't.po_date', hasIsActive: false,
     filters: ['supplier_id', 'po_type', 'status_id', 'approval_state', 'so_id', 'branch_id'],
+    // Yarn POs / Fabric POs list only POs carrying that material (14-Oct-2026: each list showed the other's POs)
+    filterSql: { material_type: 'EXISTS (SELECT 1 FROM trx_purchase_order_line pml WHERE pml.po_id = t.id AND pml.material_type = ?)' },
     autoNumber: { column: 'po_no', docType: 'PURCHASE_ORDER' },
     selectExtra: `sup.party_name AS supplier_name, cur.code AS currency_code, cur.symbol AS currency_symbol, cs.label AS status_label, so.so_no, so.io_no, st.style_code, ship_to.party_name AS shipping_to_party_name,
       ${PO_RECEIPT_STATUS_SQL('t.id')} AS receipt_status`,
@@ -327,7 +329,7 @@ export const transactionResources: ResourceConfig[] = [
     path: 'general-purchases', table: 'trx_general_purchase', permission: 'PURCHASE', label: 'General Purchase',
     searchable: ['purchase_no', 'supplier_inv_no', 'remarks'], sortable: ['purchase_no', 'purchase_date'],
     defaultSort: 't.purchase_date', hasIsActive: false,
-    filters: ['supplier_id', 'purchase_type', 'status_id', 'approval_state', 'branch_id'],
+    filters: ['supplier_id', 'purchase_type', 'status_id', 'approval_state', 'branch_id', 'doc_kind'],
     autoNumber: { column: 'purchase_no', docType: 'GENERAL_PURCHASE' },
     selectExtra: 'sup.party_name AS supplier_name, cur.code AS currency_code, cur.symbol AS currency_symbol, cs.label AS status_label, gin.entry_no AS gate_entry_no, (SELECT COUNT(*) FROM trx_general_purchase_line gpl WHERE gpl.purchase_id = t.id) AS item_count',
     joins: `LEFT JOIN mst_party sup ON sup.id = t.supplier_id
@@ -354,6 +356,7 @@ export const transactionResources: ResourceConfig[] = [
     ],
     fields: [
       f('branch_id', s.id()), f('purchase_no', s.nullableStr(40)), f('grn_no', s.nullableStr(40)), f('purchase_date', s.date()),
+      f('doc_kind', s.enum(['PO', 'GRN'])),
       f('supplier_id', s.idReq()),
       f('purchase_type', s.enum(['GENERAL','STOCK','ORDER_SPECIFIC','EMERGENCY','MAINTENANCE','SAMPLE'])),
       f('supplier_inv_no', s.nullableStr(60)), f('supplier_inv_date', s.date()),

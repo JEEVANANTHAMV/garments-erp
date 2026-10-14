@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './lib/auth';
 import { ToastProvider } from './hooks/useToast';
@@ -21,7 +21,6 @@ import { DivisionsPage } from './pages/masters/Divisions';
 /* Sales */
 import { EnquiriesPage, SamplesPage, QuotationsPage } from './pages/sales';
 import QuotationDetailPage from './pages/sales/QuotationDetail';
-import CostingsPage, { CostingDetailPage } from './pages/sales/Costings';
 import PreCostingsPage from './pages/sales/PreCostings';
 import PreCostingDetailPage from './pages/sales/PreCostingDetail';
 import SalesOrdersPage from './pages/sales/SalesOrders';
@@ -163,6 +162,12 @@ const queryClient = new QueryClient({
   },
 });
 
+/** Old links to a screen that was merged into another (keeps the :id). */
+function RedirectTo({ base }: { base: string }) {
+  const { id } = useParams();
+  return <Navigate to={id ? `${base}/${id}` : base} replace />;
+}
+
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('erp.accessToken');
   if (!token) return <Navigate to="/login" replace />;
@@ -217,8 +222,9 @@ export default function App() {
                 <Route path="sales">
                   <Route path="enquiries" element={<EnquiriesPage />} />
                   <Route path="samples" element={<SamplesPage />} />
-                  <Route path="costings" element={<CostingsPage />} />
-                  <Route path="costings/:id" element={<CostingDetailPage />} />
+                  {/* Classic costing sheet merged into Pre-Costing (same trx_costing record) — 14-Oct-2026 */}
+                  <Route path="costings" element={<RedirectTo base="/sales/pre-costings" />} />
+                  <Route path="costings/:id" element={<RedirectTo base="/sales/pre-costings" />} />
                   <Route path="pre-costings" element={<PreCostingsPage />} />
                   <Route path="pre-costings/new" element={<PreCostingDetailPage />} />
                   <Route path="pre-costings/:id" element={<PreCostingDetailPage />} />
@@ -423,13 +429,12 @@ export default function App() {
                 </Route>
                 <Route path="export">
                   <Route path="invoices" element={<ExportInvoicesPage />} />
-                  <Route path="packing-lists" element={<PackingListPage />} />
-                  <Route path="packing-lists/new" element={<PackingListDetailPage />} />
-                  <Route path="packing-lists/:id" element={<PackingListDetailPage />} />
+                  {/* packing lists / shipments live under /logistics; these were duplicate paths */}
+                  <Route path="packing-lists" element={<RedirectTo base="/logistics/packing-lists" />} />
+                  <Route path="packing-lists/:id" element={<RedirectTo base="/logistics/packing-lists" />} />
                   <Route path="shipping-bills" element={<ShippingBillsPage />} />
-                  <Route path="shipments" element={<ShipmentListPage />} />
-                  <Route path="shipments/new" element={<ShipmentDetailPage />} />
-                  <Route path="shipments/:id" element={<ShipmentDetailPage />} />
+                  <Route path="shipments" element={<RedirectTo base="/logistics/shipments" />} />
+                  <Route path="shipments/:id" element={<RedirectTo base="/logistics/shipments" />} />
                   <Route path="certificates" element={<CertificatesPage />} />
                 </Route>
 

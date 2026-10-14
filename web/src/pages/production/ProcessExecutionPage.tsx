@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import {
   Save, X, PackageMinus, PackagePlus, ClipboardCheck, History, Plus, Trash2,
 } from 'lucide-react';
@@ -76,10 +77,13 @@ export default function ProcessExecutionPage() {
       `/process-issues?src_type=${srcType}&src_id=${srcId}`)).data || [],
     enabled: srcId !== '',
   });
+  // Collar output is received on Collar Knitting (PCS by size); this screen QCs those receipts.
+  const collar = srcType === 'COLLAR_PROGRAM';
   const { data: receipts = [] } = useQuery({
     queryKey: ['exec-receipts', srcType, srcId],
-    queryFn: async () => (await http.get<{ data: any[] }>(
-      `/process-receipts?src_type=${srcType}&src_id=${srcId}`)).data || [],
+    queryFn: async () => (await http.get<{ data: any[] }>(collar
+      ? `/collar-receipts?program_id=${srcId}`
+      : `/process-receipts?src_type=${srcType}&src_id=${srcId}`)).data || [],
     enabled: srcId !== '',
   });
   const { data: qcRows = [] } = useQuery({
@@ -106,8 +110,8 @@ export default function ProcessExecutionPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Collar — Yarn Issue / Output / QC"
-        subtitle="Issue yarn, receive output, record QC and raise revisions for collar programs (knitting and yarn processes use their own DC / GRN screens)"
+        title="Collar — Yarn Issue / QC"
+        subtitle="Issue yarn, QC the collar receipts and raise revisions for collar programs. Collar output is received on Collar Knitting (PCS by size)."
       />
 
       <div className="card grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
@@ -144,9 +148,16 @@ export default function ProcessExecutionPage() {
               <button className="btn-secondary" onClick={() => setModal('issue')} id="btn-new-issue">
                 <PackageMinus size={14} /> Issue
               </button>
-              <button className="btn-secondary" onClick={() => setModal('receipt')} id="btn-new-receipt">
-                <PackagePlus size={14} /> Receipt
-              </button>
+              {collar ? (
+                <Link to="/production/collar-knitting" className="btn-secondary" id="btn-collar-receipt"
+                  title="Collar output is received on Collar Knitting (PCS by size)">
+                  <PackagePlus size={14} /> Receive output (Collar Knitting)
+                </Link>
+              ) : (
+                <button className="btn-secondary" onClick={() => setModal('receipt')} id="btn-new-receipt">
+                  <PackagePlus size={14} /> Receipt
+                </button>
+              )}
               <button className="btn-secondary" onClick={() => setModal('qc')} id="btn-new-qc">
                 <ClipboardCheck size={14} /> QC
               </button>
@@ -179,7 +190,18 @@ export default function ProcessExecutionPage() {
                     : <span className="text-slate-400">No</span>,
                 ])} empty="No material issued yet" />
             )}
-            {tab === 'receipt' && (
+            {tab === 'receipt' && collar && (
+              <Table head={['Receipt No', 'Date', 'Size', 'Received', 'Rejected', 'Good PCS', 'QC', 'Posted']}
+                rows={receipts.map((r: any) => [
+                  r.receipt_no, fmtDate(r.receipt_date), r.size_code ?? r.size_master_code ?? '—',
+                  r.received_pcs, r.rejected_pcs, <span className="font-semibold">{r.good_pcs}</span>,
+                  <Badge tone={r.qc_status === 'PASSED' ? 'emerald' : r.qc_status === 'REJECTED' ? 'rose' : 'amber'}>
+                    {r.qc_status}
+                  </Badge>,
+                  r.is_stock_posted ? 'Yes' : 'No',
+                ])} empty="No collar output received yet — receive it on Collar Knitting" />
+            )}
+            {tab === 'receipt' && !collar && (
               <Table head={['Receipt No', 'Date', 'Input', 'Output', 'Loss', 'Rejected', 'Lot', 'QC', 'Posted']}
                 rows={receipts.map((r: any) => [
                   r.receipt_no, fmtDate(r.receipt_date), fmtDecimal(r.input_qty, 3),
@@ -429,7 +451,8 @@ function QcModal({ open, onClose, srcType, srcId, receipts, onSaved }: any) {
     try {
       await http.post('/process-qc', {
         src_type: srcType, src_id: srcId, qc_date: f.qc_date,
-        receipt_id: f.receipt_id === '' ? null : Number(f.receipt_id),
+        // collar receipts live on Collar Knitting (trx_collar_receipt)
+        [srcType === 'COLLAR_PROGRAM' ? 'collar_receipt_id' : 'receipt_id']: f.receipt_id === '' ? null : Number(f.receipt_id),
         process_type: QC_TYPE_FOR[srcType as SrcType],
         overall_status: f.overall_status, remarks: f.remarks || null,
         lines: lines.filter((l) => l.parameter),
@@ -450,7 +473,11 @@ function QcModal({ open, onClose, srcType, srcId, receipts, onSaved }: any) {
             onChange={(e) => setF({ ...f, qc_date: e.target.value })} id="qc-date" />
           <Select label="Against Receipt" value={f.receipt_id} placeholder="— Whole document —"
             onChange={(e) => setF({ ...f, receipt_id: e.target.value })} id="qc-receipt">
-            {receipts.map((r: any) => <option key={r.id} value={r.id}>{r.receipt_no}</option>)}
+            {receipts.filter((r: any) => !r.is_stock_posted).map((r: any) => (
+              <option key={r.id} value={r.id}>
+                {r.receipt_no}{r.good_pcs != null ? ` · ${r.size_code ?? r.size_master_code ?? ''} ${r.good_pcs} PCS · ${r.qc_status}` : ''}
+              </option>
+            ))}
           </Select>
           <Select label="Overall Result" value={f.overall_status}
             onChange={(e) => setF({ ...f, overall_status: e.target.value })} id="qc-status">

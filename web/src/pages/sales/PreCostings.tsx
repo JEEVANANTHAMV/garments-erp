@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Sparkles, FileSpreadsheet } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { useList, useListState } from '../../hooks/useResource';
 import { useLookup, toOptions } from '../../hooks/useLookup';
@@ -46,23 +46,6 @@ export default function PreCostingsPage() {
           )
         }
       />
-
-      {/* Top Level Screen Switcher */}
-      <div className="mb-4 flex items-center gap-2 border-b border-slate-200 pb-2">
-        <button
-          type="button"
-          onClick={() => nav('/sales/costings')}
-          className="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 flex items-center gap-1.5"
-        >
-          <FileSpreadsheet size={14} /> Costing Sheets (Classic F14)
-        </button>
-        <button
-          type="button"
-          className="px-3 py-1.5 text-xs font-bold rounded-lg bg-brand-600 text-white shadow-xs flex items-center gap-1.5"
-        >
-          <Sparkles size={14} /> Merchandiser Pre-Costing (V2 Engine)
-        </button>
-      </div>
 
       {/* KPI Cards */}
       <div className="mb-4 grid grid-cols-1 md:grid-cols-4 gap-3">
