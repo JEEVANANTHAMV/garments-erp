@@ -1,11 +1,11 @@
 import { useState, useMemo, useEffect } from 'react';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Menu, X, LogOut, ChevronDown, ChevronRight, Search, Bell, Building2, Star, Clock,
+  Menu, X, LogOut, ChevronDown, ChevronRight, Search, Bell, Building2, Star, Clock, ArrowLeft, ArrowRight,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../lib/auth';
-import { NAV, NAV_BY_PATH, PROCESS_TABS, type NavItem } from '../lib/nav';
+import { NAV, NAV_BY_PATH, PROCESS_TABS, matchNav, type NavItem } from '../lib/nav';
 import { initials } from '../lib/format';
 import { useQuery } from '@tanstack/react-query';
 import { http } from '../lib/api';
@@ -25,15 +25,17 @@ export default function AppLayout() {
     localStorage.setItem('erp.textSize', textSize);
   }, [textSize]);
 
-  // Only render sections the user can actually reach.
-  const sections = useMemo(() => NAV
+  // The steps the user can reach (the step bar walks these), and the same filtered by the sidebar search.
+  const steps = useMemo(() => NAV
     .map((s) => ({ ...s, items: s.items.filter((i) => !i.hidden && canAny(...i.perms)) }))
-    .filter((s) => s.items.length)
+    .filter((s) => s.items.length),
+    [canAny, user]);
+  const sections = useMemo(() => steps
     .map((s) => filter
       ? { ...s, items: s.items.filter((i) => i.label.toLowerCase().includes(filter.toLowerCase()) || s.label.toLowerCase().includes(filter.toLowerCase())) }
       : s)
     .filter((s) => s.items.length),
-    [canAny, filter, user]);
+    [steps, filter]);
 
   // per-user sidebar memory: open steps, favourites, recent screens (browser storage, best effort)
   const uid = user?.id ?? 0;
@@ -45,16 +47,23 @@ export default function AppLayout() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { setOpenSecs(load('open', [])); setFavs(load('favs', [])); setRecent(load('recent', [])); }, [uid]);
   // the step of the page you are on opens by itself; the visit goes to "Recent"
-  const currentSection = sections.find((s) => s.items.some((i) => i.to !== '/' && (location.pathname === i.to || location.pathname.startsWith(`${i.to}/`))))?.label;
+  // exactly one menu screen is "the page you are on" (longest matching path; a hidden tab screen → its parent)
+  const match = matchNav(location.pathname);
+  const activeTo = match?.item.to;
+  const stepIdx = steps.findIndex((s) => s.items.some((i) => i.to === activeTo));
+  const step = stepIdx >= 0 ? steps[stepIdx] : undefined;
+  const currentSection = activeTo === '/' ? undefined : step?.label;
   useEffect(() => {
-    if (currentSection) setOpenSecs((o) => { if (o.includes(currentSection)) return o; const next = [...o, currentSection]; save('open', next); return next; });
+    // one step open at a time: the page's own step replaces whatever was open
+    if (currentSection) setOpenSecs((o) => { if (o.length === 1 && o[0] === currentSection) return o; const next = [currentSection]; save('open', next); return next; });
     if (NAV_BY_PATH.has(location.pathname) && location.pathname !== '/') {
       setRecent((r) => { const next = [location.pathname, ...r.filter((p) => p !== location.pathname)].slice(0, 6); save('recent', next); return next; });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, currentSection]);
   const toggleSec = (label: string) => {
-    const next = openSecs.includes(label) ? openSecs.filter((x) => x !== label) : [...openSecs, label];
+    // accordion: opening a step closes the previously open one; clicking the open step folds it
+    const next = openSecs.includes(label) ? [] : [label];
     setOpenSecs(next); save('open', next);
   };
   const toggleFav = (to: string) => {
@@ -66,6 +75,54 @@ export default function AppLayout() {
   const favItems = favs.map(reachable).filter(Boolean) as NavItem[];
   const recentItems = (recent.filter((p) => !favs.includes(p) && p !== location.pathname).map(reachable).filter(Boolean) as NavItem[]).slice(0, 5);
   const tabGroup = PROCESS_TABS.find((g) => g.tabs.some((t) => t.to === location.pathname));
+  // previous / next numbered step (1 · Orders … 14 · Masters & Setup) for the step bar
+  const numbered = (s?: { label: string }) => !!s && /^\d+ · /.test(s.label);
+  const prevStep = numbered(step) ? steps.slice(0, stepIdx).reverse().find(numbered) : undefined;
+  const nextStep = numbered(step) ? steps.slice(stepIdx + 1).find(numbered) : undefined;
+
+  // Every screen: where you are in the flow, the other screens of this step, and the steps either side.
+  const stepBar = step && match && activeTo !== '/' && (
+    <div id="step-bar" className="mb-4 rounded-xl border border-surface-border bg-white px-3 py-2 shadow-xs">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[12px]">
+        <span className="font-medium text-slate-500">{step.label.replace(/^(\d+) · /, 'Step $1 · ')}</span>
+        <ChevronRight size={12} className="text-slate-300" />
+        {match.detail ? (
+          <Link to={match.item.to} className="inline-flex items-center gap-1 font-medium text-brand-700 hover:underline" id="step-back">
+            <ArrowLeft size={12} /> {match.item.label}
+          </Link>
+        ) : <span className="font-semibold text-slate-800">{match.item.label}</span>}
+        {!match.detail && (prevStep || nextStep) && (
+          <div className="ml-auto flex gap-1.5">
+            {prevStep && (
+              <Link to={prevStep.items[0].to} id="step-prev" title={`Previous step: ${prevStep.label}`}
+                className="inline-flex items-center gap-1 rounded-lg border border-surface-border px-2 py-1 text-[11.5px] text-slate-600 hover:border-brand-300 hover:text-brand-700">
+                <ArrowLeft size={12} /> {prevStep.label}
+              </Link>
+            )}
+            {nextStep && (
+              <Link to={nextStep.items[0].to} id="step-next" title={`Next step: ${nextStep.label}`}
+                className="inline-flex items-center gap-1 rounded-lg border border-brand-200 bg-brand-50 px-2 py-1 text-[11.5px] font-medium text-brand-700 hover:bg-brand-100">
+                {nextStep.label} <ArrowRight size={12} />
+              </Link>
+            )}
+          </div>
+        )}
+      </div>
+      {!match.detail && step.items.length > 1 && (
+        <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5" id="step-screens">
+          {step.items.map((i) => (
+            <Link key={i.to} to={i.to} aria-current={i.to === activeTo ? 'page' : undefined}
+              className={clsx('whitespace-nowrap rounded-full border px-2.5 py-1 text-[11.5px] transition-colors',
+                i.to === activeTo
+                  ? 'border-brand-600 bg-brand-600 font-semibold text-white'
+                  : 'border-surface-border text-slate-600 hover:border-brand-300 hover:text-brand-700')}>
+              {i.label}
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 
   const { data: notifications } = useQuery({
     queryKey: ['notifications'],
@@ -84,16 +141,15 @@ export default function AppLayout() {
 
   const navLink = (item: NavItem, isFav: boolean) => (
     <div key={item.to} className="group relative">
-      <NavLink to={item.to} end={item.to === '/'}
-        onClick={() => setMobileOpen(false)}
-        className={({ isActive }) => clsx(
+      <Link to={item.to} onClick={() => setMobileOpen(false)} aria-current={item.to === activeTo ? 'page' : undefined}
+        className={clsx(
           'flex items-center gap-2.5 rounded-lg py-[7px] pl-2.5 pr-7 text-[12.5px] transition-colors',
-          isActive
+          item.to === activeTo
             ? 'bg-brand-600 font-medium text-white'
             : 'text-slate-400 hover:bg-white/5 hover:text-slate-100')}>
         <item.icon size={15} className="shrink-0" />
         <span className="truncate">{item.label}</span>
-      </NavLink>
+      </Link>
       {item.to !== '/' && (
         <button type="button" onClick={() => toggleFav(item.to)} data-fav={item.to}
           title={isFav ? 'Remove from favourites' : 'Add to favourites'} aria-label={isFav ? `Unpin ${item.label}` : `Pin ${item.label}`}
@@ -150,17 +206,25 @@ export default function AppLayout() {
           const single = section.items.length === 1;
           const open = !!filter || single || openSecs.includes(section.label);
           return (
-            <div key={section.label} className="mb-1">
+            <div key={section.label} className={clsx('mb-1 rounded-lg', open && !single && 'bg-white/[0.03]')}>
               {!single && (
+                // open step: lit header; the step of the page you are on: brand accent bar + brand count
                 <button onClick={() => toggleSec(section.label)} aria-expanded={open} data-section={section.label}
-                  className={clsx('flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-[10.5px] font-semibold uppercase tracking-wider hover:bg-white/5',
-                    section.label === currentSection ? 'text-white' : 'text-slate-400')}>
+                  data-current={section.label === currentSection || undefined}
+                  className={clsx('relative flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-[10.5px] font-semibold uppercase tracking-wider transition-colors',
+                    section.label === currentSection
+                      ? 'bg-brand-600/20 text-white'
+                      : open ? 'bg-white/[0.06] text-slate-100' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200')}>
+                  {section.label === currentSection && <span className="absolute inset-y-1 left-0 w-[3px] rounded-full bg-brand-400" />}
                   {open ? <ChevronDown size={12} className="shrink-0" /> : <ChevronRight size={12} className="shrink-0" />}
                   <span className="flex-1 truncate">{section.label}</span>
-                  <span className="rounded-full bg-white/5 px-1.5 text-[9.5px] font-medium text-slate-500">{section.items.length}</span>
+                  <span className={clsx('rounded-full px-1.5 text-[9.5px] font-medium',
+                    section.label === currentSection ? 'bg-brand-500 text-white' : open ? 'bg-white/10 text-slate-300' : 'bg-white/5 text-slate-500')}>
+                    {section.items.length}
+                  </span>
                 </button>
               )}
-              {open && <div className="mb-2 mt-0.5 space-y-0.5">{section.items.map((item) => navLink(item, favs.includes(item.to)))}</div>}
+              {open && <div className={clsx('space-y-0.5', !single && 'mb-1 mt-0.5 pb-1')}>{section.items.map((item) => navLink(item, favs.includes(item.to)))}</div>}
             </div>
           );
         })}
@@ -313,6 +377,7 @@ export default function AppLayout() {
 
         <main key={location.pathname} className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-[1600px] p-4 sm:p-6">
+            {stepBar}
             {tabGroup && (
               // Sewing / Checking / Ironing / Packing versions of the same screen, one click apart
               <div className="mb-4 flex gap-1 overflow-x-auto border-b border-surface-border" id="process-tabs">

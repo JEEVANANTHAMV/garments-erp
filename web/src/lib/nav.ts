@@ -16,6 +16,8 @@ export interface NavItem {
   perms: string[];
   /** Kept routable but off the menu (old screens, or screens reached through tabs of another screen). */
   hidden?: boolean;
+  /** Hidden screen that is part of a menu screen (a tab of it): the sidebar and step bar show that screen. */
+  parent?: string;
 }
 export interface NavSection {
   label: string;
@@ -246,14 +248,14 @@ export const NAV: NavSection[] = [
     // Routable but off the menu: older screens, and line masters reached through the tabs of "Production Lines".
     label: 'Hidden',
     items: [
-      { label: 'Checking Lines',  to: '/production/checking-lines', icon: SlidersHorizontal, perms: ['PRODUCTION.VIEW'], hidden: true },
-      { label: 'Ironing Lines',   to: '/production/ironing-lines', icon: SlidersHorizontal, perms: ['PRODUCTION.VIEW'], hidden: true },
-      { label: 'Packing Lines',   to: '/production/packing-lines', icon: SlidersHorizontal, perms: ['PRODUCTION.VIEW'], hidden: true },
+      { label: 'Checking Lines',  to: '/production/checking-lines', icon: SlidersHorizontal, perms: ['PRODUCTION.VIEW'], hidden: true, parent: '/production/sewing-lines' },
+      { label: 'Ironing Lines',   to: '/production/ironing-lines', icon: SlidersHorizontal, perms: ['PRODUCTION.VIEW'], hidden: true, parent: '/production/sewing-lines' },
+      { label: 'Packing Lines',   to: '/production/packing-lines', icon: SlidersHorizontal, perms: ['PRODUCTION.VIEW'], hidden: true, parent: '/production/sewing-lines' },
       { label: 'Yarn Processing', to: '/production/knitting', icon: Activity, perms: ['PRODUCTION.VIEW'], hidden: true },
       { label: 'Process Routes',  to: '/production/process-routes', icon: Workflow, perms: ['PRODUCTION.VIEW'], hidden: true },
       { label: 'Yarn Processing (D/W/T)', to: '/production/yarn-processes', icon: Beaker, perms: ['PRODUCTION.VIEW'], hidden: true },
-      { label: 'Yarn Process – Contractor Bill', to: '/production/yarn-process/bills', icon: Receipt, perms: ['YARN_PROCESS.VIEW'], hidden: true },
-      { label: 'Fabric Process – Contractor Bill', to: '/production/fabric-process/bills', icon: Receipt, perms: ['FABRIC_PROCESS.VIEW'], hidden: true },
+      { label: 'Yarn Process – Contractor Bill', to: '/production/yarn-process/bills', icon: Receipt, perms: ['YARN_PROCESS.VIEW'], hidden: true, parent: '/procurement/supplier-bills' },
+      { label: 'Fabric Process – Contractor Bill', to: '/production/fabric-process/bills', icon: Receipt, perms: ['FABRIC_PROCESS.VIEW'], hidden: true, parent: '/procurement/supplier-bills' },
       { label: 'Daily Plans',        to: '/production/daily-plans', icon: CalendarClock, perms: ['PRODUCTION.VIEW'], hidden: true },
       { label: 'Daily Output Entry', to: '/production/daily-outputs', icon: ClipboardCheck, perms: ['PRODUCTION.VIEW'], hidden: true },
       { label: 'Line Allocations',   to: '/production/line-allocations', icon: GitBranch, perms: ['PRODUCTION.VIEW'], hidden: true },
@@ -264,9 +266,9 @@ export const NAV: NavSection[] = [
       { label: 'Washing',            to: '/production/washings', icon: Beaker, perms: ['PRODUCTION.VIEW'], hidden: true },
       { label: 'Finishing',          to: '/production/finishings', icon: PackageCheck, perms: ['PRODUCTION.VIEW'], hidden: true },
       { label: 'Process Movements',  to: '/production/process-transactions', icon: GitBranch, perms: ['PRODUCTION.VIEW'], hidden: true },
-      { label: 'Contractor Bills',   to: '/production/contractor-bills', icon: HandCoins, perms: ['PRODUCTION.VIEW'], hidden: true },
+      { label: 'Contractor Bills',   to: '/production/contractor-bills', icon: HandCoins, perms: ['PRODUCTION.VIEW'], hidden: true, parent: '/procurement/supplier-bills' },
       // Duplicates removed from the menu 14-Oct-2026 (each replaced by the screen in brackets)
-      { label: 'General POs',        to: '/procurement/general-orders', icon: ShoppingCart, perms: ['PURCHASE.VIEW'], hidden: true },   // General PO & GRN, PO tab
+      { label: 'General POs',        to: '/procurement/general-orders', icon: ShoppingCart, perms: ['PURCHASE.VIEW'], hidden: true, parent: '/procurement/general-purchases' }, // PO tab
       { label: 'Production Plans',   to: '/production/plans', icon: CalendarClock, perms: ['PRODUCTION.VIEW'], hidden: true },          // T&A Order Tracking
       { label: 'QC Inspections',     to: '/quality/inspections', icon: ClipboardCheck, perms: ['QC.VIEW'], hidden: true },              // Checking Entry (QC)
       { label: 'WIP Dashboard',      to: '/production/wip', icon: BarChart3, perms: ['PRODUCTION.VIEW'], hidden: true },                // WIP Stock Value / Operation Status
@@ -277,6 +279,23 @@ export const NAV: NavSection[] = [
 
 /** Every menu screen by path (favourites / recent show the label and icon). */
 export const NAV_BY_PATH = new Map(NAV.flatMap((s) => s.items.map((i) => [i.to, i] as [string, NavItem])));
+
+/**
+ * The menu screen a page belongs to: the longest menu path the URL starts with (so /tna/dashboard is
+ * "T&A Risk Dashboard", not "T&A Order Tracking"; /procurement/yarn/orders/12 is "Yarn POs"), with a hidden
+ * tab screen resolved to its parent. `detail` is true below the list (an open document).
+ */
+export function matchNav(pathname: string): { item: NavItem; detail: boolean } | null {
+  let best: NavItem | null = null;
+  for (const i of NAV_BY_PATH.values()) {
+    const hit = i.to === '/' ? pathname === '/' : pathname === i.to || pathname.startsWith(`${i.to}/`);
+    if (hit && (!best || i.to.length > best.to.length)) best = i;
+  }
+  if (!best) return null;
+  const detail = pathname !== best.to;
+  const shown = best.parent ? NAV_BY_PATH.get(best.parent) ?? best : best;
+  return { item: shown, detail };
+}
 
 /**
  * Screens that are one screen with tabs — Sewing / Checking / Ironing / Packing versions of the same page.
