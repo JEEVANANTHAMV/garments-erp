@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Card, Button, Input, DataTable, Textarea, Modal, Tabs, Checkbox, Select } from '../../components/ui';
+import { Card, Button, Input, DataTable, Textarea, Modal, FormSection, Tabs, Checkbox, Select } from '../../components/ui';
+import { Layers, Scissors } from 'lucide-react';
 import { api } from '../../lib/api';
 import { fmtDate, fmtDateTime, fmtNumber, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
@@ -160,27 +161,31 @@ function NewLayModal({ plans, onClose, onSaved }: { plans: any[]; onClose: () =>
   };
   return (
     <Modal open onClose={onClose} title="New Lay Plan" size="lg"
-      footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button onClick={save} loading={saving}>Create Lay</Button></>}>
-      <div className="space-y-4">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <SearchSelect label="Cut Order" required value={f.cutting_plan_id} onChange={v => setF({ ...f, cutting_plan_id: v, marker_version_id: '' })}
+      subtitle="Pick the cut order and an approved marker version, then the ply to lay"
+      icon={<Layers size={16} />}
+      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={save} loading={saving}>Create Lay</Button></>}>
+        <FormSection title="Cut order & marker">
+          <Input label="Lay Date" type="date" value={f.lay_date} onChange={e => setF({ ...f, lay_date: e.target.value })} />
+          <SearchSelect className="lg:col-span-3" label="Cut Order" required value={f.cutting_plan_id} onChange={v => setF({ ...f, cutting_plan_id: v, marker_version_id: '' })}
             options={plans.filter(p => !['CLOSED', 'CANCELLED'].includes(p.status)).map(p => ({ value: p.id, label: `${p.plan_no} · ${p.io_no} · ${p.style_code || ''}`, right: p.status }))} />
-          <SearchSelect label="Marker / Version" required value={f.marker_version_id} onChange={v => setF({ ...f, marker_version_id: v })}
+          <SearchSelect className="sm:col-span-2 lg:col-span-4" label="Marker / Version" required value={f.marker_version_id} onChange={v => setF({ ...f, marker_version_id: v })}
             placeholder={f.cutting_plan_id ? (markers.length ? 'Select marker version' : 'No marker versions — create one in Marker Versions') : 'Select a cut order first'}
             options={markers.map(m => ({ value: m.id, label: `${m.marker_no} v${m.version} · ${m.ratio_text}`, sub: `${m.pieces_per_marker} PCS/marker · ${m.length_m ?? '—'} M · ${m.marker_kg_per_ply ?? '—'} KG/ply${m.is_locked ? ' · locked' : ''}`, right: m.approved_at ? 'Approved' : '' }))} />
-          <Input label="Lay Date" type="date" value={f.lay_date} onChange={e => setF({ ...f, lay_date: e.target.value })} />
+        </FormSection>
+        <FormSection title="Lay" cols={3}>
           <UomInput label="Ply" uom="PLY" value={f.ply_count} step="1" min={1} onChange={v => setF({ ...f, ply_count: v })} />
           <Input label="Table No" value={f.table_no} onChange={e => setF({ ...f, table_no: e.target.value })} />
           <Input label="Operator" value={f.operator_name} onChange={e => setF({ ...f, operator_name: e.target.value })} />
-        </div>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        </FormSection>
+        <FormSection title="Plan">
           <MetricTile label="Pieces / marker" value={mv ? mv.pieces_per_marker : '—'} uom="PCS" />
           <MetricTile label="Expected pieces" value={fmtNumber(expected)} uom="PCS" tone="indigo" sub="marker pieces × ply" />
           <MetricTile label="Planned fabric" value={plannedKg != null ? fmtNumber(plannedKg, 3) : '—'} uom="KG" tone="indigo" />
           <MetricTile label="Cut order balance" value={plan ? fmtNumber(plan.balance_qty) : '—'} uom="PCS" />
-        </div>
-        <Textarea label="Remarks" rows={2} value={f.remarks} onChange={e => setF({ ...f, remarks: e.target.value })} />
-      </div>
+        </FormSection>
+        <FormSection title="Remarks" cols={1}>
+          <Textarea label="Remarks" rows={2} value={f.remarks} onChange={e => setF({ ...f, remarks: e.target.value })} />
+        </FormSection>
     </Modal>
   );
 }
@@ -280,7 +285,10 @@ function ExecuteModal({ lay, onClose, onSaved }: { lay: any; onClose: () => void
   const kgVar = plannedKg ? actualKg - plannedKg : null;
   return (
     <Modal open onClose={onClose} title={`Execute Lay ${lay.lay_no}`} size="full"
-      footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button onClick={submit} loading={saving}>Post Lay Execution</Button></>}>
+      subtitle="Record the rolls laid, losses and size-wise cut output"
+      icon={<Scissors size={16} />}
+      footerStart={<><b>{rolls.length}</b> rolls · <b>{fmtNumber(actualKg, 3)}</b> KG consumed · <b>{fmtNumber(good)}</b> PCS good{rejects ? <> · <b>{fmtNumber(rejects)}</b> PCS reject</> : null}</>}
+      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={submit} loading={saving}>Post Lay Execution</Button></>}>
       <div className="space-y-5">
         {prefilled && <p className="rounded bg-indigo-50 px-3 py-2 text-xs text-indigo-800" id="exec-prefilled">Filled from the spreading actuals and the CAD marker (ratio × actual ply). Change only what differs, then post.</p>}
         {/* Planned vs actual — kept at the top so the operator sees it while keying */}
@@ -295,16 +303,15 @@ function ExecuteModal({ lay, onClose, onSaved }: { lay: any; onClose: () => void
             sub={mv?.cad_kg_per_pc ? `Marker ${fmtNumber(mv.cad_kg_per_pc, 4)} KG/PC` : undefined} />
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <FormSection title="Lay actuals">
           <UomInput label="Actual ply" uom="PLY" value={ply} step="1" min={1} onChange={setPly} />
           <Input label="Operator" value={operator} onChange={e => setOperator(e.target.value)} />
-          <SearchSelect className="md:col-span-1" label="Add DC roll" value="" onChange={v => addRoll(dcRolls.find(d => String(d.fabric_issue_roll_id) === v))}
+          <SearchSelect label="Add DC roll" value="" onChange={v => addRoll(dcRolls.find(d => String(d.fabric_issue_roll_id) === v))}
             options={dcRolls.map(d => ({ value: d.fabric_issue_roll_id, label: `${d.roll_no} · Lot ${d.lot_no || '—'}`, sub: `DC ${d.issue_no} · ${d.roll_status}`, right: `${fmtNumber(d.remaining_kg, 3)} KG`, disabled: d.roll_status === 'CLOSED' }))} />
           <ScanInput label="Scan roll barcode" onScan={onScan} />
-        </div>
+        </FormSection>
 
-        <section>
-          <h4 className="mb-2 text-sm font-semibold text-slate-700">Roll-wise consumption <span className="font-normal text-slate-400">(Before − Remaining = Actual)</span></h4>
+        <FormSection title="Roll-wise consumption" description="Before − Remaining = Actual" cols={1}>
           <div className="overflow-x-auto rounded-lg border">
             <table className="w-full text-xs">
               <thead className="border-b bg-slate-50 text-left text-slate-600">
@@ -338,13 +345,10 @@ function ExecuteModal({ lay, onClose, onSaved }: { lay: any; onClose: () => void
                 <td className="p-2 text-right"><Qty v={actualKg} uom="KG" dp={3} /></td><td colSpan={2} /></tr></tfoot>}
             </table>
           </div>
-        </section>
+        </FormSection>
 
-        <section>
-          <div className="mb-2 flex items-center justify-between">
-            <h4 className="text-sm font-semibold text-slate-700">Losses <span className="font-normal text-slate-400">(recorded separately from garment-use consumption)</span></h4>
-            <Button size="sm" variant="outline" onClick={() => setLosses(ls => [...ls, { loss_type: 'END_LOSS', qty_kg: '', reason: '' }])}>+ Add loss</Button>
-          </div>
+        <FormSection title="Losses" description="Recorded separately from garment-use consumption" cols={1}
+          actions={<Button size="sm" variant="outline" onClick={() => setLosses(ls => [...ls, { loss_type: 'END_LOSS', qty_kg: '', reason: '' }])}>+ Add loss</Button>}>
           {losses.length === 0 ? <p className="text-xs text-slate-400">No losses recorded.</p> : (
             <div className="space-y-2">
               {losses.map((l, i) => {
@@ -361,13 +365,10 @@ function ExecuteModal({ lay, onClose, onSaved }: { lay: any; onClose: () => void
               <p className="text-right text-xs font-semibold text-slate-600">Total losses <Qty v={lossKg} uom="KG" dp={3} /></p>
             </div>
           )}
-        </section>
+        </FormSection>
 
-        <section>
-          <div className="mb-2 flex items-center justify-between">
-            <h4 className="text-sm font-semibold text-slate-700">Size-wise cut output</h4>
-            {mv && <Button size="sm" variant="outline" onClick={fillFromRatio}>Fill good PCS from ratio × ply</Button>}
-          </div>
+        <FormSection title="Size-wise cut output" cols={1}
+          actions={mv ? <Button size="sm" variant="outline" onClick={fillFromRatio}>Fill good PCS from ratio × ply</Button> : undefined}>
           <div className="overflow-x-auto rounded-lg border">
             <table className="w-full text-xs">
               <thead className="border-b bg-slate-50 text-left text-slate-600">
@@ -404,7 +405,7 @@ function ExecuteModal({ lay, onClose, onSaved }: { lay: any; onClose: () => void
           {!overExpected && (
             <Input className="mt-2" label="Over-cut authorisation reason (only if the cut order allowance is exceeded)" value={override} onChange={e => setOverride(e.target.value)} />
           )}
-        </section>
+        </FormSection>
       </div>
     </Modal>
   );
@@ -426,20 +427,25 @@ function SpreadingModal({ lay, onClose, onSaved }: { lay: any; onClose: () => vo
   };
   return (
     <Modal open onClose={onClose} title={`Spreading — ${lay.lay_no}`} size="lg"
-      footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button onClick={save} loading={saving}>Save Spreading</Button></>}>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      icon={<Layers size={16} />}
+      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={save} loading={saving}>Save Spreading</Button></>}>
+      <FormSection title="Roll" cols={3}>
         <Input label="Date" type="date" value={f.spreading_date} onChange={e => setF({ ...f, spreading_date: e.target.value })} />
         <Input label="Roll No" value={f.roll_no} onChange={e => setF({ ...f, roll_no: e.target.value })} />
         <Input label="Operator" value={f.operator_name} onChange={e => setF({ ...f, operator_name: e.target.value })} />
+      </FormSection>
+      <FormSection title="Length & ply">
         <UomInput label="Start" uom="MTR" value={f.start_mtr} onChange={v => setF({ ...f, start_mtr: v })} />
         <UomInput label="End" uom="MTR" value={f.end_mtr} onChange={v => setF({ ...f, end_mtr: v })} />
         <div><label className="label">Used (MTR)</label><div className="input bg-slate-50 text-right font-semibold">{used != null ? fmtNumber(used, 3) : '—'} MTR</div></div>
         <UomInput label="Ply" uom="PLY" step="1" value={f.ply_count} onChange={v => setF({ ...f, ply_count: v })} />
+      </FormSection>
+      <FormSection title="Fabric & QC">
         <UomInput label="Width" uom="CM" value={f.fabric_width_cm} onChange={v => setF({ ...f, fabric_width_cm: v })} />
         <UomInput label="GSM" uom="GSM" value={f.gsm} onChange={v => setF({ ...f, gsm: v })} />
         <Input label="Shade" value={f.shade} onChange={e => setF({ ...f, shade: e.target.value })} />
         <Select label="QC" value={f.qc_status} onChange={e => setF({ ...f, qc_status: e.target.value })} options={[{ value: 'PASS', label: 'Pass' }, { value: 'HOLD', label: 'Hold' }, { value: 'REJECT', label: 'Reject' }]} />
-      </div>
+      </FormSection>
     </Modal>
   );
 }
@@ -458,7 +464,7 @@ function CancelLayModal({ lay, onClose, onSaved }: { lay: any; onClose: () => vo
   };
   return (
     <Modal open onClose={onClose} title={`${executed ? 'Reverse' : 'Cancel'} lay ${lay.lay_no}`} size="sm"
-      footer={<><Button variant="ghost" onClick={onClose}>Back</Button><Button variant="danger" onClick={go} loading={saving}>{executed ? 'Reverse lay' : 'Cancel lay'}</Button></>}>
+      footer={<><Button variant="secondary" onClick={onClose}>Back</Button><Button variant="danger" onClick={go} loading={saving}>{executed ? 'Reverse lay' : 'Cancel lay'}</Button></>}>
       {executed && <p className="mb-3 text-xs text-amber-800">Reversal returns the consumed KG to the DC rolls, reverses the losses and cut output, and cancels its bundles. It is blocked once any bundle has moved beyond GENERATED. Needs PRODUCTION.APPROVE.</p>}
       <Textarea label="Reason" required rows={3} value={reason} onChange={e => setReason(e.target.value)} />
     </Modal>
@@ -599,7 +605,7 @@ function MarkerVersions() {
       </Card>
       {reasonFor && (
         <Modal open onClose={() => setReasonFor(null)} title={reasonFor.action === 'reject' ? 'Reject marker version' : 'Make marker version obsolete'} size="sm"
-          footer={<><Button variant="ghost" onClick={() => setReasonFor(null)}>Back</Button><Button variant="danger" disabled={!reason.trim()} onClick={withReason}>Confirm</Button></>}>
+          footer={<><Button variant="secondary" onClick={() => setReasonFor(null)}>Back</Button><Button variant="danger" disabled={!reason.trim()} onClick={withReason}>Confirm</Button></>}>
           <Textarea label="Reason" required rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
         </Modal>
       )}
@@ -613,19 +619,23 @@ function MarkerVersions() {
         </Modal>
       )}
       {manual && (
-        <Modal open onClose={() => setManual(null)} title="Manual marker (Marker Master)" size="lg"
-          footer={<><Button variant="ghost" onClick={() => setManual(null)}>Cancel</Button><Button onClick={saveManual}>Save version</Button></>}>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <Modal open onClose={() => setManual(null)} title="New manual marker" subtitle="Saved to the Marker Master as a new marker version" size="lg"
+          footer={<><Button variant="secondary" onClick={() => setManual(null)}>Cancel</Button><Button onClick={saveManual}>Save version</Button></>}>
+          <FormSection title="Marker" cols={3}>
             <Input label="Marker No" value={manual.marker_no} onChange={e => setManual({ ...manual, marker_no: e.target.value })} />
             <SearchSelect label="Style" required value={manual.style_id} onChange={v => setManual({ ...manual, style_id: v })} options={styles.map((s: any) => ({ value: s.id, label: s.label || s.code }))} />
             <SearchSelect label="Fabric" value={manual.fabric_id} onChange={v => setManual({ ...manual, fabric_id: v })} options={fabrics.map((f: any) => ({ value: f.id, label: f.label || f.code }))} />
+          </FormSection>
+          <FormSection title="Size ratio" cols={2}>
             <Input label="Sizes (space separated)" value={manual.sizes} onChange={e => setManual({ ...manual, sizes: e.target.value })} />
             <Input label="Ratio (same order)" value={manual.ratios} onChange={e => setManual({ ...manual, ratios: e.target.value })} />
+          </FormSection>
+          <FormSection title="Dimensions">
             <UomInput label="Marker length" uom="M" value={manual.length_m} onChange={v => setManual({ ...manual, length_m: v })} />
             <UomInput label="Width" uom="IN" value={manual.width_in} onChange={v => setManual({ ...manual, width_in: v })} />
             <UomInput label="GSM" uom="GSM" value={manual.gsm} onChange={v => setManual({ ...manual, gsm: v })} />
             <UomInput label="Fabric per ply" uom="KG" value={manual.marker_kg_per_ply} onChange={v => setManual({ ...manual, marker_kg_per_ply: v })} />
-          </div>
+          </FormSection>
         </Modal>
       )}
     </div>

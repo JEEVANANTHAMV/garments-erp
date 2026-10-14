@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, Badge, Button, Input, Select, DataTable, Textarea } from '../../components/ui';
+import { Card, Badge, Button, Input, Select, DataTable, Textarea, Modal, FormSection } from '../../components/ui';
+import { Ship, Container, MapPin, PackageCheck, Tag } from 'lucide-react';
 import { api } from '../../lib/api';
 import { fmtDate, fmtNumber, fmtDecimal, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
@@ -115,63 +116,52 @@ export function ShipmentPlanPage() {
       </Card>
 
       {/* Plan Creation Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="w-full max-w-3xl bg-white rounded-xl shadow-xl overflow-hidden max-h-[85vh] flex flex-col">
-            <div className="flex items-center justify-between border-b px-6 py-4 bg-slate-50">
-              <h3 className="text-lg font-bold text-slate-800">New Shipment Plan</h3>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 font-bold">✕</button>
-            </div>
+      <Modal open={showModal} onClose={() => setShowModal(false)} title="New Shipment Plan" size="lg"
+        subtitle="Plan a shipment from confirmed packages, then convert it to a shipment"
+        icon={<Ship size={16} />}
+        footerStart={<><b>{selectedPkgs.length}</b> package(s) selected</>}
+        footer={<>
+          <Button variant="secondary" onClick={() => setShowModal(false)}>Cancel</Button>
+          <Button onClick={handleCreatePlan} loading={saving}>Create Plan</Button>
+        </>}>
+        <FormSection title="Plan" cols={3}>
+          <Input label="Planned Date" type="date" value={form.planned_date}
+            onChange={e => setForm({ ...form, planned_date: e.target.value })} />
+          <Select label="Buyer" value={form.buyer_id}
+            onChange={e => setForm({ ...form, buyer_id: e.target.value })}
+            options={[{ value: '', label: '— Select —' }, ...buyers.map(b => ({ value: b.id, label: b.label || b.code }))]} />
+          <Select label="Shipment Type" value={form.shipment_type}
+            onChange={e => setForm({ ...form, shipment_type: e.target.value })}
+            options={[{ value: 'DOMESTIC', label: 'Domestic' }, { value: 'EXPORT', label: 'Export' }]} />
+          <Select label="Mode" value={form.mode}
+            onChange={e => setForm({ ...form, mode: e.target.value })}
+            options={['ROAD','AIR','SEA','COURIER'].map(m => ({ value: m, label: m }))} />
+          <Input label="Destination" value={form.destination} className="lg:col-span-2"
+            onChange={e => setForm({ ...form, destination: e.target.value })} />
+        </FormSection>
 
-            <div className="p-6 space-y-4 overflow-y-auto flex-1">
-              <div className="grid grid-cols-3 gap-4">
-                <Input label="Planned Date" type="date" value={form.planned_date}
-                  onChange={e => setForm({ ...form, planned_date: e.target.value })} />
-                <Select label="Buyer" value={form.buyer_id}
-                  onChange={e => setForm({ ...form, buyer_id: e.target.value })}
-                  options={[{ value: '', label: '— Select —' }, ...buyers.map(b => ({ value: b.id, label: b.label || b.code }))]} />
-                <Select label="Shipment Type" value={form.shipment_type}
-                  onChange={e => setForm({ ...form, shipment_type: e.target.value })}
-                  options={[{ value: 'DOMESTIC', label: 'Domestic' }, { value: 'EXPORT', label: 'Export' }]} />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <Select label="Mode" value={form.mode}
-                  onChange={e => setForm({ ...form, mode: e.target.value })}
-                  options={['ROAD','AIR','SEA','COURIER'].map(m => ({ value: m, label: m }))} />
-                <Input label="Destination" value={form.destination}
-                  onChange={e => setForm({ ...form, destination: e.target.value })} />
-              </div>
-
-              <div>
-                <h4 className="text-sm font-semibold text-slate-800 mb-2">Select Confirmed Packages ({selectedPkgs.length} selected)</h4>
-                <div className="border rounded-lg max-h-48 overflow-y-auto p-2 divide-y">
-                  {availablePkgs.map(p => (
-                    <label key={p.id} className="flex items-center gap-3 p-2 hover:bg-slate-50 cursor-pointer text-xs">
-                      <input
-                        type="checkbox"
-                        checked={selectedPkgs.includes(p.id)}
-                        onChange={e => setSelectedPkgs(prev => e.target.checked ? [...prev, p.id] : prev.filter(i => i !== p.id))}
-                      />
-                      <span className="font-mono font-semibold">{p.carton_no}</span>
-                      <span className="text-slate-500">Pack: {p.pack_no}</span>
-                      <span className="text-blue-700 font-bold">{p.content_qty} PCS</span>
-                      <span className="text-slate-400">{p.gross_weight_kg} KG</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <Textarea label="Remarks" value={form.remarks} onChange={e => setForm({ ...form, remarks: e.target.value })} rows={2} />
-            </div>
-
-            <div className="flex justify-end gap-2 border-t px-6 py-4 bg-slate-50">
-              <Button variant="ghost" onClick={() => setShowModal(false)}>Cancel</Button>
-              <Button onClick={handleCreatePlan} loading={saving}>Create Plan</Button>
-            </div>
+        <FormSection title={`Confirmed packages (${selectedPkgs.length} selected)`} cols={1}>
+          <div className="border rounded-lg max-h-48 overflow-y-auto p-2 divide-y">
+            {availablePkgs.map(p => (
+              <label key={p.id} className="flex items-center gap-3 p-2 hover:bg-slate-50 cursor-pointer text-xs">
+                <input
+                  type="checkbox"
+                  checked={selectedPkgs.includes(p.id)}
+                  onChange={e => setSelectedPkgs(prev => e.target.checked ? [...prev, p.id] : prev.filter(i => i !== p.id))}
+                />
+                <span className="font-mono font-semibold">{p.carton_no}</span>
+                <span className="text-slate-500">Pack: {p.pack_no}</span>
+                <span className="text-blue-700 font-bold">{p.content_qty} PCS</span>
+                <span className="text-slate-400">{p.gross_weight_kg} KG</span>
+              </label>
+            ))}
           </div>
-        </div>
-      )}
+        </FormSection>
+
+        <FormSection title="Remarks" cols={1}>
+          <Textarea label="Remarks" value={form.remarks} onChange={e => setForm({ ...form, remarks: e.target.value })} rows={2} />
+        </FormSection>
+      </Modal>
     </div>
   );
 }
@@ -654,153 +644,116 @@ export function ShipmentDetailPage() {
       )}
 
       {/* Add Container Modal */}
-      {showContainerModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="w-full max-w-xl bg-white rounded-xl shadow-xl overflow-hidden">
-            <div className="flex items-center justify-between border-b px-6 py-4 bg-slate-50">
-              <h3 className="text-lg font-bold text-slate-800">Assign Container to Shipment</h3>
-              <button onClick={() => setShowContainerModal(false)} className="text-slate-400 font-bold">✕</button>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <Input label="Container No *" value={containerForm.container_no}
-                  onChange={e => setContainerForm({ ...containerForm, container_no: e.target.value })} />
-                <Select label="Type" value={containerForm.container_type}
-                  onChange={e => setContainerForm({ ...containerForm, container_type: e.target.value })}
-                  options={['20FT','40FT','40HC','45HC','LCL'].map(t => ({ value: t, label: t }))} />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <Input label="Seal No" value={containerForm.seal_no}
-                  onChange={e => setContainerForm({ ...containerForm, seal_no: e.target.value })} />
-                <Input label="Stuffing Location" value={containerForm.stuffing_location}
-                  onChange={e => setContainerForm({ ...containerForm, stuffing_location: e.target.value })} />
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <Input label="Tare Weight (KG)" type="number" value={containerForm.tare_weight_kg}
-                  onChange={e => setContainerForm({ ...containerForm, tare_weight_kg: Number(e.target.value) })} />
-                <Input label="Gross Weight (KG)" type="number" value={containerForm.gross_weight_kg}
-                  onChange={e => setContainerForm({ ...containerForm, gross_weight_kg: Number(e.target.value) })} />
-                <Input label="Loaded CBM" type="number" value={containerForm.loaded_cbm}
-                  onChange={e => setContainerForm({ ...containerForm, loaded_cbm: Number(e.target.value) })} />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 border-t px-6 py-4 bg-slate-50">
-              <Button variant="ghost" onClick={() => setShowContainerModal(false)}>Cancel</Button>
-              <Button onClick={handleAddContainer}>Add Container</Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal open={showContainerModal} onClose={() => setShowContainerModal(false)} size="md"
+        title={`Assign container to shipment ${header.shipment_no ?? ''}`}
+        icon={<Container size={16} />}
+        footer={<>
+          <Button variant="secondary" onClick={() => setShowContainerModal(false)}>Cancel</Button>
+          <Button onClick={handleAddContainer}>Add Container</Button>
+        </>}>
+        <FormSection title="Container" cols={2}>
+          <Input label="Container No *" value={containerForm.container_no}
+            onChange={e => setContainerForm({ ...containerForm, container_no: e.target.value })} />
+          <Select label="Type" value={containerForm.container_type}
+            onChange={e => setContainerForm({ ...containerForm, container_type: e.target.value })}
+            options={['20FT','40FT','40HC','45HC','LCL'].map(t => ({ value: t, label: t }))} />
+          <Input label="Seal No" value={containerForm.seal_no}
+            onChange={e => setContainerForm({ ...containerForm, seal_no: e.target.value })} />
+          <Input label="Stuffing Location" value={containerForm.stuffing_location}
+            onChange={e => setContainerForm({ ...containerForm, stuffing_location: e.target.value })} />
+        </FormSection>
+        <FormSection title="Weights & volume" cols={3}>
+          <Input label="Tare Weight (KG)" type="number" value={containerForm.tare_weight_kg}
+            onChange={e => setContainerForm({ ...containerForm, tare_weight_kg: Number(e.target.value) })} />
+          <Input label="Gross Weight (KG)" type="number" value={containerForm.gross_weight_kg}
+            onChange={e => setContainerForm({ ...containerForm, gross_weight_kg: Number(e.target.value) })} />
+          <Input label="Loaded CBM" type="number" value={containerForm.loaded_cbm}
+            onChange={e => setContainerForm({ ...containerForm, loaded_cbm: Number(e.target.value) })} />
+        </FormSection>
+      </Modal>
 
       {/* Add Tracking Modal */}
-      {showTrackingModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="w-full max-w-md bg-white rounded-xl shadow-xl overflow-hidden">
-            <div className="flex items-center justify-between border-b px-6 py-4 bg-slate-50">
-              <h3 className="text-lg font-bold text-slate-800">Add Tracking Milestone</h3>
-              <button onClick={() => setShowTrackingModal(false)} className="text-slate-400 font-bold">✕</button>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <Select label="Milestone Event *" value={trackingForm.event_type}
-                onChange={e => setTrackingForm({ ...trackingForm, event_type: e.target.value })}
-                options={[
-                  { value: 'GATED_IN', label: 'Gated In (Port/CFS)' },
-                  { value: 'LOADED', label: 'Loaded on Vessel/Vehicle' },
-                  { value: 'SAILED', label: 'Vessel Sailed / Vehicle Departed' },
-                  { value: 'TRANSIT', label: 'In Transit' },
-                  { value: 'CUSTOMS_CLEARANCE', label: 'Customs Cleared' },
-                  { value: 'ARRIVED', label: 'Arrived at Destination Port' },
-                  { value: 'DELIVERED', label: 'Delivered to Consignee' },
-                ]}
-              />
-              <Input label="Current Location" value={trackingForm.event_location}
-                onChange={e => setTrackingForm({ ...trackingForm, event_location: e.target.value })} placeholder="e.g. Chennai Port" />
-              <Input label="Remarks" value={trackingForm.remarks}
-                onChange={e => setTrackingForm({ ...trackingForm, remarks: e.target.value })} />
-            </div>
-
-            <div className="flex justify-end gap-2 border-t px-6 py-4 bg-slate-50">
-              <Button variant="ghost" onClick={() => setShowTrackingModal(false)}>Cancel</Button>
-              <Button onClick={handleAddTracking}>Post Milestone</Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal open={showTrackingModal} onClose={() => setShowTrackingModal(false)} size="sm"
+        title={`Add tracking milestone${header.shipment_no ? ` — ${header.shipment_no}` : ''}`}
+        icon={<MapPin size={16} />}
+        footer={<>
+          <Button variant="secondary" onClick={() => setShowTrackingModal(false)}>Cancel</Button>
+          <Button onClick={handleAddTracking}>Post Milestone</Button>
+        </>}>
+        <FormSection cols={1}>
+          <Select label="Milestone Event *" value={trackingForm.event_type}
+            onChange={e => setTrackingForm({ ...trackingForm, event_type: e.target.value })}
+            options={[
+              { value: 'GATED_IN', label: 'Gated In (Port/CFS)' },
+              { value: 'LOADED', label: 'Loaded on Vessel/Vehicle' },
+              { value: 'SAILED', label: 'Vessel Sailed / Vehicle Departed' },
+              { value: 'TRANSIT', label: 'In Transit' },
+              { value: 'CUSTOMS_CLEARANCE', label: 'Customs Cleared' },
+              { value: 'ARRIVED', label: 'Arrived at Destination Port' },
+              { value: 'DELIVERED', label: 'Delivered to Consignee' },
+            ]}
+          />
+          <Input label="Current Location" value={trackingForm.event_location}
+            onChange={e => setTrackingForm({ ...trackingForm, event_location: e.target.value })} placeholder="e.g. Chennai Port" />
+          <Input label="Remarks" value={trackingForm.remarks}
+            onChange={e => setTrackingForm({ ...trackingForm, remarks: e.target.value })} />
+        </FormSection>
+      </Modal>
 
       {/* Confirm Delivery POD Modal */}
-      {showDeliveryModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="w-full max-w-md bg-white rounded-xl shadow-xl overflow-hidden">
-            <div className="flex items-center justify-between border-b px-6 py-4 bg-slate-50">
-              <h3 className="text-lg font-bold text-slate-800">Confirm Delivery & POD</h3>
-              <button onClick={() => setShowDeliveryModal(false)} className="text-slate-400 font-bold">✕</button>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <Input label="Delivered Date *" type="date" value={deliveryForm.delivered_date}
-                onChange={e => setDeliveryForm({ ...deliveryForm, delivered_date: e.target.value })} />
-              <Input label="Receiver Name *" value={deliveryForm.receiver_name}
-                onChange={e => setDeliveryForm({ ...deliveryForm, receiver_name: e.target.value })} placeholder="e.g. John Doe (Store Manager)" />
-              <Input label="POD Docket / Ack Ref" value={deliveryForm.pod_ref}
-                onChange={e => setDeliveryForm({ ...deliveryForm, pod_ref: e.target.value })} placeholder="POD-99823" />
-              <Textarea label="Remarks" value={deliveryForm.remarks}
-                onChange={e => setDeliveryForm({ ...deliveryForm, remarks: e.target.value })} rows={2} />
-            </div>
-
-            <div className="flex justify-end gap-2 border-t px-6 py-4 bg-slate-50">
-              <Button variant="ghost" onClick={() => setShowDeliveryModal(false)}>Cancel</Button>
-              <Button onClick={handleConfirmDelivery}>Close Shipment (Delivered)</Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal open={showDeliveryModal} onClose={() => setShowDeliveryModal(false)} size="md"
+        title={`Confirm delivery${header.shipment_no ? ` — ${header.shipment_no}` : ''}`}
+        subtitle="Records the proof of delivery and closes the shipment as delivered"
+        icon={<PackageCheck size={16} />}
+        footer={<>
+          <Button variant="secondary" onClick={() => setShowDeliveryModal(false)}>Cancel</Button>
+          <Button onClick={handleConfirmDelivery}>Close Shipment (Delivered)</Button>
+        </>}>
+        <FormSection cols={3}>
+          <Input label="Delivered Date *" type="date" value={deliveryForm.delivered_date}
+            onChange={e => setDeliveryForm({ ...deliveryForm, delivered_date: e.target.value })} />
+          <Input label="Receiver Name *" value={deliveryForm.receiver_name}
+            onChange={e => setDeliveryForm({ ...deliveryForm, receiver_name: e.target.value })} placeholder="e.g. John Doe (Store Manager)" />
+          <Input label="POD Docket / Ack Ref" value={deliveryForm.pod_ref}
+            onChange={e => setDeliveryForm({ ...deliveryForm, pod_ref: e.target.value })} placeholder="POD-99823" />
+          <Textarea label="Remarks" value={deliveryForm.remarks} className="sm:col-span-2 lg:col-span-3"
+            onChange={e => setDeliveryForm({ ...deliveryForm, remarks: e.target.value })} rows={2} />
+        </FormSection>
+      </Modal>
 
       {/* Printable Carton Labels Modal */}
-      {showLabelsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="w-full max-w-2xl bg-white rounded-xl shadow-xl overflow-hidden">
-            <div className="flex items-center justify-between border-b px-6 py-4 bg-slate-50">
-              <h3 className="text-lg font-bold text-slate-800">Carton Barcode Shipping Labels</h3>
-              <button onClick={() => setShowLabelsModal(false)} className="text-slate-400 font-bold">✕</button>
-            </div>
-
-            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-              <div className="grid grid-cols-2 gap-4">
-                {packages.map((pkg, idx) => (
-                  <div key={idx} className="border-2 border-dashed border-slate-300 rounded-lg p-4 bg-white space-y-2">
-                    <div className="flex justify-between border-b pb-1">
-                      <span className="text-xs font-bold text-slate-800">TEXTILE EXPORTS</span>
-                      <span className="font-mono text-xs font-bold text-indigo-700">{pkg.carton_no}</span>
-                    </div>
-                    <div className="text-[11px] space-y-0.5">
-                      <p><strong>I/O:</strong> {header.io_no || 'N/A'}</p>
-                      <p><strong>Shipment:</strong> {header.shipment_no}</p>
-                      <p><strong>Qty:</strong> {pkg.allocated_qty} PCS</p>
-                      <p><strong>Gross Wt:</strong> {pkg.carton_gross || pkg.gross_weight_kg} KG</p>
-                    </div>
-                    <div className="pt-2 text-center border-t">
-                      <div className="font-mono text-lg font-black tracking-widest bg-slate-100 py-1 rounded">
-                        ||| | |||| | |||||
-                      </div>
-                      <span className="font-mono text-[10px] text-slate-500">{pkg.carton_no}</span>
-                    </div>
-                  </div>
-                ))}
+      <Modal open={showLabelsModal} onClose={() => setShowLabelsModal(false)} size="lg"
+        title={`Carton labels${header.shipment_no ? ` — ${header.shipment_no}` : ''}`}
+        subtitle="Barcode shipping labels for every carton on this shipment"
+        icon={<Tag size={16} />}
+        footerStart={<><b>{packages.length}</b> carton(s)</>}
+        footer={<>
+          <Button variant="secondary" onClick={() => setShowLabelsModal(false)}>Close</Button>
+          <Button onClick={() => window.print()}>🖨️ Print Labels</Button>
+        </>}>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {packages.map((pkg, idx) => (
+            <div key={idx} className="border-2 border-dashed border-slate-300 rounded-lg p-4 bg-white space-y-2">
+              <div className="flex justify-between border-b pb-1">
+                <span className="text-xs font-bold text-slate-800">TEXTILE EXPORTS</span>
+                <span className="font-mono text-xs font-bold text-indigo-700">{pkg.carton_no}</span>
+              </div>
+              <div className="text-[11px] space-y-0.5">
+                <p><strong>I/O:</strong> {header.io_no || 'N/A'}</p>
+                <p><strong>Shipment:</strong> {header.shipment_no}</p>
+                <p><strong>Qty:</strong> {pkg.allocated_qty} PCS</p>
+                <p><strong>Gross Wt:</strong> {pkg.carton_gross || pkg.gross_weight_kg} KG</p>
+              </div>
+              <div className="pt-2 text-center border-t">
+                <div className="font-mono text-lg font-black tracking-widest bg-slate-100 py-1 rounded">
+                  ||| | |||| | |||||
+                </div>
+                <span className="font-mono text-[10px] text-slate-500">{pkg.carton_no}</span>
               </div>
             </div>
-
-            <div className="flex justify-end gap-2 border-t px-6 py-4 bg-slate-50">
-              <Button variant="ghost" onClick={() => setShowLabelsModal(false)}>Close</Button>
-              <Button onClick={() => window.print()}>🖨️ Print Labels</Button>
-            </div>
-          </div>
+          ))}
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

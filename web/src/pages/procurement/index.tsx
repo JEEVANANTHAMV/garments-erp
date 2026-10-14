@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Trash2, PlayCircle, Truck } from 'lucide-react';
+import { Plus, Trash2, PlayCircle, Truck, PackageCheck, PackageMinus } from 'lucide-react';
 import { http, ApiError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { useList, useListState } from '../../hooks/useResource';
@@ -10,7 +10,7 @@ import { useToast } from '../../hooks/useToast';
 import { DataTable } from '../../components/DataTable';
 import { CrudPage } from '../../components/CrudPage';
 import {
-  PageHeader, SearchInput, Select, Input, Modal, Spinner, Badge, StatusBadge, useDebounced, LoadingBlock
+  PageHeader, SearchInput, Select, Input, Modal, FormSection, Spinner, Badge, StatusBadge, useDebounced, LoadingBlock
 } from '../../components/ui';
 import { fmtDecimal, fmtDate, humanize, today } from '../../lib/format';
 import { gateOptions } from '../../lib/gateOptions';
@@ -112,17 +112,14 @@ export function MrpPage() {
         emptyTitle="No MRP runs yet"
         emptyMessage="Run MRP against a sales order to work out what to buy." />
 
-      <Modal open={runOpen} onClose={() => setRunOpen(false)} title="Run MRP" size="sm"
+      <Modal open={runOpen} onClose={() => setRunOpen(false)} title="Run MRP" size="sm" icon={<PlayCircle size={16} />}
+        subtitle="Explodes each style's active BOM against the ordered quantity, then subtracts free stock and quantities already on open purchase orders"
         footer={<>
           <button className="btn-secondary" onClick={() => setRunOpen(false)} disabled={busy}>Cancel</button>
           <button className="btn-primary" onClick={() => void runMrp()} disabled={busy}>
             {busy && <Spinner size={14} />}Run MRP
           </button>
         </>}>
-        <p className="mb-3 text-[13px] text-slate-600">
-          MRP explodes each style's active BOM against the ordered quantity, then subtracts
-          free stock and quantities already on open purchase orders.
-        </p>
         <Select label="Sales order" required options={toOptions(salesOrders.data)}
           placeholder="— Select sales order —" value={soId} onChange={(e) => setSoId(e.target.value)} />
       </Modal>
@@ -169,12 +166,17 @@ function MrpDetailModal({ id, onClose }: { id: number | null; onClose: () => voi
   return (
     <>
       <Modal open={!!id} onClose={onClose} size="xl"
-        title={`MRP ${detail.data?.mrp_no ?? ''} — net requirements`}
-        footer={can('PURCHASE.CREATE') && selected.length > 0 ? (
-          <button className="btn-primary" onClick={() => setPoOpen(true)}>
-            <Truck size={15} /> Create PO for {selected.length} item{selected.length === 1 ? '' : 's'}
-          </button>
-        ) : <button className="btn-secondary" onClick={onClose}>Close</button>}>
+        title={`MRP ${detail.data?.mrp_no ?? ''}`}
+        subtitle="Net requirements — tick shortfall lines to raise a draft purchase order"
+        footerStart={selected.length > 0 ? <><b>{selected.length}</b> shortfall line{selected.length === 1 ? '' : 's'} selected</> : undefined}
+        footer={<>
+          <button className="btn-secondary" onClick={onClose}>Close</button>
+          {can('PURCHASE.CREATE') && selected.length > 0 && (
+            <button className="btn-primary" onClick={() => setPoOpen(true)}>
+              <Truck size={15} /> Create PO for {selected.length} item{selected.length === 1 ? '' : 's'}
+            </button>
+          )}
+        </>}>
         {detail.isLoading ? <LoadingBlock rows={6} /> : (
           <>
             <div className="mb-3 flex flex-wrap gap-4 rounded-lg bg-surface-muted px-3.5 py-2.5 text-[12.5px]">
@@ -233,18 +235,15 @@ function MrpDetailModal({ id, onClose }: { id: number | null; onClose: () => voi
         )}
       </Modal>
 
-      <Modal open={poOpen} onClose={() => setPoOpen(false)} title="Create draft purchase order" size="sm"
+      <Modal open={poOpen} onClose={() => setPoOpen(false)} title="Create draft purchase order" size="sm" icon={<Truck size={16} />}
+        subtitle={`${selected.length} shortfall line${selected.length === 1 ? '' : 's'} will be added to a draft PO priced at standard rates`}
         footer={<>
           <button className="btn-secondary" onClick={() => setPoOpen(false)} disabled={busy}>Cancel</button>
           <button className="btn-primary" onClick={() => void createPo()} disabled={busy}>
             {busy && <Spinner size={14} />}Create PO
           </button>
         </>}>
-        <p className="mb-3 text-[13px] text-slate-600">
-          {selected.length} shortfall line{selected.length === 1 ? '' : 's'} will be added to a draft PO
-          priced at standard rates.
-        </p>
-        <div className="space-y-3.5">
+        <div className="space-y-3">
           <Select label="Supplier" required options={toOptions(suppliers.data)} placeholder="— Select supplier —"
             value={supplierId} onChange={(e) => setSupplierId(e.target.value)} />
           <Select label="Currency" required options={toOptions(currencies.data)} placeholder="— Select currency —"
@@ -443,24 +442,30 @@ function GrnModal({ open, onClose, onDone }: { open: boolean; onClose: () => voi
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="New goods receipt" size="xl"
+    <Modal open={open} onClose={onClose} title="New goods receipt" size="xl" icon={<PackageCheck size={16} />}
+      subtitle="Pick the gate entry or purchase orders to pull open lines, then confirm the quantities received"
+      footerStart="Accepted quantities post into the stock ledger and update the PO's received quantity."
       footer={<>
         <button className="btn-secondary" onClick={onClose} disabled={busy}>Cancel</button>
         <button className="btn-primary" onClick={() => void submit()} disabled={busy}>
           {busy && <Spinner size={14} />}Post GRN
         </button>
       </>}>
-      <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-3">
+      <FormSection title="Document">
         <Input label="GRN no" hint="Blank to auto-generate" value={head.grn_no ?? ''}
           onChange={(e) => setHead((s) => ({ ...s, grn_no: e.target.value }))} />
         <Input label="GRN date" type="date" required value={head.grn_date ?? ''}
           onChange={(e) => setHead((s) => ({ ...s, grn_date: e.target.value }))} />
+        <Input label="Supplier DC no" value={head.supplier_dc_no ?? ''}
+          onChange={(e) => setHead((s) => ({ ...s, supplier_dc_no: e.target.value }))} />
+        <Input label="Supplier invoice no" value={head.supplier_inv_no ?? ''}
+          onChange={(e) => setHead((s) => ({ ...s, supplier_inv_no: e.target.value }))} />
+      </FormSection>
+      <FormSection title="Party & orders" cols={3}>
         <Select label="Gate Inward Entry" options={gateOptions(gateInwards.data, head.supplier_id, head.gate_inward_id)} placeholder="— Select to auto-fill —"
           value={head.gate_inward_id ?? ''} onChange={(e) => handleGateInwardChange(e.target.value)} />
         <Select label="Supplier" required options={toOptions(suppliers.data)} placeholder="— Select —"
           value={head.supplier_id ?? ''} onChange={(e) => setHead((s) => ({ ...s, supplier_id: e.target.value }))} />
-        <Select label="Warehouse" required options={toOptions(warehouses.data)} placeholder="— Select —"
-          value={head.warehouse_id ?? ''} onChange={(e) => setHead((s) => ({ ...s, warehouse_id: e.target.value }))} />
         <div>
           <label className="block text-[11px] font-medium text-slate-700 mb-1">
             Against Purchase Orders ({selectedPoIds.length})
@@ -503,15 +508,20 @@ function GrnModal({ open, onClose, onDone }: { open: boolean; onClose: () => voi
             </div>
           )}
         </div>
-        <Input label="Supplier DC no" value={head.supplier_dc_no ?? ''}
-          onChange={(e) => setHead((s) => ({ ...s, supplier_dc_no: e.target.value }))} />
-        <Input label="Supplier invoice no" value={head.supplier_inv_no ?? ''}
-          onChange={(e) => setHead((s) => ({ ...s, supplier_inv_no: e.target.value }))} />
+      </FormSection>
+      <FormSection title="Store & transport" cols={2}>
+        <Select label="Warehouse" required options={toOptions(warehouses.data)} placeholder="— Select —"
+          value={head.warehouse_id ?? ''} onChange={(e) => setHead((s) => ({ ...s, warehouse_id: e.target.value }))} />
         <Input label="Vehicle no" value={head.vehicle_no ?? ''}
           onChange={(e) => setHead((s) => ({ ...s, vehicle_no: e.target.value }))} />
-      </div>
+      </FormSection>
 
-      <h3 className="mb-2 mt-5 text-[13.5px] font-semibold text-slate-800">Receipt lines</h3>
+      <div className="mb-2.5 mt-5 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-1.5">
+        <h3 className="mr-auto text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Receipt lines</h3>
+        <button className="btn-secondary btn-sm" onClick={() => setLines((s) => [...s, emptyGrnLine()])}>
+          <Plus size={14} /> Add line
+        </button>
+      </div>
       <div className="overflow-x-auto rounded-lg border border-surface-border">
         <table className="w-full">
           <thead><tr>
@@ -596,13 +606,6 @@ function GrnModal({ open, onClose, onDone }: { open: boolean; onClose: () => voi
           </tbody>
         </table>
       </div>
-      <button className="btn-secondary btn-sm mt-2 w-full justify-center border-dashed"
-        onClick={() => setLines((s) => [...s, emptyGrnLine()])}>
-        <Plus size={14} /> Add line
-      </button>
-      <p className="mt-2 text-[11.5px] text-slate-500">
-        Accepted quantities post into the stock ledger and update the PO's received quantity.
-      </p>
     </Modal>
   );
 }
@@ -696,14 +699,15 @@ function IssueModal({ open, onClose, onDone }: { open: boolean; onClose: () => v
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="New material issue" size="lg"
+    <Modal open={open} onClose={onClose} title="New material issue" size="lg" icon={<PackageMinus size={16} />}
+      footerStart="The issue is rejected if any line exceeds the available balance in that warehouse."
       footer={<>
         <button className="btn-secondary" onClick={onClose} disabled={busy}>Cancel</button>
         <button className="btn-primary" onClick={() => void submit()} disabled={busy}>
           {busy && <Spinner size={14} />}Post issue
         </button>
       </>}>
-      <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2">
+      <FormSection cols={3}>
         <Input label="Issue no" hint="Blank to auto-generate" value={head.issue_no ?? ''}
           onChange={(e) => setHead((s) => ({ ...s, issue_no: e.target.value }))} />
         <Input label="Issue date" type="date" required value={head.issue_date ?? ''}
@@ -714,9 +718,14 @@ function IssueModal({ open, onClose, onDone }: { open: boolean; onClose: () => v
           value={head.prod_order_id ?? ''} onChange={(e) => setHead((s) => ({ ...s, prod_order_id: e.target.value }))} />
         <Select label="Issue to unit" options={toOptions(units.data)} placeholder="— None —"
           value={head.issued_to_unit ?? ''} onChange={(e) => setHead((s) => ({ ...s, issued_to_unit: e.target.value }))} />
-      </div>
+      </FormSection>
 
-      <h3 className="mb-2 mt-5 text-[13.5px] font-semibold text-slate-800">Issue lines</h3>
+      <div className="mb-2.5 mt-5 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-1.5">
+        <h3 className="mr-auto text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Issue lines</h3>
+        <button className="btn-secondary btn-sm" onClick={() => setLines((s) => [...s, emptyGrnLine()])}>
+          <Plus size={14} /> Add line
+        </button>
+      </div>
       <div className="overflow-x-auto rounded-lg border border-surface-border">
         <table className="w-full">
           <thead><tr>
@@ -774,13 +783,6 @@ function IssueModal({ open, onClose, onDone }: { open: boolean; onClose: () => v
           </tbody>
         </table>
       </div>
-      <button className="btn-secondary btn-sm mt-2 w-full justify-center border-dashed"
-        onClick={() => setLines((s) => [...s, emptyGrnLine()])}>
-        <Plus size={14} /> Add line
-      </button>
-      <p className="mt-2 text-[11.5px] text-slate-500">
-        The issue is rejected if any line exceeds the available balance in that warehouse.
-      </p>
     </Modal>
   );
 }

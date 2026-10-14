@@ -11,7 +11,7 @@ import { useQuotedRates, matchQuote } from '../../lib/quotedRates';
 import { useJobBoms, bomItemLabel, type JobBomItem } from '../../lib/jobBom';
 import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
-import { Input, Select, StatusBadge, Modal } from '../../components/ui';
+import { Input, Select, StatusBadge, Modal, Button } from '../../components/ui';
 import { fmtDecimal, today } from '../../lib/format';
 
 interface YarnLine {
@@ -1484,15 +1484,21 @@ export default function YarnPurchaseOrderDetailPage() {
       {/* Convert from Quotation Modal */}
       {quoteModalOpen && (
         <Modal
-          title="Convert Approved Yarn Quotations to PO"
+          title="Convert yarn quotations to PO"
+          subtitle="Select one or more approved yarn quotations for the same mill to pull accepted rates, items, and counts into PO lines"
           open={quoteModalOpen}
           onClose={() => setQuoteModalOpen(false)}
+          footerStart={<>{selectedQuoteIds.length} quotation(s) selected</>}
+          footer={<>
+            <Button variant="secondary" onClick={() => setQuoteModalOpen(false)}>Cancel</Button>
+            <Button onClick={handleConvertQuotation} disabled={selectedQuoteIds.length === 0}>
+              Convert {selectedQuoteIds.length > 0 ? `(${selectedQuoteIds.length})` : ''} & Open PO
+            </Button>
+          </>}
         >
-          <div className="space-y-4 text-xs">
-            <div className="flex items-center justify-between">
-              <p className="text-slate-600">
-                Select one or more approved Yarn Quotations for the same mill to pull accepted rates, items, and counts into PO lines.
-              </p>
+          <div className="space-y-3 text-xs">
+            <div className="flex flex-wrap items-end gap-2 border-b border-slate-100 pb-1.5">
+              <h3 className="mr-auto text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Approved quotations</h3>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -1552,27 +1558,6 @@ export default function YarnPurchaseOrderDetailPage() {
                   );
                 })
               )}
-            </div>
-
-            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-              <span className="text-slate-600 font-medium">
-                {selectedQuoteIds.length} quotation(s) selected
-              </span>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setQuoteModalOpen(false)}
-                  className="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleConvertQuotation}
-                  disabled={selectedQuoteIds.length === 0}
-                  className="px-4 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-medium disabled:opacity-50"
-                >
-                  Convert {selectedQuoteIds.length > 0 ? `(${selectedQuoteIds.length})` : ''} & Open PO
-                </button>
-              </div>
             </div>
           </div>
         </Modal>

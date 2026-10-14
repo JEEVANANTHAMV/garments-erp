@@ -410,217 +410,201 @@ export default function KnittingPage() {
       </div>
 
       {/* CREATE KWO MODAL */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden border border-slate-100 max-h-[90vh] flex flex-col">
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-              <div className="flex items-center gap-2">
-                <span className="p-1.5 rounded-lg bg-teal-100 text-teal-700">
-                  <Activity size={18} />
-                </span>
-                <h3 className="text-base font-bold text-slate-900">New Yarn Processing Order (Knitting)</h3>
-              </div>
-              <button onClick={() => setShowCreateModal(false)} className="text-slate-400 hover:text-slate-600">
-                <X size={18} />
-              </button>
+      <Modal open={showCreateModal} onClose={() => setShowCreateModal(false)} size="lg"
+        title="New Yarn Processing Order (Knitting)"
+        subtitle="Work order for knitting / winding / twisting / dyeing of yarn against an I/O"
+        icon={<Activity size={16} />}
+        footer={<>
+          <button
+            type="button"
+            onClick={() => setShowCreateModal(false)}
+            className="btn-secondary text-xs"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="ko-create-form"
+            disabled={createMutation.isPending}
+            className="btn-primary text-xs flex items-center gap-1.5"
+          >
+            <Check size={14} /> Create Work Order
+          </button>
+        </>}>
+        <form
+          id="ko-create-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            createMutation.mutate({
+              ...newOrder,
+              style_id: newOrder.style_id ? Number(newOrder.style_id) : null,
+              vendor_id: newOrder.vendor_id ? Number(newOrder.vendor_id) : null,
+              fabric_id: newOrder.fabric_id ? Number(newOrder.fabric_id) : null,
+              planned_fabric_kg: Number(newOrder.planned_fabric_kg),
+              planned_yarn_kg: Number(newOrder.planned_yarn_kg),
+            });
+          }}
+          className="text-xs"
+        >
+          <FormSection title="Document" cols={4}>
+            <div>
+              <label className="label">Order Date *</label>
+              <input
+                type="date"
+                required
+                value={newOrder.kwo_date}
+                onChange={(e) => setNewOrder({ ...newOrder, kwo_date: e.target.value })}
+                className="input text-xs"
+              />
             </div>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                createMutation.mutate({
-                  ...newOrder,
-                  style_id: newOrder.style_id ? Number(newOrder.style_id) : null,
-                  vendor_id: newOrder.vendor_id ? Number(newOrder.vendor_id) : null,
-                  fabric_id: newOrder.fabric_id ? Number(newOrder.fabric_id) : null,
-                  planned_fabric_kg: Number(newOrder.planned_fabric_kg),
-                  planned_yarn_kg: Number(newOrder.planned_yarn_kg),
-                });
-              }}
-              className="p-6 space-y-4 overflow-y-auto flex-1 text-xs"
-            >
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <JobSelect label="I/O No (Internal Order)" required value={newOrder.io_no} id="ko-io"
-                  onPick={(j) => setNewOrder((o) => ({ ...o, io_no: j?.job_no ?? '', style_id: onlyStyle(j) ? String(onlyStyle(j)) : (j && o.style_id && !j.style_ids.includes(Number(o.style_id)) ? '' : o.style_id) }))} />
-                <div>
-                  <label className="label">Customer PO No</label>
-                  <input
-                    type="text"
-                    value={newOrder.customer_po_no}
-                    onChange={(e) => setNewOrder({ ...newOrder, customer_po_no: e.target.value })}
-                    placeholder="e.g. PO-2026-A12"
-                    className="input text-xs font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="label">Order Date *</label>
-                  <input
-                    type="date"
-                    required
-                    value={newOrder.kwo_date}
-                    onChange={(e) => setNewOrder({ ...newOrder, kwo_date: e.target.value })}
-                    className="input text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="label">Sub-Process *</label>
-                  <select
-                    value={newOrder.sub_process}
-                    onChange={(e) => setNewOrder({ ...newOrder, sub_process: e.target.value })}
-                    className="input text-xs font-medium"
-                  >
-                    <option value="KNITTING">Knitting</option>
-                    <option value="WINDING">Winding</option>
-                    <option value="TWISTING">Twisting</option>
-                    <option value="YARN_DYEING">Yarn Dyeing</option>
-                    <option value="COLLAR_KNITTING">Collar Knitting</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="label">Style Reference</label>
-                  <select
-                    value={newOrder.style_id}
-                    onChange={(e) => setNewOrder({ ...newOrder, style_id: e.target.value })}
-                    className="input text-xs"
-                  >
-                    <option value="">-- Select Style --</option>
-                    {styles.map((s: any) => (
-                      <option key={s.id} value={s.id}>
-                        {s.style_code} - {s.style_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Knitting Vendor / Unit</label>
-                  <select
-                    value={newOrder.vendor_id}
-                    onChange={(e) => setNewOrder({ ...newOrder, vendor_id: e.target.value })}
-                    className="input text-xs"
-                  >
-                    <option value="">-- In-House or Select Party --</option>
-                    {parties.map((p: any) => (
-                      <option key={p.id} value={p.id}>{p.party_name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="label">Target Fabric *</label>
-                  <select
-                    value={newOrder.fabric_id}
-                    onChange={(e) => setNewOrder({ ...newOrder, fabric_id: e.target.value })}
-                    className="input text-xs"
-                  >
-                    <option value="">-- Select Fabric Master --</option>
-                    {fabrics.map((f: any) => (
-                      <option key={f.id} value={f.id}>{f.fabric_name} ({f.fabric_code})</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Dia (Inches)</label>
-                  <input
-                    type="text"
-                    value={newOrder.dia}
-                    onChange={(e) => setNewOrder({ ...newOrder, dia: e.target.value })}
-                    placeholder="30&quot;"
-                    className="input text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="label">GSM</label>
-                  <input
-                    type="text"
-                    value={newOrder.gsm}
-                    onChange={(e) => setNewOrder({ ...newOrder, gsm: e.target.value })}
-                    placeholder="180"
-                    className="input text-xs"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
-                  <label className="label">Planned Fabric (Kg) *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    value={newOrder.planned_fabric_kg}
-                    onChange={(e) => setNewOrder({ ...newOrder, planned_fabric_kg: Number(e.target.value) })}
-                    className="input text-xs font-semibold text-emerald-700"
-                  />
-                </div>
-                <div>
-                  <label className="label">Planned Yarn (Kg) *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    value={newOrder.planned_yarn_kg}
-                    onChange={(e) => setNewOrder({ ...newOrder, planned_yarn_kg: Number(e.target.value) })}
-                    className="input text-xs font-semibold text-indigo-700"
-                  />
-                </div>
-                <div>
-                  <label className="label">Gauge</label>
-                  <input
-                    type="text"
-                    value={newOrder.gauge}
-                    onChange={(e) => setNewOrder({ ...newOrder, gauge: e.target.value })}
-                    placeholder="24 GG"
-                    className="input text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="label">Yarn Lot No</label>
-                  <input
-                    type="text"
-                    value={newOrder.yarn_lot_no}
-                    onChange={(e) => setNewOrder({ ...newOrder, yarn_lot_no: e.target.value })}
-                    placeholder="Y-LOT-01"
-                    className="input text-xs"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="label">Remarks</label>
-                <textarea
-                  rows={2}
-                  value={newOrder.remarks}
-                  onChange={(e) => setNewOrder({ ...newOrder, remarks: e.target.value })}
-                  className="input text-xs"
-                  placeholder="Special instructions, loop length, yarn count, etc."
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="btn-secondary text-xs"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={createMutation.isPending}
-                  className="btn-primary text-xs flex items-center gap-1.5"
-                >
-                  <Check size={14} /> Create Work Order
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            <JobSelect label="I/O No (Internal Order)" required value={newOrder.io_no} id="ko-io"
+              onPick={(j) => setNewOrder((o) => ({ ...o, io_no: j?.job_no ?? '', style_id: onlyStyle(j) ? String(onlyStyle(j)) : (j && o.style_id && !j.style_ids.includes(Number(o.style_id)) ? '' : o.style_id) }))} />
+            <div>
+              <label className="label">Customer PO No</label>
+              <input
+                type="text"
+                value={newOrder.customer_po_no}
+                onChange={(e) => setNewOrder({ ...newOrder, customer_po_no: e.target.value })}
+                placeholder="e.g. PO-2026-A12"
+                className="input text-xs font-semibold"
+              />
+            </div>
+            <div>
+              <label className="label">Style Reference</label>
+              <select
+                value={newOrder.style_id}
+                onChange={(e) => setNewOrder({ ...newOrder, style_id: e.target.value })}
+                className="input text-xs"
+              >
+                <option value="">-- Select Style --</option>
+                {styles.map((s: any) => (
+                  <option key={s.id} value={s.id}>
+                    {s.style_code} - {s.style_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </FormSection>
+          <FormSection title="Process & party" cols={2}>
+            <div>
+              <label className="label">Sub-Process *</label>
+              <select
+                value={newOrder.sub_process}
+                onChange={(e) => setNewOrder({ ...newOrder, sub_process: e.target.value })}
+                className="input text-xs font-medium"
+              >
+                <option value="KNITTING">Knitting</option>
+                <option value="WINDING">Winding</option>
+                <option value="TWISTING">Twisting</option>
+                <option value="YARN_DYEING">Yarn Dyeing</option>
+                <option value="COLLAR_KNITTING">Collar Knitting</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Knitting Vendor / Unit</label>
+              <select
+                value={newOrder.vendor_id}
+                onChange={(e) => setNewOrder({ ...newOrder, vendor_id: e.target.value })}
+                className="input text-xs"
+              >
+                <option value="">-- In-House or Select Party --</option>
+                {parties.map((p: any) => (
+                  <option key={p.id} value={p.id}>{p.party_name}</option>
+                ))}
+              </select>
+            </div>
+          </FormSection>
+          <FormSection title="Fabric & quantities" cols={4}>
+            <div className="sm:col-span-2">
+              <label className="label">Target Fabric *</label>
+              <select
+                value={newOrder.fabric_id}
+                onChange={(e) => setNewOrder({ ...newOrder, fabric_id: e.target.value })}
+                className="input text-xs"
+              >
+                <option value="">-- Select Fabric Master --</option>
+                {fabrics.map((f: any) => (
+                  <option key={f.id} value={f.id}>{f.fabric_name} ({f.fabric_code})</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Planned Fabric (Kg) *</label>
+              <input
+                type="number"
+                step="0.01"
+                required
+                value={newOrder.planned_fabric_kg}
+                onChange={(e) => setNewOrder({ ...newOrder, planned_fabric_kg: Number(e.target.value) })}
+                className="input text-xs font-semibold text-emerald-700"
+              />
+            </div>
+            <div>
+              <label className="label">Planned Yarn (Kg) *</label>
+              <input
+                type="number"
+                step="0.01"
+                required
+                value={newOrder.planned_yarn_kg}
+                onChange={(e) => setNewOrder({ ...newOrder, planned_yarn_kg: Number(e.target.value) })}
+                className="input text-xs font-semibold text-indigo-700"
+              />
+            </div>
+            <div>
+              <label className="label">Dia (Inches)</label>
+              <input
+                type="text"
+                value={newOrder.dia}
+                onChange={(e) => setNewOrder({ ...newOrder, dia: e.target.value })}
+                placeholder="30&quot;"
+                className="input text-xs"
+              />
+            </div>
+            <div>
+              <label className="label">GSM</label>
+              <input
+                type="text"
+                value={newOrder.gsm}
+                onChange={(e) => setNewOrder({ ...newOrder, gsm: e.target.value })}
+                placeholder="180"
+                className="input text-xs"
+              />
+            </div>
+            <div>
+              <label className="label">Gauge</label>
+              <input
+                type="text"
+                value={newOrder.gauge}
+                onChange={(e) => setNewOrder({ ...newOrder, gauge: e.target.value })}
+                placeholder="24 GG"
+                className="input text-xs"
+              />
+            </div>
+            <div>
+              <label className="label">Yarn Lot No</label>
+              <input
+                type="text"
+                value={newOrder.yarn_lot_no}
+                onChange={(e) => setNewOrder({ ...newOrder, yarn_lot_no: e.target.value })}
+                placeholder="Y-LOT-01"
+                className="input text-xs"
+              />
+            </div>
+          </FormSection>
+          <FormSection title="Remarks" cols={1}>
+            <div>
+              <label className="label">Remarks</label>
+              <textarea
+                rows={2}
+                value={newOrder.remarks}
+                onChange={(e) => setNewOrder({ ...newOrder, remarks: e.target.value })}
+                className="input text-xs"
+                placeholder="Special instructions, loop length, yarn count, etc."
+              />
+            </div>
+          </FormSection>
+        </form>
+      </Modal>
 
       {/* MANAGE KWO DETAIL MODAL */}
       {activeOrder && (

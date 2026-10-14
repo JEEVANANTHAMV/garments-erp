@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Card, Button, DataTable, Modal, Select, Textarea } from '../../components/ui';
+import { Card, Button, DataTable, Modal, FormSection, Select, Textarea } from '../../components/ui';
 import { api } from '../../lib/api';
 import { fmtDate, fmtDateTime, fmtNumber } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
@@ -200,8 +200,8 @@ export function CuttingReconciliationPage() {
       </Card>
 
       {dialog === 'close' && f && (
-        <Modal open onClose={() => setDialog(null)} title="Close cutting — reconciliation check" size="md"
-          footer={<><Button variant="ghost" onClick={() => setDialog(null)}>Back</Button>
+        <Modal open onClose={() => setDialog(null)} title={`Close cut order ${data.plan.plan_no}`} subtitle="Reconciliation check before the cut order is closed" size="md"
+          footer={<><Button variant="secondary" onClick={() => setDialog(null)}>Back</Button>
             <Button onClick={() => run(async () => { const id = await ensureRecon(); await api.post(`/cutting-reconciliation/${id}/close`, {}); }, 'Cutting closed')}
               loading={busy} disabled={data.blockers.length > 0 || !data.can_close}>Close cut order</Button></>}>
           <div className="space-y-3 text-sm">
@@ -217,7 +217,7 @@ export function CuttingReconciliationPage() {
       )}
       {(dialog === 'approve' || dialog === 'reopen') && (
         <Modal open onClose={() => setDialog(null)} title={dialog === 'approve' ? 'Approve cutting variance' : 'Reopen cut order'} size="sm"
-          footer={<><Button variant="ghost" onClick={() => setDialog(null)}>Back</Button>
+          footer={<><Button variant="secondary" onClick={() => setDialog(null)}>Back</Button>
             <Button loading={busy} onClick={() => {
               if (!reason.trim()) { toast('A reason is required', 'error'); return; }
               if (dialog === 'approve') run(async () => { const id = await ensureRecon(); await api.post(`/cutting-reconciliation/${id}/approve-variance`, { reason }); }, 'Variance approved');
@@ -231,13 +231,13 @@ export function CuttingReconciliationPage() {
       )}
       {dialog === 'loss' && (
         <Modal open onClose={() => setDialog(null)} title="Record cutting loss / remnant" size="sm"
-          footer={<><Button variant="ghost" onClick={() => setDialog(null)}>Back</Button>
+          footer={<><Button variant="secondary" onClick={() => setDialog(null)}>Back</Button>
             <Button loading={busy} onClick={() => run(() => api.post(`/cutting-plans/${planId}/losses`, { ...loss, qty_kg: Number(loss.qty_kg) }), 'Loss recorded')}>Save</Button></>}>
-          <div className="space-y-3">
+          <FormSection cols={2}>
             <Select label="Loss type" value={loss.loss_type} onChange={e => setLoss({ ...loss, loss_type: e.target.value })} options={LOSS_TYPES} />
             <UomInput label="Quantity" uom="KG" value={loss.qty_kg} min={0} onChange={v => setLoss({ ...loss, qty_kg: v })} />
-            <Textarea label="Reason" rows={2} value={loss.reason} onChange={e => setLoss({ ...loss, reason: e.target.value })} />
-          </div>
+            <Textarea className="sm:col-span-2" label="Reason" rows={2} value={loss.reason} onChange={e => setLoss({ ...loss, reason: e.target.value })} />
+          </FormSection>
         </Modal>
       )}
     </div>

@@ -800,7 +800,9 @@ export default function SalesOrderDetail() {
         </div>
       )}
 
-      <Modal open={stateModal} onClose={() => setStateModal(false)} title="Change order state" size="sm">
+      <Modal open={stateModal} onClose={() => setStateModal(false)} title="Change order state" size="sm"
+        subtitle="Pick the new approval state for this order"
+        footer={<button className="btn-secondary" onClick={() => setStateModal(false)}>Cancel</button>}>
         <p className="mb-3 text-[13px] text-slate-600">
           Current state: <StatusBadge value={head.approval_state} />
         </p>

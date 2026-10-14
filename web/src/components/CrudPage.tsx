@@ -5,7 +5,7 @@ import { useList, useSave, useRemove, useListState } from '../hooks/useResource'
 import { useLookup, toOptions, toPlainOptions, useStatuses } from '../hooks/useLookup';
 import { DataTable, type Column } from './DataTable';
 import {
-  PageHeader, Modal, ConfirmDialog, SearchInput, Input, Select, Textarea,
+  PageHeader, Modal, FormSection, ConfirmDialog, SearchInput, Input, Select, Textarea,
   Checkbox, Spinner, useDebounced,
 } from './ui';
 import { ApiError } from '../lib/api';
@@ -241,7 +241,7 @@ export function CrudPage<T extends { id: number }>(cfg: CrudConfig<T>) {
         open={editing !== undefined}
         onClose={() => setEditing(undefined)}
         title={editing ? `Edit ${cfg.singular}` : `New ${cfg.singular}`}
-        size={cfg.modalSize ?? 'md'}
+        size={cfg.modalSize ?? defaultModalSize(cfg.fields)}
         footer={<>
           <button className="btn-secondary" onClick={() => setEditing(undefined)} disabled={save.isPending}>
             Cancel
@@ -251,26 +251,29 @@ export function CrudPage<T extends { id: number }>(cfg: CrudConfig<T>) {
             {editing ? 'Save changes' : `Create ${cfg.singular.toLowerCase()}`}
           </button>
         </>}>
-        <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2">
-          {cfg.fields.map((f) => (
-            <FormControl key={f.name} field={f}
-              value={values[f.name]}
-              error={errors[f.name]}
-              onChange={(v, row) => {
-                setValues((s) => ({
-                  ...s, [f.name]: v,
-                  ...(f.fill ? Object.fromEntries(Object.entries(f.fill).map(([t, k]) => [t, row ? (row[k] ?? null) : v == null ? null : s[t]])) : {}),
-                }));
-                if (errors[f.name]) {
-                  setErrors((prev) => {
-                    const next = { ...prev };
-                    delete next[f.name];
-                    return next;
-                  });
-                }
-              }} />
-          ))}
-        </div>
+        {/* fields are locked while the save is in flight */}
+        <fieldset disabled={save.isPending} aria-busy={save.isPending} className="min-w-0">
+          <FormSection cols={2}>
+            {cfg.fields.map((f) => (
+              <FormControl key={f.name} field={f}
+                value={values[f.name]}
+                error={errors[f.name]}
+                onChange={(v, row) => {
+                  setValues((s) => ({
+                    ...s, [f.name]: v,
+                    ...(f.fill ? Object.fromEntries(Object.entries(f.fill).map(([t, k]) => [t, row ? (row[k] ?? null) : v == null ? null : s[t]])) : {}),
+                  }));
+                  if (errors[f.name]) {
+                    setErrors((prev) => {
+                      const next = { ...prev };
+                      delete next[f.name];
+                      return next;
+                    });
+                  }
+                }} />
+            ))}
+          </FormSection>
+        </fieldset>
       </Modal>
 
       <ConfirmDialog
@@ -285,6 +288,12 @@ export function CrudPage<T extends { id: number }>(cfg: CrudConfig<T>) {
         }} />
     </>
   );
+}
+
+/** Popup width when the screen does not set one: confirmations-sized for ≤3 fields, wider for long forms. */
+function defaultModalSize(fields: FormField[]): 'sm' | 'md' | 'lg' {
+  if (fields.length <= 3 && !fields.some((f) => f.type === 'textarea' || f.span === 2)) return 'sm';
+  return fields.length > 12 ? 'lg' : 'md';
 }
 
 /* ----------------------------------------------------- field renderers */
@@ -321,7 +330,8 @@ function FormControl({ field, value, error, onChange }: {
 
   if (field.type === 'select' || options) {
     return <Select className={span} label={field.label} error={error} required={field.required}
-      hint={field.hint} placeholder={field.placeholder ?? '— Select —'} options={options ?? []}
+      hint={field.hint} options={options ?? []}
+      placeholder={(field.lookup && lookup.isLoading) || (field.statusDomain && statuses.isLoading) ? 'Loading…' : field.placeholder ?? '— Select —'}
       value={(value as string | number) ?? ''}
       onChange={(e) => {
         const v = e.target.value === '' ? null : e.target.value;

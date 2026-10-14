@@ -6,7 +6,7 @@ import {
   Layers, Boxes, Shirt, Weight, CheckCircle2, ListPlus, FileInput, Combine, FileSpreadsheet, Paperclip, History, Eye,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { Card, Badge, Button, Input, Select, Textarea, Modal, DataTable, StatusBadge, SearchInput, useDebounced } from '../../components/ui';
+import { Card, Badge, Button, Input, Select, Textarea, Modal, FormSection, LoadingBlock, DataTable, StatusBadge, SearchInput, useDebounced } from '../../components/ui';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { fmtDate, fmtDateTime, fmtNumber, today } from '../../lib/format';
@@ -531,46 +531,46 @@ function DcEditor({ id, stages, onClose, onSaved }: {
   };
 
   return (
-    <Modal open onClose={onClose} title={id ? `Edit draft DC ${head.challan_no}` : 'Process Outward DC (multiple jobs)'} size="full"
+    <Modal open onClose={onClose} title={id ? `Edit draft DC ${head.challan_no}` : 'New Process Outward DC'} size="full"
+      subtitle="One DC can carry several jobs / styles — pick the process and party, then add bundles"
+      icon={<Send size={16} />}
+      footerStart={<><b>{jobs.length}</b> jobs · <b>{lines.length}</b> bundles · <b>{fmtNumber(total)}</b> PCS{totalKg ? <> · <b>{totalKg.toFixed(2)}</b> KG</> : null}</>}
       footer={<>
-        <span className="mr-auto self-center text-sm text-slate-600">
-          <b>{jobs.length}</b> jobs · <b>{lines.length}</b> bundles · <b>{fmtNumber(total)}</b> PCS
-        </span>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button variant="secondary" loading={saving} onClick={() => save(false)}>Save draft</Button>
         <Button variant="secondary" loading={saving} onClick={() => save(true)}><Send size={13} className="inline mr-1" />Save &amp; issue</Button>
         <Button loading={saving} onClick={() => save(true, true)}><Printer size={13} className="inline mr-1" />Save, issue &amp; print DC</Button>
       </>}>
-      {/* Header + scan */}
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-4">
-        <div className="xl:col-span-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+      {/* Header fields (grouped in the order they are filled) + scan box */}
+      <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-4">
+        <div className="xl:col-span-3">
+        <FormSection title="Document">
           <Input label="DC no" value={head.challan_no} disabled={readonlyNo} placeholder="Auto"
             onChange={(e) => setHead({ ...head, challan_no: e.target.value })} />
           <Input label="Date" type="date" required value={head.challan_date} onChange={(e) => setHead({ ...head, challan_date: e.target.value })} />
+          <Input label="Ref / SR no" value={head.ref_no} onChange={(e) => setHead({ ...head, ref_no: e.target.value })} />
+          <Input label="Expected return" type="date" value={head.expected_return} onChange={(e) => setHead({ ...head, expected_return: e.target.value })} />
+        </FormSection>
+        <FormSection title="Process & party" cols={3}>
+          {/* who → which process → rate (the rate depends on both) */}
+          <Select label="Send to" id="dc-send-to" value={head.send_to}
+            onChange={(e) => setHead({ ...head, send_to: e.target.value, vendor_id: '', unit_id: '', jw_order_line_id: '' })}
+            options={[{ value: 'CONTRACTOR', label: 'Contractor (job work)' }, { value: 'UNIT', label: 'In-house unit' }]} />
+          {toUnit
+            ? <Select label="In-house unit" required id="dc-unit" className="lg:col-span-2" value={head.unit_id} onChange={(e) => setHead({ ...head, unit_id: e.target.value })}
+                hint="No contractor, no rate — never on a contractor bill"
+                placeholder="— choose unit —" options={units.map((u) => ({ value: u.id, label: u.label }))} />
+            : <Select label="Contractor" required id="dc-vendor" className="lg:col-span-2" value={head.vendor_id} onChange={(e) => setHead({ ...head, vendor_id: e.target.value })}
+                placeholder="— choose —" options={contractors.map((c) => ({ value: c.id, label: c.label }))} />}
+          <Select label="To process" required id="dc-stage" value={head.stage_id}
+            onChange={(e) => { setHead({ ...head, stage_id: e.target.value, source_level: '', from_line_id: '' }); setOpSel({}); if (lines.length) { setLines([]); setJobMeta({}); toast('Process changed — bundle lines cleared', 'info'); } }}
+            placeholder="— choose —" options={stages.map((s) => ({ value: s.id, label: s.stage_name }))} />
           {(baseStage?.sources?.length ?? 0) > 1
             ? <Select label="From process" id="dc-source" value={head.source_level || baseStage!.level}
                 hint={stage?.source}
                 onChange={(e) => { setHead({ ...head, source_level: e.target.value, from_line_id: '' }); if (lines.length) { setLines([]); setJobMeta({}); toast('From process changed — bundle lines cleared', 'info'); } }}
                 options={baseStage!.sources!.map((x) => ({ value: x.level, label: x.label }))} />
             : <Input label="From process" value={stage ? stage.source : ''} disabled placeholder="Set by the To process" />}
-          <Select label="To process" required id="dc-stage" value={head.stage_id}
-            onChange={(e) => { setHead({ ...head, stage_id: e.target.value, source_level: '', from_line_id: '' }); setOpSel({}); if (lines.length) { setLines([]); setJobMeta({}); toast('Process changed — bundle lines cleared', 'info'); } }}
-            placeholder="— choose —" options={stages.map((s) => ({ value: s.id, label: s.stage_name }))} />
-          <Select label="Send to" id="dc-send-to" value={head.send_to}
-            onChange={(e) => setHead({ ...head, send_to: e.target.value, vendor_id: '', unit_id: '', jw_order_line_id: '' })}
-            options={[{ value: 'CONTRACTOR', label: 'Contractor (job work)' }, { value: 'UNIT', label: 'In-house unit' }]} />
-          {toUnit
-            ? <Select label="In-house unit" required id="dc-unit" value={head.unit_id} onChange={(e) => setHead({ ...head, unit_id: e.target.value })}
-                hint="No contractor, no rate — never on a contractor bill"
-                placeholder="— choose unit —" options={units.map((u) => ({ value: u.id, label: u.label }))} />
-            : <Select label="Contractor" required id="dc-vendor" value={head.vendor_id} onChange={(e) => setHead({ ...head, vendor_id: e.target.value })}
-                placeholder="— choose —" options={contractors.map((c) => ({ value: c.id, label: c.label }))} />}
-          <Select label="From location" required id="dc-from-loc" value={head.from_warehouse_id} onChange={(e) => setHead({ ...head, from_warehouse_id: e.target.value })}
-            placeholder="— store —" options={toOptions(warehouses.data)} />
-          <Select label="To location" required id="dc-to-loc" value={head.to_warehouse_id} onChange={(e) => setHead({ ...head, to_warehouse_id: e.target.value })}
-            placeholder="— store —" options={toOptions(warehouses.data)} />
-          <Input label="Ref / SR no" value={head.ref_no} onChange={(e) => setHead({ ...head, ref_no: e.target.value })} />
-          <Input label="Expected return" type="date" value={head.expected_return} onChange={(e) => setHead({ ...head, expected_return: e.target.value })} />
           {toUnit
             ? <Input label="Internal rate (₹ / PCS)" type="number" min={0} step="0.01" value={head.rate} id="dc-rate"
                 hint="For the stock value report — not printed, never billed"
@@ -582,18 +582,29 @@ function DcEditor({ id, stages, onClose, onSaved }: {
                   hint={opsChosen ? 'Sum of the operation rates (rate master)' : jwLine ? 'From the job work order' : masterRate != null ? 'From the process rate master' : 'No rate on file — type it'}
                   onChange={(e) => { setRateTouched(true); setHead({ ...head, rate: e.target.value }); }} />;
               })()}
-          <Input label="Vehicle no" value={head.vehicle_no} onChange={(e) => setHead({ ...head, vehicle_no: e.target.value.toUpperCase() })} />
-          <Input label="Driver" value={head.driver_name} onChange={(e) => setHead({ ...head, driver_name: e.target.value })} />
           {jwLines.length > 0 && (
-            <Select label="Job work order" id="dc-jw-line" value={head.jw_order_line_id} className="md:col-span-2"
+            <Select label="Job work order" id="dc-jw-line" value={head.jw_order_line_id} className="sm:col-span-2 lg:col-span-3"
               onChange={(e) => setHead({ ...head, jw_order_line_id: e.target.value })} placeholder="— not against an order —"
               options={jwLines.map((l) => ({ value: l.id, label: `${l.jw_no} · ${l.io_no ?? ''} ${l.style_code ?? ''} · line ${l.seq_no} — ${fmtNumber(l.outward)} of ${fmtNumber(l.planned)} PCS sent` }))} />
           )}
           {jwLine && total + num(jwLine.outward) > num(jwLine.planned) && (
-            <Input label={`Over the order by ${fmtNumber(total + num(jwLine.outward) - num(jwLine.planned))} PCS — manager override reason`} id="dc-jw-override" className="md:col-span-2"
+            <Input label={`Over the order by ${fmtNumber(total + num(jwLine.outward) - num(jwLine.planned))} PCS — manager override reason`} id="dc-jw-override" className="sm:col-span-2 lg:col-span-3"
               value={head.outward_override_reason} onChange={(e) => setHead({ ...head, outward_override_reason: e.target.value })} />
           )}
+        </FormSection>
+        <FormSection title="Movement & transport">
+          <Select label="From location" required id="dc-from-loc" value={head.from_warehouse_id} onChange={(e) => setHead({ ...head, from_warehouse_id: e.target.value })}
+            placeholder="— store —" options={toOptions(warehouses.data)} />
+          <Select label="To location" required id="dc-to-loc" value={head.to_warehouse_id} onChange={(e) => setHead({ ...head, to_warehouse_id: e.target.value })}
+            placeholder="— store —" options={toOptions(warehouses.data)} />
+          <Input label="Vehicle no" value={head.vehicle_no} onChange={(e) => setHead({ ...head, vehicle_no: e.target.value.toUpperCase() })} />
+          <Input label="Driver" value={head.driver_name} onChange={(e) => setHead({ ...head, driver_name: e.target.value })} />
+        </FormSection>
         </div>
+        <div className="space-y-3 xl:sticky xl:top-0">
+        <ScanCard value={scan} onChange={setScan} onSubmit={onScan} disabled={!head.stage_id} inputRef={scanRef}
+          placeholder={head.stage_id ? 'Scan bundle barcode + Enter' : 'Choose the To process first'}
+          last={last ? { ...last, qty: last.available_qty } : null} />
         {!toUnit && ((stage?.kind === 'SEWING' && stage?.level === 'CUT') || stage?.kind === 'FINISHING' || ['PACK', 'PACKING'].includes(String(stage?.stage_code ?? '').toUpperCase())) && (
           <label className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-xs ${lines.some((l) => l.line_alloc) ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
             <input type="checkbox" className="mt-0.5" checked={!!head.release_line_allocation}
@@ -617,9 +628,7 @@ function DcEditor({ id, stages, onClose, onSaved }: {
             </span>
           </div>
         )}
-        <ScanCard value={scan} onChange={setScan} onSubmit={onScan} disabled={!head.stage_id} inputRef={scanRef}
-          placeholder={head.stage_id ? 'Scan bundle barcode + Enter' : 'Choose the To process first'}
-          last={last ? { ...last, qty: last.available_qty } : null} />
+        </div>
       </div>
 
       {/* Operations of the process (rate per operation for this contractor) */}
@@ -666,18 +675,20 @@ function DcEditor({ id, stages, onClose, onSaved }: {
       )}
 
       {/* Toolbar */}
-      <div className="mt-4 flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
-        <span className="mr-auto text-sm font-semibold text-slate-800">Job / style details</span>
-        <Button size="sm" disabled={!head.stage_id} onClick={() => setPicker('jobs')}><Plus size={13} className="inline mr-1" />Add job</Button>
-        <Button size="sm" variant="secondary" disabled={!head.stage_id} onClick={() => setPicker('bundles')}>
-          <ListPlus size={13} className="inline mr-1" />Load pending bundles
-        </Button>
+      <div className="mt-5 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-1.5">
+        <h3 className="mr-auto text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Jobs & bundles</h3>
+        {checked.size > 0 && (
+          <Button size="sm" variant="danger" onClick={() => removeIds(checked)}>
+            <Trash2 size={13} className="inline mr-1" />Remove selected ({checked.size})
+          </Button>
+        )}
         <Button size="sm" variant="secondary" disabled={!head.stage_id} onClick={() => setPicker('import')}>
           <FileSpreadsheet size={13} className="inline mr-1" />Import from Excel
         </Button>
-        <Button size="sm" variant="danger" disabled={!checked.size} onClick={() => removeIds(checked)}>
-          <Trash2 size={13} className="inline mr-1" />Remove selected ({checked.size})
+        <Button size="sm" variant="secondary" disabled={!head.stage_id} onClick={() => setPicker('bundles')}>
+          <ListPlus size={13} className="inline mr-1" />Load pending bundles
         </Button>
+        <Button size="sm" disabled={!head.stage_id} onClick={() => setPicker('jobs')}><Plus size={13} className="inline mr-1" />Add job</Button>
       </div>
 
       {/* Job sections */}
@@ -799,9 +810,8 @@ function DcEditor({ id, stages, onClose, onSaved }: {
       </div>
 
       {/* DC level summary */}
-      <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
-        <div className="lg:col-span-2 rounded-xl border border-red-100 bg-red-50/30 p-3">
-          <p className="mb-2 text-sm font-bold text-red-700">DC level summary</p>
+      <FormSection title="DC summary" className="mt-5" cols={3}>
+        <div className="lg:col-span-2">
           <SummaryTiles tiles={[
             { label: 'Total jobs', value: String(jobs.length), icon: <Layers size={20} />, tone: 'border-blue-100 bg-blue-50 text-blue-800' },
             { label: 'Total bundles', value: fmtNumber(lines.length), icon: <Boxes size={20} />, tone: 'border-violet-100 bg-violet-50 text-violet-800' },
@@ -809,8 +819,8 @@ function DcEditor({ id, stages, onClose, onSaved }: {
             { label: 'Total weight (KG)', value: totalKg ? totalKg.toFixed(2) : '—', icon: <Weight size={20} />, tone: 'border-rose-100 bg-rose-50 text-rose-800' },
           ]} />
         </div>
-        <Textarea label="Remarks (overall DC)" value={head.remarks} onChange={(e) => setHead({ ...head, remarks: e.target.value })} rows={4} />
-      </div>
+        <Textarea label="Remarks (overall DC)" value={head.remarks} onChange={(e) => setHead({ ...head, remarks: e.target.value })} rows={3} />
+      </FormSection>
       {lines.length > 0 && (
         <details className="mt-3">
           <summary className="cursor-pointer text-xs font-semibold text-slate-500">Colour × size breakdown</summary>
@@ -865,9 +875,11 @@ function JobPicker({ stage, excluded, onClose, onAdd }: { stage: Stage; excluded
   };
 
   return (
-    <Modal open onClose={onClose} size="lg" title={`Add job — bundles ready for ${stage.stage_name}`}
+    <Modal open onClose={onClose} size="xl" title={`Add job — ${stage.stage_name}`}
+      subtitle="Jobs with bundles ready for this process — picking a job loads all its free bundles"
+      icon={<Plus size={16} />}
+      footerStart={<>{picked.size > 0 && <><b>{picked.size}</b> job(s) picked · </>}{stage.source}</>}
       footer={<>
-        <span className="mr-auto self-center text-xs text-slate-500">{stage.source}</span>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button loading={adding} disabled={!picked.size} onClick={add} id="dc-jobs-add">Add {picked.size || ''} job(s)</Button>
       </>}>
@@ -900,7 +912,7 @@ function JobPicker({ stage, excluded, onClose, onAdd }: { stage: Stage; excluded
           <th className="px-2 py-1.5 text-right">Bundles free</th><th className="px-2 py-1.5 text-right">Qty (PCS)</th>
         </tr></thead>
         <tbody>
-          {loading && <tr><td colSpan={7} className="py-6 text-center text-slate-400">Loading…</td></tr>}
+          {loading && <tr><td colSpan={7}><LoadingBlock rows={3} /></td></tr>}
           {!loading && !shown.length && <tr><td colSpan={7} className="py-6 text-center text-slate-400">No jobs have bundles ready for {stage.stage_name}.</td></tr>}
           {shown.map((j) => {
             const k = j.io_no ?? '';
@@ -958,18 +970,20 @@ function ImportBundlesModal({ stage, excludeChallanId, onClose, onAdd }: {
   const ready = (result || []).filter((r) => r.ok && r.bundle).map((r) => r.bundle!) as Avail[];
 
   return (
-    <Modal open onClose={onClose} size="lg" title={`Import bundles — ${stage.stage_name}`}
+    <Modal open onClose={onClose} size={result ? 'xl' : 'md'} title={`Import bundles — ${stage.stage_name}`}
+      subtitle="Bundle nos / barcodes from an Excel sheet or pasted, checked against what the process can take"
+      icon={<FileSpreadsheet size={16} />}
+      footerStart={result ? <><b>{ready.length}</b> ready · <b>{result.length - ready.length}</b> rejected</> : undefined}
       footer={<>
-        {result && <span className="mr-auto self-center text-xs text-slate-600"><b>{ready.length}</b> ready · <b>{result.length - ready.length}</b> rejected</span>}
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
         {!result ? <Button loading={busy} onClick={check}>Check bundles</Button>
           : <Button disabled={!ready.length} onClick={() => onAdd(ready)}>Add {ready.length} bundles</Button>}
       </>}>
       {!result ? (
-        <>
-          <input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => { const f = e.target.files?.[0]; if (f) readFile(f); }} className="mb-2 block text-xs" />
+        <FormSection cols={1}>
+          <input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => { const f = e.target.files?.[0]; if (f) readFile(f); }} className="block text-xs" />
           <Textarea label="Bundle nos / barcodes (first column of the sheet, or paste — one per line)" rows={10} value={text} onChange={(e) => setText(e.target.value)} />
-        </>
+        </FormSection>
       ) : (
         <table className="w-full text-xs">
           <thead className="bg-slate-50 text-slate-500"><tr>
@@ -1023,13 +1037,15 @@ function BundlePicker({ stage, excluded, fromLineId, onClose, onAdd }: { stage: 
 
   return (
     <Modal open onClose={onClose} size="xl" title={`Load pending bundles — ${stage.stage_name}`}
+      subtitle="Filter the bundles ready for this process, grouped job → colour → size"
+      icon={<ListPlus size={16} />}
+      footerStart={loading ? 'Loading…' : <><b>{shown.length}</b> bundles available{checked.size > 0 && <> · <b>{checked.size}</b> selected</>} · {stage.source}</>}
       footer={<>
-        <span className="mr-auto self-center text-xs text-slate-500">{loading ? 'Loading…' : `${shown.length} bundles available · ${stage.source}`}</span>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button variant="secondary" disabled={!free.length} onClick={() => onAdd(free)}>Add all shown ({free.length})</Button>
         <Button disabled={!checked.size} onClick={() => onAdd(shown.filter((b) => checked.has(b.id)))}>Add selected ({checked.size})</Button>
       </>}>
-      <div className="mb-2 grid grid-cols-2 gap-2 md:grid-cols-4">
+      <div className="mb-3 grid grid-cols-2 gap-x-4 gap-y-3 md:grid-cols-4">
         <Input placeholder="IO / job no" value={filters.io_no} onChange={(e) => setFilters({ ...filters, io_no: e.target.value })} />
         <Input placeholder="Bundle no / barcode" value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} />
         <Select value={filters.style_id} onChange={(e) => setFilters({ ...filters, style_id: e.target.value })} placeholder="All styles" options={toOptions(styles.data)} />
@@ -1045,7 +1061,8 @@ function BundlePicker({ stage, excluded, fromLineId, onClose, onAdd }: { stage: 
           ))}
         </div>
       )}
-      <div className="max-h-[60vh] space-y-3 overflow-y-auto">
+      <div className="space-y-3">
+        {loading && !shown.length && <LoadingBlock rows={4} />}
         {groupByJob(shown).map((j, ji) => (
           <div key={j.key} className="overflow-hidden rounded-lg border border-slate-200">
             <div className={`flex items-center justify-between border-b px-3 py-1.5 text-xs ${JOB_TONES[ji % JOB_TONES.length]}`}>
@@ -1154,7 +1171,7 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
     catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(false); }
   };
 
-  if (!dc) return <Modal open onClose={onClose} title="DC"><p className="text-sm text-slate-500">Loading…</p></Modal>;
+  if (!dc) return <Modal open onClose={onClose} size="full" title="Process DC" icon={<Send size={16} />}><LoadingBlock /></Modal>;
   const lines = (dc.lines as any[]).map((l) => ({ ...l, io_no: l.job_io_no }));
   const jobs = groupByJob(lines);
   const jobMeta = new Map<string, any>((dc.summary.jobs as any[]).map((j) => [j.io_no ?? '—', j]));
@@ -1163,18 +1180,19 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
 
   return (
     <Modal open onClose={onClose} size="full" title={`${dc.stage_name ?? 'Job work'} DC ${dc.challan_no}`}
+      subtitle={<>{dc.unit_id ? 'In-house unit' : 'Contractor'} {dc.vendor_name} · {fmtDate(dc.challan_date)} · {human(dc.status)}</>}
+      icon={<Send size={16} />}
+      footerStart={<><b>{fmtNumber(t.bundles)}</b> bundles · <b>{fmtNumber(t.qty)}</b> PCS sent · <b>{fmtNumber(t.received)}</b> received{!['DRAFT', 'CANCELLED'].includes(dc.status) && <> · <b>{fmtNumber(t.pending)}</b> pending</>}</>}
       footer={<>
-        <div className="mr-auto flex gap-2">
-          {['DRAFT', 'ISSUED'].includes(dc.status) && (
-            <Button variant="danger" disabled={busy} onClick={() => { setReason(''); setReasonFor('cancel'); }}><Ban size={13} className="inline mr-1" />Cancel DC</Button>
-          )}
-          {canReceive && (
-            <Button variant="secondary" disabled={busy} onClick={() => { setReason(''); setVariance(''); setReasonFor('close'); }}><Lock size={13} className="inline mr-1" />Close short</Button>
-          )}
-          {canReceive && dc.dc_kind !== 'FABRIC' && (
-            <Button variant="secondary" disabled={busy} id="dc-return-btn" onClick={() => setReturning(true)}>Return unprocessed</Button>
-          )}
-        </div>
+        {['DRAFT', 'ISSUED'].includes(dc.status) && (
+          <Button variant="danger" disabled={busy} onClick={() => { setReason(''); setReasonFor('cancel'); }}><Ban size={13} className="inline mr-1" />Cancel DC</Button>
+        )}
+        {canReceive && (
+          <Button variant="secondary" disabled={busy} onClick={() => { setReason(''); setVariance(''); setReasonFor('close'); }}><Lock size={13} className="inline mr-1" />Close short</Button>
+        )}
+        {canReceive && dc.dc_kind !== 'FABRIC' && (
+          <Button variant="secondary" disabled={busy} id="dc-return-btn" onClick={() => setReturning(true)}>Return unprocessed</Button>
+        )}
         <Button variant="secondary" onClick={() => printDc(id, toast, false)}><Eye size={13} className="inline mr-1" />Preview DC</Button>
         <Button variant="secondary" onClick={() => printDc(id, toast)}><Printer size={13} className="inline mr-1" />Print DC</Button>
         {dc.status === 'DRAFT' && <Button variant="secondary" onClick={() => onEdit(id)}>Edit draft</Button>}
@@ -1185,22 +1203,28 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
         )}
         {canReceive && <Button onClick={() => setReceiving(true)}><PackageCheck size={13} className="inline mr-1" />Process inward</Button>}
       </>}>
-      <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4 xl:grid-cols-6">
-        <Info label="Status"><StatusChip value={dc.status} /></Info>
-        <Info label={dc.unit_id ? 'In-house unit' : 'Contractor'}>{dc.vendor_name}</Info>
-        {dc.source_label && <Info label="From process">{dc.source_label}</Info>}
-        <Info label="DC date">{fmtDate(dc.challan_date)}</Info>
-        <Info label="To process">{dc.stage_name}</Info>
-        <Info label="From → to location">{dc.from_location ?? '—'} → {dc.to_location ?? '—'}</Info>
-        <Info label="Ref / SR no">{dc.ref_no ?? '—'}</Info>
-        <Info label="Expected return">{fmtDate(dc.expected_return)}</Info>
-        <Info label="Vehicle / driver">{dc.vehicle_no ?? '—'}{dc.driver_name ? ` · ${dc.driver_name}` : ''}</Info>
-        <Info label="Issued">{dc.issued_at ? `${fmtDateTime(dc.issued_at)} · ${dc.issued_by_name ?? ''}` : '—'}</Info>
-        <Info label="Rate">{dc.rate != null ? `₹${Number(dc.rate).toFixed(2)} / PCS` : '—'}</Info>
-        <Info label="Operations">{dc.operations?.length ? dc.operations.map((o: any) => `${o.op_name} ₹${Number(o.rate).toFixed(2)}`).join(', ') : '—'}</Info>
-        <Info label="Remarks">{dc.remarks ?? '—'}</Info>
-        {dc.jw_no && <Info label="Job work order"><Link to={`/production/job-work-orders?open=${dc.jw_order_id}`} className="font-mono text-brand-700 hover:underline">{dc.jw_no}</Link>{dc.jw_line_seq ? ` · line ${dc.jw_line_seq}` : ''}</Info>}
-        {dc.outward_override_reason && <Info label="Over-plan override">{dc.outward_override_reason}</Info>}
+      <div className="text-sm">
+        <FormSection title="Document" cols={4}>
+          <Info label="Status"><StatusChip value={dc.status} /></Info>
+          <Info label="DC date">{fmtDate(dc.challan_date)}</Info>
+          <Info label="Ref / SR no">{dc.ref_no ?? '—'}</Info>
+          <Info label="Expected return">{fmtDate(dc.expected_return)}</Info>
+          <Info label="Issued">{dc.issued_at ? `${fmtDateTime(dc.issued_at)} · ${dc.issued_by_name ?? ''}` : '—'}</Info>
+        </FormSection>
+        <FormSection title="Process & party" cols={4}>
+          <Info label={dc.unit_id ? 'In-house unit' : 'Contractor'}>{dc.vendor_name}</Info>
+          <Info label="To process">{dc.stage_name}</Info>
+          {dc.source_label && <Info label="From process">{dc.source_label}</Info>}
+          <Info label="Rate">{dc.rate != null ? `₹${Number(dc.rate).toFixed(2)} / PCS` : '—'}</Info>
+          <div className="sm:col-span-2"><Info label="Operations">{dc.operations?.length ? dc.operations.map((o: any) => `${o.op_name} ₹${Number(o.rate).toFixed(2)}`).join(', ') : '—'}</Info></div>
+          {dc.jw_no && <Info label="Job work order"><Link to={`/production/job-work-orders?open=${dc.jw_order_id}`} className="font-mono text-brand-700 hover:underline">{dc.jw_no}</Link>{dc.jw_line_seq ? ` · line ${dc.jw_line_seq}` : ''}</Info>}
+          {dc.outward_override_reason && <Info label="Over-plan override">{dc.outward_override_reason}</Info>}
+        </FormSection>
+        <FormSection title="Movement & remarks" cols={4}>
+          <Info label="From → to location">{dc.from_location ?? '—'} → {dc.to_location ?? '—'}</Info>
+          <Info label="Vehicle / driver">{dc.vehicle_no ?? '—'}{dc.driver_name ? ` · ${dc.driver_name}` : ''}</Info>
+          <div className="sm:col-span-2"><Info label="Remarks">{dc.remarks ?? '—'}</Info></div>
+        </FormSection>
       </div>
       {dc.variance_reason && (
         <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">Loss over tolerance approved by {dc.variance_approved_by_name ?? '—'}: {dc.variance_reason}</p>
@@ -1211,7 +1235,7 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
         </p>
       )}
 
-      <div className="mt-4">
+      <FormSection title="DC summary" className="mt-4" cols={1}>
         <SummaryTiles tiles={[
           { label: 'Total jobs', value: String(dc.summary.jobs.length), icon: <Layers size={20} />, tone: 'border-blue-100 bg-blue-50 text-blue-800' },
           { label: 'Total bundles', value: fmtNumber(t.bundles), icon: <Boxes size={20} />, tone: 'border-violet-100 bg-violet-50 text-violet-800' },
@@ -1220,9 +1244,10 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
           { label: 'Reject + shortage + loss / pending', value: `${fmtNumber(t.rejected + t.shortage + num(t.loss))} / ${fmtNumber(['DRAFT', 'CANCELLED'].includes(dc.status) ? 0 : t.pending)}`, icon: <Weight size={20} />, tone: 'border-amber-100 bg-amber-50 text-amber-800' },
           { label: 'Returned unprocessed / rework open', value: `${fmtNumber(num(t.returned))} / ${fmtNumber(num(t.rework_open))}`, icon: <Boxes size={20} />, tone: 'border-slate-200 bg-slate-50 text-slate-700' },
         ]} />
-      </div>
+      </FormSection>
 
-      <div className="mt-4 space-y-3">
+      <h3 className="mt-5 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Jobs & bundles</h3>
+      <div className="mt-3 space-y-3">
         {jobs.map((j, ji) => {
           const m = jobMeta.get(j.key) ?? { io_no: j.key };
           return (
@@ -1290,8 +1315,8 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
       </div>
 
       {dc.receipts.length > 0 && (
-        <div className="mt-4">
-          <h4 className="mb-1 text-sm font-semibold text-slate-700">Process inwards against this DC</h4>
+        <div className="mt-5">
+          <h3 className="mb-2.5 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Process inwards against this DC</h3>
           <table className="w-full text-xs">
             <thead className="bg-slate-50 text-slate-500"><tr>
               <th className="px-2 py-1 text-left">Inward no</th><th className="px-2 py-1 text-left">Date</th>
@@ -1334,17 +1359,22 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
       {returning && <ReturnModal dc={dc} onClose={() => setReturning(false)} onDone={() => { setReturning(false); load(); onChanged(); }} />}
       {qcFor && (
         <Modal open onClose={() => setQcFor(null)} size="sm" title={`QC ${qcFor.status === 'ACCEPTED' ? 'accept' : 'reject'} inward ${qcFor.receipt_no}`}
+          subtitle="Only a QC-accepted inward goes on the contractor bill"
+          icon={<CheckCircle2 size={16} />}
           footer={<>
             <Button variant="secondary" onClick={() => setQcFor(null)}>Back</Button>
             <Button variant={qcFor.status === 'ACCEPTED' ? 'primary' : 'danger'} id="dc-qc-confirm" disabled={qcFor.status === 'REJECTED' && qcFor.remarks.trim().length < 3}
               onClick={() => { const q = qcFor; setQcFor(null); act(() => api.post(`/process-dcs/receipts/${q.id}/qc`, { status: q.status, remarks: q.remarks || null }), `Inward ${q.receipt_no} QC ${q.status.toLowerCase()}`); }}>Confirm</Button>
           </>}>
-          <p className="mb-2 text-xs text-slate-600">Only a QC-accepted inward goes on the contractor bill.</p>
           <Textarea label="QC remarks" required={qcFor.status === 'REJECTED'} value={qcFor.remarks} onChange={(e) => setQcFor({ ...qcFor, remarks: e.target.value })} />
         </Modal>
       )}
       {reasonFor && (
         <Modal open onClose={() => setReasonFor(null)} size="sm" title={reasonFor === 'cancel' ? `Cancel DC ${dc.challan_no}` : `Close DC ${dc.challan_no} short`}
+          subtitle={reasonFor === 'cancel'
+            ? 'The DC stays on record as CANCELLED and every bundle quantity returns to where it came from.'
+            : `Every pending PCS (${t.pending} PCS) is written off as contractor shortage against its bundle.`}
+          icon={reasonFor === 'cancel' ? <Ban size={16} /> : <Lock size={16} />}
           footer={<>
             <Button variant="secondary" onClick={() => setReasonFor(null)}>Back</Button>
             <Button variant="danger" loading={busy} disabled={reason.trim().length < 3}
@@ -1352,15 +1382,12 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
               Confirm
             </Button>
           </>}>
-          <p className="mb-2 text-xs text-slate-600">
-            {reasonFor === 'cancel'
-              ? 'The DC stays on record as CANCELLED and every bundle quantity returns to where it came from.'
-              : `Every pending PCS (${t.pending} PCS) is written off as contractor shortage against its bundle.`}
-          </p>
-          <Textarea label="Reason" required value={reason} onChange={(e) => setReason(e.target.value)} />
-          {reasonFor === 'close' && (
-            <Textarea label="Variance reason (needed when reject + shortage + loss is over the tolerance)" id="dc-close-variance" className="mt-2" value={variance} onChange={(e) => setVariance(e.target.value)} />
-          )}
+          <FormSection cols={1}>
+            <Textarea label="Reason" required value={reason} onChange={(e) => setReason(e.target.value)} />
+            {reasonFor === 'close' && (
+              <Textarea label="Variance reason (needed when reject + shortage + loss is over the tolerance)" id="dc-close-variance" value={variance} onChange={(e) => setVariance(e.target.value)} />
+            )}
+          </FormSection>
         </Modal>
       )}
     </Modal>
@@ -1386,13 +1413,19 @@ function ReturnModal({ dc, onClose, onDone }: { dc: any; onClose: () => void; on
   };
   return (
     <Modal open onClose={onClose} size="lg" title={`Return unprocessed — DC ${dc.challan_no}`}
+      subtitle="Unprocessed PCS given back by the contractor — back to our stock at the level they left"
+      icon={<PackageCheck size={16} />}
+      footerStart={<><b>{total}</b> PCS to return</>}
       footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button loading={busy} id="dc-return-save" disabled={!total || reason.trim().length < 3} onClick={save}>Return {total} PCS</Button></>}>
-      <div className="mb-3 grid grid-cols-2 gap-3">
-        <Input label="Reason" required id="dc-return-reason" value={reason} onChange={(e) => setReason(e.target.value)} />
+      <FormSection cols={2}>
         <Input label="Party DC no" value={partyDc} onChange={(e) => setPartyDc(e.target.value)} />
+        <Input label="Reason" required id="dc-return-reason" value={reason} onChange={(e) => setReason(e.target.value)} />
+      </FormSection>
+      <div className="mb-2 mt-4 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-1.5">
+        <h3 className="mr-auto text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Bundles with the contractor</h3>
+        <Button size="sm" variant="secondary" onClick={() => setQty(Object.fromEntries(open.map((l) => [l.id, num(l.pending_qty)])))}>All pending</Button>
       </div>
-      <div className="mb-2 flex justify-end"><Button size="sm" variant="secondary" onClick={() => setQty(Object.fromEntries(open.map((l) => [l.id, num(l.pending_qty)])))}>All pending</Button></div>
       <table className="w-full text-xs">
         <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-1 text-left">Bundle</th><th className="px-2 py-1 text-left">Colour</th><th className="px-2 py-1 text-left">Size</th>
           <th className="px-2 py-1 text-right">With contractor</th><th className="px-2 py-1 text-right">Return (PCS)</th></tr></thead>
@@ -1612,42 +1645,56 @@ function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void
 
   return (
     <Modal open onClose={onClose} size="full"
-      title={`Process Inward — ${first.stage_name ?? ''} from ${first.vendor_name}${dcs.length > 1 ? ` (${dcs.length} DCs)` : ''}`}
+      title={`New Process Inward — ${first.stage_name ?? ''} from ${first.vendor_name}`}
+      subtitle={dcs.length > 1
+        ? `Receiving against ${dcs.length} DCs of this party (${dcs.map((d) => d.challan_no).join(', ')}) — enter good / reject / shortage per bundle`
+        : `Receiving against DC ${first.challan_no} — enter good / reject / shortage per bundle, or scan returned bundles`}
+      icon={<PackageCheck size={16} />}
+      footerStart={<>
+        Good <b>{tot.g}</b> · Reject <b>{tot.r}</b> · Shortage <b>{tot.s}</b>{tot.l ? <> · Loss <b>{tot.l}</b></> : null}{tot.t ? <> · Returned unprocessed <b>{tot.t}</b></> : null}{tot.w ? <> · Rework <b>{tot.w}</b></> : null}{tot.x ? <> · Excess <b>{tot.x}</b></> : null} · Still with contractor <b>{tot.p - tot.g - tot.r - tot.s - tot.l - tot.t}</b> PCS
+      </>}
       footer={<>
-        <span className="mr-auto self-center text-xs text-slate-600">
-          Good <b>{tot.g}</b> · Reject <b>{tot.r}</b> · Shortage <b>{tot.s}</b>{tot.l ? <> · Loss <b>{tot.l}</b></> : null}{tot.t ? <> · Returned unprocessed <b>{tot.t}</b></> : null}{tot.w ? <> · Rework <b>{tot.w}</b></> : null}{tot.x ? <> · Excess <b>{tot.x}</b></> : null} · Still with contractor <b>{tot.p - tot.g - tot.r - tot.s - tot.l - tot.t}</b> PCS
-        </span>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button loading={saving} disabled={over} onClick={save}><CheckCircle2 size={13} className="inline mr-1" />Save &amp; confirm inward</Button>
       </>}>
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-4">
-        <div className="xl:col-span-3 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Input label="Inward no" value="" disabled placeholder="Auto" />
-          <Input label={dcs.length > 1 ? 'Source DCs' : 'Source DC no'} value={dcs.map((d) => d.challan_no).join(', ')} disabled />
-          <Input label="From process" value={first.stage_name ?? ''} disabled />
-          <Input label="Date" type="date" required value={head.receipt_date} onChange={(e) => setHead({ ...head, receipt_date: e.target.value })} />
-          <Input label={first.unit_id ? 'In-house unit' : 'Contractor'} value={first.vendor_name ?? ''} disabled />
-          <Select label="Receiving location" value={head.to_warehouse_id} onChange={(e) => setHead({ ...head, to_warehouse_id: e.target.value })}
-            placeholder="— store —" options={toOptions(warehouses.data)} />
-          <Input label="Party DC no" value={head.party_dc_no} onChange={(e) => setHead({ ...head, party_dc_no: e.target.value })} />
-          <Input label="Party DC date" type="date" value={head.party_dc_date} onChange={(e) => setHead({ ...head, party_dc_date: e.target.value })} />
-          <Input label="Ref / SR no" value={head.ref_no} onChange={(e) => setHead({ ...head, ref_no: e.target.value })} />
-          <Input label="Vehicle no" value={head.vehicle_no} onChange={(e) => setHead({ ...head, vehicle_no: e.target.value.toUpperCase() })} />
-          <Input label="Remarks" value={head.remarks} onChange={(e) => setHead({ ...head, remarks: e.target.value })} className="md:col-span-2" />
+      {/* Header fields (grouped in the order they are filled) + scan box */}
+      <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-4">
+        <div className="xl:col-span-3">
+          <FormSection title="Document">
+            <Input label="Inward no" value="" disabled placeholder="Auto" />
+            <Input label="Date" type="date" required value={head.receipt_date} onChange={(e) => setHead({ ...head, receipt_date: e.target.value })} />
+            <Input label="Ref / SR no" value={head.ref_no} onChange={(e) => setHead({ ...head, ref_no: e.target.value })} />
+            <Input label={dcs.length > 1 ? 'Source DCs' : 'Source DC no'} value={dcs.map((d) => d.challan_no).join(', ')} disabled />
+          </FormSection>
+          <FormSection title="Process & party">
+            <Input label={first.unit_id ? 'In-house unit' : 'Contractor'} value={first.vendor_name ?? ''} disabled />
+            <Input label="From process" value={first.stage_name ?? ''} disabled />
+            <Input label="Party DC no" value={head.party_dc_no} onChange={(e) => setHead({ ...head, party_dc_no: e.target.value })} />
+            <Input label="Party DC date" type="date" value={head.party_dc_date} onChange={(e) => setHead({ ...head, party_dc_date: e.target.value })} />
+          </FormSection>
+          <FormSection title="Movement & remarks">
+            <Select label="Receiving location" value={head.to_warehouse_id} onChange={(e) => setHead({ ...head, to_warehouse_id: e.target.value })}
+              placeholder="— store —" options={toOptions(warehouses.data)} />
+            <Input label="Vehicle no" value={head.vehicle_no} onChange={(e) => setHead({ ...head, vehicle_no: e.target.value.toUpperCase() })} />
+            <Input label="Remarks" value={head.remarks} onChange={(e) => setHead({ ...head, remarks: e.target.value })} className="sm:col-span-2" />
+          </FormSection>
         </div>
-        <ScanCard value={scan} onChange={setScan} onSubmit={onScan} placeholder="Scan returned bundle — fills pending as good" last={last} />
+        <div className="xl:sticky xl:top-0">
+          <ScanCard value={scan} onChange={setScan} onSubmit={onScan} placeholder="Scan returned bundle — fills pending as good" last={last} />
+        </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
-        <span className="mr-auto text-sm font-semibold text-slate-800">Job / style details</span>
+      {/* Toolbar */}
+      <div className="mt-5 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-1.5">
+        <h3 className="mr-auto text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Jobs & bundles</h3>
         <label className="flex items-center gap-1 text-xs text-slate-600">Process completed (all bundles)
           <select className="input h-8 w-40 px-1" id="in-op-all" defaultValue="" onChange={(e) => { if (e.target.value !== '__') setAllOps(e.target.value); }}>
             <option value="__">— set for all —</option><option value="">(none)</option>
             {allOps.map((o) => <option key={o.id} value={o.id}>{o.op_name}</option>)}
           </select>
         </label>
-        <Button size="sm" variant="secondary" onClick={() => fillGood(open)}>All pending good</Button>
         <Button size="sm" variant="secondary" onClick={() => restShortage(open)}>Rest as shortage</Button>
+        <Button size="sm" variant="secondary" onClick={() => fillGood(open)}><CheckCircle2 size={13} className="inline mr-1" />All pending good</Button>
       </div>
 
       <div className="mt-3 space-y-3">
@@ -1743,8 +1790,7 @@ function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void
         })}
       </div>
 
-      <div className="mt-4 rounded-xl border border-red-100 bg-red-50/30 p-3">
-        <p className="mb-2 text-sm font-bold text-red-700">DC level summary</p>
+      <FormSection title="DC summary" className="mt-5" cols={1}>
         <SummaryTiles tiles={[
           { label: 'Total jobs', value: String(new Set(open.map((l) => l.io_no ?? '—')).size), icon: <Layers size={20} />, tone: 'border-blue-100 bg-blue-50 text-blue-800' },
           { label: 'Total bundles', value: fmtNumber(open.length), icon: <Boxes size={20} />, tone: 'border-violet-100 bg-violet-50 text-violet-800' },
@@ -1752,7 +1798,7 @@ function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void
           { label: 'Total received (good)', value: fmtNumber(tot.g), icon: <CheckCircle2 size={20} />, tone: 'border-emerald-100 bg-emerald-50 text-emerald-800' },
           { label: 'Total difference', value: fmtNumber(tot.g + tot.x - tot.p), icon: <Weight size={20} />, tone: 'border-rose-100 bg-rose-50 text-rose-800' },
         ]} />
-      </div>
+      </FormSection>
     </Modal>
   );
 }
@@ -1925,12 +1971,14 @@ function SelectDcModal({ onClose, onPick }: { onClose: () => void; onPick: (ids:
 
   return (
     <Modal open onClose={onClose} size="xl" title="Select DC(s) to receive against"
+      subtitle="Tick several DCs of the same contractor for one inward (one party DC / vehicle)"
+      icon={<FileInput size={16} />}
+      footerStart={picked.size > 0 ? <><b>{picked.size}</b> DC(s) picked</> : undefined}
       footer={<>
-        <span className="mr-auto self-center text-xs text-slate-500">Tick several DCs of the same contractor for one inward (one party DC / vehicle)</span>
-        <Button variant="secondary" onClick={onClose}>Close</Button>
+        <Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button disabled={!picked.size} onClick={() => onPick([...picked])}>Receive {picked.size || ''} DC(s)</Button>
       </>}>
-      <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-3">
+      <div className="mb-3 grid grid-cols-1 gap-x-4 gap-y-3 md:grid-cols-3">
         <Select value={stageId} onChange={(e) => setStageId(e.target.value)} placeholder="All processes" options={stages.map((s) => ({ value: s.id, label: s.stage_name }))} />
         <Select value={vendorId} onChange={(e) => setVendorId(e.target.value)} placeholder="All contractors / units"
           options={[...contractors.map((c) => ({ value: `V${c.id}`, label: c.label })), ...units.map((u) => ({ value: `U${u.id}`, label: `${u.label} (in-house unit)` }))]} />
@@ -1944,7 +1992,7 @@ function SelectDcModal({ onClose, onPick }: { onClose: () => void; onPick: (ids:
           <th className="px-2 py-1.5 text-right">Received qty</th><th className="px-2 py-1.5 text-right">Balance qty</th>
         </tr></thead>
         <tbody>
-          {loading && <tr><td colSpan={9} className="py-6 text-center text-slate-400">Loading…</td></tr>}
+          {loading && <tr><td colSpan={9}><LoadingBlock rows={3} /></td></tr>}
           {!loading && !rows.length && <tr><td colSpan={9} className="py-6 text-center text-slate-400">No DCs pending receipt.</td></tr>}
           {rows.map((r) => {
             const other = pickedParty != null && pickedParty !== partyKey(r);
@@ -2016,7 +2064,10 @@ function PanelConversionModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <Modal open onClose={onClose} size="lg" title="Panel conversion"
+    <Modal open onClose={onClose} size="lg" title="New panel conversion"
+      subtitle="Scan the panel bundles of one garment — e.g. the front in one colour and the back in another. Each panel gives the same number of PCS and together they become one bundle of the output part."
+      icon={<Combine size={16} />}
+      footerStart={!done && panels.length > 0 ? <><b>{panels.length}</b> panel bundle(s) · up to <b>{minBal}</b> PCS</> : undefined}
       footer={done ? <Button onClick={onClose}>Done</Button> : <>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button loading={saving} disabled={panels.length < 2 || !part.trim() || reason.trim().length < 3} onClick={save}>
@@ -2031,10 +2082,7 @@ function PanelConversionModal({ onClose }: { onClose: () => void }) {
         </div>
       ) : (
         <>
-          <p className="mb-3 text-xs text-slate-500">
-            Scan the panel bundles of one garment — e.g. the front in one colour and the back in another. Each panel gives the same
-            number of PCS and together they become one bundle of the output part.
-          </p>
+          <h3 className="mb-2.5 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Panel bundles</h3>
           <form onSubmit={onScan} className="mb-3 flex gap-2">
             <div className="relative flex-1">
               <ScanLine size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-brand-600" />
@@ -2061,14 +2109,14 @@ function PanelConversionModal({ onClose }: { onClose: () => void }) {
               ))}
             </tbody>
           </table>
-          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+          <FormSection title="Output" className="mt-5" cols={3}>
             <Input label="Output part" required value={part} onChange={(e) => setPart(e.target.value.toUpperCase())} />
             <Select label="Output colour" value={colorId} onChange={(e) => setColorId(e.target.value)}
               placeholder={panels[0] ? `Same as ${panels[0].color_name}` : 'Same as first panel'} options={toOptions(colors.data)} />
             <Input label="PCS to convert" type="number" min={1} max={minBal || undefined} value={qty} placeholder={minBal ? String(minBal) : ''}
               onChange={(e) => setQty(e.target.value)} />
-            <Textarea label="Reason" required value={reason} onChange={(e) => setReason(e.target.value)} className="md:col-span-3" rows={2} />
-          </div>
+            <Textarea label="Reason" required value={reason} onChange={(e) => setReason(e.target.value)} className="sm:col-span-2 lg:col-span-3" rows={2} />
+          </FormSection>
         </>
       )}
     </Modal>

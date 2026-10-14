@@ -289,9 +289,14 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
 }
 
 /* ---------------------------------------------------------------- Modal */
-export function Modal({ open, onClose, title, children, footer, size = 'md' }: {
-  open: boolean; onClose: () => void; title: string; children: ReactNode;
-  footer?: ReactNode; size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
+/**
+ * The one popup used across the app. Header (title + optional subtitle) and footer stay pinned while the body
+ * scrolls. Footer convention: `footerStart` = totals / help on the left; `footer` = buttons on the right in the
+ * order Cancel → secondary actions → primary action (last, filled).
+ */
+export function Modal({ open, onClose, title, subtitle, icon, children, footer, footerStart, size = 'md' }: {
+  open: boolean; onClose: () => void; title: string; subtitle?: ReactNode; icon?: ReactNode; children: ReactNode;
+  footer?: ReactNode; footerStart?: ReactNode; size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
 }) {
   useEffect(() => {
     if (!open) return;
@@ -302,28 +307,64 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }: {
   }, [open, onClose]);
 
   if (!open) return null;
-  const width = { sm: 'max-w-md', md: 'max-w-2xl', lg: 'max-w-4xl', xl: 'max-w-6xl', full: 'max-w-[95vw]' }[size];
+  const width = { sm: 'max-w-md', md: 'max-w-2xl', lg: 'max-w-4xl', xl: 'max-w-6xl', full: 'max-w-[1600px]' }[size];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 backdrop-blur-[2px]"
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/40 p-3 backdrop-blur-[2px] sm:p-6"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className={clsx('animate-fade-in my-6 w-full rounded-xl bg-white shadow-popover', width)}
+      <div className={clsx('animate-fade-in flex w-full flex-col rounded-xl bg-white shadow-popover',
+          size === 'full' ? 'h-full max-h-full' : 'max-h-full', width)}
         role="dialog" aria-modal="true" aria-label={title}>
-        <div className="flex items-center justify-between border-b border-surface-border px-5 py-3.5">
-          <h2 className="text-[15px] font-semibold text-slate-900">{title}</h2>
-          <button onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-surface-hover hover:text-slate-600"
+        <div className="flex shrink-0 items-start gap-3 border-b border-surface-border px-5 py-3.5">
+          {icon && <div className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-600">{icon}</div>}
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-[15px] font-semibold text-slate-900">{title}</h2>
+            {subtitle && <p className="mt-0.5 text-[12px] text-slate-500">{subtitle}</p>}
+          </div>
+          <button onClick={onClose} className="-mr-1 rounded-lg p-1 text-slate-400 hover:bg-surface-hover hover:text-slate-600"
             aria-label="Close">
             <X size={18} />
           </button>
         </div>
-        <div className="max-h-[calc(100vh-14rem)] overflow-y-auto px-5 py-4">{children}</div>
-        {footer && (
-          <div className="flex justify-end gap-2 border-t border-surface-border bg-surface-muted/60 px-5 py-3 rounded-b-xl">
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        {(footer || footerStart) && (
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 rounded-b-xl border-t border-surface-border bg-surface-muted/60 px-5 py-3">
+            {footerStart && <div className="mr-auto text-[12.5px] text-slate-600">{footerStart}</div>}
             {footer}
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * A titled group of fields inside a form or popup, laid out on one aligned grid
+ * (1–4 columns; 2 on tablets). Use `span` on children via className "sm:col-span-2" etc.
+ */
+export function FormSection({ title, description, actions, cols = 4, children, className }: {
+  title?: ReactNode; description?: ReactNode; actions?: ReactNode; cols?: 1 | 2 | 3 | 4;
+  children: ReactNode; className?: string;
+}) {
+  const grid = {
+    1: 'grid-cols-1',
+    2: 'grid-cols-1 sm:grid-cols-2',
+    3: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
+    4: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4',
+  }[cols];
+  return (
+    <section className={clsx('mb-4 last:mb-0', className)}>
+      {(title || actions) && (
+        <div className="mb-2.5 flex flex-wrap items-end justify-between gap-2 border-b border-slate-100 pb-1.5">
+          <div>
+            {title && <h3 className="text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">{title}</h3>}
+            {description && <p className="mt-0.5 text-[12px] text-slate-400">{description}</p>}
+          </div>
+          {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+        </div>
+      )}
+      <div className={clsx('grid gap-x-4 gap-y-3', grid)}>{children}</div>
+    </section>
   );
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Card, Button, Input, Select, Modal, Textarea, Badge } from '../../components/ui';
+import { Card, Button, Input, Select, Modal, FormSection, LoadingBlock, Textarea, Badge } from '../../components/ui';
 import { api } from '../../lib/api';
 import { fmtDate, fmtDateTime, fmtNumber, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
@@ -379,7 +379,7 @@ function ReasonModal({ title, onClose, onOk }: { title: string; onClose: () => v
   const [reason, setReason] = useState('');
   return (
     <Modal open onClose={onClose} title={title} size="sm"
-      footer={<><Button variant="ghost" onClick={onClose}>Back</Button><Button variant="danger" id="reason-ok" disabled={!reason.trim()} onClick={() => onOk(reason)}>Confirm</Button></>}>
+      footer={<><Button variant="secondary" onClick={onClose}>Back</Button><Button variant="danger" id="reason-ok" disabled={!reason.trim()} onClick={() => onOk(reason)}>Confirm</Button></>}>
       <Textarea label="Reason" required rows={3} value={reason} onChange={(e) => setReason(e.target.value)} id="reason-text" />
     </Modal>
   );
@@ -421,8 +421,10 @@ function RollAllocationModal({ lay, onClose, onSaved }: { lay: any; onClose: () 
   };
   return (
     <Modal open onClose={onClose} title={`Roll allocation — lay ${lay.lay_no}`} size="full"
-      footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button>
-        <Button variant="outline" onClick={() => setPicked(Object.fromEntries((proposal?.lines || []).map((l: any) => [l.fabric_roll_id, String(l.alloc_kg)])))}>Auto allocate</Button>
+      subtitle="Reserve fabric rolls for this lay — the auto proposal can be changed roll by roll"
+      footerStart={<><b>{Object.values(picked).filter((v) => n(v) > 0).length}</b> rolls · <b>{fmtNumber(total, 3)}</b> KG picked{need ? <> of <b>{fmtNumber(need.qty, 3)}</b> {need.basis === 'M' ? 'M' : 'KG'} needed</> : null}</>}
+      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button>
+        <Button variant="secondary" onClick={() => setPicked(Object.fromEntries((proposal?.lines || []).map((l: any) => [l.fabric_roll_id, String(l.alloc_kg)])))}>Auto allocate</Button>
         <Button id="alloc-reserve" loading={busy} onClick={save}>Reserve rolls</Button></>}>
       <div className="space-y-4 text-xs">
         <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
@@ -433,6 +435,7 @@ function RollAllocationModal({ lay, onClose, onSaved }: { lay: any; onClose: () 
           <MetricTile label="Not eligible" value={ineligible.length} tone={ineligible.length ? 'amber' : 'slate'} />
         </div>
         <p className="text-slate-500">Rule (doc §8–§10): same job, colour, fabric, QC passed, GSM / width within tolerance; same shade / lot for one lay first, then FIFO; the last roll is taken partly and keeps its balance. Nothing is consumed until the lay is cut.</p>
+        <h3 className="border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Eligible rolls</h3>
         <table className="w-full border" id="alloc-rolls">
           <thead className="bg-slate-50 text-left text-slate-600"><tr><th className="p-1.5">Roll</th><th className="p-1.5">Shade / Lot</th><th className="p-1.5">GRN</th><th className="p-1.5 text-right">GSM</th><th className="p-1.5 text-right">Width</th>
             <th className="p-1.5 text-right">Roll KG</th><th className="p-1.5 text-right">Free KG</th><th className="p-1.5 text-right">Free M</th><th className="p-1.5">Store</th><th className="p-1.5 w-36">Allocate (KG)</th><th className="p-1.5 text-right">Balance after</th></tr></thead>
@@ -483,13 +486,16 @@ function IssueModal({ lay, onClose, onSaved }: { lay: any; onClose: () => void; 
   };
   return (
     <Modal open onClose={onClose} title={`Issue fabric to cutting — lay ${lay.lay_no}`} size="lg"
-      footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button id="issue-go" loading={busy} onClick={go}>Issue (cutting DC)</Button></>}>
+      subtitle="The reserved rolls go out on a cutting DC"
+      footerStart={<><b>{allocs.length}</b> rolls · <b>{fmtNumber(allocs.reduce((x, a) => x + n(a.alloc_kg), 0), 3)}</b> KG</>}
+      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button id="issue-go" loading={busy} onClick={go}>Issue (cutting DC)</Button></>}>
       <div className="space-y-3 text-xs">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <FormSection title="Cutting DC" cols={3}>
           <Input label="Issue date" type="date" value={f.issue_date} onChange={(e) => setF({ ...f, issue_date: e.target.value })} />
           <Input label="From" value={f.from_location} onChange={(e) => setF({ ...f, from_location: e.target.value })} />
           <Input label="To" value={f.to_location} onChange={(e) => setF({ ...f, to_location: e.target.value })} />
-        </div>
+        </FormSection>
+        <h3 className="border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Reserved rolls</h3>
         <table className="w-full border"><thead className="bg-slate-50 text-left"><tr><th className="p-1.5">Roll</th><th className="p-1.5">Shade / Lot</th><th className="p-1.5">Store</th><th className="p-1.5 text-right">Issue KG</th><th className="p-1.5 text-right">Issue M</th><th className="p-1.5 text-right">Stays on roll</th></tr></thead>
           <tbody>{allocs.map((a) => <tr key={a.id} className="border-t"><td className="p-1.5 font-mono">{a.roll_no}</td><td className="p-1.5">{a.shade || '—'} / {a.lot_no || '—'}</td><td className="p-1.5">{a.warehouse_name}{a.location_bin ? ` · ${a.location_bin}` : ''}</td>
             <td className="p-1.5 text-right font-semibold"><Qty v={a.alloc_kg} uom="KG" dp={3} /></td><td className="p-1.5 text-right"><Qty v={a.alloc_m} uom="M" dp={1} /></td><td className="p-1.5 text-right"><Qty v={a.roll_balance_kg} uom="KG" dp={3} /></td></tr>)}</tbody>
@@ -549,13 +555,12 @@ function FlowSpreadingModal({ lay, onClose, onSaved }: { lay: any; onClose: () =
   };
   return (
     <Modal open onClose={onClose} title={`Spreading — lay ${lay.lay_no}`} size="full"
-      footer={<><Button variant="ghost" onClick={onClose}>Close</Button>{sp ? <Button id="sp-complete" loading={busy} onClick={complete}>Complete spreading</Button> : <Button id="sp-start" loading={busy} onClick={begin}>Start spreading</Button>}</>}>
+      footer={<><Button variant="secondary" onClick={onClose}>Close</Button>{sp ? <Button id="sp-complete" loading={busy} onClick={complete}>Complete spreading</Button> : <Button id="sp-start" loading={busy} onClick={begin}>Start spreading</Button>}</>}>
       {!sp ? (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <FormSection title="Start spreading" description="Starts the clock and loads the issued rolls with their planned length / KG." cols={2}>
           <Input label="Operator" value={start.operator_name} onChange={(e) => setStart({ ...start, operator_name: e.target.value })} id="sp-operator" />
           <Input label="Table" value={start.table_no} onChange={(e) => setStart({ ...start, table_no: e.target.value })} />
-          <p className="self-end text-xs text-slate-500">Starts the clock and loads the issued rolls with their planned length / KG.</p>
-        </div>
+        </FormSection>
       ) : (
         <div className="space-y-4 text-xs">
           <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
@@ -566,12 +571,13 @@ function FlowSpreadingModal({ lay, onClose, onSaved }: { lay: any; onClose: () =
             <MetricTile label="Actual length" value={fmtNumber(m, 2)} uom="M" />
             <MetricTile label="Roll plies" value={plies} uom="PLY" tone={plies && plies !== n(ply) ? 'red' : 'slate'} />
           </div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          <FormSection title="Actuals">
             <UomInput label="Actual ply" uom="PLY" value={ply} step="1" min={1} onChange={setPly} />
             <UomInput label="Measured lay length" uom="M" value={measured} onChange={setMeasured} />
-            <Input className="md:col-span-2" label={`Variance reason${plyChanged || overFabric ? ' *' : ''}`} value={reason} onChange={(e) => setReason(e.target.value)} id="sp-reason"
+            <Input className="sm:col-span-2" label={`Variance reason${plyChanged || overFabric ? ' *' : ''}`} value={reason} onChange={(e) => setReason(e.target.value)} id="sp-reason"
               hint={plyChanged ? `Ply ${ply} differs from the planned ${sp.ply_planned}` : overFabric ? 'Fabric is over the plan' : 'Only when the ply or fabric differs from the plan'} />
-          </div>
+          </FormSection>
+          <h3 className="border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Roll-wise actuals</h3>
           <table className="w-full border" id="sp-rolls">
             <thead className="bg-slate-50 text-left text-slate-600"><tr><th className="p-1.5">Roll</th><th className="p-1.5 text-right">Planned KG</th><th className="p-1.5 text-right">Planned M</th>
               <th className="p-1.5 w-24">Plies</th><th className="p-1.5 w-32">Actual KG</th><th className="p-1.5 w-32">Actual M</th><th className="p-1.5 w-28">End loss M</th><th className="p-1.5 w-28">Splice loss M</th></tr></thead>
@@ -620,8 +626,8 @@ function LaySheetModal({ lay, onClose }: { lay: any; onClose: () => void }) {
   const out = l?.size_output || {};
   return (
     <Modal open onClose={onClose} title={`Lay sheet — ${lay.lay_no}`} size="xl"
-      footer={<><Button variant="ghost" onClick={onClose}>Close</Button><Button id="sheet-print" onClick={print} disabled={!g}>Print lay sheet</Button></>}>
-      {!g ? <p className="text-xs text-slate-500">Loading…</p> : (
+      footer={<><Button variant="secondary" onClick={onClose}>Close</Button><Button id="sheet-print" onClick={print} disabled={!g}>Print lay sheet</Button></>}>
+      {!g ? <LoadingBlock /> : (
         <div id="lay-sheet-print" className="text-xs">
           <h2 className="text-base font-bold">LAY SHEET — {l.lay_no}</h2>
           <div className="grid grid-cols-4 gap-x-4 gap-y-1">
@@ -650,7 +656,7 @@ function GenealogyModal({ lay, onClose }: { lay: any; onClose: () => void }) {
   );
   return (
     <Modal open onClose={onClose} title={`Genealogy — lay ${lay.lay_no}`} size="xl">
-      {!g ? <p className="text-xs text-slate-500">Loading…</p> : (
+      {!g ? <LoadingBlock /> : (
         <div id="lay-genealogy" className="pl-2">
           <Step title="Job">{g.job.io_no} · {g.job.so_no} · {g.job.buyer_name || '—'} · PO {g.job.buyer_po_no || '—'}</Step>
           <Step title="Cutting plan">{g.cutting_plan.plan_no} · {g.cutting_plan.style_code} · {g.cutting_plan.color_name || '—'} · {g.cutting_plan.fabric_name || '—'} · order {g.cutting_plan.order_qty} · cut {g.cutting_plan.actual_cut_qty}</Step>
@@ -774,16 +780,18 @@ export function CuttingTables() {
           {!rows.length && <tr><td colSpan={8} className="p-3 text-center text-slate-400">No tables — the default max ply (Admin › Settings › CUT_MAX_PLY) is used.</td></tr>}</tbody>
       </table>
       {f && (
-        <Modal open onClose={() => setF(null)} title={f.id ? `Table ${f.table_code}` : 'New cutting table'} size="md" footer={<><Button variant="ghost" onClick={() => setF(null)}>Cancel</Button><Button id="tbl-save" onClick={save}>Save</Button></>}>
-          <div className="grid grid-cols-2 gap-3">
+        <Modal open onClose={() => setF(null)} title={f.id ? `Edit cutting table ${f.table_code}` : 'New cutting table'} size="md" footer={<><Button variant="secondary" onClick={() => setF(null)}>Cancel</Button><Button id="tbl-save" onClick={save}>Save</Button></>}>
+          <FormSection title="Table" cols={3}>
             <Input label="Code" value={f.table_code} onChange={(e) => setF({ ...f, table_code: e.target.value })} id="tbl-code" />
             <Input label="Name" value={f.table_name || ''} onChange={(e) => setF({ ...f, table_name: e.target.value })} />
+            <label className="flex items-center gap-2 self-end pb-2 text-xs"><input type="checkbox" checked={!!f.is_active} onChange={(e) => setF({ ...f, is_active: e.target.checked })} /> Active</label>
+          </FormSection>
+          <FormSection title="Size & ply">
             <UomInput label="Length" uom="M" value={f.length_m ?? ''} onChange={(v) => setF({ ...f, length_m: v })} />
             <UomInput label="Width" uom="IN" value={f.width_in ?? ''} onChange={(v) => setF({ ...f, width_in: v })} />
             <UomInput label="Max ply" uom="PLY" value={f.max_ply} step="1" onChange={(v) => setF({ ...f, max_ply: v })} />
             <UomInput label="Min ply" uom="PLY" value={f.min_ply} step="1" onChange={(v) => setF({ ...f, min_ply: v })} />
-            <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={!!f.is_active} onChange={(e) => setF({ ...f, is_active: e.target.checked })} /> Active</label>
-          </div>
+          </FormSection>
         </Modal>
       )}
     </Card>

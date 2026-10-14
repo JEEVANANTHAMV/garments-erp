@@ -482,14 +482,16 @@ export function PackingListDetailPage() {
       )}
 
       {/* ---------- print preview + print portal */}
-      <Modal open={showPrint} onClose={() => setShowPrint(false)} title="Packing list — print view" size="full"
-        footer={<><Button variant="ghost" onClick={() => setShowPrint(false)}>Close</Button><Button variant="outline" onClick={handleExcel}>Download Excel</Button><Button onClick={handlePrint}>Print</Button></>}>
+      <Modal open={showPrint} onClose={() => setShowPrint(false)} title={`Packing list ${header.pl_no ?? ''} — print view`} size="full"
+        subtitle="Preview of the printed packing list"
+        footer={<><Button variant="secondary" onClick={() => setShowPrint(false)}>Close</Button><Button variant="secondary" onClick={handleExcel}>Download Excel</Button><Button onClick={handlePrint}>Print</Button></>}>
         {saved && <PackingListDocument pl={saved} />}
       </Modal>
       {saved && <PackingListPrintPortal pl={saved} />}
 
-      <Modal open={reopenOpen} onClose={() => setReopenOpen(false)} title="Re-open confirmed packing list" size="sm"
-        footer={<><Button variant="ghost" onClick={() => setReopenOpen(false)}>Cancel</Button><Button variant="danger" onClick={handleReopen} disabled={!reopenReason.trim()}>Re-open</Button></>}>
+      <Modal open={reopenOpen} onClose={() => setReopenOpen(false)} title={`Re-open packing list ${header.pl_no ?? ''}`} size="sm"
+        subtitle="Send this confirmed list back to DRAFT"
+        footer={<><Button variant="secondary" onClick={() => setReopenOpen(false)}>Cancel</Button><Button variant="danger" onClick={handleReopen} disabled={!reopenReason.trim()}>Re-open</Button></>}>
         <p className="mb-3 text-sm text-slate-600">The list goes back to DRAFT so it can be corrected. Not possible once a shipment uses it. The reason is kept in the audit trail.</p>
         <Textarea label="Reason" required value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} />
       </Modal>

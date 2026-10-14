@@ -7,7 +7,7 @@ import { Truck, PackagePlus, Printer, Plus, Trash2, Save, X, Scale, Undo2 } from
 import { http } from '../../lib/api';
 import { fmtDate, fmtDecimal, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
-import { Modal, Input, Select, Textarea, LoadingBlock } from '../../components/ui';
+import { Modal, FormSection, Input, Select, Textarea, LoadingBlock } from '../../components/ui';
 
 /**
  * Knitting DC (yarn outward to the knitter) and grey fabric inward against it,
@@ -256,9 +256,11 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
 
   return (
     <Modal open={open} onClose={onClose} size="full"
-      title={`Knitting DC — Yarn Outward${jobs.length ? ` · ${jobs.map((j) => j.program_no).join(', ')}` : ''}`}
+      title="New Knitting DC — Yarn Outward"
+      subtitle={jobs.length ? `Programs ${jobs.map((j) => j.program_no).join(', ')} · pick each yarn lot to send to the knitting unit` : 'Yarn going out to the knitting unit against released programs'}
+      icon={<Truck size={16} />}
+      footerStart={<><b>{jobs.length}</b> job(s) · <b>{fmtDecimal(totalKg, 3)}</b> KG · {totalCones} cones</>}
       footer={<>
-        <span className="mr-auto self-center text-xs text-slate-600"><b>{jobs.length}</b> job(s) · <b>{fmtDecimal(totalKg, 3)}</b> KG · {totalCones} cones</span>
         <button className="btn-secondary" onClick={onClose}><X size={14} /> Cancel</button>
         <button className="btn-primary" onClick={save} disabled={saving} id="btn-save-knit-dc">
           <Truck size={14} /> {saving ? 'Saving…' : 'Save & Print DC'}
@@ -266,7 +268,7 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
       </>}>
       {!jobs.length ? <LoadingBlock rows={4} /> : (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <FormSection cols={4} className="!mb-0">
             <Input label="DC Date" type="date" value={h.dc_date ?? ''} onChange={(e) => setH({ ...h, dc_date: e.target.value })} id="kdc-date" />
             <Select label="Knitting unit (Supplier / Vendor)" required value={h.vendor_id ?? ''} placeholder="— Select —"
               onChange={(e) => { setH({ ...h, vendor_id: e.target.value }); setJobs((js) => js.map((j) => ({ ...j, quote: { quotation_id: '', quotation_line_id: '', rate_per_kg: '' } }))); }} id="kdc-vendor">
@@ -277,8 +279,9 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
               {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.label}</option>)}
             </Select>
             <Input label="Vehicle No" value={h.vehicle_no ?? ''} onChange={(e) => setH({ ...h, vehicle_no: e.target.value })} id="kdc-vehicle" />
-          </div>
+          </FormSection>
 
+          <h3 className="border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Jobs &amp; yarn lots</h3>
           {jobs.map((j, ji) => (
             <div key={j.program_id} className="overflow-x-auto rounded-lg border border-slate-200">
               <div className="flex flex-wrap items-center justify-between gap-2 bg-sky-50 px-3 py-2 text-[12px]">
@@ -400,6 +403,7 @@ export function KnittingDcPrint({ dcNo, onClose }: { dcNo: string | null; onClos
   const c = dc?.company ?? {};
   return (
     <Modal open={!!dcNo} onClose={onClose} size="lg" title={`Knitting DC ${dcNo ?? ''}`}
+      subtitle="Delivery challan — yarn for knitting (job work)" icon={<Printer size={16} />}
       footer={<>
         <button className="btn-secondary" onClick={onClose}>Close</button>
         <button className="btn-primary" onClick={print} disabled={!dc} id="btn-print-knit-dc">
@@ -578,7 +582,10 @@ export function KnittingInwardModal({ programId, open, onClose }: {
 
   return (
     <Modal open={open} onClose={onClose} size="xl"
-      title={`Grey Fabric Inward — against Knitting DC${recon ? ` · ${recon.program.program_no}` : ''}`}
+      title={`New Grey Fabric Inward${recon ? ` — ${recon.program.program_no}` : ''}`}
+      subtitle="Grey fabric received from the knitter against our knitting DC(s), into roll stock"
+      icon={<PackagePlus size={16} />}
+      footerStart={<><b>{rolls.filter((r) => Number(r.weight_kg) > 0).length}</b> roll(s) · <b>{fmtDecimal(fabricKg, 3)}</b> KG</>}
       footer={<>
         <button className="btn-secondary" onClick={onClose}><X size={14} /> Cancel</button>
         <button className="btn-primary" onClick={save} disabled={saving} id="btn-save-knit-inward">
@@ -597,7 +604,7 @@ export function KnittingInwardModal({ programId, open, onClose }: {
           <KnittingReconciliation programId={recon.program.id} compact />
 
           <div className="rounded-lg border border-slate-200 p-3">
-            <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">Our knitting DCs on this GRN (one GRN may cover several DCs)</p>
+            <p className="mb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Our knitting DCs on this GRN (one GRN may cover several DCs)</p>
             <div className="flex flex-wrap gap-2">
               {recon.dcs.map((d: any) => {
                 const closed = d.status === 'CLOSED';
@@ -620,21 +627,18 @@ export function KnittingInwardModal({ programId, open, onClose }: {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="col-span-2"><GateEntryPicker partyId={recon.program.vendor_id} value={h.gate_inward_id ?? ''} idPrefix="kin"
-              onChange={(v) => setH((x: any) => ({ ...x, gate_inward_id: v }))}
-              onPick={(g) => setH((x: any) => ({ ...x, gate_inward_id: String(g.id), vehicle_no: x.vehicle_no || g.vehicle_no || '', party_dc_no: x.party_dc_no || g.supplier_dc_no || '' }))} /></div>
-            <Input label="Knitter DC No" required value={h.party_dc_no ?? ''}
-              onChange={(e) => setH({ ...h, party_dc_no: e.target.value })} id="kin-party-dc" />
+          <div>
+          <FormSection title="Document" cols={4}>
             <Input label="Inward Date" type="date" value={h.receipt_date ?? ''}
               onChange={(e) => setH({ ...h, receipt_date: e.target.value })} id="kin-date" />
-            <Input label="Vehicle No" value={h.vehicle_no ?? ''}
-              onChange={(e) => setH({ ...h, vehicle_no: e.target.value })} id="kin-vehicle" />
-            <Select label="Receiving Store" required value={h.warehouse_id ?? ''} placeholder="— Select —"
-              onChange={(e) => setH({ ...h, warehouse_id: e.target.value })} id="kin-wh">
-              {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.label}</option>)}
-            </Select>
-            <Select label="Grey Fabric (this job's)" required value={h.fabric_id ?? ''} placeholder={noJobFabric ? '— Select (no fabric on the program / BOM) —' : '— Select —'}
+            <Input label="Knitter DC No" required value={h.party_dc_no ?? ''}
+              onChange={(e) => setH({ ...h, party_dc_no: e.target.value })} id="kin-party-dc" />
+            <div className="sm:col-span-2"><GateEntryPicker partyId={recon.program.vendor_id} value={h.gate_inward_id ?? ''} idPrefix="kin"
+              onChange={(v) => setH((x: any) => ({ ...x, gate_inward_id: v }))}
+              onPick={(g) => setH((x: any) => ({ ...x, gate_inward_id: String(g.id), vehicle_no: x.vehicle_no || g.vehicle_no || '', party_dc_no: x.party_dc_no || g.supplier_dc_no || '' }))} /></div>
+          </FormSection>
+          <FormSection title="Fabric" cols={4}>
+            <Select label="Grey Fabric (this job's)" className="sm:col-span-2" required value={h.fabric_id ?? ''} placeholder={noJobFabric ? '— Select (no fabric on the program / BOM) —' : '— Select —'}
               onChange={(e) => setH({ ...h, fabric_id: e.target.value })} id="kin-fabric">
               {fabrics.map((f: any) => <option key={f.id} value={f.id}>{f.fabric_code ? `${f.fabric_code} — ` : ''}{f.fabric_name} ({f.source})</option>)}
             </Select>
@@ -642,7 +646,18 @@ export function KnittingInwardModal({ programId, open, onClose }: {
               onChange={(e) => setH({ ...h, lot_no: e.target.value })} id="kin-lot" />
             <Input label="Rejected KG" type="number" step="0.001" value={h.rejected_kg ?? ''}
               onChange={(e) => setH({ ...h, rejected_kg: e.target.value })} id="kin-rejected" />
+          </FormSection>
+          <FormSection title="Store & transport" cols={2}>
+            <Select label="Receiving Store" required value={h.warehouse_id ?? ''} placeholder="— Select —"
+              onChange={(e) => setH({ ...h, warehouse_id: e.target.value })} id="kin-wh">
+              {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.label}</option>)}
+            </Select>
+            <Input label="Vehicle No" value={h.vehicle_no ?? ''}
+              onChange={(e) => setH({ ...h, vehicle_no: e.target.value })} id="kin-vehicle" />
+          </FormSection>
           </div>
+
+          <h3 className="border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Rolls</h3>
 
           <div className="overflow-x-auto rounded-lg border border-slate-200">
             <table className="w-full text-[12px]">
@@ -796,7 +811,10 @@ export function KnittingYarnReturnModal({ dcNo, onClose, onPrint }: {
   };
 
   return (
-    <Modal open={open} onClose={onClose} size="xl" title={`Unused Yarn Return — against Knitting DC ${dcNo ?? ''}`}
+    <Modal open={open} onClose={onClose} size="xl" title={`New Yarn Return — Knitting DC ${dcNo ?? ''}`}
+      subtitle="Unused yarn coming back from the knitter into store"
+      icon={<Undo2 size={16} />}
+      footerStart={<><b>{fmtDecimal(totalKg, 3)}</b> KG · {totalCones} cones</>}
       footer={<>
         <button className="btn-secondary" onClick={onClose}><X size={14} /> Cancel</button>
         <button className="btn-primary" onClick={save} disabled={saving || over} id="btn-save-knit-yarn-return">
@@ -812,21 +830,27 @@ export function KnittingYarnReturnModal({ dcNo, onClose, onPrint }: {
             <Info label="Still with knitter" value={`${fmtDecimal(bal.balance_kg, 3)} kg`} />
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div>
+          <FormSection title="Document" cols={4}>
             <Input label="Return Date" type="date" value={h.return_date ?? ''}
               onChange={(e) => setH({ ...h, return_date: e.target.value })} id="kyr-date" />
             <Input label="Knitter Return DC No" required value={h.party_dc_no ?? ''}
               onChange={(e) => setH({ ...h, party_dc_no: e.target.value })} id="kyr-party-dc" />
-            <Input label="Vehicle No" value={h.vehicle_no ?? ''}
-              onChange={(e) => setH({ ...h, vehicle_no: e.target.value })} id="kyr-vehicle" />
+            <div className="sm:col-span-2"><GateEntryPicker partyId={bal.vendor_id} value={h.gate_inward_id ?? ''} idPrefix="kyr"
+              onChange={(v) => setH((x: any) => ({ ...x, gate_inward_id: v }))}
+              onPick={(g) => setH((x: any) => ({ ...x, gate_inward_id: String(g.id), vehicle_no: x.vehicle_no || g.vehicle_no || '', party_dc_no: x.party_dc_no || g.supplier_dc_no || '' }))} /></div>
+          </FormSection>
+          <FormSection title="Store & transport" cols={2}>
             <Select label="Receiving Store" required value={h.warehouse_id ?? ''} placeholder="— Select —"
               onChange={(e) => setH({ ...h, warehouse_id: e.target.value })} id="kyr-wh">
               {warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.label}</option>)}
             </Select>
-            <div className="col-span-2"><GateEntryPicker partyId={bal.vendor_id} value={h.gate_inward_id ?? ''} idPrefix="kyr"
-              onChange={(v) => setH((x: any) => ({ ...x, gate_inward_id: v }))}
-              onPick={(g) => setH((x: any) => ({ ...x, gate_inward_id: String(g.id), vehicle_no: x.vehicle_no || g.vehicle_no || '', party_dc_no: x.party_dc_no || g.supplier_dc_no || '' }))} /></div>
+            <Input label="Vehicle No" value={h.vehicle_no ?? ''}
+              onChange={(e) => setH({ ...h, vehicle_no: e.target.value })} id="kyr-vehicle" />
+          </FormSection>
           </div>
+
+          <h3 className="border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Yarn lines</h3>
 
           <div className="overflow-x-auto rounded-lg border border-slate-200">
             <table className="w-full text-[12px]">
@@ -907,6 +931,7 @@ export function KnittingYarnReturnPrint({ returnNo, onClose }: { returnNo: strin
   const c = rt?.company ?? {};
   return (
     <Modal open={!!returnNo} onClose={onClose} size="lg" title={`Yarn Return ${returnNo ?? ''}`}
+      subtitle="Yarn return note — unused yarn from knitter" icon={<Printer size={16} />}
       footer={<>
         <button className="btn-secondary" onClick={onClose}>Close</button>
         <button className="btn-primary" onClick={print} disabled={!rt} id="btn-print-knit-yarn-return">

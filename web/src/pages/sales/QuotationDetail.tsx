@@ -1416,8 +1416,9 @@ export default function QuotationDetailPage() {
 
           {actual && (
             <Modal open onClose={() => setActual(null)} size="xl" title={`Job ${actual.job.job_no} — actual ${actual.kind === 'FABRIC' ? 'fabric' : 'yarn'} available`}
+              subtitle="Only the job's own rolls: QC-accepted, KG left, not on a draft DC or another live quotation. Rolls of the same fabric / state / colour / GSM / Dia go on one line. Pick the dye colour on each line after loading."
+              footerStart={<>{actual.job.buyer_name ?? ''}{actual.job.styles ? ` · ${actual.job.styles}` : ''}{actual.job.buyer_po_no ? ` · PO ${actual.job.buyer_po_no}` : ''}</>}
               footer={<>
-                <span className="mr-auto self-center text-xs text-slate-600">{actual.job.buyer_name ?? ''}{actual.job.styles ? ` · ${actual.job.styles}` : ''}{actual.job.buyer_po_no ? ` · PO ${actual.job.buyer_po_no}` : ''}</span>
                 <button className="btn-secondary" onClick={() => setActual(null)}>Cancel</button>
                 <button className="btn-primary" onClick={applyJobActual} id="btn-apply-job-material">Load selected</button>
               </>}>
@@ -1465,7 +1466,6 @@ export default function QuotationDetailPage() {
                 })}</tbody>
               </table>
               )}
-              <p className="mt-2 text-[11px] text-slate-500">Only the job's own rolls: QC-accepted, KG left, not on a draft DC or another live quotation. Rolls of the same fabric / state / colour / GSM / Dia go on one line. Pick the dye colour on each line after loading.</p>
             </Modal>
           )}
 

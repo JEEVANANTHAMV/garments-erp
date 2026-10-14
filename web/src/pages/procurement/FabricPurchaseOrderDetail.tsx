@@ -1399,14 +1399,12 @@ export default function FabricPurchaseOrderDetailPage() {
       <Modal
         open={showQuoteModal}
         onClose={() => setShowQuoteModal(false)}
-        title="Convert Approved Fabric Quotation to PO"
+        title="Convert fabric quotation to PO"
+        subtitle="Pick an approved fabric quotation to inherit all fabric specifications, consumption, rates, and internal references without manual re-entry"
         size="lg"
+        footer={<button type="button" className="btn-secondary" onClick={() => setShowQuoteModal(false)}>Cancel</button>}
       >
         <div className="space-y-4">
-          <p className="text-xs text-slate-600">
-            Select an approved fabric quotation to inherit all fabric specifications, consumption, rates, and internal references without manual re-entry.
-          </p>
-
           <div className="rounded-lg border border-slate-200 overflow-hidden">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">

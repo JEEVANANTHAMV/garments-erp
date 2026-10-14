@@ -9,7 +9,7 @@ import { http } from '../../lib/api';
 import { fmtDate, fmtNumber } from '../../lib/format';
 import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
-import { StatusBadge } from '../../components/ui';
+import { StatusBadge, Modal, FormSection } from '../../components/ui';
 
 export default function TnaListPage() {
   const nav = useNavigate();
@@ -393,106 +393,97 @@ export default function TnaListPage() {
       </div>
 
       {/* 5. Create T&A Modal */}
-      {newModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-slate-200">
-            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2 mb-1">
-              <CalendarClock className="text-brand-600" size={20} />
-              Create Time & Action (T&A) Plan
-            </h2>
-            <p className="text-xs text-slate-500 mb-4">
-              Select an approved Sales Order and a manufacturing template to auto-generate order lifecycle milestones
-            </p>
+      <Modal open={newModalOpen} onClose={() => setNewModalOpen(false)} size="md"
+        title="New Time & Action (T&A) Plan"
+        subtitle="Select an approved Sales Order and a manufacturing template to auto-generate order lifecycle milestones"
+        icon={<CalendarClock size={16} />}
+        footer={<>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => setNewModalOpen(false)}
+            disabled={creating}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="tna-create-form"
+            className="btn-primary flex items-center gap-1.5"
+            disabled={creating}
+          >
+            {creating ? 'Generating Milestones…' : 'Generate T&A Plan'}
+          </button>
+        </>}>
+        <form id="tna-create-form" onSubmit={handleCreateTna}>
+          <FormSection cols={2}>
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Sales Order <span className="text-rose-500">*</span>
+              </label>
+              <select
+                required
+                value={soId}
+                onChange={(e) => handleSelectSo(e.target.value)}
+                className="input text-xs w-full"
+              >
+                <option value="">-- Select Sales Order --</option>
+                {toOptions(salesOrders.data).map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
 
-            <form onSubmit={handleCreateTna} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Sales Order <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  required
-                  value={soId}
-                  onChange={(e) => handleSelectSo(e.target.value)}
-                  className="input text-xs w-full"
-                >
-                  <option value="">-- Select Sales Order --</option>
-                  {toOptions(salesOrders.data).map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              </div>
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                T&A Activity Template <span className="text-rose-500">*</span>
+              </label>
+              <select
+                required
+                value={tplId}
+                onChange={(e) => setTplId(e.target.value)}
+                className="input text-xs w-full"
+              >
+                {(templatesQuery.data || []).map((t: any) => (
+                  <option key={t.id} value={t.id}>
+                    {t.template_name} ({t.activity_count} activities)
+                  </option>
+                ))}
+              </select>
+            </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  T&A Activity Template <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  required
-                  value={tplId}
-                  onChange={(e) => setTplId(e.target.value)}
-                  className="input text-xs w-full"
-                >
-                  {(templatesQuery.data || []).map((t: any) => (
-                    <option key={t.id} value={t.id}>
-                      {t.template_name} ({t.activity_count} activities)
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Shipment Date <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="date"
+                required
+                value={shipDate}
+                onChange={(e) => setShipDate(e.target.value)}
+                className="input text-xs w-full"
+              />
+            </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Shipment Date <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={shipDate}
-                    onChange={(e) => setShipDate(e.target.value)}
-                    className="input text-xs w-full"
-                  />
-                </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Order Quantity
+              </label>
+              <input
+                type="number"
+                value={orderQty}
+                onChange={(e) => setOrderQty(e.target.value)}
+                placeholder="e.g. 10000"
+                className="input text-xs w-full"
+              />
+            </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Order Quantity
-                  </label>
-                  <input
-                    type="number"
-                    value={orderQty}
-                    onChange={(e) => setOrderQty(e.target.value)}
-                    placeholder="e.g. 10000"
-                    className="input text-xs w-full"
-                  />
-                </div>
-              </div>
-
-              <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-[11px] text-amber-800">
-                <span className="font-bold">Backward Planning Note:</span> Milestones will be automatically scheduled backward from your Shipment Date, taking into account Sunday weekly-offs and factory lead times.
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
-                <button
-                  type="button"
-                  className="btn-ghost btn-sm"
-                  onClick={() => setNewModalOpen(false)}
-                  disabled={creating}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn-primary btn-sm flex items-center gap-1.5"
-                  disabled={creating}
-                >
-                  {creating ? 'Generating Milestones…' : 'Generate T&A Plan'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            <div className="sm:col-span-2 rounded-lg bg-amber-50 border border-amber-200 p-3 text-[11px] text-amber-800">
+              <span className="font-bold">Backward Planning Note:</span> Milestones will be automatically scheduled backward from your Shipment Date, taking into account Sunday weekly-offs and factory lead times.
+            </div>
+          </FormSection>
+        </form>
+      </Modal>
     </div>
   );
 }

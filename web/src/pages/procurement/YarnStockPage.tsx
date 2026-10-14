@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { http } from '../../lib/api';
 import { fmtDecimal, fmtNumber, fmtDate } from '../../lib/format';
-import { Badge, Modal, useDebounced } from '../../components/ui';
+import { Badge, Button, LoadingBlock, Modal, useDebounced } from '../../components/ui';
 import { useToast } from '../../hooks/useToast';
 
 interface YarnStockRow {
@@ -501,22 +501,17 @@ export default function YarnStockPage() {
       {/* Bin assignment modal */}
       {editBatch && (
         <Modal
-          title={`Assign Bin — Lot ${editBatch.lot_no || '#' + editBatch.id}`}
+          title={`Assign bin — lot ${editBatch.lot_no || '#' + editBatch.id}`}
+          subtitle="Choose the bin / rack this yarn lot is stored in"
           open={!!editBatch}
           onClose={() => setEditBatch(null)}
           size="sm"
           footer={
             <>
-              <button onClick={() => setEditBatch(null)} className="px-3 py-1.5 text-xs rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700">
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                disabled={updating || binsQuery.isLoading}
-                className="px-3.5 py-1.5 text-xs rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-medium disabled:opacity-50"
-              >
+              <Button variant="secondary" onClick={() => setEditBatch(null)}>Cancel</Button>
+              <Button onClick={handleSaveEdit} loading={updating} disabled={binsQuery.isLoading}>
                 {updating ? 'Saving...' : 'Save Bin'}
-              </button>
+              </Button>
             </>
           }
         >
@@ -538,7 +533,7 @@ export default function YarnStockPage() {
             <div>
               <label className="block text-[11px] font-medium text-slate-600 mb-1">Bin / Rack</label>
               {binsQuery.isLoading ? (
-                <div className="text-slate-400">Loading bins…</div>
+                <LoadingBlock label="Loading bins…" rows={1} />
               ) : binsQuery.error ? (
                 <div className="text-red-600">{binsQuery.error instanceof Error ? binsQuery.error.message : 'Unable to load bins'}</div>
               ) : (binsQuery.data ?? []).length === 0 ? (

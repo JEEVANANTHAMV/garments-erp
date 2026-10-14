@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { History } from 'lucide-react';
 import { http } from '../../lib/api';
-import { Modal, Spinner } from '../../components/ui';
+import { Modal, LoadingBlock } from '../../components/ui';
 import { fmtDate, fmtDecimal } from '../../lib/format';
 
 /**
@@ -44,8 +44,11 @@ export function QuotationVersionsButton({ quotationId, currentLines }: { quotati
       <button className="btn-secondary" onClick={() => { setOpen(true); setView(null); }} title="Earlier versions of this quotation">
         <History size={15} /> V{cur}{count > 1 ? ` · ${count} versions` : ''}
       </button>
-      <Modal open={open} onClose={() => setOpen(false)} size="xl" title={`Versions — ${list.data?.quotation_no ?? ''}`}>
-        {list.isLoading ? <Spinner /> : (
+      <Modal open={open} onClose={() => setOpen(false)} size="xl" title={`Versions of quotation ${list.data?.quotation_no ?? ''}`}
+        subtitle="Each saved change keeps the previous content — view an earlier version to see what changed"
+        icon={<History size={16} />}
+        footer={<button className="btn-secondary" onClick={() => setOpen(false)}>Close</button>}>
+        {list.isLoading ? <LoadingBlock rows={3} /> : (
           <div className="space-y-4">
             <table className="w-full text-xs">
               <thead className="bg-slate-50 text-slate-500">
@@ -67,10 +70,10 @@ export function QuotationVersionsButton({ quotationId, currentLines }: { quotati
             </table>
             {count === 1 && <p className="text-[11.5px] text-slate-500">No earlier versions yet — each saved change to this quotation keeps the previous one as V{cur}.</p>}
             {view !== null && (
-              snap.isLoading ? <Spinner /> : snap.data && (
+              snap.isLoading ? <LoadingBlock rows={3} /> : snap.data && (
                 <div>
-                  <h4 className="mb-1 text-[12.5px] font-semibold text-slate-800">
-                    V{view} <span className="font-normal text-slate-500">(replaced {fmtDate(snap.data.replaced_at)}) · total {fmtDecimal(snap.data.header?.total_amount, 2)} · cells changed since are highlighted</span>
+                  <h4 className="mb-2 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">
+                    V{view} <span className="font-normal normal-case tracking-normal text-slate-400">(replaced {fmtDate(snap.data.replaced_at)}) · total {fmtDecimal(snap.data.header?.total_amount, 2)} · cells changed since are highlighted</span>
                   </h4>
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
