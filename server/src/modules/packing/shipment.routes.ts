@@ -382,9 +382,15 @@ shipmentRouter.post('/packing-lists', requirePermission('PACKING.CREATE'), ah(as
   if (!body.exporter_details) body.exporter_details = await companyExporterDetails(cid);
 
   const id = await transaction(async (tx) => {
-    const plNo = body.pl_no || await nextDocNumber(tx, cid, 'PACKING_LIST');
-    const dup = await txQueryOne(tx, `SELECT id FROM trx_packing_list WHERE company_id = ? AND pl_no = ?`, [cid, plNo]);
-    if (dup) throw BadRequest(`Packing list number "${plNo}" already exists`);
+    const taken = (no: string) => txQueryOne(tx, `SELECT id FROM trx_packing_list WHERE company_id = ? AND pl_no = ?`, [cid, no]);
+    let plNo = body.pl_no || await nextDocNumber(tx, cid, 'PACKING_LIST');
+    if (body.pl_no) {
+      if (await taken(plNo)) throw BadRequest(`Packing list number "${plNo}" already exists`);
+    } else {
+      // the series can lag behind numbers typed by hand (PL-00001 exists, series at 1) — move past them
+      for (let i = 0; i < 200 && await taken(plNo); i++) plNo = await nextDocNumber(tx, cid, 'PACKING_LIST');
+      if (await taken(plNo)) throw BadRequest(`Packing list number "${plNo}" already exists`);
+    }
     const t = await headerTotals(tx, body, computed);
     const r = await txExecute(tx,
       `INSERT INTO trx_packing_list
