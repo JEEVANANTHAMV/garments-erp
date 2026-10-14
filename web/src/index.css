@@ -68,6 +68,15 @@
            placeholder:text-slate-400 transition
            focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20
            disabled:bg-slate-50 disabled:text-slate-500; }
+  /* plain <select className="input"> looks and sizes exactly like the shared Select (same chevron, same height) */
+  select.input {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.45rem center;
+    background-size: 15px;
+    padding-right: 1.6rem !important; /* also in compact table-cell selects (px-1), so text never runs under the chevron */
+  }
   .input-error { @apply border-red-400 focus:border-red-500 focus:ring-red-500/20; }
   .label { @apply block text-xs font-medium text-slate-600 mb-1.5; }
   .help-error { @apply mt-1 text-xs text-red-600; }

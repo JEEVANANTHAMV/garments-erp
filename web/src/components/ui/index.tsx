@@ -1,6 +1,6 @@
 import {
   type ReactNode, type InputHTMLAttributes, type SelectHTMLAttributes,
-  type TextareaHTMLAttributes, forwardRef, useEffect, useState,
+  type TextareaHTMLAttributes, forwardRef, useEffect, useRef, useState,
 } from 'react';
 import { AlertCircle, Loader2, X, Search, Inbox, ChevronLeft, ChevronRight } from 'lucide-react';
 import clsx from 'clsx';
@@ -289,6 +289,8 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
 }
 
 /* ---------------------------------------------------------------- Modal */
+const MODAL_STACK: object[] = [];
+
 /**
  * The one popup used across the app. Header (title + optional subtitle) and footer stay pinned while the body
  * scrolls. Footer convention: `footerStart` = totals / help on the left; `footer` = buttons on the right in the
@@ -298,13 +300,23 @@ export function Modal({ open, onClose, title, subtitle, icon, children, footer, 
   open: boolean; onClose: () => void; title: string; subtitle?: ReactNode; icon?: ReactNode; children: ReactNode;
   footer?: ReactNode; footerStart?: ReactNode; size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
 }) {
+  // latest onClose without re-running the effect (callers pass inline functions; re-running would re-order the stack)
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    // popups stack (a picker over a DC): Escape closes only the top one, never the unsaved popup underneath
+    const token = {};
+    MODAL_STACK.push(token);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && MODAL_STACK[MODAL_STACK.length - 1] === token) closeRef.current(); };
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
-    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = ''; };
-  }, [open, onClose]);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      MODAL_STACK.splice(MODAL_STACK.indexOf(token), 1);
+      if (!MODAL_STACK.length) document.body.style.overflow = '';
+    };
+  }, [open]);
 
   if (!open) return null;
   const width = { sm: 'max-w-md', md: 'max-w-2xl', lg: 'max-w-4xl', xl: 'max-w-6xl', full: 'max-w-[1600px]' }[size];
