@@ -33,11 +33,18 @@ export default function AppLayout() {
     staleTime: 5 * 60_000,
   });
   const flagOn = (i: NavItem) => !i.flag || !!uiFlags?.[i.flag];
+  // per-role menu overrides set in Admin → Menu Access (visibility only; permissions still apply)
+  const { data: myMenu } = useQuery({
+    queryKey: ['my-menu', user?.id],
+    queryFn: async () => (await http.get<{ data: { hide: string[]; show: string[] } }>('/admin/my-menu')).data ?? { hide: [], show: [] },
+    staleTime: 5 * 60_000,
+  });
+  const menuOn = (i: NavItem) => (!i.hidden || !!myMenu?.show.includes(i.to)) && !myMenu?.hide.includes(i.to);
   const steps = useMemo(() => NAV
-    .map((s) => ({ ...s, items: s.items.filter((i) => !i.hidden && flagOn(i) && canAny(...i.perms)) }))
+    .map((s) => ({ ...s, items: s.items.filter((i) => menuOn(i) && flagOn(i) && canAny(...i.perms)) }))
     .filter((s) => s.items.length),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [canAny, user, uiFlags]);
+    [canAny, user, uiFlags, myMenu]);
   const sections = useMemo(() => steps
     .map((s) => filter
       ? { ...s, items: s.items.filter((i) => i.label.toLowerCase().includes(filter.toLowerCase()) || s.label.toLowerCase().includes(filter.toLowerCase())) }
@@ -79,7 +86,7 @@ export default function AppLayout() {
     setFavs(next); save('favs', next);
   };
   const allowed = (to: string) => { const i = NAV_BY_PATH.get(to); return i && canAny(...i.perms) ? i : null; };
-  const reachable = (to: string) => { const i = allowed(to); return i && !i.hidden && flagOn(i) ? i : null; };
+  const reachable = (to: string) => { const i = allowed(to); return i && menuOn(i) && flagOn(i) ? i : null; };
   const favItems = favs.map(reachable).filter(Boolean) as NavItem[];
   const recentItems = (recent.filter((p) => !favs.includes(p) && p !== location.pathname).map(reachable).filter(Boolean) as NavItem[]).slice(0, 5);
   const tabGroup = PROCESS_TABS.find((g) => g.tabs.some((t) => t.to === location.pathname));
@@ -211,7 +218,7 @@ export default function AppLayout() {
         )}
         {sections.map((section) => {
           // searching opens every step; a one-screen step (Overview) has no header
-          const single = (steps.find((s) => s.label === section.label)?.items.length ?? 0) === 1; // by the full step, not the search hits
+          const single = section.label === 'Overview'; // only the dashboard has no step header (a role may see one screen of a step — it still gets its header)
           const open = !!filter || single || openSecs.includes(section.label);
           return (
             <div key={section.label} className={clsx('mb-1 rounded-lg', open && !single && 'bg-white/[0.03]')}>

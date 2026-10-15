@@ -386,6 +386,58 @@ adminRouter.get('/ui-flags', ah(async (req, res) => {
   res.json({ data: flags });
 }));
 
+/**
+ * The signed-in user's menu overrides (cfg_role_menu): a screen is SHOWN when any of the user's roles shows it,
+ * HIDDEN only when every one of the user's roles hides it (most permissive role wins). Visibility only.
+ */
+adminRouter.get('/my-menu', ah(async (req, res) => {
+  const roles = await query<{ role_id: number }>(`SELECT role_id FROM map_user_role WHERE user_id = ?`, [req.user!.id]);
+  const roleIds = roles.map((r) => Number(r.role_id));
+  if (!roleIds.length) { res.json({ data: { hide: [], show: [] } }); return; }
+  const rows = await query<{ role_id: number; path: string; mode: 'HIDE' | 'SHOW' }>(
+    `SELECT role_id, path, mode FROM cfg_role_menu WHERE company_id = ? AND role_id IN (?)`, [req.user!.companyId, roleIds]);
+  const show = new Set<string>(); const hiddenBy = new Map<string, Set<number>>();
+  for (const r of rows) {
+    if (r.mode === 'SHOW') show.add(r.path);
+    else { const s = hiddenBy.get(r.path) ?? new Set<number>(); s.add(Number(r.role_id)); hiddenBy.set(r.path, s); }
+  }
+  const hide = [...hiddenBy.entries()].filter(([p, s]) => !show.has(p) && s.size === roleIds.length).map(([p]) => p);
+  res.json({ data: { hide, show: [...show] } });
+}));
+
+/** Admin → Menu Access: one role's overrides. */
+adminRouter.get('/menu-access', requireAny('ROLE.VIEW', 'SETTINGS.VIEW'), ah(async (req, res) => {
+  const roleId = z.coerce.number().int().positive().parse(req.query.role_id);
+  const role = await queryOne<any>(`SELECT id FROM mst_role WHERE id = ? AND company_id = ?`, [roleId, req.user!.companyId]);
+  if (!role) throw NotFound('Role not found');
+  const rows = await query(`SELECT path, mode FROM cfg_role_menu WHERE company_id = ? AND role_id = ? ORDER BY path`, [req.user!.companyId, roleId]);
+  res.json({ data: rows });
+}));
+
+adminRouter.put('/menu-access', requireAny('ROLE.UPDATE', 'SETTINGS.UPDATE'), ah(async (req, res) => {
+  const body = z.object({
+    role_id: z.coerce.number().int().positive(),
+    items: z.array(z.object({ path: z.string().trim().min(1).max(120).regex(/^\//, 'path must start with /'), mode: z.enum(['HIDE', 'SHOW']).nullable() })).max(500),
+  }).parse(req.body);
+  const cid = req.user!.companyId;
+  const role = await queryOne<any>(`SELECT id, role_code FROM mst_role WHERE id = ? AND company_id = ?`, [body.role_id, cid]);
+  if (!role) throw NotFound('Role not found');
+  const before = await query(`SELECT path, mode FROM cfg_role_menu WHERE company_id = ? AND role_id = ?`, [cid, body.role_id]);
+  await transaction(async (tx) => {
+    for (const it of body.items) {
+      if (it.mode) {
+        await txExecute(tx, `INSERT INTO cfg_role_menu (company_id, role_id, path, mode, updated_by) VALUES (?,?,?,?,?)
+                              ON DUPLICATE KEY UPDATE mode = VALUES(mode), updated_by = VALUES(updated_by)`, [cid, body.role_id, it.path, it.mode, req.user!.id]);
+      } else {
+        await txExecute(tx, `DELETE FROM cfg_role_menu WHERE company_id = ? AND role_id = ? AND path = ?`, [cid, body.role_id, it.path]);
+      }
+    }
+  });
+  const after = await query(`SELECT path, mode FROM cfg_role_menu WHERE company_id = ? AND role_id = ?`, [cid, body.role_id]);
+  await audit(req, 'cfg_role_menu', body.role_id, 'UPDATE', { role: role.role_code, overrides: before }, { role: role.role_code, overrides: after });
+  res.json({ data: after });
+}));
+
 // the Settings menu needs SETTINGS.VIEW, the API used to need COMPANY.VIEW — either opens it
 adminRouter.get('/settings', requireAny('COMPANY.VIEW', 'SETTINGS.VIEW'), ah(async (req, res) => {
   const rows = await query(

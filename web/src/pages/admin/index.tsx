@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Trash2, Save, UserCog, ShieldCheck } from 'lucide-react';
 import { DataTable } from '../../components/DataTable';
@@ -10,6 +10,7 @@ import { useList, useRemove, useListState } from '../../hooks/useResource';
 import { http, ApiError } from '../../lib/api';
 import { useToast } from '../../hooks/useToast';
 import { useAuth } from '../../lib/auth';
+import { NAV } from '../../lib/nav';
 
 /* ---------------------------------------------------------------- Users */
 export function UsersPage() {
@@ -406,6 +407,102 @@ export function SettingsPage() {
           })}
         </div>
       </div>
+    </>
+  );
+}
+
+/* ------------------------------------------------------------ Menu access */
+/**
+ * Per-role menu visibility (client call 15-Oct-2026: "nothing is deleted — only visibility; show modules user-wise").
+ * Default = the standard menu (permissions decide). Hide = off this role's menu. Show = put a normally hidden
+ * (older / tab) screen on it. Permissions still decide what a user can open and do.
+ */
+export function MenuAccessPage() {
+  const toast = useToast();
+  const qc = useQueryClient();
+  const roles = useQuery({ queryKey: ['admin/roles'], queryFn: async () => (await http.get<{ data: any[] }>('/admin/roles')).data });
+  const [roleId, setRoleId] = useState<string>('');
+  const [find, setFind] = useState('');
+  const [modes, setModes] = useState<Record<string, 'HIDE' | 'SHOW' | ''>>({});
+  const [busy, setBusy] = useState(false);
+  const current = useQuery({
+    queryKey: ['admin/menu-access', roleId],
+    enabled: !!roleId,
+    queryFn: async () => (await http.get<{ data: { path: string; mode: 'HIDE' | 'SHOW' }[] }>(`/admin/menu-access?role_id=${roleId}`)).data,
+  });
+  useEffect(() => {
+    if (!current.data) return;
+    const m: Record<string, 'HIDE' | 'SHOW' | ''> = {};
+    for (const r of current.data) m[r.path] = r.mode;
+    setModes(m);
+  }, [current.data]);
+  const saved = new Map((current.data ?? []).map((r) => [r.path, r.mode]));
+  const changed = Object.entries(modes).filter(([p, m]) => (saved.get(p) ?? '') !== m);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      await http.put('/admin/menu-access', { role_id: Number(roleId), items: changed.map(([path, mode]) => ({ path, mode: mode || null })) });
+      toast('Menu access saved — users of this role see it on their next page load');
+      void qc.invalidateQueries({ queryKey: ['admin/menu-access', roleId] });
+      void qc.invalidateQueries({ queryKey: ['my-menu'] });
+    } catch (e: any) { toast(e?.message || 'Could not save', 'error'); } finally { setBusy(false); }
+  };
+
+  const q = find.trim().toLowerCase();
+  return (
+    <>
+      <PageHeader title="Menu Access" subtitle="Show or hide menu screens for a role — visibility only, nothing is deleted; permissions still apply"
+        actions={<button className="btn-primary" id="ma-save" disabled={!roleId || !changed.length || busy} onClick={() => void save()}>
+          {busy && <Spinner size={14} />}<Save size={15} /> Save{changed.length ? ` (${changed.length})` : ''}
+        </button>} />
+      <div className="mb-3 flex flex-wrap items-end gap-3">
+        <div className="w-72">
+          <label className="label">Role</label>
+          <select className="input" id="ma-role" value={roleId} onChange={(e) => { setRoleId(e.target.value); setModes({}); }}>
+            <option value="">— choose a role —</option>
+            {(roles.data ?? []).map((r: any) => <option key={r.id} value={r.id}>{r.role_name ?? r.role_code}</option>)}
+          </select>
+        </div>
+        <SearchInput value={find} onChange={setFind} placeholder="Find a screen…" className="w-72" />
+      </div>
+      {!roleId ? <div className="card p-6 text-[13px] text-slate-500">Choose a role to see its menu.</div>
+        : current.isLoading ? <div className="card"><LoadingBlock rows={6} /></div> : (
+        <div className="space-y-3" id="ma-list">
+          {NAV.map((sec) => {
+            const items = sec.items.filter((i) => !q || `${i.label} ${i.to} ${sec.label}`.toLowerCase().includes(q));
+            if (!items.length) return null;
+            return (
+              <div key={sec.label} className="card p-4">
+                <h3 className="mb-2 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">{sec.label}</h3>
+                <div className="divide-y divide-surface-border">
+                  {items.map((i) => {
+                    const m = modes[i.to] ?? '';
+                    return (
+                      <div key={i.to} className="flex flex-wrap items-center gap-3 py-2" data-menu-path={i.to}>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[13px] font-medium text-slate-800">{i.label}
+                            {i.hidden && <Badge tone="slate" className="ml-2">hidden by default</Badge>}</p>
+                          <p className="font-mono text-[11px] text-slate-400">{i.to} · needs {i.perms.join(' or ')}</p>
+                        </div>
+                        <div className="flex overflow-hidden rounded-lg border border-surface-border text-[12px]">
+                          {([['', 'Default'], ['SHOW', 'Show'], ['HIDE', 'Hide']] as const).map(([v, label]) => (
+                            <button key={v} type="button" data-mode={v || 'DEFAULT'}
+                              onClick={() => setModes((cur) => ({ ...cur, [i.to]: v }))}
+                              className={`px-3 py-1 ${m === v ? (v === 'HIDE' ? 'bg-red-600 text-white' : v === 'SHOW' ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-white') : 'text-slate-600 hover:bg-slate-50'}`}>
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </>
   );
 }

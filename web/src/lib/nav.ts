@@ -102,7 +102,8 @@ export const NAV: NavSection[] = [
       { label: 'Yarn Process – Return',        to: '/production/yarn-process/returns', icon: ShieldAlert, perms: ['YARN_PROCESS.VIEW'] },
       { label: 'Yarn Process – Reprocess',     to: '/production/yarn-process/reprocess', icon: RefreshCw, perms: ['YARN_PROCESS.VIEW'] },
       { label: 'Yarn Cone / Lot Tracking',     to: '/production/yarn-process/cone-tracking', icon: History, perms: ['YARN_PROCESS.VIEW'] },
-      { label: 'Yarn Substitution',            to: '/production/yarn-substitution', icon: GitBranch, perms: ['PRODUCTION.VIEW', 'INVENTORY.VIEW'] },
+      // "alternate yarn" in the client's words: use another job's / count's yarn in an emergency, with approval (call 15-Oct-2026)
+      { label: 'Yarn Substitution (Alternate Yarn)', to: '/production/yarn-substitution', icon: GitBranch, perms: ['PRODUCTION.VIEW', 'INVENTORY.VIEW', 'YARN_SUBSTITUTION.VIEW'] },
       { label: 'Collar Knitting',              to: '/production/collar-knitting', icon: Shirt, perms: ['PRODUCTION.VIEW'] },
       { label: 'Collar – Yarn Issue / QC', to: '/production/process-execution', icon: ClipboardCheck, perms: ['PRODUCTION.VIEW'] },
     ],
@@ -261,11 +262,12 @@ export const NAV: NavSection[] = [
       { label: 'Roles',    to: '/admin/roles', icon: Shield, perms: ['ROLE.VIEW'] },
       { label: 'Company',  to: '/admin/company', icon: Building2, perms: ['COMPANY.VIEW'] },
       { label: 'Settings', to: '/admin/settings', icon: Settings, perms: ['SETTINGS.VIEW'] },
+      { label: 'Menu Access', to: '/admin/menu-access', icon: SlidersHorizontal, perms: ['ROLE.VIEW', 'SETTINGS.VIEW'] },
     ],
   },
   {
     // Routable but off the menu: older screens, and line masters reached through the tabs of "Production Lines".
-    label: 'Hidden',
+    label: 'More screens',
     items: [
       { label: 'Checking Lines',  to: '/production/checking-lines', icon: SlidersHorizontal, perms: ['PRODUCTION.VIEW'], hidden: true, parent: '/production/sewing-lines' },
       { label: 'Ironing Lines',   to: '/production/ironing-lines', icon: SlidersHorizontal, perms: ['PRODUCTION.VIEW'], hidden: true, parent: '/production/sewing-lines' },

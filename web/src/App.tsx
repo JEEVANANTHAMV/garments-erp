@@ -157,7 +157,7 @@ import ClientReportsAPage from './pages/reports/ClientReportsA';
 import ClientReportsBPage from './pages/reports/ClientReportsB';
 
 /* Admin */
-import { UsersPage, RolesPage, CompanyPage, SettingsPage } from './pages/admin';
+import { UsersPage, RolesPage, CompanyPage, SettingsPage, MenuAccessPage } from './pages/admin';
 
 /* ------------------------------------------------------------------ */
 
@@ -481,6 +481,7 @@ export default function App() {
                   <Route path="roles" element={<RolesPage />} />
                   <Route path="company" element={<CompanyPage />} />
                   <Route path="settings" element={<SettingsPage />} />
+                  <Route path="menu-access" element={<MenuAccessPage />} />
                 </Route>
 
                 {/* Catch-all */}
