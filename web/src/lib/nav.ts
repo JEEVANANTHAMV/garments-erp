@@ -157,7 +157,7 @@ export const NAV: NavSection[] = [
       { label: 'FG Receipts',              to: '/production/fg-receipts', icon: PackageCheck, perms: ['PRODUCTION.VIEW'] },
       // packing engine (client developer doc 14-Oct-2026): order → polybag / piece entry → carton box entry → verify / seal → post
       { label: 'Packing Orders',           to: '/logistics/packing/orders', icon: PackageCheck, perms: ['PACKING.VIEW'] },
-      { label: 'Indl Piece / Polybag Entry', to: '/logistics/packing/polybag', icon: Package, perms: ['PACKING.CREATE'] },
+      { label: 'Individual Piece / Polybag Entry', to: '/logistics/packing/polybag', icon: Package, perms: ['PACKING.CREATE'] },
       { label: 'Carton Box Entry',         to: '/logistics/packing/cartons', icon: Boxes, perms: ['PACKING.CREATE'] },
       { label: 'Carton Verify / Seal',     to: '/logistics/packing/verify', icon: ShieldCheck, perms: ['PACKING.UPDATE'] },
       { label: 'Packing Reports',          to: '/logistics/packing/reports', icon: BarChart3, perms: ['PACKING.VIEW'] },

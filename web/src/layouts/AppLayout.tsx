@@ -163,7 +163,7 @@ export default function AppLayout() {
             ? 'bg-brand-600 font-medium text-white'
             : 'text-slate-400 hover:bg-white/5 hover:text-slate-100')}>
         <item.icon size={15} className="shrink-0" />
-        <span className="truncate">{item.label}</span>
+        <span className="truncate" title={item.label}>{item.label}</span>
       </Link>
       {item.to !== '/' && (
         <button type="button" onClick={() => toggleFav(item.to)} data-fav={item.to}
