@@ -268,7 +268,23 @@ export function RolesPage() {
 
 /* ----------------------------------------------- Company settings */
 export function CompanyPage() {
-  const { company, switchCompany } = useAuth();
+  const { company, switchCompany, user } = useAuth();
+  // super admin: activate / deactivate a company (server refuses the current / home / last active company)
+  const completeSetup = async (r: any) => {
+    try {
+      const res = await http.post<{ data: { setup: Record<string, number> } }>(`/admin/companies/${r.id}/provision`, { copy_masters: { tax: true, ledger: true } });
+      const added = Object.values(res.data.setup ?? {}).reduce((a, n) => a + Number(n || 0), 0);
+      toast(added ? `${r.legal_name}: ${added} missing setup records added` : `${r.legal_name} is already fully set up`);
+    } catch (e: any) { toast(e?.message || 'Could not complete the setup', 'error'); }
+  };
+  const toggleActive = async (r: any) => {
+    if (r.is_active && !window.confirm(`Deactivate ${r.legal_name}? Nobody can sign in to it until it is activated again.`)) return;
+    try {
+      await http.put(`/admin/companies/${r.id}/active`, { is_active: !r.is_active });
+      toast(r.is_active ? `${r.legal_name} deactivated` : `${r.legal_name} activated`);
+      void companiesList.refetch();
+    } catch (e: any) { toast(e?.message || 'Could not change the company status', 'error'); }
+  };
   const toast = useToast();
   const qc = useQueryClient();
   const [tab, setTab] = useState<'all' | 'active'>('all');
@@ -295,7 +311,7 @@ export function CompanyPage() {
     phone: '',
     email: '',
     website: '',
-    assigned_user_ids: [],
+    assigned_user_ids: [], copy_masters: { tax: true, ledger: true, colors: true, sizeGroups: true, gsm: true, dia: true, yarnCounts: true, compositions: true },
   });
   const [createBusy, setCreateBusy] = useState(false);
 
@@ -358,8 +374,10 @@ export function CompanyPage() {
     }
     setCreateBusy(true);
     try {
-      await http.post('/admin/companies', newCompany);
-      toast('New company created successfully!');
+      const r = await http.post<{ data: { setup?: Record<string, number> } }>('/admin/companies', newCompany);
+      const setup = r.data?.setup ?? {};
+      const total = Object.values(setup).reduce((a, n) => a + Number(n || 0), 0);
+      toast(`Company created and set up (${total} setup records). Use Switch to open it.`);
       setCreateOpen(false);
       void qc.invalidateQueries({ queryKey: ['admin/companies'] });
       void qc.invalidateQueries({ queryKey: ['admin/company'] });
@@ -412,7 +430,7 @@ export function CompanyPage() {
                   phone: '',
                   email: '',
                   website: '',
-                  assigned_user_ids: [],
+                  assigned_user_ids: [], copy_masters: { tax: true, ledger: true, colors: true, sizeGroups: true, gsm: true, dia: true, yarnCounts: true, compositions: true },
                 });
                 setCreateOpen(true);
               }}
@@ -503,6 +521,7 @@ export function CompanyPage() {
                 header: 'Status',
                 render: (r: any) => {
                   const isCurrent = r.id === company?.id;
+                  if (!r.is_active) return <Badge tone="red">Inactive</Badge>;
                   return isCurrent ? (
                     <Badge tone="green" className="font-semibold">
                       Current Active
@@ -521,7 +540,23 @@ export function CompanyPage() {
                   const isCurrent = r.id === company?.id;
                   return (
                     <div className="flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-                      {!isCurrent && (
+                      {!isCurrent && !!user?.isSuperAdmin && !!r.is_active && (
+                        <button type="button" data-co-provision={r.id}
+                          onClick={() => void completeSetup(r)}
+                          className="btn-secondary !px-2.5 !py-1 text-[11.5px]"
+                          title="Copy any missing setup (settings, stages, stores, T&A …) from the current company — safe to run again">
+                          Complete setup
+                        </button>
+                      )}
+                      {!isCurrent && !!user?.isSuperAdmin && (
+                        <button type="button" data-co-active={r.id}
+                          onClick={() => void toggleActive(r)}
+                          className={`btn-secondary !px-2.5 !py-1 text-[11.5px] ${r.is_active ? 'hover:border-red-400 hover:text-red-700' : 'hover:border-emerald-500 hover:text-emerald-700'}`}
+                          title={r.is_active ? 'Deactivate — nobody can sign in to it until reactivated' : 'Activate this company again'}>
+                          {r.is_active ? 'Deactivate' : 'Activate'}
+                        </button>
+                      )}
+                      {!isCurrent && !!r.is_active && (
                         <button
                           type="button"
                           onClick={() => void switchCompany(r.id)}
@@ -725,6 +760,22 @@ export function CompanyPage() {
                 value={newCompany.email}
                 onChange={(e) => setNewCompany({ ...newCompany, email: e.target.value })}
               />
+            </div>
+          </div>
+
+          {/* settings, process stages + operations, warehouses, FY, reference lists, calendar / T&A are always copied */}
+          <div className="rounded-xl border border-surface-border bg-slate-50 p-3" id="nc-copy-masters">
+            <label className="label !mb-1 font-semibold text-slate-800">Copy masters from this company</label>
+            <p className="mb-2 text-[11.5px] text-slate-500">Configuration (settings, number series, roles, process stages &amp; operations, stores, financial year, T&amp;A) is always set up.</p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {([['tax', 'Tax rates'], ['ledger', 'Ledger accounts'], ['colors', 'Colours'], ['sizeGroups', 'Size groups'],
+                ['gsm', 'GSM'], ['dia', 'Dia'], ['yarnCounts', 'Yarn counts'], ['compositions', 'Compositions']] as const).map(([k, label]) => (
+                <label key={k} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[12px]">
+                  <input type="checkbox" checked={!!newCompany.copy_masters?.[k]}
+                    onChange={(e) => setNewCompany({ ...newCompany, copy_masters: { ...(newCompany.copy_masters ?? {}), [k]: e.target.checked } })} />
+                  {label}
+                </label>
+              ))}
             </div>
           </div>
 

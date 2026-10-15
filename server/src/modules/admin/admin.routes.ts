@@ -1,17 +1,56 @@
-import { Router } from 'express';
+import { Router, type Request } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { query, queryOne, transaction, txExecute, txQueryOne } from '../../config/db.js';
+import { query, queryOne, transaction, txExecute, txQuery, txQueryOne } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
 import { NotFound, BadRequest, Forbidden, Conflict } from '../../core/errors.js';
 import { requirePermission, requireAny } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
+import { provisionCompany } from './companyProvision.js';
 import { env } from '../../config/env.js';
 import { s } from '../resources/schemas.js';
 
 export const adminRouter = Router();
 
 // ============================================================== USERS
+/** A request may administer its own working company; any other company only as a platform super admin. */
+function assertCanManageCompany(req: Request, cid: number) {
+  if (cid !== req.user!.companyId && !req.user!.isPlatformSuperAdmin) {
+    throw Forbidden('Only a super administrator can manage another company');
+  }
+}
+
+/**
+ * Roles / branches in a user form must belong to the company being administered (no cross-company grants), and only a
+ * super admin may hand out SUPER_ADMIN. Closes "user admin of company A gives itself company B's Super Admin".
+ */
+async function checkUserGrants(req: Request, roleIds?: number[], branchIds?: number[]) {
+  const cid = req.user!.companyId;
+  if (roleIds?.length) {
+    const rows = await query<{ id: number; role_code: string }>(
+      `SELECT id, role_code FROM mst_role WHERE id IN (?) AND company_id = ?`, [roleIds, cid]);
+    if (rows.length !== new Set(roleIds).size) throw BadRequest('A selected role does not belong to this company');
+    if (rows.some((r) => r.role_code === 'SUPER_ADMIN') && !req.user!.isSuperAdmin) {
+      throw Forbidden('Only a Super Admin can assign the Super Admin role');
+    }
+  }
+  if (branchIds?.length) {
+    const rows = await query<{ id: number }>(`SELECT id FROM mst_branch WHERE id IN (?) AND company_id = ?`, [branchIds, cid]);
+    if (rows.length !== new Set(branchIds).size) throw BadRequest('A selected branch does not belong to this company');
+  }
+}
+
+/** Company ids a user form may grant: only a platform super admin may grant companies other than the current one. */
+async function checkCompanyGrants(req: Request, companyIds?: number[], alreadyHas: number[] = []) {
+  if (!companyIds?.length) return;
+  // companies the user already has are sent back unchanged by the form — only NEW other-company grants need a super admin
+  const foreign = companyIds.filter((c) => c !== req.user!.companyId && !alreadyHas.includes(c));
+  if (foreign.length && !req.user!.isPlatformSuperAdmin) {
+    throw Forbidden('Only a super administrator can give access to other companies');
+  }
+  const rows = await query<{ id: number }>(`SELECT id FROM mst_company WHERE id IN (?) AND is_deleted = 0`, [companyIds]);
+  if (rows.length !== new Set(companyIds).size) throw BadRequest('A selected company does not exist');
+}
 const userCreateSchema = z.object({
   username: z.string().trim().min(3, 'Username must be at least 3 characters').max(60)
     .regex(/^[a-zA-Z0-9._-]+$/, 'Username may contain letters, numbers, dot, underscore and hyphen only'),
@@ -35,8 +74,9 @@ adminRouter.get('/users', requirePermission('USER.VIEW'), ah(async (req, res) =>
     includeInactive: z.coerce.boolean().default(false),
   }).parse(req.query);
 
-  const where = ['u.company_id = ?', 'u.is_deleted = 0'];
-  const params: unknown[] = [req.user!.companyId];
+  // this company's own users + users of other companies granted access to it (map_user_company)
+  const where = ['(u.company_id = ? OR u.id IN (SELECT user_id FROM map_user_company WHERE company_id = ?))', 'u.is_deleted = 0'];
+  const params: unknown[] = [req.user!.companyId, req.user!.companyId];
   if (!q.includeInactive) where.push('u.is_active = 1');
   if (q.q) { where.push('(u.username LIKE ? OR u.full_name LIKE ? OR u.email LIKE ?)');
     params.push(`%${q.q}%`, `%${q.q}%`, `%${q.q}%`); }
@@ -46,12 +86,13 @@ adminRouter.get('/users', requirePermission('USER.VIEW'), ah(async (req, res) =>
   const [rows, total] = await Promise.all([
     query(`SELECT u.id, u.username, u.full_name, u.email, u.mobile, u.employee_code,
                   u.default_branch, u.is_active, u.is_locked, u.last_login_at, u.created_at,
+                  (u.company_id <> ${Number(req.user!.companyId)}) AS from_other_company,
                   b.branch_name AS default_branch_name,
                   GROUP_CONCAT(DISTINCT r.role_name ORDER BY r.role_name SEPARATOR ', ') AS role_names
              FROM mst_user u
              LEFT JOIN mst_branch b ON b.id = u.default_branch
              LEFT JOIN map_user_role ur ON ur.user_id = u.id
-             LEFT JOIN mst_role r ON r.id = ur.role_id
+             LEFT JOIN mst_role r ON r.id = ur.role_id AND r.company_id = ${Number(req.user!.companyId)}
             WHERE ${clause}
             GROUP BY u.id, u.username, u.full_name, u.email, u.mobile, u.employee_code,
                      u.default_branch, u.is_active, u.is_locked, u.last_login_at, u.created_at, b.branch_name
@@ -67,15 +108,16 @@ adminRouter.get('/users/:id', requirePermission('USER.VIEW'), ah(async (req, res
   const user = await queryOne(
     `SELECT id, username, full_name, email, mobile, employee_code, default_branch,
             is_active, is_locked, last_login_at, password_expiry, created_at
-       FROM mst_user WHERE id = ? AND company_id = ? AND is_deleted = 0`,
-    [id, req.user!.companyId]);
+       FROM mst_user WHERE id = ? AND is_deleted = 0
+        AND (company_id = ? OR id IN (SELECT user_id FROM map_user_company WHERE company_id = ?))`,
+    [id, req.user!.companyId, req.user!.companyId]);
   if (!user) throw NotFound('User not found');
 
   const [roles, branches, companies] = await Promise.all([
     query(`SELECT r.id, r.role_code, r.role_name FROM map_user_role ur
-             JOIN mst_role r ON r.id = ur.role_id WHERE ur.user_id = ?`, [id]),
+             JOIN mst_role r ON r.id = ur.role_id AND r.company_id = ? WHERE ur.user_id = ?`, [req.user!.companyId, id]),
     query(`SELECT b.id, b.branch_code, b.branch_name FROM map_user_branch ub
-             JOIN mst_branch b ON b.id = ub.branch_id WHERE ub.user_id = ?`, [id]),
+             JOIN mst_branch b ON b.id = ub.branch_id AND b.company_id = ? WHERE ub.user_id = ?`, [req.user!.companyId, id]),
     query(`SELECT c.id, c.company_code, c.legal_name, c.trade_name, COALESCE(muc.is_default, 0) AS is_default
              FROM map_user_company muc
              JOIN mst_company c ON c.id = muc.company_id
@@ -86,6 +128,11 @@ adminRouter.get('/users/:id', requirePermission('USER.VIEW'), ah(async (req, res
 
 adminRouter.post('/users', requirePermission('USER.CREATE'), ah(async (req, res) => {
   const body = userCreateSchema.parse(req.body);
+  await checkUserGrants(req, body.roleIds, body.branchIds);
+  await checkCompanyGrants(req, body.companyIds);
+  // new usernames are unique across ALL companies, so login always finds one account
+  const taken = await queryOne(`SELECT id FROM mst_user WHERE username = ? AND is_deleted = 0`, [body.username]);
+  if (taken) throw Conflict(`Username "${body.username}" is already in use (in this or another company)`);
 
   const created = await transaction(async (tx) => {
     const hash = await bcrypt.hash(body.password, env.bcryptRounds);
@@ -104,7 +151,7 @@ adminRouter.post('/users', requirePermission('USER.CREATE'), ah(async (req, res)
     for (const bid of body.branchIds) {
       await txExecute(tx, `INSERT INTO map_user_branch (user_id, branch_id) VALUES (?,?)`, [userId, bid]);
     }
-    const cids = body.companyIds?.length ? body.companyIds : [req.user!.companyId];
+    const cids = [...new Set([req.user!.companyId, ...(body.companyIds ?? [])])];
     for (const cid of cids) {
       await txExecute(tx,
         `INSERT IGNORE INTO map_user_company (user_id, company_id, is_default, granted_by) VALUES (?,?,?,?)`,
@@ -123,20 +170,34 @@ const userUpdateSchema = userCreateSchema.omit({ password: true, username: true 
 adminRouter.put('/users/:id', requirePermission('USER.UPDATE'), ah(async (req, res) => {
   const id = Number(req.params.id);
   const before = await queryOne<any>(
-    `SELECT * FROM mst_user WHERE id = ? AND company_id = ? AND is_deleted = 0`,
-    [id, req.user!.companyId]);
+    `SELECT * FROM mst_user WHERE id = ? AND is_deleted = 0
+        AND (company_id = ? OR id IN (SELECT user_id FROM map_user_company WHERE company_id = ?))`,
+    [id, req.user!.companyId, req.user!.companyId]);
   if (!before) throw NotFound('User not found');
+  // a user from another company (granted access here): this company sets only its own roles / branches;
+  // the account itself (name, password, active, company access) belongs to the home company
+  const foreignUser = Number(before.company_id) !== Number(req.user!.companyId) && !req.user!.isPlatformSuperAdmin;
 
   const body = userUpdateSchema.parse(req.body);
   const { roleIds, branchIds, companyIds, ...data } = body;
+  if (foreignUser) {
+    // the form sends every field back — refuse only a real change to the account
+    const norm = (v: unknown) => (v === undefined || v === null || v === '' ? null : typeof v === 'boolean' ? (v ? 1 : 0) : String(v));
+    const changed = Object.entries(data).filter(([k, v]) => v !== undefined && norm(v) !== norm(before[k]));
+    if (changed.length) throw Forbidden(`This user belongs to another company — here you can only set their roles and branches (not ${changed.map(([k]) => k).join(', ')})`);
+    for (const k of Object.keys(data)) delete (data as any)[k];
+  }
+  await checkUserGrants(req, roleIds, branchIds);
+  const hasNow = (await query<{ company_id: number }>(`SELECT company_id FROM map_user_company WHERE user_id = ?`, [id])).map((r) => Number(r.company_id));
+  if (!foreignUser) await checkCompanyGrants(req, companyIds, hasNow);
 
   const after = await transaction(async (tx) => {
     const cols: Record<string, unknown> = { ...data, updated_by: req.user!.id };
     const keys = Object.keys(cols).filter((k) => cols[k] !== undefined);
     if (keys.length) {
       await txExecute(tx,
-        `UPDATE mst_user SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ? AND company_id = ?`,
-        [...keys.map((k) => cols[k]), id, req.user!.companyId]);
+        `UPDATE mst_user SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`,
+        [...keys.map((k) => cols[k]), id]);
     }
     if (roleIds) {
       // Guard against an admin removing their own last administrative role.
@@ -148,23 +209,34 @@ adminRouter.put('/users/:id', requirePermission('USER.UPDATE'), ah(async (req, r
               AND role_code = 'SUPER_ADMIN'`, roleIds);
         if (!stillAdmin?.n) throw Forbidden('You cannot remove your own Super Admin role');
       }
-      await txExecute(tx, `DELETE FROM map_user_role WHERE user_id = ?`, [id]);
+      // only this company's roles are replaced — the user's roles in other companies stay
+      await txExecute(tx, `DELETE ur FROM map_user_role ur JOIN mst_role r ON r.id = ur.role_id
+                            WHERE ur.user_id = ? AND r.company_id = ?`, [id, req.user!.companyId]);
       for (const rid of roleIds) {
         await txExecute(tx, `INSERT INTO map_user_role (user_id, role_id) VALUES (?,?)`, [id, rid]);
       }
     }
     if (branchIds) {
-      await txExecute(tx, `DELETE FROM map_user_branch WHERE user_id = ?`, [id]);
+      await txExecute(tx, `DELETE ub FROM map_user_branch ub JOIN mst_branch b ON b.id = ub.branch_id
+                            WHERE ub.user_id = ? AND b.company_id = ?`, [id, req.user!.companyId]);
       for (const bid of branchIds) {
         await txExecute(tx, `INSERT INTO map_user_branch (user_id, branch_id) VALUES (?,?)`, [id, bid]);
       }
     }
-    if (companyIds) {
-      await txExecute(tx, `DELETE FROM map_user_company WHERE user_id = ?`, [id]);
-      for (const cid of companyIds) {
-        await txExecute(tx,
-          `INSERT INTO map_user_company (user_id, company_id, is_default, granted_by) VALUES (?,?,?,?)`,
-          [id, cid, cid === before.company_id ? 1 : 0, req.user!.id]);
+    if (companyIds && !foreignUser) {
+      // change only companies this admin manages; the home company can never be removed
+      const managed = req.user!.isPlatformSuperAdmin
+        ? (await txQuery<{ id: number }>(tx, `SELECT id FROM mst_company WHERE is_deleted = 0`)).map((c) => Number(c.id))
+        : [req.user!.companyId];
+      const wanted = new Set([...companyIds, before.company_id]);
+      for (const cid of managed) {
+        if (wanted.has(cid)) {
+          await txExecute(tx,
+            `INSERT IGNORE INTO map_user_company (user_id, company_id, is_default, granted_by) VALUES (?,?,?,?)`,
+            [id, cid, cid === before.company_id ? 1 : 0, req.user!.id]);
+        } else if (cid !== before.company_id) {
+          await txExecute(tx, `DELETE FROM map_user_company WHERE user_id = ? AND company_id = ?`, [id, cid]);
+        }
       }
     }
     return txQueryOne(tx, `SELECT id, username, full_name, email FROM mst_user WHERE id = ?`, [id]);
@@ -347,7 +419,9 @@ adminRouter.get('/companies', requireAny('COMPANY.VIEW', 'SETTINGS.VIEW'), ah(as
             (SELECT COUNT(*) FROM map_user_company muc WHERE muc.company_id = c.id) AS user_count
        FROM mst_company c
       WHERE c.is_deleted = 0
+        AND (? = 1 OR c.id = ? OR c.id IN (SELECT company_id FROM map_user_company WHERE user_id = ?))
       ORDER BY c.id`,
+    [req.user!.isPlatformSuperAdmin ? 1 : 0, req.user!.companyId, req.user!.id],
   );
   res.json({ data: rows });
 }));
@@ -373,6 +447,12 @@ const companyCreateSchema = z.object({
   website: s.nullableStr(120),
   logo_path: s.nullableStr(255),
   assigned_user_ids: z.array(z.coerce.number().int().positive()).optional().default([]),
+  /** masters to copy from the current company (configuration is always copied) */
+  copy_masters: z.object({
+    tax: z.coerce.boolean().optional(), ledger: z.coerce.boolean().optional(), colors: z.coerce.boolean().optional(),
+    sizeGroups: z.coerce.boolean().optional(), gsm: z.coerce.boolean().optional(), dia: z.coerce.boolean().optional(),
+    yarnCounts: z.coerce.boolean().optional(), compositions: z.coerce.boolean().optional(),
+  }).optional().default({ tax: true, ledger: true }),
 });
 
 adminRouter.post('/companies', requireAny('COMPANY.CREATE', 'COMPANY.VIEW'), ah(async (req, res) => {
@@ -380,6 +460,19 @@ adminRouter.post('/companies', requireAny('COMPANY.CREATE', 'COMPANY.VIEW'), ah(
     throw Forbidden('Creating a new company requires COMPANY.CREATE or Super Administrator');
   }
   const body = companyCreateSchema.parse(req.body);
+  if (body.gstin) {
+    const g = body.gstin.toUpperCase();
+    if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(g)) throw BadRequest('GSTIN must be 15 characters, e.g. 33ABCDE1234F1Z5');
+    if (body.state_gst_code && g.slice(0, 2) !== body.state_gst_code) throw BadRequest(`GSTIN must start with the state code ${body.state_gst_code}`);
+    body.gstin = g;
+    body.state_gst_code = body.state_gst_code ?? g.slice(0, 2);   // drives the IGST (inter-state) decision
+  }
+  // a company admin may only give the new company to users of their own company
+  if (body.assigned_user_ids.length && !req.user!.isPlatformSuperAdmin) {
+    const own = await query<{ id: number }>(`SELECT id FROM mst_user WHERE id IN (?) AND company_id = ? AND is_deleted = 0`,
+      [body.assigned_user_ids, req.user!.companyId]);
+    if (own.length !== new Set(body.assigned_user_ids).size) throw Forbidden('You can only give the new company to users of your own company');
+  }
 
   const dup = await queryOne(`SELECT id FROM mst_company WHERE company_code = ? AND is_deleted = 0`, [body.company_code]);
   if (dup) throw Conflict(`Company code '${body.company_code}' is already in use`);
@@ -449,7 +542,8 @@ adminRouter.post('/companies', requireAny('COMPANY.CREATE', 'COMPANY.VIEW'), ah(
     await txExecute(tx,
       `INSERT IGNORE INTO cfg_number_series (company_id, doc_type, prefix, suffix, next_number, padding)
        SELECT ?, doc_type, prefix, suffix, 1, padding
-         FROM cfg_number_series WHERE company_id = ? AND branch_id IS NULL AND fy_id IS NULL`,
+         FROM cfg_number_series WHERE company_id = ? AND branch_id IS NULL AND fy_id IS NULL
+          AND doc_type NOT LIKE 'JW\\_INV\\_DIV\\_%'`,
       [newCompanyId, req.user!.companyId],
     );
 
@@ -460,13 +554,15 @@ adminRouter.post('/companies', requireAny('COMPANY.CREATE', 'COMPANY.VIEW'), ah(
       [req.user!.id, newCompanyId, req.user!.id],
     );
 
-    await txExecute(tx,
-      `INSERT IGNORE INTO map_user_company (user_id, company_id, is_default, granted_by)
-       SELECT DISTINCT ur.user_id, ?, 0, ?
-         FROM map_user_role ur
-         JOIN mst_role r ON r.id = ur.role_id AND r.role_code = 'SUPER_ADMIN'`,
-      [newCompanyId, req.user!.id],
-    );
+    // platform super admins (SUPER_ADMIN in their HOME company) — not anyone who is SUPER_ADMIN of some company
+    const platformSupers = await txQuery<{ user_id: number }>(tx,
+      `SELECT DISTINCT ur.user_id FROM map_user_role ur
+         JOIN mst_role r ON r.id = ur.role_id AND r.role_code = 'SUPER_ADMIN' AND r.is_active = 1
+         JOIN mst_user u ON u.id = ur.user_id AND u.company_id = r.company_id AND u.is_deleted = 0`);
+    for (const p of platformSupers) {
+      await txExecute(tx, `INSERT IGNORE INTO map_user_company (user_id, company_id, is_default, granted_by) VALUES (?, ?, 0, ?)`,
+        [p.user_id, newCompanyId, req.user!.id]);
+    }
 
     for (const uid of body.assigned_user_ids) {
       await txExecute(tx,
@@ -486,14 +582,19 @@ adminRouter.post('/companies', requireAny('COMPANY.CREATE', 'COMPANY.VIEW'), ah(
         `INSERT IGNORE INTO map_user_role (user_id, role_id) VALUES (?, ?)`,
         [req.user!.id, newSuperRole.id],
       );
-      await txExecute(tx,
-        `INSERT IGNORE INTO map_user_role (user_id, role_id)
-         SELECT DISTINCT muc.user_id, ?
-           FROM map_user_company muc
-           JOIN mst_user u ON u.id = muc.user_id
-          WHERE muc.company_id = ?`,
-        [newSuperRole.id, newCompanyId],
-      );
+      // Super Admin of the new company: its creator and the platform super admins only
+      for (const p of platformSupers) {
+        await txExecute(tx, `INSERT IGNORE INTO map_user_role (user_id, role_id) VALUES (?, ?)`, [p.user_id, newSuperRole.id]);
+      }
+    }
+    // users the creator chose get the new company's ADMIN role (not Super Admin)
+    const newAdminRole = await txQueryOne<{ id: number }>(tx,
+      `SELECT id FROM mst_role WHERE company_id = ? AND role_code = 'ADMIN'`, [newCompanyId]);
+    if (newAdminRole) {
+      for (const uid of body.assigned_user_ids) {
+        if (uid === req.user!.id) continue;
+        await txExecute(tx, `INSERT IGNORE INTO map_user_role (user_id, role_id) VALUES (?, ?)`, [uid, newAdminRole.id]);
+      }
     }
 
     await txExecute(tx,
@@ -501,15 +602,54 @@ adminRouter.post('/companies', requireAny('COMPANY.CREATE', 'COMPANY.VIEW'), ah(
       [req.user!.id, hoBranchId],
     );
 
-    return txQueryOne(tx, `SELECT * FROM mst_company WHERE id = ?`, [newCompanyId]);
+    // everything else a company needs to work (settings, stages + operations, warehouses, FY, units, reference lists,
+    // calendar / T&A, workflows, lines …) — copied from the current company; optional masters per copy_masters
+    const setup = await provisionCompany(tx, newCompanyId, req.user!.companyId, req.user!.id, { copyMasters: body.copy_masters });
+    const row = await txQueryOne<any>(tx, `SELECT * FROM mst_company WHERE id = ?`, [newCompanyId]);
+    return { ...row, setup };
   });
 
   await audit(req, 'mst_company', (created as any).id, 'INSERT', undefined, created);
   res.status(201).json({ data: created });
 }));
 
+/**
+ * Complete a company's setup from the current company (platform super admin). Idempotent — only missing rows are
+ * added — so it also back-fills companies created before provisioning existed.
+ */
+adminRouter.post('/companies/:id/provision', ah(async (req, res) => {
+  if (!req.user!.isPlatformSuperAdmin) throw Forbidden('Only a super administrator can set up a company');
+  const id = z.coerce.number().int().positive().parse(req.params.id);
+  if (id === req.user!.companyId) throw BadRequest('Choose another company — this one is the source of the setup');
+  const co = await queryOne<any>(`SELECT id, company_code FROM mst_company WHERE id = ? AND is_deleted = 0`, [id]);
+  if (!co) throw NotFound('Company not found');
+  const body = z.object({ copy_masters: companyCreateSchema.shape.copy_masters }).parse(req.body ?? {});
+  const setup = await transaction((tx) => provisionCompany(tx, id, req.user!.companyId, req.user!.id, { copyMasters: body.copy_masters }));
+  await audit(req, 'mst_company', id, 'UPDATE', undefined, { action: 'PROVISION', from_company: req.user!.companyId, setup });
+  res.json({ data: { id, company_code: co.company_code, setup } });
+}));
+
+/** Activate / deactivate a company (platform super admin). Tokens for an inactive company stop working at once. */
+adminRouter.put('/companies/:id/active', ah(async (req, res) => {
+  if (!req.user!.isPlatformSuperAdmin) throw Forbidden('Only a super administrator can activate or deactivate a company');
+  const id = z.coerce.number().int().positive().parse(req.params.id);
+  const { is_active } = z.object({ is_active: z.coerce.boolean() }).parse(req.body);
+  const co = await queryOne<any>(`SELECT id, company_code, is_active FROM mst_company WHERE id = ? AND is_deleted = 0`, [id]);
+  if (!co) throw NotFound('Company not found');
+  if (!is_active) {
+    if (id === req.user!.companyId) throw BadRequest('Switch to another company before deactivating this one');
+    if (id === req.user!.homeCompanyId) throw BadRequest('Your own home company cannot be deactivated');
+    const left = await queryOne<{ n: number }>(`SELECT COUNT(*) AS n FROM mst_company WHERE is_active = 1 AND is_deleted = 0 AND id <> ?`, [id]);
+    if (!Number(left?.n)) throw BadRequest('At least one company must stay active');
+  }
+  await query(`UPDATE mst_company SET is_active = ?, updated_by = ? WHERE id = ?`, [is_active ? 1 : 0, req.user!.id, id]);
+  await audit(req, 'mst_company', id, 'UPDATE', { is_active: co.is_active }, { is_active: is_active ? 1 : 0 });
+  res.json({ data: { id, company_code: co.company_code, is_active: is_active ? 1 : 0 } });
+}));
+
 adminRouter.get('/company-users/:companyId', requireAny('COMPANY.VIEW', 'USER.VIEW'), ah(async (req, res) => {
   const companyId = z.coerce.number().int().positive().parse(req.params.companyId);
+  assertCanManageCompany(req, companyId);
   const rows = await query(
     `SELECT u.id, u.username, u.full_name, u.email,
             IF(muc.company_id IS NOT NULL, 1, 0) AS has_access,
@@ -517,8 +657,9 @@ adminRouter.get('/company-users/:companyId', requireAny('COMPANY.VIEW', 'USER.VI
        FROM mst_user u
        LEFT JOIN map_user_company muc ON muc.user_id = u.id AND muc.company_id = ?
       WHERE u.is_deleted = 0
+        AND (? = 1 OR u.company_id = ? OR muc.user_id IS NOT NULL)
       ORDER BY has_access DESC, u.full_name`,
-    [companyId],
+    [companyId, req.user!.isPlatformSuperAdmin ? 1 : 0, req.user!.companyId],
   );
   res.json({ data: rows });
 }));
@@ -529,17 +670,24 @@ adminRouter.put('/company-users/:companyId', requireAny('COMPANY.UPDATE', 'USER.
     userIds: z.array(z.coerce.number().int().positive()),
     defaultUserId: z.coerce.number().int().positive().optional(),
   }).parse(req.body);
+  assertCanManageCompany(req, companyId);
+  if (userIds.length && !req.user!.isPlatformSuperAdmin) {
+    const own = await query<{ id: number }>(`SELECT id FROM mst_user WHERE id IN (?) AND company_id = ? AND is_deleted = 0`,
+      [userIds, req.user!.companyId]);
+    if (own.length !== new Set(userIds).size) throw Forbidden('You can only give access to users of your own company');
+  }
 
   await transaction(async (tx) => {
     // Keep super admins always
     await txExecute(tx,
       `DELETE FROM map_user_company
         WHERE company_id = ?
+          AND user_id NOT IN (SELECT id FROM mst_user WHERE company_id = ?)
           AND user_id NOT IN (
             SELECT ur.user_id FROM map_user_role ur
-            JOIN mst_role r ON r.id = ur.role_id AND r.role_code = 'SUPER_ADMIN'
+            JOIN mst_role r ON r.id = ur.role_id AND r.role_code = 'SUPER_ADMIN' AND r.company_id = ?
           )`,
-      [companyId],
+      [companyId, companyId, companyId],
     );
 
     for (const uid of userIds) {
@@ -557,7 +705,8 @@ adminRouter.put('/company-users/:companyId', requireAny('COMPANY.UPDATE', 'USER.
 }));
 
 adminRouter.get('/company', requirePermission('COMPANY.VIEW'), ah(async (req, res) => {
-  const targetId = req.query.company_id ? Number(req.query.company_id) : req.user!.companyId;
+  const targetId = req.query.company_id ? z.coerce.number().int().positive().parse(req.query.company_id) : req.user!.companyId;
+  assertCanManageCompany(req, targetId);
   const company = await queryOne(`SELECT * FROM mst_company WHERE id = ?`, [targetId]);
   if (!company) throw NotFound('Company not found');
   res.json({ data: company });
@@ -576,7 +725,8 @@ const companySchema = z.object({
 }).partial();
 
 adminRouter.put('/company', requirePermission('COMPANY.UPDATE'), ah(async (req, res) => {
-  const targetId = req.query.company_id ? Number(req.query.company_id) : req.user!.companyId;
+  const targetId = req.query.company_id ? z.coerce.number().int().positive().parse(req.query.company_id) : req.user!.companyId;
+  assertCanManageCompany(req, targetId);
   const body = companySchema.parse(req.body);
   const before = await queryOne(`SELECT * FROM mst_company WHERE id = ?`, [targetId]);
   if (!before) throw NotFound('Company not found');

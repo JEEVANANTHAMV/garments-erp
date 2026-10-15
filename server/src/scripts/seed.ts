@@ -612,7 +612,8 @@ async function main() {
              '33AABCC1234D1ZP','AABCC1234D','0788012345','U18101TZ2005PTC012345',
              ?,?, 'SF No. 142/3, Mangalam Road','Kongu Nagar','Tiruppur','Tamil Nadu','33',
              '641604','+91 421 220 1234','exports@ckexports.in','www.ckexports.in')
-     ON DUPLICATE KEY UPDATE legal_name=VALUES(legal_name)`, [inrId, indId]);
+     ON DUPLICATE KEY UPDATE company_code=company_code`, [inrId, indId]);
+  // ^ insert-only: the client edits name / GSTIN / address on the Company page; a re-seed must never revert them.
   const companyId = await id(`SELECT id FROM mst_company WHERE company_code='TEX01'`, [], 'company');
 
   // Branches
@@ -652,15 +653,18 @@ async function main() {
   const fyId = await id(`SELECT id FROM mst_financial_year WHERE company_id=? AND fy_code='2026-27'`,
     [companyId], 'financial year');
 
-  // Number series
-  for (const [docType, prefix] of NUMBER_SERIES) {
-    // branch_id/fy_id are NULL, so the UNIQUE key never matches — guard explicitly
-    // or every seed run adds another series row starting at 1.
-    await exec(`INSERT INTO cfg_number_series (company_id,branch_id,doc_type,fy_id,prefix,next_number,padding)
-                SELECT ?,NULL,?,NULL,?,1,5 FROM DUAL
-                 WHERE NOT EXISTS (SELECT 1 FROM cfg_number_series
-                                    WHERE company_id=? AND doc_type=? AND branch_id IS NULL AND fy_id IS NULL)`,
-               [companyId, docType, prefix, companyId, docType]);
+  // Number series — base series for EVERY company (a company created from Admin → Companies gets new doc types too).
+  const allCompanyIds = (await q<{ id: number }>(`SELECT id FROM mst_company WHERE is_deleted = 0 ORDER BY id`)).map((r) => Number(r.id));
+  for (const cid of allCompanyIds) {
+    for (const [docType, prefix] of NUMBER_SERIES) {
+      // branch_id/fy_id are NULL, so the UNIQUE key never matches — guard explicitly
+      // or every seed run adds another series row starting at 1.
+      await exec(`INSERT INTO cfg_number_series (company_id,branch_id,doc_type,fy_id,prefix,next_number,padding)
+                  SELECT ?,NULL,?,NULL,?,1,5 FROM DUAL
+                   WHERE NOT EXISTS (SELECT 1 FROM cfg_number_series
+                                      WHERE company_id=? AND doc_type=? AND branch_id IS NULL AND fy_id IS NULL)`,
+                 [cid, docType, prefix, cid, docType]);
+    }
   }
   log(`company "${'CK Exports'}" with ${UNITS.length} units, FY 2026-27, ${NUMBER_SERIES.length} number series`);
 
@@ -678,7 +682,12 @@ async function main() {
     roleIdByCode.set(role.code, rid);
 
     const codes = expandPermissions(role.permissions, allPermCodes);
-    await exec(`DELETE FROM map_role_permission WHERE role_id=?`, [rid]);
+    // Reset only the permissions this catalog defines; codes added by migrations (PROCESS.*, CUTTING.* …) that are not in
+    // seedData are left alone — deleting them made every deploy (migrate, then seed) strip those rights again.
+    await exec(
+      `DELETE rp FROM map_role_permission rp JOIN mst_permission p ON p.id = rp.permission_id
+        WHERE rp.role_id = ? AND p.permission_code IN (${allPermCodes.map(() => '?').join(',')})`,
+      [rid, ...allPermCodes]);
     if (codes.length) {
       await exec(
         `INSERT IGNORE INTO map_role_permission (role_id, permission_id)
@@ -687,6 +696,31 @@ async function main() {
     }
   }
   log(`${ROLES.length} roles with permission mappings`);
+
+  // Other companies: the SAME seeded role codes get the same permission set, so a permission added to seedData reaches
+  // every company's built-in roles. Only existing roles are synced (no roles are created there) and custom role codes
+  // are never touched.
+  let otherSynced = 0;
+  for (const cid of allCompanyIds.filter((c) => c !== Number(companyId))) {
+    for (const role of ROLES) {
+      const r = await one(`SELECT id FROM mst_role WHERE company_id=? AND role_code=?`, [cid, role.code]);
+      if (!r) continue;
+      const rid = Number(r.id);
+      const codes = expandPermissions(role.permissions, allPermCodes);
+      await exec(
+        `DELETE rp FROM map_role_permission rp JOIN mst_permission p ON p.id = rp.permission_id
+          WHERE rp.role_id = ? AND p.permission_code IN (${allPermCodes.map(() => '?').join(',')})`,
+        [rid, ...allPermCodes]);
+      if (codes.length) {
+        await exec(
+          `INSERT IGNORE INTO map_role_permission (role_id, permission_id)
+           SELECT ?, id FROM mst_permission WHERE permission_code IN (${codes.map(() => '?').join(',')})`,
+          [rid, ...codes]);
+      }
+      otherSynced++;
+    }
+  }
+  if (otherSynced) log(`${otherSynced} seeded roles re-synced in ${allCompanyIds.length - 1} other compan${allCompanyIds.length === 2 ? 'y' : 'ies'}`);
 
   // One time: custom (non-seeded) roles that ran fabric processing under PRODUCTION.* keep that
   // access under the new FABRIC_PROCESS.* codes (they can be trimmed on the Roles screen after).

@@ -131,6 +131,7 @@ export default function Login() {
                     <button
                       key={comp.id}
                       type="button"
+                      data-company-id={comp.id}
                       disabled={selectingCompanyId !== null}
                       onClick={() => void chooseCompany(comp.id)}
                       className="group flex w-full items-center justify-between rounded-xl border border-surface-border bg-white p-4 text-left shadow-sm transition-all hover:border-brand-500 hover:shadow-md disabled:opacity-60"

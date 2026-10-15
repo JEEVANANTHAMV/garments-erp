@@ -7,6 +7,7 @@ import {
   Globe, Sparkles
 } from 'lucide-react';
 import { http, ApiError } from '../../lib/api';
+import { useMyCompanyAddress } from '../../lib/myCompany';
 import { useQuotedRates, matchQuote } from '../../lib/quotedRates';
 import { useJobBoms, bomItemLabel, type JobBomItem } from '../../lib/jobBom';
 import { useLookup, toOptions } from '../../hooks/useLookup';
@@ -156,7 +157,8 @@ export default function FabricPurchaseOrderDetailPage() {
   const parties = useLookup('parties');
   const currencies = useLookup('currencies');
 
-  const COMPANY_DEFAULT_ADDRESS = "CK Exports\n123 Textile Park, Dharapuram Road\nTirupur - 641604, Tamil Nadu\nGSTIN: 33AAAAA0000A1Z5";
+  // "Bill to" default = the signed-in company (name, address, GSTIN) — was hard-coded to one company.
+  const COMPANY_DEFAULT_ADDRESS = useMyCompanyAddress();
 
   // Header state
   const [head, setHead] = useState({
@@ -185,6 +187,10 @@ export default function FabricPurchaseOrderDetailPage() {
     tcs_section: '206C(1H)',
     tcs_rate: 0.1,
   });
+  // The company address loads asynchronously: fill an empty Bill-to once it arrives (never overwrites typed text).
+  useEffect(() => {
+    if (COMPANY_DEFAULT_ADDRESS) setHead((h) => (h.billing_address ? h : { ...h, billing_address: COMPANY_DEFAULT_ADDRESS }));
+  }, [COMPANY_DEFAULT_ADDRESS]);
 
   const [lines, setLines] = useState<FabricLine[]>([emptyFabricLine()]);
   const [filterBomOnly, setFilterBomOnly] = useState(false);

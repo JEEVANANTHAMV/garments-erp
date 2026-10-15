@@ -54,6 +54,25 @@ export async function loadAuthUser(userId: number, companyId?: number): Promise<
   // The effective company is either the one from the JWT, or the user's home company.
   const effectiveCid = companyId ?? u.company_id;
 
+  // Platform super admin = SUPER_ADMIN in the user's HOME company (a SUPER_ADMIN role in some other company — e.g. one
+  // they created — never makes a user administrator of every company).
+  const platform = await query<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM map_user_role ur
+       JOIN mst_role r ON r.id = ur.role_id AND r.is_active = 1 AND r.company_id = ? AND r.role_code = 'SUPER_ADMIN'
+      WHERE ur.user_id = ?`, [u.company_id, userId]);
+  const isPlatformSuperAdmin = Number(platform[0]?.n ?? 0) > 0;
+
+  // Re-checked on EVERY request and refresh (not only at login): the company must be active and the user must still
+  // have access to it — so removing access or deactivating a company takes effect immediately.
+  const co = await query<{ is_active: number; is_deleted: number }>(
+    `SELECT is_active, is_deleted FROM mst_company WHERE id = ?`, [effectiveCid]);
+  if (!co[0] || co[0].is_deleted || !co[0].is_active) throw Unauthorized('This company is not available — sign in again');
+  if (effectiveCid !== u.company_id && !isPlatformSuperAdmin) {
+    const access = await query<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM map_user_company WHERE user_id = ? AND company_id = ?`, [userId, effectiveCid]);
+    if (!Number(access[0]?.n ?? 0)) throw Unauthorized('You no longer have access to this company — sign in again');
+  }
+
   const [roles, perms, branches] = await Promise.all([
     query<{ role_code: string }>(
       `SELECT r.role_code FROM map_user_role ur
@@ -67,7 +86,8 @@ export async function loadAuthUser(userId: number, companyId?: number): Promise<
          JOIN mst_permission p       ON p.id = rp.permission_id
         WHERE ur.user_id = ?`, [effectiveCid, userId]),
     query<{ branch_id: number }>(
-      `SELECT branch_id FROM map_user_branch WHERE user_id = ?`, [userId]),
+      `SELECT ub.branch_id FROM map_user_branch ub JOIN mst_branch b ON b.id = ub.branch_id AND b.company_id = ?
+        WHERE ub.user_id = ?`, [effectiveCid, userId]),
   ]);
 
   const roleCodes = roles.map((r) => r.role_code);
@@ -80,6 +100,8 @@ export async function loadAuthUser(userId: number, companyId?: number): Promise<
     permissions: new Set(perms.map((p) => p.permission_code)),
     branchIds: branches.map((b) => b.branch_id),
     isSuperAdmin: roleCodes.includes('SUPER_ADMIN'),
+    homeCompanyId: u.company_id,
+    isPlatformSuperAdmin,
   };
 }
 

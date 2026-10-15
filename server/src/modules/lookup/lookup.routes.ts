@@ -352,6 +352,22 @@ lookupRouter.get('/so-lines/:soId', ah(async (req, res) => {
 }));
 
 /** Generic named-lookup catch-all — must stay LAST so specific routes above match first. */
+/**
+ * The signed-in company's billing identity (name, address, GSTIN …) for document headers such as the PO "Bill to"
+ * block. Any logged-in user may read it — unlike GET /admin/company, which needs COMPANY.VIEW.
+ */
+lookupRouter.get('/my-company', ah(async (req, res) => {
+  const row = await query(
+    `SELECT c.id, c.company_code, c.legal_name, c.trade_name, c.gstin, c.pan, c.iec_code,
+            c.address_line1, c.address_line2, c.city, c.state, c.state_gst_code, c.pincode,
+            c.phone, c.email, c.website, ctry.name AS country
+       FROM mst_company c
+       LEFT JOIN cfg_country ctry ON ctry.id = c.country_id
+      WHERE c.id = ?`, [req.user!.companyId]);
+  if (!row[0]) throw NotFound('Company not found');
+  res.json({ data: row[0] });
+}));
+
 lookupRouter.get('/:name', ah(async (req, res) => {
   const name = String(req.params.name);
   const def = LOOKUPS[name];
