@@ -284,7 +284,7 @@ function RateVarianceModal({ ioNo, onClose }: { ioNo: string; onClose: () => voi
               ['Merchandiser ₹ / PCS', t.merch_rate_pc, `${money(t.merch_amount)} on order qty`],
               ['Production ₹ / PCS', t.prod_rate_pc, `${money(t.prod_amount)} on order qty`],
               ['Actual ₹ / PCS', t.actual_rate_pc, `${money(t.actual_amount)} on received PCS`],
-              ['Actual − Production', t.var_actual_vs_prod_amount, `on received PCS (prod ${money(t.prod_amount_on_received)})`],
+              ['Actual − Production', t.var_actual_vs_prod_amount, `carded operations, received PCS: ${money(t.actual_amount_on_card)} vs ${money(t.prod_amount_on_received)}`],
             ].map(([l, v, sub], i) => (
               <div key={i} className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
                 <div className="text-[11px] font-semibold uppercase text-slate-500">{l as string}</div>
@@ -312,7 +312,7 @@ function RateVarianceModal({ ioNo, onClose }: { ioNo: string; onClose: () => voi
                   <td className="px-2 py-1.5 text-right font-semibold">{vr(r.var_prod_vs_merch)}</td>
                   <td className="px-2 py-1.5 text-right font-semibold">{vr(r.var_actual_vs_prod)}</td>
                   <td className="px-2 py-1.5 text-right text-slate-500">{r.issued_qty ? `${fmtNumber(r.issued_qty)} / ${fmtNumber(r.received_qty)}` : '—'}</td>
-                  <td className="px-2 py-1.5 text-right">{r.actual_amount ? money(r.actual_amount) : '—'}</td>
+                  <td className="px-2 py-1.5 text-right">{r.actual_rate == null && r.issued_qty ? <span className="text-amber-700" title="DC has no rate">no rate</span> : r.actual_amount ? money(r.actual_amount) : '—'}</td>
                 </tr>
               ))}
               {!d.rows.length && <tr><td colSpan={9} className="px-2 py-6 text-center text-slate-400">No costing rows, rate card or DCs for this job yet.</td></tr>}
@@ -323,13 +323,13 @@ function RateVarianceModal({ ioNo, onClose }: { ioNo: string; onClose: () => voi
                 <td className="px-2 py-2 text-right">{num(t.merch_rate_pc).toFixed(2)}</td>
                 <td className="px-2 py-2 text-right">{num(t.prod_rate_pc).toFixed(2)}</td>
                 <td className="px-2 py-2 text-right">{num(t.actual_rate_pc).toFixed(2)}</td>
-                <td className="px-2 py-2 text-right">{vr(t.var_prod_vs_merch_pc)}</td>
-                <td className="px-2 py-2 text-right">{vr(t.var_actual_vs_prod_pc)}</td>
+                <td className="px-2 py-2 text-right" title="operations with both rates">{vr(t.var_prod_vs_merch_pc)}</td>
+                <td className="px-2 py-2 text-right" title="operations with both rates">{vr(t.var_actual_vs_prod_pc)}</td>
                 <td /><td className="px-2 py-2 text-right">{money(t.actual_amount)}</td>
               </tr></tfoot>
             )}
           </table>
-          <p className="text-[11px] text-slate-500">Merch = the style's pre-costing (sewing SMV × ₹ / min, cutting and process rows) · Production = this rate card · Actual = rate on the job's issued DCs, weighted by issued PCS; amount on received PCS. + over, − under.</p>
+          <p className="text-[11px] text-slate-500">Merch = the style's pre-costing (sewing SMV × ₹ / min, cutting and process rows) · Production = this rate card · Actual = rate on the job's issued DCs, weighted by issued PCS; amount on received PCS. Variances count only operations that have both figures. + over, − under.</p>
         </div>
       )}
     </Modal>

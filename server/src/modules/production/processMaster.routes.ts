@@ -617,12 +617,13 @@ export async function jobRateVariance(cid: number, ioNo: string) {
     const issued = n(d.issued), good = goodOf.get(Number(d.id)) ?? 0;
     const parts = ops.length
       ? ops.map((o) => ({ opId: Number(o.operation_id), rate: n(o.rate), name: opInfo.get(Number(o.operation_id))?.op_name ?? `Operation ${o.operation_id}` }))
-      : [{ opId: null as number | null, rate: n(d.rate), name: '(DC rate — no operation named)' }];
+      : [{ opId: null as number | null, rate: d.rate == null ? null : n(d.rate), name: '(DC rate — no operation named)' }];
     for (const p of parts) {
       const x = row(p.opId, Number(d.stage_id), d.stage_name, p.name);
       if (!x.stage_name) x.stage_name = d.stage_name;
-      x.act_w += issued; x.act_amt_issued += issued * p.rate;
-      x.issued_qty += issued; x.received_qty += good; x.actual_amount += good * p.rate;
+      // a DC with no rate (in-house unit before the card) is counted in PCS but not in the actual rate
+      if (p.rate != null) { x.act_w += issued; x.act_amt_issued += issued * p.rate; x.actual_amount += good * p.rate; }
+      x.issued_qty += issued; x.received_qty += good;
       x.dcs.add(d.challan_no); if (d.unit_id) x.inhouse_dcs += 1;
     }
   }
@@ -636,7 +637,7 @@ export async function jobRateVariance(cid: number, ioNo: string) {
       prod_amount_on_received: x.prod_rate != null ? r2(x.received_qty * x.prod_rate) : null,
       var_prod_vs_merch: x.prod_rate != null && x.merch_rate != null ? r4(x.prod_rate - x.merch_rate) : null,
       var_actual_vs_prod: actual_rate != null && x.prod_rate != null ? r4(actual_rate - x.prod_rate) : null,
-      off_card: x.prod_rate == null && x.act_w > 0,
+      off_card: x.prod_rate == null && x.issued_qty > 0,
       dcs: [...x.dcs], inhouse_dcs: x.inhouse_dcs,
     };
   }).sort((a, b) => String(a.stage_name).localeCompare(String(b.stage_name)) || String(a.op_name).localeCompare(String(b.op_name)));
@@ -650,7 +651,11 @@ export async function jobRateVariance(cid: number, ioNo: string) {
   });
   const merchPc = sumOf('merch_rate'), prodPc = sumOf('prod_rate'), actPc = sumOf('actual_rate');
   const actualAmount = r2(out.reduce((a, r) => a + r.actual_amount, 0));
-  const prodOnReceived = r2(out.reduce((a, r) => a + (r.prod_amount_on_received ?? 0), 0));
+  // variances compare like with like: only operations that have both figures
+  const both = (k1: 'prod_rate' | 'actual_rate', k2: 'merch_rate' | 'prod_rate') => out.filter((r) => r[k1] != null && r[k2] != null);
+  const onCard = out.filter((r) => r.prod_rate != null && r.received_qty > 0 && r.actual_rate != null);
+  const prodOnReceived = r2(onCard.reduce((a, r) => a + (r.prod_amount_on_received ?? 0), 0));
+  const actualOnCard = r2(onCard.reduce((a, r) => a + r.actual_amount, 0));
   return {
     io_no: ioNo, order_qty: orderQty,
     card: { status: status.status, revision_no: status.revision_no, locked_at: status.locked_at, locked_by: status.locked_by },
@@ -658,9 +663,11 @@ export async function jobRateVariance(cid: number, ioNo: string) {
     rows: out, stages,
     totals: {
       merch_rate_pc: merchPc, prod_rate_pc: prodPc, actual_rate_pc: actPc,
-      var_prod_vs_merch_pc: r4(prodPc - merchPc), var_actual_vs_prod_pc: r4(actPc - prodPc),
+      var_prod_vs_merch_pc: r4(both('prod_rate', 'merch_rate').reduce((a, r) => a + (r.prod_rate! - r.merch_rate!), 0)),
+      var_actual_vs_prod_pc: r4(both('actual_rate', 'prod_rate').reduce((a, r) => a + (r.actual_rate! - r.prod_rate!), 0)),
       merch_amount: r2(merchPc * orderQty), prod_amount: r2(prodPc * orderQty),
-      actual_amount: actualAmount, prod_amount_on_received: prodOnReceived, var_actual_vs_prod_amount: r2(actualAmount - prodOnReceived),
+      actual_amount: actualAmount, actual_amount_on_card: actualOnCard, prod_amount_on_received: prodOnReceived,
+      var_actual_vs_prod_amount: r2(actualOnCard - prodOnReceived),
       off_card_rows: out.filter((r) => r.off_card).length,
     },
   };
