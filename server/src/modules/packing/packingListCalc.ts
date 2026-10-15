@@ -211,8 +211,10 @@ export function computePackingList(input: {
         if (items.length !== 1 || packed)
           errors.push({ field: rPath, message: `${label}: an ASSORTED carton holds one style/colour in a size ratio (use a MIXED row for packs or several colours)` });
       }
-      if (input.pl_type === 'SOLID' && rowType !== 'SOLID')
-        errors.push({ field: rPath, message: `${label}: a SOLID packing list can only contain SOLID cartons (one size per carton)` });
+      // Model 2 (size grid): a carton holds one style / colour; normally one size, several sizes only
+      // when the buyer packing rule allows mixed sizes (the grid prints them the same way)
+      if (input.pl_type === 'SOLID' && rowType === 'MIXED')
+        errors.push({ field: rPath, message: `${label}: a SOLID packing list holds one style / colour per carton (use a MIXED list for packs or several colours)` });
       if (input.pl_type === 'ASSORTED' && rowType === 'MIXED')
         errors.push({ field: rPath, message: `${label}: MIXED cartons are only allowed on a MIXED packing list` });
 
@@ -319,6 +321,8 @@ export interface SummaryGroup {
   sizes: string[];
   shipped: Record<string, number>; order: Record<string, number>; diff: Record<string, number>;
   shipped_total: number; order_total: number; diff_total: number;
+  /** Over-shipment, shown separately: shipped − order where shipped is MORE than ordered (always >= 0) */
+  excess: Record<string, number>; excess_total: number;
   order_source: 'SALES_ORDER' | 'MANUAL' | 'NONE';
 }
 
@@ -335,7 +339,8 @@ export function shippedGroups(c: ComputedList): SummaryGroup[] {
     if (!g) {
       g = { group_key: key, order_no: it.order_no, so_id: it.so_id, style_id: it.style_id, style_no: it.style_no,
             style_name: it.style_name, color_id: it.color_id, colour: it.colour, sizes: [],
-            shipped: {}, order: {}, diff: {}, shipped_total: 0, order_total: 0, diff_total: 0, order_source: 'NONE' };
+            shipped: {}, order: {}, diff: {}, shipped_total: 0, order_total: 0, diff_total: 0,
+            excess: {}, excess_total: 0, order_source: 'NONE' };
       map.set(key, g);
     }
     for (const h of b.effective_size_headers) if (!g.sizes.includes(h)) g.sizes.push(h);
@@ -357,10 +362,12 @@ export function applyOrderQty(g: SummaryGroup, order: Record<string, number>, so
     g.order[label] = (g.order[label] || 0) + q;
     g.order_total += q;
   }
-  g.diff = {}; g.diff_total = 0;
+  g.diff = {}; g.diff_total = 0; g.excess = {}; g.excess_total = 0;
   for (const h of g.sizes) {
     const d = (g.order[h] || 0) - (g.shipped[h] || 0);
     g.diff[h] = d;
+    // over-shipment only means something when an order qty is known
+    if (source !== 'NONE' && d < 0) { g.excess[h] = -d; g.excess_total += -d; }
   }
   g.diff_total = g.order_total - g.shipped_total;
 }
