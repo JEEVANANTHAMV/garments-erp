@@ -249,7 +249,7 @@ export async function buildOrderData(companyId: number, prodOrderId: number) {
        LEFT JOIN cfg_process_stage ps ON ps.id = j.stage_id WHERE j.company_id = ? AND j.io_no = ?`, [companyId, ioNo]) : [];
   const cardHdr = ioNo ? await queryOne<any>(
     `SELECT c.status, c.revision_no, c.locked_at, u.full_name AS locked_by FROM trx_job_rate_card c
-       LEFT JOIN sec_user u ON u.id = c.locked_by WHERE c.company_id = ? AND c.io_no = ?`, [companyId, ioNo]) : null;
+       LEFT JOIN mst_user u ON u.id = c.locked_by WHERE c.company_id = ? AND c.io_no = ?`, [companyId, ioNo]) : null;
   const CUT_STAGES = ['CUT', 'CUTTING'];
   const headOfStage = (c: string) => CUT_STAGES.includes(c) ? 'cutting' : SEW_STAGES.includes(c) ? 'sewing' : FIN_STAGES.includes(c) ? 'finishing'
     : PACK_STAGES.includes(c) ? 'packing' : 'process';

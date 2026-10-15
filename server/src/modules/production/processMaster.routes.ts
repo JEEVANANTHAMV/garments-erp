@@ -271,9 +271,9 @@ async function cardStatus(cid: number, ioNo: string) {
   const rates = await cardRates(cid, ioNo);
   const history = h ? await query<any>(
     `SELECT r.id, r.revision_no, r.action, r.reason, r.total_rate, r.rates_json, r.created_at, u.full_name AS by_name
-       FROM trx_job_rate_card_rev r LEFT JOIN sec_user u ON u.id = r.created_by
+       FROM trx_job_rate_card_rev r LEFT JOIN mst_user u ON u.id = r.created_by
       WHERE r.card_id = ? ORDER BY r.id DESC LIMIT 200`, [h.id]) : [];
-  const users = h ? await query<any>(`SELECT id, full_name FROM sec_user WHERE id IN (?)`, [[h.submitted_by ?? 0, h.locked_by ?? 0]]) : [];
+  const users = h ? await query<any>(`SELECT id, full_name FROM mst_user WHERE id IN (?)`, [[h.submitted_by ?? 0, h.locked_by ?? 0]]) : [];
   const nameOf = (id: unknown) => users.find((u) => Number(u.id) === Number(id))?.full_name ?? null;
   return {
     io_no: ioNo,
