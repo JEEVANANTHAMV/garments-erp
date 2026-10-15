@@ -144,7 +144,7 @@ tnaRouter.get('/', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => 
       LEFT JOIN mst_style st ON st.id = h.style_id
       LEFT JOIN trx_sales_order so ON so.id = h.sales_order_id
       LEFT JOIN mst_tna_template_header tpl ON tpl.id = h.template_id
-      LEFT JOIN sec_user u ON u.id = h.merchandiser_id
+      LEFT JOIN mst_user u ON u.id = h.merchandiser_id
      WHERE h.company_id = ?
   `;
   const params: any[] = [companyId];
@@ -302,8 +302,8 @@ tnaRouter.get('/:id', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) 
       LEFT JOIN mst_style st ON st.id = h.style_id
       LEFT JOIN trx_sales_order so ON so.id = h.sales_order_id
       LEFT JOIN mst_tna_template_header tpl ON tpl.id = h.template_id
-      LEFT JOIN sec_user u ON u.id = h.merchandiser_id
-      LEFT JOIN sec_user appr ON appr.id = h.approved_by
+      LEFT JOIN mst_user u ON u.id = h.merchandiser_id
+      LEFT JOIN mst_user appr ON appr.id = h.approved_by
      WHERE h.id = ? AND h.company_id = ?
   `, [id, companyId]);
 
@@ -312,8 +312,8 @@ tnaRouter.get('/:id', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) 
   const activities = await query<any>(`
     SELECT a.*, u.full_name AS responsible_user_name, c.full_name AS completed_by_name
       FROM trx_tna_activity a
-      LEFT JOIN sec_user u ON u.id = a.responsible_user_id
-      LEFT JOIN sec_user c ON c.id = a.completed_by
+      LEFT JOIN mst_user u ON u.id = a.responsible_user_id
+      LEFT JOIN mst_user c ON c.id = a.completed_by
      WHERE a.tna_id = ?
      ORDER BY a.sequence_no ASC
   `, [id]);
@@ -655,7 +655,7 @@ tnaRouter.get('/:id/gantt', requirePermission('PRODUCTION.VIEW'), ah(async (req,
   const activities = await query<any>(`
     SELECT a.*, u.full_name AS owner_name
       FROM trx_tna_activity a
-      LEFT JOIN sec_user u ON u.id = a.responsible_user_id
+      LEFT JOIN mst_user u ON u.id = a.responsible_user_id
      WHERE a.tna_id = ?
      ORDER BY a.sequence_no ASC
   `, [id]);
@@ -771,7 +771,7 @@ tnaRouter.get('/:id/history', requirePermission('PRODUCTION.VIEW'), ah(async (re
     SELECT h.*, a.activity_name, a.activity_code, u.full_name AS changed_by_name
       FROM trx_tna_activity_history h
       JOIN trx_tna_activity a ON a.id = h.activity_id
-      LEFT JOIN sec_user u ON u.id = h.changed_by
+      LEFT JOIN mst_user u ON u.id = h.changed_by
      WHERE a.tna_id = ?
      ORDER BY h.changed_at DESC
   `, [id]);
