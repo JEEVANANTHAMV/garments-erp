@@ -704,7 +704,8 @@ export async function jobRateVariance(cid: number, ioNo: string) {
     return { stage_name: sn, merch_rate: sumOf('merch_rate', l), prod_rate: sumOf('prod_rate', l), actual_rate: sumOf('actual_rate', l),
       actual_amount: r2(l.reduce((a, r) => a + r.actual_amount, 0)), prod_amount_on_received: r2(l.reduce((a, r) => a + (r.prod_amount_on_received ?? 0), 0)) };
   });
-  const merchPc = sumOf('merch_rate'), prodPc = sumOf('prod_rate'), actPc = sumOf('actual_rate');
+  // actual ₹ / PCS over the operations on the card (comparable with production); all DC rows separately
+  const merchPc = sumOf('merch_rate'), prodPc = sumOf('prod_rate'), actPc = sumOf('actual_rate', out.filter((r) => r.prod_rate != null)), actAllPc = sumOf('actual_rate');
   const actualAmount = r2(out.reduce((a, r) => a + r.actual_amount, 0));
   // variances compare like with like: only operations that have both figures
   const both = (k1: 'prod_rate' | 'actual_rate', k2: 'merch_rate' | 'prod_rate') => out.filter((r) => r[k1] != null && r[k2] != null);
@@ -717,7 +718,7 @@ export async function jobRateVariance(cid: number, ioNo: string) {
     costing: pv.costing,
     rows: out, stages,
     totals: {
-      merch_rate_pc: merchPc, prod_rate_pc: prodPc, actual_rate_pc: actPc,
+      merch_rate_pc: merchPc, prod_rate_pc: prodPc, actual_rate_pc: actPc, actual_rate_pc_all: actAllPc,
       var_prod_vs_merch_pc: r4(both('prod_rate', 'merch_rate').reduce((a, r) => a + (r.prod_rate! - r.merch_rate!), 0)),
       var_actual_vs_prod_pc: r4(both('actual_rate', 'prod_rate').reduce((a, r) => a + (r.actual_rate! - r.prod_rate!), 0)),
       merch_amount: r2(merchPc * orderQty), prod_amount: r2(prodPc * orderQty),

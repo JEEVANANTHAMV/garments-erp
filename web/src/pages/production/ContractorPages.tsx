@@ -288,7 +288,7 @@ function RateVarianceModal({ ioNo, onClose }: { ioNo: string; onClose: () => voi
             {[
               ['Merchandiser ₹ / PCS', t.merch_rate_pc, `${money(t.merch_amount)} on order qty`],
               ['Production ₹ / PCS', t.prod_rate_pc, `${money(t.prod_amount)} on order qty`],
-              ['Actual ₹ / PCS', t.actual_rate_pc, `${money(t.actual_amount)} on received PCS`],
+              ['Actual ₹ / PCS (card operations)', t.actual_rate_pc, `all DCs of the job: ₹${num(t.actual_rate_pc_all).toFixed(2)} / PCS · ${money(t.actual_amount)} on received PCS`],
               ['Actual − Production', t.var_actual_vs_prod_amount, `carded operations, received PCS: ${money(t.actual_amount_on_card)} vs ${money(t.prod_amount_on_received)}`],
             ].map(([l, v, sub], i) => (
               <div key={i} className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
@@ -327,7 +327,7 @@ function RateVarianceModal({ ioNo, onClose }: { ioNo: string; onClose: () => voi
                 <td className="px-2 py-2" colSpan={2}>Total / PCS</td>
                 <td className="px-2 py-2 text-right">{num(t.merch_rate_pc).toFixed(2)}</td>
                 <td className="px-2 py-2 text-right">{num(t.prod_rate_pc).toFixed(2)}</td>
-                <td className="px-2 py-2 text-right">{num(t.actual_rate_pc).toFixed(2)}</td>
+                <td className="px-2 py-2 text-right" title="all DC rows of the job">{num(t.actual_rate_pc_all).toFixed(2)}</td>
                 <td className="px-2 py-2 text-right" title="operations with both rates">{vr(t.var_prod_vs_merch_pc)}</td>
                 <td className="px-2 py-2 text-right" title="operations with both rates">{vr(t.var_actual_vs_prod_pc)}</td>
                 <td /><td className="px-2 py-2 text-right">{money(t.actual_amount)}</td>
