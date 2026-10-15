@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Trash2, Save, UserCog, ShieldCheck } from 'lucide-react';
+import { Plus, Pencil, Trash2, Save, UserCog, ShieldCheck, Building2, Users, ArrowRightLeft } from 'lucide-react';
+import clsx from 'clsx';
 import { DataTable } from '../../components/DataTable';
 import {
   PageHeader, Modal, FormSection, ConfirmDialog, Input, Checkbox, Spinner,
-  Badge, LoadingBlock, ErrorState, Tabs, SearchInput,
+  Badge, LoadingBlock, Tabs, SearchInput,
 } from '../../components/ui';
 import { useList, useRemove, useListState } from '../../hooks/useResource';
 import { http, ApiError } from '../../lib/api';
@@ -267,68 +268,564 @@ export function RolesPage() {
 
 /* ----------------------------------------------- Company settings */
 export function CompanyPage() {
-  useAuth();
+  const { company, switchCompany } = useAuth();
   const toast = useToast();
   const qc = useQueryClient();
+  const [tab, setTab] = useState<'all' | 'active'>('all');
   const [v, setV] = useState<Record<string, any>>({});
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
+
+  // New Company Modal state
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newCompany, setNewCompany] = useState<Record<string, any>>({
+    company_code: '',
+    legal_name: '',
+    trade_name: '',
+    gstin: '',
+    pan: '',
+    iec_code: '',
+    cin: '',
+    state: 'Tamil Nadu',
+    state_gst_code: '33',
+    city: 'Tiruppur',
+    pincode: '',
+    address_line1: '',
+    address_line2: '',
+    phone: '',
+    email: '',
+    website: '',
+    assigned_user_ids: [],
+  });
+  const [createBusy, setCreateBusy] = useState(false);
+
+  // User access modal state
+  const [userAccessCompany, setUserAccessCompany] = useState<{ id: number; legal_name: string } | null>(null);
+  const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
+  const [accessBusy, setAccessBusy] = useState(false);
+
+  // Queries
+  const companiesList = useQuery({
+    queryKey: ['admin/companies'],
+    queryFn: async () => (await http.get<{ data: any[] }>('/admin/companies')).data,
+  });
 
   const detail = useQuery({
     queryKey: ['admin/company'],
     queryFn: async () => (await http.get<{ data: any }>('/admin/company')).data,
   });
 
+  const allUsers = useQuery({
+    queryKey: ['admin/users/all-for-mapping'],
+    queryFn: async () => (await http.get<{ data: any[] }>('/admin/users?pageSize=200')).data,
+    enabled: createOpen,
+  });
+
+  const companyUsers = useQuery({
+    queryKey: ['admin/company-users', userAccessCompany?.id],
+    queryFn: async () => (await http.get<{ data: any[] }>(`/admin/company-users/${userAccessCompany!.id}`)).data,
+    enabled: !!userAccessCompany,
+  });
+
+  useEffect(() => {
+    if (companyUsers.data) {
+      setSelectedUserIds(companyUsers.data.filter((u: any) => u.has_access).map((u: any) => u.id));
+    }
+  }, [companyUsers.data]);
+
   if (detail.data && !loaded) { setV({ ...detail.data }); setLoaded(true); }
 
-  const save = async () => {
+  const saveActive = async () => {
     setBusy(true);
     try {
       await http.put('/admin/company', v);
       toast('Company settings saved');
       void qc.invalidateQueries({ queryKey: ['admin/company'] });
+      void qc.invalidateQueries({ queryKey: ['admin/companies'] });
     } catch (e) {
       toast(e instanceof ApiError ? e.message : 'Could not save', 'error');
     } finally { setBusy(false); }
   };
 
-  if (detail.isLoading) return <div className="card"><LoadingBlock rows={5} /></div>;
-  if (detail.error) return <div className="card"><ErrorState error={detail.error} /></div>;
+  const handleCreateCompany = async () => {
+    if (!newCompany.company_code.trim()) {
+      toast('Company code is required', 'error');
+      return;
+    }
+    if (!newCompany.legal_name.trim()) {
+      toast('Legal name is required', 'error');
+      return;
+    }
+    setCreateBusy(true);
+    try {
+      await http.post('/admin/companies', newCompany);
+      toast('New company created successfully!');
+      setCreateOpen(false);
+      void qc.invalidateQueries({ queryKey: ['admin/companies'] });
+      void qc.invalidateQueries({ queryKey: ['admin/company'] });
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : 'Could not create company', 'error');
+    } finally {
+      setCreateBusy(false);
+    }
+  };
+
+  const handleSaveAccess = async () => {
+    if (!userAccessCompany) return;
+    setAccessBusy(true);
+    try {
+      await http.put(`/admin/company-users/${userAccessCompany.id}`, { userIds: selectedUserIds });
+      toast('User access updated successfully!');
+      setUserAccessCompany(null);
+      void qc.invalidateQueries({ queryKey: ['admin/companies'] });
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : 'Could not update user access', 'error');
+    } finally {
+      setAccessBusy(false);
+    }
+  };
 
   return (
     <>
-      <PageHeader title="Company Settings" subtitle="Legal entity, fiscal year and address"
-        actions={<button className="btn-primary" onClick={() => void save()} disabled={busy}>
-          {busy && <Spinner size={14} />}<Save size={15} /> Save
-        </button>} />
+      <PageHeader
+        title="Companies & Organizations"
+        subtitle="Manage legal entities, GST accounts, and user access permissions"
+        actions={
+          tab === 'all' ? (
+            <button
+              className="btn-primary"
+              onClick={() => {
+                setNewCompany({
+                  company_code: '',
+                  legal_name: '',
+                  trade_name: '',
+                  gstin: '',
+                  pan: '',
+                  iec_code: '',
+                  cin: '',
+                  state: 'Tamil Nadu',
+                  state_gst_code: '33',
+                  city: 'Tiruppur',
+                  pincode: '',
+                  address_line1: '',
+                  address_line2: '',
+                  phone: '',
+                  email: '',
+                  website: '',
+                  assigned_user_ids: [],
+                });
+                setCreateOpen(true);
+              }}
+            >
+              <Plus size={15} /> New Company (Add GST Entity)
+            </button>
+          ) : (
+            <button className="btn-primary" onClick={() => void saveActive()} disabled={busy}>
+              {busy && <Spinner size={14} />}<Save size={15} /> Save Settings
+            </button>
+          )
+        }
+      />
 
-      <div className="card p-5">
-        <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[
-            { k: 'company_code', label: 'Company code' },
-            { k: 'legal_name', label: 'Legal name' },
-            { k: 'trade_name', label: 'Trade name' },
-            { k: 'gstin', label: 'GSTIN' },
-            { k: 'pan', label: 'PAN' },
-            { k: 'iec_code', label: 'IEC code' },
-            { k: 'rcmc_no', label: 'RCMC no' },
-            { k: 'cin', label: 'CIN' },
-            { k: 'email', label: 'Email' },
-            { k: 'phone', label: 'Phone' },
-            { k: 'website', label: 'Website', span: 2 },
-            { k: 'address_line1', label: 'Address', span: 2 },
-            { k: 'city', label: 'City' },
-            { k: 'state', label: 'State' },
-            { k: 'pincode', label: 'Pincode' },
-            { k: 'country', label: 'Country' },
-          ].map(({ k, label, span }) => (
-            <div key={k} className={span === 2 ? 'sm:col-span-2 lg:col-span-2' : ''}>
-              <label className="label">{label}</label>
-              <input className="input" value={v[k] ?? ''} onChange={(e) => setV((s) => ({ ...s, [k]: e.target.value }))} />
-            </div>
-          ))}
+      <Tabs
+        tabs={[
+          { key: 'all', label: 'All Companies / நிறுவனங்கள்', count: companiesList.data?.length },
+          { key: 'active', label: `Active Company Settings (${company?.company_code ?? ''})` },
+        ]}
+        active={tab}
+        onChange={(k) => setTab(k as 'all' | 'active')}
+      />
+
+      {tab === 'all' && (
+        <div className="space-y-4">
+          <DataTable
+            columns={[
+              {
+                key: 'company_code',
+                header: 'Code',
+                render: (r: any) => (
+                  <span className="font-mono text-[12.5px] font-bold text-brand-700">
+                    {r.company_code}
+                  </span>
+                ),
+              },
+              {
+                key: 'legal_name',
+                header: 'Legal Entity & Trade Name',
+                render: (r: any) => (
+                  <div>
+                    <span className="font-semibold text-slate-900">{r.legal_name}</span>
+                    {r.trade_name && (
+                      <span className="block text-[11.5px] text-slate-500">{r.trade_name}</span>
+                    )}
+                  </div>
+                ),
+              },
+              {
+                key: 'gstin',
+                header: 'GSTIN / PAN',
+                render: (r: any) => (
+                  <div className="font-mono text-[11.5px]">
+                    {r.gstin ? (
+                      <span className="font-medium text-slate-800">{r.gstin}</span>
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    )}
+                    {r.pan && <span className="block text-[10.5px] text-slate-500">PAN: {r.pan}</span>}
+                  </div>
+                ),
+              },
+              {
+                key: 'location',
+                header: 'Location',
+                render: (r: any) => (
+                  <span className="text-[12px] text-slate-600">
+                    {[r.city, r.state].filter(Boolean).join(', ') || '—'}
+                  </span>
+                ),
+              },
+              {
+                key: 'branch_count',
+                header: 'Branches',
+                render: (r: any) => (
+                  <Badge tone="slate">{r.branch_count ?? 1} branch</Badge>
+                ),
+              },
+              {
+                key: 'user_count',
+                header: 'Users Mapped',
+                render: (r: any) => (
+                  <Badge tone="blue">{r.user_count ?? 0} users</Badge>
+                ),
+              },
+              {
+                key: 'status',
+                header: 'Status',
+                render: (r: any) => {
+                  const isCurrent = r.id === company?.id;
+                  return isCurrent ? (
+                    <Badge tone="green" className="font-semibold">
+                      Current Active
+                    </Badge>
+                  ) : (
+                    <Badge tone="slate">Ready</Badge>
+                  );
+                },
+              },
+              {
+                key: '__actions',
+                header: '',
+                align: 'right',
+                width: 'w-48',
+                render: (r: any) => {
+                  const isCurrent = r.id === company?.id;
+                  return (
+                    <div className="flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      {!isCurrent && (
+                        <button
+                          type="button"
+                          onClick={() => void switchCompany(r.id)}
+                          className="btn-secondary !px-2.5 !py-1 text-[11.5px] gap-1 hover:border-brand-500 hover:text-brand-700"
+                          title="Switch into this company"
+                        >
+                          <ArrowRightLeft size={12} /> Switch
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setUserAccessCompany({ id: r.id, legal_name: r.legal_name })}
+                        className="btn-secondary !px-2.5 !py-1 text-[11.5px] gap-1"
+                        title="Manage which users can access this company"
+                      >
+                        <Users size={12} /> User Access
+                      </button>
+                    </div>
+                  );
+                },
+              },
+            ]}
+            rows={companiesList.data ?? []}
+            loading={companiesList.isLoading}
+            error={companiesList.error}
+            onRetry={() => void companiesList.refetch()}
+            rowKey={(r) => r.id}
+            emptyTitle="No companies found"
+          />
         </div>
-      </div>
+      )}
+
+      {tab === 'active' && (
+        <div className="card p-5">
+          <div className="mb-4 flex items-center gap-2 border-b border-surface-border pb-3">
+            <Building2 size={18} className="text-brand-600" />
+            <h3 className="text-[14px] font-semibold text-slate-900">
+              Editing: {company?.legal_name} ({company?.company_code})
+            </h3>
+          </div>
+          <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+            {[
+              { k: 'company_code', label: 'Company code', disabled: true },
+              { k: 'legal_name', label: 'Legal name' },
+              { k: 'trade_name', label: 'Trade name' },
+              { k: 'gstin', label: 'GSTIN' },
+              { k: 'pan', label: 'PAN' },
+              { k: 'iec_code', label: 'IEC code' },
+              { k: 'rcmc_no', label: 'RCMC no' },
+              { k: 'cin', label: 'CIN' },
+              { k: 'email', label: 'Email' },
+              { k: 'phone', label: 'Phone' },
+              { k: 'website', label: 'Website', span: 2 },
+              { k: 'address_line1', label: 'Address', span: 2 },
+              { k: 'city', label: 'City' },
+              { k: 'state', label: 'State' },
+              { k: 'pincode', label: 'Pincode' },
+              { k: 'country', label: 'Country' },
+            ].map(({ k, label, span, disabled }: any) => (
+              <div key={k} className={span === 2 ? 'sm:col-span-2 lg:col-span-2' : ''}>
+                <label className="label">{label}</label>
+                <input
+                  className="input"
+                  disabled={disabled}
+                  value={v[k] ?? ''}
+                  onChange={(e) => setV((s) => ({ ...s, [k]: e.target.value }))}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* New Company Creation Modal */}
+      <Modal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title="Create New Company / புதிய நிறுவனம்"
+        subtitle="Add a new company entity / GST account with its own numbering series and roles"
+        size="lg"
+        icon={<Building2 size={18} className="text-brand-600" />}
+        footer={
+          <>
+            <button className="btn-secondary" onClick={() => setCreateOpen(false)} disabled={createBusy}>
+              Cancel
+            </button>
+            <button className="btn-primary" onClick={() => void handleCreateCompany()} disabled={createBusy}>
+              {createBusy && <Spinner size={14} />} Create Company
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4 py-1">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="label font-semibold text-slate-800">Company Code * (e.g. TEX02)</label>
+              <input
+                className="input font-mono font-bold uppercase"
+                placeholder="e.g. TEX02"
+                value={newCompany.company_code}
+                onChange={(e) => setNewCompany({ ...newCompany, company_code: e.target.value.toUpperCase() })}
+                required
+              />
+            </div>
+            <div>
+              <label className="label font-semibold text-slate-800">Legal Name *</label>
+              <input
+                className="input"
+                placeholder="e.g. Kongu Apparels Private Limited"
+                value={newCompany.legal_name}
+                onChange={(e) => setNewCompany({ ...newCompany, legal_name: e.target.value })}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div>
+              <label className="label">Trade Name</label>
+              <input
+                className="input"
+                placeholder="e.g. Kongu Apparels"
+                value={newCompany.trade_name}
+                onChange={(e) => setNewCompany({ ...newCompany, trade_name: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="label">GSTIN (15 Digits)</label>
+              <input
+                className="input font-mono"
+                placeholder="e.g. 33AABCK9999Z1ZR"
+                maxLength={15}
+                value={newCompany.gstin}
+                onChange={(e) => setNewCompany({ ...newCompany, gstin: e.target.value.toUpperCase() })}
+              />
+            </div>
+            <div>
+              <label className="label">PAN</label>
+              <input
+                className="input font-mono"
+                placeholder="e.g. AABCK9999Z"
+                maxLength={10}
+                value={newCompany.pan}
+                onChange={(e) => setNewCompany({ ...newCompany, pan: e.target.value.toUpperCase() })}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div>
+              <label className="label">City</label>
+              <input
+                className="input"
+                value={newCompany.city}
+                onChange={(e) => setNewCompany({ ...newCompany, city: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="label">State</label>
+              <input
+                className="input"
+                value={newCompany.state}
+                onChange={(e) => setNewCompany({ ...newCompany, state: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="label">Pincode</label>
+              <input
+                className="input"
+                value={newCompany.pincode}
+                onChange={(e) => setNewCompany({ ...newCompany, pincode: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="label">Address</label>
+            <input
+              className="input"
+              placeholder="e.g. SF No. 45, Avinashi Road, Tiruppur"
+              value={newCompany.address_line1}
+              onChange={(e) => setNewCompany({ ...newCompany, address_line1: e.target.value })}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="label">Phone</label>
+              <input
+                className="input"
+                placeholder="+91 421 220 0000"
+                value={newCompany.phone}
+                onChange={(e) => setNewCompany({ ...newCompany, phone: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="label">Email</label>
+              <input
+                className="input"
+                placeholder="info@konguapparels.in"
+                value={newCompany.email}
+                onChange={(e) => setNewCompany({ ...newCompany, email: e.target.value })}
+              />
+            </div>
+          </div>
+
+          {allUsers.data && allUsers.data.length > 0 && (
+            <div className="mt-2 rounded-xl border border-surface-border bg-slate-50 p-3">
+              <label className="label !mb-2 font-semibold text-slate-800">
+                Grant Initial Login Access To Users:
+              </label>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 max-h-36 overflow-y-auto">
+                {allUsers.data.map((u: any) => {
+                  const checked = newCompany.assigned_user_ids.includes(u.id);
+                  return (
+                    <label
+                      key={u.id}
+                      className="flex items-center gap-2 rounded-lg bg-white px-2 py-1.5 text-[12px] border border-slate-200 cursor-pointer hover:bg-brand-50"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          const next = e.target.checked
+                            ? [...newCompany.assigned_user_ids, u.id]
+                            : newCompany.assigned_user_ids.filter((id: number) => id !== u.id);
+                          setNewCompany({ ...newCompany, assigned_user_ids: next });
+                        }}
+                        className="rounded border-slate-300 text-brand-600 focus:ring-brand-500/30"
+                      />
+                      <span className="truncate font-medium text-slate-700">
+                        {u.full_name} <span className="font-mono text-slate-400">({u.username})</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* User Access Modal */}
+      <Modal
+        open={!!userAccessCompany}
+        onClose={() => setUserAccessCompany(null)}
+        title={`User Access · ${userAccessCompany?.legal_name ?? ''}`}
+        subtitle="Select which staff members are permitted to log in and switch into this company"
+        size="md"
+        icon={<Users size={18} className="text-brand-600" />}
+        footer={
+          <>
+            <button className="btn-secondary" onClick={() => setUserAccessCompany(null)} disabled={accessBusy}>
+              Cancel
+            </button>
+            <button className="btn-primary" onClick={() => void handleSaveAccess()} disabled={accessBusy}>
+              {accessBusy && <Spinner size={14} />} Save Access
+            </button>
+          </>
+        }
+      >
+        {companyUsers.isLoading ? (
+          <LoadingBlock rows={4} />
+        ) : (
+          <div className="space-y-2 py-2 max-h-[420px] overflow-y-auto">
+            {(companyUsers.data ?? []).map((u: any) => {
+              const isChecked = selectedUserIds.includes(u.id);
+              return (
+                <label
+                  key={u.id}
+                  className={clsx(
+                    'flex items-center justify-between rounded-xl border p-3 cursor-pointer transition-colors',
+                    isChecked ? 'border-brand-500 bg-brand-50/50' : 'border-surface-border bg-white hover:bg-slate-50'
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedUserIds([...selectedUserIds, u.id]);
+                        } else {
+                          setSelectedUserIds(selectedUserIds.filter((id) => id !== u.id));
+                        }
+                      }}
+                      className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500/30"
+                    />
+                    <div>
+                      <p className="text-[13px] font-semibold text-slate-900">{u.full_name}</p>
+                      <p className="font-mono text-[11px] text-slate-500">@{u.username} {u.email ? `· ${u.email}` : ''}</p>
+                    </div>
+                  </div>
+                  {isChecked && (
+                    <span className="rounded bg-brand-100 px-2 py-0.5 text-[10px] font-bold text-brand-700">
+                      Access Granted
+                    </span>
+                  )}
+                </label>
+              );
+            })}
+          </div>
+        )}
+      </Modal>
     </>
   );
 }

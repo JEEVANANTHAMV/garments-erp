@@ -11,9 +11,10 @@ import { useQuery } from '@tanstack/react-query';
 import { http } from '../lib/api';
 
 export default function AppLayout() {
-  const { user, company, logout, canAny } = useAuth();
+  const { user, company, companies, switchCompany, logout, canAny } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenu, setUserMenu] = useState(false);
+  const [companyDropdown, setCompanyDropdown] = useState(false);
   const [filter, setFilter] = useState('');
   const [textSize, setTextSize] = useState<'sm' | 'md' | 'lg'>(() => {
     return (localStorage.getItem('erp.textSize') as 'sm' | 'md' | 'lg') || 'md';
@@ -341,6 +342,85 @@ export default function AppLayout() {
           )}
           </div>
 
+          {/* Active Company Switcher Pill */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setCompanyDropdown((v) => !v)}
+              className="flex items-center gap-2 rounded-lg border border-surface-border bg-slate-50 px-2.5 py-1.5 text-left text-slate-700 transition-colors hover:bg-slate-100"
+              title={companies.length > 1 ? 'Click to switch company' : company?.legal_name}
+            >
+              <Building2 size={15} className="shrink-0 text-brand-600" />
+              <div className="hidden max-w-[170px] truncate md:block">
+                <p className="truncate text-[12px] font-semibold leading-tight text-slate-900">
+                  {company?.trade_name || company?.legal_name || 'Select Company'}
+                </p>
+                {company?.gstin && (
+                  <p className="font-mono text-[10px] leading-tight text-slate-500">
+                    GST: {company.gstin}
+                  </p>
+                )}
+              </div>
+              {companies.length > 1 && (
+                <ChevronDown size={13} className="text-slate-400" />
+              )}
+            </button>
+
+            {companyDropdown && companies.length > 1 && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setCompanyDropdown(false)} />
+                <div className="absolute right-0 top-full z-20 mt-1.5 w-72 animate-fade-in rounded-xl border border-surface-border bg-white p-1.5 shadow-popover">
+                  <p className="px-2.5 py-1 text-[10.5px] font-semibold uppercase tracking-wider text-slate-400">
+                    Switch Company
+                  </p>
+                  <div className="mt-1 space-y-1">
+                    {companies.map((c) => {
+                      const isCurrent = c.id === company?.id;
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          disabled={isCurrent}
+                          onClick={() => {
+                            setCompanyDropdown(false);
+                            void switchCompany(c.id);
+                          }}
+                          className={clsx(
+                            'flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors',
+                            isCurrent
+                              ? 'bg-brand-50 text-brand-900 cursor-default'
+                              : 'hover:bg-slate-50 text-slate-700'
+                          )}
+                        >
+                          <Building2
+                            size={16}
+                            className={clsx('mt-0.5 shrink-0', isCurrent ? 'text-brand-600' : 'text-slate-400')}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="truncate text-[12.5px] font-semibold">
+                              {c.legal_name}
+                            </p>
+                            {c.trade_name && (
+                              <p className="text-[11px] text-slate-500">{c.trade_name}</p>
+                            )}
+                            {c.gstin && (
+                              <p className="font-mono text-[10px] text-slate-400">GST: {c.gstin}</p>
+                            )}
+                          </div>
+                          {isCurrent && (
+                            <span className="shrink-0 rounded bg-brand-200/60 px-1.5 py-0.5 text-[9.5px] font-bold text-brand-800">
+                              Active
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
           <div className="relative">
             <button onClick={() => setUserMenu((v) => !v)}
               className="flex items-center gap-2 rounded-lg py-1 pl-1 pr-2 hover:bg-surface-hover">
@@ -375,10 +455,44 @@ export default function AppLayout() {
                     </div>
                   </div>
                   <div className="border-b border-surface-border px-3 py-2 text-[11px] text-slate-500">
-                    <span className="flex items-center gap-1.5">
-                      <Building2 size={12} />{company?.legal_name}
+                    <span className="flex items-center gap-1.5 font-medium text-slate-700">
+                      <Building2 size={12} className="text-brand-600" />{company?.trade_name || company?.legal_name}
                     </span>
+                    {company?.gstin && <p className="mt-0.5 font-mono text-[10px] text-slate-400">GST: {company.gstin}</p>}
                   </div>
+
+                  {companies.length > 1 && (
+                    <div className="border-b border-surface-border p-1.5">
+                      <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                        Switch Company
+                      </p>
+                      {companies.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          disabled={c.id === company?.id}
+                          onClick={() => {
+                            setUserMenu(false);
+                            void switchCompany(c.id);
+                          }}
+                          className={clsx(
+                            'flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-[12px]',
+                            c.id === company?.id
+                              ? 'bg-brand-50 font-semibold text-brand-700'
+                              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                          )}
+                        >
+                          <span className="truncate">{c.trade_name || c.legal_name}</span>
+                          {c.id === company?.id && (
+                            <span className="rounded bg-brand-200/60 px-1 text-[9px] font-bold text-brand-800">
+                              Current
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
                   <button onClick={() => void logout()}
                     className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px]
                                text-red-600 hover:bg-red-50">

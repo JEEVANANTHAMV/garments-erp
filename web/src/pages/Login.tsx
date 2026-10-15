@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { Factory, AlertCircle, Eye, EyeOff } from 'lucide-react';
-import { useAuth } from '../lib/auth';
+import { Factory, AlertCircle, Eye, EyeOff, Building2, ArrowRight, ArrowLeft } from 'lucide-react';
+import { useAuth, type Company } from '../lib/auth';
 import { ApiError } from '../lib/api';
 import { Spinner } from '../components/ui';
 
@@ -23,6 +23,8 @@ export default function Login() {
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [companiesToSelect, setCompaniesToSelect] = useState<Company[] | null>(null);
+  const [selectingCompanyId, setSelectingCompanyId] = useState<number | null>(null);
 
   if (loading) {
     return <div className="grid h-screen place-items-center"><Spinner size={26} className="text-brand-600" /></div>;
@@ -33,11 +35,25 @@ export default function Login() {
     e.preventDefault();
     setError(null); setBusy(true);
     try {
-      await login(username.trim(), password);
+      const res = await login(username.trim(), password);
+      if (res?.requiresCompanySelection && res.companies && res.companies.length > 0) {
+        setCompaniesToSelect(res.companies);
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Unable to sign in. Please try again.');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const chooseCompany = async (companyId: number) => {
+    setError(null);
+    setSelectingCompanyId(companyId);
+    try {
+      await login(username.trim(), password, companyId);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Unable to sign in to selected company. Please try again.');
+      setSelectingCompanyId(null);
     }
   };
 
@@ -81,7 +97,7 @@ export default function Login() {
 
       {/* Form panel */}
       <div className="flex w-full items-center justify-center bg-surface-muted px-6 py-10 lg:w-1/2">
-        <div className="w-full max-w-[380px]">
+        <div className="w-full max-w-[420px]">
           <div className="mb-7 lg:hidden">
             <div className="mb-3 grid h-11 w-11 place-items-center rounded-xl bg-brand-600 text-white">
               <Factory size={22} />
@@ -89,57 +105,133 @@ export default function Login() {
             <h1 className="text-xl font-semibold text-slate-900">Garment ERP</h1>
           </div>
 
-          <h2 className="text-[22px] font-semibold tracking-tight text-slate-900">Sign in</h2>
-          <p className="mt-1 text-[13px] text-slate-500">Enter your credentials to continue.</p>
-
-          <form onSubmit={submit} className="mt-6 space-y-4">
-            {error && (
-              <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-[13px] text-red-800">
-                <AlertCircle size={16} className="mt-px shrink-0" />
-                <span>{error}</span>
+          {companiesToSelect ? (
+            /* Multi-Company Selection Screen */
+            <div className="animate-fade-in">
+              <div className="mb-6 flex items-center justify-between">
+                <div>
+                  <h2 className="text-[22px] font-semibold tracking-tight text-slate-900">Select Company</h2>
+                  <p className="mt-1 text-[13px] text-slate-500">
+                    Choose which company / GST entity you want to enter:
+                  </p>
+                </div>
               </div>
-            )}
 
-            <div>
-              <label className="label" htmlFor="username">Username</label>
-              <input id="username" className="input" value={username} autoComplete="username"
-                onChange={(e) => setUsername(e.target.value)} required autoFocus />
-            </div>
+              {error && (
+                <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-[13px] text-red-800">
+                  <AlertCircle size={16} className="mt-px shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
 
-            <div>
-              <label className="label" htmlFor="password">Password</label>
-              <div className="relative">
-                <input id="password" type={showPw ? 'text' : 'password'} className="input pr-10"
-                  value={password} autoComplete="current-password"
-                  onChange={(e) => setPassword(e.target.value)} required />
-                <button type="button" onClick={() => setShowPw((v) => !v)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                  aria-label={showPw ? 'Hide password' : 'Show password'}>
-                  {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
+              <div className="space-y-3">
+                {companiesToSelect.map((comp) => {
+                  const isBusy = selectingCompanyId === comp.id;
+                  return (
+                    <button
+                      key={comp.id}
+                      type="button"
+                      disabled={selectingCompanyId !== null}
+                      onClick={() => void chooseCompany(comp.id)}
+                      className="group flex w-full items-center justify-between rounded-xl border border-surface-border bg-white p-4 text-left shadow-sm transition-all hover:border-brand-500 hover:shadow-md disabled:opacity-60"
+                    >
+                      <div className="flex items-start gap-3.5">
+                        <div className="mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-600 group-hover:bg-brand-600 group-hover:text-white transition-colors">
+                          <Building2 size={20} />
+                        </div>
+                        <div>
+                          <p className="text-[14px] font-semibold text-slate-900 group-hover:text-brand-700">
+                            {comp.legal_name}
+                          </p>
+                          {comp.trade_name && (
+                            <p className="text-[12px] font-medium text-slate-600">
+                              {comp.trade_name}
+                            </p>
+                          )}
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
+                            <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono font-medium text-slate-700">
+                              {comp.company_code}
+                            </span>
+                            {comp.gstin && (
+                              <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-mono text-emerald-700">
+                                GST: {comp.gstin}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="ml-2 text-slate-400 group-hover:text-brand-600">
+                        {isBusy ? <Spinner size={18} /> : <ArrowRight size={18} />}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
+
+              <button
+                type="button"
+                onClick={() => { setCompaniesToSelect(null); setError(null); }}
+                className="mt-6 flex items-center gap-1.5 text-[13px] font-medium text-slate-500 hover:text-slate-800"
+              >
+                <ArrowLeft size={15} /> Back to credentials
+              </button>
             </div>
+          ) : (
+            /* Standard Login Form */
+            <>
+              <h2 className="text-[22px] font-semibold tracking-tight text-slate-900">Sign in</h2>
+              <p className="mt-1 text-[13px] text-slate-500">Enter your credentials to continue.</p>
 
-            <button type="submit" className="btn-primary w-full py-2.5" disabled={busy}>
-              {busy && <Spinner size={15} />}{busy ? 'Signing in…' : 'Sign in'}
-            </button>
-          </form>
+              <form onSubmit={submit} className="mt-6 space-y-4">
+                {error && (
+                  <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-[13px] text-red-800">
+                    <AlertCircle size={16} className="mt-px shrink-0" />
+                    <span>{error}</span>
+                  </div>
+                )}
 
-          <div className="mt-7 rounded-xl border border-surface-border bg-white p-3.5">
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              Demo accounts · password <code className="font-mono text-brand-700">Admin@123</code>
-            </p>
-            <div className="grid grid-cols-2 gap-1">
-              {DEMO_ACCOUNTS.map(([u, role]) => (
-                <button key={u} type="button"
-                  onClick={() => { setUsername(u); setPassword('Admin@123'); setError(null); }}
-                  className="rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-brand-50">
-                  <span className="block font-mono text-[12px] font-medium text-brand-700">{u}</span>
-                  <span className="block text-[10.5px] text-slate-500">{role}</span>
+                <div>
+                  <label className="label" htmlFor="username">Username</label>
+                  <input id="username" className="input" value={username} autoComplete="username"
+                    onChange={(e) => setUsername(e.target.value)} required autoFocus />
+                </div>
+
+                <div>
+                  <label className="label" htmlFor="password">Password</label>
+                  <div className="relative">
+                    <input id="password" type={showPw ? 'text' : 'password'} className="input pr-10"
+                      value={password} autoComplete="current-password"
+                      onChange={(e) => setPassword(e.target.value)} required />
+                    <button type="button" onClick={() => setShowPw((v) => !v)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      aria-label={showPw ? 'Hide password' : 'Show password'}>
+                      {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                <button type="submit" className="btn-primary w-full py-2.5" disabled={busy}>
+                  {busy && <Spinner size={15} />}{busy ? 'Verifying…' : 'Sign in'}
                 </button>
-              ))}
-            </div>
-          </div>
+              </form>
+
+              <div className="mt-7 rounded-xl border border-surface-border bg-white p-3.5">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Demo accounts · password <code className="font-mono text-brand-700">Admin@123</code>
+                </p>
+                <div className="grid grid-cols-2 gap-1">
+                  {DEMO_ACCOUNTS.map(([u, role]) => (
+                    <button key={u} type="button"
+                      onClick={() => { setUsername(u); setPassword('Admin@123'); setError(null); }}
+                      className="rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-brand-50">
+                      <span className="block font-mono text-[12px] font-medium text-brand-700">{u}</span>
+                      <span className="block text-[10.5px] text-slate-500">{role}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

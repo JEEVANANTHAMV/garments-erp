@@ -24,6 +24,7 @@ const userCreateSchema = z.object({
   is_active: s.bool(),
   roleIds: z.array(z.coerce.number().int().positive()).default([]),
   branchIds: z.array(z.coerce.number().int().positive()).default([]),
+  companyIds: z.array(z.coerce.number().int().positive()).optional(),
 });
 
 adminRouter.get('/users', requirePermission('USER.VIEW'), ah(async (req, res) => {
@@ -70,13 +71,17 @@ adminRouter.get('/users/:id', requirePermission('USER.VIEW'), ah(async (req, res
     [id, req.user!.companyId]);
   if (!user) throw NotFound('User not found');
 
-  const [roles, branches] = await Promise.all([
+  const [roles, branches, companies] = await Promise.all([
     query(`SELECT r.id, r.role_code, r.role_name FROM map_user_role ur
              JOIN mst_role r ON r.id = ur.role_id WHERE ur.user_id = ?`, [id]),
     query(`SELECT b.id, b.branch_code, b.branch_name FROM map_user_branch ub
              JOIN mst_branch b ON b.id = ub.branch_id WHERE ub.user_id = ?`, [id]),
+    query(`SELECT c.id, c.company_code, c.legal_name, c.trade_name, COALESCE(muc.is_default, 0) AS is_default
+             FROM map_user_company muc
+             JOIN mst_company c ON c.id = muc.company_id
+            WHERE muc.user_id = ? AND c.is_deleted = 0`, [id]),
   ]);
-  res.json({ data: { ...user, roles, branches } });
+  res.json({ data: { ...user, roles, branches, companies, companyIds: companies.map((c: any) => c.id) } });
 }));
 
 adminRouter.post('/users', requirePermission('USER.CREATE'), ah(async (req, res) => {
@@ -99,6 +104,12 @@ adminRouter.post('/users', requirePermission('USER.CREATE'), ah(async (req, res)
     for (const bid of body.branchIds) {
       await txExecute(tx, `INSERT INTO map_user_branch (user_id, branch_id) VALUES (?,?)`, [userId, bid]);
     }
+    const cids = body.companyIds?.length ? body.companyIds : [req.user!.companyId];
+    for (const cid of cids) {
+      await txExecute(tx,
+        `INSERT IGNORE INTO map_user_company (user_id, company_id, is_default, granted_by) VALUES (?,?,?,?)`,
+        [userId, cid, cid === req.user!.companyId ? 1 : 0, req.user!.id]);
+    }
     return txQueryOne(tx,
       `SELECT id, username, full_name, email FROM mst_user WHERE id = ?`, [userId]);
   });
@@ -117,7 +128,7 @@ adminRouter.put('/users/:id', requirePermission('USER.UPDATE'), ah(async (req, r
   if (!before) throw NotFound('User not found');
 
   const body = userUpdateSchema.parse(req.body);
-  const { roleIds, branchIds, ...data } = body;
+  const { roleIds, branchIds, companyIds, ...data } = body;
 
   const after = await transaction(async (tx) => {
     const cols: Record<string, unknown> = { ...data, updated_by: req.user!.id };
@@ -146,6 +157,14 @@ adminRouter.put('/users/:id', requirePermission('USER.UPDATE'), ah(async (req, r
       await txExecute(tx, `DELETE FROM map_user_branch WHERE user_id = ?`, [id]);
       for (const bid of branchIds) {
         await txExecute(tx, `INSERT INTO map_user_branch (user_id, branch_id) VALUES (?,?)`, [id, bid]);
+      }
+    }
+    if (companyIds) {
+      await txExecute(tx, `DELETE FROM map_user_company WHERE user_id = ?`, [id]);
+      for (const cid of companyIds) {
+        await txExecute(tx,
+          `INSERT INTO map_user_company (user_id, company_id, is_default, granted_by) VALUES (?,?,?,?)`,
+          [id, cid, cid === before.company_id ? 1 : 0, req.user!.id]);
       }
     }
     return txQueryOne(tx, `SELECT id, username, full_name, email FROM mst_user WHERE id = ?`, [id]);
@@ -320,8 +339,226 @@ adminRouter.get('/modules', requirePermission('ROLE.VIEW'), ah(async (_req, res)
 }));
 
 // ============================================================ COMPANY
+adminRouter.get('/companies', requireAny('COMPANY.VIEW', 'SETTINGS.VIEW'), ah(async (req, res) => {
+  const rows = await query(
+    `SELECT c.*,
+            (SELECT COUNT(*) FROM mst_branch b WHERE b.company_id = c.id AND b.is_deleted = 0) AS branch_count,
+            (SELECT COUNT(*) FROM mst_unit u WHERE u.company_id = c.id AND u.is_deleted = 0) AS unit_count,
+            (SELECT COUNT(*) FROM map_user_company muc WHERE muc.company_id = c.id) AS user_count
+       FROM mst_company c
+      WHERE c.is_deleted = 0
+      ORDER BY c.id`,
+  );
+  res.json({ data: rows });
+}));
+
+const companyCreateSchema = z.object({
+  company_code: z.string().trim().min(2).max(20).toUpperCase(),
+  legal_name: z.string().trim().min(2).max(200),
+  trade_name: s.nullableStr(200),
+  gstin: s.nullableStr(15),
+  pan: s.nullableStr(10),
+  iec_code: s.nullableStr(20),
+  cin: s.nullableStr(30),
+  base_currency: z.coerce.number().int().positive().optional(),
+  country_id: z.coerce.number().int().positive().optional(),
+  address_line1: s.nullableStr(200),
+  address_line2: s.nullableStr(200),
+  city: s.nullableStr(80),
+  state: s.nullableStr(80),
+  state_gst_code: s.nullableStr(2),
+  pincode: s.nullableStr(12),
+  phone: s.nullableStr(40),
+  email: s.email(),
+  website: s.nullableStr(120),
+  logo_path: s.nullableStr(255),
+  assigned_user_ids: z.array(z.coerce.number().int().positive()).optional().default([]),
+});
+
+adminRouter.post('/companies', requireAny('COMPANY.CREATE', 'COMPANY.VIEW'), ah(async (req, res) => {
+  if (!req.user!.isSuperAdmin && !req.user!.permissions.has('COMPANY.CREATE')) {
+    throw Forbidden('Creating a new company requires COMPANY.CREATE or Super Administrator');
+  }
+  const body = companyCreateSchema.parse(req.body);
+
+  const dup = await queryOne(`SELECT id FROM mst_company WHERE company_code = ? AND is_deleted = 0`, [body.company_code]);
+  if (dup) throw Conflict(`Company code '${body.company_code}' is already in use`);
+
+  let baseCurrency = body.base_currency;
+  if (!baseCurrency) {
+    const cur = await queryOne<{ id: number }>(`SELECT id FROM cfg_currency WHERE code = 'INR' LIMIT 1`);
+    baseCurrency = cur?.id ?? 1;
+  }
+  let countryId = body.country_id;
+  if (!countryId) {
+    const ctry = await queryOne<{ id: number }>(`SELECT id FROM cfg_country WHERE iso2 = 'IN' LIMIT 1`);
+    countryId = ctry?.id ?? 1;
+  }
+
+  const created = await transaction(async (tx) => {
+    // 1. Insert into mst_company
+    const compRes = await txExecute(tx,
+      `INSERT INTO mst_company (
+        company_code, legal_name, trade_name, gstin, pan, iec_code, cin,
+        base_currency, country_id, address_line1, address_line2, city, state,
+        state_gst_code, pincode, phone, email, website, logo_path, created_by
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        body.company_code, body.legal_name, body.trade_name ?? null,
+        body.gstin ?? null, body.pan ?? null, body.iec_code ?? null, body.cin ?? null,
+        baseCurrency, countryId, body.address_line1 ?? null, body.address_line2 ?? null,
+        body.city ?? null, body.state ?? null, body.state_gst_code ?? null,
+        body.pincode ?? null, body.phone ?? null, body.email ?? null,
+        body.website ?? null, body.logo_path ?? null, req.user!.id,
+      ],
+    );
+    const newCompanyId = compRes.insertId;
+
+    // 2. Insert default Head Office branch
+    const branchRes = await txExecute(tx,
+      `INSERT INTO mst_branch (
+        company_id, branch_code, branch_name, gstin, address_line1, city, state, pincode, phone, is_head_office, created_by
+      ) VALUES (?, 'HO', 'Head Office', ?, ?, ?, ?, ?, ?, 1, ?)`,
+      [
+        newCompanyId, body.gstin ?? null, body.address_line1 ?? null,
+        body.city ?? 'Tiruppur', body.state ?? 'Tamil Nadu', body.pincode ?? null,
+        body.phone ?? null, req.user!.id,
+      ],
+    );
+    const hoBranchId = branchRes.insertId;
+
+    // 3. Clone standard roles from source company
+    await txExecute(tx,
+      `INSERT INTO mst_role (company_id, role_code, role_name, description, is_system, is_active)
+       SELECT ?, role_code, role_name, description, is_system, is_active
+         FROM mst_role WHERE company_id = ?`,
+      [newCompanyId, req.user!.companyId],
+    );
+
+    // 4. Clone role permissions
+    await txExecute(tx,
+      `INSERT INTO map_role_permission (role_id, permission_id)
+       SELECT new_r.id, mrp.permission_id
+         FROM map_role_permission mrp
+         JOIN mst_role old_r ON old_r.id = mrp.role_id AND old_r.company_id = ?
+         JOIN mst_role new_r ON new_r.role_code = old_r.role_code AND new_r.company_id = ?`,
+      [req.user!.companyId, newCompanyId],
+    );
+
+    // 5. Clone number series template
+    await txExecute(tx,
+      `INSERT IGNORE INTO cfg_number_series (company_id, doc_type, prefix, current_no, pad_length, is_active)
+       SELECT ?, doc_type, prefix, 1, pad_length, 1
+         FROM cfg_number_series WHERE company_id = ? AND branch_id IS NULL AND fy_id IS NULL`,
+      [newCompanyId, req.user!.companyId],
+    );
+
+    // 6. Map the creator & all super admins to the new company
+    await txExecute(tx,
+      `INSERT IGNORE INTO map_user_company (user_id, company_id, is_default, granted_by)
+       VALUES (?, ?, 0, ?)`,
+      [req.user!.id, newCompanyId, req.user!.id],
+    );
+
+    await txExecute(tx,
+      `INSERT IGNORE INTO map_user_company (user_id, company_id, is_default, granted_by)
+       SELECT DISTINCT ur.user_id, ?, 0, ?
+         FROM map_user_role ur
+         JOIN mst_role r ON r.id = ur.role_id AND r.role_code = 'SUPER_ADMIN'`,
+      [newCompanyId, req.user!.id],
+    );
+
+    for (const uid of body.assigned_user_ids) {
+      await txExecute(tx,
+        `INSERT IGNORE INTO map_user_company (user_id, company_id, is_default, granted_by)
+         VALUES (?, ?, 0, ?)`,
+        [uid, newCompanyId, req.user!.id],
+      );
+    }
+
+    // 7. Assign creator & super admins the SUPER_ADMIN role in the new company
+    const newSuperRole = await txQueryOne<{ id: number }>(tx,
+      `SELECT id FROM mst_role WHERE company_id = ? AND role_code = 'SUPER_ADMIN'`,
+      [newCompanyId],
+    );
+    if (newSuperRole) {
+      await txExecute(tx,
+        `INSERT IGNORE INTO map_user_role (user_id, role_id) VALUES (?, ?)`,
+        [req.user!.id, newSuperRole.id],
+      );
+      await txExecute(tx,
+        `INSERT IGNORE INTO map_user_role (user_id, role_id)
+         SELECT DISTINCT muc.user_id, ?
+           FROM map_user_company muc
+           JOIN mst_user u ON u.id = muc.user_id
+          WHERE muc.company_id = ?`,
+        [newSuperRole.id, newCompanyId],
+      );
+    }
+
+    await txExecute(tx,
+      `INSERT IGNORE INTO map_user_branch (user_id, branch_id) VALUES (?, ?)`,
+      [req.user!.id, hoBranchId],
+    );
+
+    return txQueryOne(tx, `SELECT * FROM mst_company WHERE id = ?`, [newCompanyId]);
+  });
+
+  await audit(req, 'mst_company', (created as any).id, 'INSERT', undefined, created);
+  res.status(201).json({ data: created });
+}));
+
+adminRouter.get('/company-users/:companyId', requireAny('COMPANY.VIEW', 'USER.VIEW'), ah(async (req, res) => {
+  const companyId = z.coerce.number().int().positive().parse(req.params.companyId);
+  const rows = await query(
+    `SELECT u.id, u.username, u.full_name, u.email,
+            IF(muc.company_id IS NOT NULL, 1, 0) AS has_access,
+            muc.is_default, muc.granted_at
+       FROM mst_user u
+       LEFT JOIN map_user_company muc ON muc.user_id = u.id AND muc.company_id = ?
+      WHERE u.is_deleted = 0
+      ORDER BY has_access DESC, u.full_name`,
+    [companyId],
+  );
+  res.json({ data: rows });
+}));
+
+adminRouter.put('/company-users/:companyId', requireAny('COMPANY.UPDATE', 'USER.UPDATE'), ah(async (req, res) => {
+  const companyId = z.coerce.number().int().positive().parse(req.params.companyId);
+  const { userIds, defaultUserId } = z.object({
+    userIds: z.array(z.coerce.number().int().positive()),
+    defaultUserId: z.coerce.number().int().positive().optional(),
+  }).parse(req.body);
+
+  await transaction(async (tx) => {
+    // Keep super admins always
+    await txExecute(tx,
+      `DELETE FROM map_user_company
+        WHERE company_id = ?
+          AND user_id NOT IN (
+            SELECT ur.user_id FROM map_user_role ur
+            JOIN mst_role r ON r.id = ur.role_id AND r.role_code = 'SUPER_ADMIN'
+          )`,
+      [companyId],
+    );
+
+    for (const uid of userIds) {
+      const isDef = defaultUserId === uid ? 1 : 0;
+      await txExecute(tx,
+        `INSERT INTO map_user_company (user_id, company_id, is_default, granted_by)
+         VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE is_default = VALUES(is_default)`,
+        [uid, companyId, isDef, req.user!.id],
+      );
+    }
+  });
+
+  res.json({ data: { success: true, count: userIds.length } });
+}));
+
 adminRouter.get('/company', requirePermission('COMPANY.VIEW'), ah(async (req, res) => {
-  const company = await queryOne(`SELECT * FROM mst_company WHERE id = ?`, [req.user!.companyId]);
+  const targetId = req.query.company_id ? Number(req.query.company_id) : req.user!.companyId;
+  const company = await queryOne(`SELECT * FROM mst_company WHERE id = ?`, [targetId]);
   if (!company) throw NotFound('Company not found');
   res.json({ data: company });
 }));
@@ -339,18 +576,21 @@ const companySchema = z.object({
 }).partial();
 
 adminRouter.put('/company', requirePermission('COMPANY.UPDATE'), ah(async (req, res) => {
+  const targetId = req.query.company_id ? Number(req.query.company_id) : req.user!.companyId;
   const body = companySchema.parse(req.body);
-  const before = await queryOne(`SELECT * FROM mst_company WHERE id = ?`, [req.user!.companyId]);
+  const before = await queryOne(`SELECT * FROM mst_company WHERE id = ?`, [targetId]);
+  if (!before) throw NotFound('Company not found');
   const keys = Object.keys(body).filter((k) => (body as any)[k] !== undefined);
   if (!keys.length) throw BadRequest('No changes supplied');
 
   const after = await transaction(async (tx) => {
     await txExecute(tx,
       `UPDATE mst_company SET ${keys.map((k) => `${k} = ?`).join(', ')}, updated_by = ? WHERE id = ?`,
-      [...keys.map((k) => (body as any)[k]), req.user!.id, req.user!.companyId]);
-    return txQueryOne(tx, `SELECT * FROM mst_company WHERE id = ?`, [req.user!.companyId]);
+      [...keys.map((k) => (body as any)[k]), req.user!.id, targetId],
+    );
+    return txQueryOne(tx, `SELECT * FROM mst_company WHERE id = ?`, [targetId]);
   });
-  await audit(req, 'mst_company', req.user!.companyId, 'UPDATE', before, after);
+  await audit(req, 'mst_company', targetId, 'UPDATE', before, after);
   res.json({ data: after });
 }));
 

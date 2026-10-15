@@ -4,7 +4,7 @@ import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { query, queryOne, execute } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
-import { Unauthorized, BadRequest } from '../../core/errors.js';
+import { Unauthorized, BadRequest, Forbidden, NotFound } from '../../core/errors.js';
 import { env } from '../../config/env.js';
 import {
   authenticate, loadAuthUser, signAccessToken, signRefreshToken, verifyRefreshToken,
@@ -25,11 +25,12 @@ const loginLimiter = rateLimit({
 const loginSchema = z.object({
   username: z.string().trim().min(1, 'Username is required'),
   password: z.string().min(1, 'Password is required'),
+  companyId: z.coerce.number().int().positive().optional(),
   companyCode: z.string().trim().optional(),
 });
 
 authRouter.post('/login', loginLimiter, ah(async (req, res) => {
-  const { username, password, companyCode } = loginSchema.parse(req.body);
+  const { username, password, companyId, companyCode } = loginSchema.parse(req.body);
 
   const user = await queryOne<{
     id: number; company_id: number; username: string; full_name: string;
@@ -38,11 +39,9 @@ authRouter.post('/login', loginLimiter, ah(async (req, res) => {
     `SELECT u.id, u.company_id, u.username, u.full_name, u.password_hash,
             u.is_active, u.is_deleted, u.is_locked
        FROM mst_user u
-       JOIN mst_company c ON c.id = u.company_id
       WHERE u.username = ?
-        ${companyCode ? 'AND c.company_code = ?' : ''}
       LIMIT 1`,
-    companyCode ? [username, companyCode] : [username],
+    [username],
   );
 
   // Uniform error for unknown user vs bad password — no account enumeration.
@@ -52,20 +51,121 @@ authRouter.post('/login', loginLimiter, ah(async (req, res) => {
   if (user.is_locked) throw Unauthorized('This account is locked. Contact your administrator.');
   if (!(await bcrypt.compare(password, user.password_hash))) throw invalid;
 
+  // Check if user has SUPER_ADMIN role in any company
+  const isSuperAdminRow = await queryOne<{ id: number }>(
+    `SELECT ur.id FROM map_user_role ur
+       JOIN mst_role r ON r.id = ur.role_id AND r.role_code = 'SUPER_ADMIN'
+      WHERE ur.user_id = ? LIMIT 1`,
+    [user.id],
+  );
+  const isSuperAdmin = !!isSuperAdminRow;
+
+  // Retrieve all companies accessible by this user
+  let accessibleCompanies = await query<{
+    id: number;
+    company_code: string;
+    legal_name: string;
+    trade_name: string | null;
+    gstin: string | null;
+    logo_path: string | null;
+    is_default: number;
+  }>(
+    `SELECT c.id, c.company_code, c.legal_name, c.trade_name, c.gstin, c.logo_path,
+            COALESCE(muc.is_default, 0) AS is_default
+       FROM mst_company c
+       JOIN map_user_company muc ON muc.company_id = c.id
+      WHERE muc.user_id = ? AND c.is_active = 1 AND c.is_deleted = 0
+      ORDER BY muc.is_default DESC, c.legal_name`,
+    [user.id],
+  );
+
+  // If super admin, ensure all active companies are accessible
+  if (isSuperAdmin) {
+    const allCompanies = await query<{
+      id: number;
+      company_code: string;
+      legal_name: string;
+      trade_name: string | null;
+      gstin: string | null;
+      logo_path: string | null;
+    }>(
+      `SELECT id, company_code, legal_name, trade_name, gstin, logo_path
+         FROM mst_company
+        WHERE is_active = 1 AND is_deleted = 0
+        ORDER BY legal_name`,
+    );
+    const existingIds = new Set(accessibleCompanies.map((c) => c.id));
+    for (const comp of allCompanies) {
+      if (!existingIds.has(comp.id)) {
+        accessibleCompanies.push({ ...comp, is_default: 0 });
+      }
+    }
+  }
+
+  // Fallback if map_user_company is somehow empty
+  if (accessibleCompanies.length === 0) {
+    const home = await queryOne<{
+      id: number; company_code: string; legal_name: string;
+      trade_name: string | null; gstin: string | null; logo_path: string | null;
+    }>(
+      `SELECT id, company_code, legal_name, trade_name, gstin, logo_path
+         FROM mst_company WHERE id = ?`,
+      [user.company_id],
+    );
+    if (home) accessibleCompanies = [{ ...home, is_default: 1 }];
+  }
+
+  // Determine target company
+  let targetCid = companyId;
+  if (!targetCid && companyCode) {
+    const match = accessibleCompanies.find(
+      (c) => c.company_code.toLowerCase() === companyCode.toLowerCase(),
+    );
+    if (match) targetCid = match.id;
+  }
+
+  // If no company was explicitly selected and the user has multiple companies,
+  // prompt for company selection on the login screen
+  if (!targetCid) {
+    if (accessibleCompanies.length > 1) {
+      res.json({
+        data: {
+          requiresCompanySelection: true,
+          companies: accessibleCompanies,
+          user: {
+            id: user.id,
+            username: user.username,
+            fullName: user.full_name,
+          },
+        },
+      });
+      return;
+    }
+    targetCid = accessibleCompanies[0]?.id ?? user.company_id;
+  }
+
+  const chosenCompany = accessibleCompanies.find((c) => c.id === targetCid);
+  if (!chosenCompany && !isSuperAdmin) {
+    throw Forbidden('You do not have permission to access this company');
+  }
+  const effectiveCompanyId = chosenCompany?.id ?? targetCid;
+
   const session = await execute(
     `INSERT INTO trx_user_session (user_id, ip_address, user_agent) VALUES (?,?,?)`,
     [user.id, req.ip ?? null, (req.headers['user-agent'] ?? '').slice(0, 255)],
   );
   await execute(`UPDATE mst_user SET last_login_at = NOW() WHERE id = ?`, [user.id]);
 
-  const payload = { sub: user.id, cid: user.company_id, sid: session.insertId, username: user.username };
-  const profile = await loadAuthUser(user.id);
+  const payload = { sub: user.id, cid: effectiveCompanyId, sid: session.insertId, username: user.username };
+  const profile = await loadAuthUser(user.id, effectiveCompanyId);
 
   res.json({
     data: {
       accessToken: signAccessToken(payload),
       refreshToken: signRefreshToken(payload),
       user: serializeUser(profile),
+      company: chosenCompany ?? null,
+      companies: accessibleCompanies,
     },
   });
 }));
@@ -73,13 +173,41 @@ authRouter.post('/login', loginLimiter, ah(async (req, res) => {
 authRouter.post('/refresh', ah(async (req, res) => {
   const token = z.object({ refreshToken: z.string().min(1) }).parse(req.body).refreshToken;
   const payload = verifyRefreshToken(token);
-  const profile = await loadAuthUser(payload.sub);   // re-validates active/locked
+  const profile = await loadAuthUser(payload.sub, payload.cid);   // re-validates active/locked with company scope
   const next = { sub: profile.id, cid: profile.companyId, sid: payload.sid, username: profile.username };
   res.json({
     data: {
       accessToken: signAccessToken(next),
       refreshToken: signRefreshToken(next),
       user: serializeUser(profile),
+    },
+  });
+}));
+
+authRouter.post('/switch-company', authenticate, ah(async (req, res) => {
+  const { companyId } = z.object({ companyId: z.coerce.number().int().positive() }).parse(req.body);
+  const targetCompany = await queryOne<{
+    id: number; company_code: string; legal_name: string; trade_name: string | null; gstin: string | null; logo_path: string | null;
+  }>(`SELECT id, company_code, legal_name, trade_name, gstin, logo_path FROM mst_company WHERE id = ? AND is_active = 1 AND is_deleted = 0`, [companyId]);
+  if (!targetCompany) throw NotFound('Company not found or inactive');
+
+  if (!req.user!.isSuperAdmin) {
+    const mapped = await queryOne(
+      `SELECT 1 FROM map_user_company WHERE user_id = ? AND company_id = ?`,
+      [req.user!.id, companyId],
+    );
+    if (!mapped) throw Forbidden('You do not have access to this company');
+  }
+
+  const payload = { sub: req.user!.id, cid: companyId, sid: req.sessionId, username: req.user!.username };
+  const profile = await loadAuthUser(req.user!.id, companyId);
+
+  res.json({
+    data: {
+      accessToken: signAccessToken(payload),
+      refreshToken: signRefreshToken(payload),
+      user: serializeUser(profile),
+      company: targetCompany,
     },
   });
 }));
@@ -94,7 +222,7 @@ authRouter.post('/logout', authenticate, ah(async (req, res) => {
 
 authRouter.get('/me', authenticate, ah(async (req, res) => {
   const company = await queryOne(
-    `SELECT id, company_code, legal_name, trade_name, base_currency, logo_path
+    `SELECT id, company_code, legal_name, trade_name, base_currency, logo_path, gstin, pan, city, state
        FROM mst_company WHERE id = ?`, [req.user!.companyId]);
   const branches = await query(
     `SELECT b.id, b.branch_code, b.branch_name, b.is_head_office
@@ -104,7 +232,34 @@ authRouter.get('/me', authenticate, ah(async (req, res) => {
       ORDER BY b.is_head_office DESC, b.branch_name`,
     req.user!.isSuperAdmin ? [req.user!.companyId] : [req.user!.companyId, req.user!.id]);
 
-  res.json({ data: { user: serializeUser(req.user!), company, branches, menu: await buildMenu(req.user!) } });
+  const companies = req.user!.isSuperAdmin
+    ? await query(
+        `SELECT id, company_code, legal_name, trade_name, gstin, logo_path,
+                (id = ?) AS is_current
+           FROM mst_company
+          WHERE is_active = 1 AND is_deleted = 0
+          ORDER BY is_current DESC, legal_name`,
+        [req.user!.companyId],
+      )
+    : await query(
+        `SELECT c.id, c.company_code, c.legal_name, c.trade_name, c.gstin, c.logo_path,
+                (c.id = ?) AS is_current
+           FROM mst_company c
+           JOIN map_user_company muc ON muc.company_id = c.id
+          WHERE muc.user_id = ? AND c.is_active = 1 AND c.is_deleted = 0
+          ORDER BY is_current DESC, c.legal_name`,
+        [req.user!.companyId, req.user!.id],
+      );
+
+  res.json({
+    data: {
+      user: serializeUser(req.user!),
+      company,
+      branches,
+      companies,
+      menu: await buildMenu(req.user!),
+    },
+  });
 }));
 
 const changePwSchema = z.object({
