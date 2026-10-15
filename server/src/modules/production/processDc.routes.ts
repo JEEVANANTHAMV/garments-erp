@@ -62,7 +62,7 @@ async function resolveFromLine(tx: Tx | null, cid: number, st: StageInfo, lineId
 }
 import { refreshJwOrder, resolveJwRate, lossTolerance } from './jwOrderStatus.js';
 import { settingFlag } from '../../core/inwardControls.js';
-import { contractorRates, lockedJobCard } from './processMaster.routes.js';
+import { contractorRates, lockedJobCard, effectiveJobCard } from './processMaster.routes.js';
 
 /**
  * Process DCs with bundle numbers (client voice note 1, doc §15, §19, §20).
@@ -822,9 +822,8 @@ async function resolveOps(cid: number, st: StageInfo, vendorId: number | null, o
   }
   if (!ops.length) return Object.assign([] as { operation_id: number; rate: number }[], { cardLocked: false });
   const known = await contractorRates(cid, vendorId, st.id);
-  const card = ioNo
-    ? new Map((await query<any>(`SELECT operation_id, rate FROM trx_job_op_rate WHERE company_id = ? AND io_no = ?`, [cid, ioNo])).map((c) => [Number(c.operation_id), n(c.rate)]))
-    : new Map<number, number>();
+  // rates in force (a pending revision keeps the last approved rates)
+  const card = new Map(((await effectiveJobCard(cid, ioNo))?.rows ?? []).map((c) => [c.operation_id, c.rate]));
   const out = ops.map((o) => {
     const k = known.find((x) => Number(x.id) === o.operation_id);
     if (!k) throw BadRequest(`Operation ${o.operation_id} does not belong to ${st.stage_name}`);

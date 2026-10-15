@@ -151,6 +151,11 @@ export function JobRateCardPage() {
                 {locked ? <>Locked by <b>{status.locked_by ?? '—'}</b> on {fmtDate(status.locked_at)} · <b>₹{num(status.total_rate).toFixed(2)} / PCS</b> over {status.operations} operation(s), all processes</>
                   : status.status === 'SUBMITTED' ? <>Submitted by <b>{status.submitted_by ?? '—'}</b> on {fmtDate(status.submitted_at)} — waiting for approval</>
                     : status.status ? <>Draft — rates can be changed; submit when ready</> : <>No rates fixed for this job yet</>}
+                {status.in_revision && !locked && (
+                  <span id="rc-in-force" className="ml-1 rounded bg-white/70 px-1.5 py-0.5 font-semibold text-emerald-800">
+                    <Lock size={10} className="mr-0.5 inline" />Revision {status.revision_no} pending — rev {status.revision_no - 1} rates (₹{num(status.in_force_total).toFixed(2)} / PCS) stay in force on DCs, bills and costing until it is locked
+                  </span>
+                )}
               </span>
               <span className="ml-auto flex flex-wrap gap-1.5">
                 {status.status === 'DRAFT' && can('PRODUCTION.UPDATE') && <Button size="sm" variant="secondary" id="rc-submit" loading={stepBusy} onClick={() => step('submit')}><Send size={12} className="mr-1 inline" />Submit for approval</Button>}
@@ -250,7 +255,7 @@ export function JobRateCardPage() {
 type CardStatus = {
   io_no: string; status: 'DRAFT' | 'SUBMITTED' | 'LOCKED' | null; revision_no: number;
   submitted_at: string | null; submitted_by: string | null; locked_at: string | null; locked_by: string | null;
-  operations: number; total_rate: number;
+  operations: number; total_rate: number; in_revision: boolean; in_force_total: number;
   history: { id: number; revision_no: number; action: 'SUBMIT' | 'LOCK' | 'REJECT' | 'REVISE'; reason: string | null; total_rate: number; created_at: string; by_name: string | null; rates: { op_name: string; rate: number }[] }[];
 };
 
@@ -307,7 +312,7 @@ function RateVarianceModal({ ioNo, onClose }: { ioNo: string; onClose: () => voi
                   <td className="px-2 py-1.5 text-slate-500">{r.stage_name}</td>
                   <td className="px-2 py-1.5 font-medium" title={r.dcs.length ? `DCs: ${r.dcs.join(', ')}` : ''}>{r.op_name}{r.inhouse_dcs > 0 && <span className="ml-1 text-[10px] text-slate-400">in-house</span>}</td>
                   <td className="px-2 py-1.5 text-right">{rate(r.merch_rate)}</td>
-                  <td className="px-2 py-1.5 text-right font-semibold">{rate(r.prod_rate)}</td>
+                  <td className="px-2 py-1.5 text-right font-semibold">{rate(r.prod_rate)}{r.draft_rate != null && r.draft_rate !== r.prod_rate && <div className="text-[10px] font-normal text-amber-700" title="Rate of the pending revision — not in force yet">draft {num(r.draft_rate).toFixed(2)}</div>}</td>
                   <td className="px-2 py-1.5 text-right">{rate(r.actual_rate)}</td>
                   <td className="px-2 py-1.5 text-right font-semibold">{vr(r.var_prod_vs_merch)}</td>
                   <td className="px-2 py-1.5 text-right font-semibold">{vr(r.var_actual_vs_prod)}</td>

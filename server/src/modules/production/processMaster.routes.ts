@@ -150,14 +150,14 @@ processMasterRouter.get('/process-master/operations', requirePermission('PRODUCT
   const qp = z.object({ stage_id: s.id(), vendor_id: s.id(), io_no: z.string().trim().max(40).optional() }).parse(req.query);
   const ops = await contractorRates(cid, qp.vendor_id ?? null, qp.stage_id ?? null);
   if (!qp.io_no) { res.json({ data: ops }); return; }
-  const card = await query<any>(`SELECT operation_id, rate FROM trx_job_op_rate WHERE company_id = ? AND io_no = ?`, [cid, qp.io_no]);
-  const byOp = new Map(card.map((c) => [Number(c.operation_id), n(c.rate)]));
-  const hdr = await rateCardHeader(cid, qp.io_no);
+  const eff = (await effectiveJobCard(cid, qp.io_no))!;
+  const card = eff.rows;
+  const byOp = new Map(card.map((c) => [c.operation_id, c.rate]));
   res.json({
     data: ops.map((o) => (byOp.has(Number(o.id))
       ? { ...o, rate: byOp.get(Number(o.id)), job_rate: byOp.get(Number(o.id)), in_job_card: true }
       : { ...o, in_job_card: false })),
-    meta: { io_no: qp.io_no, job_card_ops: card.length, card_status: hdr?.status ?? (card.length ? 'DRAFT' : null), card_revision: hdr ? Number(hdr.revision_no) : 0 },
+    meta: { io_no: qp.io_no, job_card_ops: card.length, card_status: eff.inForce ? 'LOCKED' : eff.status, card_revision: eff.inRevision ? eff.revision - 1 : eff.revision, card_in_revision: eff.inRevision },
   });
 }));
 
@@ -225,19 +225,63 @@ export async function rateCardHeader(cid: number, ioNo: string) {
   return queryOne<any>(`SELECT * FROM trx_job_rate_card WHERE company_id = ? AND io_no = ?`, [cid, ioNo]);
 }
 
-/** The job's locked card rates (operation → rate, stage of each) when the card is LOCKED and the lock is enforced, else null. */
+export type JobRate = { operation_id: number; stage_id: number; rate: number; op_name: string | null };
+export type EffectiveCard = { status: CardStatus | null; revision: number; inRevision: boolean; inForce: boolean; rows: JobRate[] };
+
+/**
+ * The rates IN FORCE for jobs: a LOCKED card → its rates; a card opened for revision (not locked, but locked before) →
+ * the rates of its last approval until the revision is locked again (draft rates never reach DCs, bills or costing);
+ * a card never locked → its current rates (as before the lock existed).
+ */
+export async function effectiveJobRates(cid: number, ioNos: string[]): Promise<Map<string, EffectiveCard>> {
+  const ios = [...new Set(ioNos.filter(Boolean))];
+  const out = new Map<string, EffectiveCard>();
+  if (!ios.length) return out;
+  const heads = await query<any>(`SELECT io_no, status, revision_no FROM trx_job_rate_card WHERE company_id = ? AND io_no IN (?)`, [cid, ios]);
+  const cur = await query<any>(
+    `SELECT j.io_no, j.operation_id, j.stage_id, j.rate, o.op_name FROM trx_job_op_rate j
+       LEFT JOIN mst_process_operation o ON o.id = j.operation_id WHERE j.company_id = ? AND j.io_no IN (?)`, [cid, ios]);
+  const unlocked = heads.filter((h) => h.status !== 'LOCKED').map((h) => h.io_no);
+  const snaps = unlocked.length ? await query<any>(
+    `SELECT r.io_no, r.rates_json FROM trx_job_rate_card_rev r
+      WHERE r.company_id = ? AND r.io_no IN (?) AND r.action = 'LOCK'
+        AND r.id = (SELECT MAX(r2.id) FROM trx_job_rate_card_rev r2 WHERE r2.card_id = r.card_id AND r2.action = 'LOCK')`, [cid, unlocked]) : [];
+  const snapOps = new Set<number>();
+  const parsed = new Map<string, any[]>();
+  for (const sn of snaps) {
+    let rj: any = sn.rates_json;
+    try { rj = typeof rj === 'string' ? JSON.parse(rj) : rj; } catch { rj = []; }
+    const list = Array.isArray(rj) ? rj : [];
+    parsed.set(sn.io_no, list); list.forEach((x) => snapOps.add(Number(x.operation_id)));
+  }
+  const opRows = snapOps.size ? await query<any>(`SELECT id, stage_id, op_name FROM mst_process_operation WHERE id IN (?)`, [[...snapOps]]) : [];
+  const opOf = new Map(opRows.map((o) => [Number(o.id), o]));
+  for (const io of ios) {
+    const h = heads.find((x) => x.io_no === io);
+    const status = (h?.status ?? null) as CardStatus | null;
+    const snap = parsed.get(io);
+    const inRevision = !!h && status !== 'LOCKED' && !!snap;
+    const rows: JobRate[] = inRevision
+      ? snap!.map((x) => ({ operation_id: Number(x.operation_id), stage_id: Number(x.stage_id ?? opOf.get(Number(x.operation_id))?.stage_id),
+          rate: n(x.rate), op_name: x.op_name ?? opOf.get(Number(x.operation_id))?.op_name ?? null }))
+      : cur.filter((c) => c.io_no === io).map((c) => ({ operation_id: Number(c.operation_id), stage_id: Number(c.stage_id), rate: n(c.rate), op_name: c.op_name }));
+    out.set(io, { status: status ?? (rows.length ? 'DRAFT' : null), revision: h ? Number(h.revision_no) : 0, inRevision, inForce: status === 'LOCKED' || inRevision, rows });
+  }
+  return out;
+}
+export async function effectiveJobCard(cid: number, ioNo: string | null | undefined) {
+  return ioNo ? (await effectiveJobRates(cid, [ioNo])).get(ioNo)! : null;
+}
+
+/** The job's approved (locked) rates in force — also while a revision is pending — else null; enforced = PRODUCTION_RATE_LOCK_ENFORCED. */
 export async function lockedJobCard(cid: number, ioNo: string | null | undefined) {
-  if (!ioNo) return null;
-  const h = await rateCardHeader(cid, ioNo);
-  if (h?.status !== 'LOCKED') return null;
+  const e = await effectiveJobCard(cid, ioNo);
+  if (!e?.inForce) return null;
   const setting = await queryOne<any>(`SELECT setting_value FROM cfg_system_setting WHERE company_id = ? AND setting_key = 'PRODUCTION_RATE_LOCK_ENFORCED'`, [cid]);
   const enforced = String(setting?.setting_value ?? '1').trim() !== '0';
-  const rows = await query<any>(
-    `SELECT j.operation_id, j.stage_id, j.rate, o.op_name FROM trx_job_op_rate j
-       LEFT JOIN mst_process_operation o ON o.id = j.operation_id WHERE j.company_id = ? AND j.io_no = ?`, [cid, ioNo]);
   return {
-    header: h, enforced, revision: Number(h.revision_no),
-    rates: new Map(rows.map((r) => [Number(r.operation_id), { rate: n(r.rate), stage_id: Number(r.stage_id), op_name: r.op_name as string }])),
+    enforced, revision: e.inRevision ? e.revision - 1 : e.revision, inRevision: e.inRevision,
+    rates: new Map(e.rows.map((r) => [r.operation_id, { rate: r.rate, stage_id: r.stage_id, op_name: r.op_name as string }])),
   };
 }
 
@@ -268,6 +312,7 @@ async function cardRates(cid: number, ioNo: string) {
 
 async function cardStatus(cid: number, ioNo: string) {
   const h = await rateCardHeader(cid, ioNo);
+  const eff = (await effectiveJobCard(cid, ioNo))!;
   const rates = await cardRates(cid, ioNo);
   const history = h ? await query<any>(
     `SELECT r.id, r.revision_no, r.action, r.reason, r.total_rate, r.rates_json, r.created_at, u.full_name AS by_name
@@ -283,6 +328,9 @@ async function cardStatus(cid: number, ioNo: string) {
     locked_at: h?.locked_at ?? null, locked_by: nameOf(h?.locked_by),
     operations: rates.length,
     total_rate: Math.round(rates.reduce((a, r) => a + n(r.rate), 0) * 10000) / 10000,
+    // a revision is pending: the last approved rates stay in force until it is locked again
+    in_revision: eff.inRevision,
+    in_force_total: Math.round(eff.rows.reduce((a, r) => a + r.rate, 0) * 10000) / 10000,
     history: history.map((r) => {
       let rj: any = r.rates_json;
       try { rj = typeof rj === 'string' ? JSON.parse(rj) : rj; } catch { rj = null; }
@@ -296,7 +344,7 @@ async function cardStep(req: any, ioNo: string, action: 'SUBMIT' | 'LOCK' | 'REJ
   await transaction(async (tx) => {
     const h = await txQueryOne<any>(tx, `SELECT * FROM trx_job_rate_card WHERE company_id = ? AND io_no = ? FOR UPDATE`, [cid, ioNo]);
     const rates = await txQuery<any>(tx,
-      `SELECT j.operation_id, o.op_name, ps.stage_name, j.rate FROM trx_job_op_rate j
+      `SELECT j.operation_id, j.stage_id, o.op_name, ps.stage_name, j.rate FROM trx_job_op_rate j
          LEFT JOIN mst_process_operation o ON o.id = j.operation_id LEFT JOIN cfg_process_stage ps ON ps.id = j.stage_id
         WHERE j.company_id = ? AND j.io_no = ?`, [cid, ioNo]);
     if (!h || !rates.length) throw BadRequest(`Job ${ioNo} has no rates on its card yet`);
@@ -326,7 +374,7 @@ async function cardStep(req: any, ioNo: string, action: 'SUBMIT' | 'LOCK' | 'REJ
         `UPDATE trx_job_rate_card SET status = 'DRAFT', revision_no = ?, locked_by = NULL, locked_at = NULL, submitted_by = NULL, submitted_at = NULL WHERE id = ?`,
         [rev, h.id]);
     }
-    const snap = rates.map((r) => ({ operation_id: Number(r.operation_id), op_name: r.op_name, stage_name: r.stage_name, rate: n(r.rate) }));
+    const snap = rates.map((r) => ({ operation_id: Number(r.operation_id), stage_id: Number(r.stage_id), op_name: r.op_name, stage_name: r.stage_name, rate: n(r.rate) }));
     await txExecute(tx,
       `INSERT INTO trx_job_rate_card_rev (card_id, company_id, io_no, revision_no, action, reason, total_rate, rates_json, created_by)
        VALUES (?,?,?,?,?,?,?,?,?)`,
@@ -568,7 +616,8 @@ processMasterRouter.post('/job-rate-cards/from-costing', requirePermission('PROD
 export async function jobRateVariance(cid: number, ioNo: string) {
   const pv = await costingRatePreview(cid, ioNo, null);
   const status = await cardStatus(cid, ioNo);
-  const card = await cardRates(cid, ioNo);
+  const eff = (await effectiveJobCard(cid, ioNo))!;
+  const draft = eff.inRevision ? await cardRates(cid, ioNo) : [];
   const oq = await queryOne<any>(
     `SELECT COALESCE(SUM(sol.order_qty), 0) AS qty FROM trx_sales_order so JOIN trx_sales_order_line sol ON sol.so_id = so.id
       WHERE so.company_id = ? AND so.io_no = ? AND so.is_deleted = 0`, [cid, ioNo]);
@@ -608,10 +657,13 @@ export async function jobRateVariance(cid: number, ioNo: string) {
     const x = row(r.operation_id, o?.stage_id ?? null, o?.stage_name ?? null, o?.op_name ?? r.name);
     x.merch_rate = (x.merch_rate ?? 0) + r.costing_rate;
   }
-  for (const c of card) {
-    const x = row(Number(c.operation_id), Number(c.stage_id), c.stage_name, c.op_name);
-    x.prod_rate = n(c.rate);
+  const stageName = new Map(pv.operations.map((o) => [o.stage_id, o.stage_name]));
+  for (const c of eff.rows) {
+    const x = row(c.operation_id, c.stage_id, stageName.get(c.stage_id) ?? null, c.op_name ?? `Operation ${c.operation_id}`);
+    x.prod_rate = c.rate;
   }
+  const draftRate = new Map(draft.map((d) => [Number(d.operation_id), n(d.rate)]));
+  for (const d of draft) if (!rows.has(`op:${Number(d.operation_id)}`)) row(Number(d.operation_id), Number(d.stage_id), d.stage_name, d.op_name);
   for (const d of dcs) {
     const ops = dcOps.filter((o) => Number(o.challan_id) === Number(d.id));
     const issued = n(d.issued), good = goodOf.get(Number(d.id)) ?? 0;
@@ -633,6 +685,7 @@ export async function jobRateVariance(cid: number, ioNo: string) {
     return {
       stage_id: x.stage_id, stage_name: x.stage_name ?? '—', operation_id: x.operation_id, op_name: x.op_name,
       merch_rate: x.merch_rate == null ? null : r4(x.merch_rate), prod_rate: x.prod_rate, actual_rate,
+      draft_rate: x.operation_id != null && draftRate.has(x.operation_id) ? draftRate.get(x.operation_id)! : null,
       issued_qty: x.issued_qty, received_qty: x.received_qty, actual_amount: r2(x.actual_amount),
       prod_amount_on_received: x.prod_rate != null ? r2(x.received_qty * x.prod_rate) : null,
       var_prod_vs_merch: x.prod_rate != null && x.merch_rate != null ? r4(x.prod_rate - x.merch_rate) : null,
@@ -658,7 +711,7 @@ export async function jobRateVariance(cid: number, ioNo: string) {
   const actualOnCard = r2(onCard.reduce((a, r) => a + r.actual_amount, 0));
   return {
     io_no: ioNo, order_qty: orderQty,
-    card: { status: status.status, revision_no: status.revision_no, locked_at: status.locked_at, locked_by: status.locked_by },
+    card: { status: status.status, revision_no: status.revision_no, locked_at: status.locked_at, locked_by: status.locked_by, in_revision: eff.inRevision },
     costing: pv.costing,
     rows: out, stages,
     totals: {
@@ -690,9 +743,9 @@ export async function jobPieceRates(cid: number, challanIds: number[], ioNos: st
   const dcs = await query<any>(`SELECT id, stage_id, rate FROM trx_jobwork_challan WHERE id IN (?)`, [challanIds]);
   const dcOps = await query<any>(`SELECT challan_id, operation_id, rate FROM trx_jobwork_challan_op WHERE challan_id IN (?)`, [challanIds]);
   const ios = [...new Set(ioNos.filter(Boolean))];
-  const cards = ios.length
-    ? await query<any>(`SELECT io_no, stage_id, operation_id, rate FROM trx_job_op_rate WHERE company_id = ? AND io_no IN (?)`, [cid, ios])
-    : [];
+  // rates in force: a pending revision's draft rates never price DCs / bills
+  const eff = await effectiveJobRates(cid, ios);
+  const cards = ios.flatMap((io) => (eff.get(io)?.rows ?? []).map((r) => ({ io_no: io, ...r })));
   for (const dc of dcs) {
     const ops = dcOps.filter((o) => Number(o.challan_id) === Number(dc.id));
     for (const io of ios) {

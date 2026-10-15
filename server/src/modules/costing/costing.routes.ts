@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { jobPieceRates } from '../production/processMaster.routes.js';
+import { jobPieceRates, effectiveJobCard } from '../production/processMaster.routes.js';
 import { z } from 'zod';
 import { query, queryOne, transaction, txQuery, txQueryOne, txExecute } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
@@ -222,9 +222,9 @@ export async function buildOrderData(companyId: number, prodOrderId: number) {
   let unpricedDcs = 0;
   // The job's rate card (operations picked for this job × its rates) prices job work
   // where it exists; other DCs keep their own rate (client voice note 29-Sep-2026).
-  const cardStages = ioNo
-    ? new Set((await query<any>(`SELECT DISTINCT stage_id FROM trx_job_op_rate WHERE company_id = ? AND io_no = ?`, [companyId, ioNo])).map((r) => Number(r.stage_id)))
-    : new Set<number>();
+  // rates in force: a card under revision keeps its last approved rates
+  const effCard = await effectiveJobCard(companyId, ioNo);
+  const cardStages = new Set((effCard?.rows ?? []).map((r) => r.stage_id));
   const jobRates = ioNo && cardStages.size ? await jobPieceRates(companyId, jw.map((d) => Number(d.id)), [ioNo]) : new Map<string, number>();
   const dcLine = (d: any) => {
     const billed = numv(d.good) + (numv(d.bill_include_mistake) ? numv(d.rej) : 0);
@@ -244,9 +244,10 @@ export async function buildOrderData(companyId: number, prodOrderId: number) {
 
   // H. Production rate card of the job (client audio 15-Oct-2026: production fixes & locks a rate per
   //    process / operation; that is the production budget and prices in-house cutting / sewing)
-  const cardRows = ioNo ? await query<any>(
-    `SELECT j.rate, UPPER(ps.stage_code) AS stage_code FROM trx_job_op_rate j
-       LEFT JOIN cfg_process_stage ps ON ps.id = j.stage_id WHERE j.company_id = ? AND j.io_no = ?`, [companyId, ioNo]) : [];
+  const stageCodes = cardStages.size
+    ? new Map((await query<any>(`SELECT id, UPPER(stage_code) AS stage_code FROM cfg_process_stage WHERE id IN (?)`, [[...cardStages]])).map((r) => [Number(r.id), r.stage_code]))
+    : new Map<number, string>();
+  const cardRows = (effCard?.rows ?? []).map((r) => ({ rate: r.rate, stage_code: stageCodes.get(r.stage_id) ?? '' }));
   const cardHdr = ioNo ? await queryOne<any>(
     `SELECT c.status, c.revision_no, c.locked_at, u.full_name AS locked_by FROM trx_job_rate_card c
        LEFT JOIN mst_user u ON u.id = c.locked_by WHERE c.company_id = ? AND c.io_no = ?`, [companyId, ioNo]) : null;
@@ -445,6 +446,7 @@ export async function buildOrderData(companyId: number, prodOrderId: number) {
       production: {
         has_card: hasCard,
         status: cardHdr?.status ?? (hasCard ? 'DRAFT' : null),
+        in_revision: !!effCard?.inRevision,
         revision_no: cardHdr ? Number(cardHdr.revision_no) : 0,
         locked_at: cardHdr?.locked_at ?? null, locked_by: cardHdr?.locked_by ?? null,
         rate_pc: hasCard ? r2(Object.values(prodPc).reduce((a, v) => a + v, 0)) : null,
