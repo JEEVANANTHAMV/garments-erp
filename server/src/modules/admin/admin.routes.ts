@@ -447,8 +447,8 @@ adminRouter.post('/companies', requireAny('COMPANY.CREATE', 'COMPANY.VIEW'), ah(
 
     // 5. Clone number series template
     await txExecute(tx,
-      `INSERT IGNORE INTO cfg_number_series (company_id, doc_type, prefix, current_no, pad_length, is_active)
-       SELECT ?, doc_type, prefix, 1, pad_length, 1
+      `INSERT IGNORE INTO cfg_number_series (company_id, doc_type, prefix, suffix, next_number, padding)
+       SELECT ?, doc_type, prefix, suffix, 1, padding
          FROM cfg_number_series WHERE company_id = ? AND branch_id IS NULL AND fy_id IS NULL`,
       [newCompanyId, req.user!.companyId],
     );
