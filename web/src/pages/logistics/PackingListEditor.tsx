@@ -581,14 +581,14 @@ export function PackingListDetailPage() {
               onChange={(e) => { const v = e.target.value ? Number(e.target.value) : null; setField('so_id', v); if (v) void pickSource({ packing_id: header.packing_id, so_id: v }, v); }} />
             {!ro && header.so_id && <Button variant="outline" size="sm" onClick={() => fillFromSo(header.so_id, false)} title="Overwrite header fields from the sales order">↻</Button>}
           </div>
-          <Select label="Source packing (cartons)" value={header.packing_id ?? ''}
+          <Select label="Source packing (cartons)" value={header.packing_id ?? ''} id="pl-packing"
             onChange={(e) => { const v = e.target.value ? Number(e.target.value) : null; const p = lk.packings.find((x: any) => x.id === v);
               const so = header.so_id ?? p?.so_id ?? null;
               setHeader((h) => ({ ...h, packing_id: v, so_id: h.so_id ?? p?.so_id ?? null })); setDirty(true);
               if (v) void pickSource({ packing_id: v }, !header.so_id ? so : null); }}
             options={[{ value: '', label: '— None —' }, ...lk.packings.map((p: any) => ({ value: p.id, label: p.label || p.code }))]} />
           <JobSelect label="I/O No" value={header.io_no || ''} id="pl-io"
-            onPick={(j) => { setHeader((h) => ({ ...h, io_no: j?.job_no ?? '', so_id: j ? j.id : h.so_id })); setDirty(true); if (j) void pickSource({ packing_id: header.packing_id, io_no: j.job_no }, j.id); }} />
+            onPick={(j) => { setHeader((h) => ({ ...h, io_no: j?.job_no ?? '', so_id: j ? j.id : h.so_id })); setDirty(true); if (j) void pickSource({ packing_id: header.packing_id, so_id: j.id, io_no: j.job_no }, j.id); }} />
           <Select label="Buyer" value={header.buyer_id ?? ''} options={partyOptions} onChange={(e) => setField('buyer_id', e.target.value ? Number(e.target.value) : null)} />
         </fieldset>
       </Card>
