@@ -957,6 +957,10 @@ productionFloorRouter.post('/cartons/:id/bundles', requirePermission('PACKING.UP
     bundle_ids: z.array(z.coerce.number().int().positive()).default([]),
     barcodes: z.array(z.string().trim().min(1).max(120)).default([]),
   }).parse(req.body);
+  // packing-engine cartons link bundles only when they are posted (Carton Box Entry → post), never by direct scan
+  const eng = await queryOne<{ is_engine: number }>(
+    `SELECT p.is_engine FROM trx_carton ct JOIN trx_packing p ON p.id = ct.packing_id WHERE ct.id = ? AND p.company_id = ?`, [id, req.user!.companyId]);
+  if (eng && Number(eng.is_engine) === 1) throw BadRequest('This carton belongs to a packing order — add pieces on Carton Box Entry; bundles are linked when the carton is posted');
   const items = [
     ...body.items,
     ...body.bundle_ids.map((bundle_id) => ({ bundle_id })),

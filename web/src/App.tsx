@@ -89,6 +89,12 @@ import { YarnProcessBillPage, YarnConeTrackingPage, YarnProcessReportsPage, Yarn
 import JobTransferPage from './pages/inventory/JobTransferPage';
 import BillsInwardHub from './pages/procurement/BillsInwardHub';
 import PurchaseExcessPage from './pages/procurement/PurchaseExcessPage';
+import OpeningStockPage from './pages/stores/OpeningStockPage';
+import StockAuditPage from './pages/stores/StockAuditPage';
+import StockDeliveryPage from './pages/stores/StockDeliveryPage';
+import BillTrackerPage from './pages/stores/BillTrackerPage';
+import SpecialRequestPage from './pages/stores/SpecialRequestPage';
+import ScrapRejectionPage from './pages/stores/ScrapRejectionPage';
 import YarnSubstitutionPage from './pages/production/YarnSubstitutionPage';
 import MaterialTracePage from './pages/production/MaterialTracePage';
 import GenealogyReportsPage from './pages/production/GenealogyReportsPage';
@@ -137,6 +143,7 @@ import {
   PackingsPage, ContainersPage,
   ExportInvoicesPage, ShippingBillsPage, CertificatesPage,
 } from './pages/logistics';
+import { PackingEngineApp } from './pages/logistics/packing';
 
 /* Finance */
 import {
@@ -241,6 +248,17 @@ export default function App() {
                 <Route path="gate">
                   <Route path="inwards" element={<GateInwardsPage />} />
                   <Route path="outwards" element={<GateOutwardsPage />} />
+                </Route>
+
+                {/* Stores transactions (14-Oct) */}
+                <Route path="stores">
+                  <Route path="opening-stock" element={<OpeningStockPage />} />
+                  <Route path="stock-audit" element={<StockAuditPage />} />
+                  <Route path="stock-delivery" element={<StockDeliveryPage key="stock" kind="STOCK" />} />
+                  <Route path="general-delivery" element={<StockDeliveryPage key="general" kind="GENERAL" />} />
+                  <Route path="bill-tracker" element={<BillTrackerPage />} />
+                  <Route path="special-requests" element={<SpecialRequestPage />} />
+                  <Route path="scrap-rejection" element={<ScrapRejectionPage />} />
                 </Route>
 
                 {/* Procurement */}
@@ -417,6 +435,7 @@ export default function App() {
                 {/* Logistics & Export */}
                 <Route path="logistics">
                   <Route path="packings" element={<PackingsPage />} />
+                  <Route path="packing/*" element={<PackingEngineApp />} />
                   <Route path="dispatches" element={<DispatchListPage />} />
                   <Route path="dispatches/new" element={<DispatchDetailPage />} />
                   <Route path="dispatches/:id" element={<DispatchDetailPage />} />

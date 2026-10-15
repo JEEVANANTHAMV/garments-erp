@@ -357,6 +357,19 @@ async function outwardDcs(cid: number) {
     push({ del_type: 'Dispatch / delivery challan', ref_type: 'DISPATCH', id: r.id, del_no: r.dispatch_no, del_date: r.dispatch_date, created_on: r.created_at, from_location: null,
       to_party: [r.to_party, r.delivery_location].filter(Boolean).join(' — '), prepared_by: r.prepared_by, incharge: null, unit: null, del_qty: n(r.total_qty), uom: 'PCS',
       job_close: null, job_status: 'DISPATCHED', pass: find('DISPATCH', r.id, r.dispatch_no), link: '/logistics/dispatches' });
+  // stores deliveries: stock delivery (FOC / returnable) and general delivery (trx_stock_delivery, gate pass ref_type STOCK_DELIVERY)
+  for (const r of await safe<any>(
+    `SELECT d.id, d.doc_no, d.doc_date, d.created_at, d.updated_at, d.status, d.delivery_kind, d.dc_type, d.gate_outward_id, w.warehouse_name from_loc, un.unit_name, p.party_name to_party,
+            us.full_name prepared_by, au.full_name incharge, (SELECT COALESCE(SUM(l.qty), 0) FROM trx_stock_delivery_line l WHERE l.delivery_id = d.id) qty
+       FROM trx_stock_delivery d LEFT JOIN mst_party p ON p.id = d.party_id LEFT JOIN mst_warehouse w ON w.id = d.warehouse_id LEFT JOIN mst_unit un ON un.id = w.unit_id
+       LEFT JOIN mst_user us ON us.id = d.created_by LEFT JOIN mst_user au ON au.id = d.approved_by
+      WHERE d.company_id = ? AND d.status NOT IN ('DRAFT', 'CANCELLED')`, [cid])) {
+    const general = r.delivery_kind === 'GENERAL';
+    push({ del_type: `${general ? 'General delivery' : 'Stock delivery'} (${String(r.dc_type ?? '').replace(/_/g, ' ').toLowerCase()})`, ref_type: general ? 'GENERAL_DELIVERY' : 'STOCK_DELIVERY',
+      id: r.id, del_no: r.doc_no, del_date: r.doc_date, created_on: r.created_at, from_location: r.from_loc, to_party: r.to_party, prepared_by: r.prepared_by, incharge: r.incharge,
+      unit: r.unit_name, del_qty: n(r.qty), uom: '', job_close: ['RETURNED', 'CLOSED'].includes(r.status) ? r.updated_at : null, job_status: r.status,
+      pass: find('STOCK_DELIVERY', r.id, r.doc_no, r.gate_outward_id), link: `/stores/${general ? 'general' : 'stock'}-delivery?id=${r.id}` });
+  }
   return dcs.map((d) => {
     const p = d.pass;
     const gateAt = p ? `${dstr(p.pass_date)}${p.pass_time ? ` ${String(p.pass_time).slice(0, 5)}` : ''}` : null;
@@ -377,7 +390,7 @@ clientReportsBRouter.get('/b/dc-gate-outward', requirePermission('REPORT.VIEW'),
   res.json({ data: rows, meta: { footnotes: [
     'DCs covered: process / job-work DCs (incl. in-house unit DCs), fabric process DCs, yarn process DCs, knitting / yarn issue DCs, purchase return DCs and dispatches. Draft and cancelled DCs are left out.',
     'A DC is matched to its gate pass by the DC\'s gate pass link, the pass reference (type + id) or the DC number on the pass. Age = DC date → gate-out date (or today while pending).',
-    'General deliveries are not a separate document in the ERP yet, so they do not appear here.',
+    'Stock deliveries and general deliveries (stores) are included; their gate pass is the one made on approval (ref STOCK_DELIVERY).',
   ] } });
 }));
 
@@ -523,6 +536,13 @@ async function stockLines(cid: number, q: StockQ) {
   await resolve('FAB_RETURN', `SELECT id, return_no no FROM trx_fabric_return WHERE id IN (?)`, () => '/inventory/ledger');
   await resolve('JW_FABRIC_DC', `SELECT jc.id, jc.challan_no no, p.party_name party, 'JOB WORK' process FROM trx_jobwork_challan jc LEFT JOIN mst_party p ON p.id = jc.vendor_id WHERE jc.id IN (?)`,
     (r) => `/production/jobwork-challans?dc=${r.id}`);
+  await resolve('OPENING_STOCK', `SELECT o.id, o.doc_no no, p.party_name party, o.process_name process FROM trx_opening_stock o LEFT JOIN mst_party p ON p.id = o.party_id WHERE o.id IN (?)`, () => '/stores/opening-stock');
+  await resolve('STOCK_DELIVERY', `SELECT d.id, d.doc_no no, p.party_name party, d.delivery_kind kind FROM trx_stock_delivery d LEFT JOIN mst_party p ON p.id = d.party_id WHERE d.id IN (?)`,
+    (r) => `/stores/${r.kind === 'GENERAL' ? 'general' : 'stock'}-delivery?id=${r.id}`);
+  await resolve('DELIVERY_RETURN', `SELECT r.id, r.return_no no, p.party_name party, d.delivery_kind kind, d.id did FROM trx_stock_delivery_return r JOIN trx_stock_delivery d ON d.id = r.delivery_id LEFT JOIN mst_party p ON p.id = d.party_id WHERE r.id IN (?)`,
+    (r) => `/stores/${r.kind === 'GENERAL' ? 'general' : 'stock'}-delivery?id=${r.did}`);
+  await resolve('STOCK_AUDIT', `SELECT id, doc_no no FROM trx_stock_audit WHERE id IN (?)`, () => '/stores/stock-audit');
+  await resolve('REJECTION_ENTRY', `SELECT id, doc_no no FROM trx_scrap_rejection WHERE id IN (?)`, () => '/stores/scrap-rejection');
   const names = async (sql: string, ids: number[]) => new Map((ids.length ? await safe<any>(sql, [ids]) : []).map((r) => [Number(r.id), r]));
   const uniq = (k: string) => [...new Set(rows.map((r) => Number(r[k])).filter(Boolean))];
   const [yarn, fab, sku, col, wh, bin, sos, uom] = await Promise.all([
@@ -663,6 +683,21 @@ async function outstandingLines(cid: number, q: StockQ) {
       item: r.yarn_name, color: null, uom: 'KG', issue_qty: r3(iss), grn_qty: r3(n(r.used_kg)), bal_qty: bal, rate: r2(n(r.rate)), amount: r2(bal * n(r.rate)), location: r.warehouse_name,
       unit: r.unit_name, loss_pct: 0, age: daysBetween(r.dc_date, asOn), doc_link: '/production/knitting-programs' });
   }
+  // returnable stock / general deliveries still at the party
+  for (const r of await safe<any>(
+    `SELECT d.id, d.doc_no, d.doc_date, d.delivery_kind, p.party_name, d.purpose, w.warehouse_name, un.unit_name, COALESCE(NULLIF(so.io_no, ''), so.so_no) so_no, st.style_code,
+            l.material_type, COALESCE(y.yarn_name, f.fabric_name, t.trim_name, l.item_description) item, l.color_name, u.code uom, l.qty, COALESCE(l.returned_qty, 0) returned_qty, COALESCE(l.rate, 0) rate
+       FROM trx_stock_delivery d JOIN trx_stock_delivery_line l ON l.delivery_id = d.id LEFT JOIN mst_party p ON p.id = d.party_id LEFT JOIN mst_warehouse w ON w.id = d.warehouse_id
+       LEFT JOIN mst_unit un ON un.id = w.unit_id LEFT JOIN trx_sales_order so ON so.id = COALESCE(l.so_id, d.so_id) LEFT JOIN mst_style st ON st.id = COALESCE(l.style_id, d.style_id)
+       LEFT JOIN mst_yarn y ON y.id = l.yarn_id LEFT JOIN mst_fabric f ON f.id = l.fabric_id LEFT JOIN mst_trim t ON t.id = l.trim_id LEFT JOIN cfg_uom u ON u.id = l.uom_id
+      WHERE d.company_id = ? AND d.dc_type = 'RETURNABLE' AND d.status NOT IN ('DRAFT', 'CANCELLED', 'RETURNED', 'CLOSED') AND d.doc_date <= ?`, [cid, asOn])) {
+    const iss = n(r.qty); const bal = r3(Math.max(0, iss - n(r.returned_qty)));
+    const general = r.delivery_kind === 'GENERAL';
+    add({ bucket: 'OUTSTANDING', type: general ? 'General delivery (returnable)' : 'Stock delivery (returnable)', item_group: ['YARN', 'FABRIC', 'TRIM'].includes(r.material_type) ? r.material_type : 'OTHER',
+      doc_no: r.doc_no, doc_date: dstr(r.doc_date), party: r.party_name, process: r.purpose, so_no: r.so_no, style_no: r.style_code, item: r.item, color: r.color_name, uom: r.uom,
+      issue_qty: r3(iss), grn_qty: r3(n(r.returned_qty)), bal_qty: bal, rate: r2(n(r.rate)), amount: r2(bal * n(r.rate)), location: r.warehouse_name, unit: r.unit_name, loss_pct: 0,
+      age: daysBetween(r.doc_date, asOn), doc_link: `/stores/${general ? 'general' : 'stock'}-delivery?id=${r.id}` });
+  }
   // garment process / job-work DCs at outside parties
   if (!q.item_group || q.item_group === 'WIP') {
     for (const r of await safe<any>(
@@ -699,7 +734,7 @@ async function jobOrderLines(cid: number, q: StockQ) {
 const STOCK_NOTES = [
   'STOCK: yarn / fabric / WIP / FG from the stock ledger up to the as-on date (rate = weighted average GRN rate); trims from trims stock by lot (current balance, valued at the GRN rate or master rate).',
   'TRANSIT: stock transfers still in transit + open process DCs to our own in-house units (DC qty vs received back).',
-  'OUTSTANDING: material at outside parties on open DCs — fabric process, yarn process, knitting (yarn issued vs consumed on knitting GRNs) and garment process DCs. Fabric / yarn valued at master std rate; garment DCs at the DC process rate.',
+  'OUTSTANDING: material at outside parties on open DCs — fabric process, yarn process, knitting (yarn issued vs consumed on knitting GRNs), garment process DCs and returnable stock / general deliveries not yet returned. Fabric / yarn valued at master std rate; garment DCs at the DC process rate.',
   'JOB ORDER STOCK: customer material received on open job-work-in orders, valued at the job-work rate.',
 ];
 
@@ -904,21 +939,38 @@ clientReportsBRouter.get('/b/direct-bills', requirePermission('REPORT.VIEW'), ah
 clientReportsBRouter.get('/b/opening-stock', requirePermission('REPORT.VIEW'), ah(async (req, res) => {
   const cid = cidOf(req);
   const q = z.object({ dateFrom: isoDate.optional(), dateTo: isoDate.optional(), item_group: z.string().optional(), warehouse_id: optId }).parse(req.query);
-  const rows = await query<any>(
+  const flt = (dateCol: string, matCol: string, whCol: string) => `${q.dateFrom ? `AND DATE(${dateCol}) >= ?` : ''} ${q.dateTo ? `AND DATE(${dateCol}) <= ?` : ''}
+    ${q.item_group ? `AND ${matCol} = ?` : ''} ${q.warehouse_id ? `AND ${whCol} = ?` : ''}`;
+  const fp = [...(q.dateFrom ? [q.dateFrom] : []), ...(q.dateTo ? [q.dateTo] : []), ...(q.item_group ? [q.item_group] : []), ...(q.warehouse_id ? [q.warehouse_id] : [])];
+  // opening stock entries (Stores → Opening Stock), posted ones only
+  const docs = await safe<any>(
+    `SELECT o.id, o.doc_no, o.doc_date, pt.party_name, w.warehouse_name, o.process_name, COALESCE(NULLIF(so.io_no, ''), so.so_no) so_no, so.season, so.order_type, b.party_name buyer,
+            st.style_code, COALESCE(y.yarn_name, f.fabric_name, t.trim_name, l.item_description) item, l.material_type, l.color_name, l.sizes, l.item_description, u.code uom,
+            l.qty, l.rate, l.amount, us.full_name prepared_by, COALESCE(l.remarks, o.remarks) remarks
+       FROM trx_opening_stock o JOIN trx_opening_stock_line l ON l.opening_id = o.id LEFT JOIN mst_party pt ON pt.id = o.party_id LEFT JOIN mst_warehouse w ON w.id = o.warehouse_id
+       LEFT JOIN trx_sales_order so ON so.id = COALESCE(l.so_id, o.so_id) LEFT JOIN mst_party b ON b.id = so.buyer_id LEFT JOIN mst_style st ON st.id = COALESCE(l.style_id, o.style_id)
+       LEFT JOIN mst_yarn y ON y.id = l.yarn_id LEFT JOIN mst_fabric f ON f.id = l.fabric_id LEFT JOIN mst_trim t ON t.id = l.trim_id LEFT JOIN cfg_uom u ON u.id = l.uom_id
+       LEFT JOIN mst_user us ON us.id = o.created_by
+      WHERE o.company_id = ? AND o.status = 'POSTED' ${flt('o.doc_date', 'l.material_type', 'o.warehouse_id')} ORDER BY o.doc_date, o.id, l.id`, [cid, ...fp]);
+  // older opening balances posted straight to the stock ledger (ref type OPENING)
+  const led = await query<any>(
     `SELECT l.id, l.txn_date, l.material_type, w.warehouse_name, COALESCE(NULLIF(so.io_no, ''), so.so_no) so_no, so.season, so.order_type, b.party_name buyer, st.style_code,
-            COALESCE(y.yarn_name, f.fabric_name, t.trim_name, k.sku_code) item, c.color_name, sz.size_label, u.code uom, l.qty_in, l.qty_out, l.rate, us.full_name prepared_by, l.ref_id
+            COALESCE(y.yarn_name, f.fabric_name, t.trim_name, k.sku_code) item, c.color_name, sz.size_label, u.code uom, l.qty_in, l.qty_out, l.rate, us.full_name prepared_by
        FROM trx_stock_ledger l LEFT JOIN mst_warehouse w ON w.id = l.warehouse_id LEFT JOIN trx_sales_order so ON so.id = l.so_id LEFT JOIN mst_party b ON b.id = so.buyer_id
        LEFT JOIN mst_yarn y ON y.id = l.yarn_id LEFT JOIN mst_fabric f ON f.id = l.fabric_id LEFT JOIN mst_trim t ON t.id = l.trim_id LEFT JOIN mst_style_sku k ON k.id = l.sku_id
        LEFT JOIN mst_style st ON st.id = k.style_id LEFT JOIN mst_size sz ON sz.id = k.size_id LEFT JOIN mst_color c ON c.id = l.color_id LEFT JOIN cfg_uom u ON u.id = l.uom_id
        LEFT JOIN mst_user us ON us.id = l.created_by
-      WHERE l.company_id = ? AND l.ref_type = 'OPENING' ${q.dateFrom ? 'AND DATE(l.txn_date) >= ?' : ''} ${q.dateTo ? 'AND DATE(l.txn_date) <= ?' : ''}
-        ${q.item_group ? 'AND l.material_type = ?' : ''} ${q.warehouse_id ? 'AND l.warehouse_id = ?' : ''} ORDER BY l.txn_date, l.id`,
-    [cid, ...(q.dateFrom ? [q.dateFrom] : []), ...(q.dateTo ? [q.dateTo] : []), ...(q.item_group ? [q.item_group] : []), ...(q.warehouse_id ? [q.warehouse_id] : [])]);
-  const data = rows.map((r) => {
-    const qty = r3(n(r.qty_in) - n(r.qty_out));
-    return { doc_id: r.ref_id ? `OPN-${r.ref_id}` : `OPN-L${r.id}`, doc_date: dstr(r.txn_date), location: r.warehouse_name, so_no: r.so_no, style_no: r.style_code, season: r.season, buyer: r.buyer,
-      item: r.item, item_type: r.material_type, color: r.color_name, size: r.size_label, uom: r.uom, qty, rate: r2(n(r.rate)), amount: r2(qty * n(r.rate)), prepared_by: r.prepared_by,
-      order_type: r.order_type, doc_link: '/inventory/ledger' };
-  });
-  res.json({ data, meta: { footnotes: ['Opening stock entries posted to the stock ledger (ref type OPENING). Party / process / buyer dept / remarks are not captured on opening entries.'] } });
+      WHERE l.company_id = ? AND l.ref_type = 'OPENING' ${flt('l.txn_date', 'l.material_type', 'l.warehouse_id')} ORDER BY l.txn_date, l.id`, [cid, ...fp]);
+  const data = [
+    ...docs.map((r) => ({ doc_id: r.doc_no, doc_date: dstr(r.doc_date), party: r.party_name, location: r.warehouse_name, process: r.process_name, so_no: r.so_no, style_no: r.style_code,
+      season: r.season, buyer: r.buyer, item: r.item, item_type: r.material_type, color: r.color_name, size: r.sizes, description: r.item_description, uom: r.uom, qty: r3(n(r.qty)),
+      rate: r2(n(r.rate)), amount: r2(n(r.amount) || n(r.qty) * n(r.rate)), prepared_by: r.prepared_by, remarks: r.remarks, order_type: r.order_type, doc_link: '/stores/opening-stock' })),
+    ...led.map((r) => {
+      const qty = r3(n(r.qty_in) - n(r.qty_out));
+      return { doc_id: `OPN-L${r.id}`, doc_date: dstr(r.txn_date), party: null, location: r.warehouse_name, process: null, so_no: r.so_no, style_no: r.style_code, season: r.season,
+        buyer: r.buyer, item: r.item, item_type: r.material_type, color: r.color_name, size: r.size_label, description: null, uom: r.uom, qty, rate: r2(n(r.rate)), amount: r2(qty * n(r.rate)),
+        prepared_by: r.prepared_by, remarks: 'Opening balance (ledger)', order_type: r.order_type, doc_link: '/inventory/ledger' };
+    }),
+  ];
+  res.json({ data, meta: { footnotes: ['Posted opening stock entries (Stores → Opening Stock) plus older opening balances posted straight to the stock ledger. Buyer dept is not captured.'] } });
 }));

@@ -541,29 +541,37 @@ clientReportsARouter.get('/invoice-despatch-pending', VIEW, ah(async (req, res) 
 }));
 
 /* ================================================================ 6. Orders closed / cancelled during a period */
-const closedQ = baseQ.extend({ kind: z.enum(['closed', 'cancelled']).default('closed') });
+const closedQ = baseQ.extend({
+  kind: z.enum(['closed', 'cancelled']).default('closed'),
+  /** closed only: narrow to one closure type (migration 117). */
+  closure: z.enum(['SHORT_CLOSED', 'COMPLETED']).optional(),
+});
 
 clientReportsARouter.get('/orders-closed', VIEW, ah(async (req, res) => {
   const q = closedQ.parse(req.query);
   const cid = req.user!.companyId;
   const cols = await soColumns();
-  const closedStates = q.kind === 'closed' ? `('CLOSED','SHORT_CLOSED')` : `('CANCELLED')`;
-  // Migration-117 fields when present; else the status-history date; else the last update.
-  const dateCols = q.kind === 'closed'
-    ? firstCol(cols, ['short_closed_at', 'closed_at', 'short_close_date', 'close_date'])
-    : firstCol(cols, ['cancelled_at', 'cancel_date']);
-  const reasonCols = q.kind === 'closed'
-    ? firstCol(cols, ['short_close_reason', 'close_reason', 'closed_reason'])
-    : firstCol(cols, ['cancel_reason', 'cancellation_reason']);
-  const byCols = q.kind === 'closed'
-    ? firstCol(cols, ['short_closed_by', 'closed_by'])
-    : firstCol(cols, ['cancelled_by']);
+  const has117 = cols.has('closure_type');
+  const histStates = q.kind === 'closed' ? `('CLOSED','SHORT_CLOSED')` : `('CANCELLED')`;
+  // Migration 117 closure fields (closure_type, closed_date, close_reason, closed_by, closed_at) lead;
+  // orders closed before them fall back to the status-history entry, then the last update.
+  const stateW = has117
+    ? (q.kind === 'closed'
+      ? `(so.closure_type IN ('SHORT_CLOSED','COMPLETED') OR (so.closure_type IS NULL AND so.approval_state IN ('CLOSED','SHORT_CLOSED')))`
+      : `(so.closure_type = 'CANCELLED' OR (so.closure_type IS NULL AND so.approval_state = 'CANCELLED'))`)
+    : `so.approval_state IN ${histStates}`;
+  const dateCols = firstCol(cols, ['closed_date', 'closed_at']);
   const dateExpr = `DATE(COALESCE(${[...dateCols, 'hist.changed_at', 'so.updated_at'].join(', ')}))`;
-  const reasonExpr = `COALESCE(${[...reasonCols, 'hist.remarks'].join(', ')})`;
-  const byExpr = `COALESCE(${[...byCols, 'hist.changed_by'].join(', ')})`;
+  const reasonExpr = `COALESCE(${[...firstCol(cols, ['close_reason']), 'hist.remarks'].join(', ')})`;
+  const byExpr = `COALESCE(${[...firstCol(cols, ['closed_by']), 'hist.changed_by'].join(', ')})`;
+  const closureExpr = has117
+    ? `COALESCE(so.closure_type, CASE so.approval_state WHEN 'CANCELLED' THEN 'CANCELLED' ELSE 'COMPLETED' END)`
+    : `CASE so.approval_state WHEN 'CANCELLED' THEN 'CANCELLED' ELSE 'CLOSED' END`;
+  const cancelledQty = cols.has('cancelled_qty') ? 'so.cancelled_qty' : '0';
 
-  const where = ['so.company_id = ?', 'so.is_deleted = 0', `so.approval_state IN ${closedStates}`];
+  const where = ['so.company_id = ?', 'so.is_deleted = 0', stateW];
   const params: unknown[] = [cid];
+  if (q.kind === 'closed' && q.closure) { where.push(`${closureExpr} = ?`); params.push(q.closure); }
   if (q.buyer_id) { where.push('so.buyer_id = ?'); params.push(q.buyer_id); }
   if (q.season) { where.push('so.season = ?'); params.push(q.season); }
   if (q.dateFrom) { where.push(`${dateExpr} >= ?`); params.push(q.dateFrom); }
@@ -571,11 +579,12 @@ clientReportsARouter.get('/orders-closed', VIEW, ah(async (req, res) => {
 
   const rows = await query<any>(`
     SELECT so.id AS so_id, b.party_name AS buyer_name, so.so_no, so.io_no, so.buyer_po_no, so.season, sty.styles AS style_no,
-           so.so_date, COALESCE(so.delivery_date, so.ship_date) AS delivery_date, so.order_qty,
+           so.so_date, COALESCE(so.delivery_date, so.ship_date) AS delivery_date, so.order_qty, ${cancelledQty} AS cancelled_qty,
            COALESCE(sh.qty,0) AS shipped_qty, GREATEST(so.order_qty - COALESCE(sh.qty,0), 0) AS unshipped_qty,
            cur.code AS currency, so.total_amount AS order_value,
            ROUND(GREATEST(so.order_qty - COALESCE(sh.qty,0), 0) * CASE WHEN so.order_qty > 0 THEN so.total_amount / so.order_qty ELSE 0 END, 2) AS unshipped_value,
-           so.approval_state AS status, ${dateExpr} AS action_date, ${reasonExpr} AS reason, u.full_name AS action_by
+           so.approval_state AS status, ${closureExpr} AS closure_type,
+           ${dateExpr} AS action_date, ${reasonExpr} AS reason, u.full_name AS action_by
       FROM trx_sales_order so
       LEFT JOIN mst_party b ON b.id = so.buyer_id
       LEFT JOIN cfg_currency cur ON cur.id = so.currency_id
@@ -584,12 +593,14 @@ clientReportsARouter.get('/orders-closed', VIEW, ah(async (req, res) => {
       LEFT JOIN (SELECT h.record_id, h.changed_at, h.remarks, h.changed_by,
                         ROW_NUMBER() OVER (PARTITION BY h.record_id ORDER BY h.changed_at DESC, h.id DESC) AS rn
                    FROM trx_status_history h JOIN cfg_status cs ON cs.id = h.to_status_id
-                  WHERE h.domain = 'SALES_ORDER' AND cs.code IN ${closedStates}) hist ON hist.record_id = so.id AND hist.rn = 1
+                  WHERE h.domain = 'SALES_ORDER' AND cs.code IN ${histStates}) hist ON hist.record_id = so.id AND hist.rn = 1
       LEFT JOIN mst_user u ON u.id = ${byExpr}
      WHERE ${where.join(' AND ')}
      ORDER BY action_date DESC, so.so_no`, [cid, ...params]);
   res.json({ data: rows, meta: { footnotes: [
-    `${q.kind === 'closed' ? 'Closed / short-closed' : 'Cancelled'} date = the order's ${dateCols.length ? `${dateCols.map((c) => c.slice(3)).join(' / ')} field, else the ` : ''}status-change history date, else the order's last update.`,
+    has117
+      ? `${q.kind === 'closed' ? 'Closed (completed / short-closed)' : 'Cancelled'} orders by the order's closure type; date = its closed date (else the status-change history date, else the last update); reason and "by" from the closure entry.`
+      : `${q.kind === 'closed' ? 'Closed' : 'Cancelled'} date = the status-change history date, else the order's last update.`,
   ] } });
 }));
 

@@ -552,6 +552,15 @@ salesOrderRouter.put('/:id', requirePermission('SALES_ORDER.UPDATE'), ah(async (
   }
 
   const body = soSchema.partial().parse(req.body);
+  // A saved line list is rewritten (delete + insert): that would drop the "additional" lines' amendment links and the
+  // cancelled quantities, so once an order has posted amendments its quantities change only through amendments.
+  if (body.lines) {
+    const am = await queryOne<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM trx_sales_order_amendment WHERE so_id = ? AND company_id = ? AND status = 'POSTED'`, [id, req.user!.companyId]);
+    if (Number(am?.n ?? 0) > 0) {
+      throw Conflict('This order has amendments — change its quantities with "Amend order" (add / cancel quantity), not by editing the lines');
+    }
+  }
   const after = await transaction(async (tx) => {
     const { lines, ...h } = body;
     const cols: Record<string, unknown> = { ...h, updated_by: req.user!.id };

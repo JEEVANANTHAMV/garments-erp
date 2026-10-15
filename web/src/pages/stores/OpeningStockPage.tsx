@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Plus, Trash2, PackagePlus } from 'lucide-react';
-import { PageHeader, Tabs, Modal, FormSection, Input, Select, Textarea, Button, LoadingBlock, StatusBadge, useDebounced } from '../../components/ui';
+import { PageHeader, Tabs, Modal, FormSection, Input, Select, Button, LoadingBlock, StatusBadge, useDebounced } from '../../components/ui';
 import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useAuth } from '../../lib/auth';
 import { fmtDate, fmtDecimal } from '../../lib/format';
@@ -174,4 +174,3 @@ function OpeningView({ id, onClose, onEdit }: { id: number; onClose: () => void;
   );
 }
 
-export { Textarea };

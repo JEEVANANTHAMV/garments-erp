@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Download, Loader2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useList, useListState } from '../../hooks/useResource';
 import { DataTable } from '../../components/DataTable';
 import {
@@ -69,9 +70,39 @@ export function ReportsPage() {
           );
         })}
       </div>
+
+      {/* Client's own report set (Fashion Knits business-process tracker, 14-Oct-2026) — kept separate below the defaults */}
+      <div className="mb-3 mt-8 flex items-end justify-between border-b border-slate-200 pb-1.5" id="client-reports">
+        <div>
+          <h2 className="text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Client reports</h2>
+          <p className="text-[12px] text-slate-400">In the formats from the business-process sheet — filters, totals, Excel export and drill-down to the entry</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {CLIENT_SETS.map((c) => (
+          <Link key={c.to} to={c.to} className="card group p-5 transition-shadow hover:shadow-md">
+            <h3 className="text-[14px] font-semibold text-slate-800 group-hover:text-brand-700">{c.label}</h3>
+            <p className="mt-1.5 text-[12.5px] leading-relaxed text-slate-500">{c.reports.join(' · ')}</p>
+            <div className="mt-3 text-[11.5px] font-medium text-brand-600">Open reports →</div>
+          </Link>
+        ))}
+      </div>
     </>
   );
 }
+
+const CLIENT_SETS = [
+  {
+    to: '/reports/client-a', label: 'Orders, budget, production & logistics',
+    reports: ['Orders in hand', 'Order status', 'Order completion (OCR)', 'Budget sheet / Budget vs actuals', 'Consolidated budget vs actuals',
+      'Production output', 'Invoice made despatch pending', 'Orders closed / cancelled', 'T&A status', 'Despatch – shipping bill pending', 'Master chart – exports'],
+  },
+  {
+    to: '/reports/client-b', label: 'Purchase, stores, gate, bills & users',
+    reports: ['GR / IR', 'PO vs GRN vs bill', 'Our DC vs gate outward', 'DC vs inward vs GRN', 'Gate inward – GRN pending', 'Consolidated stock statement',
+      'Opening stock', 'Bill tracker', 'Direct bills', 'User rights', 'Userwise log'],
+  },
+];
 
 /* ---------------------------------------------------------- Audit trail */
 

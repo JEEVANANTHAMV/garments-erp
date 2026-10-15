@@ -1,39 +1,12 @@
+import { Navigate } from 'react-router-dom';
 import { CrudPage } from '../../components/CrudPage';
 import { StatusBadge, Badge } from '../../components/ui';
 import { fmtDate, fmtNumber, fmtDecimal, humanize, today } from '../../lib/format';
 
 /* --------------------------------------------------------- Packings */
+/** The old generic packing page is replaced by the packing engine (Packing orders, 14-Oct-2026). */
 export function PackingsPage() {
-  return <CrudPage
-    path="packings" title="Packing" permission="PACKING" singular="Packing"
-    subtitle="Carton packing records linked to production orders"
-    defaultSort={{ key: 'pack_date', dir: 'desc' }}
-    columns={[
-      { key: 'packing_no', header: 'Packing no', sortable: true,
-        render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.packing_no}</span> },
-      { key: 'pack_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.pack_date) },
-      { key: 'so_no', header: 'Sales order',
-        render: (r: any) => <span className="font-mono text-[12px] text-brand-700">{r.so_no}</span> },
-      { key: 'carton_count', header: 'Cartons', align: 'right', render: (r: any) => fmtNumber(r.carton_count) },
-      { key: 'total_qty', header: 'Total qty', align: 'right', render: (r: any) => fmtNumber(r.total_qty) },
-      { key: 'net_weight_kg', header: 'Net wt (kg)', align: 'right', render: (r: any) => fmtDecimal(r.net_weight_kg) },
-      { key: 'gross_weight_kg', header: 'Gross wt (kg)', align: 'right', render: (r: any) => fmtDecimal(r.gross_weight_kg) },
-      { key: 'cbm', header: 'CBM', align: 'right', render: (r: any) => fmtDecimal(r.cbm, 3) },
-      { key: 'status_label', header: 'Status', render: (r: any) => <StatusBadge value={r.status_label} /> },
-    ]}
-    filters={[
-      { name: 'so_id', label: 'Job (I/O)', lookup: 'sales-orders' },
-      { name: 'status_id', label: 'Status', statusDomain: 'PACKING' },
-    ]}
-    fields={[
-      { name: 'packing_no', label: 'Packing no', hint: 'Blank to auto-generate' },
-      { name: 'pack_date', label: 'Pack date', type: 'date', required: true, defaultValue: today() },
-      { name: 'so_id', label: 'Job (I/O / sales order)', required: true, lookup: 'sales-orders' },
-      { name: 'prod_order_id', label: 'Production order', lookup: 'prod-orders' },
-      { name: 'warehouse_id', label: 'Warehouse', lookup: 'warehouses' },
-      { name: 'status_id', label: 'Status', statusDomain: 'PACKING' },
-      { name: 'remarks', label: 'Remarks', type: 'textarea' },
-    ]} />;
+  return <Navigate to="/logistics/packing/orders" replace />;
 }
 
 /* -------------------------------------------------------- Dispatches */

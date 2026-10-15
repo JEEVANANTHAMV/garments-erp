@@ -197,6 +197,7 @@ export function buildPermissions(): [string, string, string][] {
     ['PURCHASE.APPROVE','Approve Purchase Orders','PURCHASE'],
     ['COSTING.APPROVE','Approve Costings','COSTING'],
     ['PRODUCTION.APPROVE','Approve Production Orders','PRODUCTION'],
+    ['PACKING.APPROVE','Approve Packing (packing orders, variance, reopen / reverse cartons)','PACKING'],
     ['INVENTORY.ADJUST','Adjust Stock','INVENTORY'],
     // Purchase Return permission matrix (spec section 29). Create/Edit/Delete
     // reuse PURCHASE.*; these cover the actions that need their own role split.

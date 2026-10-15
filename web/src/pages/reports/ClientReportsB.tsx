@@ -91,7 +91,8 @@ const poGrnBill: ReportDef = {
 
 const DC_TYPES = [{ value: 'JW_CHALLAN', label: 'Process / job-work DC' }, { value: 'FABRIC_PROCESS_DC', label: 'Fabric process DC' },
   { value: 'YARN_PROCESS_DC', label: 'Yarn process DC' }, { value: 'KNITTING_DC', label: 'Knitting DC' }, { value: 'YARN_DC', label: 'Yarn issue DC' },
-  { value: 'PURCHASE_RETURN', label: 'Purchase return DC' }, { value: 'DISPATCH', label: 'Dispatch' }];
+  { value: 'PURCHASE_RETURN', label: 'Purchase return DC' }, { value: 'DISPATCH', label: 'Dispatch' },
+  { value: 'STOCK_DELIVERY', label: 'Stock delivery' }, { value: 'GENERAL_DELIVERY', label: 'General delivery' }];
 const dcGateCols: ReportDef['columns'] = [
   { key: 'del_type', header: 'Del Type' },
   { key: 'del_no', header: 'Del No', link: link('dc_link') },
@@ -209,7 +210,9 @@ const openingStock: ReportDef = {
   columns: [
     { key: 'doc_id', header: 'Docid', link: link('doc_link') },
     { key: 'doc_date', header: 'Docdate', type: 'date' },
+    { key: 'party', header: 'Party Name' },
     { key: 'location', header: 'Location' },
+    { key: 'process', header: 'Process Name' },
     { key: 'so_no', header: 'Sale Order No' },
     { key: 'style_no', header: 'Style No' },
     { key: 'season', header: 'Season' },
@@ -218,11 +221,13 @@ const openingStock: ReportDef = {
     { key: 'item_type', header: 'Item Type' },
     { key: 'color', header: 'Color' },
     { key: 'size', header: 'Sizes' },
+    { key: 'description', header: 'Description' },
     { key: 'uom', header: 'Uom' },
     { key: 'qty', header: 'Qty', type: 'qty', total: true },
     { key: 'rate', header: 'Rate', type: 'money' },
     { key: 'amount', header: 'Amount', type: 'money', total: true },
     { key: 'prepared_by', header: 'Prepby' },
+    { key: 'remarks', header: 'Remarks' },
     { key: 'order_type', header: 'Order Type' },
   ],
 };

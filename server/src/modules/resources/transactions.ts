@@ -642,6 +642,9 @@ export const transactionResources: ResourceConfig[] = [
   // ------------------------------------------------ Packing & dispatch
   {
     path: 'packings', table: 'trx_packing', permission: 'PACKING', label: 'Packing',
+    // packing orders of the packing engine are changed only through /api/packing (rules, carton posting, approvals)
+    beforeUpdate: async (_req, _id, row) => { if (Number(row?.is_engine) === 1) throw BadRequest(`${row.pack_no} is a packing order — open it under Packing Orders`); },
+    beforeDelete: async (_req, _id, row) => { if (Number(row?.is_engine) === 1) throw BadRequest(`${row.pack_no} is a packing order — cancel it under Packing Orders`); },
     searchable: ['pack_no'], sortable: ['pack_no', 'pack_date'], defaultSort: 't.pack_date',
     hasIsActive: false, softDelete: false, filters: ['so_id', 'prod_order_id', 'status_id', 'pack_method', 'part_name'],
     autoNumber: { column: 'pack_no', docType: 'PACKING' },

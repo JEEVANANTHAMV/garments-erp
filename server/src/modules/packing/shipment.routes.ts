@@ -834,8 +834,26 @@ async function resolveShipmentSource(tx: any, cid: number, plId: number | null |
     if (!t.packages || !t.qty) throw BadRequest(`Packing list ${pl.pl_no} has no cartons / quantity to ship`);
     return { pl, basis: 'PACKING_LIST' as const, cartons: [] as ShipCarton[], totals: t };
   }
+  // From a confirmed list, each carton ships with the weights / CBM of its list row (the confirmed document;
+  // engine cartons can be posted without weights, which are then typed on the list); else the carton's own.
+  const rowOf = new Map<number, { net: number | null; gross: number | null; cbm: number | null }>();
+  if (pl) {
+    const plRows = await txQuery<any>(tx,
+      `SELECT source_carton_ids, net_wt_per_ctn, gross_wt_per_ctn, cbm_per_ctn FROM trx_packing_list_row WHERE packing_list_id = ?`, [pl.id]);
+    for (const r of plRows) {
+      const src = typeof r.source_carton_ids === 'string' ? JSON.parse(r.source_carton_ids) : r.source_carton_ids;
+      for (const c of (Array.isArray(src) ? src : [])) rowOf.set(Number(c), {
+        net: r.net_wt_per_ctn == null ? null : Number(r.net_wt_per_ctn), gross: r.gross_wt_per_ctn == null ? null : Number(r.gross_wt_per_ctn),
+        cbm: r.cbm_per_ctn == null ? null : Number(r.cbm_per_ctn) });
+    }
+  }
   const cartons: ShipCarton[] = [];
-  for (const id of ids) cartons.push(await lockShippableCarton(tx, cid, id));
+  for (const id of ids) {
+    const c = await lockShippableCarton(tx, cid, id);
+    const w = rowOf.get(id);
+    if (w) { c.net = w.net ?? c.net; c.gross = w.gross ?? c.gross; c.cbm = w.cbm ?? c.cbm; }
+    cartons.push(c);
+  }
   const totals = {
     packages: cartons.length, qty: cartons.reduce((a, c) => a + c.qty, 0), net: r3(cartons.reduce((a, c) => a + c.net, 0)),
     gross: r3(cartons.reduce((a, c) => a + c.gross, 0)), cbm: r5(cartons.reduce((a, c) => a + c.cbm, 0)),

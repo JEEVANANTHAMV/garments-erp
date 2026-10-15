@@ -266,16 +266,16 @@ export function CartonEditor({ order, carton, onClose, onSaved }: {
         </table>
         {warn.length > 0 && <div className="mt-2 text-[12px] text-amber-700">{warn.join(' · ')}</div>}
       </section>
-      <FormSection title="Weight & dimensions" cols={4} description="Optional. Gross must be at least net.">
-        <Input id="carton-net" label="Net weight (kg)" inputMode="decimal" value={f.net_weight_kg} onChange={set('net_weight_kg')} />
-        <Input id="carton-gross" label="Gross weight (kg)" inputMode="decimal" value={f.gross_weight_kg} onChange={set('gross_weight_kg')} />
+      <FormSection title="Dimensions, weight & seal" cols={3} description="Optional. Gross must be at least net.">
         <Input label="Length (cm)" inputMode="decimal" value={f.length_cm} onChange={set('length_cm')} />
         <Input label="Width (cm)" inputMode="decimal" value={f.width_cm} onChange={set('width_cm')} />
         <Input label="Height (cm)" inputMode="decimal" value={f.height_cm} onChange={set('height_cm')} />
-      </FormSection>
-      <FormSection title="Remarks" cols={4}>
+        <Input id="carton-net" label="Net weight (kg)" inputMode="decimal" value={f.net_weight_kg} onChange={set('net_weight_kg')} />
+        <Input id="carton-gross" label="Gross weight (kg)" inputMode="decimal" value={f.gross_weight_kg} onChange={set('gross_weight_kg')} />
         <Input label="Seal no" value={f.seal_no} onChange={set('seal_no')} />
-        <Input label="Remarks" className="lg:col-span-3" value={f.remarks} onChange={set('remarks')} />
+      </FormSection>
+      <FormSection title="Remarks" cols={1}>
+        <Input label="Remarks" value={f.remarks} onChange={set('remarks')} />
       </FormSection>
     </Modal>
   );

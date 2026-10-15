@@ -231,8 +231,10 @@ export function PartyDetailPage() {
   }, [isNew, currencyTouched, currencies, form.country_id, indiaCountryId]);
 
   useEffect(() => {
-    if (itemQuery.data?.data) {
-      const d = itemQuery.data.data;
+    // useItem already unwraps the API envelope ({ data }) — accept both shapes.
+    const raw: any = itemQuery.data;
+    const d = raw?.data && typeof raw.data === 'object' && !Array.isArray(raw.data) ? raw.data : raw;
+    if (d && d.id) {
       setForm({
         ...d,
         udyam_date: toDateInput(d.udyam_date),
