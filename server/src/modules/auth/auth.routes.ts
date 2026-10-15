@@ -52,8 +52,8 @@ authRouter.post('/login', loginLimiter, ah(async (req, res) => {
   if (!(await bcrypt.compare(password, user.password_hash))) throw invalid;
 
   // Check if user has SUPER_ADMIN role in any company
-  const isSuperAdminRow = await queryOne<{ id: number }>(
-    `SELECT ur.id FROM map_user_role ur
+  const isSuperAdminRow = await queryOne<{ user_id: number }>(
+    `SELECT ur.user_id FROM map_user_role ur
        JOIN mst_role r ON r.id = ur.role_id AND r.role_code = 'SUPER_ADMIN'
       WHERE ur.user_id = ? LIMIT 1`,
     [user.id],
