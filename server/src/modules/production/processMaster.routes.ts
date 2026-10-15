@@ -152,11 +152,12 @@ processMasterRouter.get('/process-master/operations', requirePermission('PRODUCT
   if (!qp.io_no) { res.json({ data: ops }); return; }
   const card = await query<any>(`SELECT operation_id, rate FROM trx_job_op_rate WHERE company_id = ? AND io_no = ?`, [cid, qp.io_no]);
   const byOp = new Map(card.map((c) => [Number(c.operation_id), n(c.rate)]));
+  const hdr = await rateCardHeader(cid, qp.io_no);
   res.json({
     data: ops.map((o) => (byOp.has(Number(o.id))
       ? { ...o, rate: byOp.get(Number(o.id)), job_rate: byOp.get(Number(o.id)), in_job_card: true }
       : { ...o, in_job_card: false })),
-    meta: { io_no: qp.io_no, job_card_ops: card.length },
+    meta: { io_no: qp.io_no, job_card_ops: card.length, card_status: hdr?.status ?? (card.length ? 'DRAFT' : null), card_revision: hdr ? Number(hdr.revision_no) : 0 },
   });
 }));
 
@@ -205,19 +206,178 @@ async function jobRateCard(cid: number, ioNo: string, stageId: number) {
   return rows.map((r) => ({ ...r, selected: !!r.card_id, job_rate: r.job_rate == null ? null : n(r.job_rate), default_rate: n(r.default_rate) }));
 }
 
-/** GET /job-rate-cards — jobs that have a rate card, per process, with the total rate / PCS. */
+// ------------------------------------------------------------
+// Production rate fixing — approve & lock (client audio 15-Oct-2026: "for
+// stitching we need to set and lock the rates of each process for production;
+// only based on that can we carry it forward everywhere").
+// A job's card (trx_job_rate_card over its trx_job_op_rate rows) is
+//   DRAFT → SUBMITTED (production) → LOCKED (PRODUCTION.APPROVE).
+// Locked: rates cannot be edited; every DC of the job (contractor and, with
+// PRODUCTION_RATE_LOCK_ENFORCED = 1, in-house units) takes the card rate, a DC
+// with no operations for a carded process takes all the card's operations of
+// that process, and production costing prices the job from it. A change needs
+// Revise (reason, revision no + 1) → DRAFT; every step is kept in
+// trx_job_rate_card_rev with the rates at that moment.
+// ------------------------------------------------------------
+export type CardStatus = 'DRAFT' | 'SUBMITTED' | 'LOCKED';
+
+export async function rateCardHeader(cid: number, ioNo: string) {
+  return queryOne<any>(`SELECT * FROM trx_job_rate_card WHERE company_id = ? AND io_no = ?`, [cid, ioNo]);
+}
+
+/** The job's locked card rates (operation → rate, stage of each) when the card is LOCKED and the lock is enforced, else null. */
+export async function lockedJobCard(cid: number, ioNo: string | null | undefined) {
+  if (!ioNo) return null;
+  const h = await rateCardHeader(cid, ioNo);
+  if (h?.status !== 'LOCKED') return null;
+  const setting = await queryOne<any>(`SELECT setting_value FROM cfg_system_setting WHERE company_id = ? AND setting_key = 'PRODUCTION_RATE_LOCK_ENFORCED'`, [cid]);
+  const enforced = String(setting?.setting_value ?? '1').trim() !== '0';
+  const rows = await query<any>(
+    `SELECT j.operation_id, j.stage_id, j.rate, o.op_name FROM trx_job_op_rate j
+       LEFT JOIN mst_process_operation o ON o.id = j.operation_id WHERE j.company_id = ? AND j.io_no = ?`, [cid, ioNo]);
+  return {
+    header: h, enforced, revision: Number(h.revision_no),
+    rates: new Map(rows.map((r) => [Number(r.operation_id), { rate: n(r.rate), stage_id: Number(r.stage_id), op_name: r.op_name as string }])),
+  };
+}
+
+/** Rates can change only while the card is DRAFT / SUBMITTED; an edit of a SUBMITTED card sends it back to DRAFT. */
+async function assertCardEditable(cid: number, ioNo: string) {
+  const h = await rateCardHeader(cid, ioNo);
+  if (h?.status === 'LOCKED') {
+    throw BadRequest(`Job ${ioNo} rate card is Approved & Locked (revision ${h.revision_no}) — use Revise with a reason to change it`);
+  }
+  return h;
+}
+async function touchCardDraft(tx: any, cid: number, ioNo: string, styleId: number | null, userId: number) {
+  await txExecute(tx,
+    `INSERT INTO trx_job_rate_card (company_id, io_no, style_id, status, created_by) VALUES (?,?,?,'DRAFT',?)
+     ON DUPLICATE KEY UPDATE status = IF(status = 'LOCKED', status, 'DRAFT'), style_id = COALESCE(VALUES(style_id), style_id),
+                             submitted_by = IF(status = 'LOCKED', submitted_by, NULL), submitted_at = IF(status = 'LOCKED', submitted_at, NULL)`,
+    [cid, ioNo, styleId, userId]);
+}
+
+async function cardRates(cid: number, ioNo: string) {
+  return query<any>(
+    `SELECT j.operation_id, o.op_code, o.op_name, j.stage_id, ps.stage_name, j.rate
+       FROM trx_job_op_rate j
+       LEFT JOIN mst_process_operation o ON o.id = j.operation_id
+       LEFT JOIN cfg_process_stage ps ON ps.id = j.stage_id
+      WHERE j.company_id = ? AND j.io_no = ? ORDER BY ps.sort_order, o.sort_order, o.op_name`, [cid, ioNo]);
+}
+
+async function cardStatus(cid: number, ioNo: string) {
+  const h = await rateCardHeader(cid, ioNo);
+  const rates = await cardRates(cid, ioNo);
+  const history = h ? await query<any>(
+    `SELECT r.id, r.revision_no, r.action, r.reason, r.total_rate, r.rates_json, r.created_at, u.full_name AS by_name
+       FROM trx_job_rate_card_rev r LEFT JOIN sec_user u ON u.id = r.created_by
+      WHERE r.card_id = ? ORDER BY r.id DESC LIMIT 200`, [h.id]) : [];
+  const users = h ? await query<any>(`SELECT id, full_name FROM sec_user WHERE id IN (?)`, [[h.submitted_by ?? 0, h.locked_by ?? 0]]) : [];
+  const nameOf = (id: unknown) => users.find((u) => Number(u.id) === Number(id))?.full_name ?? null;
+  return {
+    io_no: ioNo,
+    status: (h?.status ?? (rates.length ? 'DRAFT' : null)) as CardStatus | null,
+    revision_no: h ? Number(h.revision_no) : 0,
+    submitted_at: h?.submitted_at ?? null, submitted_by: nameOf(h?.submitted_by),
+    locked_at: h?.locked_at ?? null, locked_by: nameOf(h?.locked_by),
+    operations: rates.length,
+    total_rate: Math.round(rates.reduce((a, r) => a + n(r.rate), 0) * 10000) / 10000,
+    history: history.map((r) => {
+      let rj: any = r.rates_json;
+      try { rj = typeof rj === 'string' ? JSON.parse(rj) : rj; } catch { rj = null; }
+      return { ...r, total_rate: n(r.total_rate), rates_json: undefined, rates: Array.isArray(rj) ? rj : [] };
+    }),
+  };
+}
+
+async function cardStep(req: any, ioNo: string, action: 'SUBMIT' | 'LOCK' | 'REJECT' | 'REVISE', reason: string | null) {
+  const cid = req.user!.companyId;
+  await transaction(async (tx) => {
+    const h = await txQueryOne<any>(tx, `SELECT * FROM trx_job_rate_card WHERE company_id = ? AND io_no = ? FOR UPDATE`, [cid, ioNo]);
+    const rates = await txQuery<any>(tx,
+      `SELECT j.operation_id, o.op_name, ps.stage_name, j.rate FROM trx_job_op_rate j
+         LEFT JOIN mst_process_operation o ON o.id = j.operation_id LEFT JOIN cfg_process_stage ps ON ps.id = j.stage_id
+        WHERE j.company_id = ? AND j.io_no = ?`, [cid, ioNo]);
+    if (!h || !rates.length) throw BadRequest(`Job ${ioNo} has no rates on its card yet`);
+    const st = h.status as CardStatus;
+    let rev = Number(h.revision_no);
+    if (action === 'SUBMIT') {
+      if (st !== 'DRAFT') throw BadRequest(`Only a Draft card can be submitted (it is ${st})`);
+      await txExecute(tx, `UPDATE trx_job_rate_card SET status = 'SUBMITTED', submitted_by = ?, submitted_at = NOW() WHERE id = ?`, [req.user!.id, h.id]);
+    } else if (action === 'LOCK') {
+      if (st === 'LOCKED') throw BadRequest('The card is already locked');
+      if (rates.some((r) => n(r.rate) <= 0)) throw BadRequest(`Every operation needs a rate above 0 before locking (${rates.filter((r) => n(r.rate) <= 0).map((r) => r.op_name).join(', ')})`);
+      const costing = h.style_id ? await txQueryOne<any>(tx,
+        `SELECT c.id FROM trx_costing c LEFT JOIN cfg_status s ON s.id = c.status_id
+          WHERE c.company_id = ? AND c.style_id = ? AND c.is_deleted = 0 AND c.costing_type = 'PRE_COSTING'
+          ORDER BY (s.code = 'APPROVED') DESC, c.version DESC, c.id DESC LIMIT 1`, [cid, h.style_id]) : null;
+      await txExecute(tx,
+        `UPDATE trx_job_rate_card SET status = 'LOCKED', locked_by = ?, locked_at = NOW(), costing_id = ?,
+                submitted_by = COALESCE(submitted_by, ?), submitted_at = COALESCE(submitted_at, NOW()) WHERE id = ?`,
+        [req.user!.id, costing?.id ?? null, req.user!.id, h.id]);
+    } else if (action === 'REJECT') {
+      if (st !== 'SUBMITTED') throw BadRequest(`Only a Submitted card can be sent back (it is ${st})`);
+      await txExecute(tx, `UPDATE trx_job_rate_card SET status = 'DRAFT', submitted_by = NULL, submitted_at = NULL WHERE id = ?`, [h.id]);
+    } else {
+      if (st !== 'LOCKED') throw BadRequest(`Only a Locked card can be revised (it is ${st})`);
+      rev += 1;
+      await txExecute(tx,
+        `UPDATE trx_job_rate_card SET status = 'DRAFT', revision_no = ?, locked_by = NULL, locked_at = NULL, submitted_by = NULL, submitted_at = NULL WHERE id = ?`,
+        [rev, h.id]);
+    }
+    const snap = rates.map((r) => ({ operation_id: Number(r.operation_id), op_name: r.op_name, stage_name: r.stage_name, rate: n(r.rate) }));
+    await txExecute(tx,
+      `INSERT INTO trx_job_rate_card_rev (card_id, company_id, io_no, revision_no, action, reason, total_rate, rates_json, created_by)
+       VALUES (?,?,?,?,?,?,?,?,?)`,
+      [h.id, cid, ioNo, rev, action, reason, snap.reduce((a, r) => a + r.rate, 0), JSON.stringify(snap), req.user!.id]);
+    await audit(req, 'trx_job_rate_card', Number(h.id), 'UPDATE', { status: st, revision_no: h.revision_no },
+      { status: action === 'SUBMIT' ? 'SUBMITTED' : action === 'LOCK' ? 'LOCKED' : 'DRAFT', revision_no: rev, reason }, tx);
+  });
+  return cardStatus(cid, ioNo);
+}
+
+const ioBody = z.object({ io_no: z.string().trim().min(1).max(40), reason: s.nullableStr(500) });
+
+/** GET /job-rate-cards/status?io_no= — lock status, revision and history of a job's card. */
+processMasterRouter.get('/job-rate-cards/status', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  const qp = z.object({ io_no: z.string().trim().min(1).max(40) }).parse(req.query);
+  res.json({ data: await cardStatus(req.user!.companyId, qp.io_no) });
+}));
+processMasterRouter.post('/job-rate-cards/submit', requirePermission('PRODUCTION.UPDATE'), ah(async (req, res) => {
+  const b = ioBody.parse(req.body);
+  res.json({ data: await cardStep(req, b.io_no, 'SUBMIT', b.reason ?? null) });
+}));
+processMasterRouter.post('/job-rate-cards/lock', requirePermission('PRODUCTION.APPROVE'), ah(async (req, res) => {
+  const b = ioBody.parse(req.body);
+  res.json({ data: await cardStep(req, b.io_no, 'LOCK', b.reason ?? null) });
+}));
+processMasterRouter.post('/job-rate-cards/reject', requirePermission('PRODUCTION.APPROVE'), ah(async (req, res) => {
+  const b = ioBody.parse(req.body);
+  if (!b.reason?.trim()) throw BadRequest('Give a reason for sending the card back');
+  res.json({ data: await cardStep(req, b.io_no, 'REJECT', b.reason.trim()) });
+}));
+processMasterRouter.post('/job-rate-cards/revise', requirePermission('PRODUCTION.APPROVE'), ah(async (req, res) => {
+  const b = ioBody.parse(req.body);
+  if (!b.reason?.trim()) throw BadRequest('Give a reason for revising a locked rate card');
+  res.json({ data: await cardStep(req, b.io_no, 'REVISE', b.reason.trim()) });
+}));
+
+/** GET /job-rate-cards — jobs that have a rate card, per process, with the total rate / PCS and the card's lock status. */
 processMasterRouter.get('/job-rate-cards', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const rows = await query<any>(
     `SELECT j.io_no, j.stage_id, ps.stage_name, MAX(j.style_id) AS style_id, MAX(st.style_code) AS style_code,
-            COUNT(*) AS operations, SUM(j.rate) AS total_rate, MAX(COALESCE(j.updated_at, j.created_at)) AS updated_at
+            COUNT(*) AS operations, SUM(j.rate) AS total_rate, MAX(COALESCE(j.updated_at, j.created_at)) AS updated_at,
+            MAX(COALESCE(c.status, 'DRAFT')) AS card_status, MAX(COALESCE(c.revision_no, 0)) AS revision_no
        FROM trx_job_op_rate j
        LEFT JOIN cfg_process_stage ps ON ps.id = j.stage_id
        LEFT JOIN mst_style st ON st.id = j.style_id
+       LEFT JOIN trx_job_rate_card c ON c.company_id = j.company_id AND c.io_no = j.io_no
       WHERE j.company_id = ? ${req.query.io_no ? 'AND j.io_no = ?' : ''}
       GROUP BY j.io_no, j.stage_id, ps.stage_name ORDER BY updated_at DESC LIMIT 500`,
     req.query.io_no ? [cid, String(req.query.io_no)] : [cid]);
-  res.json({ data: rows.map((r) => ({ ...r, total_rate: r2(n(r.total_rate)) })) });
+  res.json({ data: rows.map((r) => ({ ...r, total_rate: r2(n(r.total_rate)), revision_no: Number(r.revision_no) })) });
 }));
 
 /** GET /job-rate-cards/card?io_no=&stage_id= — the card to edit. */
@@ -242,6 +402,7 @@ processMasterRouter.put('/job-rate-cards', requirePermission('PRODUCTION.UPDATE'
   const so = await queryOne<any>(`SELECT id FROM trx_sales_order WHERE company_id = ? AND io_no = ? AND is_deleted = 0 LIMIT 1`, [cid, b.io_no]);
   const cut = await queryOne<any>(`SELECT id FROM trx_cutting_bundle WHERE company_id = ? AND io_no = ? LIMIT 1`, [cid, b.io_no]);
   if (!so && !cut) throw BadRequest(`Job ${b.io_no} not found (no sales order or cutting with that IO no)`);
+  await assertCardEditable(cid, b.io_no);
   const ids = b.operations.map((o) => o.operation_id);
   if (new Set(ids).size !== ids.length) throw BadRequest('An operation is listed twice');
   if (ids.length) {
@@ -257,6 +418,7 @@ processMasterRouter.put('/job-rate-cards', requirePermission('PRODUCTION.UPDATE'
         `INSERT INTO trx_job_op_rate (company_id, io_no, style_id, stage_id, operation_id, rate, remarks, created_by) VALUES (?,?,?,?,?,?,?,?)`,
         [cid, b.io_no, b.style_id ?? null, b.stage_id, o.operation_id, o.rate, o.remarks ?? null, req.user!.id]);
     }
+    await touchCardDraft(tx, cid, b.io_no, b.style_id ?? null, req.user!.id);
     await audit(req, 'trx_job_op_rate', 0, 'UPDATE', { io_no: b.io_no, stage_id: b.stage_id, operations: before },
       { io_no: b.io_no, stage_id: b.stage_id, operations: b.operations }, tx);
   });
@@ -367,6 +529,7 @@ processMasterRouter.post('/job-rate-cards/from-costing', requirePermission('PROD
     costing_id: s.id(),
     rows: z.array(z.object({ operation_id: s.idReq(), rate: z.coerce.number().min(0).max(100000) })).max(500).optional(),
   }).parse(req.body);
+  await assertCardEditable(cid, b.io_no);
   const pv = await costingRatePreview(cid, b.io_no, b.costing_id ?? null);
   if (!pv.costing) throw BadRequest(`No pre-costing found for the style of job ${b.io_no}`);
   const picked = b.rows ?? pv.rows.filter((r) => r.operation_id).map((r) => ({ operation_id: r.operation_id!, rate: r.costing_rate }));
@@ -386,10 +549,127 @@ processMasterRouter.post('/job-rate-cards/from-costing', requirePermission('PROD
          ON DUPLICATE KEY UPDATE rate = VALUES(rate), stage_id = VALUES(stage_id), style_id = COALESCE(VALUES(style_id), style_id), remarks = VALUES(remarks)`,
         [cid, b.io_no, pv.style_id, stageOf.get(opId), opId, Math.round(rate * 10000) / 10000, remarks, req.user!.id]);
     }
+    await touchCardDraft(tx, cid, b.io_no, pv.style_id, req.user!.id);
     await audit(req, 'trx_job_op_rate', 0, 'UPDATE', { io_no: b.io_no, operations: before },
       { io_no: b.io_no, costing_id: pv.costing!.id, operations: [...sum].map(([operation_id, rate]) => ({ operation_id, rate })) }, tx);
   });
   res.json({ data: { io_no: b.io_no, costing: pv.costing, applied: sum.size, stages: [...new Set(ops.map((o) => Number(o.stage_id)))] } });
+}));
+
+/**
+ * Three-way variance of a job, per process / operation (client audio 15-Oct-2026):
+ *   Merchandiser  the style's pre-costing rate (same mapping as "Load rates from costing")
+ *   Production    the job's rate card (locked or not — the status is returned)
+ *   Actual        the job's DCs (not draft / cancelled): rate per operation on each DC,
+ *                 weighted by the job's issued PCS; amount = received good PCS × rate.
+ *                 DCs that name no operation are a "(DC rate)" row of their process.
+ * Order value = rate × order qty; actual vs production compares on received PCS.
+ */
+export async function jobRateVariance(cid: number, ioNo: string) {
+  const pv = await costingRatePreview(cid, ioNo, null);
+  const status = await cardStatus(cid, ioNo);
+  const card = await cardRates(cid, ioNo);
+  const oq = await queryOne<any>(
+    `SELECT COALESCE(SUM(sol.order_qty), 0) AS qty FROM trx_sales_order so JOIN trx_sales_order_line sol ON sol.so_id = so.id
+      WHERE so.company_id = ? AND so.io_no = ? AND so.is_deleted = 0`, [cid, ioNo]);
+  const orderQty = n(oq?.qty);
+
+  const dcs = await query<any>(
+    `SELECT jc.id, jc.challan_no, jc.stage_id, jc.rate, jc.unit_id, ps.stage_name, SUM(jl.qty) AS issued
+       FROM trx_jobwork_challan jc
+       JOIN trx_jobwork_challan_line jl ON jl.challan_id = jc.id
+       LEFT JOIN cfg_process_stage ps ON ps.id = jc.stage_id
+      WHERE jc.company_id = ? AND jl.io_no = ? AND jc.status NOT IN ('DRAFT','CANCELLED')
+      GROUP BY jc.id`, [cid, ioNo]);
+  const dcIds = dcs.map((d) => Number(d.id));
+  const recv = dcIds.length ? await query<any>(
+    `SELECT jl.challan_id, COALESCE(SUM(rl.received_qty), 0) AS good
+       FROM trx_jobwork_receipt_line rl JOIN trx_jobwork_challan_line jl ON jl.id = rl.challan_line_id
+      WHERE jl.challan_id IN (?) AND jl.io_no = ? GROUP BY jl.challan_id`, [dcIds, ioNo]) : [];
+  const dcOps = dcIds.length ? await query<any>(`SELECT challan_id, operation_id, rate FROM trx_jobwork_challan_op WHERE challan_id IN (?)`, [dcIds]) : [];
+  const goodOf = new Map(recv.map((r) => [Number(r.challan_id), n(r.good)]));
+
+  type Row = { key: string; stage_id: number | null; stage_name: string | null; operation_id: number | null; op_name: string;
+    merch_rate: number | null; prod_rate: number | null; act_w: number; act_amt_issued: number; issued_qty: number; received_qty: number;
+    actual_amount: number; dcs: Set<string>; inhouse_dcs: number };
+  const rows = new Map<string, Row>();
+  const opInfo = new Map(pv.operations.map((o) => [o.id, o]));
+  const row = (opId: number | null, stageId: number | null, stageName: string | null, opName: string) => {
+    const key = opId ? `op:${opId}` : `dc:${stageId}`;
+    if (!rows.has(key)) {
+      rows.set(key, { key, stage_id: stageId, stage_name: stageName, operation_id: opId, op_name: opName, merch_rate: null, prod_rate: null,
+        act_w: 0, act_amt_issued: 0, issued_qty: 0, received_qty: 0, actual_amount: 0, dcs: new Set(), inhouse_dcs: 0 });
+    }
+    return rows.get(key)!;
+  };
+  for (const r of pv.rows) {
+    if (!r.operation_id) continue;
+    const o = opInfo.get(r.operation_id);
+    const x = row(r.operation_id, o?.stage_id ?? null, o?.stage_name ?? null, o?.op_name ?? r.name);
+    x.merch_rate = (x.merch_rate ?? 0) + r.costing_rate;
+  }
+  for (const c of card) {
+    const x = row(Number(c.operation_id), Number(c.stage_id), c.stage_name, c.op_name);
+    x.prod_rate = n(c.rate);
+  }
+  for (const d of dcs) {
+    const ops = dcOps.filter((o) => Number(o.challan_id) === Number(d.id));
+    const issued = n(d.issued), good = goodOf.get(Number(d.id)) ?? 0;
+    const parts = ops.length
+      ? ops.map((o) => ({ opId: Number(o.operation_id), rate: n(o.rate), name: opInfo.get(Number(o.operation_id))?.op_name ?? `Operation ${o.operation_id}` }))
+      : [{ opId: null as number | null, rate: n(d.rate), name: '(DC rate — no operation named)' }];
+    for (const p of parts) {
+      const x = row(p.opId, Number(d.stage_id), d.stage_name, p.name);
+      if (!x.stage_name) x.stage_name = d.stage_name;
+      x.act_w += issued; x.act_amt_issued += issued * p.rate;
+      x.issued_qty += issued; x.received_qty += good; x.actual_amount += good * p.rate;
+      x.dcs.add(d.challan_no); if (d.unit_id) x.inhouse_dcs += 1;
+    }
+  }
+  const r4 = (v: number) => Math.round(v * 10000) / 10000;
+  const out = [...rows.values()].map((x) => {
+    const actual_rate = x.act_w > 0 ? r4(x.act_amt_issued / x.act_w) : null;
+    return {
+      stage_id: x.stage_id, stage_name: x.stage_name ?? '—', operation_id: x.operation_id, op_name: x.op_name,
+      merch_rate: x.merch_rate == null ? null : r4(x.merch_rate), prod_rate: x.prod_rate, actual_rate,
+      issued_qty: x.issued_qty, received_qty: x.received_qty, actual_amount: r2(x.actual_amount),
+      prod_amount_on_received: x.prod_rate != null ? r2(x.received_qty * x.prod_rate) : null,
+      var_prod_vs_merch: x.prod_rate != null && x.merch_rate != null ? r4(x.prod_rate - x.merch_rate) : null,
+      var_actual_vs_prod: actual_rate != null && x.prod_rate != null ? r4(actual_rate - x.prod_rate) : null,
+      off_card: x.prod_rate == null && x.act_w > 0,
+      dcs: [...x.dcs], inhouse_dcs: x.inhouse_dcs,
+    };
+  }).sort((a, b) => String(a.stage_name).localeCompare(String(b.stage_name)) || String(a.op_name).localeCompare(String(b.op_name)));
+
+  const sumOf = (k: 'merch_rate' | 'prod_rate' | 'actual_rate', list = out) => r4(list.reduce((a, r) => a + (r[k] ?? 0), 0));
+  const stageNames = [...new Set(out.map((r) => r.stage_name))];
+  const stages = stageNames.map((sn) => {
+    const l = out.filter((r) => r.stage_name === sn);
+    return { stage_name: sn, merch_rate: sumOf('merch_rate', l), prod_rate: sumOf('prod_rate', l), actual_rate: sumOf('actual_rate', l),
+      actual_amount: r2(l.reduce((a, r) => a + r.actual_amount, 0)), prod_amount_on_received: r2(l.reduce((a, r) => a + (r.prod_amount_on_received ?? 0), 0)) };
+  });
+  const merchPc = sumOf('merch_rate'), prodPc = sumOf('prod_rate'), actPc = sumOf('actual_rate');
+  const actualAmount = r2(out.reduce((a, r) => a + r.actual_amount, 0));
+  const prodOnReceived = r2(out.reduce((a, r) => a + (r.prod_amount_on_received ?? 0), 0));
+  return {
+    io_no: ioNo, order_qty: orderQty,
+    card: { status: status.status, revision_no: status.revision_no, locked_at: status.locked_at, locked_by: status.locked_by },
+    costing: pv.costing,
+    rows: out, stages,
+    totals: {
+      merch_rate_pc: merchPc, prod_rate_pc: prodPc, actual_rate_pc: actPc,
+      var_prod_vs_merch_pc: r4(prodPc - merchPc), var_actual_vs_prod_pc: r4(actPc - prodPc),
+      merch_amount: r2(merchPc * orderQty), prod_amount: r2(prodPc * orderQty),
+      actual_amount: actualAmount, prod_amount_on_received: prodOnReceived, var_actual_vs_prod_amount: r2(actualAmount - prodOnReceived),
+      off_card_rows: out.filter((r) => r.off_card).length,
+    },
+  };
+}
+
+/** GET /job-rate-cards/variance?io_no= — merchandiser vs production vs actual, per operation. */
+processMasterRouter.get('/job-rate-cards/variance', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  const qp = z.object({ io_no: z.string().trim().min(1).max(40) }).parse(req.query);
+  res.json({ data: await jobRateVariance(req.user!.companyId, qp.io_no) });
 }));
 
 /**

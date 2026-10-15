@@ -111,6 +111,8 @@ export default function ProductionCostDetailPage() {
   // Where each actual head comes from (transactions / rate setting / no data) — never an assumed figure.
   const [heads, setHeads] = useState<{ key: string; label: string; amount: number; source: string; note: string }[]>([]);
   const [quality, setQuality] = useState<{ std_rate_valuations: number; unpriced_dcs: number; has_job: boolean } | null>(null);
+  // production rate card of the job (rate fixing — approve & lock): production budget between merchandiser and actual
+  const [production, setProduction] = useState<{ has_card: boolean; status: string | null; revision_no: number; locked_at: string | null; locked_by: string | null; rate_pc: number | null } | null>(null);
   const [stageWip, setStageWip] = useState<any[]>([]);
   const [sources, setSources] = useState<any>({
     materials: [],
@@ -195,6 +197,7 @@ export default function ProductionCostDetailPage() {
         if (parsed.sources) setSources(parsed.sources);
         if (parsed.heads) setHeads(parsed.heads);
         if (parsed.quality) setQuality(parsed.quality);
+        if (parsed.production) setProduction(parsed.production);
       } catch (err) {}
     }
   }, [costQuery.data]);
@@ -246,6 +249,7 @@ export default function ProductionCostDetailPage() {
       setSources(d.sources || {});
       setHeads(d.heads || []);
       setQuality(d.quality || null);
+      setProduction(d.production || null);
 
       toast(`Loaded transaction-driven costing for ${d.order.po_prod_no} (${d.order.style_code})`);
     } catch (err) {
@@ -320,6 +324,7 @@ export default function ProductionCostDetailPage() {
           sources,
           heads,
           quality,
+          production,
         },
       };
 
@@ -1211,39 +1216,53 @@ export default function ProductionCostDetailPage() {
           {/* Tab 12: VARIANCE (Developer Spec Section 18) */}
           {activeTab === 'Variance' && (
             <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
-              <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center text-xs">
-                <span className="font-bold text-slate-700">Standard vs Actual Variance Analysis</span>
-                <span className="text-[11px] text-slate-500">Variance = Actual Cost − Standard Cost</span>
+              <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-wrap gap-2 justify-between items-center text-xs">
+                <span className="font-bold text-slate-700">Merchandiser vs Production vs Actual</span>
+                <span className="text-[11px] text-slate-500">
+                  Merchandiser = pre-costing · Production = job rate card
+                  {production?.has_card
+                    ? <> (<b id="pc-card-status" className={production.status === 'LOCKED' ? 'text-emerald-700' : 'text-amber-700'}>{production.status === 'LOCKED' ? `Locked rev ${production.revision_no}` : production.status === 'SUBMITTED' ? 'Submitted, not locked' : 'Draft, not locked'}</b>)</>
+                    : <> (<b className="text-amber-700">no rate card for this job</b>)</>}
+                  {' '}· Actual = transactions
+                  {head.io_no && <> · <a className="font-semibold text-brand-700 underline" href={`/production/job-rate-cards?io_no=${encodeURIComponent(head.io_no)}`}>Rate fixing →</a></>}
+                </span>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
+                <table className="w-full text-left text-xs border-collapse" id="pc-variance">
                   <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-[11px]">
                     <tr>
                       <th className="py-2.5 px-3">Cost Head</th>
-                      <th className="py-2.5 px-3 text-right">Standard / Pc</th>
+                      <th className="py-2.5 px-3 text-right">Merchandiser / Pc</th>
+                      <th className="py-2.5 px-3 text-right">Production / Pc</th>
                       <th className="py-2.5 px-3 text-right">Actual / Pc</th>
-                      <th className="py-2.5 px-3 text-right">Variance / Pc</th>
+                      <th className="py-2.5 px-3 text-right" title="Production rate − merchandiser costing">Prod − Merch</th>
+                      <th className="py-2.5 px-3 text-right" title="Actual − production rate">Actual − Prod</th>
+                      <th className="py-2.5 px-3 text-right" title="Actual − merchandiser costing">Actual − Merch</th>
                       <th className="py-2.5 px-3 text-right">Variance %</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700">
                     {(tabsData.variance || []).map((r: any, i: number) => {
                       const isTotal = r.cost_head === 'TOTAL';
-                      const isPositive = r.variance > 0;
+                      const sv = (v: number | null | undefined) => v == null
+                        ? <span className="text-slate-400">—</span>
+                        : <span className={v > 0 ? 'text-rose-600' : v < 0 ? 'text-emerald-600' : ''}>{v > 0 ? `+₹${v.toFixed(2)}` : v < 0 ? `-₹${Math.abs(v).toFixed(2)}` : '₹0.00'}</span>;
                       return (
                         <tr key={i} className={isTotal ? 'bg-slate-50/90 font-bold border-t-2 border-slate-300' : 'hover:bg-slate-50'}>
                           <td className={`py-2.5 px-3 ${isTotal ? 'text-slate-900 font-bold' : 'font-medium'}`}>{r.cost_head}</td>
                           <td className="py-2.5 px-3 text-right font-mono">{money(r.standard_pc)}</td>
+                          <td className="py-2.5 px-3 text-right font-mono">{money(r.production_pc)}</td>
                           <td className="py-2.5 px-3 text-right font-mono font-bold">
                             ₹{Number(r.actual_pc).toFixed(2)}
                             {r.source === 'NO_DATA' && <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] font-semibold text-amber-800" title={r.note}>no data</span>}
+                            {r.source === 'RATE_CARD' && <span className="ml-1 rounded bg-emerald-100 px-1 text-[10px] font-semibold text-emerald-800" title={r.note}>rate card</span>}
                             {r.source === 'RATE_SETTING' && <span className="ml-1 rounded bg-sky-100 px-1 text-[10px] font-semibold text-sky-800" title={r.note}>rate setting</span>}
                           </td>
-                          <td className={`py-2.5 px-3 text-right font-mono font-bold ${isPositive ? 'text-rose-600' : 'text-emerald-600'}`}>
-                            {r.variance == null ? '—' : isPositive ? `+₹${r.variance.toFixed(2)}` : `-₹${Math.abs(r.variance).toFixed(2)}`}
-                          </td>
-                          <td className={`py-2.5 px-3 text-right font-mono font-bold ${isPositive ? 'text-rose-600' : 'text-emerald-600'}`}>
-                            {r.variance_pct == null ? '—' : isPositive ? `+${r.variance_pct.toFixed(2)}%` : `${r.variance_pct.toFixed(2)}%`}
+                          <td className="py-2.5 px-3 text-right font-mono font-bold">{sv(r.var_prod_vs_std)}</td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold">{sv(r.var_actual_vs_prod)}</td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold">{sv(r.variance)}</td>
+                          <td className={`py-2.5 px-3 text-right font-mono font-bold ${r.variance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                            {r.variance_pct == null ? '—' : r.variance > 0 ? `+${r.variance_pct.toFixed(2)}%` : `${r.variance_pct.toFixed(2)}%`}
                           </td>
                         </tr>
                       );
@@ -1251,6 +1270,10 @@ export default function ProductionCostDetailPage() {
                   </tbody>
                 </table>
               </div>
+              <p className="border-t border-slate-100 px-3 py-2 text-[11px] text-slate-500">
+                Production / Pc is the job's rate card for cutting, sewing, process, finishing and packing (fabric, trims and overhead have no production rate).
+                The TOTAL row's Prod − Merch and Actual − Prod compare those conversion heads only. + is over, − is under.
+              </p>
             </div>
           )}
 

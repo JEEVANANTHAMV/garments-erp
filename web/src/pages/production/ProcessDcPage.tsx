@@ -480,12 +480,15 @@ function DcEditor({ id, stages, onClose, onSaved }: {
   // Operations of the process with this contractor's rates.
   // One job on the DC → its job rate card decides the operations and rates (client voice note 29-Sep-2026).
   const singleIo = lines.length && lines.every((l) => l.io_no && l.io_no === lines[0].io_no) ? lines[0].io_no : null;
+  // the job's production rate card is Approved & Locked: its rates apply to contractor and in-house DCs alike (client audio 15-Oct-2026)
+  const [cardLocked, setCardLocked] = useState<{ rev: number } | null>(null);
   useEffect(() => {
     if (!head.stage_id) { setOps([]); return; }
     api.get('/process-master/operations', { params: { stage_id: head.stage_id, vendor_id: head.vendor_id || undefined, io_no: singleIo || undefined } })
       .then((r) => {
         const rows: Op[] = r.data.data || [];
         setOps(rows);
+        setCardLocked(r.data.meta?.card_status === 'LOCKED' && rows.some((o) => o.in_job_card) ? { rev: Number(r.data.meta?.card_revision) || 0 } : null);
         const card = rows.filter((o) => o.in_job_card);
         if (card.length && !id) setOpSel((cur) => (Object.keys(cur).length ? cur : Object.fromEntries(card.map((o) => [o.id, String(o.rate)]))));
       }).catch(() => setOps([]));
@@ -748,13 +751,15 @@ function DcEditor({ id, stages, onClose, onSaved }: {
             {ops.filter((o) => ops.length <= 6 || !opQ || o.op_name.toLowerCase().includes(opQ.toLowerCase()) || (o.op_code ?? '').toLowerCase().includes(opQ.toLowerCase())).map((o) => {
               const on = o.id in opSel;
               // contractor: the rate card / contractor rate is fixed; in-house: internal rate, editable
-              const rateLocked = !toUnit && (o.in_job_card || o.contractor_rate != null);
+              const rateLocked = (!!cardLocked && !!o.in_job_card) || (!toUnit && (o.in_job_card || o.contractor_rate != null));
+              const offCard = !!cardLocked && !o.in_job_card;
               return (
-                <label key={o.id} className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs ${on ? 'border-brand-300 bg-brand-50' : 'border-slate-200 bg-white'}`}>
-                  <input type="checkbox" checked={on} onChange={() => toggleOp(o)} />
-                  <span className="flex-1 font-medium text-slate-700">{o.op_name}{o.in_job_card && <span className="ml-1 rounded bg-violet-100 px-1 text-[10px] font-semibold text-violet-700" title="On this job's rate card">job</span>}</span>
+                <label key={o.id} className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs ${on ? 'border-brand-300 bg-brand-50' : 'border-slate-200 bg-white'} ${offCard && !on ? 'opacity-50' : ''}`}
+                  title={offCard ? 'Not on the job\'s locked rate card — revise the card to add it' : undefined}>
+                  <input type="checkbox" checked={on} disabled={offCard && !on} onChange={() => toggleOp(o)} />
+                  <span className="flex-1 font-medium text-slate-700">{o.op_name}{o.in_job_card && <span className={`ml-1 rounded px-1 text-[10px] font-semibold ${cardLocked ? 'bg-emerald-100 text-emerald-700' : 'bg-violet-100 text-violet-700'}`} title={cardLocked ? `Locked production rate (rev ${cardLocked.rev})` : "On this job's rate card"}>{cardLocked ? 'locked' : 'job'}</span>}</span>
                   {on ? (
-                    <input type="number" min={0} step="0.01" value={rateLocked ? String(o.rate) : opSel[o.id]} title={rateLocked ? 'Rate master — fixed' : '₹ / PCS'} disabled={rateLocked}
+                    <input type="number" min={0} step="0.01" value={rateLocked ? String(o.rate) : opSel[o.id]} title={rateLocked ? (cardLocked && o.in_job_card ? 'Locked production rate' : 'Rate master — fixed') : '₹ / PCS'} disabled={rateLocked}
                       onChange={(e) => setOpSel((cur) => ({ ...cur, [o.id]: e.target.value }))}
                       className="input h-6 w-16 px-1 text-right" />
                   ) : (

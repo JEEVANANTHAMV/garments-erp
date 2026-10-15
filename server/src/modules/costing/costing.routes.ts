@@ -39,7 +39,7 @@ export const costingRouter = Router();
  * currency), else the latest rate in trx_exchange_rate; with no rate the
  * variance is not computed.
  */
-type HeadSource = 'TRANSACTIONS' | 'RATE_SETTING' | 'NO_DATA';
+type HeadSource = 'TRANSACTIONS' | 'RATE_CARD' | 'RATE_SETTING' | 'NO_DATA';
 interface CostHead { key: string; label: string; amount: number; source: HeadSource; note: string; docs: number }
 
 const r2 = (v: number) => Math.round(v * 100) / 100;
@@ -242,9 +242,26 @@ export async function buildOrderData(companyId: number, prodOrderId: number) {
   const procDcs = dcs.filter((d) => ![...SEW_STAGES, ...FIN_STAGES, ...PACK_STAGES, ...EMB_STAGES].includes(code(d)));
   const sum = (ds: any[]) => ds.reduce((a, d) => a + d.amount, 0);
 
-  // H. In-house rates (company settings) — never assumed
-  const cutRate = await costSetting(companyId, 'COSTING_CUTTING_RATE_PER_PC');
-  const sewRate = await costSetting(companyId, 'COSTING_SEWING_RATE_PER_PC');
+  // H. Production rate card of the job (client audio 15-Oct-2026: production fixes & locks a rate per
+  //    process / operation; that is the production budget and prices in-house cutting / sewing)
+  const cardRows = ioNo ? await query<any>(
+    `SELECT j.rate, UPPER(ps.stage_code) AS stage_code FROM trx_job_op_rate j
+       LEFT JOIN cfg_process_stage ps ON ps.id = j.stage_id WHERE j.company_id = ? AND j.io_no = ?`, [companyId, ioNo]) : [];
+  const cardHdr = ioNo ? await queryOne<any>(
+    `SELECT c.status, c.revision_no, c.locked_at, u.full_name AS locked_by FROM trx_job_rate_card c
+       LEFT JOIN sec_user u ON u.id = c.locked_by WHERE c.company_id = ? AND c.io_no = ?`, [companyId, ioNo]) : null;
+  const CUT_STAGES = ['CUT', 'CUTTING'];
+  const headOfStage = (c: string) => CUT_STAGES.includes(c) ? 'cutting' : SEW_STAGES.includes(c) ? 'sewing' : FIN_STAGES.includes(c) ? 'finishing'
+    : PACK_STAGES.includes(c) ? 'packing' : 'process';
+  const prodPc: Record<string, number> = {};
+  for (const r of cardRows) { const h = headOfStage(String(r.stage_code ?? '')); prodPc[h] = (prodPc[h] ?? 0) + numv(r.rate); }
+  const hasCard = cardRows.length > 0;
+
+  // In-house rates: the job's rate card, else company settings — never assumed
+  const cardCut = prodPc.cutting != null ? r2(prodPc.cutting) : null;
+  const cardSew = prodPc.sewing != null ? r2(prodPc.sewing) : null;
+  const cutRate = cardCut ?? await costSetting(companyId, 'COSTING_CUTTING_RATE_PER_PC');
+  const sewRate = cardSew ?? await costSetting(companyId, 'COSTING_SEWING_RATE_PER_PC');
   const ohRate = await costSetting(companyId, 'COSTING_OVERHEAD_PER_PC');
   const stitchDcGood = sewDcs.reduce((a, d) => a + numv(d.good), 0);
   const inHouseSewn = Math.max(0, sewGood - stitchDcGood);
@@ -262,11 +279,11 @@ export async function buildOrderData(companyId: number, prodOrderId: number) {
     { key: 'process', label: 'Process (print / emb / wash …)', amount: r2(sum(embDcs) + sum(procDcs)),
       source: embDcs.length + procDcs.length ? 'TRANSACTIONS' : 'NO_DATA',
       note: embDcs.length + procDcs.length ? `${embDcs.length + procDcs.length} process DC(s) received` : 'No printing / embroidery / washing DC received for this job', docs: embDcs.length + procDcs.length },
-    { key: 'cutting', label: 'Cutting', amount: cutAmt, source: cutRate != null ? 'RATE_SETTING' : 'NO_DATA',
-      note: cutRate != null ? `${fmtQty(cutQty)} cut PCS × ₹${cutRate}/PC (COSTING_CUTTING_RATE_PER_PC)` : 'Set COSTING_CUTTING_RATE_PER_PC to cost in-house cutting', docs: 0 },
+    { key: 'cutting', label: 'Cutting', amount: cutAmt, source: cardCut != null ? 'RATE_CARD' : cutRate != null ? 'RATE_SETTING' : 'NO_DATA',
+      note: cutRate != null ? `${fmtQty(cutQty)} cut PCS × ₹${cutRate}/PC (${cardCut != null ? 'job rate card' : 'COSTING_CUTTING_RATE_PER_PC'})` : 'Put Cutting on the job rate card (or set COSTING_CUTTING_RATE_PER_PC) to cost in-house cutting', docs: 0 },
     { key: 'sewing', label: 'Sewing', amount: r2(sum(sewDcs) + inSewAmt),
-      source: sewDcs.length ? 'TRANSACTIONS' : sewRate != null ? 'RATE_SETTING' : 'NO_DATA',
-      note: [sewDcs.length ? `${sewDcs.length} stitching DC(s)` : '', sewRate != null ? `${fmtQty(inHouseSewn)} in-house PCS × ₹${sewRate}/PC` : inHouseSewn ? `${fmtQty(inHouseSewn)} in-house PCS not costed — set COSTING_SEWING_RATE_PER_PC` : '']
+      source: sewDcs.length ? 'TRANSACTIONS' : cardSew != null ? 'RATE_CARD' : sewRate != null ? 'RATE_SETTING' : 'NO_DATA',
+      note: [sewDcs.length ? `${sewDcs.length} stitching DC(s)` : '', sewRate != null ? `${fmtQty(inHouseSewn)} in-house PCS × ₹${sewRate}/PC (${cardSew != null ? 'job rate card' : 'COSTING_SEWING_RATE_PER_PC'})` : inHouseSewn ? `${fmtQty(inHouseSewn)} in-house PCS not costed — put stitching on the job rate card or set COSTING_SEWING_RATE_PER_PC` : '']
         .filter(Boolean).join(' · ') || 'No stitching DC received and no in-house sewing rate', docs: sewDcs.length },
     { key: 'finishing', label: 'Finishing / ironing', amount: r2(sum(finDcs)), source: finDcs.length ? 'TRANSACTIONS' : 'NO_DATA',
       note: finDcs.length ? `${finDcs.length} ironing / finishing DC(s)` : 'No ironing / finishing DC received for this job', docs: finDcs.length },
@@ -331,12 +348,24 @@ export async function buildOrderData(companyId: number, prodOrderId: number) {
     const standard_pc = stdAvailable ? r2(stdPc[h.key] ?? 0) : null;
     const variance = standard_pc != null ? r2(actual_pc - standard_pc) : null;
     const variance_pct = standard_pc ? r2(((variance as number) / standard_pc) * 100) : null;
-    return { cost_head: h.label, key: h.key, standard_pc, actual_pc, variance, variance_pct, source: h.source, note: h.note };
+    // production budget: the job's rate card for the conversion heads; material / overhead stay on the merchandiser figure
+    const production_pc = hasCard && ['cutting', 'sewing', 'finishing', 'packing', 'process'].includes(h.key) ? r2(prodPc[h.key] ?? 0) : null;
+    return { cost_head: h.label, key: h.key, standard_pc, production_pc, actual_pc, variance, variance_pct,
+      var_prod_vs_std: production_pc != null && standard_pc != null ? r2(production_pc - standard_pc) : null,
+      var_actual_vs_prod: production_pc != null ? r2(actual_pc - production_pc) : null,
+      source: h.source, note: h.note };
   });
   const totAct = r2(varianceRows.reduce((a, r) => a + r.actual_pc, 0));
   const totStd = stdAvailable ? r2(varianceRows.reduce((a, r) => a + (r.standard_pc ?? 0), 0)) : null;
+  const prodRows = varianceRows.filter((r) => r.production_pc != null);
+  const totProd = hasCard ? r2(prodRows.reduce((a, r) => a + r.production_pc, 0)) : null;
+  const totProdStd = hasCard && stdAvailable ? r2(prodRows.reduce((a, r) => a + (r.standard_pc ?? 0), 0)) : null;
+  const totProdAct = hasCard ? r2(prodRows.reduce((a, r) => a + r.actual_pc, 0)) : null;
   varianceRows.push({
-    cost_head: 'TOTAL', key: 'total', standard_pc: totStd, actual_pc: totAct,
+    cost_head: 'TOTAL', key: 'total', standard_pc: totStd, actual_pc: totAct, production_pc: totProd,
+    // conversion heads only — the card covers cutting / sewing / process / finishing / packing
+    var_prod_vs_std: totProd != null && totProdStd != null ? r2(totProd - totProdStd) : null,
+    var_actual_vs_prod: totProd != null && totProdAct != null ? r2(totProdAct - totProd) : null,
     variance: totStd != null ? r2(totAct - totStd) : null,
     variance_pct: totStd ? r2(((totAct - totStd) / totStd) * 100) : null, source: null, note: null,
   });
@@ -413,6 +442,14 @@ export async function buildOrderData(companyId: number, prodOrderId: number) {
         variance: varianceRows,
       },
       breakdownHeads,
+      production: {
+        has_card: hasCard,
+        status: cardHdr?.status ?? (hasCard ? 'DRAFT' : null),
+        revision_no: cardHdr ? Number(cardHdr.revision_no) : 0,
+        locked_at: cardHdr?.locked_at ?? null, locked_by: cardHdr?.locked_by ?? null,
+        rate_pc: hasCard ? r2(Object.values(prodPc).reduce((a, v) => a + v, 0)) : null,
+        by_head: Object.fromEntries(Object.entries(prodPc).map(([k, v]) => [k, r2(v)])),
+      },
       standard: {
         costing_id: estimatedCosting?.id ?? null,
         costing_no: estimatedCosting?.costing_no ?? null,

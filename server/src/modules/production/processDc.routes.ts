@@ -62,7 +62,7 @@ async function resolveFromLine(tx: Tx | null, cid: number, st: StageInfo, lineId
 }
 import { refreshJwOrder, resolveJwRate, lossTolerance } from './jwOrderStatus.js';
 import { settingFlag } from '../../core/inwardControls.js';
-import { contractorRates } from './processMaster.routes.js';
+import { contractorRates, lockedJobCard } from './processMaster.routes.js';
 
 /**
  * Process DCs with bundle numbers (client voice note 1, doc §15, §19, §20).
@@ -811,18 +811,31 @@ function headerFrom(lines: PreparedLine[]) {
  * unless a rate / PCS was typed in.
  */
 async function resolveOps(cid: number, st: StageInfo, vendorId: number | null, ops: z.infer<typeof dcSchema>['operations'], ioNo?: string | null, locked = false) {
-  if (!ops.length) return [];
+  // Production rate card Approved & Locked (client audio 15-Oct-2026): the job's card rates are used on every DC —
+  // contractor and in-house (PRODUCTION_RATE_LOCK_ENFORCED) — a DC naming no operation of a carded process takes
+  // all the card's operations of that process, and an operation the locked card lacks for that process is refused.
+  const lockedCard = await lockedJobCard(cid, ioNo);
+  const stageCard = lockedCard ? [...lockedCard.rates].filter(([, v]) => v.stage_id === st.id) : [];
+  const cardLocked = !!lockedCard && stageCard.length > 0 && (locked || lockedCard.enforced);
+  if (!ops.length && cardLocked) {
+    return Object.assign(stageCard.map(([opId, v]) => ({ operation_id: opId, rate: v.rate })), { cardLocked });
+  }
+  if (!ops.length) return Object.assign([] as { operation_id: number; rate: number }[], { cardLocked: false });
   const known = await contractorRates(cid, vendorId, st.id);
   const card = ioNo
     ? new Map((await query<any>(`SELECT operation_id, rate FROM trx_job_op_rate WHERE company_id = ? AND io_no = ?`, [cid, ioNo])).map((c) => [Number(c.operation_id), n(c.rate)]))
     : new Map<number, number>();
-  return ops.map((o) => {
+  const out = ops.map((o) => {
     const k = known.find((x) => Number(x.id) === o.operation_id);
     if (!k) throw BadRequest(`Operation ${o.operation_id} does not belong to ${st.stage_name}`);
+    if (cardLocked && !card.has(o.operation_id)) {
+      throw BadRequest(`${k.op_name} is not on the locked rate card of job ${ioNo} (revision ${lockedCard!.revision}) — revise the card to add it`);
+    }
     // the job's rate card, else the contractor's rate — on a contractor DC these cannot be overridden (voice note 13-Oct-2026)
     const master = card.has(o.operation_id) ? card.get(o.operation_id)! : k.contractor_rate != null ? n(k.contractor_rate) : null;
-    return { operation_id: o.operation_id, rate: locked && master != null ? master : (o.rate ?? master ?? n(k.default_rate)) };
+    return { operation_id: o.operation_id, rate: (locked || cardLocked) && master != null ? master : (o.rate ?? master ?? n(k.default_rate)) };
   });
+  return Object.assign(out, { cardLocked });
 }
 async function writeOps(tx: Tx, challanId: number, ops: { operation_id: number; rate: number }[]) {
   await txExecute(tx, `DELETE FROM trx_jobwork_challan_op WHERE challan_id = ?`, [challanId]);
@@ -965,8 +978,9 @@ processDcRouter.post('/process-dcs', requirePermission('PRODUCTION.CREATE'), ah(
     const lines = await prepareLines(tx, cid, st, body.lines, undefined, body.release_line_allocation, fromLine, party.isUnit);
     const h = headerFrom(lines);
     const ops = await resolveOps(cid, st, body.vendor_id ?? null, body.operations, h.io_no, !party.isUnit);
-    if (ops.length && (!party.isUnit || body.rate == null)) body.rate = opsRate(ops);
+    if (ops.length && (!party.isUnit || body.rate == null || ops.cardLocked)) body.rate = opsRate(ops);
     const ol = await checkOrderLine(tx, req, body, st, h.total_qty);
+    if (ops.cardLocked) body.rate = opsRate(ops); // locked production rate wins over a job-work order rate
     if (!ol && !ops.length && body.vendor_id) {
       const r = await resolveJwRate(cid, { vendor_id: body.vendor_id, stage_id: st.id, style_id: h.style_id, uom: 'PCS', on: body.challan_date });
       if (r) body.rate = r.rate;
@@ -1024,8 +1038,9 @@ processDcRouter.put('/process-dcs/:id', requirePermission('PRODUCTION.UPDATE'), 
     const lines = await prepareLines(tx, cid, st, body.lines, id, body.release_line_allocation, fromLine, party.isUnit);
     const h = headerFrom(lines);
     const ops = await resolveOps(cid, st, body.vendor_id ?? null, body.operations, h.io_no, !party.isUnit);
-    if (ops.length && (!party.isUnit || body.rate == null)) body.rate = opsRate(ops);
+    if (ops.length && (!party.isUnit || body.rate == null || ops.cardLocked)) body.rate = opsRate(ops);
     const ol = await checkOrderLine(tx, req, body, st, h.total_qty, id);
+    if (ops.cardLocked) body.rate = opsRate(ops); // locked production rate wins over a job-work order rate
     if (!ol && !ops.length && body.vendor_id) {
       const rr = await resolveJwRate(cid, { vendor_id: body.vendor_id, stage_id: st.id, style_id: h.style_id, uom: 'PCS', on: body.challan_date });
       if (rr) body.rate = rr.rate;

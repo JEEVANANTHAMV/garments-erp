@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Save, Ban, Search, Wallet, FileMinus, Calculator } from 'lucide-react';
+import { Plus, Save, Ban, Search, Wallet, FileMinus, Calculator, Lock, Unlock, Send, Undo2, History, Scale } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { useAuth } from '../../lib/auth';
 import { Card, Badge, Button, Input, Select, Textarea, Modal, FormSection, DataTable } from '../../components/ui';
 import { api } from '../../lib/api';
 import { fmtDate, fmtNumber, today } from '../../lib/format';
@@ -38,6 +40,29 @@ export function JobRateCardPage() {
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [fromCosting, setFromCosting] = useState(false);
+  const { can } = useAuth();
+  const [params] = useSearchParams();
+  const [status, setStatus] = useState<CardStatus | null>(null);
+  const [ask, setAsk] = useState<null | 'reject' | 'revise'>(null);
+  const [reason, setReason] = useState('');
+  const [stepBusy, setStepBusy] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [showVariance, setShowVariance] = useState(false);
+  const locked = status?.status === 'LOCKED';
+
+  const loadStatus = (io = ioNo) => (io.trim()
+    ? api.get('/job-rate-cards/status', { params: { io_no: io.trim() } }).then((r) => setStatus(r.data.data)).catch(() => setStatus(null))
+    : Promise.resolve(setStatus(null)));
+  const step = async (action: 'submit' | 'lock' | 'reject' | 'revise', why?: string) => {
+    setStepBusy(true);
+    try {
+      const r = await api.post(`/job-rate-cards/${action}`, { io_no: ioNo.trim(), reason: why || null });
+      setStatus(r.data.data);
+      toast({ submit: 'Rate card submitted for approval', lock: 'Rate card approved & locked — every DC, bill and costing of this job now uses these rates',
+        reject: 'Rate card sent back to draft', revise: `Rate card opened for revision ${r.data.data.revision_no}` }[action]);
+      setAsk(null); setReason(''); loadCards();
+    } catch (e) { toast(errMsg(e), 'error'); } finally { setStepBusy(false); }
+  };
 
   const loadCards = () => api.get('/job-rate-cards').then((r) => setCards(r.data.data || [])).catch(() => setCards([]));
   useEffect(() => {
@@ -58,8 +83,14 @@ export function JobRateCardPage() {
       setRows(d);
       setEdit(Object.fromEntries(d.map((o) => [o.operation_id, { on: o.selected, rate: o.job_rate != null ? String(o.job_rate) : String(o.default_rate || ''), remarks: o.remarks ?? '' }])));
       setLoaded(true);
+      loadStatus(io);
     } catch (e) { toast(errMsg(e), 'error'); }
   };
+  useEffect(() => {
+    const io = params.get('io_no');
+    if (io && stageId && !loaded) { setIoNo(io); loadCard(io, stageId); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params, stageId]);
 
   const total = useMemo(() => Object.values(edit).filter((e) => e.on).reduce((a, e) => a + num(e.rate), 0), [edit]);
 
@@ -77,8 +108,13 @@ export function JobRateCardPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold text-slate-800">Job Rate Card</h1>
-        <p className="text-sm text-slate-500">For each job pick only the operations it needs from the Process & Operations master and fix the contractor piece rate. Process DCs and contractor bills use these rates.</p>
+        <h1 className="text-2xl font-bold text-slate-800">Production Costing – Rate Fixing</h1>
+        <p className="text-sm text-slate-500">
+          Production fixes the rate of every process of a job — cutting, each stitching operation, checking, ironing, packing, printing / embroidery —
+          then submits it and the production head <b>approves &amp; locks</b> it. Once locked, every Process DC (contractor and in-house),
+          contractor bill and production costing of the job uses only these rates; a change needs <b>Revise</b> with a reason.
+          The variance shows merchandiser costing vs these rates vs actual.
+        </p>
       </div>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_1.4fr]">
         <Card title="Jobs with a rate card">
@@ -89,6 +125,7 @@ export function JobRateCardPage() {
               { key: 'style_code', header: 'Style', render: (r: any) => r.style_code || '—' },
               { key: 'operations', header: 'Operations', align: 'right' as const },
               { key: 'total_rate', header: '₹ / PCS', align: 'right' as const, render: (r: any) => <b>{num(r.total_rate).toFixed(2)}</b> },
+              { key: 'card_status', header: 'Status', render: (r: any) => <CardBadge status={r.card_status} rev={r.revision_no} /> },
               { key: 'updated_at', header: 'Updated', render: (r: any) => fmtDate(r.updated_at) },
             ]} />
         </Card>
@@ -98,7 +135,7 @@ export function JobRateCardPage() {
             <Select label="Process" className="w-44" value={stageId} onChange={(e) => { setStageId(e.target.value); setLoaded(false); }}
               options={stages.map((s) => ({ value: s.id, label: s.stage_name }))} />
             <Button variant="secondary" className="!h-10" onClick={() => loadCard()}><Search size={14} className="mr-1 inline" />Load</Button>
-            <Button variant="secondary" className="!h-10" id="rc-from-costing" disabled={!ioNo.trim()} onClick={() => setFromCosting(true)}>
+            <Button variant="secondary" className="!h-10" id="rc-from-costing" disabled={!ioNo.trim() || locked} onClick={() => setFromCosting(true)}>
               <Calculator size={14} className="mr-1 inline" />Load rates from costing
             </Button>
           </div>
@@ -107,6 +144,24 @@ export function JobRateCardPage() {
             (Sewing: SMV × ₹ / min · Cutting and Processes: the row rate). In-house unit DCs and contractor bills use this
             rate card, so they pick up the costing rates.
           </p>
+          {loaded && status && (
+            <div id="rc-status" data-status={status.status ?? ''} className={`mx-3 mb-3 flex flex-wrap items-center gap-2 rounded-lg border p-2.5 text-xs ${locked ? 'border-emerald-200 bg-emerald-50' : status.status === 'SUBMITTED' ? 'border-sky-200 bg-sky-50' : 'border-amber-200 bg-amber-50'}`}>
+              <CardBadge status={status.status} rev={status.revision_no} />
+              <span className="text-slate-700">
+                {locked ? <>Locked by <b>{status.locked_by ?? '—'}</b> on {fmtDate(status.locked_at)} · <b>₹{num(status.total_rate).toFixed(2)} / PCS</b> over {status.operations} operation(s), all processes</>
+                  : status.status === 'SUBMITTED' ? <>Submitted by <b>{status.submitted_by ?? '—'}</b> on {fmtDate(status.submitted_at)} — waiting for approval</>
+                    : status.status ? <>Draft — rates can be changed; submit when ready</> : <>No rates fixed for this job yet</>}
+              </span>
+              <span className="ml-auto flex flex-wrap gap-1.5">
+                {status.status === 'DRAFT' && can('PRODUCTION.UPDATE') && <Button size="sm" variant="secondary" id="rc-submit" loading={stepBusy} onClick={() => step('submit')}><Send size={12} className="mr-1 inline" />Submit for approval</Button>}
+                {(status.status === 'DRAFT' || status.status === 'SUBMITTED') && can('PRODUCTION.APPROVE') && <Button size="sm" id="rc-lock" loading={stepBusy} onClick={() => step('lock')}><Lock size={12} className="mr-1 inline" />Approve &amp; lock</Button>}
+                {status.status === 'SUBMITTED' && can('PRODUCTION.APPROVE') && <Button size="sm" variant="secondary" id="rc-reject" onClick={() => setAsk('reject')}><Undo2 size={12} className="mr-1 inline" />Send back</Button>}
+                {locked && can('PRODUCTION.APPROVE') && <Button size="sm" variant="secondary" id="rc-revise" onClick={() => setAsk('revise')}><Unlock size={12} className="mr-1 inline" />Revise</Button>}
+                <Button size="sm" variant="secondary" id="rc-variance" onClick={() => setShowVariance(true)}><Scale size={12} className="mr-1 inline" />Variance</Button>
+                {status.history.length > 0 && <Button size="sm" variant="secondary" id="rc-history" onClick={() => setShowHistory(true)}><History size={12} className="mr-1 inline" />History ({status.history.length})</Button>}
+              </span>
+            </div>
+          )}
           {loaded && (
             <>
               <table className="w-full text-xs">
@@ -119,15 +174,15 @@ export function JobRateCardPage() {
                     const e = edit[o.operation_id] ?? { on: false, rate: '', remarks: '' };
                     return (
                       <tr key={o.operation_id} className={`border-t border-slate-100 ${e.on ? 'bg-brand-50/40' : ''}`}>
-                        <td className="px-3 py-1.5 text-center"><input type="checkbox" checked={e.on} onChange={() => setEdit((c) => ({ ...c, [o.operation_id]: { ...e, on: !e.on } }))} /></td>
+                        <td className="px-3 py-1.5 text-center"><input type="checkbox" checked={e.on} disabled={locked} onChange={() => setEdit((c) => ({ ...c, [o.operation_id]: { ...e, on: !e.on } }))} /></td>
                         <td className="px-3 py-1.5 font-medium">{o.op_name} <span className="text-slate-400">{o.op_code}</span></td>
                         <td className="px-3 py-1.5 text-right text-slate-500">{num(o.default_rate).toFixed(2)}</td>
                         <td className="px-3 py-1.5 text-right">
-                          <input type="number" min={0} step="0.01" disabled={!e.on} className="input h-7 w-24 text-right text-xs" value={e.rate}
+                          <input type="number" min={0} step="0.01" disabled={!e.on || locked} className="input h-7 w-24 text-right text-xs" value={e.rate}
                             onChange={(ev) => setEdit((c) => ({ ...c, [o.operation_id]: { ...e, rate: ev.target.value } }))} />
                         </td>
                         <td className="px-3 py-1.5">
-                          <input disabled={!e.on} className="input h-7 w-40 text-xs" value={e.remarks}
+                          <input disabled={!e.on || locked} className="input h-7 w-40 text-xs" value={e.remarks}
                             onChange={(ev) => setEdit((c) => ({ ...c, [o.operation_id]: { ...e, remarks: ev.target.value } }))} />
                         </td>
                       </tr>
@@ -138,7 +193,9 @@ export function JobRateCardPage() {
               </table>
               <div className="flex items-center justify-between border-t border-slate-200 px-3 py-2 text-sm">
                 <span>{Object.values(edit).filter((e) => e.on).length} operation(s) · <b>₹{total.toFixed(2)} / PCS</b> for {ioNo}</span>
-                <Button loading={saving} onClick={save}><Save size={13} className="mr-1 inline" />Save rate card</Button>
+                {locked
+                  ? <span className="text-xs font-semibold text-emerald-700"><Lock size={12} className="mr-1 inline" />Locked — use Revise to change</span>
+                  : <Button loading={saving} onClick={save}><Save size={13} className="mr-1 inline" />Save rate card</Button>}
               </div>
             </>
           )}
@@ -148,7 +205,134 @@ export function JobRateCardPage() {
         <CostingRatesModal ioNo={ioNo.trim()} onClose={() => setFromCosting(false)}
           onApplied={(stage) => { setFromCosting(false); loadCards(); const st = stage ? String(stage) : stageId; setStageId(st); loadCard(ioNo, st); }} />
       )}
+      {ask && (
+        <Modal open onClose={() => setAsk(null)} size="md" icon={ask === 'revise' ? <Unlock size={18} /> : <Undo2 size={18} />}
+          title={ask === 'revise' ? 'Revise locked rate card' : 'Send rate card back'}
+          subtitle={`${ioNo} · ${ask === 'revise' ? `opens revision ${(status?.revision_no ?? 0) + 1} as a draft; DCs keep the old rates until it is locked again` : 'back to draft for production to correct'}`}
+          footer={<>
+            <Button variant="secondary" onClick={() => setAsk(null)}>Cancel</Button>
+            <Button id="rc-reason-ok" loading={stepBusy} disabled={!reason.trim()} onClick={() => step(ask, reason.trim())}>{ask === 'revise' ? 'Revise' : 'Send back'}</Button>
+          </>}>
+          <Textarea id="rc-reason" label="Reason (kept in the card history)" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
+        </Modal>
+      )}
+      {showHistory && status && (
+        <Modal open onClose={() => setShowHistory(false)} size="lg" icon={<History size={18} />} title="Rate card history" subtitle={`${ioNo} · revision ${status.revision_no}`}
+          footer={<Button variant="secondary" onClick={() => setShowHistory(false)}>Close</Button>}>
+          <table className="w-full text-xs">
+            <thead className="bg-slate-50 text-slate-500"><tr>
+              <th className="px-2 py-2 text-left">When</th><th className="px-2 py-2 text-left">Action</th><th className="px-2 py-2 text-right">Rev</th>
+              <th className="px-2 py-2 text-left">By</th><th className="px-2 py-2 text-right">₹ / PCS</th><th className="px-2 py-2 text-left">Reason / rates</th>
+            </tr></thead>
+            <tbody>
+              {status.history.map((h) => (
+                <tr key={h.id} className="border-t border-slate-100 align-top">
+                  <td className="px-2 py-1.5 whitespace-nowrap">{fmtDate(h.created_at)}</td>
+                  <td className="px-2 py-1.5"><Badge tone={h.action === 'LOCK' ? 'green' : h.action === 'REVISE' ? 'amber' : h.action === 'REJECT' ? 'red' : 'blue'}>{{ SUBMIT: 'Submitted', LOCK: 'Approved & locked', REJECT: 'Sent back', REVISE: 'Revised' }[h.action]}</Badge></td>
+                  <td className="px-2 py-1.5 text-right">{h.revision_no}</td>
+                  <td className="px-2 py-1.5">{h.by_name ?? '—'}</td>
+                  <td className="px-2 py-1.5 text-right font-semibold">{num(h.total_rate).toFixed(2)}</td>
+                  <td className="px-2 py-1.5">
+                    {h.reason && <div className="font-medium text-slate-700">{h.reason}</div>}
+                    <div className="text-[11px] text-slate-500">{h.rates.map((r) => `${r.op_name} ${num(r.rate).toFixed(2)}`).join(' · ')}</div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Modal>
+      )}
+      {showVariance && <RateVarianceModal ioNo={ioNo.trim()} onClose={() => setShowVariance(false)} />}
     </div>
+  );
+}
+
+type CardStatus = {
+  io_no: string; status: 'DRAFT' | 'SUBMITTED' | 'LOCKED' | null; revision_no: number;
+  submitted_at: string | null; submitted_by: string | null; locked_at: string | null; locked_by: string | null;
+  operations: number; total_rate: number;
+  history: { id: number; revision_no: number; action: 'SUBMIT' | 'LOCK' | 'REJECT' | 'REVISE'; reason: string | null; total_rate: number; created_at: string; by_name: string | null; rates: { op_name: string; rate: number }[] }[];
+};
+
+function CardBadge({ status, rev }: { status: string | null | undefined; rev?: number }) {
+  if (!status) return <Badge tone="slate">No rates</Badge>;
+  const t: Record<string, any> = { LOCKED: 'green', SUBMITTED: 'blue', DRAFT: 'amber' };
+  const l: Record<string, string> = { LOCKED: 'Locked', SUBMITTED: 'Submitted', DRAFT: 'Draft' };
+  return <Badge tone={t[status] ?? 'slate'}>{status === 'LOCKED' ? <Lock size={10} className="mr-0.5 inline" /> : null}{l[status] ?? status}{rev ? ` · rev ${rev}` : ''}</Badge>;
+}
+
+/** Merchandiser costing vs production rate card vs actual (DCs), per process / operation. */
+function RateVarianceModal({ ioNo, onClose }: { ioNo: string; onClose: () => void }) {
+  const toast = useToast();
+  const [d, setD] = useState<any>(null);
+  useEffect(() => {
+    api.get('/job-rate-cards/variance', { params: { io_no: ioNo } }).then((r) => setD(r.data.data)).catch((e) => { toast(errMsg(e), 'error'); onClose(); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ioNo]);
+  const rate = (v: number | null | undefined) => (v == null ? <span className="text-slate-400">—</span> : num(v).toFixed(2));
+  const vr = (v: number | null | undefined) => (v == null ? <span className="text-slate-400">—</span>
+    : <span className={v > 0.00005 ? 'text-rose-600' : v < -0.00005 ? 'text-emerald-600' : 'text-slate-500'}>{v > 0 ? '+' : ''}{num(v).toFixed(2)}</span>);
+  const t = d?.totals;
+  return (
+    <Modal open onClose={onClose} size="xl" icon={<Scale size={18} />} title="Merchandiser vs Production vs Actual"
+      subtitle={d ? `${ioNo} · order ${fmtNumber(d.order_qty)} PCS · ${d.costing ? `costing ${d.costing.costing_no} v${d.costing.version} (${d.costing.status})` : 'no pre-costing'} · rate card ${d.card.status ? `${d.card.status.toLowerCase()}${d.card.revision_no ? ` rev ${d.card.revision_no}` : ''}` : 'not set'}` : ioNo}
+      footer={<Button variant="secondary" onClick={onClose}>Close</Button>}>
+      {!d ? <p className="p-4 text-sm text-slate-500">Loading…</p> : (
+        <div className="space-y-3" id="rc-variance-table">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            {[
+              ['Merchandiser ₹ / PCS', t.merch_rate_pc, `${money(t.merch_amount)} on order qty`],
+              ['Production ₹ / PCS', t.prod_rate_pc, `${money(t.prod_amount)} on order qty`],
+              ['Actual ₹ / PCS', t.actual_rate_pc, `${money(t.actual_amount)} on received PCS`],
+              ['Actual − Production', t.var_actual_vs_prod_amount, `on received PCS (prod ${money(t.prod_amount_on_received)})`],
+            ].map(([l, v, sub], i) => (
+              <div key={i} className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                <div className="text-[11px] font-semibold uppercase text-slate-500">{l as string}</div>
+                <div className={`text-lg font-bold ${i === 3 ? (num(v) > 0 ? 'text-rose-600' : 'text-emerald-600') : 'text-slate-800'}`}>{i === 3 ? money(v) : `₹${num(v).toFixed(2)}`}</div>
+                <div className="text-[11px] text-slate-500">{sub as string}</div>
+              </div>
+            ))}
+          </div>
+          {t.off_card_rows > 0 && <p className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">{t.off_card_rows} DC operation(s) of this job are not on its rate card — add them so production has a rate to compare.</p>}
+          <table className="w-full text-xs">
+            <thead className="bg-slate-50 text-slate-500"><tr>
+              <th className="px-2 py-2 text-left">Process</th><th className="px-2 py-2 text-left">Operation</th>
+              <th className="px-2 py-2 text-right">Merch</th><th className="px-2 py-2 text-right">Production</th><th className="px-2 py-2 text-right">Actual</th>
+              <th className="px-2 py-2 text-right" title="Production − merchandiser">Prod − Merch</th><th className="px-2 py-2 text-right" title="Actual − production">Actual − Prod</th>
+              <th className="px-2 py-2 text-right">Issued / recd PCS</th><th className="px-2 py-2 text-right">Actual ₹</th>
+            </tr></thead>
+            <tbody>
+              {d.rows.map((r: any, i: number) => (
+                <tr key={i} className={`border-t border-slate-100 ${r.off_card ? 'bg-amber-50/60' : ''}`}>
+                  <td className="px-2 py-1.5 text-slate-500">{r.stage_name}</td>
+                  <td className="px-2 py-1.5 font-medium" title={r.dcs.length ? `DCs: ${r.dcs.join(', ')}` : ''}>{r.op_name}{r.inhouse_dcs > 0 && <span className="ml-1 text-[10px] text-slate-400">in-house</span>}</td>
+                  <td className="px-2 py-1.5 text-right">{rate(r.merch_rate)}</td>
+                  <td className="px-2 py-1.5 text-right font-semibold">{rate(r.prod_rate)}</td>
+                  <td className="px-2 py-1.5 text-right">{rate(r.actual_rate)}</td>
+                  <td className="px-2 py-1.5 text-right font-semibold">{vr(r.var_prod_vs_merch)}</td>
+                  <td className="px-2 py-1.5 text-right font-semibold">{vr(r.var_actual_vs_prod)}</td>
+                  <td className="px-2 py-1.5 text-right text-slate-500">{r.issued_qty ? `${fmtNumber(r.issued_qty)} / ${fmtNumber(r.received_qty)}` : '—'}</td>
+                  <td className="px-2 py-1.5 text-right">{r.actual_amount ? money(r.actual_amount) : '—'}</td>
+                </tr>
+              ))}
+              {!d.rows.length && <tr><td colSpan={9} className="px-2 py-6 text-center text-slate-400">No costing rows, rate card or DCs for this job yet.</td></tr>}
+            </tbody>
+            {d.rows.length > 0 && (
+              <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-bold"><tr>
+                <td className="px-2 py-2" colSpan={2}>Total / PCS</td>
+                <td className="px-2 py-2 text-right">{num(t.merch_rate_pc).toFixed(2)}</td>
+                <td className="px-2 py-2 text-right">{num(t.prod_rate_pc).toFixed(2)}</td>
+                <td className="px-2 py-2 text-right">{num(t.actual_rate_pc).toFixed(2)}</td>
+                <td className="px-2 py-2 text-right">{vr(t.var_prod_vs_merch_pc)}</td>
+                <td className="px-2 py-2 text-right">{vr(t.var_actual_vs_prod_pc)}</td>
+                <td /><td className="px-2 py-2 text-right">{money(t.actual_amount)}</td>
+              </tr></tfoot>
+            )}
+          </table>
+          <p className="text-[11px] text-slate-500">Merch = the style's pre-costing (sewing SMV × ₹ / min, cutting and process rows) · Production = this rate card · Actual = rate on the job's issued DCs, weighted by issued PCS; amount on received PCS. + over, − under.</p>
+        </div>
+      )}
+    </Modal>
   );
 }
 

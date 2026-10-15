@@ -244,7 +244,7 @@ export const NAV: NavSection[] = [
       { label: 'Divisions',          to: '/masters/divisions', icon: Building2, perms: ['UNIT.VIEW'] },
       { label: 'Production Lines',   to: '/production/sewing-lines', icon: SlidersHorizontal, perms: ['PRODUCTION.VIEW'] },
       { label: 'Process & Operations', to: '/production/process-master', icon: ListChecks, perms: ['PRODUCTION.VIEW'] },
-      { label: 'Job Rate Card',      to: '/production/job-rate-cards', icon: ListChecks, perms: ['PRODUCTION.VIEW'] },
+      { label: 'Production Rate Fixing (Job Rate Card)', to: '/production/job-rate-cards', icon: ListChecks, perms: ['PRODUCTION.VIEW'] },
       { label: 'Job Work Rates',     to: '/production/job-work-rates', icon: ListChecks, perms: ['PRODUCTION.VIEW'] },
       { label: 'Yarn Process Types', to: '/production/yarn-process/types', icon: SlidersHorizontal, perms: ['YARN_PROCESS.VIEW'] },
       { label: 'Fabric Process Types & QC', to: '/production/fabric-process/masters', icon: SlidersHorizontal, perms: ['FABRIC_PROCESS.VIEW'] },
