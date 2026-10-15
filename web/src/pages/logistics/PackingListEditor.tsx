@@ -7,8 +7,9 @@ import { useToast } from '../../hooks/useToast';
 import {
   type BlockS, type ItemS, type PlType, type RowS,
   blocksFromServer, blocksToPayload, calcList, emptyItem, newBlock, newRowAfter, parseHeaders,
-  normKey, shippedGroups, STANDARD_PRESETS, uid,
+  normKey, shippedGroups, STANDARD_PRESETS, uid, FORMAT_LABEL,
 } from './packingListModel';
+import { useAuth } from '../../lib/auth';
 import { PackingListDocument, PackingListPrintPortal } from './PackingListPrint';
 import { JobSelect } from '../../components/JobSelect';
 
@@ -27,8 +28,13 @@ const errMsg = (e: any) => e?.message || e?.response?.data?.error?.message || 'R
 export function PackingListPage() {
   const [lists, setLists] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [flt, setFlt] = useState({ q: '', type: '', status: '' });
   const nav = useNavigate();
   useEffect(() => { api.get('/packing-lists').then((r) => setLists(r.data.data)).finally(() => setLoading(false)); }, []);
+  // register filters (spec §11): buyer / PO / job / style / invoice / shipment by text, template model, status
+  const shown = lists.filter((r) => (!flt.type || r.pl_type === flt.type) && (!flt.status || r.status === flt.status)
+    && (!flt.q || [r.pl_no, r.buyer_order_no, r.so_no, r.io_no, r.buyer_name, r.style_summary, r.invoice_no, r.shipment_no]
+      .some((v) => String(v ?? '').toLowerCase().includes(flt.q.toLowerCase()))));
 
   return (
     <div className="space-y-6">
@@ -40,8 +46,15 @@ export function PackingListPage() {
         <Button onClick={() => nav('/logistics/packing-lists/new')}>+ New Packing List</Button>
       </div>
       <Card>
+        <div className="flex flex-wrap items-end gap-3 border-b border-surface-border p-3">
+          <Input className="w-72" label="Search" placeholder="PL / PO / job / buyer / style / invoice / shipment" value={flt.q} onChange={(e) => setFlt((f) => ({ ...f, q: e.target.value }))} id="pl-reg-q" />
+          <Select className="w-80" label="Template" value={flt.type} onChange={(e) => setFlt((f) => ({ ...f, type: e.target.value }))}
+            options={[{ value: '', label: 'All models' }, ...(['ASSORTED', 'SOLID', 'MIXED'] as const).map((t) => ({ value: t, label: FORMAT_LABEL[t] }))]} />
+          <Select className="w-40" label="Status" value={flt.status} onChange={(e) => setFlt((f) => ({ ...f, status: e.target.value }))}
+            options={[{ value: '', label: 'All' }, { value: 'DRAFT', label: 'Draft' }, { value: 'CONFIRMED', label: 'Confirmed' }, { value: 'CLOSED', label: 'Closed' }]} />
+        </div>
         <DataTable
-          data={lists} loading={loading}
+          data={shown} loading={loading}
           columns={[
             { key: 'pl_no', header: 'PL No', sortable: true, render: (r: any) => (
               <button onClick={() => nav(`/logistics/packing-lists/${r.id}`)} className="font-mono text-xs font-semibold text-brand-700 hover:underline">{r.pl_no}</button>) },
@@ -55,7 +68,8 @@ export function PackingListPage() {
             { key: 'total_qty', header: 'Qty (PCS)', align: 'right' as const, render: (r: any) => fmtNumber(r.total_qty) },
             { key: 'gross_weight_kg', header: 'Gross (KG)', align: 'right' as const, render: (r: any) => fmtDecimal(r.gross_weight_kg) },
             { key: 'total_cbm', header: 'CBM', align: 'right' as const, render: (r: any) => fmtDecimal(r.total_cbm, 3) },
-            { key: 'status', header: 'Status', render: (r: any) => <Badge color={STATUS_COLOR[r.status] || 'slate'}>{r.status}</Badge> },
+            { key: 'status', header: 'Status', render: (r: any) => <span className="flex items-center gap-1"><Badge color={STATUS_COLOR[r.status] || 'slate'}>{r.status}</Badge>{r.revision_no > 0 && <Badge color="amber">Rev {r.revision_no}</Badge>}</span> },
+            { key: 'shipment_no', header: 'Shipment', render: (r: any) => r.shipment_no || '—' },
           ]}
         />
       </Card>
@@ -69,7 +83,7 @@ export function PackingListPage() {
 const EMPTY_HEADER = {
   pl_no: '', pl_date: today(), io_no: '', so_id: null as number | null, packing_id: null as number | null,
   invoice_id: null as number | null, buyer_id: null as number | null, consignee_id: null as number | null,
-  shipment_type: 'EXPORT', destination: '', pl_type: 'ASSORTED' as PlType, status: 'DRAFT',
+  shipment_type: 'EXPORT', destination: '', pl_type: 'ASSORTED' as PlType, status: 'DRAFT', ctn_numbering: 'SEQUENCE' as 'SEQUENCE' | 'CARTON_NO',
   allow_ctn_gaps: false, carton_tare_kg: '' as string | number,
   invoice_no: '', invoice_date: '', buyer_order_no: '', buyer_order_date: '', other_references: '',
   exporter_details: '', consignee_details: '', notify_label: 'Notify Party :-', notify_details: '',
@@ -116,6 +130,14 @@ export function PackingListDetailPage() {
   const [cartonInfo, setCartonInfo] = useState<Record<number, CartonInfo>>({});   // posted cartons behind built rows
   const [packSum, setPackSum] = useState<any>(null);                               // Order | Packed | On this list | Balance
   const [req, setReq] = useState<Record<string, { ppb: string; bpc: string; ppc: string }>>({}); // carton requirement inputs per row
+  const [autoRows, setAutoRows] = useState(false);          // rows came from the auto-fill and were not edited since
+  const [ctnStart, setCtnStart] = useState('1');             // first carton number when numbering 1..N
+  const [buyerTpl, setBuyerTpl] = useState<any>(null);       // buyer default template
+  const [formatTouched, setFormatTouched] = useState(false); // user picked a format → buyer default no longer applied
+  const [revView, setRevView] = useState<any>(null);         // frozen revision shown in the print modal
+  const [overOpen, setOverOpen] = useState(false);
+  const [overReason, setOverReason] = useState('');
+  const { can } = useAuth();
 
   const ro = !isNew && header.status !== 'DRAFT';
 
@@ -176,7 +198,7 @@ export function PackingListDetailPage() {
   }, [header.so_id, header.io_no, id, isNew, saved]);
 
   const setField = (k: keyof Header, v: any) => { setHeader((p) => ({ ...p, [k]: v })); setDirty(true); };
-  const mutateBlocks = (fn: (b: BlockS[]) => BlockS[]) => { setBlocks((prev) => fn(structuredClone(prev))); setDirty(true); };
+  const mutateBlocks = (fn: (b: BlockS[]) => BlockS[]) => { setBlocks((prev) => fn(structuredClone(prev))); setDirty(true); setAutoRows(false); };
 
   /* ---------- style / colour pickers on the carton rows */
   const itemFromLine = (l: OrderLine) => ({
@@ -268,11 +290,16 @@ export function PackingListDetailPage() {
       setHeader((h) => {
         const next: any = { ...h };
         for (const k of ['io_no', 'buyer_id', 'consignee_id', 'buyer_order_no', 'buyer_order_date', 'port_of_loading', 'port_of_discharge',
-                         'country_of_destination', 'final_destination', 'terms_of_delivery', 'terms_of_payment', 'consignee_details', 'shipment_type', 'exporter_details']) {
-          if (d[k] != null && d[k] !== '' && (!onlyEmpty || !next[k])) next[k] = d[k];
+                         'country_of_destination', 'final_destination', 'terms_of_delivery', 'terms_of_payment', 'consignee_details', 'shipment_type', 'exporter_details',
+                         'invoice_id', 'invoice_no', 'invoice_date', 'vessel_flight_no', 'other_references', 'notify_details', 'country_of_origin']) {
+          if (d[k] != null && d[k] !== '' && (!onlyEmpty || !next[k] || (k === 'country_of_origin' && next[k] === 'INDIA'))) next[k] = d[k];
         }
+        if (d.notify_label && (!onlyEmpty || !h.notify_details)) next.notify_label = d.notify_label;
+        // buyer default template (format + numbering) unless the user already picked a format
+        if (d.buyer_template && !formatTouched) { next.pl_type = d.buyer_template.pl_type; next.ctn_numbering = d.buyer_template.ctn_numbering || 'SEQUENCE'; }
         return next;
       });
+      setBuyerTpl(d.buyer_template ?? null);
       // carton rows: order no of the sales order on rows that have none, size columns from the order
       const lines: OrderLine[] = d.order_lines || [];
       const orderNo = orderNoOf(d);
@@ -293,30 +320,72 @@ export function PackingListDetailPage() {
         return b;
       });
       toast('Header and carton defaults filled from the sales order');
+      return d;
     } catch (e) { toast(errMsg(e), 'error'); }
+    return null;
   };
 
-  /* ---------- build rows from the posted (verified / sealed) cartons of the packing, order or job */
+  /* ---------- AUTO-FILL: rows from the posted (verified / sealed) cartons of the packing, order or job,
+                grouped per the chosen format (Model 1 / 2 / 3) */
   const canBuild = Boolean(header.packing_id || header.so_id || header.io_no);
-  const buildFromPacking = async () => {
-    if (!canBuild) return;
-    const hasRows = blocks.some((b) => b.rows.some((r) => r.items.some((it) => Object.values(it.size_qty).some((v) => Number(v) > 0))));
-    if (hasRows && !window.confirm('Replace the current carton rows with rows built from the packed cartons?')) return;
+  const hasTypedQty = () => blocks.some((b) => b.rows.some((r) => r.items.some((it) => Object.values(it.size_qty).some((v) => Number(v) > 0))));
+  const buildFromPacking = async (opts: { format?: PlType; src?: { packing_id?: number | null; so_id?: number | null; io_no?: string | null };
+                                          numbering?: string; start?: string; auto?: boolean } = {}) => {
+    const src = opts.src ?? { packing_id: header.packing_id, so_id: header.so_id, io_no: header.io_no };
+    if (!src.packing_id && !src.so_id && !src.io_no) return;
+    if (!opts.auto && !autoRows && hasTypedQty() && !window.confirm('Replace the current carton rows with rows built from the packed cartons?')) return;
     try {
-      const params = header.packing_id ? { packing_id: header.packing_id } : header.so_id ? { so_id: header.so_id } : { io_no: header.io_no };
-      const r = await api.get('/packing-lists/build-rows', { params: { ...params, pl_id: isNew ? undefined : id } });
+      const params: any = src.packing_id ? { packing_id: src.packing_id } : src.so_id ? { so_id: src.so_id } : { io_no: src.io_no };
+      const numbering = opts.numbering ?? header.ctn_numbering;
+      // format not chosen yet (no buyer default either) → inferred from the cartons' contents
+      const format = opts.format ?? (formatTouched || !isNew || buyerTpl ? header.pl_type : 'AUTO');
+      const r = await api.get('/packing-lists/build-rows', { params: { ...params, format, numbering,
+        start: numbering === 'SEQUENCE' ? (Number(opts.start ?? ctnStart) || 1) : undefined, pl_id: isNew ? undefined : id } });
       const d = r.data.data;
       setSizeHeaders(d.size_headers);
       setBlocks(blocksFromServer(d.blocks));
       setCartonInfo(d.carton_info || {});
-      setHeader((h) => ({ ...h, pl_type: d.pl_type, allow_ctn_gaps: h.allow_ctn_gaps || Boolean(d.has_gaps) }));
-      setDirty(true);
+      setHeader((h) => ({ ...h, pl_type: d.pl_type, ctn_numbering: d.numbering || h.ctn_numbering, allow_ctn_gaps: h.allow_ctn_gaps || Boolean(d.has_gaps) }));
+      setDirty(true); setAutoRows(true);
       const sk = d.skipped || {};
       const skipped = [sk.not_ready ? `${sk.not_ready} not posted / verified` : '', sk.on_other_list ? `${sk.on_other_list} on another list` : '', sk.shipped ? `${sk.shipped} shipped` : '']
         .filter(Boolean).join(', ');
-      toast(`Built ${d.blocks[0].rows.length} carton range(s) from the packed cartons${d.empty_cartons ? ` (${d.empty_cartons} empty carton(s) skipped)` : ''}${skipped ? ` — skipped ${skipped}` : ''}`);
+      toast(`Auto-filled ${d.carton_count ?? ''} posted carton(s) as ${d.row_count ?? d.blocks[0]?.rows.length} row(s) in ${d.blocks.length} block(s) — ${d.pl_type}`
+        + `${d.empty_cartons ? ` (${d.empty_cartons} empty carton(s) skipped)` : ''}${skipped ? ` — skipped ${skipped}` : ''}`
+        + `${d.missing_weight ? ` — ${d.missing_weight} carton(s) without weight: enter it on the rows` : ''}`);
+    } catch (e) { if (!opts.auto) toast(errMsg(e), 'error'); else toast(`No rows auto-filled: ${errMsg(e)}`, 'warning'); }
+  };
+  /** A source (order / job / packing) was picked: fill the header, then the rows from its posted cartons. */
+  const pickSource = async (src: { packing_id?: number | null; so_id?: number | null; io_no?: string | null }, soForHeader: number | null) => {
+    let fmt: PlType | undefined;
+    if (soForHeader && isNew) {
+      const d = await fillFromSo(soForHeader);
+      if (d?.buyer_template && !formatTouched) fmt = d.buyer_template.pl_type;
+    }
+    if (!ro && (autoRows || !hasTypedQty())) await buildFromPacking({ src, format: fmt, auto: true });
+  };
+  /** Format changed: rows that came from the auto-fill are regrouped for the new format. */
+  const changeFormat = (v: PlType) => {
+    setField('pl_type', v); setFormatTouched(true);
+    if (autoRows && canBuild) void buildFromPacking({ format: v, auto: true });
+  };
+  const saveBuyerDefault = async () => {
+    if (!header.buyer_id) return;
+    try {
+      const r = await api.put('/packing-lists/buyer-template', { buyer_id: header.buyer_id, pl_type: header.pl_type, ctn_numbering: header.ctn_numbering,
+        size_headers: sizeHeaders, notify_label: header.notify_label || null, notify_details: header.notify_details || null, other_references: header.other_references || null });
+      setBuyerTpl(r.data.data); toast(`Buyer default set: ${FORMAT_LABEL[header.pl_type]}`);
     } catch (e) { toast(errMsg(e), 'error'); }
   };
+  // buyer picked by hand → its default template
+  useEffect(() => {
+    if (!header.buyer_id) { setBuyerTpl(null); return; }
+    api.get('/packing-lists/buyer-template', { params: { buyer_id: header.buyer_id } }).then((r) => {
+      const t = r.data.data; setBuyerTpl(t);
+      if (t && isNew && !formatTouched && !autoRows && !hasTypedQty()) setHeader((h) => ({ ...h, pl_type: t.pl_type, ctn_numbering: t.ctn_numbering || 'SEQUENCE' }));
+    }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [header.buyer_id]);
 
   /* ---------- save */
   const payload = () => ({
@@ -344,14 +413,24 @@ export function PackingListDetailPage() {
       toast(errMsg(e), 'error');
     } finally { setSaving(false); }
   };
-  const handleConfirm = async () => {
+  const handleConfirm = async (reason?: string) => {
     if (dirty) { toast('Save your changes before confirming', 'warning'); return; }
-    if (!window.confirm('Confirm and freeze this packing list? It can no longer be edited afterwards.')) return;
-    try { const r = await api.post(`/packing-lists/${id}/confirm`); applyServer(r.data.data); toast('Packing list confirmed and frozen'); }
-    catch (e) { toast(errMsg(e), 'error'); }
+    if (!reason && saved?.over_shipment?.qty > 0) { setOverOpen(true); return; }
+    if (!reason && !window.confirm('Confirm and freeze this packing list? It can no longer be edited afterwards (only revised).')) return;
+    try {
+      const r = await api.post(`/packing-lists/${id}/confirm`, reason ? { over_ship_reason: reason } : {});
+      applyServer(r.data.data); setOverOpen(false); setOverReason(''); toast('Packing list confirmed and frozen');
+    } catch (e) { toast(errMsg(e), 'error'); }
   };
   const handleReopen = async () => {
-    try { const r = await api.post(`/packing-lists/${id}/reopen`, { reason: reopenReason }); applyServer(r.data.data); setReopenOpen(false); setReopenReason(''); toast('Packing list re-opened for correction'); }
+    try {
+      const r = await api.post(`/packing-lists/${id}/revise`, { reason: reopenReason });
+      applyServer(r.data.data); setReopenOpen(false); setReopenReason('');
+      toast(`Revision ${r.data.data.revision_no} opened — the confirmed version is kept in the history`);
+    } catch (e) { toast(errMsg(e), 'error'); }
+  };
+  const openRevision = async (rev: number) => {
+    try { const r = await api.get(`/packing-lists/${id}/revisions/${rev}`); setRevView(r.data.data); }
     catch (e) { toast(errMsg(e), 'error'); }
   };
   const handleExcel = async () => {
@@ -369,7 +448,8 @@ export function PackingListDetailPage() {
   const updItem = (bi: number, ri: number, ii: number, patch: Partial<ItemS>) => mutateBlocks((b) => { Object.assign(b[bi].rows[ri].items[ii], patch); return b; });
   const setQty = (bi: number, ri: number, ii: number, size: string, v: string) => mutateBlocks((b) => {
     const it = b[bi].rows[ri].items[ii];
-    if (header.pl_type === 'SOLID' && v !== '' && Number(v) > 0) it.size_qty = {};   // one size per carton
+    // solid sheet: typing a size moves a one-size carton to that size (a multi-size carton keeps its other sizes)
+    if (header.pl_type === 'SOLID' && v !== '' && Number(v) > 0 && Object.values(it.size_qty).filter((q) => Number(q) > 0).length <= 1) it.size_qty = {};
     it.size_qty[size] = v.replace(/[^0-9]/g, '');
     return b;
   });
@@ -416,8 +496,8 @@ export function PackingListDetailPage() {
           <Button variant="ghost" onClick={() => nav('/logistics/packing-lists')}>← Back</Button>
           {!isNew && <Button variant="outline" onClick={() => setShowPrint(true)} disabled={dirty} title={dirty ? 'Save first' : ''}>Print view</Button>}
           {!isNew && <Button variant="outline" onClick={handleExcel} disabled={dirty || !saved?.blocks?.length} title={dirty ? 'Save first' : ''}>Download Excel</Button>}
-          {!isNew && header.status === 'DRAFT' && <Button variant="outline" onClick={handleConfirm}>✓ Confirm &amp; Freeze</Button>}
-          {!isNew && header.status === 'CONFIRMED' && <Button variant="outline" onClick={() => setReopenOpen(true)}>Re-open</Button>}
+          {!isNew && header.status === 'DRAFT' && <Button variant="outline" onClick={() => handleConfirm()} id="pl-confirm">✓ Confirm &amp; Freeze</Button>}
+          {!isNew && header.status === 'CONFIRMED' && <Button variant="outline" onClick={() => setReopenOpen(true)} id="pl-revise">Revise (new revision)</Button>}
           {!ro && <Button onClick={handleSave} loading={saving}>{dirty || isNew ? 'Save' : 'Saved'}</Button>}
         </div>
       </div>
@@ -426,9 +506,11 @@ export function PackingListDetailPage() {
         <div className="no-print flex flex-wrap items-center gap-2">
           <Badge color={STATUS_COLOR[header.status] || 'slate'} size="lg">{header.status}</Badge>
           <Badge color={TYPE_COLOR[header.pl_type]} size="lg">{header.pl_type}</Badge>
+          {saved?.revision_no > 0 && <Badge color="amber" size="lg">Rev {saved.revision_no}</Badge>}
           {header.shipment_type === 'EXPORT' && <Badge color="blue" size="lg">EXPORT</Badge>}
           {saved?.confirmed_at && <span className="text-xs text-slate-500">Confirmed {fmtDate(saved.confirmed_at)} by {saved.confirmed_by_name || '—'}</span>}
-          {saved?.reopen_reason && header.status === 'DRAFT' && <span className="text-xs text-amber-700">Re-opened: {saved.reopen_reason}</span>}
+          {saved?.reopen_reason && header.status === 'DRAFT' && <span className="text-xs text-amber-700">Revision {saved.revision_no} opened: {saved.reopen_reason}</span>}
+          {saved?.over_ship_note && <span className="text-xs text-red-700">Over-shipment approved: {saved.over_ship_note}</span>}
           {dirty && <span className="text-xs font-medium text-amber-700">Unsaved changes</span>}
         </div>
       )}
@@ -437,6 +519,20 @@ export function PackingListDetailPage() {
         <div className="no-print rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
           <div className="mb-1 font-semibold">The packing list could not be saved:</div>
           <ul className="list-disc pl-5">{serverErrors.slice(0, 20).map((m, i) => <li key={i}>{m}</li>)}</ul>
+        </div>
+      )}
+
+      {saved?.over_shipment?.qty > 0 && (
+        <div className="no-print rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800" data-testid="pl-over-ship">
+          <b>Over-shipment: {fmtNumber(saved.over_shipment.qty)} PCS more than the order qty</b> —{' '}
+          {saved.over_shipment.lines.map((l: any) => `${l.style ?? ''} ${l.colour ?? ''}: ${Object.entries(l.excess).map(([k, v]) => `${k} +${v}`).join(' ')}`).join('; ')}.
+          {header.status === 'DRAFT' && ' Confirming needs an approval reason (Approve Packing right).'}
+        </div>
+      )}
+      {saved?.carton_check && !saved.carton_check.ok && (
+        <div className="no-print rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800" data-testid="pl-carton-drift">
+          <b>The packed cartons changed since this list was made</b> — {saved.carton_check.issues.slice(0, 5).join('; ')}.
+          {header.status === 'CONFIRMED' ? ' Revise the list and rebuild the rows.' : ' Rebuild the rows from the packed cartons.'}
         </div>
       )}
 
@@ -473,21 +569,26 @@ export function PackingListDetailPage() {
         <fieldset disabled={ro} className="grid grid-cols-1 gap-4 p-4 md:grid-cols-4">
           <Input label="PL No" value={header.pl_no} onChange={(e) => setField('pl_no', e.target.value)} placeholder="Auto-generate" disabled={!isNew} />
           <Input label="Date" type="date" value={header.pl_date} onChange={(e) => setField('pl_date', e.target.value)} />
-          <Select label="Packing list type" value={header.pl_type} onChange={(e) => setField('pl_type', e.target.value as PlType)}
-            options={[{ value: 'ASSORTED', label: 'Assorted — size ratio per carton' }, { value: 'SOLID', label: 'Solid — one size per carton' }, { value: 'MIXED', label: 'Mixed — size sets / packs / mixed cartons' }]} />
+          <div>
+            <Select label="Format (template model)" value={header.pl_type} onChange={(e) => changeFormat(e.target.value as PlType)} id="pl-format"
+              options={(['ASSORTED', 'SOLID', 'MIXED'] as const).map((t) => ({ value: t, label: FORMAT_LABEL[t] }))} />
+            {buyerTpl && <p className="mt-1 text-[11px] text-slate-500" data-testid="pl-buyer-default">Buyer default: <b>{buyerTpl.pl_type}</b>{buyerTpl.pl_type !== header.pl_type && ' (another format picked)'}</p>}
+          </div>
           <Select label="Shipment type" value={header.shipment_type} onChange={(e) => setField('shipment_type', e.target.value)}
             options={[{ value: 'EXPORT', label: 'Export' }, { value: 'DOMESTIC', label: 'Domestic' }]} />
           <div className="flex items-end gap-2">
             <Select className="flex-1" label="Sales order" value={header.so_id ?? ''} options={soOptions}
-              onChange={(e) => { const v = e.target.value ? Number(e.target.value) : null; setField('so_id', v); if (v && isNew) fillFromSo(v); }} />
+              onChange={(e) => { const v = e.target.value ? Number(e.target.value) : null; setField('so_id', v); if (v) void pickSource({ packing_id: header.packing_id, so_id: v }, v); }} />
             {!ro && header.so_id && <Button variant="outline" size="sm" onClick={() => fillFromSo(header.so_id, false)} title="Overwrite header fields from the sales order">↻</Button>}
           </div>
           <Select label="Source packing (cartons)" value={header.packing_id ?? ''}
             onChange={(e) => { const v = e.target.value ? Number(e.target.value) : null; const p = lk.packings.find((x: any) => x.id === v);
-              setHeader((h) => ({ ...h, packing_id: v, so_id: h.so_id ?? p?.so_id ?? null })); setDirty(true); }}
+              const so = header.so_id ?? p?.so_id ?? null;
+              setHeader((h) => ({ ...h, packing_id: v, so_id: h.so_id ?? p?.so_id ?? null })); setDirty(true);
+              if (v) void pickSource({ packing_id: v }, !header.so_id ? so : null); }}
             options={[{ value: '', label: '— None —' }, ...lk.packings.map((p: any) => ({ value: p.id, label: p.label || p.code }))]} />
           <JobSelect label="I/O No" value={header.io_no || ''} id="pl-io"
-            onPick={(j) => { setHeader((h) => ({ ...h, io_no: j?.job_no ?? '', so_id: j ? j.id : h.so_id })); setDirty(true); if (j && isNew) void fillFromSo(j.id); }} />
+            onPick={(j) => { setHeader((h) => ({ ...h, io_no: j?.job_no ?? '', so_id: j ? j.id : h.so_id })); setDirty(true); if (j) void pickSource({ packing_id: header.packing_id, io_no: j.job_no }, j.id); }} />
           <Select label="Buyer" value={header.buyer_id ?? ''} options={partyOptions} onChange={(e) => setField('buyer_id', e.target.value ? Number(e.target.value) : null)} />
         </fieldset>
       </Card>
@@ -538,10 +639,25 @@ export function PackingListDetailPage() {
             <Input label="Carton tare (KG) — net = gross − tare" type="number" step="0.001" min="0" value={header.carton_tare_kg}
               onChange={(e) => setField('carton_tare_kg', e.target.value)} placeholder="e.g. 1.1" />
             <Checkbox label="Allow carton-number gaps" checked={header.allow_ctn_gaps} onChange={(v) => setField('allow_ctn_gaps', v)} disabled={ro} />
+            <div className="grid grid-cols-2 gap-2">
+              <Select label="Carton numbers" value={header.ctn_numbering} id="pl-numbering"
+                onChange={(e) => { const v = e.target.value as Header['ctn_numbering']; setField('ctn_numbering', v); if (autoRows) void buildFromPacking({ numbering: v, auto: true }); }}
+                options={[{ value: 'SEQUENCE', label: '1..N on this list' }, { value: 'CARTON_NO', label: 'Physical carton no' }]} />
+              {header.ctn_numbering === 'SEQUENCE' && (
+                <Input label="Start at" inputMode="numeric" value={ctnStart} id="pl-ctn-start"
+                  onChange={(e) => setCtnStart(e.target.value.replace(/[^0-9]/g, ''))}
+                  onBlur={() => { if (autoRows) void buildFromPacking({ auto: true }); }} />
+              )}
+            </div>
             {!ro && canBuild && (
-              <Button variant="outline" size="sm" onClick={buildFromPacking} id="pl-build-from-cartons"
-                title="Rows from the posted (verified / sealed) cartons of the source packing, else of the sales order / job, that are not on another list">
-                Build rows from packed cartons
+              <Button variant="outline" size="sm" onClick={() => buildFromPacking()} id="pl-build-from-cartons"
+                title="Rows from the posted (verified / sealed) cartons of the source packing, else of the sales order / job, that are not on another list — grouped for the chosen format">
+                {autoRows ? '↻ Rebuild rows from packed cartons' : 'Build rows from packed cartons'}
+              </Button>
+            )}
+            {!ro && header.buyer_id && can('PACKING.APPROVE') && (
+              <Button variant="ghost" size="sm" onClick={saveBuyerDefault} id="pl-save-buyer-default" title="Use this format / numbering / size columns as the buyer's default">
+                Save as buyer default
               </Button>
             )}
             {!ro && orderLines.length > 0 && (
@@ -658,7 +774,7 @@ export function PackingListDetailPage() {
 
       {/* ---------- order vs shipped */}
       <Card title="Order qty / Shipped qty / Diff (PCS)"
-        subtitle="Order qty comes from the sales order size breakdown when it matches the style & colour; otherwise enter it here. Diff = Order − Shipped.">
+        subtitle="Order qty comes from the sales order size breakdown when it matches the style & colour; otherwise enter it here. Diff = Order − Shipped (positive = short shipped); over-shipment is shown on its own Excess row.">
         <div className="space-y-4 overflow-x-auto p-4">
           {groups.length === 0 && <p className="text-sm text-slate-500">No carton rows yet.</p>}
           {groups.map((g) => {
@@ -705,6 +821,13 @@ export function PackingListDetailPage() {
                     {sizes.map((s) => { const d = order(s) - (g.shipped[s] || 0); return <td key={s} className={`border px-2 py-1 text-right ${d ? (d > 0 ? 'text-amber-700' : 'text-red-600') : 'text-slate-400'}`}>{fmtNumber(d)}</td>; })}
                     <td className="border px-2 py-1 text-right font-semibold">{fmtNumber(orderTotal - g.total)}</td>
                   </tr>
+                  {orderTotal > 0 && sizes.some((s) => (g.shipped[s] || 0) > order(s)) && (
+                    <tr className="bg-red-50 text-red-700" data-testid="pl-excess-row">
+                      <td className="border px-2 py-1 font-medium">Excess (Shipped &gt; Order)</td>
+                      {sizes.map((s) => <td key={s} className="border px-2 py-1 text-right">{fmtNumber(Math.max(0, (g.shipped[s] || 0) - order(s)))}</td>)}
+                      <td className="border px-2 py-1 text-right font-semibold">{fmtNumber(sizes.reduce((a, s) => a + Math.max(0, (g.shipped[s] || 0) - order(s)), 0))}</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             );
@@ -727,6 +850,23 @@ export function PackingListDetailPage() {
         </Card>
       )}
 
+      {/* ---------- revision history (frozen confirmed versions) */}
+      {saved?.revisions?.length > 0 && (
+        <div id="pl-revisions"><Card title="Revision history" subtitle="Each confirmed version is frozen before it is revised">
+          <table className="w-full text-xs">
+            <thead className="border-b text-slate-500"><tr><th className="px-4 py-1 text-left">Rev</th><th className="text-left">Reason</th><th className="text-right">Cartons</th><th className="text-right">PCS</th><th className="text-right">Gross (KG)</th><th className="text-left pl-4">Revised by</th><th /></tr></thead>
+            <tbody>{saved.revisions.map((r: any) => (
+              <tr key={r.revision_no} className="border-b border-slate-50">
+                <td className="px-4 py-1 font-semibold">Rev {r.revision_no}</td><td>{r.reason}</td>
+                <td className="text-right">{fmtNumber(r.total_cartons)}</td><td className="text-right">{fmtNumber(r.total_qty)}</td><td className="text-right">{fmtDecimal(r.gross_weight_kg, 2)}</td>
+                <td className="pl-4">{r.created_by_name || '—'} · {fmtDate(r.created_at)}</td>
+                <td className="pr-4 text-right"><Button size="sm" variant="ghost" onClick={() => openRevision(r.revision_no)}>View</Button></td>
+              </tr>))}
+            </tbody>
+          </table>
+        </Card></div>
+      )}
+
       {/* ---------- print preview + print portal */}
       <Modal open={showPrint} onClose={() => setShowPrint(false)} title={`Packing list ${header.pl_no ?? ''} — print view`} size="full"
         subtitle="Preview of the printed packing list"
@@ -734,11 +874,22 @@ export function PackingListDetailPage() {
         {saved && <PackingListDocument pl={saved} />}
       </Modal>
       {saved && <PackingListPrintPortal pl={saved} />}
+      <Modal open={!!revView} onClose={() => setRevView(null)} title={`Packing list ${header.pl_no ?? ''} — Rev ${revView?.revision_no ?? ''} (frozen)`} size="full"
+        subtitle={revView ? `Revised ${fmtDate(revView.created_at)} by ${revView.created_by_name || '—'}: ${revView.reason}` : ''}
+        footer={<Button variant="secondary" onClick={() => setRevView(null)}>Close</Button>}>
+        {revView?.snapshot && <PackingListDocument pl={revView.snapshot} />}
+      </Modal>
+      <Modal open={overOpen} onClose={() => setOverOpen(false)} title="Confirm with over-shipment" size="sm"
+        subtitle={`${fmtNumber(saved?.over_shipment?.qty ?? 0)} PCS above the order qty`}
+        footer={<><Button variant="secondary" onClick={() => setOverOpen(false)}>Cancel</Button><Button variant="danger" onClick={() => handleConfirm(overReason.trim())} disabled={!overReason.trim()} id="pl-over-go">Approve &amp; confirm</Button></>}>
+        <p className="mb-3 text-sm text-slate-600">Shipped quantity is more than the buyer order for some sizes. Confirming needs the Approve Packing right; the reason is printed nowhere but kept on the list and in the audit trail.</p>
+        <Textarea label="Approval reason" required value={overReason} onChange={(e) => setOverReason(e.target.value)} id="pl-over-reason" />
+      </Modal>
 
-      <Modal open={reopenOpen} onClose={() => setReopenOpen(false)} title={`Re-open packing list ${header.pl_no ?? ''}`} size="sm"
-        subtitle="Send this confirmed list back to DRAFT"
-        footer={<><Button variant="secondary" onClick={() => setReopenOpen(false)}>Cancel</Button><Button variant="danger" onClick={handleReopen} disabled={!reopenReason.trim()}>Re-open</Button></>}>
-        <p className="mb-3 text-sm text-slate-600">The list goes back to DRAFT so it can be corrected. Not possible once a shipment uses it. The reason is kept in the audit trail.</p>
+      <Modal open={reopenOpen} onClose={() => setReopenOpen(false)} title={`Revise packing list ${header.pl_no ?? ''}`} size="sm"
+        subtitle={`Opens revision ${(saved?.revision_no ?? 0) + 1}`}
+        footer={<><Button variant="secondary" onClick={() => setReopenOpen(false)}>Cancel</Button><Button variant="danger" onClick={handleReopen} disabled={!reopenReason.trim()} id="pl-revise-go">Revise</Button></>}>
+        <p className="mb-3 text-sm text-slate-600">A confirmed list cannot be edited. Revising freezes this confirmed version (Rev {saved?.revision_no ?? 0}) in the history and sends the list back to DRAFT as the next revision. Not possible once a shipment uses it. The reason is kept with the revision and in the audit trail.</p>
         <Textarea label="Reason" required value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} />
       </Modal>
     </div>

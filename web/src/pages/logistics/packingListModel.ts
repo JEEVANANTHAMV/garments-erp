@@ -89,7 +89,7 @@ export function calcList(plType: PlType, listHeaders: string[], blocks: BlockS[]
       if (ctns < 1) issues.push('No. of cartons must be at least 1');
       itemUnits.forEach((u, i) => { if (u <= 0) issues.push(`Line ${i + 1}: enter a quantity`); });
       if (r.net_wt_per_ctn && r.gross_wt_per_ctn && net > gross) issues.push('Net weight is more than gross weight');
-      if (plType === 'SOLID' && inferred !== 'SOLID') issues.push('Solid list: one colour in one size per carton');
+      if (plType === 'SOLID' && inferred === 'MIXED') issues.push('Solid list: one style / colour per carton (packs or several colours need a MIXED list)');
       if (plType === 'ASSORTED' && inferred === 'MIXED') issues.push('Packs / several colours need a MIXED list');
       r.items.forEach((it, i) => { if (!it.colour.trim()) issues.push(`Line ${i + 1}: colour is required`); if (!it.style_no.trim() && !it.style_name.trim()) issues.push(`Line ${i + 1}: style is required`); });
       return {
@@ -203,3 +203,10 @@ export const STANDARD_PRESETS: { name: string; sizes: string[] }[] = [
   { name: 'Numeric 36 – 52', sizes: ['36', '38', '40', '42', '44', '46', '48', '50', '52'] },
   { name: 'Kids 3A – 14A + Adult S – XXL', sizes: ['3A', '4A', '6A', '8A', '10A', '12A', '14A', 'S', 'M', 'L', 'XL', 'XXL'] },
 ];
+
+/** The three template models of packinglist.xlsx. */
+export const FORMAT_LABEL: Record<PlType, string> = {
+  ASSORTED: 'Model 1 — Assorted (carton range + size ratio)',
+  SOLID: 'Model 2 — Solid (carton-wise size grid, sub-total per style / colour)',
+  MIXED: 'Model 3 — Mixed (assortment / pack ratio: PCS/PACK × PACK/CTN)',
+};

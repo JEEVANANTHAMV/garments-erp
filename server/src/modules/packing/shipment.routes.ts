@@ -8,12 +8,12 @@ import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
 import {
-  PL_TYPES, blockSchema, computePackingList, normaliseSizeHeaders, groupCartons, applyPolybagPacks, type ComputedList,
+  PL_TYPES, blockSchema, computePackingList, normaliseSizeHeaders, buildFormatBlocks, type ComputedList, type PlType,
 } from './packingListCalc.js';
 import {
   asJson, loadStructure, writeStructure, buildSummary, companyExporterDetails, partyAddressBlock,
 } from './packingList.service.js';
-import { buildPackingListWorkbook } from './packingListExcel.js';
+import { buildPackingListWorkbook, buildPackingListLayout } from './packingListExcel.js';
 
 export const shipmentRouter = Router();
 
@@ -37,6 +37,7 @@ const packingListSchema = z.object({
   shipment_type: z.enum(['DOMESTIC', 'EXPORT']).default('DOMESTIC'),
   destination: s.nullableStr(120),
   pl_type: z.enum(PL_TYPES).default('ASSORTED'),
+  ctn_numbering: z.enum(['SEQUENCE', 'CARTON_NO']).default('SEQUENCE'),
   size_headers: z.array(z.string().trim().max(20)).max(40).nullish(),
   allow_ctn_gaps: z.coerce.boolean().default(false),
   carton_tare_kg: z.union([z.coerce.number().min(0).max(100), z.literal(''), z.null()])
@@ -74,7 +75,7 @@ type PackingListBody = z.infer<typeof packingListSchema>;
 
 const HEADER_COLS = [
   'pl_date', 'io_no', 'so_id', 'packing_id', 'invoice_id', 'buyer_id', 'consignee_id', 'shipment_type',
-  'destination', 'pl_type', 'allow_ctn_gaps', 'carton_tare_kg', 'invoice_no', 'invoice_date', 'buyer_order_no',
+  'destination', 'pl_type', 'ctn_numbering', 'allow_ctn_gaps', 'carton_tare_kg', 'invoice_no', 'invoice_date', 'buyer_order_no',
   'buyer_order_date', 'other_references', 'exporter_details', 'consignee_details', 'notify_label', 'notify_details',
   'country_of_origin', 'country_of_destination', 'pre_carriage_by', 'place_of_receipt', 'vessel_flight_no',
   'port_of_loading', 'port_of_discharge', 'final_destination', 'terms_of_delivery', 'terms_of_payment', 'remarks',
@@ -285,6 +286,38 @@ async function syncCartonLinks(tx: any, cid: number, plId: number, computed: Com
   }
 }
 
+/** Over-shipment (shipped > order qty) per order / style / colour — shown separately, never as a hidden negative Diff. */
+function overShipment(summary: any[]) {
+  const lines = summary.filter((g) => g.excess_total > 0).map((g) => ({
+    group_key: g.group_key, style: g.style_no || g.style_name, colour: g.colour, excess: g.excess, excess_total: g.excess_total }));
+  return { qty: lines.reduce((a, l) => a + l.excess_total, 0), lines };
+}
+
+/**
+ * Rows built from posted cartons must still match those cartons (spec §8: the packing list
+ * is a snapshot; if carton contents change after it was made, it needs a revision).
+ */
+async function cartonCheck(cid: number, st: ComputedList) {
+  const rows = st.blocks.flatMap((b) => b.rows).filter((r) => r.source_carton_ids?.length);
+  const ids = [...new Set(rows.flatMap((r) => r.source_carton_ids ?? []))];
+  if (!ids.length) return { ok: true, cartons: 0, issues: [] as string[] };
+  const cs = await query<any>(
+    `SELECT c.id, c.carton_no, c.carton_status, c.is_posted FROM trx_carton c JOIN trx_packing p ON p.id = c.packing_id AND p.company_id = ?
+      WHERE c.id IN (?)`, [cid, ids]);
+  const byId = new Map(cs.map((c: any) => [Number(c.id), c]));
+  const qty = await cartonQtyMap({}, ids);
+  const issues: string[] = [];
+  const missing = ids.filter((i) => !byId.has(i));
+  if (missing.length) issues.push(`${missing.length} carton(s) no longer exist`);
+  const voided = cs.filter((c: any) => c.carton_status === 'VOID' || !Number(c.is_posted));
+  if (voided.length) issues.push(`carton(s) ${voided.map((c: any) => c.carton_no).join(', ')} are void / un-posted`);
+  for (const r of rows) {
+    const q = (r.source_carton_ids ?? []).reduce((a, c) => a + (qty.get(c) ?? 0), 0);
+    if (q !== r.total_qty) issues.push(`cartons ${r.ctn_from}-${r.ctn_to}: ${r.total_qty} pcs on the list, ${q} pcs in the cartons now`);
+  }
+  return { ok: !issues.length, cartons: ids.length, issues };
+}
+
 /** Full packing list payload: header, blocks/rows/items, totals, summary, legacy carton view. */
 async function loadPackingList(cid: number, id: number) {
   const row = await queryOne<any>(
@@ -337,8 +370,19 @@ async function loadPackingList(cid: number, id: number) {
   const handRows = allRows.filter((r) => !r.source_carton_ids?.length).length;
   const ship = await queryOne<any>(
     `SELECT sh.id, sh.shipment_no FROM trx_shipment sh WHERE sh.packing_list_id = ? AND sh.company_id = ? AND ${ACTIVE_SHIP_SQL} LIMIT 1`, [id, cid]);
+  const revisions = await query<any>(
+    `SELECT r.revision_no, r.reason, r.total_cartons, r.total_qty, r.gross_weight_kg, r.created_at, u.full_name AS created_by_name
+       FROM trx_packing_list_revision r LEFT JOIN mst_user u ON u.id = r.created_by
+      WHERE r.packing_list_id = ? AND r.company_id = ? ORDER BY r.revision_no DESC`, [id, cid]);
+  const iso = (d: any) => (d ? (d instanceof Date ? d.toISOString() : String(d)).slice(0, 10) : null);
+  const layout = structure.blocks.length ? buildPackingListLayout({
+    ...row, invoice_no: row.invoice_no ?? row.ci_invoice_no ?? null,
+    invoice_date: iso(row.invoice_date), buyer_order_date: iso(row.buyer_order_date),
+  }, structure, summary) : null;
   return { ...row, blocks: structure.blocks, totals: structure.totals, measurements: structure.measurements,
-           order_summary: summary, cartons, summary: cartonSummary,
+           order_summary: summary, over_shipment: overShipment(summary), layout, revisions,
+           carton_check: await cartonCheck(cid, structure),
+           cartons, summary: cartonSummary,
            carton_info: await cartonInfo(cid, srcIds), hand_rows: handRows, carton_rows: allRows.length - handRows,
            source: !allRows.length ? 'NONE' : !handRows ? 'CARTONS' : handRows === allRows.length ? 'MANUAL' : 'MIXED',
            shipment: ship ?? null,
@@ -352,7 +396,7 @@ shipmentRouter.get('/packing-lists', requirePermission('PACKING.VIEW'), ah(async
     `SELECT pl.id, pl.pl_no, pl.pl_date, pl.io_no, pl.so_id, pl.packing_id, pl.invoice_id, pl.buyer_id,
             pl.consignee_id, pl.shipment_type, pl.destination, pl.status, pl.pl_type, pl.total_cartons,
             pl.total_qty, pl.net_weight_kg, pl.gross_weight_kg, pl.total_cbm, pl.invoice_no, pl.buyer_order_no,
-            pl.style_summary, pl.created_at, pl.confirmed_at,
+            pl.style_summary, pl.created_at, pl.confirmed_at, pl.revision_no, pl.over_ship_note,
             p.pack_no, so.so_no, b.party_name AS buyer_name, con.party_name AS consignee_name,
             (SELECT COUNT(*) FROM trx_packing_list_row r WHERE r.packing_list_id = pl.id) AS row_count,
             (SELECT COUNT(*) FROM trx_packing_list_carton plc WHERE plc.packing_list_id = pl.id) AS linked_cartons,
@@ -389,17 +433,52 @@ shipmentRouter.get('/packing-lists/prefill', requirePermission('PACKING.VIEW'), 
          FROM trx_sales_order so LEFT JOIN cfg_country ct ON ct.id = so.destination_country
         WHERE so.id = ? AND so.company_id = ?`, [soId, cid]);
     if (!so) throw NotFound('Sales order not found');
+    const isoD = (d: any) => (d ? String(d instanceof Date ? d.toISOString() : d).slice(0, 10) : null);
+    const dmyD = (d: any) => { const v = isoD(d); return v ? `${v.slice(8, 10)}.${v.slice(5, 7)}.${v.slice(0, 4)}` : ''; };
+    const up = (v: any) => (v ? String(v).toUpperCase() : null);
+    // linked commercial invoice and shipment of the order (latest live one), when they exist
+    const inv = await queryOne<any>(
+      `SELECT ci.id, ci.invoice_no, ci.invoice_date, ci.port_of_loading, ci.port_of_discharge, ci.final_destination, ci.lc_no, ci.incoterm,
+              co.name AS origin, cd.name AS dest
+         FROM trx_commercial_invoice ci LEFT JOIN cfg_country co ON co.id = ci.country_origin LEFT JOIN cfg_country cd ON cd.id = ci.country_dest
+        WHERE ci.so_id = ? AND ci.company_id = ? ORDER BY ci.invoice_date DESC, ci.id DESC LIMIT 1`, [soId, cid]);
+    const shp = await queryOne<any>(
+      `SELECT sh.id, sh.shipment_no, sh.mode, sh.vessel_name, sh.voyage_no, sh.pol, sh.pod, sh.destination, sh.consignee_id, sh.notify_party_id,
+              ct.name AS country
+         FROM trx_shipment sh LEFT JOIN cfg_country ct ON ct.id = sh.country_id
+        WHERE sh.so_id = ? AND sh.company_id = ? AND ${ACTIVE_SHIP_SQL} ORDER BY sh.id DESC LIMIT 1`, [soId, cid]);
+    const mode = shp?.mode ? `BY ${shp.mode}` : null;
+    const pod = inv?.port_of_discharge || shp?.pod || so.destination_port || null;
+    const destCountry = up(inv?.dest || shp?.country || so.dest_country);
+    const incoterm = inv?.incoterm || so.incoterm || null;
+    const lcNo = inv?.lc_no || so.lc_no || null;
     Object.assign(out, {
-      so_id: so.id, so_no: so.so_no, io_no: so.io_no, buyer_id: so.buyer_id, consignee_id: so.buyer_id,
-      buyer_order_no: so.buyer_po_no, buyer_order_date: so.buyer_po_date ? String(so.buyer_po_date instanceof Date ? so.buyer_po_date.toISOString() : so.buyer_po_date).slice(0, 10) : null,
-      port_of_loading: so.port_of_loading, port_of_discharge: so.destination_port,
-      country_of_destination: so.dest_country ? String(so.dest_country).toUpperCase() : null,
-      final_destination: so.dest_country ? String(so.dest_country).toUpperCase() : null,
-      terms_of_delivery: so.incoterm ?? null,
-      terms_of_payment: [so.payment_term, so.lc_no ? `L/C NO: ${so.lc_no}` : null].filter(Boolean).join(' ') || null,
+      so_id: so.id, so_no: so.so_no, io_no: so.io_no, buyer_id: so.buyer_id, consignee_id: shp?.consignee_id ?? so.buyer_id,
+      buyer_order_no: so.buyer_po_no, buyer_order_date: isoD(so.buyer_po_date),
+      invoice_id: inv?.id ?? null, invoice_no: inv?.invoice_no ?? null, invoice_date: isoD(inv?.invoice_date),
+      port_of_loading: inv?.port_of_loading || shp?.pol || so.port_of_loading, port_of_discharge: pod,
+      country_of_origin: up(inv?.origin) || 'INDIA',
+      country_of_destination: destCountry, final_destination: inv?.final_destination || destCountry,
+      vessel_flight_no: [mode, shp?.vessel_name, shp?.voyage_no].filter(Boolean).join(' ') || null,
+      // as typed on the buyer sheets: "CPT BY AIR -BRUSSELS" / "PAYMENT TERMS: L/C AT SIGHT" / "L/C NO: … DATE: …"
+      terms_of_delivery: incoterm ? [incoterm, mode, pod ? `-${up(pod)}` : null].filter(Boolean).join(' ') : null,
+      terms_of_payment: [so.payment_term ? `PAYMENT TERMS: ${so.payment_term}` : null,
+                         lcNo ? `L/C NO: ${lcNo}${so.lc_date ? ` DATE: ${dmyD(so.lc_date)}` : ''}` : null].filter(Boolean).join('\n') || null,
+      other_references: 'STYLE REF NO : AS PER BELOW',
       shipment_type: so.order_type === 'EXPORT' ? 'EXPORT' : 'DOMESTIC',
-      consignee_details: await partyAddressBlock(cid, so.buyer_id),
+      shipment_no: shp?.shipment_no ?? null,
+      consignee_details: await partyAddressBlock(cid, shp?.consignee_id ?? so.buyer_id),
     });
+    if (shp?.notify_party_id) Object.assign(out, { notify_label: 'Notify Party :-', notify_details: await partyAddressBlock(cid, shp.notify_party_id) });
+    else {
+      // a separate shipping address of the buyer prints as "Goods Delivery address" (solid sheet)
+      const ship = await queryOne<any>(
+        `SELECT pa.address_name, pa.address_line1, pa.address_line2, pa.address_line3, pa.city, pa.pincode, ct.name AS country
+           FROM mst_party_address pa LEFT JOIN cfg_country ct ON ct.id = pa.country_id
+          WHERE pa.party_id = ? AND pa.is_active = 1 AND pa.address_type = 'SHIPPING' AND pa.is_default = 0 ORDER BY pa.id LIMIT 1`, [so.buyer_id]);
+      if (ship) Object.assign(out, { notify_label: 'Goods Delivery address', notify_details: [ship.address_name, ship.address_line1, ship.address_line2, ship.address_line3,
+        [ship.pincode, ship.city].filter(Boolean).join(' '), up(ship.country)].filter(Boolean).join('\n') });
+    }
     const lines = await query<any>(
       `SELECT DISTINCT l.style_id, st.style_code, st.style_name, st.size_group_id, col.color_name, l.color_id
          FROM trx_sales_order_line l LEFT JOIN mst_style st ON st.id = l.style_id
@@ -427,6 +506,19 @@ shipmentRouter.get('/packing-lists/prefill', requirePermission('PACKING.VIEW'), 
       byKey.set(key, g);
     }
     out.order_lines = [...byKey.values()];
+  }
+  const buyerQ = req.query.buyer_id ? Number(req.query.buyer_id) : null;
+  const tplBuyer = out.buyer_id ?? buyerQ;
+  if (tplBuyer) {
+    const tpl = await buyerTemplate(cid, Number(tplBuyer));
+    out.buyer_template = tpl;
+    if (tpl) {
+      // buyer default format / layout; the user may still pick another format
+      out.pl_type = tpl.pl_type; out.ctn_numbering = tpl.ctn_numbering;
+      if (tpl.notify_label) out.notify_label = tpl.notify_label;
+      if (tpl.notify_details) out.notify_details = tpl.notify_details;
+      if (tpl.other_references) out.other_references = tpl.other_references;
+    }
   }
   if (styleId) {
     const st = await queryOne<any>(`SELECT size_group_id FROM mst_style WHERE id = ? AND company_id = ?`, [styleId, cid]);
@@ -456,6 +548,51 @@ shipmentRouter.get('/packing-lists/prefill', requirePermission('PACKING.VIEW'), 
   res.json({ data: out });
 }));
 
+async function buyerTemplate(cid: number, buyerId: number) {
+  const t = await queryOne<any>(
+    `SELECT t.*, b.party_name AS buyer_name, u.full_name AS updated_by_name FROM cfg_packing_list_buyer_template t
+       JOIN mst_party b ON b.id = t.buyer_id LEFT JOIN mst_user u ON u.id = t.updated_by
+      WHERE t.company_id = ? AND t.buyer_id = ?`, [cid, buyerId]);
+  if (!t) return null;
+  return { ...t, size_headers: asJson<string[] | null>(t.size_headers, null) };
+}
+
+/** GET /packing-lists/buyer-template?buyer_id= — buyer default format (Model 1 / 2 / 3) + layout defaults */
+shipmentRouter.get('/packing-lists/buyer-template', requirePermission('PACKING.VIEW'), ah(async (req, res) => {
+  const buyerId = Number(req.query.buyer_id);
+  if (!Number.isInteger(buyerId) || buyerId <= 0) throw BadRequest('buyer_id is required');
+  res.json({ data: await buyerTemplate(req.user!.companyId, buyerId) });
+}));
+
+/** PUT /packing-lists/buyer-template — set the buyer's default packing list template */
+shipmentRouter.put('/packing-lists/buyer-template', requirePermission('PACKING.APPROVE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const b = z.object({
+    buyer_id: z.coerce.number().int().positive(),
+    pl_type: z.enum(PL_TYPES),
+    ctn_numbering: z.enum(['SEQUENCE', 'CARTON_NO']).default('SEQUENCE'),
+    size_headers: z.array(z.string().trim().min(1).max(20)).max(40).nullish(),
+    notify_label: s.nullableStr(40),
+    notify_details: s.nullableStr(2000),
+    other_references: s.nullableStr(500),
+  }).parse(req.body);
+  const buyer = await queryOne<any>(`SELECT id FROM mst_party WHERE id = ? AND company_id = ?`, [b.buyer_id, cid]);
+  if (!buyer) throw BadRequest('Buyer not found');
+  const before = await buyerTemplate(cid, b.buyer_id);
+  const sizes = b.size_headers?.length ? JSON.stringify(normaliseSizeHeaders(b.size_headers, 'Size headers')) : null;
+  await transaction(async (tx) => {
+    await txExecute(tx,
+      `INSERT INTO cfg_packing_list_buyer_template (company_id, buyer_id, pl_type, ctn_numbering, size_headers, notify_label, notify_details, other_references, updated_by)
+       VALUES (?,?,?,?,?,?,?,?,?)
+       ON DUPLICATE KEY UPDATE pl_type = VALUES(pl_type), ctn_numbering = VALUES(ctn_numbering), size_headers = VALUES(size_headers),
+         notify_label = VALUES(notify_label), notify_details = VALUES(notify_details), other_references = VALUES(other_references), updated_by = VALUES(updated_by)`,
+      [cid, b.buyer_id, b.pl_type, b.ctn_numbering, sizes, b.notify_label ?? null, b.notify_details ?? null, b.other_references ?? null, req.user!.id]);
+  });
+  const after = await buyerTemplate(cid, b.buyer_id);
+  await audit(req, 'cfg_packing_list_buyer_template', after.id, before ? 'UPDATE' : 'INSERT', before ?? undefined, after);
+  res.json({ data: after });
+}));
+
 /** GET /packing-lists/pack-summary?so_id=&io_no=&pl_id= — Order | Packed | On this list | Balance + packaging stock */
 shipmentRouter.get('/packing-lists/pack-summary', requirePermission('PACKING.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId;
@@ -466,11 +603,24 @@ shipmentRouter.get('/packing-lists/pack-summary', requirePermission('PACKING.VIE
   res.json({ data: await packSummary(cid, soId && soId > 0 ? soId : null, ioNo, plIdQ && plIdQ > 0 ? plIdQ : null) });
 }));
 
+/** "60x40x30" / "60 X 40 X 30 CM" in the carton type's specification → dims (fallback when the carton has none). */
+const dimsFromSpec = (spec: unknown) => {
+  const m = /(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)/i.exec(String(spec ?? ''));
+  return m ? { length_cm: Number(m[1]), width_cm: Number(m[2]), height_cm: Number(m[3]) } : null;
+};
+
 /**
- * GET /packing-lists/build-rows?packing_id= | so_id= | io_no= [&pl_id=] — carton rows
- * built from the READY cartons (posted, verified / sealed) of a packing, sales order
- * or job that are not on another packing list nor on an active shipment.
- * Identical consecutive cartons become one carton-number range.
+ * GET /packing-lists/build-rows?packing_id= | so_id= | io_no= [&format=ASSORTED|SOLID|MIXED]
+ *     [&numbering=SEQUENCE|CARTON_NO][&start=1][&pl_id=]
+ * AUTO-FILL: carton rows built from the READY cartons (posted, verified / sealed) of a
+ * packing order, sales order or job that are not on another packing list nor on an
+ * active shipment, grouped per the format's rule (packingListCalc.buildFormatBlocks):
+ *   Model 1 ASSORTED  identical consecutive cartons → one range row, block per style
+ *   Model 2 SOLID     carton-wise rows, block (= sub-total) per style / colour
+ *   Model 3 MIXED     PCS/PACK × PACK/CTN from the packing-rule snapshot, block per style set
+ * Carton numbers run 1..N on the list (SEQUENCE, as on the buyer sheet) or keep the
+ * physical carton numbers (CARTON_NO). format=AUTO → inferred from the contents (blocks kept);
+ * no format at all (older callers) → inferred, everything in one block.
  * Preview only; the user saves the list afterwards.
  */
 shipmentRouter.get('/packing-lists/build-rows', requirePermission('PACKING.VIEW'), ah(async (req, res) => {
@@ -479,6 +629,12 @@ shipmentRouter.get('/packing-lists/build-rows', requirePermission('PACKING.VIEW'
   const soId = req.query.so_id ? Number(req.query.so_id) : null;
   const ioNo = req.query.io_no ? String(req.query.io_no).trim().slice(0, 40) : null;
   const ownPl = req.query.pl_id ? Number(req.query.pl_id) : 0;
+  const fmtQ = req.query.format ? String(req.query.format).toUpperCase() : '';
+  if (fmtQ && fmtQ !== 'AUTO' && !(PL_TYPES as readonly string[]).includes(fmtQ)) throw BadRequest('format must be ASSORTED, SOLID, MIXED or AUTO');
+  const numQ = String(req.query.numbering ?? 'SEQUENCE').toUpperCase();
+  if (!['SEQUENCE', 'CARTON_NO'].includes(numQ)) throw BadRequest('numbering must be SEQUENCE or CARTON_NO');
+  const startQ = req.query.start ? Number(req.query.start) : 1;
+  if (!Number.isInteger(startQ) || startQ < 1 || startQ > 1_000_000) throw BadRequest('start must be a carton number from 1');
   if (!packingId && !soId && !ioNo) throw BadRequest('Pick a packing, sales order or job to build rows from');
   if (packingId != null && (!Number.isInteger(packingId) || packingId <= 0)) throw BadRequest('Invalid packing_id');
   let orderNo: string | null = null, orderSoId: number | null = soId;
@@ -495,14 +651,16 @@ shipmentRouter.get('/packing-lists/build-rows', requirePermission('PACKING.VIEW'
   }
   const where = packingId ? 'c.packing_id = ?' : soId ? 'p.so_id = ?' : 'p.io_no = ?';
   const all = await query<any>(
-    `SELECT c.id, c.carton_no, c.carton_status, c.is_posted, c.net_weight_kg, c.gross_weight_kg, c.length_cm, c.width_cm, c.height_cm,
-            c.polybag_qty, p.so_id, so.buyer_po_no, so.so_no,
+    `SELECT c.id, c.packing_id, c.carton_no, c.carton_seq, c.carton_status, c.is_posted, c.net_weight_kg, c.gross_weight_kg,
+            c.length_cm, c.width_cm, c.height_cm, c.polybag_qty, ct.specification AS carton_spec,
+            p.so_id, p.rule_snapshot, so.buyer_po_no, so.so_no,
             (SELECT pl.pl_no FROM trx_packing_list_carton plc JOIN trx_packing_list pl ON pl.id = plc.packing_list_id
               WHERE plc.carton_id = c.id AND plc.packing_list_id <> ? LIMIT 1) AS other_pl,
             (SELECT sh.shipment_no FROM trx_shipment_package sp JOIN trx_shipment sh ON sh.id = sp.shipment_id
               WHERE sp.carton_id = c.id AND sp.status <> 'CANCELLED' LIMIT 1) AS shipment_no
        FROM trx_carton c JOIN trx_packing p ON p.id = c.packing_id AND p.company_id = ?
        LEFT JOIN trx_sales_order so ON so.id = p.so_id
+       LEFT JOIN mst_trim ct ON ct.id = c.carton_trim_id
       WHERE ${where}`, [ownPl, cid, packingId ?? soId ?? ioNo]);
   if (!all.length) throw BadRequest('No cartons are packed for this yet');
   const isReady = (c: any) => Number(c.is_posted) === 1 && ['VERIFIED', 'SEALED'].includes(c.carton_status);
@@ -526,23 +684,43 @@ shipmentRouter.get('/packing-lists/build-rows', requirePermission('PACKING.VIEW'
       WHERE cc.carton_id IN (?)
       GROUP BY cc.carton_id, st.id, st.style_code, st.style_name, col.id, col.color_name, sz.size_code, sz.sort_order
       ORDER BY sz.sort_order`, [ids]);
-  const sizeOrder: string[] = [];
-  for (const x of [...contents].sort((a, b) => a.sort_order - b.sort_order)) if (!sizeOrder.includes(x.size_code)) sizeOrder.push(x.size_code);
   const byCarton = new Map<number, any[]>();
-  for (const x of contents) { const a = byCarton.get(x.carton_id) ?? []; a.push({ ...x, qty: Number(x.qty) }); byCarton.set(x.carton_id, a); }
-  const rows = groupCartons(cartons.map((c: any) => ({ ...c, polybag_qty: Number(c.polybag_qty || 0), contents: byCarton.get(c.id) ?? [] }))
-    .filter((c: any) => c.contents.length), orderNo, orderSoId);
-  const empty = cartons.length - rows.reduce((a, r) => a + r.no_of_ctns, 0);
-  const types = new Set(rows.map((r) => (r.items.length > 1 ? 'MIXED' : Object.keys(r.items[0].size_qty).length === 1 ? 'SOLID' : 'ASSORTED')));
-  const plType = types.has('MIXED') ? 'MIXED' : types.size === 1 && types.has('SOLID') ? 'SOLID' : types.has('ASSORTED') && types.has('SOLID') ? 'ASSORTED' : [...types][0] ?? 'ASSORTED';
-  const bagsOf = new Map<number, number>(cartons.map((c: any) => [c.id, Number(c.polybag_qty || 0)]));
-  if (plType === 'MIXED') applyPolybagPacks(rows, (r) => bagsOf.get(r.source_carton_ids?.[0] ?? 0) ?? 0);
-  // physical carton numbers are kept; a subset (others listed / not ready) leaves gaps
-  const sorted = [...rows].sort((a, b) => a.ctn_from - b.ctn_from);
-  const hasGaps = sorted.some((r, i) => i > 0 && r.ctn_from !== sorted[i - 1].ctn_from + sorted[i - 1].no_of_ctns);
+  for (const x of contents) {
+    const a = byCarton.get(x.carton_id) ?? [];
+    a.push({ ...x, style_id: Number(x.style_id), color_id: Number(x.color_id), qty: Number(x.qty), size_rank: Number(x.sort_order ?? 9999) });
+    byCarton.set(x.carton_id, a);
+  }
+  let dimsFromType = 0;
+  const forBuild = cartons.map((c: any) => {
+    const rule = asJson<any>(c.rule_snapshot, null);
+    let dims = { length_cm: c.length_cm, width_cm: c.width_cm, height_cm: c.height_cm };
+    if (dims.length_cm == null || dims.width_cm == null || dims.height_cm == null) {
+      const d = dimsFromSpec(c.carton_spec);
+      if (d) { dims = d; dimsFromType++; }
+    }
+    return {
+      id: Number(c.id), packing_id: Number(c.packing_id), carton_no: String(c.carton_no), carton_seq: c.carton_seq == null ? null : Number(c.carton_seq),
+      net_weight_kg: c.net_weight_kg, gross_weight_kg: c.gross_weight_kg, ...dims,
+      polybag_qty: Number(c.polybag_qty || 0),
+      pieces_per_polybag: rule?.pieces_per_polybag != null ? Number(rule.pieces_per_polybag) : null,
+      rule_code: rule?.rule_code ?? null,
+      contents: byCarton.get(c.id) ?? [],
+    };
+  }).filter((c: any) => c.contents.length);
+  const empty = cartons.length - forBuild.length;
+  if (!forBuild.length) throw BadRequest('The ready cartons hold no pieces');
+  const built = buildFormatBlocks(forBuild, {
+    format: (fmtQ && fmtQ !== 'AUTO' ? fmtQ : null) as PlType | null, numbering: numQ as any, start: startQ, orderNo, soId: orderSoId,
+  });
+  if (built.problems.length) throw BadRequest(built.problems.join('; '));
+  // no format asked (older callers): one block, type inferred from the contents
+  if (!fmtQ) built.blocks = [{ label: null, size_headers: null, rows: built.blocks.flatMap((b) => b.rows).sort((a, b) => a.ctn_from - b.ctn_from) }];
+  const rowCount = built.blocks.reduce((a, b) => a + b.rows.length, 0);
   res.json({ data: {
-    size_headers: sizeOrder, pl_type: plType, blocks: [{ label: null, size_headers: null, rows }], empty_cartons: empty,
-    has_gaps: hasGaps, skipped, carton_info: await cartonInfo(cid, ids),
+    size_headers: built.size_headers, pl_type: built.pl_type, blocks: built.blocks, empty_cartons: empty,
+    has_gaps: built.has_gaps, numbering: built.numbering, skipped, carton_info: await cartonInfo(cid, ids),
+    row_count: rowCount, carton_count: forBuild.length, dims_from_carton_type: dimsFromType,
+    missing_weight: forBuild.filter((c: any) => c.gross_weight_kg == null).length,
   } });
 }));
 
@@ -642,6 +820,7 @@ shipmentRouter.put('/packing-lists/:id', requirePermission('PACKING.UPDATE'), ah
 shipmentRouter.post('/packing-lists/:id/confirm', requirePermission('PACKING.UPDATE'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = plId(req.params.id);
+  const { over_ship_reason } = z.object({ over_ship_reason: s.nullableStr(255) }).parse(req.body ?? {});
   await transaction(async (tx) => {
     const pl = await txQueryOne<any>(tx, `SELECT * FROM trx_packing_list WHERE id = ? AND company_id = ? FOR UPDATE`, [id, cid]);
     if (!pl) throw NotFound('Packing list not found');
@@ -679,34 +858,68 @@ shipmentRouter.post('/packing-lists/:id/confirm', requirePermission('PACKING.UPD
       if (bad.length || listQty !== cartonQty || listCtns !== srcIds.length)
         throw BadRequest(`Packing list totals do not match the posted cartons (list ${listCtns} ctns / ${listQty} pcs, cartons ${srcIds.length} / ${cartonQty} pcs)${bad.length ? `: ${bad.slice(0, 5).join('; ')}` : ''}. Rebuild the rows from the packed cartons`);
     }
-    await txExecute(tx, `UPDATE trx_packing_list SET status = 'CONFIRMED', confirmed_by = ?, confirmed_at = NOW() WHERE id = ?`, [req.user!.id, id]);
-    await audit(req, 'trx_packing_list', id, 'UPDATE', { status: pl.status }, { status: 'CONFIRMED', totals: st.totals }, tx);
+    // over-shipment (shipped > order qty, spec §10): shown separately and confirmed only with an approval reason
+    const over = overShipment(await buildSummary(cid, id, pl.so_id ? Number(pl.so_id) : null, st));
+    let overNote: string | null = null;
+    if (over.qty > 0) {
+      const detail = over.lines.slice(0, 4).map((l) => `${l.style ?? ''} ${l.colour ?? ''}: ${Object.entries(l.excess).map(([k, v]) => `${k} +${v}`).join(' ')}`.trim()).join('; ');
+      if (!over_ship_reason) throw BadRequest(`Over-shipment: ${over.qty} pcs more than the order qty (${detail}). Give an approval reason to confirm`);
+      if (!req.user!.permissions.has('PACKING.APPROVE')) throw BadRequest('Confirming an over-shipment needs the Approve Packing right (PACKING.APPROVE)');
+      overNote = `${over.qty} pcs over order — ${over_ship_reason}`.slice(0, 255);
+    }
+    await txExecute(tx, `UPDATE trx_packing_list SET status = 'CONFIRMED', confirmed_by = ?, confirmed_at = NOW(), over_ship_note = ? WHERE id = ?`, [req.user!.id, overNote, id]);
+    await audit(req, 'trx_packing_list', id, 'UPDATE', { status: pl.status }, { status: 'CONFIRMED', totals: st.totals, revision_no: pl.revision_no, over_shipment: over.qty ? over : undefined, over_ship_note: overNote }, tx);
   });
   res.json({ data: await loadPackingList(cid, id) });
 }));
 
 /**
- * POST /packing-lists/:id/reopen — back to DRAFT for correction, with a reason.
- * Needs PACKING.DELETE (the strongest packing right) and is refused once a
- * live shipment references the list.
+ * POST /packing-lists/:id/revise (alias /reopen) — controlled revision of a CONFIRMED list
+ * (spec §8 / §13: a confirmed list is immutable; changes need a revision). The confirmed
+ * version is frozen in trx_packing_list_revision (header, rows, totals, order summary and
+ * the printed layout), revision_no goes up by one and the list returns to DRAFT for the
+ * correction. Needs PACKING.DELETE (the strongest packing right) and a reason; refused once
+ * a live shipment references the list.
  */
-shipmentRouter.post('/packing-lists/:id/reopen', requirePermission('PACKING.DELETE'), ah(async (req, res) => {
+const reviseHandler = ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = plId(req.params.id);
   const { reason } = z.object({ reason: s.strReq(255) }).parse(req.body);
+  const frozen = await loadPackingList(cid, id);
   await transaction(async (tx) => {
     const pl = await txQueryOne<any>(tx, `SELECT * FROM trx_packing_list WHERE id = ? AND company_id = ? FOR UPDATE`, [id, cid]);
     if (!pl) throw NotFound('Packing list not found');
-    if (pl.status !== 'CONFIRMED') throw BadRequest(`Only a CONFIRMED packing list can be re-opened (this one is ${pl.status})`);
+    if (pl.status !== 'CONFIRMED') throw BadRequest(`Only a CONFIRMED packing list can be revised (this one is ${pl.status})`);
     const ship = await txQueryOne<any>(tx,
       `SELECT shipment_no FROM trx_shipment WHERE packing_list_id = ? AND company_id = ?
           AND COALESCE(remarks,'') NOT LIKE '%[CANCELLED]%' LIMIT 1`, [id, cid]);
     if (ship) throw BadRequest(`Packing list is used by shipment ${ship.shipment_no}; cancel the shipment first`);
-    await txExecute(tx, `UPDATE trx_packing_list SET status = 'DRAFT', reopen_reason = ?, confirmed_by = NULL, confirmed_at = NULL,
-                            updated_by = ?, updated_at = NOW() WHERE id = ?`, [reason, req.user!.id, id]);
-    await audit(req, 'trx_packing_list', id, 'UPDATE', { status: 'CONFIRMED' }, { status: 'DRAFT', reopen_reason: reason }, tx);
+    const rev = Number(pl.revision_no || 0);
+    const { cartons: _c, summary: _s, pack_summary: _p, carton_info: _i, revisions: _r, ...snap } = frozen as any;
+    await txExecute(tx,
+      `INSERT INTO trx_packing_list_revision (company_id, packing_list_id, revision_no, pl_type, total_cartons, total_qty, net_weight_kg, gross_weight_kg,
+         total_cbm, confirmed_by, confirmed_at, reason, snapshot, created_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [cid, id, rev, pl.pl_type, pl.total_cartons, pl.total_qty, pl.net_weight_kg, pl.gross_weight_kg, pl.total_cbm,
+       pl.confirmed_by, pl.confirmed_at, reason, JSON.stringify(snap), req.user!.id]);
+    await txExecute(tx, `UPDATE trx_packing_list SET status = 'DRAFT', revision_no = ?, reopen_reason = ?, confirmed_by = NULL, confirmed_at = NULL,
+                            over_ship_note = NULL, updated_by = ?, updated_at = NOW() WHERE id = ?`, [rev + 1, reason, req.user!.id, id]);
+    await audit(req, 'trx_packing_list', id, 'UPDATE', { status: 'CONFIRMED', revision_no: rev, totals: frozen.totals },
+      { status: 'DRAFT', revision_no: rev + 1, reopen_reason: reason }, tx);
   });
   res.json({ data: await loadPackingList(cid, id) });
+});
+shipmentRouter.post('/packing-lists/:id/revise', requirePermission('PACKING.DELETE'), reviseHandler);
+shipmentRouter.post('/packing-lists/:id/reopen', requirePermission('PACKING.DELETE'), reviseHandler);
+
+/** GET /packing-lists/:id/revisions/:rev — a frozen (earlier confirmed) version, with its printed layout */
+shipmentRouter.get('/packing-lists/:id/revisions/:rev', requirePermission('PACKING.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const r = await queryOne<any>(
+    `SELECT r.*, u.full_name AS created_by_name FROM trx_packing_list_revision r LEFT JOIN mst_user u ON u.id = r.created_by
+      WHERE r.packing_list_id = ? AND r.company_id = ? AND r.revision_no = ?`, [plId(req.params.id), cid, Number(req.params.rev)]);
+  if (!r) throw NotFound('Revision not found');
+  res.json({ data: { ...r, snapshot: asJson(r.snapshot, null) } });
 }));
 
 /** GET /packing-lists/:id/export.xlsx — Excel in the client's layout for the list's type */

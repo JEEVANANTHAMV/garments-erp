@@ -14,7 +14,82 @@ const dmy = (d?: string | null) => {
 };
 const lines = (t?: string | null) => String(t ?? '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 
+/* ------------------------------------------------------------------
+   Template layout from the server (GET /packing-lists/:id → layout):
+   the SAME cell grid the Excel download is written from, so the
+   preview / print matches packinglist.xlsx and the Excel cell for cell.
+------------------------------------------------------------------ */
+interface LayoutCell { r: number; c: number; v: string | number; s?: 'title' | 'lbl' | 'th' | 'sub' | 'grand' | 'blk'; rs?: number; cs?: number }
+export interface PlLayout {
+  type: string; n_rows: number; n_cols: number; widths: number[];
+  cells: LayoutCell[]; boxes: { r1: number; c1: number; r2: number; c2: number; mode: 'grid' | 'box' }[];
+}
+const fmtCell = (v: string | number) => (typeof v === 'number' ? (Number.isInteger(v) ? String(v) : String(Math.round(v * 100000) / 100000)) : v);
+const STYLE: Record<string, string> = {
+  title: 'text-center text-[14px] font-bold tracking-wide', lbl: 'font-semibold', th: 'bg-slate-100 text-center font-semibold',
+  sub: 'font-semibold', grand: 'bg-slate-200 font-bold', blk: 'font-bold',
+};
+
+export function PackingListLayout({ layout }: { layout: PlLayout }) {
+  const at = new Map<string, LayoutCell>();
+  const covered = new Set<string>();
+  for (const c of layout.cells) {
+    at.set(`${c.r}:${c.c}`, c);
+    for (let i = 0; i < (c.rs ?? 1); i++) for (let j = 0; j < (c.cs ?? 1); j++) if (i || j) covered.add(`${c.r + i}:${c.c + j}`);
+  }
+  // Excel lets text run over empty cells to its right; do the same (inside its header box, never in the carton grid)
+  const ext = new Map<string, number>();
+  for (const c of layout.cells) {
+    if (typeof c.v !== 'string' || !c.v || (c.cs ?? 1) > 1 || (c.rs ?? 1) > 1) continue;
+    const inBoxes = layout.boxes.filter((b) => c.r >= b.r1 && c.r <= b.r2 && c.c >= b.c1 && c.c <= b.c2);
+    if (inBoxes.some((b) => b.mode === 'grid')) continue;
+    const limit = Math.min(layout.n_cols - 1, ...inBoxes.map((b) => b.c2));
+    let cs = 1;
+    while (c.c + cs <= limit && !at.has(`${c.r}:${c.c + cs}`) && !covered.has(`${c.r}:${c.c + cs}`)) { covered.add(`${c.r}:${c.c + cs}`); cs++; }
+    if (cs > 1) ext.set(`${c.r}:${c.c}`, cs);
+  }
+  const edge = (r: number, c: number, rs: number, cs: number) => {
+    const r2 = r + rs - 1, c2 = c + cs - 1;
+    const e = { t: false, b: false, l: false, r: false };
+    for (const b of layout.boxes) {
+      if (r < b.r1 || r2 > b.r2 || c < b.c1 || c2 > b.c2) continue;
+      if (b.mode === 'grid') { e.t = e.b = e.l = e.r = true; continue; }
+      if (r === b.r1) e.t = true; if (r2 === b.r2) e.b = true; if (c === b.c1) e.l = true; if (c2 === b.c2) e.r = true;
+    }
+    return { borderTop: e.t ? '1px solid #000' : undefined, borderBottom: e.b ? '1px solid #000' : undefined,
+             borderLeft: e.l ? '1px solid #000' : undefined, borderRight: e.r ? '1px solid #000' : undefined };
+  };
+  const total = layout.widths.reduce((a, w) => a + w, 0) || 1;
+  return (
+    <div className="pl-doc bg-white text-[10px] leading-tight text-black" data-testid="pl-layout" data-pl-type={layout.type}>
+      <table className="w-full border-collapse" style={{ border: '1px solid #000' }}>
+        <colgroup>{layout.widths.map((w, i) => <col key={i} style={{ width: `${(w / total) * 100}%` }} />)}</colgroup>
+        <tbody>
+          {Array.from({ length: layout.n_rows }, (_, r) => (
+            <tr key={r} style={{ height: 16 }}>
+              {Array.from({ length: layout.n_cols }, (_, c) => {
+                if (covered.has(`${r}:${c}`)) return null;
+                const cell = at.get(`${r}:${c}`);
+                const rs = cell?.rs ?? 1, cs = ext.get(`${r}:${c}`) ?? cell?.cs ?? 1;
+                const isNum = typeof cell?.v === 'number';
+                return (
+                  <td key={c} rowSpan={rs > 1 ? rs : undefined} colSpan={cs > 1 ? cs : undefined} data-cell={`${r}:${c}`}
+                    className={`px-1 py-0.5 align-middle ${isNum ? 'text-right tabular-nums' : cell?.v === '-' || cell?.v === '"' ? 'text-center' : ''} ${cell?.s ? STYLE[cell.s] : ''}`}
+                    style={edge(r, c, rs, cs)}>
+                    {cell ? fmtCell(cell.v) : ''}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function PackingListDocument({ pl }: { pl: any }) {
+  if (pl?.layout?.cells) return <PackingListLayout layout={pl.layout} />;
   const type: 'ASSORTED' | 'SOLID' | 'MIXED' = pl.pl_type || 'ASSORTED';
   const blocks: any[] = pl.blocks || [];
   const nSizes = Math.max(1, ...blocks.map((b) => (b.effective_size_headers || []).length));

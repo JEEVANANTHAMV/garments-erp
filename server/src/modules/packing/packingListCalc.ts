@@ -457,3 +457,168 @@ export function applyPolybagPacks(rows: RowIn[], polybagsOf: (row: RowIn) => num
   return rows;
 }
 
+
+/* ------------------------------------------------------------------
+   AUTO-FILL: posted cartons → blocks / rows for the chosen format
+   (client packinglist.xlsx = the template; spec "three models"):
+     ASSORTED (Model 1)  one block per style ("Product Code:…"); consecutive
+                         cartons with the identical size ratio → one range row
+     SOLID    (Model 2)  one block per style + colour (label "STYLE NAME COLOUR"),
+                         carton-wise rows (identical consecutive cartons grouped),
+                         block sub-total per style / colour
+     MIXED    (Model 3)  one block per style set, own size columns per block when
+                         the size sets differ (kids / adult / women); pack rows from
+                         the packing-rule snapshot: PCS/PACK = pieces per polybag,
+                         PACK/CTN = polybags in the carton, size qty stored PER PACK
+                         (size_qty) and per carton (size_qty_per_ctn) — never both
+                         multiplied
+   Weights / dimensions come from each carton; cartons only group when their
+   contents, weights, dims and polybags are identical.
+------------------------------------------------------------------ */
+export interface CartonForFormat extends CartonForBuild {
+  packing_id: number;
+  carton_seq?: number | null;
+  /** packing-rule snapshot of the carton's packing order (null = legacy packing without a rule) */
+  pieces_per_polybag?: number | null;
+  rule_code?: string | null;
+  contents: (CartonForBuild['contents'][number] & { size_rank?: number })[];
+}
+export type CtnNumbering = 'SEQUENCE' | 'CARTON_NO';
+
+export function buildFormatBlocks(cartons: CartonForFormat[], opts: {
+  format?: PlType | null; numbering?: CtnNumbering; start?: number;
+  orderNo: string | null; soId: number | null;
+}) {
+  const numbering: CtnNumbering = opts.numbering ?? 'SEQUENCE';
+  const start = Math.max(1, Math.trunc(opts.start ?? 1));
+  const trailing = (c: CartonForFormat) => { const m = /(\d+)\s*$/.exec(c.carton_no); return m ? Number(m[1]) : NaN; };
+  // physical order: packing order, carton sequence inside it, then carton number
+  const phys = [...cartons].sort((a, b) => (a.packing_id - b.packing_id)
+    || ((a.carton_seq ?? trailing(a) ?? 0) - (b.carton_seq ?? trailing(b) ?? 0))
+    || a.carton_no.localeCompare(b.carton_no, undefined, { numeric: true }));
+
+  // size order (mst_size.sort_order) across all cartons
+  const rank = new Map<string, number>();
+  for (const c of phys) for (const x of c.contents) {
+    const r = x.size_rank ?? 9999;
+    if (!rank.has(x.size_code) || r < rank.get(x.size_code)!) rank.set(x.size_code, r);
+  }
+  const sizeSort = (a: string, b: string) => (rank.get(a)! - rank.get(b)!) || a.localeCompare(b, undefined, { numeric: true });
+
+  const lines = (c: CartonForFormat) => new Set(c.contents.map((x) => `${x.style_id}|${x.color_id}`));
+  const sizesOf = (c: CartonForFormat) => new Set(c.contents.map((x) => x.size_code));
+  let format = opts.format ?? null;
+  if (!format) {
+    const multi = phys.some((c) => lines(c).size > 1);
+    const oneSize = phys.every((c) => sizesOf(c).size === 1);
+    format = multi ? 'MIXED' : oneSize ? 'SOLID' : 'ASSORTED';
+  }
+  const problems: string[] = [];
+  if (format !== 'MIXED') {
+    const mixedCtns = phys.filter((c) => lines(c).size > 1);
+    if (mixedCtns.length) problems.push(`${mixedCtns.length} carton(s) (${mixedCtns.slice(0, 5).map((c) => c.carton_no).join(', ')}) hold several styles / colours — use the Mixed format (Model 3)`);
+  }
+
+  // ---- blocks
+  const first = (c: CartonForFormat) => c.contents[0];
+  const keyOf = (c: CartonForFormat) => format === 'ASSORTED' ? `${first(c).style_id}`
+    : format === 'SOLID' ? `${first(c).style_id}|${first(c).color_id}`
+    : [...new Set(c.contents.map((x) => x.style_id))].sort((a, b) => a - b).join('+');
+  const labelOf = (c: CartonForFormat) => {
+    const x = first(c);
+    if (format === 'ASSORTED') return `Product Code:${x.style_code}`;
+    if (format === 'SOLID') return `${x.style_name || x.style_code} ${x.color_name}`.trim();
+    return null;
+  };
+  const blockMap = new Map<string, { label: string | null; cartons: CartonForFormat[] }>();
+  for (const c of phys) {
+    const k = keyOf(c);
+    const b = blockMap.get(k) ?? { label: labelOf(c), cartons: [] };
+    b.cartons.push(c); blockMap.set(k, b);
+  }
+  const blocksIn = [...blockMap.values()];
+
+  // ---- carton numbers on the list
+  const numOf = new Map<number, number>();
+  const physNums = phys.map(trailing);
+  const physUsable = physNums.every((n) => Number.isFinite(n) && n > 0) && new Set(physNums).size === physNums.length;
+  if (numbering === 'CARTON_NO' && physUsable) phys.forEach((c, i) => numOf.set(c.id, physNums[i]));
+  else { let n = start; for (const b of blocksIn) for (const c of b.cartons) numOf.set(c.id, n++); }
+
+  const sig = (c: CartonForFormat) => JSON.stringify([
+    [...c.contents].sort((a, b) => `${a.style_id}|${a.color_id}|${a.size_code}`.localeCompare(`${b.style_id}|${b.color_id}|${b.size_code}`))
+      .map((x) => [x.style_id, x.color_id, x.size_code, Number(x.qty)]),
+    Number(c.net_weight_kg ?? 0), Number(c.gross_weight_kg ?? 0),
+    Number(c.length_cm ?? 0), Number(c.width_cm ?? 0), Number(c.height_cm ?? 0), Number(c.polybag_qty ?? 0), Number(c.pieces_per_polybag ?? 0)]);
+
+  const allSizes = [...rank.keys()].sort(sizeSort);
+  const out: { label: string | null; size_headers: string[] | null; rows: (RowIn & { ctn_from: number })[] }[] = [];
+  const blockSizeSets: string[][] = [];
+  for (const b of blocksIn) {
+    const rows: (RowIn & { ctn_from: number })[] = [];
+    let prevSig = '', prevN = -1;
+    const used = new Set<string>();
+    for (const c of b.cartons) {
+      const n = numOf.get(c.id)!;
+      const sg = sig(c);
+      const last = rows[rows.length - 1];
+      for (const x of c.contents) used.add(x.size_code);
+      if (last && sg === prevSig && n === prevN + 1) {
+        last.no_of_ctns += 1; last.source_carton_ids!.push(c.id);
+      } else {
+        const byItem = new Map<string, ItemIn>();
+        for (const x of [...c.contents].sort((a, b2) => sizeSort(a.size_code, b2.size_code))) {
+          const k = `${x.style_id}|${x.color_id}`;
+          let it = byItem.get(k);
+          if (!it) {
+            it = { so_id: opts.soId, order_no: opts.orderNo, style_id: x.style_id, style_no: x.style_code, style_name: x.style_name,
+                   color_id: x.color_id, colour: x.color_name, size_qty: {} };
+            byItem.set(k, it);
+          }
+          it.size_qty[x.size_code] = (it.size_qty[x.size_code] || 0) + Number(x.qty);
+        }
+        const row: RowIn & { ctn_from: number } = {
+          ctn_from: n, ctn_to: null, no_of_ctns: 1, row_type: null,
+          pcs_per_pack: null, packs_per_ctn: null, pcs_per_ctn: null,
+          net_wt_per_ctn: c.net_weight_kg != null ? Number(c.net_weight_kg) : null,
+          gross_wt_per_ctn: c.gross_weight_kg != null ? Number(c.gross_weight_kg) : null,
+          length_cm: c.length_cm != null ? Number(c.length_cm) : null,
+          width_cm: c.width_cm != null ? Number(c.width_cm) : null,
+          height_cm: c.height_cm != null ? Number(c.height_cm) : null,
+          remarks: null, source_carton_ids: [c.id], items: [...byItem.values()],
+        };
+        if (format === 'MIXED') applyRulePack(row, Number(c.polybag_qty || 0), c.pieces_per_polybag ?? null, c.rule_code ?? null);
+        rows.push(row);
+      }
+      prevSig = sg; prevN = n;
+    }
+    blockSizeSets.push([...used].sort(sizeSort));
+    out.push({ label: b.label, size_headers: null, rows });
+  }
+  // Model 3: blocks with different size sets (kids 3A–14A / adult S–XXL / women 1–5) carry their own size columns
+  if (format === 'MIXED' && new Set(blockSizeSets.map((s) => s.join('|'))).size > 1)
+    out.forEach((b, i) => { b.size_headers = blockSizeSets[i]; });
+  const sorted = out.flatMap((b) => b.rows).sort((a, b) => a.ctn_from - b.ctn_from);
+  const hasGaps = sorted.some((r, i) => i > 0 && r.ctn_from !== sorted[i - 1].ctn_from + sorted[i - 1].no_of_ctns);
+  return { pl_type: format, size_headers: allSizes, blocks: out, has_gaps: hasGaps, problems,
+           numbering: numbering === 'CARTON_NO' && !physUsable ? 'SEQUENCE' as CtnNumbering : numbering };
+}
+
+/**
+ * Model 3 pack row from the packing rule: pieces per polybag (PCS/PACK) × polybags in the
+ * carton (PACK/CTN). Only when the carton is exactly full polybags (pcs = PCS/PACK × PACK/CTN)
+ * and every size qty divides by the polybag count; otherwise the row stays a size-ratio
+ * carton (PCS/CTN). Without a rule (legacy packing) the polybag count alone decides.
+ */
+export function applyRulePack(r: RowIn, bags: number, piecesPerBag: number | null, ruleCode: string | null) {
+  if (!(bags > 1)) return r;
+  const all = r.items.flatMap((it) => Object.values(it.size_qty));
+  const total = all.reduce((a, q) => a + q, 0);
+  if (!all.length || all.some((q) => q % bags !== 0)) return r;
+  const perPack = total / bags;
+  if (piecesPerBag != null && (piecesPerBag <= 1 || perPack !== piecesPerBag)) return r;
+  for (const it of r.items) for (const k of Object.keys(it.size_qty)) it.size_qty[k] = it.size_qty[k] / bags;
+  r.packs_per_ctn = bags;
+  r.remarks = `Pack basis: ${perPack} pcs/pack × ${bags} packs/ctn${ruleCode ? ` (rule ${ruleCode})` : ''}`;
+  return r;
+}
