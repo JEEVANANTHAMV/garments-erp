@@ -818,9 +818,9 @@ async function resolveOps(cid: number, st: StageInfo, vendorId: number | null, o
   const stageCard = lockedCard ? [...lockedCard.rates].filter(([, v]) => v.stage_id === st.id) : [];
   const cardLocked = !!lockedCard && stageCard.length > 0 && (locked || lockedCard.enforced);
   if (!ops.length && cardLocked) {
-    return Object.assign(stageCard.map(([opId, v]) => ({ operation_id: opId, rate: v.rate })), { cardLocked });
+    return Object.assign(stageCard.map(([opId, v]) => ({ operation_id: opId, rate: v.rate })), { cardLocked, cardRev: lockedCard!.revision });
   }
-  if (!ops.length) return Object.assign([] as { operation_id: number; rate: number }[], { cardLocked: false });
+  if (!ops.length) return Object.assign([] as { operation_id: number; rate: number }[], { cardLocked: false, cardRev: null as number | null });
   const known = await contractorRates(cid, vendorId, st.id);
   // rates in force (a pending revision keeps the last approved rates)
   const card = new Map(((await effectiveJobCard(cid, ioNo))?.rows ?? []).map((c) => [c.operation_id, c.rate]));
@@ -834,7 +834,7 @@ async function resolveOps(cid: number, st: StageInfo, vendorId: number | null, o
     const master = card.has(o.operation_id) ? card.get(o.operation_id)! : k.contractor_rate != null ? n(k.contractor_rate) : null;
     return { operation_id: o.operation_id, rate: (locked || cardLocked) && master != null ? master : (o.rate ?? master ?? n(k.default_rate)) };
   });
-  return Object.assign(out, { cardLocked });
+  return Object.assign(out, { cardLocked, cardRev: cardLocked ? lockedCard!.revision : null });
 }
 async function writeOps(tx: Tx, challanId: number, ops: { operation_id: number; rate: number }[]) {
   await txExecute(tx, `DELETE FROM trx_jobwork_challan_op WHERE challan_id = ?`, [challanId]);
@@ -1006,6 +1006,7 @@ processDcRouter.post('/process-dcs', requirePermission('PRODUCTION.CREATE'), ah(
       [ol.line.order_id, ol.line.id, ol.override ? body.outward_override_reason : null, dc.id]);
     await writeLines(tx, dc.id, st, lines);
     await writeOps(tx, dc.id, ops);
+    await txExecute(tx, `UPDATE trx_jobwork_challan SET rate_card_rev = ? WHERE id = ?`, [ops.cardRev, dc.id]);
     if (body.issue) await postIssue(tx, req, dc, st, lines, vendor?.party_name ?? 'Vendor', body.release_line_allocation, fromLine);
     if (ol) await refreshJwOrder(tx, ol.line.order_id);
     await audit(req, 'trx_jobwork_challan', dc.id, 'INSERT', undefined,
@@ -1063,6 +1064,7 @@ processDcRouter.put('/process-dcs/:id', requirePermission('PRODUCTION.UPDATE'), 
     await txExecute(tx, `DELETE FROM trx_jobwork_challan_line WHERE challan_id = ?`, [id]);
     await writeLines(tx, id, st, lines);
     await writeOps(tx, id, ops);
+    await txExecute(tx, `UPDATE trx_jobwork_challan SET rate_card_rev = ? WHERE id = ?`, [ops.cardRev, id]);
     if (body.issue) await postIssue(tx, req, { ...before, challan_date: body.challan_date }, st, lines, vendor?.party_name ?? 'Vendor', body.release_line_allocation, fromLine);
     await refreshJwOrder(tx, ol?.line.order_id ?? before.jw_order_id);
     await audit(req, 'trx_jobwork_challan', id, 'UPDATE', before,

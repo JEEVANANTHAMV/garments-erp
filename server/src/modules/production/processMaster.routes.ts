@@ -489,7 +489,8 @@ const opKey = (v: unknown) => String(v ?? '').trim().toLowerCase().replace(/[\s_
 async function jobOfIo(cid: number, ioNo: string) {
   const so = await queryOne<any>(
     `SELECT so.id, (SELECT sol.style_id FROM trx_sales_order_line sol WHERE sol.so_id = so.id ORDER BY sol.id LIMIT 1) AS style_id
-       FROM trx_sales_order so WHERE so.company_id = ? AND so.io_no = ? AND so.is_deleted = 0 ORDER BY so.id DESC LIMIT 1`, [cid, ioNo]);
+       FROM trx_sales_order so WHERE so.company_id = ? AND so.is_deleted = 0
+        AND (so.io_no = ? OR (COALESCE(so.io_no, '') = '' AND so.so_no = ?)) ORDER BY so.id DESC LIMIT 1`, [cid, ioNo, ioNo]);
   const cut = so?.style_id ? null
     : await queryOne<any>(`SELECT style_id FROM trx_cutting_bundle WHERE company_id = ? AND io_no = ? AND style_id IS NOT NULL LIMIT 1`, [cid, ioNo]);
   const anyCut = so || cut ? true : !!(await queryOne(`SELECT id FROM trx_cutting_bundle WHERE company_id = ? AND io_no = ? LIMIT 1`, [cid, ioNo]));
@@ -620,7 +621,8 @@ export async function jobRateVariance(cid: number, ioNo: string) {
   const draft = eff.inRevision ? await cardRates(cid, ioNo) : [];
   const oq = await queryOne<any>(
     `SELECT COALESCE(SUM(sol.order_qty), 0) AS qty FROM trx_sales_order so JOIN trx_sales_order_line sol ON sol.so_id = so.id
-      WHERE so.company_id = ? AND so.io_no = ? AND so.is_deleted = 0`, [cid, ioNo]);
+      WHERE so.company_id = ? AND so.is_deleted = 0
+        AND (so.io_no = ? OR (COALESCE(so.io_no, '') = '' AND so.so_no = ?))`, [cid, ioNo, ioNo]);
   const orderQty = n(oq?.qty);
 
   const dcs = await query<any>(
@@ -740,7 +742,7 @@ processMasterRouter.get('/job-rate-cards/variance', requirePermission('PRODUCTIO
 export async function jobPieceRates(cid: number, challanIds: number[], ioNos: string[]) {
   const out = new Map<string, number>(); // `${challanId}|${io}` → rate
   if (!challanIds.length) return out;
-  const dcs = await query<any>(`SELECT id, stage_id, rate FROM trx_jobwork_challan WHERE id IN (?)`, [challanIds]);
+  const dcs = await query<any>(`SELECT id, stage_id, rate, rate_card_rev FROM trx_jobwork_challan WHERE id IN (?)`, [challanIds]);
   const dcOps = await query<any>(`SELECT challan_id, operation_id, rate FROM trx_jobwork_challan_op WHERE challan_id IN (?)`, [challanIds]);
   const ios = [...new Set(ioNos.filter(Boolean))];
   // rates in force: a pending revision's draft rates never price DCs / bills
@@ -749,6 +751,8 @@ export async function jobPieceRates(cid: number, challanIds: number[], ioNos: st
   for (const dc of dcs) {
     const ops = dcOps.filter((o) => Number(o.challan_id) === Number(dc.id));
     for (const io of ios) {
+      // issued at a locked card's rates: the DC keeps them (a later revision applies to later DCs only)
+      if (dc.rate_card_rev != null && ops.length) { out.set(`${dc.id}|${io}`, Math.round(ops.reduce((a, o) => a + n(o.rate), 0) * 10000) / 10000); continue; }
       const card = cards.filter((c) => c.io_no === io && Number(c.stage_id) === Number(dc.stage_id));
       if (!card.length) { out.set(`${dc.id}|${io}`, n(dc.rate)); continue; }
       const rate = ops.length

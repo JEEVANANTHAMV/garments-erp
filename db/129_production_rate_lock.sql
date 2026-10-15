@@ -73,3 +73,9 @@ SELECT c.id, 'PRODUCTION_RATE_LOCK_ENFORCED', '1',
        'Production rate card: once a job''s card is Approved & Locked, every DC (contractor and in-house), bill and costing uses only its rates'
   FROM mst_company c
  WHERE NOT EXISTS (SELECT 1 FROM cfg_system_setting s WHERE s.company_id = c.id AND s.setting_key = 'PRODUCTION_RATE_LOCK_ENFORCED');
+
+-- the card revision whose locked rates a DC was issued at: such DCs keep their own (locked) rates in
+-- contractor bills and costing even after a later revision is locked
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_jobwork_challan' AND COLUMN_NAME='rate_card_rev');
+SET @s = IF(@x=0, 'ALTER TABLE trx_jobwork_challan ADD COLUMN rate_card_rev INT NULL COMMENT ''Locked production rate card revision the DC rates came from''', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
