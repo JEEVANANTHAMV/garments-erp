@@ -70,7 +70,10 @@ export async function resolvePlan(tx: Tx, cid: number, pl: any, st: ComputedList
       const what = `cartons ${r.ctn_from}-${r.ctn_to}`;
       if (!it.style_id || !it.color_id) { problems.push(`${what}: pick the style and colour from the order (typed names cannot be packed against)`); continue; }
       if (!onOrder.has(`${it.style_id}:${it.color_id}`)) { problems.push(`${what}: ${it.style_no ?? `style #${it.style_id}`} ${it.colour ?? `colour #${it.color_id}`} is not on the sales order`); continue; }
-      for (const [label, q] of Object.entries(it.size_qty_per_ctn ?? {})) {
+      // JSON keys come back reordered — keep the list's size column order
+      const cols = b.effective_size_headers.map((h) => norm(h));
+      const pos = (k: string) => { const i = cols.indexOf(norm(k)); return i < 0 ? 999 : i; };
+      for (const [label, q] of Object.entries(it.size_qty_per_ctn ?? {}).sort((x, y) => pos(x[0]) - pos(y[0]))) {
         if (!(Number(q) > 0)) continue;
         const sz = sizeOf(Number(it.style_id), label);
         if (!sz) { problems.push(`${what}: size "${label}" is not a size of ${it.style_no ?? `style #${it.style_id}`}`); continue; }
