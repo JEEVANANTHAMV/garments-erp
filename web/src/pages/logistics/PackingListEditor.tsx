@@ -599,12 +599,12 @@ export function PackingListDetailPage() {
           <div className="grid gap-4 border-t border-surface-border p-4 lg:grid-cols-2">
             <div className="max-h-72 overflow-auto">
               <table className="w-full text-xs" id="plan-cartons">
-                <thead><tr className="text-left text-slate-500"><th className="py-1">Ctn</th><th>Block</th><th className="text-right">Plan</th><th className="text-right">Packed</th><th>Carton</th><th>State</th></tr></thead>
+                <thead><tr className="text-left text-slate-500"><th className="py-1">Ctn</th><th>Block</th><th className="text-right">Plan</th><th className="text-right">Packed</th><th className="pl-4">Carton</th><th>State</th></tr></thead>
                 <tbody>{ps.cartons.map((c: any) => (
                   <tr key={c.ctn_no} data-ctn={c.ctn_no} data-state={c.state} className="border-t border-slate-100">
                     <td className="py-1 font-mono">{c.ctn_no}</td><td>{c.label ?? c.block_no}</td>
                     <td className="text-right">{c.planned}</td><td className="text-right">{c.carton_id ? c.packed : '—'}</td>
-                    <td className="font-mono">{c.carton_no ?? ''}{c.pack_no ? <span className="ml-1 font-sans text-slate-400">{c.pack_no}</span> : null}</td>
+                    <td className="pl-4 font-mono">{c.carton_no ?? ''}{c.pack_no ? <span className="ml-1 font-sans text-slate-400">{c.pack_no}</span> : null}</td>
                     <td><Badge color={PLAN_STATE[c.state]?.color ?? 'slate'}>{PLAN_STATE[c.state]?.label ?? c.state}</Badge></td>
                   </tr>))}</tbody>
               </table>
