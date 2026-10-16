@@ -235,13 +235,19 @@ function NewReceiptModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
                           return <td key={s.id} className="px-2 py-2 text-center text-[10px] text-slate-400" data-fg-cell={k} title="Nothing of this colour / size has finished ironing yet">ready 0<br />in FG {cl!.on_hand}</td>;
                         }
                         return (
-                          <td key={s.id} className="px-1.5 py-1.5" data-fg-cell={k}>
-                            <input type="number" min={0} placeholder="good" value={v.good} data-fg-good={k}
-                              onChange={(e) => setQty({ ...qty, [k]: { ...v, good: e.target.value } })}
-                              className={`input h-7 w-20 text-right text-xs ${over ? 'border-red-400 bg-red-50' : ''}`} />
-                            <input type="number" min={0} placeholder="reject" value={v.reject} data-fg-reject={k}
-                              onChange={(e) => setQty({ ...qty, [k]: { ...v, reject: e.target.value } })}
-                              className="input mt-1 h-7 w-20 text-right text-xs" />
+                          <td key={s.id} className="px-1.5 py-1.5 text-center" data-fg-cell={k}>
+                            <div className="inline-flex flex-col items-end gap-1">
+                              <label className="flex items-center gap-1 text-[10px] text-emerald-700">G
+                                <input type="number" min={0} placeholder="good" value={v.good} data-fg-good={k}
+                                  onChange={(e) => setQty({ ...qty, [k]: { ...v, good: e.target.value } })}
+                                  className={`input h-7 w-20 text-right text-xs ${over ? 'border-red-400 bg-red-50' : ''}`} />
+                              </label>
+                              <label className="flex items-center gap-1 text-[10px] text-red-600">R
+                                <input type="number" min={0} placeholder="reject" value={v.reject} data-fg-reject={k}
+                                  onChange={(e) => setQty({ ...qty, [k]: { ...v, reject: e.target.value } })}
+                                  className="input h-7 w-20 text-right text-xs" />
+                              </label>
+                            </div>
                             <div className="mt-0.5 text-[10px] text-slate-500" title={`Order ${cl!.order_qty} · received ${cl!.received} · packed ${cl!.packed} · in store ${cl!.on_hand}`}>
                               {cap == null ? `ord ${cl!.order_qty}` : head.source_type === 'IN_HOUSE' ? `ready ${cap}` : `bal ${cap}`} · in FG {cl!.on_hand}
                             </div>
