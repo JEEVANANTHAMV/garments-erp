@@ -1,122 +1,56 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, Badge, Button, Input, Select, DataTable, Textarea, Modal, FormSection } from '../../components/ui';
-import { PackageCheck } from 'lucide-react';
+import { PackageCheck, Ban, Eye } from 'lucide-react';
 import { api } from '../../lib/api';
 import { fmtDate, fmtNumber, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
-import { JobSelect, onlyStyle } from '../../components/JobSelect';
+import { JobSelect } from '../../components/JobSelect';
+
+/**
+ * FG Receipt — the gate into packing (client call 16-Oct-2026). Finished garments are received into the FG store
+ * here, size-wise (good / reject per colour × size of the order). Only PCS received here can be packed (packing
+ * order, polybag / individual piece entry, cartons), and the FG store stock / value follows the receipts.
+ *   In-house    PCS that finished ironing (Final QC when required) on the job's bundles
+ *   Job work    garments back from job work (fabric sent out) — up to the order qty + allowance
+ *   Return / Surplus  returned or extra pieces of the order's colours / sizes
+ */
+type Cell = { color_id: number; size_id: number; sku_id: number | null; order_qty: number; on_order: boolean; received: number; packed: number; on_hand: number; in_house_ready: number };
+type JobInfo = { io_no: string; so_no: string | null; styles: { id: number; style_code: string; style_name: string }[]; style_id: number | null;
+  colors: { id: number; color_name: string }[]; sizes: { id: number; size_code: string }[]; cells: Cell[]; fg_mode: boolean };
+
+const SOURCES = [
+  { value: 'IN_HOUSE', label: 'In-house (finished bundles)' },
+  { value: 'JOB_WORK', label: 'Job work (garments back)' },
+  { value: 'RETURN', label: 'Return' },
+  { value: 'SURPLUS', label: 'Surplus / extra pieces' },
+];
+const srcLabel = (v: string) => SOURCES.find((x) => x.value === v)?.label.split(' (')[0] ?? v;
+const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Request failed');
 
 export function FgReceiptsPage() {
+  const toast = useToast();
   const [receipts, setReceipts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [showModal, setShowModal] = useState(false);
-  const [styles, setStyles] = useState<any[]>([]);
-  const [warehouses, setWarehouses] = useState<any[]>([]);
-  const [colors, setColors] = useState<any[]>([]);
-  const [sizes, setSizes] = useState<any[]>([]);
-  const toast = useToast();
-
-  const [header, setHeader] = useState<any>({
-    receipt_no: '',
-    receipt_date: today(),
-    io_no: '',
-    style_id: '',
-    warehouse_id: '',
-    source_stage: 'FINISHING',
-    status: 'RECEIVED',
-    remarks: '',
-  });
-
-  const [lines, setLines] = useState<any[]>([]);
-  const [saving, setSaving] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [view, setView] = useState<any>(null);
+  const [cancelOf, setCancelOf] = useState<any>(null);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
 
   const fetchReceipts = () => {
     setLoading(true);
-    setLoadError(null);
-    api.get('/fg-receipts')
-      .then(r => setReceipts(r.data.data || []))
-      .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : 'Unable to load FG receipts'))
-      .finally(() => setLoading(false));
+    api.get('/fg-receipts').then((r) => setReceipts(r.data.data || [])).catch((e) => toast(errMsg(e), 'error')).finally(() => setLoading(false));
   };
+  useEffect(fetchReceipts, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    fetchReceipts();
-    Promise.all([
-      api.get('/lookups/styles'),
-      api.get('/lookups/warehouses'),
-      api.get('/lookups/colors'),
-      api.get('/lookups/sizes'),
-    ]).then(([st, wh, col, sz]) => {
-      setStyles(st.data.data || []);
-      setWarehouses(wh.data.data || []);
-      setColors(col.data.data || []);
-      setSizes(sz.data.data || []);
-    }).catch((e: unknown) => toast(e instanceof Error ? e.message : 'Unable to load lookups', 'error'));
-  }, []);
-
-  const addLine = () => {
-    setLines(prev => [
-      ...prev,
-      { color_id: '', size_id: '', good_qty: 0, reject_qty: 0, batch_no: '' },
-    ]);
-  };
-
-  const updateLine = (idx: number, field: string, val: any) => {
-    setLines(prev => prev.map((l, i) => (i === idx ? { ...l, [field]: val } : l)));
-  };
-
-  const removeLine = (idx: number) => {
-    setLines(prev => prev.filter((_, i) => i !== idx));
-  };
-
-  const handleSave = async () => {
-    if (!header.style_id || !header.io_no.trim()) {
-      toast('Please enter I/O No and select a Style', 'error');
-      return;
-    }
-    if (!lines.length) {
-      toast('Add at least one colour / size line', 'error');
-      return;
-    }
-    const badLine = lines.findIndex((l) => !l.color_id || !l.size_id);
-    if (badLine >= 0) {
-      toast(`Line ${badLine + 1}: select colour and size`, 'error');
-      return;
-    }
-    if (lines.some((l) => Number(l.good_qty) < 0 || Number(l.reject_qty) < 0)) {
-      toast('Quantities cannot be negative', 'error');
-      return;
-    }
-    if (!lines.some((l) => Number(l.good_qty) > 0 || Number(l.reject_qty) > 0)) {
-      toast('Enter good or reject pieces on at least one line', 'error');
-      return;
-    }
-    setSaving(true);
+  const open = (r: any) => api.get(`/fg-receipts/${r.id}`).then((x) => setView(x.data.data)).catch((e) => toast(errMsg(e), 'error'));
+  const doCancel = async () => {
+    setBusy(true);
     try {
-      await api.post('/fg-receipts', {
-        ...header,
-        style_id: Number(header.style_id),
-        warehouse_id: header.warehouse_id ? Number(header.warehouse_id) : null,
-        io_no: header.io_no.trim(),
-        lines: lines.map((l) => ({
-          color_id: Number(l.color_id),
-          size_id: Number(l.size_id),
-          good_qty: Number(l.good_qty) || 0,
-          reject_qty: Number(l.reject_qty) || 0,
-          batch_no: l.batch_no || null,
-        })),
-      });
-      toast('FG Receipt created successfully');
-      setShowModal(false);
-      setLines([]);
-      setHeader((h: any) => ({ ...h, receipt_no: '', io_no: '', remarks: '' }));
-      fetchReceipts();
-    } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : 'Failed to create FG receipt', 'error');
-    } finally {
-      setSaving(false);
-    }
+      await api.post(`/fg-receipts/${cancelOf.id}/cancel`, { reason });
+      toast(`${cancelOf.receipt_no} cancelled — its PCS are out of the FG store`);
+      setCancelOf(null); setReason(''); setView(null); fetchReceipts();
+    } catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(false); }
   };
 
   return (
@@ -124,143 +58,210 @@ export function FgReceiptsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Finished Goods Receipts</h1>
-          <p className="text-sm text-slate-500">Receive inspected finished garments into FG Warehouse with I/O and Style traceability</p>
+          <p className="text-sm text-slate-500">
+            Receive finished garments into the FG store, size-wise. <b>Only PCS received here can be packed</b> (packing order, polybag / piece entry, cartons);
+            the FG store stock and value follow these receipts.
+          </p>
         </div>
-        <Button onClick={() => setShowModal(true)}>+ Receive Finished Goods</Button>
+        <Button id="fg-new" onClick={() => setShowNew(true)}><PackageCheck size={14} className="mr-1 inline" />Receive Finished Goods</Button>
       </div>
-
-      {loadError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          Unable to load FG receipts: {loadError}
-        </div>
-      )}
 
       <Card>
         <DataTable
           data={receipts}
           loading={loading}
+          onRowClick={open}
           columns={[
             { key: 'receipt_no', header: 'Receipt No', sortable: true, render: (r: any) => <span className="font-mono text-xs font-semibold text-brand-700">{r.receipt_no}</span> },
             { key: 'receipt_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.receipt_date) },
-            { key: 'io_no', header: 'I/O No', render: (r: any) => r.io_no ? <Badge variant="outline" color="indigo">{r.io_no}</Badge> : <span className="text-slate-300">—</span> },
+            { key: 'io_no', header: 'I/O No', render: (r: any) => r.io_no ? <Badge color="indigo">{r.io_no}</Badge> : <span className="text-slate-300">—</span> },
             { key: 'style_code', header: 'Style', render: (r: any) => <span className="font-medium">{r.style_code}</span> },
-            { key: 'warehouse_name', header: 'Warehouse' },
-            { key: 'source_stage', header: 'Source', render: (r: any) => <Badge color="slate">{r.source_stage}</Badge> },
-            { key: 'total_qty', header: 'Good Qty (PCS)', align: 'right' as const, render: (r: any) => <span className="text-emerald-700 font-semibold">{fmtNumber(r.total_qty)}</span> },
-            { key: 'total_reject', header: 'Reject Qty (PCS)', align: 'right' as const, render: (r: any) => <span className="text-red-600 font-semibold">{fmtNumber(r.total_reject)}</span> },
-            { key: 'status', header: 'Status', render: (r: any) => <Badge color={r.status === 'RECEIVED' ? 'emerald' : 'slate'}>{r.status}</Badge> },
+            { key: 'source_type', header: 'Source', render: (r: any) => <Badge color="slate">{srcLabel(r.source_type ?? r.source_stage)}</Badge> },
+            { key: 'warehouse_name', header: 'FG store' },
+            { key: 'total_qty', header: 'Good (PCS)', align: 'right' as const, render: (r: any) => <span className="font-semibold text-emerald-700">{fmtNumber(r.total_qty)}</span> },
+            { key: 'total_reject', header: 'Reject (PCS)', align: 'right' as const, render: (r: any) => <span className="font-semibold text-red-600">{fmtNumber(r.total_reject)}</span> },
+            { key: 'status', header: 'Status', render: (r: any) => (
+              <span className="flex items-center gap-1">
+                <Badge color={r.status === 'CANCELLED' ? 'red' : r.status === 'RECEIVED' ? 'emerald' : 'slate'}>{r.status}</Badge>
+                {!Number(r.fg_posted) && r.status !== 'CANCELLED' && <span className="text-[10px] text-slate-400" title="Entered before the FG store gate — history only">history</span>}
+              </span>
+            ) },
           ]}
         />
       </Card>
 
-      {/* Receive FG Modal */}
-      <Modal open={showModal} onClose={() => setShowModal(false)} title="New Finished Goods Receipt" size="lg"
-        subtitle="Receive inspected finished garments into the FG warehouse against an I/O and style"
-        icon={<PackageCheck size={16} />}
-        footerStart={<><b>{lines.length}</b> line(s) · <b>{fmtNumber(lines.reduce((t, l) => t + (Number(l.good_qty) || 0), 0))}</b> good · <b>{fmtNumber(lines.reduce((t, l) => t + (Number(l.reject_qty) || 0), 0))}</b> reject PCS</>}
-        footer={<>
-          <Button variant="secondary" onClick={() => setShowModal(false)}>Cancel</Button>
-          <Button onClick={handleSave} loading={saving}>Save FG Receipt</Button>
-        </>}>
-        <FormSection cols={3}>
-          <Input label="Receipt Date" type="date" value={header.receipt_date}
-            onChange={e => setHeader({ ...header, receipt_date: e.target.value })} />
-          <JobSelect label="I/O Number" required value={header.io_no} id="fg-io"
-            onPick={(j) => setHeader((h: any) => ({ ...h, io_no: j?.job_no ?? '', style_id: onlyStyle(j) ? String(onlyStyle(j)) : (j && h.style_id && !j.style_ids.includes(Number(h.style_id)) ? '' : h.style_id) }))} />
-          <Select
-            label="Target Style *"
-            value={header.style_id}
-            onChange={e => setHeader({ ...header, style_id: e.target.value })}
-            options={[
-              { value: '', label: '— Select Style —' },
-              ...styles.map(st => ({ value: st.id, label: st.label ? `${st.code} (${st.label})` : String(st.code ?? st.id) })),
-            ]}
-          />
-          <Input label="Source Stage" value={header.source_stage}
-            onChange={e => setHeader({ ...header, source_stage: e.target.value })} />
-          <Select
-            label="FG Warehouse *"
-            value={header.warehouse_id}
-            className="lg:col-span-2"
-            onChange={e => setHeader({ ...header, warehouse_id: e.target.value })}
-            options={[
-              { value: '', label: '— Select FG Warehouse —' },
-              ...warehouses.map(w => ({ value: w.id, label: w.label || w.warehouse_name })),
-            ]}
-          />
-        </FormSection>
+      {showNew && <NewReceiptModal onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); fetchReceipts(); }} />}
 
-        {/* Line Breakdown */}
-        <FormSection title="Colour & Size Breakdown" cols={1}
-          actions={<Button variant="secondary" size="sm" onClick={addLine}>+ Add Line</Button>}>
-          <table className="w-full text-xs text-left border rounded-lg overflow-hidden">
-            <thead className="bg-slate-50 border-b">
-              <tr>
-                <th className="p-2">Colour</th>
-                <th className="p-2">Size</th>
-                <th className="p-2">Good Qty (PCS)</th>
-                <th className="p-2">Reject Qty (PCS)</th>
-                <th className="p-2">Batch No</th>
-                <th className="p-2 w-10"></th>
-              </tr>
-            </thead>
+      {view && (
+        <Modal open onClose={() => setView(null)} size="lg" icon={<Eye size={16} />} title={`FG receipt ${view.receipt_no}`}
+          subtitle={`${view.io_no} · ${view.style_code ?? ''} · ${srcLabel(view.source_type ?? view.source_stage)} · ${view.warehouse_name ?? ''} · ${fmtDate(view.receipt_date)}`}
+          footerStart={view.status === 'CANCELLED' ? <span className="text-xs text-red-600">Cancelled: {view.cancel_reason}</span> : null}
+          footer={<>
+            {view.status !== 'CANCELLED' && Number(view.fg_posted) ? <Button variant="secondary" id="fg-cancel" onClick={() => setCancelOf(view)}><Ban size={13} className="mr-1 inline" />Cancel receipt</Button> : null}
+            <Button variant="secondary" onClick={() => setView(null)}>Close</Button>
+          </>}>
+          <table className="w-full text-xs">
+            <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-2 text-left">Colour</th><th className="px-2 py-2 text-left">Size</th><th className="px-2 py-2 text-right">Good</th><th className="px-2 py-2 text-right">Reject</th></tr></thead>
             <tbody>
-              {lines.map((line, idx) => (
-                <tr key={idx} className="border-b">
-                  <td className="p-1.5">
-                    <select className="w-full border rounded px-1.5 py-1" value={line.color_id}
-                      onChange={e => updateLine(idx, 'color_id', e.target.value ? Number(e.target.value) : '')}>
-                      <option value="">— Colour —</option>
-                      {colors.map(c => <option key={c.id} value={c.id}>{c.label || c.color_name}</option>)}
-                    </select>
-                  </td>
-                  <td className="p-1.5">
-                    <select className="w-full border rounded px-1.5 py-1" value={line.size_id}
-                      onChange={e => updateLine(idx, 'size_id', e.target.value ? Number(e.target.value) : '')}>
-                      <option value="">— Size —</option>
-                      {sizes.map(s => <option key={s.id} value={s.id}>{s.size_code || s.code}{s.group_name ? ` (${s.group_name})` : ''}</option>)}
-                    </select>
-                  </td>
-                  <td className="p-1.5">
-                    <input type="number" min={0} className="w-full border rounded px-1.5 py-1" value={line.good_qty}
-                      onChange={e => updateLine(idx, 'good_qty', Number(e.target.value))} />
-                  </td>
-                  <td className="p-1.5">
-                    <input type="number" min={0} className="w-full border rounded px-1.5 py-1" value={line.reject_qty}
-                      onChange={e => updateLine(idx, 'reject_qty', Number(e.target.value))} />
-                  </td>
-                  <td className="p-1.5">
-                    <input className="w-full border rounded px-1.5 py-1" value={line.batch_no}
-                      onChange={e => updateLine(idx, 'batch_no', e.target.value)} placeholder="BATCH" />
-                  </td>
-                  <td className="p-1.5 text-center">
-                    <button onClick={() => removeLine(idx)} className="text-red-500 font-bold">×</button>
-                  </td>
-                </tr>
+              {view.lines.map((l: any) => (
+                <tr key={l.id} className="border-t border-slate-100"><td className="px-2 py-1.5">{l.color_name}</td><td className="px-2 py-1.5">{l.size_code}</td>
+                  <td className="px-2 py-1.5 text-right font-semibold text-emerald-700">{fmtNumber(l.good_qty)}</td><td className="px-2 py-1.5 text-right text-red-600">{fmtNumber(l.reject_qty)}</td></tr>
               ))}
-              {lines.length === 0 && (
-                <tr><td colSpan={6} className="p-3 text-center text-slate-400">No lines yet — click “+ Add Line”.</td></tr>
-              )}
             </tbody>
-            {lines.length > 0 && (
-              <tfoot className="bg-slate-50 font-semibold">
-                <tr>
-                  <td className="p-2" colSpan={2}>Total</td>
-                  <td className="p-2">{fmtNumber(lines.reduce((t, l) => t + (Number(l.good_qty) || 0), 0))} PCS</td>
-                  <td className="p-2">{fmtNumber(lines.reduce((t, l) => t + (Number(l.reject_qty) || 0), 0))} PCS</td>
-                  <td colSpan={2} />
-                </tr>
-              </tfoot>
-            )}
           </table>
-        </FormSection>
+          {view.bundles?.length > 0 && <p className="mt-2 text-[11px] text-slate-500">From bundles: {view.bundles.map((b: any) => `${b.bundle_no} (${b.good_qty}${b.reject_qty ? ` + ${b.reject_qty} rej` : ''})`).join(', ')}</p>}
+        </Modal>
+      )}
 
-        <FormSection title="Remarks" cols={1}>
-          <Textarea label="Remarks" value={header.remarks} onChange={e => setHeader({ ...header, remarks: e.target.value })} rows={2} />
-        </FormSection>
-      </Modal>
+      {cancelOf && (
+        <Modal open onClose={() => setCancelOf(null)} size="sm" icon={<Ban size={16} />} title={`Cancel ${cancelOf.receipt_no}`}
+          subtitle="Its PCS leave the FG store — only while none of them is packed or bagged"
+          footer={<>
+            <Button variant="secondary" onClick={() => setCancelOf(null)}>Back</Button>
+            <Button id="fg-cancel-ok" loading={busy} disabled={reason.trim().length < 3} onClick={doCancel}>Cancel receipt</Button>
+          </>}>
+          <Textarea id="fg-cancel-reason" label="Reason" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
+        </Modal>
+      )}
     </div>
   );
 }
 
-export default FgReceiptsPage;
+function NewReceiptModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const toast = useToast();
+  const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [head, setHead] = useState({ receipt_date: today(), io_no: '', style_id: '', source_type: 'IN_HOUSE', warehouse_id: '', source_ref: '', remarks: '' });
+  const [info, setInfo] = useState<JobInfo | null>(null);
+  const [qty, setQty] = useState<Record<string, { good: string; reject: string }>>({});
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api.get('/lookups/warehouses').then((r) => {
+      const list = r.data.data || [];
+      setWarehouses(list);
+      const fg = list.find((w: any) => w.warehouse_type === 'FINISHED_GOODS');
+      if (fg) setHead((h) => ({ ...h, warehouse_id: String(fg.id) }));
+    }).catch(() => setWarehouses([]));
+  }, []);
+
+  const loadJob = (io: string, styleId?: string) => {
+    if (!io) { setInfo(null); return; }
+    api.get('/fg-receipts/job-info', { params: { io_no: io, style_id: styleId || undefined } })
+      .then((r) => {
+        const d: JobInfo = r.data.data;
+        setInfo(d); setQty({});
+        setHead((h) => ({ ...h, style_id: d.style_id ? String(d.style_id) : '' }));
+      })
+      .catch((e) => { toast(errMsg(e), 'error'); setInfo(null); });
+  };
+
+  const cellKey = (c: number, s: number) => `${c}:${s}`;
+  const cellOf = (c: number, s: number) => info?.cells.find((x) => x.color_id === c && x.size_id === s);
+  const canTake = (cl: Cell) => (head.source_type === 'IN_HOUSE' ? cl.in_house_ready : head.source_type === 'SURPLUS' ? null : Math.max(cl.order_qty - cl.received, 0));
+  // only the order's colours / sizes (in-house also those cut on the job's bundles)
+  const visible = (cl?: Cell) => !!cl && (cl.on_order || (head.source_type === 'IN_HOUSE' && cl.in_house_ready > 0));
+  const colors = useMemo(() => (info?.colors ?? []).filter((c) => (info?.cells ?? []).some((x) => x.color_id === Number(c.id) && visible(x))), [info, head.source_type]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sizes = useMemo(() => (info?.sizes ?? []).filter((s) => (info?.cells ?? []).some((x) => x.size_id === Number(s.id) && visible(x))), [info, head.source_type]); // eslint-disable-line react-hooks/exhaustive-deps
+  const totals = Object.values(qty).reduce((a, v) => ({ good: a.good + (Number(v.good) || 0), reject: a.reject + (Number(v.reject) || 0) }), { good: 0, reject: 0 });
+
+  const save = async () => {
+    const lines = Object.entries(qty).map(([k, v]) => {
+      const [color_id, size_id] = k.split(':').map(Number);
+      return { color_id, size_id, good_qty: Number(v.good) || 0, reject_qty: Number(v.reject) || 0 };
+    }).filter((l) => l.good_qty > 0 || l.reject_qty > 0);
+    if (!head.io_no || !head.style_id) { toast('Pick the job and style', 'warning'); return; }
+    if (!head.warehouse_id) { toast('Pick the FG store', 'warning'); return; }
+    if (!lines.length) { toast('Enter good / reject PCS in the size grid', 'warning'); return; }
+    setSaving(true);
+    try {
+      const r = await api.post('/fg-receipts', { ...head, style_id: Number(head.style_id), warehouse_id: Number(head.warehouse_id), source_ref: head.source_ref || null, remarks: head.remarks || null, lines });
+      toast(r.data.message ?? 'FG receipt posted');
+      onSaved();
+    } catch (e) { toast(errMsg(e), 'error'); } finally { setSaving(false); }
+  };
+
+  return (
+    <Modal open onClose={onClose} title="Receive Finished Goods" size="xl" icon={<PackageCheck size={16} />}
+      subtitle="Pick the job — style, colours and sizes come from the order. Enter good / reject PCS size-wise."
+      footerStart={<span className="text-sm"><b className="text-emerald-700">{fmtNumber(totals.good)}</b> good · <b className="text-red-600">{fmtNumber(totals.reject)}</b> reject PCS</span>}
+      footer={<>
+        <Button variant="secondary" onClick={onClose}>Cancel</Button>
+        <Button id="fg-save" onClick={save} loading={saving}>Post into FG store</Button>
+      </>}>
+      <FormSection cols={3}>
+        <Input label="Receipt date" type="date" required value={head.receipt_date} onChange={(e) => setHead({ ...head, receipt_date: e.target.value })} />
+        <JobSelect id="fg-job" label="Job (I/O no)" required value={head.io_no}
+          onPick={(j) => { const io = j?.job_no ?? ''; setHead({ ...head, io_no: io, style_id: '' }); loadJob(io); }} />
+        <Select id="fg-style" label="Style" required value={head.style_id} placeholder={info ? 'Select style…' : 'Pick the job first'}
+          onChange={(e) => { setHead({ ...head, style_id: e.target.value }); loadJob(head.io_no, e.target.value); }}
+          options={(info?.styles ?? []).map((s) => ({ value: String(s.id), label: `${s.style_code} — ${s.style_name}` }))} />
+        <Select id="fg-source" label="Source" required value={head.source_type} onChange={(e) => { setHead({ ...head, source_type: e.target.value }); setQty({}); }} options={SOURCES} />
+        <Select id="fg-store" label="FG store" required value={head.warehouse_id} placeholder="Select store…" onChange={(e) => setHead({ ...head, warehouse_id: e.target.value })}
+          options={warehouses.map((w) => ({ value: String(w.id), label: `${w.label}${w.warehouse_type === 'FINISHED_GOODS' ? '' : ` (${w.warehouse_type})`}` }))} />
+        <Input label="Reference (DC / inspection no)" value={head.source_ref} onChange={(e) => setHead({ ...head, source_ref: e.target.value })} />
+      </FormSection>
+
+      {info && head.style_id && (
+        <div className="mt-3 overflow-x-auto">
+          {colors.length === 0 ? (
+            <p className="rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+              {head.source_type === 'IN_HOUSE' ? 'No finished PCS of this job / style are waiting to be received (nothing has finished ironing yet).' : 'The order has no colours / sizes for this style.'}
+            </p>
+          ) : (
+            <table className="w-full text-xs" id="fg-grid">
+              <thead className="bg-slate-50 text-slate-600">
+                <tr>
+                  <th className="px-2 py-2 text-left">Colour</th>
+                  {sizes.map((s) => <th key={s.id} className="px-2 py-2 text-center">{s.size_code}</th>)}
+                  <th className="px-2 py-2 text-right">Good</th><th className="px-2 py-2 text-right">Reject</th>
+                </tr>
+              </thead>
+              <tbody>
+                {colors.map((c) => {
+                  const rowGood = sizes.reduce((a, s) => a + (Number(qty[cellKey(Number(c.id), Number(s.id))]?.good) || 0), 0);
+                  const rowRej = sizes.reduce((a, s) => a + (Number(qty[cellKey(Number(c.id), Number(s.id))]?.reject) || 0), 0);
+                  return (
+                    <tr key={c.id} className="border-t border-slate-100 align-top" data-fg-color={c.id}>
+                      <td className="px-2 py-2 font-semibold text-slate-800">{c.color_name}</td>
+                      {sizes.map((s) => {
+                        const cl = cellOf(Number(c.id), Number(s.id));
+                        if (!visible(cl)) return <td key={s.id} className="px-2 py-2 text-center text-slate-300">—</td>;
+                        const k = cellKey(Number(c.id), Number(s.id));
+                        const v = qty[k] ?? { good: '', reject: '' };
+                        const cap = canTake(cl!);
+                        const over = cap != null && (Number(v.good) || 0) + (head.source_type === 'IN_HOUSE' ? Number(v.reject) || 0 : 0) > cap;
+                        return (
+                          <td key={s.id} className="px-1.5 py-1.5" data-fg-cell={k}>
+                            <input type="number" min={0} placeholder="good" value={v.good} data-fg-good={k}
+                              onChange={(e) => setQty({ ...qty, [k]: { ...v, good: e.target.value } })}
+                              className={`input h-7 w-20 text-right text-xs ${over ? 'border-red-400 bg-red-50' : ''}`} />
+                            <input type="number" min={0} placeholder="reject" value={v.reject} data-fg-reject={k}
+                              onChange={(e) => setQty({ ...qty, [k]: { ...v, reject: e.target.value } })}
+                              className="input mt-1 h-7 w-20 text-right text-xs" />
+                            <div className="mt-0.5 text-[10px] text-slate-500" title={`Order ${cl!.order_qty} · received ${cl!.received} · packed ${cl!.packed} · in store ${cl!.on_hand}`}>
+                              {cap == null ? `ord ${cl!.order_qty}` : head.source_type === 'IN_HOUSE' ? `ready ${cap}` : `bal ${cap}`} · in FG {cl!.on_hand}
+                            </div>
+                          </td>
+                        );
+                      })}
+                      <td className="px-2 py-2 text-right font-semibold text-emerald-700">{fmtNumber(rowGood)}</td>
+                      <td className="px-2 py-2 text-right text-red-600">{fmtNumber(rowRej)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+          <p className="mt-2 text-[11px] text-slate-500">
+            {head.source_type === 'IN_HOUSE'
+              ? '"ready" = PCS that finished ironing (Final QC when required) on the job\'s bundles and are not yet in the FG store. Good + reject cannot exceed it.'
+              : head.source_type === 'SURPLUS' ? 'Surplus pieces are not limited by the order quantity.'
+                : '"bal" = order quantity not yet received (a small allowance over the order is accepted).'}
+            {' '}"in FG" = PCS of the job in the FG store now (received − packed).
+          </p>
+        </div>
+      )}
+      <Textarea label="Remarks" rows={2} value={head.remarks} onChange={(e) => setHead({ ...head, remarks: e.target.value })} />
+    </Modal>
+  );
+}
