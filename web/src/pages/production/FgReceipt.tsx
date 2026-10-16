@@ -230,6 +230,10 @@ function NewReceiptModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
                         const v = qty[k] ?? { good: '', reject: '' };
                         const cap = canTake(cl!);
                         const over = cap != null && (Number(v.good) || 0) + (head.source_type === 'IN_HOUSE' ? Number(v.reject) || 0 : 0) > cap;
+                        // in-house: a size with nothing finished on the job's bundles cannot be received yet
+                        if (head.source_type === 'IN_HOUSE' && !cl!.in_house_ready) {
+                          return <td key={s.id} className="px-2 py-2 text-center text-[10px] text-slate-400" data-fg-cell={k} title="Nothing of this colour / size has finished ironing yet">ready 0<br />in FG {cl!.on_hand}</td>;
+                        }
                         return (
                           <td key={s.id} className="px-1.5 py-1.5" data-fg-cell={k}>
                             <input type="number" min={0} placeholder="good" value={v.good} data-fg-good={k}

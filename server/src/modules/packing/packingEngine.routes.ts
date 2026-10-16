@@ -233,11 +233,18 @@ async function writeOrderLines(tx: any, order: any, lines: z.infer<typeof orderL
     const floor = (e?.posted ?? 0) + (e?.draft ?? 0);
     if (l.planned_qty < floor) throw BadRequest(`${label}: ${floor} pcs are already in cartons — the plan cannot go below that`);
     if (l.planned_qty > (e?.eligible ?? 0) + (e?.posted ?? 0)) {
-      throw BadRequest(`${label}: planned ${l.planned_qty} pcs is more than the eligible ${(e?.eligible ?? 0) + (e?.posted ?? 0)} (QC-accepted, ready to pack, not held by other orders)`);
+      throw BadRequest(`${label}: planned ${l.planned_qty} pcs is more than the eligible ${(e?.eligible ?? 0) + (e?.posted ?? 0)}`
+        + (e?.awaiting_fg !== undefined
+          ? ` (in the FG store, not held by other orders)${e.awaiting_fg ? ` — ${e.awaiting_fg} finished PCS are waiting for an FG receipt` : ''}`
+          : ' (QC-accepted, ready to pack, not held by other orders)'));
     }
   }
   const keep = plan.filter((l) => l.planned_qty > 0 || elig.find((e) => key(e.color_id, e.size_id) === key(l.color_id, l.size_id) && (e.posted || e.draft)));
-  if (!keep.length) throw BadRequest('Nothing to pack: no colour / size has eligible (finished, QC-accepted, unreserved) pieces for this job and style');
+  if (!keep.length) {
+    throw BadRequest(elig.some((x) => x.awaiting_fg !== undefined)
+      ? 'Nothing to pack: no PCS of this job / style are in the FG store — receive the finished PCS on an FG Receipt first'
+      : 'Nothing to pack: no colour / size has eligible (finished, QC-accepted, unreserved) pieces for this job and style');
+  }
   await txExecute(tx, `DELETE FROM trx_packing_order_line WHERE packing_id = ?`, [order.id]);
   for (const l of keep) {
     const e = elig.find((x) => key(x.color_id, x.size_id) === key(l.color_id, l.size_id));
