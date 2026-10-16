@@ -81,11 +81,11 @@ export function PackingOrderDetailPage() {
                   }).then(() => setPlan(null)), 'Plan saved')}>Save plan</Button></>
               : <Button size="sm" variant="secondary" onClick={() => setPlan(Object.fromEntries(lines.map((l) => [`${l.color_id}:${l.size_id}`, String(l.planned)])))}>Edit plan</Button>)} />
             <table className="w-full text-[12.5px]" id="order-lines">
-              <thead><tr><th className="th">Colour</th><th className="th">Size</th><th className="th text-right">Order</th><th className="th text-right">Ready</th><th className="th text-right">Held by others</th>
+              <thead><tr><th className="th">Colour</th><th className="th">Size</th><th className="th text-right">Order</th><th className="th text-right" title="PCS in the FG store (received on FG receipts, not yet packed)">Ready (FG store)</th><th className="th text-right">Held by others</th>
                 <th className="th text-right">Eligible</th><th className="th text-right">Planned</th><th className="th text-right">Bagged</th><th className="th text-right">Unposted</th><th className="th text-right">Packed</th><th className="th text-right">Balance</th><th className="th text-right">Can add</th></tr></thead>
               <tbody>{lines.map((l) => (
                 <tr key={`${l.color_id}:${l.size_id}`}>
-                  <td className="td">{l.color_name}</td><td className="td">{l.size_code}</td><td className="td text-right">{fmtNumber(l.order_qty)}</td><td className="td text-right">{fmtNumber(l.ready)}</td>
+                  <td className="td">{l.color_name}</td><td className="td">{l.size_code}</td><td className="td text-right">{fmtNumber(l.order_qty)}</td><td className="td text-right">{fmtNumber(l.ready)}{l.awaiting_fg ? <div className="text-[11px] text-amber-700" title="Finished (ironed) PCS not yet received on an FG receipt">{l.awaiting_fg} waiting for FG receipt</div> : null}</td>
                   <td className="td text-right">{fmtNumber(l.reserved_other)}</td><td className="td text-right">{fmtNumber(l.eligible)}</td>
                   <td className="td text-right font-medium">{plan ? <input className="input w-20 text-right" value={plan[`${l.color_id}:${l.size_id}`] ?? ''} onChange={(e) => setPlan({ ...plan, [`${l.color_id}:${l.size_id}`]: e.target.value.replace(/\D/g, '') })} /> : fmtNumber(l.planned)}</td>
                   <td className="td text-right">{fmtNumber(l.bagged)}</td><td className="td text-right">{fmtNumber(l.draft)}</td><td className="td text-right text-emerald-700">{fmtNumber(l.posted)}</td>

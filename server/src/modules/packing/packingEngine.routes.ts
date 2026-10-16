@@ -427,6 +427,20 @@ packingEngineRouter.get('/orders/:id/reconciliation', requirePermission('PACKING
 packingEngineRouter.get('/orders/:id/bundles', requirePermission('PACKING.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = Number(req.params.id);
+  if (await fgMode(null, cid)) {
+    // FG store packing (16-Oct-2026): what the store holds for the order, per colour / size
+    const rows = await transaction(async (tx) => {
+      const o = await loadOrder(tx, cid, id);
+      const el = await eligibility(tx, jobKeyOf(o), Number(o.so_id), id);
+      return el.filter((e) => e.planned > 0).map((e) => ({
+        id: null, fg_store: true, color_id: e.color_id, size_id: e.size_id, color_name: e.color_name, size_code: e.size_code,
+        in_fg: e.eligible, bagged_open: e.bagged_open, baggable: Math.max(e.eligible - e.bagged_open, 0), packed: e.posted,
+        planned: e.planned, awaiting_fg: e.awaiting_fg ?? 0,
+      }));
+    });
+    res.json({ data: rows, meta: { fg_mode: true } });
+    return;
+  }
   const out = await transaction(async (tx) => {
     const o = await loadOrder(tx, cid, id);
     const bs = await jobBundles(tx, jobKeyOf(o), Number(req.query.color_id) || null, Number(req.query.size_id) || null);

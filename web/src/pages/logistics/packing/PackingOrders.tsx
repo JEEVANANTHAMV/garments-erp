@@ -133,13 +133,13 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
           <div className="mb-2 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Colour × size plan{preview.strict_qc ? ' · Final QC passed pieces only' : ''}</div>
           {!preview.rows.length ? <EmptyState title="Nothing finished yet" message="No bundles of this job / style have finished pieces." /> : (
             <table className="w-full text-[12.5px]" id="order-plan-table">
-              <thead><tr><th className="th">Colour</th><th className="th">Size</th><th className="th text-right">Order qty</th><th className="th text-right">Ready to pack</th>
+              <thead><tr><th className="th">Colour</th><th className="th">Size</th><th className="th text-right">Order qty</th><th className="th text-right" title="PCS in the FG store (received on FG receipts, not yet packed)">Ready to pack (FG store)</th>
                 <th className="th text-right">Held by other orders</th><th className="th text-right">Eligible</th><th className="th text-right">Planned</th></tr></thead>
               <tbody>{preview.rows.map((x) => {
                 const k = `${x.color_id}:${x.size_id}`;
                 return (
                   <tr key={k}><td className="td">{x.color_name}</td><td className="td">{x.size_code}</td><td className="td text-right">{fmtNumber(x.order_qty)}</td>
-                    <td className="td text-right">{fmtNumber(x.ready)}{x.qc_pending ? <div className="text-[11px] text-amber-700">{x.qc_pending} QC pending</div> : null}</td>
+                    <td className="td text-right">{fmtNumber(x.ready)}{x.qc_pending ? <div className="text-[11px] text-amber-700">{x.qc_pending} QC pending</div> : null}{x.awaiting_fg ? <div className="text-[11px] text-amber-700" title="Finished (ironed) PCS not yet received on an FG receipt">{x.awaiting_fg} waiting for FG receipt</div> : null}</td>
                     <td className="td text-right">{fmtNumber(x.reserved_other)}</td><td className="td text-right font-medium">{fmtNumber(x.eligible)}</td>
                     <td className="td w-28"><input className="input text-right" data-plan={k} inputMode="numeric" value={plan[k] ?? ''} onChange={(e) => setPlan({ ...plan, [k]: e.target.value.replace(/\D/g, '') })} /></td></tr>
                 );

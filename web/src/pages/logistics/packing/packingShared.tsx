@@ -20,7 +20,7 @@ export interface Rule {
 export interface EligRow {
   color_id: number; size_id: number; color_name: string; size_code: string; sku_id: number | null; order_qty: number; ready: number;
   reserved_other: number; eligible: number; planned: number; posted: number; draft: number; available: number; balance: number;
-  bagged: number; bagged_open: number; qc_pending: number;
+  bagged: number; bagged_open: number; qc_pending: number; awaiting_fg?: number;
 }
 export interface Variance {
   tolerance_pct: number; beyond_tolerance: boolean;
