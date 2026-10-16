@@ -210,6 +210,7 @@ export function CartonEditor({ order, carton, onClose, onSaved }: {
     if (pc) setRows(pc.lines.map((l, i) => ({ key: `p${ctn}-${i}`, color_id: l.color_id, size_id: l.size_id, qty: String(l.qty), polybag_qty: '' })));
   };
   const plannedOf = (c: number | '', sz: number | '') => planCtn?.lines.find((l) => l.color_id === c && l.size_id === sz)?.qty;
+  const own = useMemo(() => new Map<string, number>((carton?.lines ?? []).map((l: any) => [lk(l.color_id, l.size_id), n(l.qty)])), [carton]);
   // size ratio (client audio 16-Oct-2026): a carton fills in the order's ratio for one colour
   const ratio = order.size_ratio ?? [];
   const ratioCap = new Map(ratio.map((x) => [x.size_id, x.per_carton]));
@@ -223,7 +224,6 @@ export function CartonEditor({ order, carton, onClose, onSaved }: {
   };
   // a new carton of a ratio order starts filled in the ratio (not when packing for a buyer plan — that fills from the plan)
   useEffect(() => { if (!carton && ratio.length && ratioColour && !plan.id) fillRatio(Number(ratioColour)); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const own = useMemo(() => new Map<string, number>((carton?.lines ?? []).map((l: any) => [lk(l.color_id, l.size_id), n(l.qty)])), [carton]);
 
   const total = rows.reduce((a, r) => a + n(r.qty), 0);
   const stdBags = rows.reduce((a, r) => a + (n(r.qty) ? Math.ceil(n(r.qty) / ppp) : 0), 0);
