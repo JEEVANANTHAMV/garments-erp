@@ -14,6 +14,7 @@ import {
   asJson, loadStructure, writeStructure, buildSummary, companyExporterDetails, partyAddressBlock,
 } from './packingList.service.js';
 import { buildPackingListWorkbook, buildPackingListLayout } from './packingListExcel.js';
+import { resolvePlan, planStatus, parsePlan, planBlocksIn, type PlanJson } from './packingPlan.service.js';
 
 export const shipmentRouter = Router();
 
@@ -37,6 +38,8 @@ const packingListSchema = z.object({
   shipment_type: z.enum(['DOMESTIC', 'EXPORT']).default('DOMESTIC'),
   destination: s.nullableStr(120),
   pl_type: z.enum(PL_TYPES).default('ASSORTED'),
+  // PLAN = the buyer's packing list entered before packing; cartons are packed against its carton numbers
+  list_mode: z.enum(['DOCUMENT', 'PLAN']).default('DOCUMENT'),
   ctn_numbering: z.enum(['SEQUENCE', 'CARTON_NO']).default('SEQUENCE'),
   size_headers: z.array(z.string().trim().max(20)).max(40).nullish(),
   allow_ctn_gaps: z.coerce.boolean().default(false),
@@ -75,7 +78,7 @@ type PackingListBody = z.infer<typeof packingListSchema>;
 
 const HEADER_COLS = [
   'pl_date', 'io_no', 'so_id', 'packing_id', 'invoice_id', 'buyer_id', 'consignee_id', 'shipment_type',
-  'destination', 'pl_type', 'ctn_numbering', 'allow_ctn_gaps', 'carton_tare_kg', 'invoice_no', 'invoice_date', 'buyer_order_no',
+  'destination', 'pl_type', 'list_mode', 'ctn_numbering', 'allow_ctn_gaps', 'carton_tare_kg', 'invoice_no', 'invoice_date', 'buyer_order_no',
   'buyer_order_date', 'other_references', 'exporter_details', 'consignee_details', 'notify_label', 'notify_details',
   'country_of_origin', 'country_of_destination', 'pre_carriage_by', 'place_of_receipt', 'vessel_flight_no',
   'port_of_loading', 'port_of_discharge', 'final_destination', 'terms_of_delivery', 'terms_of_payment', 'remarks',
@@ -268,7 +271,8 @@ async function syncCartonLinks(tx: any, cid: number, plId: number, computed: Com
   await txExecute(tx, `DELETE FROM trx_packing_list_carton WHERE packing_list_id = ?`, [plId]);
   if (!uniq.length) return;
   const rows = await txQuery<any>(tx,
-    `SELECT c.id, c.carton_no, c.is_posted, c.carton_status, plc.packing_list_id AS other_pl, pl.pl_no AS other_pl_no
+    `SELECT c.id, c.carton_no, c.is_posted, c.carton_status, plc.packing_list_id AS other_pl, pl.pl_no AS other_pl_no,
+            c.pl_plan_id, (SELECT x.pl_no FROM trx_packing_list x WHERE x.id = c.pl_plan_id) AS plan_no
        FROM trx_carton c JOIN trx_packing p ON p.id = c.packing_id AND p.company_id = ?
        LEFT JOIN trx_packing_list_carton plc ON plc.carton_id = c.id AND plc.packing_list_id <> ?
        LEFT JOIN trx_packing_list pl ON pl.id = plc.packing_list_id
@@ -278,6 +282,8 @@ async function syncCartonLinks(tx: any, cid: number, plId: number, computed: Com
   if (notReady.length) throw BadRequest(`Carton(s) ${notReady.map((r: any) => `${r.carton_no} (${r.carton_status}${Number(r.is_posted) ? '' : ', not posted'})`).join(', ')} are not ready — only posted, verified / sealed cartons go on a packing list`);
   const taken = rows.filter((r: any) => r.other_pl);
   if (taken.length) throw BadRequest(`Carton(s) ${taken.map((r: any) => `${r.carton_no} → ${r.other_pl_no}`).join(', ')} are already on another packing list`);
+  const forPlan = rows.filter((r: any) => r.pl_plan_id && Number(r.pl_plan_id) !== plId);
+  if (forPlan.length) throw BadRequest(`Carton(s) ${forPlan.map((r: any) => `${r.carton_no} → ${r.plan_no}`).join(', ')} were packed for another packing list (plan)`);
   try {
     await txQuery(tx, `INSERT INTO trx_packing_list_carton (company_id, packing_list_id, carton_id) VALUES ?`, [uniq.map((c) => [cid, plId, c])]);
   } catch (e: any) {
@@ -323,7 +329,8 @@ async function loadPackingList(cid: number, id: number) {
   const row = await queryOne<any>(
     `SELECT pl.*, p.pack_no, so.so_no, so.buyer_po_no AS so_buyer_po_no,
             b.party_name AS buyer_name, con.party_name AS consignee_name, ci.invoice_no AS ci_invoice_no,
-            cu.full_name AS confirmed_by_name
+            cu.full_name AS confirmed_by_name, ru.full_name AS plan_released_by_name, fu.full_name AS plan_finished_by_name,
+            (SELECT f.pl_no FROM trx_packing_list f WHERE f.id = pl.follow_of_id) AS follow_of_no
        FROM trx_packing_list pl
        LEFT JOIN trx_packing p ON p.id = pl.packing_id
        LEFT JOIN trx_sales_order so ON so.id = pl.so_id
@@ -331,8 +338,15 @@ async function loadPackingList(cid: number, id: number) {
        LEFT JOIN mst_party con ON con.id = pl.consignee_id
        LEFT JOIN trx_commercial_invoice ci ON ci.id = pl.invoice_id
        LEFT JOIN mst_user cu ON cu.id = pl.confirmed_by
+       LEFT JOIN mst_user ru ON ru.id = pl.plan_released_by
+       LEFT JOIN mst_user fu ON fu.id = pl.plan_finished_by
       WHERE pl.id = ? AND pl.company_id = ?`, [id, cid]);
   if (!row) throw NotFound('Packing list not found');
+  // plan lists: planned vs packed per carton number (the stored plan itself is not sent — it can be large)
+  const plan = parsePlan(row.plan_json);
+  delete row.plan_json;
+  const planStatusOut = plan ? await planStatus(cid, id, plan) : null;
+  const followUps = await query<any>(`SELECT id, pl_no, status, total_cartons, total_qty FROM trx_packing_list WHERE follow_of_id = ? AND company_id = ? ORDER BY id`, [id, cid]);
   row.size_headers = asJson<string[] | null>(row.size_headers, null);
   row.allow_ctn_gaps = Boolean(row.allow_ctn_gaps);
 
@@ -386,6 +400,7 @@ async function loadPackingList(cid: number, id: number) {
            carton_info: await cartonInfo(cid, srcIds), hand_rows: handRows, carton_rows: allRows.length - handRows,
            source: !allRows.length ? 'NONE' : !handRows ? 'CARTONS' : handRows === allRows.length ? 'MANUAL' : 'MIXED',
            shipment: ship ?? null,
+           plan_status: planStatusOut, follow_ups: followUps,
            pack_summary: await packSummary(cid, row.so_id ? Number(row.so_id) : null, row.io_no ?? null, id) };
 }
 
@@ -397,6 +412,7 @@ shipmentRouter.get('/packing-lists', requirePermission('PACKING.VIEW'), ah(async
             pl.consignee_id, pl.shipment_type, pl.destination, pl.status, pl.pl_type, pl.total_cartons,
             pl.total_qty, pl.net_weight_kg, pl.gross_weight_kg, pl.total_cbm, pl.invoice_no, pl.buyer_order_no,
             pl.style_summary, pl.created_at, pl.confirmed_at, pl.revision_no, pl.over_ship_note,
+            pl.list_mode, pl.short_qty, pl.short_action, pl.follow_of_id, pl.plan_finished_at, pl.country_of_destination,
             p.pack_no, so.so_no, b.party_name AS buyer_name, con.party_name AS consignee_name,
             (SELECT COUNT(*) FROM trx_packing_list_row r WHERE r.packing_list_id = pl.id) AS row_count,
             (SELECT COUNT(*) FROM trx_packing_list_carton plc WHERE plc.packing_list_id = pl.id) AS linked_cartons,
@@ -609,6 +625,50 @@ const dimsFromSpec = (spec: unknown) => {
   return m ? { length_cm: Number(m[1]), width_cm: Number(m[2]), height_cm: Number(m[3]) } : null;
 };
 
+/** Carton facts + contents in the shape buildFormatBlocks takes (rows from CARTON_SELECT). */
+const CARTON_SELECT = `SELECT c.id, c.packing_id, c.carton_no, c.carton_seq, c.carton_status, c.is_posted, c.net_weight_kg, c.gross_weight_kg,
+            c.length_cm, c.width_cm, c.height_cm, c.polybag_qty, c.pl_plan_id, c.pl_ctn_no, ct.specification AS carton_spec,
+            p.so_id, p.rule_snapshot, so.buyer_po_no, so.so_no`;
+async function cartonsForBuild(cartons: any[]) {
+  const ids = cartons.map((c: any) => c.id);
+  if (!ids.length) return { forBuild: [] as any[], dimsFromType: 0 };
+  const contents = await query<any>(
+    `SELECT cc.carton_id, st.id AS style_id, st.style_code, st.style_name, col.id AS color_id, col.color_name,
+            sz.id AS size_id, sz.size_code, sz.sort_order, SUM(cc.qty) AS qty
+       FROM trx_carton_content cc
+       LEFT JOIN mst_style_sku k ON k.id = cc.sku_id
+       JOIN mst_style st ON st.id = COALESCE(cc.style_id, k.style_id)
+       JOIN mst_color col ON col.id = COALESCE(cc.color_id, k.color_id)
+       JOIN mst_size sz ON sz.id = COALESCE(cc.size_id, k.size_id)
+      WHERE cc.carton_id IN (?)
+      GROUP BY cc.carton_id, st.id, st.style_code, st.style_name, col.id, col.color_name, sz.id, sz.size_code, sz.sort_order
+      ORDER BY sz.sort_order`, [ids]);
+  const byCarton = new Map<number, any[]>();
+  for (const x of contents) {
+    const a = byCarton.get(x.carton_id) ?? [];
+    a.push({ ...x, style_id: Number(x.style_id), color_id: Number(x.color_id), qty: Number(x.qty), size_rank: Number(x.sort_order ?? 9999) });
+    byCarton.set(x.carton_id, a);
+  }
+  let dimsFromType = 0;
+  const forBuild = cartons.map((c: any) => {
+    const rule = asJson<any>(c.rule_snapshot, null);
+    let dims = { length_cm: c.length_cm, width_cm: c.width_cm, height_cm: c.height_cm };
+    if (dims.length_cm == null || dims.width_cm == null || dims.height_cm == null) {
+      const d = dimsFromSpec(c.carton_spec);
+      if (d) { dims = d; dimsFromType++; }
+    }
+    return {
+      id: Number(c.id), packing_id: Number(c.packing_id), carton_no: String(c.carton_no), carton_seq: c.carton_seq == null ? null : Number(c.carton_seq),
+      net_weight_kg: c.net_weight_kg, gross_weight_kg: c.gross_weight_kg, ...dims,
+      polybag_qty: Number(c.polybag_qty || 0),
+      pieces_per_polybag: rule?.pieces_per_polybag != null ? Number(rule.pieces_per_polybag) : null,
+      rule_code: rule?.rule_code ?? null,
+      contents: byCarton.get(c.id) ?? [],
+    };
+  }).filter((c: any) => c.contents.length);
+  return { forBuild, dimsFromType };
+}
+
 /**
  * GET /packing-lists/build-rows?packing_id= | so_id= | io_no= [&format=ASSORTED|SOLID|MIXED]
  *     [&numbering=SEQUENCE|CARTON_NO][&start=1][&pl_id=]
@@ -635,6 +695,25 @@ shipmentRouter.get('/packing-lists/build-rows', requirePermission('PACKING.VIEW'
   if (!['SEQUENCE', 'CARTON_NO'].includes(numQ)) throw BadRequest('numbering must be SEQUENCE or CARTON_NO');
   const startQ = req.query.start ? Number(req.query.start) : 1;
   if (!Number.isInteger(startQ) || startQ < 1 || startQ > 1_000_000) throw BadRequest('start must be a carton number from 1');
+  // a plan list: rows from the cartons packed for it, numbered by the plan's carton numbers
+  if (ownPl) {
+    const own = await queryOne<any>(`SELECT * FROM trx_packing_list WHERE id = ? AND company_id = ?`, [ownPl, cid]);
+    const plan = own?.list_mode === 'PLAN' ? parsePlan(own.plan_json) : null;
+    if (plan) {
+      const cs = await query<any>(`SELECT id, carton_no, carton_status, is_posted, pl_ctn_no FROM trx_carton WHERE pl_plan_id = ? AND carton_status <> 'VOID'`, [ownPl]);
+      const ready = cs.filter(cartonReady);
+      if (!ready.length) throw BadRequest(`No posted, verified / sealed carton is packed for ${own.pl_no} yet`);
+      const { built, headers, dimsFromType, carton_count } = await planRowsFromCartons(cid, own, plan, ready.map((c: any) => Number(c.id)));
+      const ids = ready.map((c: any) => Number(c.id));
+      res.json({ data: {
+        size_headers: headers, pl_type: built.pl_type, blocks: built.blocks, empty_cartons: 0, has_gaps: built.has_gaps, numbering: 'CARTON_NO',
+        skipped: { not_ready: cs.length - ready.length, on_other_list: 0, shipped: 0, for_plan: 0 }, carton_info: await cartonInfo(cid, ids),
+        row_count: built.blocks.reduce((a, b) => a + b.rows.length, 0), carton_count, dims_from_carton_type: dimsFromType,
+        missing_weight: 0, from_plan: true,
+      } });
+      return;
+    }
+  }
   if (!packingId && !soId && !ioNo) throw BadRequest('Pick a packing, sales order or job to build rows from');
   if (packingId != null && (!Number.isInteger(packingId) || packingId <= 0)) throw BadRequest('Invalid packing_id');
   let orderNo: string | null = null, orderSoId: number | null = soId;
@@ -651,9 +730,7 @@ shipmentRouter.get('/packing-lists/build-rows', requirePermission('PACKING.VIEW'
   }
   const where = packingId ? 'c.packing_id = ?' : soId ? 'p.so_id = ?' : 'p.io_no = ?';
   const all = await query<any>(
-    `SELECT c.id, c.packing_id, c.carton_no, c.carton_seq, c.carton_status, c.is_posted, c.net_weight_kg, c.gross_weight_kg,
-            c.length_cm, c.width_cm, c.height_cm, c.polybag_qty, ct.specification AS carton_spec,
-            p.so_id, p.rule_snapshot, so.buyer_po_no, so.so_no,
+    `${CARTON_SELECT},
             (SELECT pl.pl_no FROM trx_packing_list_carton plc JOIN trx_packing_list pl ON pl.id = plc.packing_list_id
               WHERE plc.carton_id = c.id AND plc.packing_list_id <> ? LIMIT 1) AS other_pl,
             (SELECT sh.shipment_no FROM trx_shipment_package sp JOIN trx_shipment sh ON sh.id = sp.shipment_id
@@ -664,49 +741,19 @@ shipmentRouter.get('/packing-lists/build-rows', requirePermission('PACKING.VIEW'
       WHERE ${where}`, [ownPl, cid, packingId ?? soId ?? ioNo]);
   if (!all.length) throw BadRequest('No cartons are packed for this yet');
   const isReady = (c: any) => Number(c.is_posted) === 1 && ['VERIFIED', 'SEALED'].includes(c.carton_status);
-  const cartons = all.filter((c: any) => isReady(c) && !c.other_pl && !c.shipment_no);
+  // cartons packed for a plan list belong to that list only
+  const forOtherPlan = (c: any) => c.pl_plan_id && Number(c.pl_plan_id) !== ownPl;
+  const cartons = all.filter((c: any) => isReady(c) && !c.other_pl && !c.shipment_no && !forOtherPlan(c));
   const skipped = {
+    for_plan: all.filter((c: any) => isReady(c) && !c.other_pl && !c.shipment_no && forOtherPlan(c)).length,
     not_ready: all.filter((c: any) => !isReady(c) && c.carton_status !== 'DISPATCHED' && c.carton_status !== 'VOID').length,
     on_other_list: all.filter((c: any) => isReady(c) && c.other_pl).length,
     shipped: all.filter((c: any) => c.carton_status === 'DISPATCHED' || (isReady(c) && !c.other_pl && c.shipment_no)).length,
   };
-  if (!cartons.length) throw BadRequest(`No ready cartons to list: ${skipped.not_ready} not yet posted / verified, ${skipped.on_other_list} already on another packing list, ${skipped.shipped} shipped`);
+  if (!cartons.length) throw BadRequest(`No ready cartons to list: ${skipped.not_ready} not yet posted / verified, ${skipped.on_other_list} already on another packing list, ${skipped.shipped} shipped${skipped.for_plan ? `, ${skipped.for_plan} packed for a plan packing list` : ''}`);
   if (!orderNo) { const f = cartons[0]; orderNo = f.buyer_po_no ?? f.so_no ?? null; orderSoId = orderSoId ?? f.so_id ?? null; }
   const ids = cartons.map((c: any) => c.id);
-  const contents = await query<any>(
-    `SELECT cc.carton_id, st.id AS style_id, st.style_code, st.style_name, col.id AS color_id, col.color_name,
-            sz.size_code, sz.sort_order, SUM(cc.qty) AS qty
-       FROM trx_carton_content cc
-       LEFT JOIN mst_style_sku k ON k.id = cc.sku_id
-       JOIN mst_style st ON st.id = COALESCE(cc.style_id, k.style_id)
-       JOIN mst_color col ON col.id = COALESCE(cc.color_id, k.color_id)
-       JOIN mst_size sz ON sz.id = COALESCE(cc.size_id, k.size_id)
-      WHERE cc.carton_id IN (?)
-      GROUP BY cc.carton_id, st.id, st.style_code, st.style_name, col.id, col.color_name, sz.size_code, sz.sort_order
-      ORDER BY sz.sort_order`, [ids]);
-  const byCarton = new Map<number, any[]>();
-  for (const x of contents) {
-    const a = byCarton.get(x.carton_id) ?? [];
-    a.push({ ...x, style_id: Number(x.style_id), color_id: Number(x.color_id), qty: Number(x.qty), size_rank: Number(x.sort_order ?? 9999) });
-    byCarton.set(x.carton_id, a);
-  }
-  let dimsFromType = 0;
-  const forBuild = cartons.map((c: any) => {
-    const rule = asJson<any>(c.rule_snapshot, null);
-    let dims = { length_cm: c.length_cm, width_cm: c.width_cm, height_cm: c.height_cm };
-    if (dims.length_cm == null || dims.width_cm == null || dims.height_cm == null) {
-      const d = dimsFromSpec(c.carton_spec);
-      if (d) { dims = d; dimsFromType++; }
-    }
-    return {
-      id: Number(c.id), packing_id: Number(c.packing_id), carton_no: String(c.carton_no), carton_seq: c.carton_seq == null ? null : Number(c.carton_seq),
-      net_weight_kg: c.net_weight_kg, gross_weight_kg: c.gross_weight_kg, ...dims,
-      polybag_qty: Number(c.polybag_qty || 0),
-      pieces_per_polybag: rule?.pieces_per_polybag != null ? Number(rule.pieces_per_polybag) : null,
-      rule_code: rule?.rule_code ?? null,
-      contents: byCarton.get(c.id) ?? [],
-    };
-  }).filter((c: any) => c.contents.length);
+  const { forBuild, dimsFromType } = await cartonsForBuild(cartons);
   const empty = cartons.length - forBuild.length;
   if (!forBuild.length) throw BadRequest('The ready cartons hold no pieces');
   const built = buildFormatBlocks(forBuild, {
@@ -785,7 +832,9 @@ shipmentRouter.put('/packing-lists/:id', requirePermission('PACKING.UPDATE'), ah
   const before = await transaction(async (tx) => {
     const pl = await txQueryOne<any>(tx, `SELECT * FROM trx_packing_list WHERE id = ? AND company_id = ? FOR UPDATE`, [id, cid]);
     if (!pl) throw NotFound('Packing list not found');
+    if (pl.status === 'PLANNED') throw BadRequest(`Packing list ${pl.pl_no} is a released plan — take it back to draft (Unrelease) to change it`);
     if (pl.status !== 'DRAFT') throw BadRequest(`Packing list ${pl.pl_no} is ${pl.status} and can no longer be edited`);
+    if (pl.plan_finished_at && body.list_mode !== 'PLAN') body.list_mode = 'PLAN';   // a finished plan stays a plan list
     if (body.pl_no && body.pl_no !== pl.pl_no) {
       const dup = await txQueryOne(tx, `SELECT id FROM trx_packing_list WHERE company_id = ? AND pl_no = ? AND id <> ?`, [cid, body.pl_no, id]);
       if (dup) throw BadRequest(`Packing list number "${body.pl_no}" already exists`);
@@ -826,6 +875,7 @@ shipmentRouter.post('/packing-lists/:id/confirm', requirePermission('PACKING.UPD
     if (!pl) throw NotFound('Packing list not found');
     if (pl.status !== 'DRAFT') throw BadRequest(`Packing list is already ${pl.status}`);
     const st = await loadStructure(id, asJson(pl.size_headers, null), { tx });
+    if (pl.list_mode === 'PLAN' && !pl.plan_finished_at) throw BadRequest(`${pl.pl_no} is a packing plan — release it, pack the cartons against it, then Finish packing before confirming`);
     const rows = st.blocks.flatMap((b) => b.rows);
     if (!rows.length && !pl.packing_id) throw BadRequest('Add carton rows (or link a packing) before confirming');
     const noWeight = rows.filter((r) => !r.gross_wt_per_ctn);
@@ -869,6 +919,248 @@ shipmentRouter.post('/packing-lists/:id/confirm', requirePermission('PACKING.UPD
     }
     await txExecute(tx, `UPDATE trx_packing_list SET status = 'CONFIRMED', confirmed_by = ?, confirmed_at = NOW(), over_ship_note = ? WHERE id = ?`, [req.user!.id, overNote, id]);
     await audit(req, 'trx_packing_list', id, 'UPDATE', { status: pl.status }, { status: 'CONFIRMED', totals: st.totals, revision_no: pl.revision_no, over_shipment: over.qty ? over : undefined, over_ship_note: overNote }, tx);
+  });
+  res.json({ data: await loadPackingList(cid, id) });
+}));
+
+// ============================================================
+// PACKING LIST AS THE PLAN (client call 16-Oct-2026)
+//   DRAFT (rows typed from the buyer's list) → release → PLANNED (rows frozen, cartons packed
+//   against its carton numbers) → finish → DRAFT document built from the packed cartons
+//   (same carton numbers) → confirm as before. One list per country / selling point.
+//   Shortage on finish: TO_FOLLOW (a follow-up plan list with the balance) or DEBIT (buyer debits).
+// ============================================================
+
+const lockPl = async (tx: any, cid: number, id: number) => {
+  const pl = await txQueryOne<any>(tx, `SELECT * FROM trx_packing_list WHERE id = ? AND company_id = ? FOR UPDATE`, [id, cid]);
+  if (!pl) throw NotFound('Packing list not found');
+  return pl;
+};
+const planCartons = (tx: any, id: number) => txQuery<any>(tx,
+  `SELECT id, carton_no, carton_status, is_posted, pl_ctn_no FROM trx_carton WHERE pl_plan_id = ? AND carton_status <> 'VOID' ORDER BY pl_ctn_no`, [id]);
+const cartonReady = (c: any) => Number(c.is_posted) === 1 && ['VERIFIED', 'SEALED'].includes(c.carton_status);
+const ctnList = (cs: any[], k = 6) => `${cs.slice(0, k).map((c: any) => `${c.pl_ctn_no} (${c.carton_no}, ${c.carton_status})`).join(', ')}${cs.length > k ? ` and ${cs.length - k} more` : ''}`;
+
+/**
+ * Document rows of a plan list from the cartons packed for it: carton numbers are the plan's numbers,
+ * size columns keep the plan's labels. Cartons must be posted + verified / sealed.
+ */
+async function planRowsFromCartons(cid: number, pl: any, plan: PlanJson, cartonIds: number[]) {
+  const rows = cartonIds.length ? await query<any>(
+    `${CARTON_SELECT}
+       FROM trx_carton c JOIN trx_packing p ON p.id = c.packing_id AND p.company_id = ?
+       LEFT JOIN trx_sales_order so ON so.id = p.so_id
+       LEFT JOIN mst_trim ct ON ct.id = c.carton_trim_id
+      WHERE c.id IN (?)`, [cid, cartonIds]) : [];
+  const { forBuild, dimsFromType } = await cartonsForBuild(rows);
+  const byId = new Map(rows.map((r: any) => [Number(r.id), r]));
+  const labelOf = new Map<string, string>();
+  for (const c of plan.cartons) for (const l of c.lines) labelOf.set(`${l.style_id}:${l.size_id}`, l.size_label);
+  for (const c of forBuild) {
+    const no = Number(byId.get(c.id)?.pl_ctn_no);
+    c.carton_no = String(no); c.carton_seq = no; c.packing_id = 0;
+    for (const x of c.contents) x.size_code = labelOf.get(`${x.style_id}:${x.size_id}`) ?? x.size_code;
+  }
+  const built = buildFormatBlocks(forBuild, {
+    format: pl.pl_type as PlType, numbering: 'CARTON_NO', orderNo: pl.buyer_order_no ?? null, soId: pl.so_id ? Number(pl.so_id) : null,
+  });
+  if (built.problems.length) throw BadRequest(built.problems.join('; '));
+  const headers = [...(plan.size_headers ?? [])];
+  for (const h of built.size_headers) if (!headers.some((x) => x.toUpperCase() === h.toUpperCase())) headers.push(h);
+  return { built, headers, dimsFromType, carton_count: forBuild.length };
+}
+
+/** POST /packing-lists/:id/plan/release — the buyer list becomes the packing plan (rows frozen). */
+shipmentRouter.post('/packing-lists/:id/plan/release', requirePermission('PACKING.UPDATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = plId(req.params.id);
+  const warnings: string[] = [];
+  await transaction(async (tx) => {
+    const pl = await lockPl(tx, cid, id);
+    if (pl.list_mode !== 'PLAN') throw BadRequest(`${pl.pl_no} is a document list — set "Packing plan (buyer list)" and save it first`);
+    if (pl.status !== 'DRAFT') throw BadRequest(`${pl.pl_no} is ${pl.status} — only a draft plan is released`);
+    if (pl.plan_finished_at) throw BadRequest(`${pl.pl_no} was already packed against and finished — reopen the plan instead`);
+    const st = await loadStructure(id, asJson(pl.size_headers, null), { tx });
+    const plan = await resolvePlan(tx, cid, pl, st);
+    const over = overShipment(await buildSummary(cid, id, Number(pl.so_id), st));
+    if (over.qty > 0) warnings.push(`The plan is ${over.qty} pcs above the order qty — it needs the over-shipment approval when the list is confirmed`);
+    await txExecute(tx, `UPDATE trx_packing_list SET status = 'PLANNED', plan_json = ?, plan_released_at = NOW(), plan_released_by = ?, updated_by = ?, updated_at = NOW() WHERE id = ?`,
+      [JSON.stringify(plan), req.user!.id, req.user!.id, id]);
+    await audit(req, 'trx_packing_list', id, 'UPDATE', { status: 'DRAFT' }, { status: 'PLANNED', plan_cartons: plan.total_cartons, plan_qty: plan.total_qty }, tx);
+  });
+  res.json({ data: await loadPackingList(cid, id), warnings });
+}));
+
+/** POST /packing-lists/:id/plan/unrelease — back to draft to correct the plan (only before any carton is packed for it). */
+shipmentRouter.post('/packing-lists/:id/plan/unrelease', requirePermission('PACKING.UPDATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = plId(req.params.id);
+  await transaction(async (tx) => {
+    const pl = await lockPl(tx, cid, id);
+    if (pl.status !== 'PLANNED') throw BadRequest(`${pl.pl_no} is ${pl.status} — only a released plan is taken back`);
+    const cs = await planCartons(tx, id);
+    if (cs.length) throw BadRequest(`${cs.length} carton(s) are packed for ${pl.pl_no}: ${ctnList(cs)} — void them first, or finish the plan`);
+    await txExecute(tx, `UPDATE trx_packing_list SET status = 'DRAFT', plan_json = NULL, plan_released_at = NULL, plan_released_by = NULL, updated_by = ?, updated_at = NOW() WHERE id = ?`, [req.user!.id, id]);
+    await audit(req, 'trx_packing_list', id, 'UPDATE', { status: 'PLANNED' }, { status: 'DRAFT', action: 'PLAN_UNRELEASE' }, tx);
+  });
+  res.json({ data: await loadPackingList(cid, id) });
+}));
+
+/** GET /packing-lists/:id/plan-status — planned vs packed per carton number and per colour × size. */
+shipmentRouter.get('/packing-lists/:id/plan-status', requirePermission('PACKING.VIEW'), ah(async (req, res) => {
+  const st = await planStatus(req.user!.companyId, plId(req.params.id));
+  if (!st) throw BadRequest('This packing list is not a released plan');
+  res.json({ data: st });
+}));
+
+/**
+ * POST /packing-lists/:id/plan/finish { short_action, short_reason } — packing against the plan is done:
+ * the rows are rebuilt from the packed cartons (plan carton numbers) and the list returns to DRAFT for
+ * weights / confirm. Every carton packed for it must be posted + verified / sealed. A shortage needs
+ * TO_FOLLOW (a follow-up plan list with the balance is made) or DEBIT (the buyer debits it), with a reason.
+ */
+shipmentRouter.post('/packing-lists/:id/plan/finish', requirePermission('PACKING.UPDATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = plId(req.params.id);
+  const b = z.object({
+    short_action: z.enum(['NONE', 'TO_FOLLOW', 'DEBIT']).nullish(),
+    short_reason: s.nullableStr(255),
+  }).parse(req.body ?? {});
+  let followId: number | null = null;
+  const warnings: string[] = [];
+  await transaction(async (tx) => {
+    const pl = await lockPl(tx, cid, id);
+    if (pl.status !== 'PLANNED') throw BadRequest(`${pl.pl_no} is ${pl.status} — only a released plan is finished`);
+    const plan = parsePlan(pl.plan_json);
+    if (!plan) throw BadRequest(`${pl.pl_no} has no released plan`);
+    const cs = await planCartons(tx, id);
+    const notReady = cs.filter((c: any) => !cartonReady(c));
+    if (notReady.length) throw BadRequest(`Carton(s) ${ctnList(notReady)} are not posted and verified / sealed yet — finish or void them before finishing the plan`);
+    if (!cs.length) throw BadRequest(`No carton is packed for ${pl.pl_no} yet`);
+    const st = (await planStatus(cid, id, plan, { tx }))!;
+    let action = b.short_action ?? null;
+    if (st.short_qty > 0) {
+      if (!action || action === 'NONE') throw BadRequest(`${st.short_qty} pcs of the plan are not packed (${st.not_packed_cartons} carton(s) not packed, ${st.short_cartons} packed short) — choose: send the shortage later on a follow-up list, or the buyer debits it`);
+      if (!b.short_reason) throw BadRequest('Give the reason for the shortage');
+    } else action = 'NONE';
+
+    const { built, headers } = await planRowsFromCartons(cid, pl, plan, cs.map((c: any) => Number(c.id)));
+    const computed = computePackingList({ pl_type: built.pl_type, size_headers: headers, allow_ctn_gaps: true, blocks: built.blocks });
+    if (built.has_gaps) warnings.push('Carton numbers have gaps — the cartons not packed are left out of the list');
+    await writeStructure(tx, cid, id, computed);
+    await syncCartonLinks(tx, cid, id, computed);
+    const t = await headerTotals(tx, { packing_id: null } as any, computed);
+    await txExecute(tx,
+      `UPDATE trx_packing_list SET status = 'DRAFT', ctn_numbering = 'CARTON_NO', allow_ctn_gaps = ?, size_headers = ?,
+              total_cartons = ?, total_qty = ?, net_weight_kg = ?, gross_weight_kg = ?, total_cbm = ?, style_summary = ?,
+              plan_finished_at = NOW(), plan_finished_by = ?, short_qty = ?, short_action = ?, short_reason = ?, updated_by = ?, updated_at = NOW()
+        WHERE id = ?`,
+      [built.has_gaps ? 1 : 0, JSON.stringify(normaliseSizeHeaders(headers, 'Size headers')), t.total_cartons, t.total_qty, t.net_weight_kg, t.gross_weight_kg, t.total_cbm,
+       t.style_summary, req.user!.id, st.short_qty, action, action === 'NONE' ? null : b.short_reason, req.user!.id, id]);
+
+    if (action === 'TO_FOLLOW') followId = await createFollowUp(tx, req, cid, pl, plan, cs);
+    await audit(req, 'trx_packing_list', id, 'UPDATE', { status: 'PLANNED' },
+      { status: 'DRAFT', action: 'PLAN_FINISH', cartons: cs.length, packed_qty: st.ready_qty, short_qty: st.short_qty, short_action: action, short_reason: b.short_reason, follow_up_id: followId }, tx);
+  });
+  res.json({ data: await loadPackingList(cid, id), follow_up_id: followId, warnings });
+}));
+
+/** Follow-up plan list for the shortage: unpacked cartons keep their numbers, short cartons' balance follows after the last one. */
+async function createFollowUp(tx: any, req: any, cid: number, pl: any, plan: PlanJson, cs: any[]) {
+  const ids = cs.map((c: any) => Number(c.id));
+  const content = ids.length ? await txQuery<any>(tx, `SELECT carton_id, color_id, size_id, SUM(qty) qty FROM trx_carton_content WHERE carton_id IN (?) GROUP BY carton_id, color_id, size_id`, [ids]) : [];
+  const packedBy = new Map<number, Map<string, number>>();
+  const noOf = new Map(cs.map((c: any) => [Number(c.id), Number(c.pl_ctn_no)]));
+  for (const x of content) {
+    const no = noOf.get(Number(x.carton_id))!;
+    const m = packedBy.get(no) ?? new Map<string, number>();
+    m.set(`${x.color_id}:${x.size_id}`, (m.get(`${x.color_id}:${x.size_id}`) ?? 0) + Number(x.qty));
+    packedBy.set(no, m);
+  }
+  const last = Math.max(...plan.cartons.map((c) => c.ctn_no));
+  let extra = last;
+  const balances: { ctn_no: number; block_no: number; lines: PlanJson['cartons'][number]['lines'] }[] = [];
+  for (const c of plan.cartons) {
+    const got = packedBy.get(c.ctn_no);
+    if (!got) { balances.push({ ctn_no: c.ctn_no, block_no: c.block_no, lines: c.lines }); continue; }
+    const rest = c.lines.map((l) => ({ ...l, qty: l.qty - (got.get(`${l.color_id}:${l.size_id}`) ?? 0) })).filter((l) => l.qty > 0);
+    if (rest.length) balances.push({ ctn_no: 0, block_no: c.block_no, lines: rest });
+  }
+  for (const bl of balances) if (!bl.ctn_no) bl.ctn_no = ++extra;
+  balances.sort((a, b2) => a.ctn_no - b2.ctn_no);
+  const sig = (ls: any[]) => JSON.stringify(ls.map((l) => [l.style_id, l.color_id, l.size_id, l.qty]));
+  const blocks = plan.blocks.map((b0) => ({ label: b0.label, size_headers: b0.size_headers, rows: [] as any[] }));
+  let prev: { block_no: number; sig: string; row: any } | null = null;
+  for (const bl of balances) {
+    const sg = sig(bl.lines);
+    if (prev && prev.block_no === bl.block_no && prev.sig === sg && prev.row.ctn_from + prev.row.no_of_ctns === bl.ctn_no) { prev.row.no_of_ctns++; continue; }
+    const items = new Map<string, any>();
+    for (const l of bl.lines) {
+      const k = `${l.style_id}:${l.color_id}`;
+      const it = items.get(k) ?? { so_id: Number(pl.so_id), order_no: pl.buyer_order_no ?? null, style_id: l.style_id, style_no: l.style_no, style_name: null,
+                                   color_id: l.color_id, colour: l.colour, size_qty: {} as Record<string, number> };
+      it.size_qty[l.size_label] = (it.size_qty[l.size_label] ?? 0) + l.qty;
+      items.set(k, it);
+    }
+    const row = { ctn_from: bl.ctn_no, ctn_to: null, no_of_ctns: 1, row_type: null, pcs_per_pack: null, packs_per_ctn: null, pcs_per_ctn: null,
+                  net_wt_per_ctn: null, gross_wt_per_ctn: null, length_cm: null, width_cm: null, height_cm: null, remarks: null, source_carton_ids: null,
+                  items: [...items.values()] };
+    blocks[bl.block_no - 1].rows.push(row);
+    prev = { block_no: bl.block_no, sig: sg, row };
+  }
+  const used = blocks.filter((b0) => b0.rows.length);
+  const computed = computePackingList({ pl_type: pl.pl_type, size_headers: plan.size_headers ?? [], allow_ctn_gaps: true, blocks: used });
+  const taken = (no: string) => txQueryOne(tx, `SELECT id FROM trx_packing_list WHERE company_id = ? AND pl_no = ?`, [cid, no]);
+  let plNo = await nextDocNumber(tx, cid, 'PACKING_LIST');
+  for (let i = 0; i < 200 && await taken(plNo); i++) plNo = await nextDocNumber(tx, cid, 'PACKING_LIST');
+  const t = await headerTotals(tx, { packing_id: null } as any, computed);
+  const cols = HEADER_COLS.filter((c) => !['pl_date', 'list_mode', 'allow_ctn_gaps', 'remarks', 'packing_id', 'invoice_id', 'invoice_no', 'invoice_date'].includes(c));
+  const r = await txExecute(tx,
+    `INSERT INTO trx_packing_list (company_id, pl_no, pl_date, list_mode, allow_ctn_gaps, remarks, follow_of_id, ${cols.join(', ')}, size_headers, status,
+       total_cartons, total_qty, net_weight_kg, gross_weight_kg, total_cbm, style_summary, created_by)
+     VALUES (?,?,CURDATE(),'PLAN',1,?,?,${cols.map(() => '?').join(',')},?,'DRAFT',?,?,?,?,?,?,?)`,
+    [cid, plNo, `Shortage to follow from ${pl.pl_no}`, pl.id, ...cols.map((c) => pl[c] ?? null), pl.size_headers ? JSON.stringify(asJson(pl.size_headers, null)) : null,
+     t.total_cartons, t.total_qty, t.net_weight_kg, t.gross_weight_kg, t.total_cbm, t.style_summary, req.user!.id]);
+  await writeStructure(tx, cid, r.insertId, computed);
+  await audit(req, 'trx_packing_list', r.insertId, 'INSERT', undefined, { follow_of: pl.pl_no, cartons: t.total_cartons, qty: t.total_qty }, tx);
+  return Number(r.insertId);
+}
+
+/**
+ * POST /packing-lists/:id/plan/reopen — undo Finish (before confirm): the plan rows come back and the list is
+ * PLANNED again, so more cartons can be packed for it. A follow-up list made on finish is removed if nothing
+ * was packed for it.
+ */
+shipmentRouter.post('/packing-lists/:id/plan/reopen', requirePermission('PACKING.UPDATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = plId(req.params.id);
+  await transaction(async (tx) => {
+    const pl = await lockPl(tx, cid, id);
+    if (pl.list_mode !== 'PLAN' || !pl.plan_finished_at) throw BadRequest(`${pl.pl_no} is not a finished plan`);
+    if (pl.status !== 'DRAFT') throw BadRequest(`${pl.pl_no} is ${pl.status} — revise it first`);
+    const plan = parsePlan(pl.plan_json);
+    if (!plan) throw BadRequest(`${pl.pl_no} has no stored plan`);
+    const ship = await txQueryOne<any>(tx, `SELECT sh.shipment_no FROM trx_shipment sh WHERE sh.packing_list_id = ? AND sh.company_id = ? AND ${ACTIVE_SHIP_SQL} LIMIT 1`, [id, cid]);
+    if (ship) throw BadRequest(`${pl.pl_no} is on shipment ${ship.shipment_no}`);
+    const follows = await txQuery<any>(tx, `SELECT id, pl_no, status FROM trx_packing_list WHERE follow_of_id = ? AND company_id = ? FOR UPDATE`, [id, cid]);
+    for (const f of follows) {
+      const k = await txQueryOne<any>(tx, `SELECT COUNT(*) k FROM trx_carton WHERE pl_plan_id = ? AND carton_status <> 'VOID'`, [f.id]);
+      if (f.status !== 'DRAFT' || Number(k?.k)) throw BadRequest(`Follow-up list ${f.pl_no} is already ${f.status === 'DRAFT' ? 'being packed' : f.status} — the plan cannot be reopened`);
+    }
+    for (const f of follows) {
+      for (const t of ['trx_packing_list_row_item', 'trx_packing_list_row', 'trx_packing_list_block', 'trx_packing_list_order_qty', 'trx_packing_list_carton'])
+        await txExecute(tx, `DELETE FROM ${t} WHERE packing_list_id = ?`, [f.id]);
+      await txExecute(tx, `DELETE FROM trx_packing_list WHERE id = ?`, [f.id]);
+    }
+    const computed = computePackingList({ pl_type: plan.pl_type as PlType, size_headers: plan.size_headers ?? [], allow_ctn_gaps: true, blocks: planBlocksIn(plan) });
+    await writeStructure(tx, cid, id, computed);
+    await syncCartonLinks(tx, cid, id, null);
+    const t = await headerTotals(tx, { packing_id: null } as any, computed);
+    await txExecute(tx,
+      `UPDATE trx_packing_list SET status = 'PLANNED', size_headers = ?, total_cartons = ?, total_qty = ?, net_weight_kg = ?, gross_weight_kg = ?, total_cbm = ?,
+              plan_finished_at = NULL, plan_finished_by = NULL, short_qty = 0, short_action = NULL, short_reason = NULL, updated_by = ?, updated_at = NOW() WHERE id = ?`,
+      [plan.size_headers ? JSON.stringify(plan.size_headers) : null, t.total_cartons, t.total_qty, t.net_weight_kg, t.gross_weight_kg, t.total_cbm, req.user!.id, id]);
+    await audit(req, 'trx_packing_list', id, 'UPDATE', { status: 'DRAFT', short_action: pl.short_action }, { status: 'PLANNED', action: 'PLAN_REOPEN', removed_follow_ups: follows.map((f: any) => f.pl_no) }, tx);
   });
   res.json({ data: await loadPackingList(cid, id) });
 }));
@@ -1342,9 +1634,9 @@ shipmentRouter.post('/dispatches', requirePermission('PACKING.CREATE'), ah(async
         `UPDATE trx_shipment_package SET status = 'DISPATCHED' WHERE shipment_id = ? AND status = 'ALLOCATED'`, [body.shipment_id]);
       // cartons packed from the FG store leave the store now (FINISHED out of the stock ledger, client call 16-Oct-2026)
       const leaving = await txQuery<any>(tx,
-        `SELECT c.id, c.carton_no, p.io_no, p.style_id, p.so_id, cc.color_id, cc.size_id, cc.qty
+        `SELECT c.id, c.carton_no, p.io_no, p.style_id, p.so_id, u.color_id, u.size_id, u.qty
            FROM trx_carton c JOIN trx_shipment_package sp ON sp.carton_id = c.id JOIN trx_packing p ON p.id = c.packing_id
-           JOIN trx_carton_content cc ON cc.carton_id = c.id
+           JOIN trx_carton_fg_use u ON u.carton_id = c.id  -- what the carton took from the FG store (a set: TOP + BOTTOM)
           WHERE sp.shipment_id = ? AND sp.status = 'DISPATCHED' AND c.carton_status <> 'DISPATCHED' AND c.from_fg = 1 AND c.is_posted = 1`, [body.shipment_id]);
       await txExecute(tx,
         `UPDATE trx_carton c JOIN trx_shipment_package sp ON sp.carton_id = c.id

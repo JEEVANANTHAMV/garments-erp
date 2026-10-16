@@ -14,8 +14,8 @@ import { JobSelect } from '../../components/JobSelect';
  *   Job work    garments back from job work (fabric sent out) — up to the order qty + allowance
  *   Return / Surplus  returned or extra pieces of the order's colours / sizes
  */
-type Cell = { color_id: number; size_id: number; sku_id: number | null; order_qty: number; on_order: boolean; received: number; packed: number; on_hand: number; in_house_ready: number };
-type JobInfo = { io_no: string; so_no: string | null; styles: { id: number; style_code: string; style_name: string }[]; style_id: number | null;
+type Cell = { part_name: string | null; color_id: number; size_id: number; sku_id: number | null; order_qty: number; on_order: boolean; received: number; packed: number; on_hand: number; in_house_ready: number };
+type JobInfo = { io_no: string; so_no: string | null; parts: (string | null)[]; styles: { id: number; style_code: string; style_name: string }[]; style_id: number | null;
   colors: { id: number; color_name: string }[]; sizes: { id: number; size_code: string }[]; cells: Cell[]; fg_mode: boolean };
 
 const SOURCES = [
@@ -155,19 +155,23 @@ function NewReceiptModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
       .catch((e) => { toast(errMsg(e), 'error'); setInfo(null); });
   };
 
-  const cellKey = (c: number, s: number) => `${c}:${s}`;
-  const cellOf = (c: number, s: number) => info?.cells.find((x) => x.color_id === c && x.size_id === s);
+  // a job with TOP and BOTTOM is received part by part (a set's parts are paired only at packing)
+  const cellKey = (p: string | null, c: number, s: number) => (p ? `${p}|${c}:${s}` : `${c}:${s}`);
+  const cellOf = (p: string | null, c: number, s: number) => info?.cells.find((x) => (x.part_name ?? null) === p && x.color_id === c && x.size_id === s);
+  const parts: (string | null)[] = info?.parts?.length ? info.parts : [null];
   const canTake = (cl: Cell) => (head.source_type === 'IN_HOUSE' ? cl.in_house_ready : head.source_type === 'SURPLUS' ? null : Math.max(cl.order_qty - cl.received, 0));
   // only the order's colours / sizes (in-house also those cut on the job's bundles)
   const visible = (cl?: Cell) => !!cl && (cl.on_order || (head.source_type === 'IN_HOUSE' && cl.in_house_ready > 0));
+  const colorsOf = (p: string | null) => (info?.colors ?? []).filter((c) => (info?.cells ?? []).some((x) => (x.part_name ?? null) === p && x.color_id === Number(c.id) && visible(x)));
   const colors = useMemo(() => (info?.colors ?? []).filter((c) => (info?.cells ?? []).some((x) => x.color_id === Number(c.id) && visible(x))), [info, head.source_type]); // eslint-disable-line react-hooks/exhaustive-deps
   const sizes = useMemo(() => (info?.sizes ?? []).filter((s) => (info?.cells ?? []).some((x) => x.size_id === Number(s.id) && visible(x))), [info, head.source_type]); // eslint-disable-line react-hooks/exhaustive-deps
   const totals = Object.values(qty).reduce((a, v) => ({ good: a.good + (Number(v.good) || 0), reject: a.reject + (Number(v.reject) || 0) }), { good: 0, reject: 0 });
 
   const save = async () => {
     const lines = Object.entries(qty).map(([k, v]) => {
-      const [color_id, size_id] = k.split(':').map(Number);
-      return { color_id, size_id, good_qty: Number(v.good) || 0, reject_qty: Number(v.reject) || 0 };
+      const [p, cs] = k.includes('|') ? k.split('|') : [null, k];
+      const [color_id, size_id] = cs.split(':').map(Number);
+      return { part_name: p, color_id, size_id, good_qty: Number(v.good) || 0, reject_qty: Number(v.reject) || 0 };
     }).filter((l) => l.good_qty > 0 || l.reject_qty > 0);
     if (!head.io_no || !head.style_id) { toast('Pick the job and style', 'warning'); return; }
     if (!head.warehouse_id) { toast('Pick the FG store', 'warning'); return; }
@@ -208,7 +212,11 @@ function NewReceiptModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
               {head.source_type === 'IN_HOUSE' ? 'No finished PCS of this job / style are waiting to be received (nothing has finished ironing yet).' : 'The order has no colours / sizes for this style.'}
             </p>
           ) : (
-            <table className="w-full text-xs" id="fg-grid">
+            <div id="fg-grid">
+            {parts.map((part) => colorsOf(part).length > 0 && (
+            <div key={part ?? 'all'} data-fg-part={part ?? ''} className="mb-3">
+            {part && <div className="mb-1 rounded bg-indigo-50 px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-indigo-800">{part}</div>}
+            <table className="w-full text-xs">
               <thead className="bg-slate-50 text-slate-600">
                 <tr>
                   <th className="px-2 py-2 text-left">Colour</th>
@@ -217,16 +225,16 @@ function NewReceiptModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
                 </tr>
               </thead>
               <tbody>
-                {colors.map((c) => {
-                  const rowGood = sizes.reduce((a, s) => a + (Number(qty[cellKey(Number(c.id), Number(s.id))]?.good) || 0), 0);
-                  const rowRej = sizes.reduce((a, s) => a + (Number(qty[cellKey(Number(c.id), Number(s.id))]?.reject) || 0), 0);
+                {colorsOf(part).map((c) => {
+                  const rowGood = sizes.reduce((a, s) => a + (Number(qty[cellKey(part, Number(c.id), Number(s.id))]?.good) || 0), 0);
+                  const rowRej = sizes.reduce((a, s) => a + (Number(qty[cellKey(part, Number(c.id), Number(s.id))]?.reject) || 0), 0);
                   return (
                     <tr key={c.id} className="border-t border-slate-100 align-top" data-fg-color={c.id}>
                       <td className="px-2 py-2 font-semibold text-slate-800">{c.color_name}</td>
                       {sizes.map((s) => {
-                        const cl = cellOf(Number(c.id), Number(s.id));
+                        const cl = cellOf(part, Number(c.id), Number(s.id));
                         if (!visible(cl)) return <td key={s.id} className="px-2 py-2 text-center text-slate-300">—</td>;
-                        const k = cellKey(Number(c.id), Number(s.id));
+                        const k = cellKey(part, Number(c.id), Number(s.id));
                         const v = qty[k] ?? { good: '', reject: '' };
                         const cap = canTake(cl!);
                         const over = cap != null && (Number(v.good) || 0) + (head.source_type === 'IN_HOUSE' ? Number(v.reject) || 0 : 0) > cap;
@@ -261,6 +269,9 @@ function NewReceiptModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
                 })}
               </tbody>
             </table>
+            </div>
+            ))}
+            </div>
           )}
           <p className="mt-2 text-[11px] text-slate-500">
             {head.source_type === 'IN_HOUSE'
