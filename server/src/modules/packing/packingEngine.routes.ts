@@ -12,6 +12,7 @@ import {
   OPEN_ORDER, WORKING_ORDER, EDITABLE_CARTON, key, assertApprove, canApprove, resolveRule, ruleOf, expectedCartons, stdPolybags,
   loadOrder, lockJob, eligibility, jobKeyOf, openBagged, recalcOrder, cartonEvent, assertPackagingTrim, validateCarton,
   cartonLines, assertNotDownstream, lockCarton, orderVariance, postCarton, reverseCarton, jobBundles, setting,
+  type PackingUnit, type SetDef,
 } from './packingEngineCore.js';
 import { packingReportsRouter } from './packingEngineReports.js';
 
@@ -50,6 +51,10 @@ const ruleSchema = z.object({
   rule_name: z.string().trim().min(2, 'Rule name is required').max(150),
   buyer_id: idOpt(), style_id: idOpt(), so_id: idOpt(),
   packing_mode: z.enum(['BUNDLE_QUANTITY', 'INDIVIDUAL_PIECE']).default('BUNDLE_QUANTITY'),
+  // client 16-Oct-2026: single piece / set (TOP + BOTTOM, same size) / master polybag (N pieces per master bag)
+  packing_unit: z.enum(['SINGLE', 'SET', 'MASTER_POLYBAG']).default('SINGLE'),
+  pieces_per_master_bag: z.coerce.number().int().min(2, 'A master polybag holds at least 2 pieces').max(1000).nullish(),
+  master_bag_trim_id: idOpt(),
   pieces_per_polybag: z.coerce.number().int().min(1, 'Pieces per polybag must be at least 1').max(1000).default(1),
   polybag_trim_id: idOpt(), carton_trim_id: idOpt(),
   standard_pieces_per_carton: z.coerce.number().int().min(1, 'Pieces per carton must be at least 1').max(100000),
@@ -89,6 +94,8 @@ packingEngineRouter.get('/rules/resolve', requirePermission('PACKING.VIEW'), ah(
 async function checkRuleRefs(tx: any, cid: number, b: z.infer<typeof ruleSchema>) {
   await assertPackagingTrim(tx, cid, b.polybag_trim_id, 'POLYBAG');
   await assertPackagingTrim(tx, cid, b.carton_trim_id, 'CARTON');
+  await assertPackagingTrim(tx, cid, b.master_bag_trim_id, 'POLYBAG');
+  if (b.packing_unit !== 'MASTER_POLYBAG') { b.pieces_per_master_bag = null; b.master_bag_trim_id = null; }
   if (b.effective_from && b.effective_to && b.effective_to < b.effective_from) throw BadRequest('Effective to is before effective from');
   if (b.so_id) {
     const so = await txQueryOne<any>(tx, `SELECT buyer_id FROM trx_sales_order WHERE id = ? AND company_id = ?`, [b.so_id, cid]);
@@ -104,10 +111,12 @@ packingEngineRouter.post('/rules', requirePermission('PACKING.CREATE'), ah(async
     await checkRuleRefs(tx, cid, b);
     const code = await nextDocNumber(tx, cid, 'PACKING_RULE');
     const r = await txExecute(tx,
-      `INSERT INTO mst_packing_rule (company_id, rule_code, rule_name, buyer_id, style_id, so_id, packing_mode, pieces_per_polybag, polybag_trim_id, carton_trim_id,
+      `INSERT INTO mst_packing_rule (company_id, rule_code, rule_name, buyer_id, style_id, so_id, packing_mode, packing_unit, pieces_per_master_bag, master_bag_trim_id,
+         pieces_per_polybag, polybag_trim_id, carton_trim_id,
          standard_pieces_per_carton, allow_mixed_sizes, allow_mixed_colours, allow_partial_carton, allow_overpack, label_template, effective_from, effective_to,
-         is_active, remarks, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [cid, code, b.rule_name, b.buyer_id ?? null, b.style_id ?? null, b.so_id ?? null, b.packing_mode, b.pieces_per_polybag, b.polybag_trim_id ?? null,
+         is_active, remarks, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [cid, code, b.rule_name, b.buyer_id ?? null, b.style_id ?? null, b.so_id ?? null, b.packing_mode, b.packing_unit, b.pieces_per_master_bag ?? null, b.master_bag_trim_id ?? null,
+       b.pieces_per_polybag, b.polybag_trim_id ?? null,
        b.carton_trim_id ?? null, b.standard_pieces_per_carton, b.allow_mixed_sizes, b.allow_mixed_colours, b.allow_partial_carton, b.allow_overpack,
        b.label_template, b.effective_from, b.effective_to, b.is_active === undefined ? 1 : (b.is_active ? 1 : 0), b.remarks, req.user!.id]);
     const row = await txQueryOne(tx, `${RULE_SELECT} WHERE r.id = ?`, [r.insertId]);
@@ -127,10 +136,12 @@ packingEngineRouter.put('/rules/:id', requirePermission('PACKING.UPDATE'), ah(as
     await checkRuleRefs(tx, cid, b);
     // orders keep their snapshot; a change makes a new revision
     await txExecute(tx,
-      `UPDATE mst_packing_rule SET rule_name=?, buyer_id=?, style_id=?, so_id=?, packing_mode=?, pieces_per_polybag=?, polybag_trim_id=?, carton_trim_id=?,
+      `UPDATE mst_packing_rule SET rule_name=?, buyer_id=?, style_id=?, so_id=?, packing_mode=?, packing_unit=?, pieces_per_master_bag=?, master_bag_trim_id=?,
+         pieces_per_polybag=?, polybag_trim_id=?, carton_trim_id=?,
          standard_pieces_per_carton=?, allow_mixed_sizes=?, allow_mixed_colours=?, allow_partial_carton=?, allow_overpack=?, label_template=?, effective_from=?,
          effective_to=?, is_active=?, remarks=?, revision = revision + 1, updated_by=? WHERE id = ?`,
-      [b.rule_name, b.buyer_id ?? null, b.style_id ?? null, b.so_id ?? null, b.packing_mode, b.pieces_per_polybag, b.polybag_trim_id ?? null, b.carton_trim_id ?? null,
+      [b.rule_name, b.buyer_id ?? null, b.style_id ?? null, b.so_id ?? null, b.packing_mode, b.packing_unit, b.pieces_per_master_bag ?? null, b.master_bag_trim_id ?? null,
+       b.pieces_per_polybag, b.polybag_trim_id ?? null, b.carton_trim_id ?? null,
        b.standard_pieces_per_carton, b.allow_mixed_sizes, b.allow_mixed_colours, b.allow_partial_carton, b.allow_overpack, b.label_template, b.effective_from,
        b.effective_to, b.is_active === undefined ? before.is_active : (b.is_active ? 1 : 0), b.remarks, req.user!.id, id]);
     const row = await txQueryOne(tx, `${RULE_SELECT} WHERE r.id = ?`, [id]);
@@ -202,14 +213,43 @@ packingEngineRouter.get('/eligibility', requirePermission('PACKING.VIEW'), ah(as
   if (!soId || !styleId) throw BadRequest('Pick the job and style');
   const so = await queryOne<any>(`SELECT id, buyer_id, COALESCE(NULLIF(io_no,''), so_no) job_no FROM trx_sales_order WHERE id = ? AND company_id = ?`, [soId, cid]);
   if (!so) throw NotFound('Job not found');
-  const part = req.query.part_name ? String(req.query.part_name) : null;
+  const part = req.query.part_name ? String(req.query.part_name).toUpperCase() : null;
+  const qp = z.object({
+    packing_unit: z.enum(['SINGLE', 'SET', 'MASTER_POLYBAG']).optional(),
+    sets: z.string().max(4000).optional(), // JSON [{top_color_id, bottom_color_id}]
+  }).parse(req.query);
   const out = await transaction(async (tx) => {
     const rule = await resolveRule(tx, cid, soId, styleId, so.buyer_id);
-    const rows = await eligibility(tx, { cid, io_no: so.job_no, style_id: styleId, part_name: part }, soId, null);
-    return { rule, rows, strict_qc: await packingRequiresQc(tx, cid) };
+    const unit = (qp.packing_unit ?? rule?.packing_unit ?? 'SINGLE') as PackingUnit;
+    const sets = unit === 'SET' ? parseSets(qp.sets) : undefined;
+    const parts = await jobParts(tx, cid, soId, so.job_no, styleId);
+    const rows = unit === 'SET' && !sets?.length ? []
+      : await eligibility(tx, { cid, io_no: so.job_no, style_id: styleId, part_name: unit === 'SET' ? null : part, unit, sets }, soId, null);
+    return { rule, rows, strict_qc: await packingRequiresQc(tx, cid), packing_unit: unit, parts: parts.parts, part_colors: parts.colors };
   });
   res.json({ data: out });
 }));
+
+const setSchema = z.object({ top_color_id: z.coerce.number().int().positive(), bottom_color_id: z.coerce.number().int().positive() });
+function parseSets(raw?: string): SetDef[] {
+  if (!raw) return [];
+  let v: unknown; try { v = JSON.parse(raw); } catch { throw BadRequest('sets must be JSON'); }
+  return z.array(setSchema).max(100).parse(v).map((x) => ({ top_part: 'TOP', top_color_id: x.top_color_id, bottom_part: 'BOTTOM', bottom_color_id: x.bottom_color_id }));
+}
+
+/** Garment parts of a job / style (sales order lines, cut bundles, FG receipts) with the colours of each part. */
+async function jobParts(tx: any, cid: number, soId: number, ioNo: string, styleId: number) {
+  const rows = await txQuery<any>(tx,
+    `SELECT UPPER(part_name) part, color_id FROM trx_sales_order_line WHERE so_id = ? AND style_id = ? AND part_name IS NOT NULL AND part_name <> ''
+     UNION SELECT UPPER(cb.part_name), cb.color_id FROM trx_cutting_bundle cb WHERE cb.company_id = ? AND cb.io_no = ? AND cb.style_id = ? AND cb.part_name IS NOT NULL AND cb.part_name <> ''
+       AND cb.status NOT IN ('SPLIT','CANCELLED')
+     UNION SELECT UPPER(l.part_name), l.color_id FROM trx_fg_receipt r JOIN trx_fg_receipt_line l ON l.fg_receipt_id = r.id
+       WHERE r.company_id = ? AND r.io_no = ? AND r.style_id = ? AND r.status <> 'CANCELLED' AND l.part_name IS NOT NULL`,
+    [soId, styleId, cid, ioNo, styleId, cid, ioNo, styleId]);
+  const colors: Record<string, number[]> = {};
+  for (const r of rows) { if (!r.color_id) continue; (colors[r.part] ??= []).includes(Number(r.color_id)) || colors[r.part].push(Number(r.color_id)); }
+  return { parts: Object.keys(colors).sort(), colors };
+}
 
 const orderLineSchema = z.object({ color_id: z.coerce.number().int().positive(), size_id: z.coerce.number().int().positive(), planned_qty: z.coerce.number().int().min(0) });
 const orderSchema = z.object({
@@ -218,6 +258,10 @@ const orderSchema = z.object({
   part_name: str(50),
   packing_rule_id: idOpt(),
   packing_mode: z.enum(['BUNDLE_QUANTITY', 'INDIVIDUAL_PIECE']).nullish(),
+  packing_unit: z.enum(['SINGLE', 'SET', 'MASTER_POLYBAG']).nullish(),
+  sets: z.array(setSchema).max(100).optional(),
+  pieces_per_master_bag: z.coerce.number().int().min(2).max(1000).nullish(),
+  master_bag_trim_id: idOpt(),
   pack_date: str(10), target_date: str(10), warehouse_id: idOpt(), remarks: str(500),
   lines: z.array(orderLineSchema).optional(),
 });
@@ -279,17 +323,47 @@ packingEngineRouter.post('/orders', requirePermission('PACKING.CREATE'), ah(asyn
       if (!rule) throw BadRequest('No active packing rule applies to this job — add one in Packing Rules (a company default rule with no buyer / style / PO is enough)');
     }
     const mode = b.packing_mode ?? rule.packing_mode;
+    const unit = (b.packing_unit ?? rule.packing_unit ?? 'SINGLE') as PackingUnit;
+    const parts = await jobParts(tx, cid, b.so_id, so.job_no, b.style_id);
+    let part = b.part_name ? String(b.part_name).toUpperCase() : null;
+    const sets: SetDef[] = [];
+    if (unit === 'SET') {
+      if (!(await fgMode(tx, cid))) throw BadRequest('Set packing pairs TOP and BOTTOM from the FG store — switch on PACKING_FROM_FG_RECEIPT');
+      if (!parts.colors.TOP?.length || !parts.colors.BOTTOM?.length) throw BadRequest(`Job ${so.job_no} has no TOP and BOTTOM parts for this style — a set needs both`);
+      if (!b.sets?.length) throw BadRequest('Pair each TOP colour with its BOTTOM colour for the sets');
+      for (const x of b.sets) {
+        if (!parts.colors.TOP.includes(x.top_color_id)) throw BadRequest(`Colour #${x.top_color_id} is not a TOP colour of job ${so.job_no}`);
+        if (!parts.colors.BOTTOM.includes(x.bottom_color_id)) throw BadRequest(`Colour #${x.bottom_color_id} is not a BOTTOM colour of job ${so.job_no}`);
+        if (sets.some((y) => y.top_color_id === x.top_color_id)) throw BadRequest('A TOP colour is paired twice');
+        sets.push({ top_part: 'TOP', top_color_id: x.top_color_id, bottom_part: 'BOTTOM', bottom_color_id: x.bottom_color_id });
+      }
+      part = null;
+    } else {
+      if (part && parts.parts.length && !parts.parts.includes(part)) throw BadRequest(`Part ${part} is not on job ${so.job_no} (${parts.parts.join(' / ')})`);
+      if (!part && parts.parts.length > 1) {
+        throw BadRequest(`Job ${so.job_no} has ${parts.parts.join(' and ')} — pick the part to pack as single pieces, or use a Set packing unit to pack them together`);
+      }
+      if (!part && parts.parts.length === 1) part = parts.parts[0];
+    }
+    const ppmb = unit === 'MASTER_POLYBAG' ? (b.pieces_per_master_bag ?? rule.pieces_per_master_bag ?? null) : null;
+    if (unit === 'MASTER_POLYBAG' && !(Number(ppmb) >= 2)) throw BadRequest('Give the pieces per master polybag for this order (the buyer gives it per order)');
+    const masterTrim = unit === 'MASTER_POLYBAG' ? (b.master_bag_trim_id ?? rule.master_bag_trim_id ?? null) : null;
+    if (masterTrim) await assertPackagingTrim(tx, cid, masterTrim, 'POLYBAG');
     const no = await nextDocNumber(tx, cid, 'PACKING_ORDER');
     const r = await txExecute(tx,
-      `INSERT INTO trx_packing (company_id, pack_no, io_no, style_id, pack_date, so_id, part_name, pack_method, packing_mode, order_status, is_engine,
-         buyer_id, packing_rule_id, rule_revision, rule_snapshot, warehouse_id, target_date, remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?, 'DRAFT', 1, ?,?,?,?,?,?,?,?)`,
-      [cid, no, so.job_no, b.style_id, b.pack_date ?? new Date().toISOString().slice(0, 10), b.so_id, b.part_name,
+      `INSERT INTO trx_packing (company_id, pack_no, io_no, style_id, pack_date, so_id, part_name, pack_method, packing_mode, packing_unit, pieces_per_master_bag,
+         master_bag_trim_id, order_status, is_engine, buyer_id, packing_rule_id, rule_revision, rule_snapshot, warehouse_id, target_date, remarks, created_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?, 'DRAFT', 1, ?,?,?,?,?,?,?,?)`,
+      [cid, no, so.job_no, b.style_id, b.pack_date ?? new Date().toISOString().slice(0, 10), b.so_id, part,
        rule.allow_mixed_colours ? 'ASSORTED_COLOR_ASSORTED_SIZE' : rule.allow_mixed_sizes ? 'SOLID_COLOR_ASSORTED_SIZE' : 'SOLID_COLOR_SOLID_SIZE',
-       mode, so.buyer_id, rule.id, rule.revision, JSON.stringify(rule), b.warehouse_id ?? null, b.target_date, b.remarks, req.user!.id]);
+       mode, unit, ppmb, masterTrim, so.buyer_id, rule.id, rule.revision, JSON.stringify(rule), b.warehouse_id ?? null, b.target_date, b.remarks, req.user!.id]);
+    for (const d of sets) {
+      await txExecute(tx, `INSERT INTO trx_packing_set (packing_id, top_part, top_color_id, bottom_part, bottom_color_id) VALUES (?,?,?,?,?)`,
+        [r.insertId, d.top_part, d.top_color_id, d.bottom_part, d.bottom_color_id]);
+    }
     const order = await txQueryOne<any>(tx, `SELECT * FROM trx_packing WHERE id = ?`, [r.insertId]);
     await writeOrderLines(tx, order, b.lines, rule);
-    await audit(req, 'trx_packing', r.insertId, 'INSERT', undefined, { pack_no: no, rule: rule.rule_code, rule_revision: rule.revision, lines: b.lines ?? 'eligible' }, tx);
+    await audit(req, 'trx_packing', r.insertId, 'INSERT', undefined, { pack_no: no, rule: rule.rule_code, rule_revision: rule.revision, unit, part, sets, pieces_per_master_bag: ppmb, lines: b.lines ?? 'eligible' }, tx);
     return r.insertId;
   });
   res.status(201).json({ data: await orderDetail(cid, id) });
@@ -320,10 +394,15 @@ packingEngineRouter.post('/orders/:id/apply-rule', requirePermission('PACKING.UP
     }
     if (!rule) throw BadRequest('No active packing rule applies to this job — add one in Packing rules');
     const old = ruleOf(o);
+    if ((rule.packing_unit ?? 'SINGLE') !== (o.packing_unit ?? 'SINGLE')) {
+      throw BadRequest(`The rule now packs as ${rule.packing_unit} but this order is ${o.packing_unit} — cancel the order and create a new one (sets / parts are chosen on the order)`);
+    }
     if (Number(rule.id) === Number(o.packing_rule_id) && Number(rule.revision) === Number(o.rule_revision)) throw BadRequest(`Packing order ${o.pack_no} already has the latest rule (${rule.rule_code} rev ${rule.revision})`);
     await txExecute(tx,
-      `UPDATE trx_packing SET packing_rule_id = ?, rule_revision = ?, rule_snapshot = ?, packing_mode = ?, pack_method = ?, updated_at = NOW() WHERE id = ?`,
-      [rule.id, rule.revision, JSON.stringify(rule), rule.packing_mode,
+      `UPDATE trx_packing SET packing_rule_id = ?, rule_revision = ?, rule_snapshot = ?, packing_mode = ?,
+              pieces_per_master_bag = IF(packing_unit = 'MASTER_POLYBAG', COALESCE(?, pieces_per_master_bag), NULL),
+              master_bag_trim_id = IF(packing_unit = 'MASTER_POLYBAG', COALESCE(?, master_bag_trim_id), NULL), pack_method = ?, updated_at = NOW() WHERE id = ?`,
+      [rule.id, rule.revision, JSON.stringify(rule), rule.packing_mode, rule.pieces_per_master_bag ?? null, rule.master_bag_trim_id ?? null,
        rule.allow_mixed_colours ? 'ASSORTED_COLOR_ASSORTED_SIZE' : rule.allow_mixed_sizes ? 'SOLID_COLOR_ASSORTED_SIZE' : 'SOLID_COLOR_SOLID_SIZE', id]);
     await audit(req, 'trx_packing', id, 'UPDATE', { rule: old.rule_code, rule_revision: o.rule_revision, packing_mode: o.packing_mode },
       { rule: rule.rule_code, rule_revision: rule.revision, packing_mode: rule.packing_mode }, tx);
@@ -602,6 +681,9 @@ async function bagFromFgStore(tx: any, req: any, id: number, b: z.infer<typeof p
   await lockJob(tx, Number(o.so_id));
   let bd: any = null;
   let colorId = b.color_id ?? null; let sizeId = b.size_id ?? null;
+  if ((b.bundle_id || b.barcode) && o.packing_unit === 'SET') {
+    throw BadRequest('A set is one TOP + one BOTTOM — bag sets by picking the set and size, not by scanning one bundle');
+  }
   if (b.bundle_id || b.barcode) {
     bd = await lockBundle(tx, cid, { id: b.bundle_id ?? null, code: b.barcode ?? null });
     if (bd.io_no !== o.io_no || Number(bd.style_id) !== Number(o.style_id)) {

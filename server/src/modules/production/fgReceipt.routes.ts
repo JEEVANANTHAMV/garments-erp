@@ -41,28 +41,77 @@ async function jobOf(tx: Tx | null, cid: number, ioNo: string) {
   return tx ? txQueryOne<any>(tx, sql, [cid, ioNo, ioNo]) : queryOne<any>(sql, [cid, ioNo, ioNo]);
 }
 
-/** FG received (posted, not cancelled) and packed from FG, per colour × size of a job / style. */
-export async function fgOnHand(tx: Tx | null, cid: number, ioNo: string, styleId: number, exceptReceipt?: number | null) {
+/** Part key: TOP / BOTTOM … or '' for a job whose lines carry no part. */
+export const pk = (part: unknown, c: unknown, sz: unknown) => `${String(part ?? '').toUpperCase()}|${Number(c)}:${Number(sz)}`;
+
+/**
+ * FG stock of a job / style per part × colour × size: received (posted receipts, not cancelled) and taken by cartons
+ * posted from the FG store (trx_carton_fg_use — a set takes a TOP and a BOTTOM).
+ */
+export async function fgStockParts(tx: Tx | null, cid: number, ioNo: string, styleId: number, exceptReceipt?: number | null) {
   const run = <T,>(sql: string, p: unknown[]) => (tx ? txQuery<T>(tx, sql, p) : query<T>(sql, p));
   const rec = await run<any>(
-    `SELECT l.color_id, l.size_id, SUM(l.good_qty) q FROM trx_fg_receipt r JOIN trx_fg_receipt_line l ON l.fg_receipt_id = r.id
+    `SELECT l.part_name, l.color_id, l.size_id, SUM(l.good_qty) q FROM trx_fg_receipt r JOIN trx_fg_receipt_line l ON l.fg_receipt_id = r.id
       WHERE r.company_id = ? AND r.io_no = ? AND r.style_id = ? AND r.fg_posted = 1 AND r.status <> 'CANCELLED' ${exceptReceipt ? 'AND r.id <> ?' : ''}
-      GROUP BY l.color_id, l.size_id`, exceptReceipt ? [cid, ioNo, styleId, exceptReceipt] : [cid, ioNo, styleId]);
-  const packed = await run<any>(
-    `SELECT cc.color_id, cc.size_id, SUM(cc.qty) q FROM trx_carton c JOIN trx_carton_content cc ON cc.carton_id = c.id JOIN trx_packing p ON p.id = c.packing_id
+      GROUP BY l.part_name, l.color_id, l.size_id`, exceptReceipt ? [cid, ioNo, styleId, exceptReceipt] : [cid, ioNo, styleId]);
+  const used = await run<any>(
+    `SELECT u.part_name, u.color_id, u.size_id, SUM(u.qty) q FROM trx_carton_fg_use u JOIN trx_carton c ON c.id = u.carton_id JOIN trx_packing p ON p.id = u.packing_id
       WHERE p.company_id = ? AND p.io_no = ? AND p.style_id = ? AND c.is_posted = 1 AND c.from_fg = 1 AND c.carton_status <> 'VOID'
-      GROUP BY cc.color_id, cc.size_id`, [cid, ioNo, styleId]);
+      GROUP BY u.part_name, u.color_id, u.size_id`, [cid, ioNo, styleId]);
   const out = new Map<string, { received: number; packed: number; on_hand: number }>();
-  for (const r of rec) out.set(k(r.color_id, r.size_id), { received: n(r.q), packed: 0, on_hand: n(r.q) });
-  for (const p of packed) {
-    const cur = out.get(k(p.color_id, p.size_id)) ?? { received: 0, packed: 0, on_hand: 0 };
-    cur.packed += n(p.q); cur.on_hand = Math.max(cur.received - cur.packed, 0);
-    out.set(k(p.color_id, p.size_id), cur);
+  for (const r of rec) out.set(pk(r.part_name, r.color_id, r.size_id), { received: n(r.q), packed: 0, on_hand: n(r.q) });
+  for (const u of used) {
+    const key = pk(u.part_name, u.color_id, u.size_id);
+    const cur = out.get(key) ?? { received: 0, packed: 0, on_hand: 0 };
+    cur.packed += n(u.q); cur.on_hand = Math.max(cur.received - cur.packed, 0);
+    out.set(key, cur);
   }
   return out;
 }
 
-/** In-house PCS ready to receive (finished, not yet in the store / packed), per colour × size, with their bundles. */
+/**
+ * FG stock per colour × size — all parts summed (part undefined), or of one part (lines with no part count for any part).
+ */
+export async function fgOnHand(tx: Tx | null, cid: number, ioNo: string, styleId: number, exceptReceipt?: number | null, part?: string | null) {
+  const parts = await fgStockParts(tx, cid, ioNo, styleId, exceptReceipt);
+  const want = part === undefined ? null : String(part ?? '').toUpperCase();
+  const out = new Map<string, { received: number; packed: number; on_hand: number }>();
+  for (const [key, v] of parts) {
+    const [p, cs] = key.split('|');
+    if (want !== null && p !== want && p !== '') continue;
+    const cur = out.get(cs) ?? { received: 0, packed: 0, on_hand: 0 };
+    cur.received += v.received; cur.packed += v.packed; cur.on_hand = Math.max(cur.received - cur.packed, 0);
+    out.set(cs, cur);
+  }
+  return out;
+}
+
+/**
+ * PCS bagged (open polybag entries, not yet in a posted carton) per part × colour × size of a job / style.
+ * A set's bag holds its TOP (the set's colour) and its BOTTOM (the paired colour).
+ */
+export async function openBagsByPart(tx: Tx, cid: number, ioNo: string, styleId: number) {
+  const rows = await txQuery<any>(tx,
+    `SELECT pb.packing_id, p.packing_unit, p.part_name, pb.color_id, pb.size_id, SUM(pb.pieces - pb.cartoned_qty) q
+       FROM trx_packing_polybag pb JOIN trx_packing p ON p.id = pb.packing_id
+      WHERE p.company_id = ? AND p.io_no = ? AND p.style_id = ? AND pb.status = 'OPEN'
+      GROUP BY pb.packing_id, p.packing_unit, p.part_name, pb.color_id, pb.size_id`, [cid, ioNo, styleId]);
+  const sets = rows.some((x) => x.packing_unit === 'SET')
+    ? await txQuery<any>(tx, `SELECT * FROM trx_packing_set WHERE packing_id IN (?)`, [[...new Set(rows.filter((x) => x.packing_unit === 'SET').map((x) => x.packing_id))]])
+    : [];
+  const out = new Map<string, number>();
+  const add = (key: string, q: number) => out.set(key, (out.get(key) ?? 0) + q);
+  for (const x of rows) {
+    if (x.packing_unit === 'SET') {
+      const d = sets.find((y) => Number(y.packing_id) === Number(x.packing_id) && Number(y.top_color_id) === Number(x.color_id));
+      add(pk(d?.top_part ?? 'TOP', x.color_id, x.size_id), n(x.q));
+      if (d) add(pk(d.bottom_part, d.bottom_color_id, x.size_id), n(x.q));
+    } else add(pk(x.part_name, x.color_id, x.size_id), n(x.q));
+  }
+  return out;
+}
+
+/** In-house PCS ready to receive (finished, not yet in the store / packed), per part × colour × size, with their bundles. */
 async function bundlesReady(tx: Tx | null, cid: number, ioNo: string, styleId: number) {
   const strict = tx ? await packingRequiresQc(tx, cid) : String((await queryOne<any>(
     `SELECT setting_value FROM cfg_system_setting WHERE company_id = ? AND setting_key = 'PACKING_REQUIRES_FINAL_QC'`, [cid]))?.setting_value ?? '0').trim() === '1';
@@ -72,7 +121,7 @@ async function bundlesReady(tx: Tx | null, cid: number, ioNo: string, styleId: n
   const ready = new Map<string, number>();
   for (const b of rows) {
     const a = TERMINAL.includes(b.status) ? 0 : bundleAvail(b, strict).pack;
-    if (a > 0) ready.set(k(b.color_id, b.size_id), (ready.get(k(b.color_id, b.size_id)) ?? 0) + a);
+    if (a > 0) ready.set(pk(b.part_name, b.color_id, b.size_id), (ready.get(pk(b.part_name, b.color_id, b.size_id)) ?? 0) + a);
   }
   return { ready, bundles: rows, strict };
 }
@@ -100,34 +149,45 @@ export async function fgJobInfo(cid: number, ioNo: string, styleId?: number | nu
   const sid = styleId ?? (styles.length === 1 ? Number(styles[0].id) : null);
   if (sid && !styles.some((x) => Number(x.id) === sid)) throw BadRequest('The style is not on this job — pick a style of the job');
   const base = { io_no: ioNo, so_id: so ? Number(so.id) : null, so_no: so?.so_no ?? null, styles, style_id: sid };
-  if (!sid) return { ...base, colors: [], sizes: [], cells: [] };
+  if (!sid) return { ...base, parts: [], colors: [], sizes: [], cells: [] };
 
+  // order qty per part (the sales order line carries the part: TOP / BOTTOM of a set are separate lines)
   const order = so ? await query<any>(
-    `SELECT k.color_id, k.size_id, k.id sku_id, SUM(sk.qty - sk.cancelled_qty) q
+    `SELECT l.part_name, k.color_id, k.size_id, k.id sku_id, SUM(sk.qty - sk.cancelled_qty) q
        FROM trx_sales_order_line l JOIN trx_sales_order_sku sk ON sk.so_line_id = l.id JOIN mst_style_sku k ON k.id = sk.sku_id
-      WHERE l.so_id = ? AND l.style_id = ? GROUP BY k.color_id, k.size_id, k.id`, [so.id, sid]) : [];
+      WHERE l.so_id = ? AND l.style_id = ? GROUP BY l.part_name, k.color_id, k.size_id, k.id`, [so.id, sid]) : [];
   const { ready } = await bundlesReady(null, cid, ioNo, sid);
-  const fg = await fgOnHand(null, cid, ioNo, sid);
-  const keys = new Set<string>([...order.map((o) => k(o.color_id, o.size_id)), ...ready.keys(), ...fg.keys()]);
-  const cIds = [...new Set([...keys].map((x) => Number(x.split(':')[0])))];
-  const sIds = [...new Set([...keys].map((x) => Number(x.split(':')[1])))];
+  const fg = await fgStockParts(null, cid, ioNo, sid);
+  const keys = new Set<string>([...order.map((o) => pk(o.part_name, o.color_id, o.size_id)), ...ready.keys(), ...fg.keys()]);
+  const split = (key: string) => { const [p, cs] = key.split('|'); const [c, sz] = cs.split(':').map(Number); return { p, c, sz }; };
+  const cIds = [...new Set([...keys].map((x) => split(x).c))];
+  const sIds = [...new Set([...keys].map((x) => split(x).sz))];
+  const parts = [...new Set([...keys].map((x) => split(x).p))].sort((a, b) => (a === 'TOP' ? -1 : b === 'TOP' ? 1 : a.localeCompare(b)));
   const colors = cIds.length ? await query<any>(`SELECT id, color_code, color_name FROM mst_color WHERE id IN (?) ORDER BY color_name`, [cIds]) : [];
   const sizes = sIds.length ? await query<any>(`SELECT id, size_code, size_label, sort_order FROM mst_size WHERE id IN (?) ORDER BY sort_order, id`, [sIds]) : [];
   const skus = await query<any>(`SELECT id, color_id, size_id FROM mst_style_sku WHERE style_id = ?`, [sid]);
   const cells = [...keys].map((key) => {
-    const [c, sz] = key.split(':').map(Number);
-    const o = order.find((x) => Number(x.color_id) === c && Number(x.size_id) === sz);
+    const { p, c, sz } = split(key);
+    // an order line with no part matches a bundle part of the same colour / size (single-part jobs)
+    const o = order.find((x) => pk(x.part_name, x.color_id, x.size_id) === key)
+      ?? (p ? order.find((x) => !x.part_name && Number(x.color_id) === c && Number(x.size_id) === sz) : undefined);
     const f = fg.get(key);
     return {
-      color_id: c, size_id: sz, sku_id: o?.sku_id ?? skus.find((x) => Number(x.color_id) === c && Number(x.size_id) === sz)?.id ?? null,
+      part_name: p || null, color_id: c, size_id: sz, sku_id: o?.sku_id ?? skus.find((x) => Number(x.color_id) === c && Number(x.size_id) === sz)?.id ?? null,
       order_qty: n(o?.q), on_order: !!o, received: f?.received ?? 0, packed: f?.packed ?? 0, on_hand: f?.on_hand ?? 0,
       in_house_ready: ready.get(key) ?? 0,
     };
   });
-  return { ...base, colors, sizes, cells };
+  // a part key '' next to real parts is only an order line without a part: fold it into the matching part cells
+  const real = parts.filter((x) => x);
+  const out = real.length ? cells.filter((c) => c.part_name || !cells.some((x) => x.part_name && x.color_id === c.color_id && x.size_id === c.size_id)) : cells;
+  return { ...base, parts: parts.filter((x) => x || !real.length).map((x) => x || null), colors, sizes, cells: out };
+
 }
 
 const lineSchema = z.object({
+  // TOP / BOTTOM … (a set's parts are received separately, paired at packing); optional on a single-part job
+  part_name: z.string().trim().toUpperCase().max(20).nullish(),
   color_id: s.idReq(), size_id: s.idReq(),
   good_qty: z.coerce.number().int().min(0).default(0),
   reject_qty: z.coerce.number().int().min(0).default(0),
@@ -154,16 +214,26 @@ export async function postFgReceipt(tx: Tx, req: Request, b: ReceiptIn & { sourc
   const cid = req.user!.companyId;
   const lines = b.lines.filter((l) => l.good_qty > 0 || l.reject_qty > 0);
   if (!lines.length) throw BadRequest('Enter the good / reject PCS of at least one colour / size');
-  const seen = new Set<string>();
-  for (const l of lines) { if (seen.has(k(l.color_id, l.size_id))) throw BadRequest('A colour / size is entered twice'); seen.add(k(l.color_id, l.size_id)); }
   const wh = await txQueryOne<any>(tx, `SELECT id, warehouse_name FROM mst_warehouse WHERE id = ? AND company_id = ?`, [b.warehouse_id, cid]);
   if (!wh) throw BadRequest('FG store (warehouse) not found');
   const so = await jobOf(tx, cid, b.io_no);
   if (so) await txQueryOne(tx, `SELECT id FROM trx_sales_order WHERE id = ? FOR UPDATE`, [so.id]); // one job's receipts / packing in turn
   const info = await fgJobInfo(cid, b.io_no, b.style_id);
-  const cellOf = (l: { color_id: number; size_id: number }) => info.cells.find((c) => c.color_id === l.color_id && c.size_id === l.size_id);
-  const label = (l: { color_id: number; size_id: number }) =>
-    `${info.colors.find((c: any) => Number(c.id) === l.color_id)?.color_name ?? `colour #${l.color_id}`} / ${info.sizes.find((z2: any) => Number(z2.id) === l.size_id)?.size_code ?? `size #${l.size_id}`}`;
+  const jobParts = (info.parts ?? []).filter((x): x is string => !!x);
+  // the part of each line: as sent, else the job's only part; a job with TOP and BOTTOM needs it on every line
+  for (const l of lines) {
+    if (l.part_name && !jobParts.includes(l.part_name)) throw BadRequest(`Part ${l.part_name} is not on job ${b.io_no} (${jobParts.join(' / ') || 'no parts'})`);
+    if (!l.part_name) {
+      if (jobParts.length > 1) throw BadRequest(`Job ${b.io_no} has ${jobParts.join(' and ')} — give the part of every line (TOP and BOTTOM are received separately)`);
+      l.part_name = jobParts[0] ?? null;
+    }
+  }
+  const seen = new Set<string>();
+  for (const l of lines) { const key = pk(l.part_name, l.color_id, l.size_id); if (seen.has(key)) throw BadRequest('A part / colour / size is entered twice'); seen.add(key); }
+  const cellOf = (l: { part_name?: string | null; color_id: number; size_id: number }) =>
+    info.cells.find((c) => String(c.part_name ?? '') === String(l.part_name ?? '') && c.color_id === l.color_id && c.size_id === l.size_id);
+  const label = (l: { part_name?: string | null; color_id: number; size_id: number }) =>
+    `${l.part_name ? `${l.part_name} ` : ''}${info.colors.find((c: any) => Number(c.id) === l.color_id)?.color_name ?? `colour #${l.color_id}`} / ${info.sizes.find((z2: any) => Number(z2.id) === l.size_id)?.size_code ?? `size #${l.size_id}`}`;
   for (const l of lines) {
     const c = cellOf(l);
     if (!c || (!c.on_order && b.source_type !== 'IN_HOUSE' && !c.in_house_ready)) throw BadRequest(`${label(l)} is not on job ${b.io_no} for this style`);
@@ -182,7 +252,8 @@ export async function postFgReceipt(tx: Tx, req: Request, b: ReceiptIn & { sourc
   if (b.source_type === 'IN_HOUSE') {
     const { bundles, strict } = await bundlesReady(tx, cid, b.io_no, b.style_id);
     for (const l of lines) {
-      const mine = bundles.filter((x) => Number(x.color_id) === l.color_id && Number(x.size_id) === l.size_id);
+      const mine = bundles.filter((x) => Number(x.color_id) === l.color_id && Number(x.size_id) === l.size_id
+        && (!l.part_name || String(x.part_name ?? '').toUpperCase() === l.part_name));
       let good = l.good_qty; let rej = l.reject_qty;
       const ready = mine.reduce((a, x) => a + (TERMINAL.includes(x.status) ? 0 : bundleAvail(x, strict).pack), 0);
       if (good + rej > ready) {
@@ -221,8 +292,8 @@ export async function postFgReceipt(tx: Tx, req: Request, b: ReceiptIn & { sourc
   for (const l of lines) {
     const c = cellOf(l)!;
     const lr = await txExecute(tx,
-      `INSERT INTO trx_fg_receipt_line (fg_receipt_id, color_id, size_id, sku_id, good_qty, reject_qty, batch_no) VALUES (?,?,?,?,?,?,?)`,
-      [id, l.color_id, l.size_id, c.sku_id, l.good_qty, l.reject_qty, l.batch_no ?? null]);
+      `INSERT INTO trx_fg_receipt_line (fg_receipt_id, part_name, color_id, size_id, sku_id, good_qty, reject_qty, batch_no) VALUES (?,?,?,?,?,?,?,?)`,
+      [id, l.part_name ?? null, l.color_id, l.size_id, c.sku_id, l.good_qty, l.reject_qty, l.batch_no ?? null]);
     for (const br of bundleRows.filter((x) => x.line === l)) {
       await txExecute(tx, `INSERT INTO trx_fg_receipt_bundle (fg_receipt_id, line_id, bundle_id, good_qty, reject_qty) VALUES (?,?,?,?,?)`,
         [id, lr.insertId, br.bundle_id, br.good, br.reject]);
@@ -303,14 +374,12 @@ fgReceiptRouter.post('/fg-receipts/:id/cancel', requirePermission('PRODUCTION.UP
     if (Number(r.fg_posted)) {
       const so = await jobOf(tx, cid, r.io_no);
       if (so) await txQueryOne(tx, `SELECT id FROM trx_sales_order WHERE id = ? FOR UPDATE`, [so.id]);
-      const left = await fgOnHand(tx, cid, r.io_no, Number(r.style_id), id);
-      const held = await txQuery<any>(tx,
-        `SELECT pb.color_id, pb.size_id, SUM(pb.pieces - pb.cartoned_qty) q FROM trx_packing_polybag pb JOIN trx_packing p ON p.id = pb.packing_id
-          WHERE p.company_id = ? AND p.io_no = ? AND p.style_id = ? AND pb.status = 'OPEN' GROUP BY pb.color_id, pb.size_id`, [cid, r.io_no, r.style_id]);
+      const left = await fgStockParts(tx, cid, r.io_no, Number(r.style_id), id);
+      const held = await openBagsByPart(tx, cid, r.io_no, Number(r.style_id));
       for (const l of lines) {
-        const key = k(l.color_id, l.size_id);
+        const key = pk(l.part_name, l.color_id, l.size_id);
         const after = (left.get(key)?.received ?? 0) - (left.get(key)?.packed ?? 0);
-        const bagged = n(held.find((h) => k(h.color_id, h.size_id) === key)?.q);
+        const bagged = held.get(key) ?? 0;
         if (after < bagged || after < 0) {
           throw BadRequest(`${r.receipt_no}: PCS of this receipt are already packed / bagged — reverse those first (FG left would be ${after}, bagged ${bagged})`);
         }

@@ -1342,9 +1342,9 @@ shipmentRouter.post('/dispatches', requirePermission('PACKING.CREATE'), ah(async
         `UPDATE trx_shipment_package SET status = 'DISPATCHED' WHERE shipment_id = ? AND status = 'ALLOCATED'`, [body.shipment_id]);
       // cartons packed from the FG store leave the store now (FINISHED out of the stock ledger, client call 16-Oct-2026)
       const leaving = await txQuery<any>(tx,
-        `SELECT c.id, c.carton_no, p.io_no, p.style_id, p.so_id, cc.color_id, cc.size_id, cc.qty
+        `SELECT c.id, c.carton_no, p.io_no, p.style_id, p.so_id, u.color_id, u.size_id, u.qty
            FROM trx_carton c JOIN trx_shipment_package sp ON sp.carton_id = c.id JOIN trx_packing p ON p.id = c.packing_id
-           JOIN trx_carton_content cc ON cc.carton_id = c.id
+           JOIN trx_carton_fg_use u ON u.carton_id = c.id  -- what the carton took from the FG store (a set: TOP + BOTTOM)
           WHERE sp.shipment_id = ? AND sp.status = 'DISPATCHED' AND c.carton_status <> 'DISPATCHED' AND c.from_fg = 1 AND c.is_posted = 1`, [body.shipment_id]);
       await txExecute(tx,
         `UPDATE trx_carton c JOIN trx_shipment_package sp ON sp.carton_id = c.id
