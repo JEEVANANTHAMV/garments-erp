@@ -557,6 +557,16 @@ packingEngineRouter.get('/orders/:id/reconciliation', requirePermission('PACKING
 }));
 
 /** Bundles of the order's job / style with what can still be bagged (polybag screen picker). */
+/** Planned PCS of the order not yet bagged, per colour × size (void entries do not count); null when the rule allows overpacking. */
+async function planLeftMap(tx: any, o: any) {
+  if (Number(ruleOf(o).allow_overpack)) return null;
+  const rows = await txQuery<any>(tx,
+    `SELECT l.color_id, l.size_id, l.planned_qty - COALESCE((SELECT SUM(pb.pieces) FROM trx_packing_polybag pb
+        WHERE pb.packing_id = l.packing_id AND pb.color_id = l.color_id AND pb.size_id = l.size_id AND pb.status <> 'VOID'), 0) AS q
+       FROM trx_packing_order_line l WHERE l.packing_id = ?`, [o.id]);
+  return new Map<string, number>(rows.map((r: any) => [key(r.color_id, r.size_id), Math.max(n(r.q), 0)]));
+}
+
 packingEngineRouter.get('/orders/:id/bundles', requirePermission('PACKING.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = Number(req.params.id);
@@ -565,10 +575,12 @@ packingEngineRouter.get('/orders/:id/bundles', requirePermission('PACKING.VIEW')
     const rows = await transaction(async (tx) => {
       const o = await loadOrder(tx, cid, id);
       const el = await eligibility(tx, jobKeyOf(o), Number(o.so_id), id);
+      const left = await planLeftMap(tx, o);
+      // can bag = in the store and not bagged, but never past the order's plan (unless the rule allows overpacking)
       return el.filter((e) => e.planned > 0).map((e) => ({
         id: null, fg_store: true, color_id: e.color_id, size_id: e.size_id, color_name: e.color_name, size_code: e.size_code,
-        in_fg: e.eligible, bagged_open: e.bagged_open, baggable: Math.max(e.eligible - e.bagged_open, 0), packed: e.posted,
-        planned: e.planned, awaiting_fg: e.awaiting_fg ?? 0,
+        in_fg: e.eligible, bagged_open: e.bagged_open, packed: e.posted, planned: e.planned, awaiting_fg: e.awaiting_fg ?? 0,
+        baggable: Math.min(Math.max(e.eligible - e.bagged_open, 0), left?.get(key(e.color_id, e.size_id)) ?? Infinity),
       }));
     });
     res.json({ data: rows, meta: { fg_mode: true } });
@@ -582,10 +594,12 @@ packingEngineRouter.get('/orders/:id/bundles', requirePermission('PACKING.VIEW')
     const onPlan = new Set(plan.map((p) => key(p.color_id, p.size_id)));
     const cols = await txQuery<any>(tx, `SELECT id, color_name FROM mst_color WHERE company_id = ?`, [cid]);
     const sizes = await txQuery<any>(tx, `SELECT id, size_code FROM mst_size`);
+    const left = await planLeftMap(tx, o);
     return bs.filter((b) => onPlan.has(key(b.color_id, b.size_id))).map((b) => ({
       id: b.id, bundle_no: b.bundle_no, barcode: b.barcode, color_id: b.color_id, size_id: b.size_id, status: b.status, qty: b.qty,
       color_name: cols.find((c) => Number(c.id) === Number(b.color_id))?.color_name, size_code: sizes.find((s) => Number(s.id) === Number(b.size_id))?.size_code,
-      ready: b.ready, bagged_open: bag.get(Number(b.id)) ?? 0, baggable: Math.max(b.ready - (bag.get(Number(b.id)) ?? 0), 0), packed: b.packed, qc_pending: b.strict ? b.qc_pending : 0,
+      ready: b.ready, bagged_open: bag.get(Number(b.id)) ?? 0, packed: b.packed, qc_pending: b.strict ? b.qc_pending : 0,
+      baggable: Math.min(Math.max(b.ready - (bag.get(Number(b.id)) ?? 0), 0), left?.get(key(b.color_id, b.size_id)) ?? Infinity),
     }));
   });
   res.json({ data: out });
@@ -619,6 +633,7 @@ const polybagSchema = z.object({
 /** Pieces of one entry: typed → as typed; Bag (bag_all) → everything baggable up to the plan; scan in individual mode → one polybag. */
 function entryPieces(b: { pieces?: number | null; bag_all?: boolean }, mode: string, ppp: number, baggable: number, planLeft: number, overpack: boolean) {
   if (b.pieces != null) return b.pieces;
+  if (!overpack && planLeft <= 0) throw BadRequest('All the planned PCS of this colour / size are already bagged — nothing left to bag on this packing order');
   const all = overpack ? baggable : Math.min(baggable, Math.max(planLeft, 0));
   if (b.bag_all || mode !== 'INDIVIDUAL_PIECE') return all > 0 ? all : baggable;
   return Math.min(ppp, baggable);
