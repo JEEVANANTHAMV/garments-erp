@@ -8,6 +8,7 @@ import { useAuth } from '../../../lib/auth';
 import { useLookup } from '../../../hooks/useLookup';
 import { fmtDate, fmtNumber, today } from '../../../lib/format';
 import { PackingNav, PkStatus, useOrders, errMsg, n, type EligRow, type Rule } from './packingShared';
+import { RuleModal } from './PackingRules';
 
 /** Screen A — packing orders list (replaces the old generic "Packing" page). */
 export function PackingOrdersPage() {
@@ -75,6 +76,8 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const wh = useLookup('warehouses');
+  const [ruleFor, setRuleFor] = useState(false);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     setPreview(null); setErr('');
@@ -83,7 +86,7 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
     http.get<{ data: any }>('/packing/eligibility', { so_id: job.id, style_id: styleId })
       .then((r) => { setPreview(r.data); setPlan(Object.fromEntries(r.data.rows.map((x: EligRow) => [`${x.color_id}:${x.size_id}`, String(x.eligible)]))); })
       .catch((e) => setErr(errMsg(e))).finally(() => setLoading(false));
-  }, [job, styleId]);
+  }, [job, styleId, reload]);
 
   const total = useMemo(() => Object.values(plan).reduce((a, v) => a + n(v), 0), [plan]);
   const rule = preview?.rule;
@@ -101,7 +104,7 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
 
   return (
     <Modal open onClose={onClose} size="xl" icon={<Package size={16} />} title="New packing order"
-      subtitle="Pick the job and style; the plan defaults to the eligible (finished, QC-accepted, not reserved by other orders) quantity."
+      subtitle="Pick the job and style; the plan defaults to the PCS in the FG store not held by other orders. Needs a packing rule (step 2) and an FG receipt (step 1)."
       footerStart={preview && <span>Planned <b>{fmtNumber(total)}</b> pcs{rule ? <> · ≈ {Math.ceil(total / Math.max(n(rule.pieces_per_polybag), 1))} polybags · rule {rule.rule_code} ({rule.scope})</> : null}</span>}
       footer={<>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
@@ -123,7 +126,25 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
         <Textarea label="Remarks" rows={1} value={f.remarks} onChange={(e) => setF({ ...f, remarks: e.target.value })} />
       </FormSection>
       {loading && <LoadingBlock rows={3} />}
-      {preview && !rule && <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-800">No active packing rule applies — <Link className="underline" to="/logistics/packing/rules">add one in Packing rules</Link> (a company default with no buyer / style / PO is enough).</div>}
+      {preview && !rule && (
+        <div id="no-rule" className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-800">
+          <span><b>Step 2 first:</b> no active packing rule applies to this job — the packing order needs one (pieces per polybag / carton, mixing).</span>
+          <Button size="sm" id="create-rule-here" onClick={() => setRuleFor(true)}>Create packing rule for this job</Button>
+          <Link className="underline" to="/logistics/packing/rules">or open Packing rules</Link>
+        </div>
+      )}
+      {preview && preview.rows.length > 0 && preview.rows.every((x) => !n(x.ready)) && (
+        <div id="fg-empty" className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-800">
+          <b>Step 1 first:</b> nothing of this job / style is in the FG store yet
+          {preview.rows.some((x) => n(x.awaiting_fg)) ? <> — {fmtNumber(preview.rows.reduce((a, x) => a + n(x.awaiting_fg), 0))} finished PCS are waiting for an FG receipt</> : null}.{' '}
+          <Link className="underline" to="/production/fg-receipts">Receive them on FG Receipts</Link>, then come back.
+        </div>
+      )}
+      {ruleFor && job && (
+        <RuleModal rule={{ packing_mode: 'INDIVIDUAL_PIECE', pieces_per_polybag: 1, standard_pieces_per_carton: 50, allow_partial_carton: 1, is_active: 1,
+          rule_name: `${job.job_no} packing`, so_id: job.id, buyer_id: (job as any).buyer_id ?? null, style_id: styleId || null }}
+          onClose={() => setRuleFor(false)} onSaved={() => { setRuleFor(false); setReload((x) => x + 1); }} />
+      )}
       {preview && rule && (
         <div className="mb-3 text-[12px] text-slate-600">Rule <b>{rule.rule_code}</b> ({rule.scope}, rev {rule.revision}): {rule.standard_pieces_per_carton} pcs / carton, {rule.pieces_per_polybag} pc / polybag,
           {n(rule.allow_mixed_sizes) ? ' mixed sizes' : ' solid size'}, {n(rule.allow_mixed_colours) ? 'mixed colours' : 'solid colour'}, partial {n(rule.allow_partial_carton) ? 'allowed' : 'not allowed'}.</div>

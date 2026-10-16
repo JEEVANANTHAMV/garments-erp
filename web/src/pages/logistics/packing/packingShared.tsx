@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Package, Rows3, Shirt, ScanLine, BarChart3, Settings2, ListChecks } from 'lucide-react';
+import { Package, Rows3, Shirt, ScanLine, BarChart3, Settings2, ListChecks, PackageCheck } from 'lucide-react';
 import clsx from 'clsx';
 import { Badge, Button, Input, Select, Modal, FormSection } from '../../../components/ui';
 import { api, http } from '../../../lib/api';
@@ -15,7 +15,7 @@ export interface Rule {
   packing_mode: 'BUNDLE_QUANTITY' | 'INDIVIDUAL_PIECE'; pieces_per_polybag: number; polybag_trim_id: number | null; carton_trim_id: number | null;
   standard_pieces_per_carton: number; allow_mixed_sizes: number; allow_mixed_colours: number; allow_partial_carton: number; allow_overpack: number;
   label_template: string | null; effective_from: string | null; effective_to: string | null; is_active: number; revision: number; remarks?: string | null;
-  buyer_name?: string; style_code?: string; job_no?: string; buyer_po_no?: string; polybag_trim_name?: string; carton_trim_name?: string; used_by?: number; scope?: string;
+  buyer_name?: string; style_code?: string; job_no?: string; buyer_po_no?: string; polybag_trim_name?: string; carton_trim_name?: string; used_by?: number; open_old_rev?: number; scope?: string;
 }
 export interface EligRow {
   color_id: number; size_id: number; color_name: string; size_code: string; sku_id: number | null; order_qty: number; ready: number;
@@ -39,6 +39,7 @@ export interface Order {
   warehouse_name: string | null; remarks: string | null; approved_at: string | null; approved_by_name: string | null; cancel_reason: string | null;
   variance_approved_at: string | null; variance_note: string | null; cartons_total: number; cartons_posted: number; pieces_posted: number; pieces_unposted: number;
   rule?: Rule; lines?: EligRow[]; cartons?: CartonRow[]; variance?: Variance; variance_needs_approval?: boolean; rule_revision?: number;
+  rule_latest?: { revision: number; is_active: boolean; packing_mode: string; newer: boolean } | null; can_apply_rule?: boolean;
 }
 export interface Trim { id: number; trim_code: string; trim_name: string; trim_type: 'POLYBAG' | 'CARTON'; uom: string; stock_qty: number }
 export interface Meta { trims: Trim[]; settings: Record<string, string>; can_approve: boolean }
@@ -66,26 +67,34 @@ export function useOrder(id: number | null | undefined) {
 
 /* ─────────────────────────────────────────────── chrome */
 
+// The packing steps in the order they are done (client call 16-Oct-2026: "first the rule or the packing order?")
 const TABS = [
-  { to: '/logistics/packing/orders', label: 'Packing orders', icon: Package },
-  { to: '/logistics/packing/polybag', label: 'Piece / polybag entry', icon: Shirt },
-  { to: '/logistics/packing/cartons', label: 'Carton box entry', icon: Rows3 },
-  { to: '/logistics/packing/verify', label: 'Verify / seal', icon: ScanLine },
-  { to: '/logistics/packing/reports', label: 'Reports', icon: BarChart3 },
-  { to: '/logistics/packing/rules', label: 'Packing rules', icon: Settings2 },
-  { to: '/logistics/packing-lists', label: 'Packing lists', icon: ListChecks },
+  { to: '/production/fg-receipts', label: 'FG receipt', icon: PackageCheck, step: 1, hint: 'Receive finished PCS into the FG store — only these can be packed' },
+  { to: '/logistics/packing/rules', label: 'Packing rule', icon: Settings2, step: 2, hint: 'How the buyer packs: pieces per polybag / carton, mixing — needed before a packing order' },
+  { to: '/logistics/packing/orders', label: 'Packing order', icon: Package, step: 3, hint: 'Plan the job / style from the FG store, then approve' },
+  { to: '/logistics/packing/polybag', label: 'Piece / polybag entry', icon: Shirt, step: 4, hint: 'Bag the pieces (needed for individual-piece rules)' },
+  { to: '/logistics/packing/cartons', label: 'Carton box entry', icon: Rows3, step: 5, hint: 'Put the pieces into cartons' },
+  { to: '/logistics/packing/verify', label: 'Verify / seal / post', icon: ScanLine, step: 6, hint: 'Verify, seal and post the cartons' },
+  { to: '/logistics/packing-lists', label: 'Packing list', icon: ListChecks, step: 7, hint: 'Make the packing list from the posted cartons, then ship' },
+  { to: '/logistics/packing/reports', label: 'Reports', icon: BarChart3, step: 0, hint: 'Packing reports' },
 ];
 
 /** Step strip shared by the packing screens (order → polybag → carton → verify → reports). */
 export function PackingNav({ active }: { active: string }) {
   return (
     <div className="mb-4 flex flex-wrap gap-1.5" id="packing-nav">
-      {TABS.map((t) => (
-        <Link key={t.to} to={t.to}
-          className={clsx('inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12.5px] font-medium',
-            active === t.to ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-surface-border bg-white text-slate-600 hover:bg-surface-hover')}>
-          <t.icon size={14} />{t.label}
-        </Link>
+      {TABS.map((t, i) => (
+        <span key={t.to} className="inline-flex items-center gap-1.5">
+          {i > 0 && t.step > 0 && <span className="text-slate-300" aria-hidden>→</span>}
+          <Link to={t.to} title={t.hint} data-step={t.step || undefined}
+            className={clsx('inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12.5px] font-medium',
+              t.step === 0 && 'ml-3',
+              active === t.to ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-surface-border bg-white text-slate-600 hover:bg-surface-hover')}>
+            {t.step > 0 && <span className={clsx('inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold',
+              active === t.to ? 'bg-brand-600 text-white' : 'bg-slate-200 text-slate-600')}>{t.step}</span>}
+            <t.icon size={14} />{t.label}
+          </Link>
+        </span>
       ))}
     </div>
   );

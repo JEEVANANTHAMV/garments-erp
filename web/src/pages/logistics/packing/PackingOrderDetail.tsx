@@ -51,6 +51,19 @@ export function PackingOrderDetailPage() {
           {open && can('PACKING.UPDATE') && <Button variant="danger" onClick={() => setCancel(true)}><Ban size={15} />Cancel order</Button>}
         </>} />
       <PackingNav active="/logistics/packing/orders" />
+      {o.rule_latest?.newer && open && (
+        <div id="rule-newer" className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">
+          <span>
+            This order uses rule <b>{rule.rule_code} rev {o.rule_revision}</b> ({o.packing_mode === 'INDIVIDUAL_PIECE' ? 'individual piece' : 'bundle / qty'}).
+            {o.rule_latest.is_active
+              ? <> The rule was changed after the order was made — now rev <b>{o.rule_latest.revision}</b> ({o.rule_latest.packing_mode === 'INDIVIDUAL_PIECE' ? 'individual piece' : 'bundle / qty'}).</>
+              : <> That rule has been deactivated.</>}
+          </span>
+          {o.can_apply_rule && can('PACKING.UPDATE')
+            ? <Button size="sm" id="apply-rule" loading={busy === 'rule'} onClick={() => act('rule', () => http.post(`/packing/orders/${id}/apply-rule`), 'Latest packing rule applied to the order')}>Apply latest rule</Button>
+            : <span className="text-[11.5px]">The order has polybags / cartons — void them, or cancel the order and create a new one.</span>}
+        </div>
+      )}
 
       <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
         <Stat label="Order qty" value={fmtNumber(tot('order_qty'))} />

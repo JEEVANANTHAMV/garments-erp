@@ -39,7 +39,8 @@ export function PackingRulesPage() {
                 <td className="td">{[n(r.allow_mixed_sizes) && 'sizes', n(r.allow_mixed_colours) && 'colours'].filter(Boolean).join(' + ') || 'solid'}{n(r.allow_partial_carton) ? ' · partial' : ''}{n(r.allow_overpack) ? ' · overpack' : ''}</td>
                 <td className="td">{r.polybag_trim_name ?? '—'} / {r.carton_trim_name ?? '—'}</td>
                 <td className="td">{r.effective_from ? fmtDate(r.effective_from) : '…'} – {r.effective_to ? fmtDate(r.effective_to) : '…'}</td>
-                <td className="td">{n(r.used_by) ? `${r.used_by} order(s)` : '—'}</td>
+                <td className="td">{n(r.used_by) ? `${r.used_by} order(s)` : '—'}
+                  {n(r.open_old_rev) ? <div className="text-[11px] text-amber-700" data-old-rev={r.id} title="Open packing orders made before the last change keep the older revision — open the order → Apply latest rule">{r.open_old_rev} open on an older revision</div> : null}</td>
                 <td className="td whitespace-nowrap text-right">
                   {can('PACKING.UPDATE') && <button className="mr-2 text-brand-700 hover:underline" onClick={() => setEditing(r)}>Edit</button>}
                   {can('PACKING.UPDATE') && <button className="text-slate-600 hover:underline" onClick={() => toggle(r)}>{n(r.is_active) ? 'Deactivate' : 'Activate'}</button>}
@@ -49,12 +50,17 @@ export function PackingRulesPage() {
           </table>
         )}
       </Card>
-      {editing && <RuleModal rule={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); qc.invalidateQueries({ queryKey: ['packing-rules'] }); toast('Packing rule saved'); }} />}
+      {editing && <RuleModal rule={editing} onClose={() => setEditing(null)} onSaved={(row) => {
+        setEditing(null); qc.invalidateQueries({ queryKey: ['packing-rules'] });
+        toast(n(row?.open_old_rev)
+          ? `Saved as revision ${row.revision}. ${row.open_old_rev} open packing order(s) keep the older revision — open the order and click "Apply latest rule" (only before polybags / cartons)`
+          : `Packing rule saved${row?.revision ? ` (revision ${row.revision}) — new packing orders use it` : ''}`);
+      }} />}
     </div>
   );
 }
 
-function RuleModal({ rule, onClose, onSaved }: { rule: Partial<Rule>; onClose: () => void; onSaved: () => void }) {
+export function RuleModal({ rule, onClose, onSaved }: { rule: Partial<Rule>; onClose: () => void; onSaved: (row?: any) => void }) {
   const meta = usePackingMeta();
   const buyers = useLookup('buyers');
   const styles = useLookup('styles');
@@ -69,12 +75,17 @@ function RuleModal({ rule, onClose, onSaved }: { rule: Partial<Rule>; onClose: (
     const id = (v: unknown) => (v ? Number(v) : null);
     const body = { ...f, buyer_id: id(f.buyer_id), style_id: id(f.style_id), so_id: id(f.so_id), polybag_trim_id: id(f.polybag_trim_id), carton_trim_id: id(f.carton_trim_id),
       effective_from: f.effective_from || null, effective_to: f.effective_to || null };
-    try { if (rule.id) await http.put(`/packing/rules/${rule.id}`, body); else await http.post('/packing/rules', body); onSaved(); } catch (e) { setErr(errMsg(e)); } finally { setBusy(false); }
+    try {
+      const r = rule.id ? await http.put<{ data: any }>(`/packing/rules/${rule.id}`, body) : await http.post<{ data: any }>('/packing/rules', body);
+      onSaved(r.data);
+    } catch (e) { setErr(errMsg(e)); } finally { setBusy(false); }
   };
   const trims = meta.data?.trims ?? [];
   return (
     <Modal open onClose={onClose} size="lg" icon={<Settings2 size={16} />} title={rule.id ? `Edit packing rule ${rule.rule_code}` : 'New packing rule'}
-      subtitle={rule.id && n(rule.used_by) ? 'Orders already made keep their snapshot; saving makes a new revision.' : 'Leave buyer / style / PO blank for the company default.'}
+      subtitle={rule.id && n(rule.used_by)
+        ? 'Saving makes a new revision. New packing orders use it; orders already made keep their copy until you open them and click "Apply latest rule" (only before polybags / cartons).'
+        : 'Leave buyer / style / PO blank for the company default.'}
       footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button id="save-rule" loading={busy} onClick={save}>Save rule</Button></>}>
       {err && <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-700">{err}</div>}
       <FormSection title="Rule" cols={4}>

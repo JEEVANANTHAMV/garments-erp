@@ -60,7 +60,10 @@ const ruleSchema = z.object({
 
 const RULE_SELECT = `SELECT r.*, b.party_name buyer_name, st.style_code, COALESCE(NULLIF(so.io_no,''), so.so_no) job_no, so.buyer_po_no,
        pt.trim_name polybag_trim_name, ct.trim_name carton_trim_name,
-       (SELECT COUNT(*) FROM trx_packing p WHERE p.packing_rule_id = r.id) used_by
+       (SELECT COUNT(*) FROM trx_packing p WHERE p.packing_rule_id = r.id) used_by,
+       -- open orders still on an older revision of the rule (they keep their snapshot until "Apply latest rule")
+       (SELECT COUNT(*) FROM trx_packing p WHERE p.packing_rule_id = r.id AND p.order_status IN ('DRAFT','APPROVED','IN_PROGRESS')
+           AND p.rule_revision < r.revision) open_old_rev
   FROM mst_packing_rule r
   LEFT JOIN mst_party b ON b.id = r.buyer_id LEFT JOIN mst_style st ON st.id = r.style_id
   LEFT JOIN trx_sales_order so ON so.id = r.so_id
@@ -292,6 +295,42 @@ packingEngineRouter.post('/orders', requirePermission('PACKING.CREATE'), ah(asyn
   res.status(201).json({ data: await orderDetail(cid, id) });
 }));
 
+/**
+ * POST /packing/orders/:id/apply-rule — re-take the latest revision of the order's packing rule (or, when that rule
+ * was deactivated, the rule that applies to the job now) on an order that has not started: DRAFT / APPROVED with no
+ * polybag entries and no cartons (client 16-Oct-2026: "I changed the rule to individual piece, the order still showed bundle").
+ */
+packingEngineRouter.post('/orders/:id/apply-rule', requirePermission('PACKING.UPDATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = Number(req.params.id);
+  await transaction(async (tx) => {
+    const o = await loadOrder(tx, cid, id, true);
+    if (!['DRAFT', 'APPROVED'].includes(o.order_status)) throw BadRequest(`Packing order ${o.pack_no} is ${o.order_status} — only an order that has not started can take a new rule`);
+    const started = await txQueryOne<any>(tx,
+      `SELECT (SELECT COUNT(*) FROM trx_packing_polybag WHERE packing_id = ? AND status <> 'VOID') bags,
+              (SELECT COUNT(*) FROM trx_carton WHERE packing_id = ? AND carton_status <> 'VOID') cartons`, [id, id]);
+    if (n(started?.bags) || n(started?.cartons)) {
+      throw BadRequest(`Packing order ${o.pack_no} already has ${n(started.bags)} polybag entr(ies) / ${n(started.cartons)} carton(s) — void them, or cancel the order and create a new one`);
+    }
+    let rule: any = o.packing_rule_id ? await txQueryOne<any>(tx, `SELECT * FROM mst_packing_rule WHERE id = ? AND company_id = ? AND is_active = 1`, [o.packing_rule_id, cid]) : null;
+    if (rule) rule.scope = 'Chosen';
+    else {
+      const so = await txQueryOne<any>(tx, `SELECT buyer_id FROM trx_sales_order WHERE id = ?`, [o.so_id]);
+      rule = await resolveRule(tx, cid, Number(o.so_id), Number(o.style_id), so?.buyer_id ?? null);
+    }
+    if (!rule) throw BadRequest('No active packing rule applies to this job — add one in Packing rules');
+    const old = ruleOf(o);
+    if (Number(rule.id) === Number(o.packing_rule_id) && Number(rule.revision) === Number(o.rule_revision)) throw BadRequest(`Packing order ${o.pack_no} already has the latest rule (${rule.rule_code} rev ${rule.revision})`);
+    await txExecute(tx,
+      `UPDATE trx_packing SET packing_rule_id = ?, rule_revision = ?, rule_snapshot = ?, packing_mode = ?, pack_method = ?, updated_at = NOW() WHERE id = ?`,
+      [rule.id, rule.revision, JSON.stringify(rule), rule.packing_mode,
+       rule.allow_mixed_colours ? 'ASSORTED_COLOR_ASSORTED_SIZE' : rule.allow_mixed_sizes ? 'SOLID_COLOR_ASSORTED_SIZE' : 'SOLID_COLOR_SOLID_SIZE', id]);
+    await audit(req, 'trx_packing', id, 'UPDATE', { rule: old.rule_code, rule_revision: o.rule_revision, packing_mode: o.packing_mode },
+      { rule: rule.rule_code, rule_revision: rule.revision, packing_mode: rule.packing_mode }, tx);
+  });
+  res.json({ data: await orderDetail(cid, id), message: 'Latest packing rule applied' });
+}));
+
 packingEngineRouter.put('/orders/:id', requirePermission('PACKING.UPDATE'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = Number(req.params.id);
@@ -381,7 +420,13 @@ async function orderDetail(cid: number, id: number) {
          FROM trx_carton c LEFT JOIN mst_trim ct ON ct.id = c.carton_trim_id LEFT JOIN mst_trim pt ON pt.id = c.polybag_trim_id
         WHERE c.packing_id = ? ORDER BY c.carton_seq, c.id`, [id]);
     const variance = await orderVariance(tx, head);
-    return { ...head, rule: ruleOf(head), lines, cartons, variance, variance_needs_approval: variance.beyond_tolerance && !head.variance_approved_at };
+    const latest = head.packing_rule_id ? await txQueryOne<any>(tx, `SELECT revision, is_active, packing_mode FROM mst_packing_rule WHERE id = ?`, [head.packing_rule_id]) : null;
+    const started = await txQueryOne<any>(tx,
+      `SELECT (SELECT COUNT(*) FROM trx_packing_polybag WHERE packing_id = ? AND status <> 'VOID') + (SELECT COUNT(*) FROM trx_carton WHERE packing_id = ? AND carton_status <> 'VOID') q`, [id, id]);
+    const rule_latest = latest ? { revision: Number(latest.revision), is_active: !!Number(latest.is_active), packing_mode: latest.packing_mode,
+      newer: Number(latest.revision) > Number(head.rule_revision) || !Number(latest.is_active) } : null;
+    return { ...head, rule: ruleOf(head), rule_latest, can_apply_rule: ['DRAFT', 'APPROVED'].includes(head.order_status) && !n(started?.q) && !!rule_latest?.newer,
+      lines, cartons, variance, variance_needs_approval: variance.beyond_tolerance && !head.variance_approved_at };
   });
 }
 
