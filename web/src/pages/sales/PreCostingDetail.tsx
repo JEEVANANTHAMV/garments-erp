@@ -419,14 +419,16 @@ function PreCostingSheet() {
       ...row,
       trim_code: m.code ?? row.trim_code,
       description: m.label,
-      uom: m.base_uom || row.uom,
+      uom: m.uom_code || row.uom,
       rate: std > 0 ? std : row.rate,
       certification: certOf('trims', id) || row.certification || '',
     };
   };
+  // Item name only (client 16-Oct-2026: the code in front hid the item in the narrow dropdown); the code is still
+  // stored on the row (trim_code) from the master, just not shown.
   const masterOptions = (items: any[] | undefined, manual: string) => [
     { value: '', label: manual },
-    ...(items ?? []).map((m) => ({ value: String(m.id), label: m.code ? `${m.code} — ${m.label}` : String(m.label) })),
+    ...(items ?? []).map((m) => ({ value: String(m.id), label: String(m.label ?? m.code ?? '') })),
   ];
 
   // Load Style BOM & Rates
@@ -1221,7 +1223,7 @@ function PreCostingSheet() {
               rows={yarns}
               onChange={(rows) => setYarns((prev) => withMasterPick(rows, prev, 'yarn_id', pickYarn))}
               columns={[
-                { key: 'yarn_id', label: 'Yarn (master)', type: 'select', options: masterOptions(yarnMaster.data, '— manual —'), width: 'w-44' },
+                { key: 'yarn_id', label: 'Yarn (master)', type: 'select', options: masterOptions(yarnMaster.data, '— manual —'), width: 'w-56' },
                 { key: 'yarn_name', label: 'Description', type: 'text', placeholder: 'e.g. 30s Combed Cotton' },
                 { key: 'yarn_count', label: 'Count', type: 'text', width: 'w-24' },
                 { key: 'composition', label: 'Composition', type: 'text', width: 'w-28' },
@@ -1261,10 +1263,10 @@ function PreCostingSheet() {
               rows={trims}
               onChange={(rows) => setTrims((prev) => withMasterPick(rows, prev, 'trim_id', pickTrim))}
               columns={[
-                { key: 'trim_id', label: 'Trim (master)', type: 'select', options: masterOptions(trimMaster.data, '— manual —'), width: 'w-44' },
-                { key: 'trim_code', label: 'Code', type: 'text', width: 'w-24' },
+                { key: 'trim_id', label: 'Trim (master)', type: 'select', options: masterOptions(trimMaster.data, '— manual —'), width: 'w-56' },
                 { key: 'description', label: 'Description', type: 'text', placeholder: 'e.g. Woven main label' },
-                { key: 'uom', label: 'UOM', type: 'text', width: 'w-14' },
+                { key: 'color', label: 'Colour', type: 'text', placeholder: 'e.g. Black', width: 'w-24' },
+                { key: 'uom', label: 'UOM', type: 'text', width: 'w-16' },
                 { key: 'certification', label: 'Certification', type: 'select', options: TRIM_CERT_OPTIONS, width: 'w-24' },
                 { key: 'consumption', label: 'Cons / Pc', type: 'number', step: '0.001', width: 'w-20' },
                 { key: 'wastage_pct', label: 'Wastage %', type: 'number', step: '0.5', width: 'w-16' },
