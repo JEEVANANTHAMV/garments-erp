@@ -775,6 +775,13 @@ export const transactionResources: ResourceConfig[] = [
   },
   {
     path: 'packing-lists', table: 'trx_packing_list', permission: 'EXPORT', label: 'Packing List',
+    beforeDelete: async (_req, id, row) => {
+      if (row?.status && row.status !== 'DRAFT') throw BadRequest(`${row.pl_no} is ${row.status} — only a draft packing list is deleted`);
+      const packed = await queryOne<any>(`SELECT COUNT(*) k FROM trx_carton WHERE pl_plan_id = ? AND carton_status <> 'VOID'`, [id]);
+      if (Number(packed?.k)) throw BadRequest(`${packed.k} carton(s) were packed for ${row?.pl_no ?? 'this packing list'} — void them first`);
+      const follow = await queryOne<any>(`SELECT pl_no FROM trx_packing_list WHERE follow_of_id = ? LIMIT 1`, [id]);
+      if (follow) throw BadRequest(`Follow-up packing list ${follow.pl_no} ships this list's shortage — delete that first`);
+    },
     searchable: ['pl_no'], sortable: ['pl_no', 'pl_date'], defaultSort: 't.pl_date',
     hasIsActive: false, softDelete: false, filters: ['invoice_id', 'packing_id'],
     autoNumber: { column: 'pl_no', docType: 'PACKING_LIST' },

@@ -15,6 +15,7 @@ import {
   type PackingUnit, type SetDef,
 } from './packingEngineCore.js';
 import { packingReportsRouter } from './packingEngineReports.js';
+import { assertCartonForPlan, plansForOrder } from './packingPlan.service.js';
 
 /**
  * Packing engine API (doc §14), mounted at /api/packing:
@@ -494,6 +495,7 @@ async function orderDetail(cid: number, id: number) {
     const lines = await eligibility(tx, jobKeyOf(head), Number(head.so_id), id);
     const cartons = await txQuery<any>(tx,
       `SELECT c.*, ct.trim_name carton_trim_name, pt.trim_name polybag_trim_name,
+              (SELECT pl.pl_no FROM trx_packing_list pl WHERE pl.id = c.pl_plan_id) pl_plan_no,
               (SELECT GROUP_CONCAT(CONCAT(col.color_name,'/',sz.size_code,':',cc.qty) ORDER BY col.color_name, sz.sort_order SEPARATOR ', ')
                  FROM trx_carton_content cc LEFT JOIN mst_color col ON col.id = cc.color_id LEFT JOIN mst_size sz ON sz.id = cc.size_id WHERE cc.carton_id = c.id) contents
          FROM trx_carton c LEFT JOIN mst_trim ct ON ct.id = c.carton_trim_id LEFT JOIN mst_trim pt ON pt.id = c.polybag_trim_id
@@ -764,7 +766,11 @@ const cartonSchema = z.object({
   length_cm: nonNeg(), width_cm: nonNeg(), height_cm: nonNeg(),
   seal_no: str(60), remarks: str(300),
   save_as_draft: z.boolean().optional(),
-}).refine((b) => b.gross_weight_kg == null || b.net_weight_kg == null || b.gross_weight_kg >= b.net_weight_kg,
+  // packed for a released plan packing list (buyer's list): the list and its carton number
+  pl_plan_id: z.coerce.number().int().positive().nullish(),
+  pl_ctn_no: z.coerce.number().int().positive().max(1_000_000).nullish(),
+})
+  .refine((b) => (b.pl_plan_id == null) === (b.pl_ctn_no == null), { message: 'Pick both the packing list and its carton number', path: ['pl_ctn_no'] }).refine((b) => b.gross_weight_kg == null || b.net_weight_kg == null || b.gross_weight_kg >= b.net_weight_kg,
   { message: 'Gross weight must be at least the net weight', path: ['gross_weight_kg'] });
 
 const cbmOf = (l?: number | null, w?: number | null, h?: number | null) => (l && w && h ? Number(((l * w * h) / 1_000_000).toFixed(5)) : null);
@@ -784,7 +790,8 @@ async function cartonDetail(cid: number, id: number) {
   const c = await queryOne<any>(
     `SELECT c.*, p.pack_no, p.io_no, p.so_id, p.style_id, p.order_status, p.packing_mode, p.rule_snapshot, so.so_no, so.buyer_po_no,
             b.party_name buyer_name, st.style_code, st.style_name, ct.trim_name carton_trim_name, pt.trim_name polybag_trim_name,
-            (SELECT COUNT(*) FROM trx_carton x WHERE x.packing_id = c.packing_id AND x.carton_status <> 'VOID') carton_count
+            (SELECT COUNT(*) FROM trx_carton x WHERE x.packing_id = c.packing_id AND x.carton_status <> 'VOID') carton_count,
+            (SELECT pl.pl_no FROM trx_packing_list pl WHERE pl.id = c.pl_plan_id) pl_plan_no
        FROM trx_carton c JOIN trx_packing p ON p.id = c.packing_id JOIN trx_sales_order so ON so.id = p.so_id
        LEFT JOIN mst_party b ON b.id = so.buyer_id LEFT JOIN mst_style st ON st.id = p.style_id
        LEFT JOIN mst_trim ct ON ct.id = c.carton_trim_id LEFT JOIN mst_trim pt ON pt.id = c.polybag_trim_id
@@ -810,6 +817,14 @@ async function cartonDetail(cid: number, id: number) {
   return c;
 }
 
+/** Released plan packing lists (buyer lists) this order's cartons can be packed for, with each carton number's state. */
+packingEngineRouter.get('/orders/:id/plans', requirePermission('PACKING.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const o = await queryOne<any>(`SELECT id, so_id, style_id FROM trx_packing WHERE id = ? AND company_id = ?`, [Number(req.params.id), cid]);
+  if (!o) throw NotFound('Packing order not found');
+  res.json({ data: await plansForOrder(cid, { so_id: Number(o.so_id), style_id: Number(o.style_id) }) });
+}));
+
 packingEngineRouter.get('/orders/:id/cartons', requirePermission('PACKING.VIEW'), ah(async (req, res) => {
   const d = await orderDetail(req.user!.companyId, Number(req.params.id));
   res.json({ data: d.cartons });
@@ -828,6 +843,7 @@ packingEngineRouter.post('/orders/:id/cartons', requirePermission('PACKING.CREAT
     await assertPackagingTrim(tx, cid, ctnTrim, 'CARTON');
     await assertPackagingTrim(tx, cid, bagTrim, 'POLYBAG');
     const v = await validateCarton(tx, o, b.lines, { stage: 'save' });
+    if (b.pl_plan_id) await assertCartonForPlan(tx, cid, o, b.pl_plan_id, b.pl_ctn_no!, b.lines, null);
     const cartonNo = (b.carton_no ?? await nextDocNumber(tx, cid, 'PACKING_CARTON')).toUpperCase();
     try {
       await txExecute(tx, `INSERT INTO trx_carton_no_registry (company_id, carton_no) VALUES (?,?)`, [cid, cartonNo]);
@@ -840,11 +856,13 @@ packingEngineRouter.post('/orders/:id/cartons', requirePermission('PACKING.CREAT
     const status = b.save_as_draft ? 'DRAFT' : 'OPEN';
     const ins = await txExecute(tx,
       `INSERT INTO trx_carton (packing_id, carton_no, carton_type, length_cm, width_cm, height_cm, net_weight_kg, gross_weight_kg, cbm, barcode,
-         carton_status, is_posted, company_id, carton_seq, pieces_total, polybag_qty, std_polybag_qty, carton_trim_id, polybag_trim_id, is_partial, seal_no, remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?)`,
+         carton_status, is_posted, company_id, carton_seq, pieces_total, polybag_qty, std_polybag_qty, carton_trim_id, polybag_trim_id, is_partial, seal_no, remarks, created_by,
+         pl_plan_id, pl_ctn_no)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [id, cartonNo, ctnTrim ? (await txQueryOne<any>(tx, `SELECT trim_code FROM mst_trim WHERE id = ?`, [ctnTrim]))?.trim_code ?? null : null,
        b.length_cm ?? null, b.width_cm ?? null, b.height_cm ?? null, b.net_weight_kg ?? null, b.gross_weight_kg ?? null, cbmOf(b.length_cm, b.width_cm, b.height_cm),
-       cartonNo, status, cid, n(seq?.s), v.total, bags, v.std_polybags, ctnTrim, bagTrim, v.is_partial, b.seal_no, b.remarks, req.user!.id]);
+       cartonNo, status, cid, n(seq?.s), v.total, bags, v.std_polybags, ctnTrim, bagTrim, v.is_partial, b.seal_no, b.remarks, req.user!.id,
+       b.pl_plan_id ?? null, b.pl_ctn_no ?? null]);
     await txExecute(tx, `UPDATE trx_carton_no_registry SET carton_id = ? WHERE company_id = ? AND carton_no = ?`, [ins.insertId, cid, cartonNo]);
     await writeCartonLines(tx, ins.insertId, o, b.lines);
     if (o.order_status === 'APPROVED') await txExecute(tx, `UPDATE trx_packing SET order_status = 'IN_PROGRESS' WHERE id = ?`, [id]);
@@ -873,14 +891,18 @@ packingEngineRouter.put('/cartons/:id', requirePermission('PACKING.UPDATE'), ah(
     await assertPackagingTrim(tx, cid, bagTrim, 'POLYBAG');
     if (b.carton_no && b.carton_no.toUpperCase() !== c.carton_no) throw BadRequest('The carton number cannot be changed — void the carton and make a new one');
     const v = await validateCarton(tx, o, b.lines, { cartonId: id, stage: 'save' });
+    // plan link: not sent → kept; null → the carton is no longer packed for a plan
+    const planId = b.pl_plan_id !== undefined ? b.pl_plan_id : (c.pl_plan_id ? Number(c.pl_plan_id) : null);
+    const planCtn = b.pl_plan_id !== undefined ? b.pl_ctn_no ?? null : (c.pl_ctn_no ? Number(c.pl_ctn_no) : null);
+    if (planId) await assertCartonForPlan(tx, cid, o, planId, planCtn!, b.lines, id);
     const before = { lines: await cartonLines(tx, id), polybag_qty: c.polybag_qty, gross: c.gross_weight_kg, net: c.net_weight_kg };
     const bags = b.polybag_qty ?? b.lines.reduce((a, l) => a + (l.polybag_qty ?? stdPolybags(l.qty, r)), 0);
     const status = b.save_as_draft ? 'DRAFT' : 'OPEN';
     await txExecute(tx,
       `UPDATE trx_carton SET length_cm=?, width_cm=?, height_cm=?, net_weight_kg=?, gross_weight_kg=?, cbm=?, carton_status=?, pieces_total=?, polybag_qty=?, std_polybag_qty=?,
-         carton_trim_id=?, polybag_trim_id=?, is_partial=?, seal_no=?, remarks=?, updated_at=NOW() WHERE id = ?`,
+         carton_trim_id=?, polybag_trim_id=?, is_partial=?, seal_no=?, remarks=?, pl_plan_id=?, pl_ctn_no=?, updated_at=NOW() WHERE id = ?`,
       [b.length_cm ?? null, b.width_cm ?? null, b.height_cm ?? null, b.net_weight_kg ?? null, b.gross_weight_kg ?? null, cbmOf(b.length_cm, b.width_cm, b.height_cm),
-       status, v.total, bags, v.std_polybags, ctnTrim, bagTrim, v.is_partial, b.seal_no, b.remarks, id]);
+       status, v.total, bags, v.std_polybags, ctnTrim, bagTrim, v.is_partial, b.seal_no, b.remarks, planId, planCtn, id]);
     await writeCartonLines(tx, id, o, b.lines);
     await cartonEvent(tx, req, c, 'UPDATE', c.carton_status, status, null, { lines: b.lines, polybags: bags });
     await audit(req, 'trx_carton', id, 'UPDATE', before, { lines: b.lines, polybag_qty: bags }, tx);
