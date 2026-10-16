@@ -9,6 +9,20 @@ import { http } from '../../lib/api';
 import { fmtDate, fmtDecimal } from '../../lib/format';
 import { today, monthStart, useAction, useStoresList, useStoresDoc, FilterBar, SimpleTable, ReportView, ReasonModal, InfoGrid, type Col } from './shared';
 
+/** Department master options (client 16-Oct-2026); an older typed department stays visible, marked. */
+function useDeptOptions() {
+  const depts = useLookup('departments');
+  return (current?: string) => {
+    const names = (depts.data ?? []).map((d: any) => String(d.label));
+    const cur = String(current ?? '').trim();
+    return [
+      ...(cur && !names.some((n) => n.toLowerCase() === cur.toLowerCase()) ? [{ value: cur, label: `${cur} (not in master)` }] : []),
+      ...names.map((n) => ({ value: n, label: n })),
+    ];
+  };
+}
+const DEPT_HINT = 'Departments come from Masters → Departments';
+
 /**
  * Bill Tracker (client tracker 14-Oct-2026): bill receipt (from vendor / department) → handover to the department
  * (to whom, date) → received back → submitted to accounts (date, recipient). /stores/bill-tracker?id=<id> opens one bill.
@@ -63,6 +77,7 @@ export default function BillTrackerPage() {
 }
 
 function BillEditor({ doc, onClose, onSaved }: { doc: any | null; onClose: () => void; onSaved: (d: any) => void }) {
+  const deptOptions = useDeptOptions();
   const [b, setB] = useState({
     entry_date: doc?.entry_date ?? today(), received_from: doc?.received_from ?? 'VENDOR', received_from_dept: doc?.received_from_dept ?? '', bill_no: doc?.bill_no ?? '',
     bill_date: doc?.bill_date ?? '', supplier_id: doc?.supplier_id ? String(doc.supplier_id) : '', purchase_or_process: doc?.purchase_or_process ?? '', amount: doc?.amount ? String(doc.amount) : '',
@@ -89,7 +104,8 @@ function BillEditor({ doc, onClose, onSaved }: { doc: any | null; onClose: () =>
         <Input label="Received on" type="date" required value={b.entry_date} onChange={(e) => setB({ ...b, entry_date: e.target.value })} />
         <Select label="Received from" required value={b.received_from} onChange={(e) => setB({ ...b, received_from: e.target.value })} options={[{ value: 'VENDOR', label: 'Vendor' }, { value: 'DEPARTMENT', label: 'Department' }]} />
         {b.received_from === 'DEPARTMENT'
-          ? <Input label="Department" required id="bill-from-dept" value={b.received_from_dept} onChange={(e) => setB({ ...b, received_from_dept: e.target.value })} />
+          ? <Select label="Department" required id="bill-from-dept" value={b.received_from_dept} placeholder="Select department…" hint={DEPT_HINT}
+              onChange={(e) => setB({ ...b, received_from_dept: e.target.value })} options={deptOptions(b.received_from_dept)} />
           : <div />}
       </FormSection>
       <FormSection title="Bill" cols={3}>
@@ -147,6 +163,7 @@ function BillView({ id, onClose, onEdit }: { id: number; onClose: () => void; on
 }
 
 function StepModal({ step, doc, busy, onClose, onSave }: { step: Step; doc: any; busy: boolean; onClose: () => void; onSave: (b: Record<string, string>) => void }) {
+  const deptOptions = useDeptOptions();
   const [v, setV] = useState<Record<string, string>>(step === 'handover' ? { handed_over_to: '', handover_department: doc.handover_department ?? '', handover_date: today() }
     : step === 'received-back' ? { received_back_date: today() } : { submitted_to_accounts_on: today(), accounts_recipient: '' });
   const title = { handover: 'Hand over to department', 'received-back': 'Received back from department', 'submit-accounts': 'Submit to accounts' }[step];
@@ -160,7 +177,8 @@ function StepModal({ step, doc, busy, onClose, onSave }: { step: Step; doc: any;
       <FormSection cols={1}>
         {step === 'handover' && <>
           <Input label="Handed over to" required id="step-to" value={v.handed_over_to} onChange={(e) => setV({ ...v, handed_over_to: e.target.value })} />
-          <Input label="Department" required id="step-dept" value={v.handover_department} onChange={(e) => setV({ ...v, handover_department: e.target.value })} />
+          <Select label="Department" required id="step-dept" value={v.handover_department} placeholder="Select department…" hint={DEPT_HINT}
+            onChange={(e) => setV({ ...v, handover_department: e.target.value })} options={deptOptions(v.handover_department)} />
           <Input label="Handover date" type="date" required value={v.handover_date} onChange={(e) => setV({ ...v, handover_date: e.target.value })} />
         </>}
         {step === 'received-back' && <Input label="Received back on" type="date" required value={v.received_back_date} onChange={(e) => setV({ ...v, received_back_date: e.target.value })} />}

@@ -43,6 +43,7 @@ export const NAV: NavSection[] = [
     items: [
       { label: 'Enquiries',          to: '/sales/enquiries', icon: FileText, perms: ['ENQUIRY.VIEW'] },
       { label: 'Samples',            to: '/sales/samples', icon: Beaker, perms: ['SAMPLE.VIEW'] },
+      { label: 'Styles',             to: '/masters/styles', icon: Shirt, perms: ['STYLE.VIEW'] },
       { label: 'Pre-Costing',        to: '/sales/pre-costings', icon: Calculator, perms: ['COSTING.VIEW'] },
       { label: 'Quotations',         to: '/sales/quotations', icon: FileSpreadsheet, perms: ['QUOTATION.VIEW'] },
       { label: 'Sales Orders',       to: '/sales/orders', icon: ShoppingCart, perms: ['SALES_ORDER.VIEW'] },
@@ -228,7 +229,6 @@ export const NAV: NavSection[] = [
     label: '14 · Masters & Setup',
     items: [
       { label: 'Business Partners',  to: '/masters/parties', icon: Users, perms: ['PARTY.VIEW'] },
-      { label: 'Styles',             to: '/masters/styles', icon: Shirt, perms: ['STYLE.VIEW'] },
       { label: 'Products',           to: '/masters/products', icon: Package, perms: ['PRODUCT.VIEW'] },
       { label: 'Yarns',              to: '/masters/yarns', icon: GitBranch, perms: ['MATERIAL.VIEW'] },
       { label: 'Yarn Counts',        to: '/masters/yarn-counts', icon: SlidersHorizontal, perms: ['MATERIAL.VIEW'] },
@@ -240,6 +240,7 @@ export const NAV: NavSection[] = [
       { label: 'Size Groups',        to: '/masters/size-groups', icon: Ruler, perms: ['SIZE.VIEW'] },
       { label: 'Warehouses',         to: '/masters/warehouses', icon: Warehouse, perms: ['WAREHOUSE.VIEW'] },
       { label: 'Bins & Racks',       to: '/masters/warehouse-bins', icon: Boxes, perms: ['WAREHOUSE.VIEW'] },
+      { label: 'Departments',        to: '/masters/departments', icon: Building2, perms: ['UNIT.VIEW'] },
       { label: 'Branches & Units',   to: '/masters/branches', icon: Building2, perms: ['BRANCH.VIEW', 'UNIT.VIEW'] },
       { label: 'Divisions',          to: '/masters/divisions', icon: Building2, perms: ['UNIT.VIEW'] },
       { label: 'Production Lines',   to: '/production/sewing-lines', icon: SlidersHorizontal, perms: ['PRODUCTION.VIEW'] },

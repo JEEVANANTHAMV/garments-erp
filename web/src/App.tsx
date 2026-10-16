@@ -10,7 +10,7 @@ import Dashboard from './pages/Dashboard';
 import {
   PartiesPage, PartyDetailPage, ProductsPage, YarnsPage, YarnDetailPage, YarnCountsPage, FabricsPage, FabricDetailPage,
   GsmPage, DiasPage, TrimsPage,
-  ColorsPage, WarehousesPage, WarehouseBinsPage, BranchesPage, UnitsPage, SizesPage, BatchesPage,
+  ColorsPage, DepartmentsPage, WarehousesPage, WarehouseBinsPage, BranchesPage, UnitsPage, SizesPage, BatchesPage,
 } from './pages/masters';
 import { SizeGroupsPage, SizeGroupDetailPage } from './pages/masters/SizeGroups';
 import { StylesPage, StyleDetailPage } from './pages/masters/Styles';
@@ -216,6 +216,7 @@ export default function App() {
                   <Route path="warehouse-bins" element={<WarehouseBinsPage />} />
                   <Route path="branches" element={<BranchesPage />} />
                   <Route path="units" element={<UnitsPage />} />
+                  <Route path="departments" element={<DepartmentsPage />} />
                   <Route path="divisions" element={<DivisionsPage />} />
                   <Route path="size-groups" element={<SizeGroupsPage />} />
                   <Route path="size-groups/:id" element={<SizeGroupDetailPage />} />

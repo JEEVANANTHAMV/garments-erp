@@ -263,6 +263,15 @@ export const masterResources: ResourceConfig[] = [
     ],
   },
   {
+    // Departments (client 16-Oct-2026): created here, picked in the Bill Tracker
+    path: 'departments', table: 'mst_department', permission: 'UNIT', label: 'Department',
+    searchable: ['dept_code', 'dept_name'], sortable: ['dept_code', 'dept_name'], defaultSort: 't.dept_name',
+    softDelete: false, hasAuditCols: false,
+    fields: [
+      f('dept_code', s.nullableStr(30)), f('dept_name', s.strReq(80)), f('remarks', s.nullableStr(255)), f('is_active', s.bool()),
+    ],
+  },
+  {
     path: 'size-groups', table: 'mst_size_group', permission: 'SIZE', label: 'Size Group',
     searchable: ['group_code', 'group_name', 'category', 'gender', 'description'],
     sortable: ['group_code', 'group_name'], defaultSort: 't.group_name',

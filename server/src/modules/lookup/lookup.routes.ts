@@ -38,6 +38,7 @@ const LOOKUPS: Record<string, LookupDef> = {
          ORDER BY pa.is_default DESC, pa.id ASC LIMIT 1) AS default_address
   FROM mst_party p WHERE p.company_id=? AND p.is_active=1 AND p.is_deleted=0 ORDER BY p.party_name`, scoped: true },
 
+  departments: { sql: `SELECT id, dept_code AS code, dept_name AS label FROM mst_department WHERE company_id=? AND is_active=1 ORDER BY dept_name`, scoped: true },
   colors:      { sql: `SELECT id, color_code AS code, color_name AS label, hex_value FROM mst_color WHERE company_id=? AND is_active=1 ORDER BY color_name`, scoped: true },
   'size-groups': { sql: `SELECT id, group_code AS code, group_name AS label, category, gender, description, (SELECT COUNT(*) FROM mst_size s WHERE s.size_group_id = mst_size_group.id AND s.is_active=1) AS size_count FROM mst_size_group WHERE company_id=? AND is_active=1 ORDER BY group_name`, scoped: true },
   sizes:         { sql: `SELECT sz.id, sz.size_code AS code, sz.size_label AS label, sz.sort_order, sz.size_code, sz.size_label, sz.body_measurement, g.group_name, sz.size_group_id FROM mst_size sz JOIN mst_size_group g ON g.id=sz.size_group_id WHERE g.company_id=? AND sz.is_active=1 ORDER BY g.group_name, sz.sort_order, sz.id`, scoped: true },

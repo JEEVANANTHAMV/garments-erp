@@ -275,6 +275,26 @@ export function ColorsPage() {
     ]} />;
 }
 
+/* -------------------------------------------------------- Departments */
+/** Departments (client 16-Oct-2026): created here, picked in the Bill Tracker (from / hand-over department). */
+export function DepartmentsPage() {
+  return <CrudPage
+    path="departments" title="Departments" permission="UNIT" singular="Department"
+    subtitle="Departments of the company — picked in the Bill Tracker (bill from a department / handed over to)"
+    defaultSort={{ key: 'dept_name', dir: 'asc' }}
+    columns={[
+      { key: 'dept_name', header: 'Department', sortable: true },
+      { key: 'dept_code', header: 'Code', sortable: true, render: (r: any) => <span className="font-mono text-[12px] text-brand-700">{r.dept_code ?? '—'}</span> },
+      { key: 'remarks', header: 'Remarks' },
+    ]}
+    fields={[
+      { name: 'dept_name', label: 'Department name', required: true },
+      { name: 'dept_code', label: 'Short code' },
+      { name: 'remarks', label: 'Remarks' },
+      activeField,
+    ]} />;
+}
+
 /* -------------------------------------------------------- Warehouses */
 export function WarehousesPage() {
   const TYPES = ['RAW_MATERIAL','WIP','FINISHED_GOODS','TRIMS','REJECTION','BONDED'];

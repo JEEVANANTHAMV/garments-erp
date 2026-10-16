@@ -64,11 +64,25 @@ billSpecialRouter.get('/bill-tracker/:id', BT_VIEW, ah(async (req, res) => {
   res.json({ data: r });
 }));
 
+/**
+ * Department from the master (client 16-Oct-2026: picked from a dropdown, never typed) — returns the master's spelling.
+ * `keep` = the value already on the bill: an older typed department may stay as it is.
+ */
+async function masterDept(cid: number, name: string | null | undefined, keep?: string | null) {
+  const v = String(name ?? '').trim();
+  if (!v) return null;
+  if (keep && v === String(keep).trim()) return v;
+  const d = await queryOne<any>(`SELECT dept_name FROM mst_department WHERE company_id = ? AND is_active = 1 AND LOWER(dept_name) = LOWER(?)`, [cid, v]);
+  if (!d) throw BadRequest(`Department "${v}" is not in the Department master — add it under Masters → Departments`);
+  return d.dept_name as string;
+}
+
 billSpecialRouter.post('/bill-tracker', BT_EDIT, ah(async (req, res) => {
   const cid = cidOf(req);
   const b = btSchema.parse(req.body);
   if (b.received_from === 'VENDOR' && !b.supplier_id) throw BadRequest('Select the supplier the bill came from');
   if (b.received_from === 'DEPARTMENT' && !b.received_from_dept) throw BadRequest('Enter the department the bill came from');
+  b.received_from_dept = b.received_from === 'DEPARTMENT' ? await masterDept(cid, b.received_from_dept) : null;
   const id = await transaction(async (tx) => {
     const no = await nextDocNumber(tx, cid, 'BILL_TRACKER');
     const r = await txExecute(tx,
@@ -88,6 +102,8 @@ billSpecialRouter.put('/bill-tracker/:id', BT_EDIT, ah(async (req, res) => {
   const b = btSchema.parse(req.body);
   const before = await mustGet<any>('trx_bill_tracker', cid, id, 'Bill');
   needStatus({ ...before, doc_no: `Bill ${before.bill_no}` }, ['RECEIVED'], 'edited');
+  if (b.received_from === 'DEPARTMENT' && !b.received_from_dept) throw BadRequest('Enter the department the bill came from');
+  b.received_from_dept = b.received_from === 'DEPARTMENT' ? await masterDept(cid, b.received_from_dept, before.received_from_dept) : null;
   await query(
     `UPDATE trx_bill_tracker SET entry_date = ?, received_from = ?, received_from_dept = ?, bill_no = ?, bill_date = ?, supplier_id = ?, purchase_or_process = ?,
             amount = ?, supplier_bill_id = ?, grn_id = ?, remarks = ?, updated_by = ? WHERE id = ?`,
@@ -110,6 +126,7 @@ for (const [step, cfg] of Object.entries(STEPS)) {
     const b = cfg.schema.parse(req.body) as Record<string, string>;
     const before = await mustGet<any>('trx_bill_tracker', cid, id, 'Bill');
     needStatus({ ...before, doc_no: `Bill ${before.bill_no}` }, [...cfg.from], `moved to ${cfg.to.replace(/_/g, ' ').toLowerCase()}`);
+    if ('handover_department' in b) b.handover_department = (await masterDept(cid, b.handover_department))!;
     const dates = Object.entries(b).filter(([k]) => k.endsWith('_date') || k.endsWith('_on'));
     for (const [, d] of dates) if (d < String(before.entry_date).slice(0, 10)) throw BadRequest('The date cannot be before the bill receipt date');
     const cols = Object.keys(b);
