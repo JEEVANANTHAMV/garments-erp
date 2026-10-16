@@ -105,6 +105,8 @@ export default function ProductionCostDetailPage() {
   const [standard, setStandard] = useState<{
     costing_no: string | null; approved: boolean; fob_price: number; currency_code?: string;
     available?: boolean; fx_rate?: number | null; fx_basis?: string; original_currency_code?: string | null;
+    version?: number | null; baseline_source?: string; quote_currency_code?: string | null; fob_price_fc?: number | null;
+    exchange_rate?: number | null; cmt_merged?: boolean;
   }>({
     costing_no: null, approved: false, fob_price: 0,
   });
@@ -113,6 +115,8 @@ export default function ProductionCostDetailPage() {
   const [quality, setQuality] = useState<{ std_rate_valuations: number; unpriced_dcs: number; has_job: boolean } | null>(null);
   // production rate card of the job (rate fixing — approve & lock): production budget between merchandiser and actual
   const [production, setProduction] = useState<{ has_card: boolean; status: string | null; revision_no: number; locked_at: string | null; locked_by: string | null; rate_pc: number | null } | null>(null);
+  // denominator of every ₹ / PC figure (costing documents: always state the basis)
+  const [basis, setBasis] = useState<{ label: string; qty: number } | null>(null);
   const [stageWip, setStageWip] = useState<any[]>([]);
   const [sources, setSources] = useState<any>({
     materials: [],
@@ -198,6 +202,7 @@ export default function ProductionCostDetailPage() {
         if (parsed.heads) setHeads(parsed.heads);
         if (parsed.quality) setQuality(parsed.quality);
         if (parsed.production) setProduction(parsed.production);
+        if (parsed.basis) setBasis(parsed.basis);
       } catch (err) {}
     }
   }, [costQuery.data]);
@@ -250,6 +255,7 @@ export default function ProductionCostDetailPage() {
       setHeads(d.heads || []);
       setQuality(d.quality || null);
       setProduction(d.production || null);
+      setBasis(d.basis || null);
 
       toast(`Loaded transaction-driven costing for ${d.order.po_prod_no} (${d.order.style_code})`);
     } catch (err) {
@@ -325,6 +331,7 @@ export default function ProductionCostDetailPage() {
           heads,
           quality,
           production,
+          basis,
         },
       };
 
@@ -1270,8 +1277,29 @@ export default function ProductionCostDetailPage() {
                   </tbody>
                 </table>
               </div>
+              {(() => {
+                const tot = (tabsData.variance || []).find((r: any) => r.key === 'total');
+                const src: Record<string, string> = { RATE_CARD_LOCK: 'frozen when the job rate card was locked', LATEST_APPROVED: 'latest approved version (rate card not locked yet)', LATEST_DRAFT: 'latest version — not approved', NONE: '' };
+                return (
+                  <div className="border-t border-slate-100 bg-slate-50/60 px-3 py-2 text-[11px] text-slate-600 space-y-0.5" id="pc-basis">
+                    {standard.costing_no && (
+                      <div>Merchandiser baseline: <b>{standard.costing_no}{standard.version ? ` v${standard.version}` : ''}</b> — {src[standard.baseline_source ?? 'NONE'] ?? ''}
+                        {standard.quote_currency_code && standard.quote_currency_code !== 'INR' && standard.fob_price_fc != null
+                          ? <> · quoted FOB {standard.quote_currency_code} {Number(standard.fob_price_fc).toFixed(4)} (₹{Number(standard.fob_price).toFixed(2)} @ ₹{standard.exchange_rate ?? '—'})</> : null}
+                        {standard.cmt_merged ? <> · flat CMT (cutting → finishing) compared as one head</> : null}
+                      </div>
+                    )}
+                    {basis && (
+                      <div>Basis: <b>{fmtNumber(basis.qty)} {basis.label}</b>
+                        {tot?.variance_amount != null && <> · Actual − Merch on basis <b className={tot.variance_amount > 0 ? 'text-rose-600' : 'text-emerald-700'}>₹{fmtNumber(Math.round(tot.variance_amount))}</b></>}
+                        {tot?.var_actual_vs_prod_amount != null && <> · Actual − Prod <b className={tot.var_actual_vs_prod_amount > 0 ? 'text-rose-600' : 'text-emerald-700'}>₹{fmtNumber(Math.round(tot.var_actual_vs_prod_amount))}</b></>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               <p className="border-t border-slate-100 px-3 py-2 text-[11px] text-slate-500">
-                Production / Pc is the job's rate card for cutting, sewing, process, finishing and packing (fabric, trims and overhead have no production rate).
+                Production / Pc is the job's rate card for cutting, sewing, process, finishing and packing, plus the production overhead fixed on it (fabric and trims have no production rate).
                 The TOTAL row's Prod − Merch and Actual − Prod compare those conversion heads only. + is over, − is under.
               </p>
             </div>

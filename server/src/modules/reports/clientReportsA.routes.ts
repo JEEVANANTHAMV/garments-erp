@@ -322,12 +322,9 @@ clientReportsARouter.get('/budget-vs-actuals', VIEW, ah(async (req, res) => {
     const b = B.get(Number(s.so_id)); const a = A.get(Number(s.so_id)); const iv = I.get(Number(s.so_id));
     // A foreign-currency order saved with rate ≤ 1 has no real rate: use the latest exchange-rate entry, else blank.
     const soFx = s.currency === 'INR' ? 1 : n(s.exchange_rate) > 1 ? n(s.exchange_rate) : latestXr.get(Number(s.currency_id)) ?? null;
-    let costFx: number | null = null;
-    if (b) {
-      if (b.cost_currency === 'INR') costFx = 1;
-      else if (Number(b.cost_currency_id) === Number(s.currency_id)) costFx = soFx;
-      else costFx = latestXr.get(Number(b.cost_currency_id)) ?? null;
-    }
+    // Pre-costing rates are always ₹ (client 16-Oct-2026: the quote currency only changes how the FOB is quoted;
+    // trx_costing heads, total_cost and fob_price are ₹) — no conversion of the budget.
+    const costFx: number | null = b ? 1 : null;
     const bud = (v: unknown) => (b && costFx != null ? r2(n(v) * costFx) : null);
     const act = (v: unknown) => (a ? r2(n(v)) : null);
     const order_qty = n(s.order_qty); const cut_qty = n(C.get(Number(s.so_id))?.cut_qty); const ship_qty = n(S.get(Number(s.so_id))?.qty);
@@ -481,7 +478,7 @@ clientReportsARouter.get('/production-output', VIEW, ah(async (req, res) => {
              WHEN 'PRINT' THEN pc.printing_cost WHEN 'EMB' THEN pc.embroidery_cost WHEN 'STITCH' THEN pc.stitching_cost
              WHEN 'WASH' THEN pc.washing_cost WHEN 'PACK' THEN pc.packing_cost
              WHEN 'FINISH' THEN pc.finishing_cost WHEN 'IRON' THEN pc.finishing_cost WHEN 'CHECK' THEN pc.finishing_cost END
-             * CASE WHEN pc.cost_currency = 'INR' THEN 1 WHEN pc.currency_id = so.currency_id AND so.exchange_rate > 1 THEN so.exchange_rate END, 4) AS budget_rate,
+             , 4) AS budget_rate,  -- pre-costing heads are ₹ (client 16-Oct-2026)
            u.bill_rate, u.bill_amount, u.production_unit
       FROM (${parts.join(' UNION ALL ')}) u
       LEFT JOIN ${IOMAP} m ON m.company_id = ? AND m.k = u.job_key

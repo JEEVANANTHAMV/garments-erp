@@ -7,7 +7,7 @@ import { NotFound, BadRequest } from '../../core/errors.js';
 import { requirePermission } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
-import { computePreCosting, PRE_COST_HEADS, certSummary } from './preCostingCalc.js';
+import { computePreCosting, PRE_COST_HEADS, certSummary, cmtCoversCutToFinish } from './preCostingCalc.js';
 
 export const costingRouter = Router();
 
@@ -86,15 +86,24 @@ export async function buildOrderData(companyId: number, prodOrderId: number) {
   const ioNo: string | null = order.io_no || order.so_io_no || null;
   const styleId: number | null = order.style_id ?? null;
 
-  // B. Standard: the style's pre-costing (approved preferred)
-  const estimatedCosting = await queryOne<any>(`
-    SELECT c.*, cur.code AS currency_code, cur.symbol AS currency_symbol, st.code AS status_code
-      FROM trx_costing c
-      LEFT JOIN cfg_currency cur ON cur.id = c.currency_id
-      LEFT JOIN cfg_status st ON st.id = c.status_id
+  // B. Standard (baseline): the merchandiser costing frozen with the job's production rate card when it was
+  //    locked (costing documents: "confirmed job receives a frozen baseline unaffected by later costing
+  //    revisions"), else the style's latest approved pre-costing (else the latest).
+  const COSTING_SQL = `SELECT c.*, cur.code AS currency_code, cur.symbol AS currency_symbol, st.code AS status_code
+      FROM trx_costing c LEFT JOIN cfg_currency cur ON cur.id = c.currency_id LEFT JOIN cfg_status st ON st.id = c.status_id`;
+  const frozen = ioNo ? await queryOne<any>(
+    `SELECT costing_id FROM trx_job_rate_card WHERE company_id = ? AND io_no = ? AND costing_id IS NOT NULL
+        AND (status = 'LOCKED' OR revision_no > 0)`, [companyId, ioNo]) : null;
+  const frozenCosting = frozen ? await queryOne<any>(`${COSTING_SQL} WHERE c.id = ? AND c.company_id = ? AND c.is_deleted = 0`, [frozen.costing_id, companyId]) : null;
+  const estimatedCosting = frozenCosting ?? await queryOne<any>(`${COSTING_SQL}
      WHERE c.style_id = ? AND c.company_id = ? AND c.is_deleted = 0
-     ORDER BY (st.code = 'APPROVED') DESC, c.version DESC, c.id DESC LIMIT 1
+     ORDER BY (st.code = 'APPROVED') DESC, c.approved_at DESC, c.version DESC, c.id DESC LIMIT 1
   `, [styleId, companyId]);
+  const baselineSource = frozenCosting ? 'RATE_CARD_LOCK' : estimatedCosting?.status_code === 'APPROVED' ? 'LATEST_APPROVED' : estimatedCosting ? 'LATEST_DRAFT' : 'NONE';
+  let ecJson: any = {};
+  try { ecJson = typeof estimatedCosting?.data_json === 'string' ? JSON.parse(estimatedCosting.data_json || '{}') : (estimatedCosting?.data_json ?? {}); } catch { ecJson = {}; }
+  // merchandiser's flat CMT covering cutting → finishing: compared as ONE head with production's cutting + sewing + finishing
+  const cmtMerged = cmtCoversCutToFinish(ecJson);
 
   // C. Quantities from the bundle ledger of the job (split parents / merge sources excluded from cut qty)
   const q = ioNo ? await queryOne<any>(`
@@ -263,7 +272,10 @@ export async function buildOrderData(companyId: number, prodOrderId: number) {
   const cardSew = prodPc.sewing != null ? r2(prodPc.sewing) : null;
   const cutRate = cardCut ?? await costSetting(companyId, 'COSTING_CUTTING_RATE_PER_PC');
   const sewRate = cardSew ?? await costSetting(companyId, 'COSTING_SEWING_RATE_PER_PC');
-  const ohRate = await costSetting(companyId, 'COSTING_OVERHEAD_PER_PC');
+  // overhead: the company allocation rate (setting), else the production overhead fixed on the job's rate card
+  const ohSetting = await costSetting(companyId, 'COSTING_OVERHEAD_PER_PC');
+  const cardOh = effCard?.overheadPc ?? null;
+  const ohRate = ohSetting ?? cardOh;
   const stitchDcGood = sewDcs.reduce((a, d) => a + numv(d.good), 0);
   const inHouseSewn = Math.max(0, sewGood - stitchDcGood);
   const cutAmt = cutRate != null ? r2(cutQty * cutRate) : 0;
@@ -290,8 +302,9 @@ export async function buildOrderData(companyId: number, prodOrderId: number) {
       note: finDcs.length ? `${finDcs.length} ironing / finishing DC(s)` : 'No ironing / finishing DC received for this job', docs: finDcs.length },
     { key: 'packing', label: 'Packing', amount: r2(sum(packDcs)), source: packDcs.length ? 'TRANSACTIONS' : 'NO_DATA',
       note: packDcs.length ? `${packDcs.length} packing DC(s)` : 'No packing DC received (packing materials are under Trims)', docs: packDcs.length },
-    { key: 'overhead', label: 'Overhead', amount: ohAmt, source: ohRate != null ? 'RATE_SETTING' : 'NO_DATA',
-      note: ohRate != null ? `${fmtQty(goodQty)} good PCS × ₹${ohRate}/PC (COSTING_OVERHEAD_PER_PC)` : 'Set COSTING_OVERHEAD_PER_PC to allocate factory overhead', docs: 0 },
+    { key: 'overhead', label: 'Overhead', amount: ohAmt, source: ohSetting != null ? 'RATE_SETTING' : cardOh != null ? 'RATE_CARD' : 'NO_DATA',
+      note: ohRate != null ? `${fmtQty(goodQty)} good PCS × ₹${ohRate}/PC (${ohSetting != null ? 'COSTING_OVERHEAD_PER_PC' : 'production overhead on the job rate card'})`
+        : 'Fix the production overhead on the job rate card (or set COSTING_OVERHEAD_PER_PC) to allocate factory overhead', docs: 0 },
   ];
   const H = Object.fromEntries(heads.map((h) => [h.key, h.amount])) as Record<string, number>;
 
@@ -306,21 +319,11 @@ export async function buildOrderData(companyId: number, prodOrderId: number) {
   const actualCostPerPiece = producedQty > 0 ? totalActualCost / producedQty : 0;
   const costPerGoodPiece = goodQty > 0 ? totalActualCost / goodQty : 0;
 
-  // I. Standard in INR
-  let fx: number | null = null;
-  let fxBasis = 'NONE';
-  if (estimatedCosting) {
-    if (!estimatedCosting.currency_code || estimatedCosting.currency_code === 'INR') { fx = 1; fxBasis = 'INR'; }
-    else if (numv(order.so_currency_id) === numv(estimatedCosting.currency_id) && numv(order.so_exchange_rate) > 1) {
-      fx = numv(order.so_exchange_rate); fxBasis = `Sales order ${order.so_no}`;
-    } else {
-      const inr = await queryOne<any>(`SELECT id FROM cfg_currency WHERE code = 'INR' LIMIT 1`);
-      const xr = inr ? await queryOne<any>(
-        `SELECT rate, rate_date FROM trx_exchange_rate WHERE from_currency = ? AND to_currency = ? ORDER BY rate_date DESC, id DESC LIMIT 1`,
-        [estimatedCosting.currency_id, inr.id]) : null;
-      if (numv(xr?.rate) > 0) { fx = numv(xr.rate); fxBasis = `Exchange rate of ${String(xr.rate_date).slice(0, 10)}`; }
-    }
-  }
+  // I. Standard: every rate on a pre-costing is ₹ (client 16-Oct-2026 — the quote currency only changes how the
+  //    FOB is quoted), so the cost heads are compared as they are; the FOB in the quote currency is shown alongside.
+  const fx: number | null = estimatedCosting ? 1 : null;
+  const fxBasis = estimatedCosting ? (estimatedCosting.currency_code && estimatedCosting.currency_code !== 'INR'
+    ? `Sheet rates are ₹; quoted in ${estimatedCosting.currency_code} @ ₹${numv(estimatedCosting.exchange_rate) || '—'}` : 'INR') : 'NONE';
   const stdAvailable = !!estimatedCosting && fx != null;
   const ec = estimatedCosting;
   const toInr = (v: number) => (fx != null ? v * fx : 0);
@@ -350,25 +353,48 @@ export async function buildOrderData(companyId: number, prodOrderId: number) {
     const variance = standard_pc != null ? r2(actual_pc - standard_pc) : null;
     const variance_pct = standard_pc ? r2(((variance as number) / standard_pc) * 100) : null;
     // production budget: the job's rate card for the conversion heads; material / overhead stay on the merchandiser figure
-    const production_pc = hasCard && ['cutting', 'sewing', 'finishing', 'packing', 'process'].includes(h.key) ? r2(prodPc[h.key] ?? 0) : null;
+    const production_pc = h.key === 'overhead' ? (cardOh != null ? r2(cardOh) : null)
+      : hasCard && ['cutting', 'sewing', 'finishing', 'packing', 'process'].includes(h.key) ? r2(prodPc[h.key] ?? 0) : null;
     return { cost_head: h.label, key: h.key, standard_pc, production_pc, actual_pc, variance, variance_pct,
       var_prod_vs_std: production_pc != null && standard_pc != null ? r2(production_pc - standard_pc) : null,
       var_actual_vs_prod: production_pc != null ? r2(actual_pc - production_pc) : null,
       source: h.source, note: h.note };
   });
+  // Cost-head mapping: a flat CMT (cutting → finishing) is one merchandiser head, so cutting + sewing + finishing
+  // are compared as one CMT row (detail stays in the Cutting / Sewing / Finishing tabs).
+  if (cmtMerged) {
+    const parts = varianceRows.filter((r) => ['cutting', 'sewing', 'finishing'].includes(r.key));
+    const sumN = (k: string) => (parts.some((r) => r[k] != null) ? r2(parts.reduce((a, r) => a + (r[k] ?? 0), 0)) : null);
+    const std = sumN('standard_pc'), prod = sumN('production_pc'), act = r2(parts.reduce((a, r) => a + r.actual_pc, 0));
+    const at = varianceRows.findIndex((r) => r.key === 'cutting');
+    const merged = {
+      cost_head: 'CMT (cutting → finishing)', key: 'cmt', standard_pc: std, production_pc: prod, actual_pc: act,
+      variance: std != null ? r2(act - std) : null, variance_pct: std ? r2(((act - std) / std) * 100) : null,
+      var_prod_vs_std: prod != null && std != null ? r2(prod - std) : null, var_actual_vs_prod: prod != null ? r2(act - prod) : null,
+      source: parts.some((r) => r.source === 'TRANSACTIONS') ? 'TRANSACTIONS' : parts.some((r) => r.source === 'RATE_CARD') ? 'RATE_CARD' : parts[0]?.source ?? null,
+      note: `Merchandiser flat CMT ₹${std ?? 0}/PC vs production cutting + sewing + finishing (${parts.map((r) => `${r.cost_head} ₹${r.actual_pc}`).join(', ')})`,
+      merged_from: parts.map((r) => r.key),
+    };
+    varianceRows.splice(at, 0, merged);
+    for (const k of ['cutting', 'sewing', 'finishing']) varianceRows.splice(varianceRows.findIndex((r) => r.key === k), 1);
+  }
   const totAct = r2(varianceRows.reduce((a, r) => a + r.actual_pc, 0));
   const totStd = stdAvailable ? r2(varianceRows.reduce((a, r) => a + (r.standard_pc ?? 0), 0)) : null;
   const prodRows = varianceRows.filter((r) => r.production_pc != null);
-  const totProd = hasCard ? r2(prodRows.reduce((a, r) => a + r.production_pc, 0)) : null;
-  const totProdStd = hasCard && stdAvailable ? r2(prodRows.reduce((a, r) => a + (r.standard_pc ?? 0), 0)) : null;
-  const totProdAct = hasCard ? r2(prodRows.reduce((a, r) => a + r.actual_pc, 0)) : null;
+  const anyProd = prodRows.length > 0;
+  const totProd = anyProd ? r2(prodRows.reduce((a, r) => a + r.production_pc, 0)) : null;
+  const totProdStd = anyProd && stdAvailable ? r2(prodRows.reduce((a, r) => a + (r.standard_pc ?? 0), 0)) : null;
+  const totProdAct = anyProd ? r2(prodRows.reduce((a, r) => a + r.actual_pc, 0)) : null;
   varianceRows.push({
     cost_head: 'TOTAL', key: 'total', standard_pc: totStd, actual_pc: totAct, production_pc: totProd,
-    // conversion heads only — the card covers cutting / sewing / process / finishing / packing
+    // heads with a production figure only — the card covers conversion (cutting … packing) and overhead
     var_prod_vs_std: totProd != null && totProdStd != null ? r2(totProd - totProdStd) : null,
     var_actual_vs_prod: totProd != null && totProdAct != null ? r2(totProdAct - totProd) : null,
     variance: totStd != null ? r2(totAct - totStd) : null,
     variance_pct: totStd ? r2(((totAct - totStd) / totStd) * 100) : null, source: null, note: null,
+    // ₹ on the stated basis (documents: "+₹8/pc × 10,000 comparable pieces = ₹80,000")
+    variance_amount: totStd != null ? r2((totAct - totStd) * perPcBase) : null,
+    var_actual_vs_prod_amount: totProd != null && totProdAct != null ? r2((totProdAct - totProd) * perPcBase) : null,
   });
 
   const breakdownHeads = [
@@ -443,8 +469,11 @@ export async function buildOrderData(companyId: number, prodOrderId: number) {
         variance: varianceRows,
       },
       breakdownHeads,
+      // the denominator of every ₹ / PC figure (documents: "always state ordered, produced, packed … basis")
+      basis: { label: goodQty ? 'good pieces' : producedQty ? 'produced pieces' : 'no output yet', qty: perPcBase },
       production: {
         has_card: hasCard,
+        overhead_pc: cardOh,
         status: cardHdr?.status ?? (hasCard ? 'DRAFT' : null),
         in_revision: !!effCard?.inRevision,
         revision_no: cardHdr ? Number(cardHdr.revision_no) : 0,
@@ -465,6 +494,12 @@ export async function buildOrderData(companyId: number, prodOrderId: number) {
         currency_code: 'INR',
         fx_rate: fx,
         fx_basis: fxBasis,
+        version: estimatedCosting?.version ?? null,
+        baseline_source: baselineSource,
+        quote_currency_code: estimatedCosting?.currency_code ?? null,
+        fob_price_fc: estimatedCosting?.fob_price_fc != null ? numv(estimatedCosting.fob_price_fc) : null,
+        exchange_rate: estimatedCosting?.exchange_rate != null ? numv(estimatedCosting.exchange_rate) : null,
+        cmt_merged: cmtMerged,
       },
       stageWip,
       sources: { fabric_rolls: fabricLines.length, yarn_issues: yarnLines.length, material_issue_lines: matIssues.length, dcs, fg_receipts: numv(fg?.docs) },
@@ -1093,3 +1128,57 @@ costingRouter.post('/pre-costings/calculate', requirePermission('COSTING.VIEW'),
     },
   });
 });
+
+/**
+ * GET /pre-costings/fx-rate?currency_id=&on= — latest exchange rate to ₹ (trx_exchange_rate) on or before a date,
+ * to pre-fill the costing's exchange rate (client 16-Oct-2026: "give the currency, then the INR value").
+ */
+costingRouter.get('/pre-costings/fx-rate', requirePermission('COSTING.VIEW'), ah(async (req, res) => {
+  const qp = z.object({ currency_id: z.coerce.number().int().positive(), on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).parse(req.query);
+  const cur = await queryOne<any>(`SELECT id, code FROM cfg_currency WHERE id = ?`, [qp.currency_id]);
+  if (!cur) throw NotFound('Currency not found');
+  if (String(cur.code).toUpperCase() === 'INR') { res.json({ data: { code: 'INR', rate: 1, rate_date: null } }); return; }
+  const inr = await queryOne<any>(`SELECT id FROM cfg_currency WHERE code = 'INR' LIMIT 1`);
+  const xr = inr ? await queryOne<any>(
+    `SELECT rate, rate_date FROM trx_exchange_rate WHERE from_currency = ? AND to_currency = ? AND (? IS NULL OR rate_date <= ?)
+      ORDER BY rate_date DESC, id DESC LIMIT 1`, [cur.id, inr.id, qp.on ?? null, qp.on ?? null]) : null;
+  res.json({ data: { code: cur.code, rate: xr ? numv(xr.rate) : null, rate_date: xr?.rate_date ?? null } });
+}));
+
+/**
+ * POST /pre-costings/:id/revise — approved costing stays read-only; this copies it as the next version
+ * (same costing no, version + 1, DRAFT, revised_from_id) for the merchandiser to change and re-submit.
+ */
+costingRouter.post('/pre-costings/:id/revise', requirePermission('COSTING.CREATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = Number(req.params.id);
+  const reason = z.object({ reason: z.string().trim().max(500).nullish() }).parse(req.body ?? {}).reason ?? null;
+  const newId = await transaction(async (tx) => {
+    const c = await txQueryOne<any>(tx, `SELECT * FROM trx_costing WHERE id = ? AND company_id = ? AND is_deleted = 0 FOR UPDATE`, [id, cid]);
+    if (!c) throw NotFound('Costing not found');
+    if (String(c.costing_type ?? '').toUpperCase() !== 'PRE_COSTING') throw BadRequest('Only a pre-costing can be revised here');
+    const st = await txQueryOne<any>(tx, `SELECT code FROM cfg_status WHERE id = ?`, [c.status_id]);
+    if (String(st?.code ?? '').toUpperCase() !== 'APPROVED') throw BadRequest(`${c.costing_no} v${c.version} is not approved — edit it directly`);
+    const newer = await txQueryOne<any>(tx,
+      `SELECT id, version FROM trx_costing WHERE company_id = ? AND costing_no = ? AND version > ? AND is_deleted = 0 ORDER BY version DESC LIMIT 1`,
+      [cid, c.costing_no, c.version]);
+    if (newer) throw BadRequest(`${c.costing_no} already has v${newer.version} — open that version`);
+    const draft = await txQueryOne<any>(tx, `SELECT id FROM cfg_status WHERE domain = 'COSTING' AND code = 'DRAFT' LIMIT 1`);
+    const skip = new Set(['id', 'created_at', 'updated_at', 'updated_by', 'approved_by', 'approved_at', 'version', 'status_id', 'revised_from_id', 'created_by', 'remarks']);
+    const cols = Object.keys(c).filter((k) => !skip.has(k));
+    const r = await tx.execute(
+      `INSERT INTO trx_costing (${[...cols, 'version', 'status_id', 'revised_from_id', 'created_by', 'remarks'].join(', ')})
+       VALUES (${[...cols, 'a', 'b', 'c', 'd', 'e'].map(() => '?').join(', ')})`,
+      [...cols.map((k) => c[k]), Number(c.version) + 1, draft?.id ?? null, c.id, req.user!.id,
+        [c.remarks, reason ? `Revision v${Number(c.version) + 1}: ${reason}` : null].filter(Boolean).join(' · ') || null]);
+    const insertId = Number((r as any)[0].insertId);
+    const lines = await txQuery<any>(tx, `SELECT * FROM trx_costing_line WHERE costing_id = ?`, [c.id]);
+    for (const l of lines) {
+      const lc = Object.keys(l).filter((k) => k !== 'id' && k !== 'costing_id');
+      await txExecute(tx, `INSERT INTO trx_costing_line (costing_id, ${lc.join(', ')}) VALUES (?, ${lc.map(() => '?').join(', ')})`, [insertId, ...lc.map((k) => l[k])]);
+    }
+    await audit(req, 'trx_costing', insertId, 'INSERT', undefined, { revised_from: c.id, costing_no: c.costing_no, version: Number(c.version) + 1, reason }, tx);
+    return insertId;
+  });
+  res.status(201).json({ data: { id: newId } });
+}));

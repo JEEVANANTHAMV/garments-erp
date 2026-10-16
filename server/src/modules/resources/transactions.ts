@@ -44,9 +44,34 @@ async function poExcessCheck(req: Request, row: any, tx: Tx) {
  * the stored head (update) / the sent head (create). Other costing types (Classic
  * sheet) are untouched.
  */
-function preCostingBeforeWrite(data: Record<string, unknown>, before?: any) {
+const costingStatusCode = async (statusId: unknown) => (statusId
+  ? String((await queryOne<any>(`SELECT code FROM cfg_status WHERE id = ?`, [statusId]))?.code ?? '').toUpperCase() : '');
+
+/**
+ * Approved costing = immutable baseline (costing developer documents §3.4 / §17): an APPROVED
+ * pre-costing is never edited or deleted — "Revise" (POST /pre-costings/:id/revise) creates the
+ * next version as a draft. Approving needs COSTING.APPROVE (merchandisers prepare, approvers approve).
+ */
+async function preCostingGuard(req: Request, data: Record<string, unknown>, before?: any) {
   const type = data.costing_type !== undefined ? data.costing_type : before?.costing_type;
   if (String(type ?? '').toUpperCase() !== 'PRE_COSTING') return;
+  if (before && await costingStatusCode(before.status_id) === 'APPROVED') {
+    throw BadRequest(`${before.costing_no} v${before.version} is approved and read-only — use Revise to create v${Number(before.version) + 1}`);
+  }
+  if (data.status_id !== undefined && await costingStatusCode(data.status_id) === 'APPROVED') {
+    const u = req.user!;
+    if (!u.isSuperAdmin && !u.permissions.has('COSTING.APPROVE')) throw BadRequest('Approving a costing needs the Approve Costings right (COSTING.APPROVE)');
+    const qty = Number(data.order_qty !== undefined ? data.order_qty : before?.order_qty) || 0;
+    if (qty <= 0) throw BadRequest('Enter the order quantity before approving the costing');
+    data.approved_by = u.id;
+    data.approved_at = new Date();
+  }
+}
+
+async function preCostingBeforeWrite(req: Request, data: Record<string, unknown>, before?: any) {
+  const type = data.costing_type !== undefined ? data.costing_type : before?.costing_type;
+  if (String(type ?? '').toUpperCase() !== 'PRE_COSTING') return;
+  await preCostingGuard(req, data, before);
   const rawJson = data.data_json !== undefined ? data.data_json : before?.data_json;
   let dj: any = {};
   if (rawJson != null && rawJson !== '') {
@@ -63,6 +88,20 @@ function preCostingBeforeWrite(data: Record<string, unknown>, before?: any) {
   data.smv = r.smv;
   data.total_cost = r.total_cost;
   data.fob_price = r.fob_price;
+  // Every rate on the sheet is ₹ (client 16-Oct-2026). The quote currency only changes how the FOB is quoted:
+  // fob_price_fc = ₹ FOB ÷ exchange rate (₹ per 1 unit), shown with the ₹ value under it.
+  const curId = pick('currency_id');
+  const code = String((curId ? await queryOne<any>(`SELECT code FROM cfg_currency WHERE id = ?`, [curId]) : null)?.code ?? 'INR').toUpperCase();
+  if (code === 'INR') {
+    data.exchange_rate = 1;
+    data.fob_price_fc = r.fob_price;
+  } else {
+    const fx = Number(pick('exchange_rate'));
+    if (!(fx > 0)) throw BadRequest(`Enter the exchange rate — ₹ per 1 ${code}. Rates on the sheet are ₹; the quoted FOB is shown in ${code}.`);
+    data.exchange_rate = fx;
+    data.fob_price_fc = Math.round((r.fob_price / fx) * 10000) / 10000;
+    if (!pick('fx_rate_date')) data.fx_rate_date = pick('costing_date') ?? new Date().toISOString().slice(0, 10);
+  }
   // "Certifications required" is derived from the rows on every save — never trusted from the client (call 14-Oct-2026)
   if (data.data_json !== undefined && dj && typeof dj === 'object') {
     const withCerts = { ...dj, cert_summary: certSummary(dj) };
@@ -175,8 +214,14 @@ export const transactionResources: ResourceConfig[] = [
       f('price_basis', s.nullableStr(30)), f('costing_type', s.nullableStr(30)),
       // Pre-costing sheets outgrow s.text()'s 20 000 chars; column is LONGTEXT.
       f('status_id', s.id()), f('remarks', s.text()), f('data_json', s.json()),
+      f('exchange_rate', s.dec()), f('fx_rate_date', s.date()),
     ],
-    beforeWrite: (_req, data, before) => preCostingBeforeWrite(data, before),
+    beforeWrite: (req, data, before) => preCostingBeforeWrite(req, data, before),
+    beforeDelete: async (_req, _id, row) => {
+      if (String(row?.costing_type ?? '').toUpperCase() === 'PRE_COSTING' && await costingStatusCode(row?.status_id) === 'APPROVED') {
+        throw BadRequest(`${row.costing_no} v${row.version} is approved — an approved costing is never deleted`);
+      }
+    },
   },
   {
     path: 'quotations', table: 'trx_quotation', permission: 'QUOTATION', label: 'Quotation',

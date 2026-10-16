@@ -20,6 +20,11 @@
  *                       (rows saved before the type existed: type inferred from the name)
  *   cuttingOps          cutting_cost  Σ rate
  *   sewing              stitching_cost = flat rate, or Σ SMV × smv_rate_per_min; smv = Σ SMV
+ *                       (client 16-Oct-2026: the merchandiser's flat CMT rate is the main way; detailed
+ *                        SMV operations are optional and only counted in Detailed SMV mode)
+ *   cmtScope            flat rate covering CUT_TO_FINISH: the flat rate is the whole cutting → finishing
+ *                       conversion, so Cutting rows and Finishing rows are not added again
+ *                       (packing rows still count). STITCHING (or no key, older sheets): flat = sewing only.
  *   finishingItems      qty/pc × rate → finishing_cost (FINISHING) / packing_cost (PACKING)
  *                       (older sheets: `packings` rows = PACKING, qty = consumption)
  *   otherDirect         TESTING → testing_cost, FREIGHT → freight_cost,
@@ -63,7 +68,7 @@ const OTHER_DIRECT_HEADS: PreCostHeadKey[] = ['testing_cost', 'freight_cost', 'a
 /** Top-level data_json keys written by the V2 sheet (the Classic sheet nests under `classic`). */
 export const PRE_COST_V2_KEYS = [
   'fabrics', 'yarns', 'trims', 'embellishments', 'processes', 'sewingOps', 'useFlatSewingRate',
-  'cuttingOps', 'finishingItems', 'packings', 'otherDirect', 'otherCharges', 'overhead',
+  'cuttingOps', 'finishingItems', 'packings', 'otherDirect', 'otherCharges', 'overhead', 'cmtScope', 'flatSewingRate',
 ];
 
 export const PROCESS_TYPES = ['KNITTING', 'DYEING', 'COMPACTING', 'WASHING', 'OTHER'] as const;
@@ -148,6 +153,11 @@ export function finishingRows(dj: any): any[] {
   }));
 }
 
+/** The merchandiser's flat CMT rate covers cutting → finishing (not only stitching). */
+export function cmtCoversCutToFinish(dj: any): boolean {
+  return dj?.useFlatSewingRate === true && String(dj?.cmtScope ?? '').toUpperCase() === 'CUT_TO_FINISH';
+}
+
 const gross = (r: any) => n(r?.consumption) * (1 + n(r?.wastage_pct) / 100) * n(r?.rate);
 
 export function computePreCosting(dataJson: any, input: PreCostInput = {}): PreCostResult {
@@ -156,6 +166,8 @@ export function computePreCosting(dataJson: any, input: PreCostInput = {}): PreC
   const heads = {} as Record<PreCostHeadKey, number>;
   for (const h of PRE_COST_HEADS) heads[h] = n(fb[h]);
   const useYarn = dj.useYarnRecipe === true;
+  // flat CMT covering cutting → finishing: cutting and finishing rows are inside the flat rate (never charged twice)
+  const cmtAll = cmtCoversCutToFinish(dj);
 
   // Materials
   if (has(dj, 'fabrics')) heads.fabric_cost = useYarn ? 0 : arr(dj.fabrics).reduce((s, r) => s + gross(r), 0);
@@ -179,6 +191,7 @@ export function computePreCosting(dataJson: any, input: PreCostInput = {}): PreC
 
   // Cutting
   if (has(dj, 'cuttingOps')) heads.cutting_cost = arr(dj.cuttingOps).reduce((s, r) => s + n(r?.rate), 0);
+  if (cmtAll) heads.cutting_cost = 0;
 
   // Sewing
   const ops = arr(dj.sewingOps);
@@ -197,6 +210,7 @@ export function computePreCosting(dataJson: any, input: PreCostInput = {}): PreC
     // Older sheets had only packing rows and a flat finishing figure — that figure is kept.
     if (has(dj, 'finishingItems')) heads.finishing_cost = fin;
   }
+  if (cmtAll) heads.finishing_cost = 0;
 
   for (const h of PRE_COST_HEADS) heads[h] = r4(heads[h]);
   const M = r4(DIRECT_HEADS.filter((h) => !OTHER_DIRECT_HEADS.includes(h)).reduce((s, h) => s + heads[h], 0));

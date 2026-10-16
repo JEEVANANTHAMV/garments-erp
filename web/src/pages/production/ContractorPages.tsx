@@ -27,7 +27,7 @@ function useContractors() {
 }
 
 // ───────────────────────────── Job Rate Card ─────────────────────────────
-type CardRow = { operation_id: number; op_code: string; op_name: string; default_rate: number; selected: boolean; job_rate: number | null; remarks: string | null };
+type CardRow = { operation_id: number; op_code: string; op_name: string; default_rate: number; selected: boolean; job_rate: number | null; smv: number | null; remarks: string | null };
 
 export function JobRateCardPage() {
   const toast = useToast();
@@ -36,7 +36,10 @@ export function JobRateCardPage() {
   const [ioNo, setIoNo] = useState('');
   const [stageId, setStageId] = useState('');
   const [rows, setRows] = useState<CardRow[]>([]);
-  const [edit, setEdit] = useState<Record<number, { on: boolean; rate: string; remarks: string }>>({});
+  const [edit, setEdit] = useState<Record<number, { on: boolean; rate: string; smv: string; remarks: string }>>({});
+  // production costing settings of the job (client 16-Oct-2026): ₹ per standard minute + production overhead
+  const [cfg, setCfg] = useState<{ cpm: string; ohBasis: '' | 'PER_PC' | 'PCT'; ohValue: string }>({ cpm: '', ohBasis: '', ohValue: '' });
+  const [cfgBusy, setCfgBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [fromCosting, setFromCosting] = useState(false);
@@ -50,14 +53,31 @@ export function JobRateCardPage() {
   const [showVariance, setShowVariance] = useState(false);
   const locked = status?.status === 'LOCKED';
 
+  const applyStatus = (d: CardStatus | null) => {
+    setStatus(d);
+    if (d) setCfg({ cpm: d.cost_per_min != null ? String(d.cost_per_min) : '', ohBasis: (d.overhead_basis ?? '') as any, ohValue: d.overhead_value != null ? String(d.overhead_value) : '' });
+  };
   const loadStatus = (io = ioNo) => (io.trim()
-    ? api.get('/job-rate-cards/status', { params: { io_no: io.trim() } }).then((r) => setStatus(r.data.data)).catch(() => setStatus(null))
+    ? api.get('/job-rate-cards/status', { params: { io_no: io.trim() } }).then((r) => applyStatus(r.data.data)).catch(() => setStatus(null))
     : Promise.resolve(setStatus(null)));
+  const saveCfg = async () => {
+    setCfgBusy(true);
+    try {
+      const r = await api.put('/job-rate-cards/settings', {
+        io_no: ioNo.trim(), cost_per_min: cfg.cpm === '' ? null : num(cfg.cpm),
+        overhead_basis: cfg.ohBasis || null, overhead_value: cfg.ohValue === '' ? null : num(cfg.ohValue),
+      });
+      applyStatus(r.data.data);
+      toast('Production costing settings saved — SMV operations re-priced at the new ₹ / min');
+      loadCards(); loadCard();
+    } catch (e) { toast(errMsg(e), 'error'); } finally { setCfgBusy(false); }
+  };
+  const cpm = num(cfg.cpm);
   const step = async (action: 'submit' | 'lock' | 'reject' | 'revise', why?: string) => {
     setStepBusy(true);
     try {
       const r = await api.post(`/job-rate-cards/${action}`, { io_no: ioNo.trim(), reason: why || null });
-      setStatus(r.data.data);
+      applyStatus(r.data.data);
       toast({ submit: 'Rate card submitted for approval', lock: 'Rate card approved & locked — every DC, bill and costing of this job now uses these rates',
         reject: 'Rate card sent back to draft', revise: `Rate card opened for revision ${r.data.data.revision_no}` }[action]);
       setAsk(null); setReason(''); loadCards();
@@ -81,7 +101,8 @@ export function JobRateCardPage() {
       const r = await api.get('/job-rate-cards/card', { params: { io_no: io.trim(), stage_id: st } });
       const d: CardRow[] = r.data.data || [];
       setRows(d);
-      setEdit(Object.fromEntries(d.map((o) => [o.operation_id, { on: o.selected, rate: o.job_rate != null ? String(o.job_rate) : String(o.default_rate || ''), remarks: o.remarks ?? '' }])));
+      setEdit(Object.fromEntries(d.map((o) => [o.operation_id, { on: o.selected, rate: o.job_rate != null ? String(o.job_rate) : String(o.default_rate || ''),
+        smv: o.smv != null ? String(o.smv) : '', remarks: o.remarks ?? '' }])));
       setLoaded(true);
       loadStatus(io);
     } catch (e) { toast(errMsg(e), 'error'); }
@@ -92,13 +113,20 @@ export function JobRateCardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params, stageId]);
 
-  const total = useMemo(() => Object.values(edit).filter((e) => e.on).reduce((a, e) => a + num(e.rate), 0), [edit]);
+  // an operation with SMV is priced SMV × ₹ / min (server does the same); without SMV its typed rate
+  const rowRate = (e: { rate: string; smv: string }) => (e.smv !== '' && cpm > 0 ? Math.round(num(e.smv) * cpm * 10000) / 10000 : num(e.rate));
+  const total = useMemo(() => Object.values(edit).filter((e) => e.on).reduce((a, e) => a + rowRate(e), 0), [edit, cpm]); // eslint-disable-line react-hooks/exhaustive-deps
+  const totalSmv = useMemo(() => Object.values(edit).filter((e) => e.on && e.smv !== '').reduce((a, e) => a + num(e.smv), 0), [edit]);
 
   const save = async () => {
     setSaving(true);
     try {
       const operations = rows.filter((o) => edit[o.operation_id]?.on)
-        .map((o) => ({ operation_id: o.operation_id, rate: num(edit[o.operation_id].rate), remarks: edit[o.operation_id].remarks || null }));
+        .map((o) => {
+          const e = edit[o.operation_id];
+          return e.smv !== '' ? { operation_id: o.operation_id, smv: num(e.smv), remarks: e.remarks || null }
+            : { operation_id: o.operation_id, rate: num(e.rate), remarks: e.remarks || null };
+        });
       await api.put('/job-rate-cards', { io_no: ioNo.trim(), stage_id: Number(stageId), operations });
       toast(`Rate card saved for ${ioNo.trim()} — ${operations.length} operation(s), ₹${total.toFixed(2)} / PCS`);
       loadCards(); loadCard();
@@ -141,8 +169,8 @@ export function JobRateCardPage() {
           </div>
           <p className="px-3 pb-2 text-[11px] text-slate-500">
             "Load rates from costing" takes the rate per piece of each operation from the style's approved pre-costing
-            (Sewing: SMV × ₹ / min · Cutting and Processes: the row rate). In-house unit DCs and contractor bills use this
-            rate card, so they pick up the costing rates.
+            (Cutting and Processes: the row rate · Sewing SMV rows only when the costing used detailed SMV — a merchandiser's
+            flat CMT rate is compared in Variance instead). Production enters SMV here: rate = SMV × the job's ₹ / min.
           </p>
           {loaded && status && (
             <div id="rc-status" data-status={status.status ?? ''} className={`mx-3 mb-3 flex flex-wrap items-center gap-2 rounded-lg border p-2.5 text-xs ${locked ? 'border-emerald-200 bg-emerald-50' : status.status === 'SUBMITTED' ? 'border-sky-200 bg-sky-50' : 'border-amber-200 bg-amber-50'}`}>
@@ -168,23 +196,67 @@ export function JobRateCardPage() {
             </div>
           )}
           {loaded && (
+            <div id="rc-settings" className="mx-3 mb-3 flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600">₹ per standard minute</label>
+                <input id="rc-cpm" type="number" min={0} step="0.01" disabled={locked} className="input h-8 w-28 text-right text-xs" value={cfg.cpm}
+                  placeholder="e.g. 1.20" onChange={(ev) => setCfg((c) => ({ ...c, cpm: ev.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600">Production overhead</label>
+                <div className="flex gap-1">
+                  <select id="rc-oh-basis" disabled={locked} className="input !h-8 !py-0 w-32 text-xs" value={cfg.ohBasis}
+                    onChange={(ev) => setCfg((c) => ({ ...c, ohBasis: ev.target.value as any }))}>
+                    <option value="">— none —</option>
+                    <option value="PER_PC">₹ per piece</option>
+                    <option value="PCT">% of conversion</option>
+                  </select>
+                  <input id="rc-oh-value" type="number" min={0} step="0.01" disabled={locked || !cfg.ohBasis} className="input h-8 w-24 text-right text-xs" value={cfg.ohValue}
+                    onChange={(ev) => setCfg((c) => ({ ...c, ohValue: ev.target.value }))} />
+                </div>
+              </div>
+              {!locked && <Button size="sm" variant="secondary" id="rc-cfg-save" loading={cfgBusy} onClick={saveCfg}><Save size={12} className="mr-1 inline" />Save settings</Button>}
+              <span className="ml-auto text-slate-600" id="rc-cfg-summary">
+                {status?.total_smv ? <>Total SMV <b>{num(status.total_smv).toFixed(2)}</b> min · </> : null}
+                Overhead <b>{status?.overhead_pc != null ? `₹${num(status.overhead_pc).toFixed(2)} / PCS` : 'not set'}</b>
+                {status?.in_revision && status.in_force_overhead_pc != null && status.in_force_overhead_pc !== status.overhead_pc
+                  ? <> (in force ₹{num(status.in_force_overhead_pc).toFixed(2)})</> : null}
+              </span>
+            </div>
+          )}
+          {loaded && (
             <>
               <table className="w-full text-xs">
                 <thead className="bg-slate-50 text-slate-500"><tr>
                   <th className="w-8 px-3 py-2" /><th className="px-3 py-2 text-left">Operation</th>
-                  <th className="px-3 py-2 text-right">Master rate</th><th className="px-3 py-2 text-right">Job rate (₹ / PCS)</th><th className="px-3 py-2 text-left">Remarks</th>
+                  <th className="px-3 py-2 text-right">Master rate</th>
+                  <th className="px-3 py-2 text-right" title="Standard minutes — rate = SMV × ₹ / min">SMV</th>
+                  <th className="px-3 py-2 text-right">Job rate (₹ / PCS)</th><th className="px-3 py-2 text-left">Remarks</th>
                 </tr></thead>
                 <tbody>
                   {rows.map((o) => {
-                    const e = edit[o.operation_id] ?? { on: false, rate: '', remarks: '' };
+                    const e = edit[o.operation_id] ?? { on: false, rate: '', smv: '', remarks: '' };
+                    const bySmv = e.smv !== '';
                     return (
                       <tr key={o.operation_id} className={`border-t border-slate-100 ${e.on ? 'bg-brand-50/40' : ''}`}>
                         <td className="px-3 py-1.5 text-center"><input type="checkbox" checked={e.on} disabled={locked} onChange={() => setEdit((c) => ({ ...c, [o.operation_id]: { ...e, on: !e.on } }))} /></td>
                         <td className="px-3 py-1.5 font-medium">{o.op_name} <span className="text-slate-400">{o.op_code}</span></td>
                         <td className="px-3 py-1.5 text-right text-slate-500">{num(o.default_rate).toFixed(2)}</td>
                         <td className="px-3 py-1.5 text-right">
-                          <input type="number" min={0} step="0.01" disabled={!e.on || locked} className="input h-7 w-24 text-right text-xs" value={e.rate}
-                            onChange={(ev) => setEdit((c) => ({ ...c, [o.operation_id]: { ...e, rate: ev.target.value } }))} />
+                          <input type="number" min={0} step="0.01" disabled={!e.on || locked} className="input h-7 w-20 text-right text-xs" value={e.smv}
+                            data-smv-op={o.operation_id} placeholder="—"
+                            onChange={(ev) => setEdit((c) => ({ ...c, [o.operation_id]: { ...e, smv: ev.target.value } }))} />
+                        </td>
+                        <td className="px-3 py-1.5 text-right">
+                          {bySmv ? (
+                            <span className="font-semibold" title={`${e.smv} SMV × ₹${cpm || '—'} / min`} data-rate-op={o.operation_id}>
+                              {cpm > 0 ? rowRate(e).toFixed(2) : <span className="text-amber-700">set ₹ / min</span>}
+                            </span>
+                          ) : (
+                            <input type="number" min={0} step="0.01" disabled={!e.on || locked} className="input h-7 w-24 text-right text-xs" value={e.rate}
+                              data-rate-op={o.operation_id}
+                              onChange={(ev) => setEdit((c) => ({ ...c, [o.operation_id]: { ...e, rate: ev.target.value } }))} />
+                          )}
                         </td>
                         <td className="px-3 py-1.5">
                           <input disabled={!e.on || locked} className="input h-7 w-40 text-xs" value={e.remarks}
@@ -193,11 +265,11 @@ export function JobRateCardPage() {
                       </tr>
                     );
                   })}
-                  {!rows.length && <tr><td colSpan={5} className="px-3 py-6 text-center text-slate-400">This process has no operations — add them in Process & Operations.</td></tr>}
+                  {!rows.length && <tr><td colSpan={6} className="px-3 py-6 text-center text-slate-400">This process has no operations — add them in Process & Operations.</td></tr>}
                 </tbody>
               </table>
               <div className="flex items-center justify-between border-t border-slate-200 px-3 py-2 text-sm">
-                <span>{Object.values(edit).filter((e) => e.on).length} operation(s) · <b>₹{total.toFixed(2)} / PCS</b> for {ioNo}</span>
+                <span>{Object.values(edit).filter((e) => e.on).length} operation(s){totalSmv ? ` · ${totalSmv.toFixed(2)} SMV` : ''} · <b>₹{total.toFixed(2)} / PCS</b> for {ioNo}</span>
                 {locked
                   ? <span className="text-xs font-semibold text-emerald-700"><Lock size={12} className="mr-1 inline" />Locked — use Revise to change</span>
                   : <Button loading={saving} onClick={save}><Save size={13} className="mr-1 inline" />Save rate card</Button>}
@@ -256,6 +328,8 @@ type CardStatus = {
   io_no: string; status: 'DRAFT' | 'SUBMITTED' | 'LOCKED' | null; revision_no: number;
   submitted_at: string | null; submitted_by: string | null; locked_at: string | null; locked_by: string | null;
   operations: number; total_rate: number; in_revision: boolean; in_force_total: number;
+  cost_per_min: number | null; total_smv: number; overhead_basis: 'PER_PC' | 'PCT' | null; overhead_value: number | null;
+  overhead_pc: number | null; in_force_overhead_pc: number | null;
   history: { id: number; revision_no: number; action: 'SUBMIT' | 'LOCK' | 'REJECT' | 'REVISE'; reason: string | null; total_rate: number; created_at: string; by_name: string | null; rates: { op_name: string; rate: number }[] }[];
 };
 
@@ -298,6 +372,27 @@ function RateVarianceModal({ ioNo, onClose }: { ioNo: string; onClose: () => voi
               </div>
             ))}
           </div>
+          {(d.groups ?? []).length > 0 && (
+            <table className="w-full text-xs" id="rc-variance-groups">
+              <thead className="bg-indigo-50 text-indigo-900"><tr>
+                <th className="px-2 py-2 text-left">By merchandiser head</th><th className="px-2 py-2 text-right">Merch</th>
+                <th className="px-2 py-2 text-right">Production</th><th className="px-2 py-2 text-right">Actual</th>
+                <th className="px-2 py-2 text-right">Prod − Merch</th><th className="px-2 py-2 text-right">Actual − Prod</th>
+              </tr></thead>
+              <tbody>
+                {d.groups.map((g: any) => (
+                  <tr key={g.key} data-group={g.key} className="border-t border-slate-100">
+                    <td className="px-2 py-1.5 font-medium" title={g.operations?.length ? `Production operations: ${g.operations.join(', ')}` : ''}>{g.label}</td>
+                    <td className="px-2 py-1.5 text-right">{rate(g.merch_rate)}</td>
+                    <td className="px-2 py-1.5 text-right font-semibold">{rate(g.prod_rate)}</td>
+                    <td className="px-2 py-1.5 text-right">{rate(g.actual_rate)}</td>
+                    <td className="px-2 py-1.5 text-right font-semibold">{vr(g.var_prod_vs_merch)}</td>
+                    <td className="px-2 py-1.5 text-right font-semibold">{vr(g.var_actual_vs_prod)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
           {t.off_card_rows > 0 && <p className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">{t.off_card_rows} DC operation(s) of this job are not on its rate card — add them so production has a rate to compare.</p>}
           <table className="w-full text-xs">
             <thead className="bg-slate-50 text-slate-500"><tr>
@@ -378,7 +473,7 @@ function CostingRatesModal({ ioNo, onClose, onApplied }: { ioNo: string; onClose
   const apply = async () => {
     setBusy(true);
     try {
-      const rows = picked.map((x) => ({ operation_id: x.opId, rate: x.r.costing_rate }));
+      const rows = picked.map((x) => ({ operation_id: x.opId, rate: x.r.costing_rate, smv: x.r.source === 'SEWING' ? x.r.smv ?? null : null }));
       const r = await api.post('/job-rate-cards/from-costing', { io_no: ioNo, costing_id: data?.costing?.id, rows });
       toast(`Rate card of ${ioNo} updated from ${data?.costing?.costing_no} — ${r.data.data.applied} operation(s)`);
       onApplied(r.data.data.stages?.[0] ?? null);
@@ -398,7 +493,13 @@ function CostingRatesModal({ ioNo, onClose, onApplied }: { ioNo: string; onClose
         : !c ? <p className="p-4 text-sm text-slate-500">No pre-costing found for the style of job {ioNo}. Save a pre-costing for the style first.</p>
           : (
             <div className="space-y-2">
-              {c.use_flat_sewing_rate && <p className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">The costing uses a flat sewing rate; sewing rows below are still priced SMV × ₹ / min.</p>}
+              {c.flat_cmt && (
+                <p className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900" id="rc-flat-note">
+                  The merchandiser quoted a flat CMT rate of <b>₹{num(c.flat_cmt.rate).toFixed(2)} / PCS</b>
+                  {c.flat_cmt.scope === 'CUT_TO_FINISH' ? ' (cutting → finishing)' : ' (stitching)'} — it has no operations to load.
+                  Enter production's operations and SMV on the card; Variance compares the flat rate with them.
+                </p>
+              )}
               <table className="w-full text-xs" id="rc-costing-preview">
                 <thead className="bg-slate-50 text-slate-500"><tr>
                   <th className="w-8 px-2 py-2" /><th className="px-2 py-2 text-left">Costing row</th><th className="px-2 py-2 text-left">Operation</th>

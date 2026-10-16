@@ -3,8 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Save, RefreshCw, CheckCircle,
-  Plus, Trash2, BadgeCheck
+  Plus, Trash2, BadgeCheck, Lock, GitBranch
 } from 'lucide-react';
+import { useAuth } from '../../lib/auth';
 import { CERTIFICATIONS, TRIM_CERTIFICATIONS } from '../../lib/certifications';
 import { http, ApiError } from '../../lib/api';
 import { useLookup, useStatuses, toOptions } from '../../hooks/useLookup';
@@ -14,7 +15,7 @@ import { fmtDecimal, fmtNumber, today, toDateInput } from '../../lib/format';
 import { FabricPicker } from './CostingsFabricPicker';
 import { PreCostingRowTable } from './PreCostingRowTable';
 import {
-  computePreCosting, finishingRows, otherDirectRows, processHead, processAmount,
+  computePreCosting, finishingRows, otherDirectRows, processHead, processAmount, cmtCoversCutToFinish,
   PRE_COST_HEADS, type PreCostHeadKey,
 } from '../../lib/preCostingCalc';
 
@@ -125,8 +126,18 @@ const normalizeProcess = (row: any, i: number) => {
   };
 };
 
+/**
+ * One page instance per costing: /pre-costings/new and /pre-costings/:id share the component, so without a key
+ * React kept the previous sheet's rows when "New" was opened from a costing (client 16-Oct-2026).
+ */
 export default function PreCostingDetailPage() {
   const { id } = useParams();
+  return <PreCostingSheet key={id ?? 'new'} />;
+}
+
+function PreCostingSheet() {
+  const { id } = useParams();
+  const { can } = useAuth();
   const isNew = !id || id === 'new' || isNaN(Number(id));
   const nav = useNavigate();
   const qc = useQueryClient();
@@ -137,9 +148,12 @@ export default function PreCostingDetailPage() {
   const [activeTab, setActiveTab] = useState('Fabric');
 
   // Merchandiser Flat Sewing Rate Mode (vs Detailed Operations)
+  // Client 16-Oct-2026: the merchandiser quotes ONE flat CMT rate (cutting → finishing); detailed SMV operations are
+  // optional here (Production enters SMV on Production Rate Fixing) and are only counted in Detailed SMV mode.
   const [useFlatSewingRate, setUseFlatSewingRate] = useState(true);
-  const [flatSewingRate, setFlatSewingRate] = useState(20.00);
-  const [flatSewingDesc, setFlatSewingDesc] = useState('Garment Stitching to Ironing Complete');
+  const [flatSewingRate, setFlatSewingRate] = useState<number | ''>('');
+  const [flatSewingDesc, setFlatSewingDesc] = useState('');
+  const [cmtScope, setCmtScope] = useState<'CUT_TO_FINISH' | 'STITCHING'>('CUT_TO_FINISH');
 
   // Lookups
   const styles = useLookup('styles');
@@ -167,175 +181,51 @@ export default function PreCostingDetailPage() {
     costing_date: today(),
     buyer_id: '',
     buyer_name: '',
-    season: 'AW-26',
+    season: '',
     style_id: '',
     style_code: '',
     style_name: '',
-    buyer_ref: 'RFQ-45821',
-    order_qty: 5000,
+    buyer_ref: '',
+    order_qty: 0,
     currency_id: '1',
     currency_code: 'INR',
+    // ₹ per 1 unit of the quote currency: every rate on the sheet is ₹, the quoted FOB is shown in the currency
+    exchange_rate: '' as number | '',
+    fx_rate_date: '',
     price_basis: 'PER_PCS',
     unit_id: '1',
-    factory: 'Unit 1 (Tiruppur)',
+    factory: '',
     version: 1,
     status: 'Draft',
-    margin_pct: 15.0,
-    smv: 12.5,
-    smv_rate_per_min: 0.85,
+    status_code: 'DRAFT',
+    margin_pct: 0,
+    smv: 0,
+    smv_rate_per_min: 0,
     remarks: '',
   });
   // Stored head values of a loaded sheet: kept for a tab its data_json never had.
   const [storedHeads, setStoredHeads] = useState<Partial<Record<PreCostHeadKey, number>>>({});
 
-  // Tab 1: Fabric Lines
-  const [fabrics, setFabrics] = useState<any[]>([
-    {
-      _key: 'fab_1',
-      component: 'Body',
-      fabric_id: '1',
-      fabric_name: 'Single Jersey 180 GSM',
-      color: 'Black',
-      size: 'All',
-      consumption: 0.22,
-      wastage_pct: 5.0,
-      rate: 420.00,
-      amount: 97.02,
-      rate_source: 'Standard Rate Master',
-    },
-    {
-      _key: 'fab_2',
-      component: 'Collar / Neck Rib',
-      fabric_id: '4',
-      fabric_name: 'Rib 1x1 200 GSM',
-      color: 'Black',
-      size: 'All',
-      consumption: 0.025,
-      wastage_pct: 4.0,
-      rate: 450.00,
-      amount: 11.70,
-      rate_source: 'Standard Rate Master',
-    },
-  ]);
-
-  // Tab 2: Yarn Lines (For in-house manufactured fabric recipe)
+  // A new sheet starts empty — no sample rows (client 16-Oct-2026: "New" showed earlier values).
+  const [fabrics, setFabrics] = useState<any[]>([]);
+  // Yarn lines (in-house manufactured fabric recipe)
   const [useYarnRecipe, setUseYarnRecipe] = useState(false);
-  const [yarns, setYarns] = useState<any[]>([
-    {
-      _key: 'yarn_1',
-      yarn_count_id: '1',
-      yarn_count: '30s Combed',
-      yarn_id: '1',
-      yarn_name: '30s Combed Cotton Cone Yarn',
-      composition: '100% Cotton',
-      consumption: 0.23,
-      wastage_pct: 3.0,
-      rate: 285.00,
-      amount: 67.51,
-      rate_source: 'Approved Supplier Quote',
-    },
-  ]);
-
-  // Tab 3: Trims Lines
-  const [trims, setTrims] = useState<any[]>([
-    {
-      _key: 'trm_1',
-      trim_id: '1',
-      trim_code: 'TR-LBL-01',
-      description: 'Woven Main Brand Label',
-      size: '30x50mm',
-      color: 'White/Black',
-      consumption: 1.0,
-      uom: 'Nos',
-      wastage_pct: 3.0,
-      rate: 1.20,
-      amount: 1.24,
-    },
-    {
-      _key: 'trm_2',
-      trim_id: '2',
-      trim_code: 'TR-CARE-01',
-      description: 'Printed Satin Care / Wash Label',
-      size: '25x60mm',
-      color: 'White',
-      consumption: 1.0,
-      uom: 'Nos',
-      wastage_pct: 3.0,
-      rate: 0.75,
-      amount: 0.77,
-    },
-    {
-      _key: 'trm_3',
-      trim_id: '3',
-      trim_code: 'TR-THRD-01',
-      description: 'Spun Poly Sewing Thread (Cones)',
-      size: '40/2',
-      color: 'Black',
-      consumption: 0.015,
-      uom: 'Cone',
-      wastage_pct: 5.0,
-      rate: 120.00,
-      amount: 1.89,
-    },
-  ]);
-
-  // Tab 4: Printing & Embroidery
-  const [embellishments, setEmbellishments] = useState<any[]>([
-    {
-      _key: 'emb_1',
-      type: 'PRINTING',
-      method: 'Screen Print',
-      artwork: 'Chest Logo 3-Colours',
-      position: 'Front Chest',
-      colors: 3,
-      rate: 6.50,
-      rate_source: 'Outsourced Printer Quote',
-    },
-  ]);
-
-  // Tab 5: Processes (knitting / dyeing / compacting / washing — per KG or per PC)
-  const [processes, setProcesses] = useState<any[]>([
-    { _key: 'prc_1', process_name: 'Bio-Washing & Softening', process_type: 'WASHING', basis: 'PER_PC', consumption: '', rate: 4.50 },
-  ]);
-
-  // Tab 6: Cutting operations (₹ / pc)
-  const [cuttingOps, setCuttingOps] = useState<any[]>([
-    { _key: 'cut_1', operation: 'Spreading', rate: 0.40 },
-    { _key: 'cut_2', operation: 'Cutting', rate: 0.70 },
-    { _key: 'cut_3', operation: 'Numbering / Bundling', rate: 0.40 },
-  ]);
-
-  // Tab 7: Sewing SMV Operations
-  const [sewingOps, setSewingOps] = useState<any[]>([
-    { _key: 'op_1', operation: 'Shoulder Join', smv: 0.85 },
-    { _key: 'op_2', operation: 'Rib Neck Attach', smv: 1.60 },
-    { _key: 'op_3', operation: 'Neck Topstitch', smv: 1.20 },
-    { _key: 'op_4', operation: 'Sleeve Attach', smv: 2.40 },
-    { _key: 'op_5', operation: 'Side Seam Overlock', smv: 2.10 },
-    { _key: 'op_6', operation: 'Sleeve & Bottom Hemming', smv: 2.85 },
-    { _key: 'op_7', operation: 'Check & Trim Thread', smv: 1.50 },
-  ]);
-
-  // Tab 8: Finishing & Packing items (qty / pc × rate, each row Finishing or Packing)
-  const [finishingItems, setFinishingItems] = useState<any[]>([
-    { _key: 'fin_1', item: 'Thread Cutting', cost_type: 'FINISHING', qty_per_pc: 1, rate: 0.30 },
-    { _key: 'fin_2', item: 'Checking', cost_type: 'FINISHING', qty_per_pc: 1, rate: 0.40 },
-    { _key: 'fin_3', item: 'Ironing', cost_type: 'FINISHING', qty_per_pc: 1, rate: 0.80 },
-    { _key: 'fin_4', item: 'Folding', cost_type: 'PACKING', qty_per_pc: 1, rate: 0.25 },
-    { _key: 'fin_5', item: 'Printed Polybag with Warning', cost_type: 'PACKING', qty_per_pc: 1, rate: 0.85 },
-    { _key: 'fin_6', item: 'Brand Hangtag & Kimble Tag', cost_type: 'PACKING', qty_per_pc: 1, rate: 1.20 },
-    { _key: 'fin_7', item: '5-Ply Export Master Carton (60 Pcs/Box)', cost_type: 'PACKING', qty_per_pc: 0.0167, rate: 85.00 },
-  ]);
-
-  // Tab 9: Other Direct Charges (₹/pc, % of FOB or % of direct cost)
-  const [otherDirect, setOtherDirect] = useState<any[]>([
-    { _key: 'oth_1', charge_type: 'TESTING', description: 'Lab Testing & Colour Fastness', basis: 'PER_PC', value: 0.45 },
-    { _key: 'oth_2', charge_type: 'FREIGHT', description: 'Buyer Sample Couriers & Approvals', basis: 'PER_PC', value: 0.35 },
-  ]);
-
-  // Tab 10: Overhead
+  const [yarns, setYarns] = useState<any[]>([]);
+  const [trims, setTrims] = useState<any[]>([]);
+  const [embellishments, setEmbellishments] = useState<any[]>([]);
+  // Processes (knitting / dyeing / compacting / washing — per KG or per PC)
+  const [processes, setProcesses] = useState<any[]>([]);
+  // Cutting operations (₹ / pc)
+  const [cuttingOps, setCuttingOps] = useState<any[]>([]);
+  // Sewing SMV operations (optional — Detailed SMV mode only)
+  const [sewingOps, setSewingOps] = useState<any[]>([]);
+  // Finishing & Packing items (qty / pc × rate, each row Finishing or Packing)
+  const [finishingItems, setFinishingItems] = useState<any[]>([]);
+  // Other Direct Charges (₹/pc, % of FOB or % of direct cost)
+  const [otherDirect, setOtherDirect] = useState<any[]>([]);
+  // Overhead
   const [overhead, setOverhead] = useState<{ basis: string; rate: number | ''; pct: number | '' }>({
-    basis: 'PER_PIECE', rate: 3.00, pct: 5.0,
+    basis: 'PER_PIECE', rate: '', pct: '',
   });
 
   const addSewingOp = () => {
@@ -364,18 +254,21 @@ export default function PreCostingDetailPage() {
       costing_date: toDateInput(c.costing_date) || today(),
       buyer_id: String(c.buyer_id || ''),
       buyer_name: c.buyer_name || '',
-      season: c.season || 'AW-26',
+      season: c.season || '',
       style_id: String(c.style_id || ''),
       style_code: c.style_code || '',
       style_name: c.style_name || '',
-      buyer_ref: c.buyer_ref || 'RFQ-45821',
-      order_qty: Number(c.order_qty) || 5000,
+      buyer_ref: c.buyer_ref || '',
+      order_qty: Number(c.order_qty) || 0,
       currency_id: String(c.currency_id || '1'),
       currency_code: c.currency_code || 'INR',
+      exchange_rate: c.exchange_rate != null && String(c.currency_code || 'INR') !== 'INR' ? Number(c.exchange_rate) : '',
+      fx_rate_date: toDateInput(c.fx_rate_date) || '',
       price_basis: c.price_basis || 'PER_PCS',
       version: Number(c.version) || 1,
       status: c.status_label || 'Draft',
-      margin_pct: c.margin_pct != null ? Number(c.margin_pct) : 15.0,
+      status_code: String(costingStatuses.data?.find((x) => Number(x.id) === Number(c.status_id))?.code ?? c.status_code ?? 'DRAFT').toUpperCase(),
+      margin_pct: c.margin_pct != null ? Number(c.margin_pct) : 0,
       smv: c.smv != null ? Number(c.smv) : prev.smv,
       smv_rate_per_min: c.smv_rate_per_min != null ? Number(c.smv_rate_per_min) : prev.smv_rate_per_min,
       remarks: c.remarks || '',
@@ -403,6 +296,10 @@ export default function PreCostingDetailPage() {
     if (parsed.useFlatSewingRate !== undefined) setUseFlatSewingRate(parsed.useFlatSewingRate);
     if (parsed.flatSewingRate !== undefined) setFlatSewingRate(Number(parsed.flatSewingRate) || 0);
     if (parsed.flatSewingDesc !== undefined) setFlatSewingDesc(parsed.flatSewingDesc);
+    // sheets saved before the scope existed: the flat rate was stitching only (their totals stay the same)
+    // a sheet saved before flat mode existed priced sewing from its SMV rows — keep that mode so its total stays
+    if (parsed.useFlatSewingRate === undefined) setUseFlatSewingRate(!(Array.isArray(parsed.sewingOps) && parsed.sewingOps.length));
+    setCmtScope(String(parsed.cmtScope ?? '').toUpperCase() === 'CUT_TO_FINISH' ? 'CUT_TO_FINISH' : 'STITCHING');
 
     // Tabs added later: a sheet saved before them gets its stored head as one row,
     // so the first save keeps the same figure.
@@ -435,8 +332,9 @@ export default function PreCostingDetailPage() {
     setOtherDirect(oth);
     setOverhead(parsed.overhead && typeof parsed.overhead === 'object'
       ? { basis: parsed.overhead.basis === 'PERCENT_DIRECT' ? 'PERCENT_DIRECT' : 'PER_PIECE', rate: parsed.overhead.rate ?? '', pct: parsed.overhead.pct ?? '' }
-      : { basis: 'PER_PIECE', rate: stored.overhead_cost ?? 0, pct: 5.0 });
-  }, [costingQuery.data]);
+      : { basis: 'PER_PIECE', rate: stored.overhead_cost ?? 0, pct: '' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [costingQuery.data, costingStatuses.data]);
 
   // Rows saved / defaulted before the Certification column existed take the master's certification.
   useEffect(() => {
@@ -458,25 +356,25 @@ export default function PreCostingDetailPage() {
 
   const newFabricRow = () => ({
     _key: `fab_${Date.now()}`,
-    component: 'Body',
+    component: '',
     fabric_id: '',
     fabric_name: '',
-    color: 'Assorted',
+    color: '',
     size: 'All',
-    consumption: 0.20,
-    wastage_pct: 5,
-    rate: 420,
-    amount: 88.2,
+    consumption: '',
+    wastage_pct: '',
+    rate: '',
+    amount: 0,
     rate_source: 'Manual Rate',
     certification: '',
   });
   const newYarnRow = () => ({
-    yarn_id: '', yarn_count: '', yarn_name: '', composition: '100% Cotton',
-    consumption: 0.15, wastage_pct: 3, rate: '', rate_source: 'Manual Rate', certification: '',
+    yarn_id: '', yarn_count: '', yarn_name: '', composition: '',
+    consumption: '', wastage_pct: '', rate: '', rate_source: 'Manual Rate', certification: '',
   });
   const newTrimRow = () => ({
     trim_id: '', trim_code: '', description: '', size: 'Standard', color: '',
-    consumption: 1, uom: 'Nos', wastage_pct: 2, rate: '', certification: '',
+    consumption: 1, uom: 'Nos', wastage_pct: '', rate: '', certification: '',
   });
   const newEmbRow = () => ({ type: 'PRINTING', method: '', artwork: '', position: '', colors: '', rate: '' });
   /** Append a row from the top "Add" button (the grid's own button is at the bottom). */
@@ -565,15 +463,15 @@ export default function PreCostingDetailPage() {
       };
       bomLines.forEach((l: any, idx: number) => {
         if (l.material_type === 'FABRIC') {
-          const cons = perGarment(l) || 0.22;
-          const wastage = l.wastage_pct != null && l.wastage_pct !== '' ? Number(l.wastage_pct) : 5;
-          const rate = Number(l.applied_rate) || Number(l.std_rate) || 420;
+          const cons = perGarment(l) || 0;
+          const wastage = l.wastage_pct != null && l.wastage_pct !== '' ? Number(l.wastage_pct) : 0;
+          const rate = Number(l.applied_rate) || Number(l.std_rate) || 0;
           newFabrics.push({
             _key: `fab_${idx}`,
-            component: idx === 0 ? 'Body' : 'Collar / Neck',
+            component: l.part_name || l.component || (idx === 0 ? 'Body' : ''),
             fabric_id: String(l.fabric_id),
             fabric_name: l.fabric_name,
-            color: l.color_name || 'Assorted',
+            color: l.color_name || '',
             size: l.size_code || 'All',
             consumption: cons,
             wastage_pct: wastage,
@@ -583,9 +481,9 @@ export default function PreCostingDetailPage() {
             certification: l.certification || '',
           });
         } else if (l.material_type === 'TRIM') {
-          const cons = perGarment(l) || 1;
-          const wastage = l.wastage_pct != null && l.wastage_pct !== '' ? Number(l.wastage_pct) : 3;
-          const rate = Number(l.applied_rate) || Number(l.std_rate) || 1.5;
+          const cons = perGarment(l) || 0;
+          const wastage = l.wastage_pct != null && l.wastage_pct !== '' ? Number(l.wastage_pct) : 0;
+          const rate = Number(l.applied_rate) || Number(l.std_rate) || 0;
           newTrims.push({
             _key: `trm_${idx}`,
             trim_id: String(l.trim_id),
@@ -601,18 +499,18 @@ export default function PreCostingDetailPage() {
             certification: l.certification || '',
           });
         } else if (l.material_type === 'YARN') {
-          const cons = perGarment(l) || 0.23;
-          const rate = Number(l.applied_rate) || 285;
+          const cons = perGarment(l) || 0;
+          const rate = Number(l.applied_rate) || Number(l.std_rate) || 0;
           newYarns.push({
             _key: `yrn_${idx}`,
             yarn_id: String(l.yarn_id),
             yarn_name: l.yarn_name,
-            yarn_count: l.yarn_code || '30s Combed',
-            composition: '100% Cotton',
+            yarn_count: l.yarn_code || '',
+            composition: '',
             consumption: cons,
-            wastage_pct: 3.0,
+            wastage_pct: Number(l.wastage_pct) || 0,
             rate: rate,
-            amount: cons * 1.03 * rate,
+            amount: cons * (1 + (Number(l.wastage_pct) || 0) / 100) * rate,
             rate_source: l.rate_source || 'Style BOM',
             certification: l.certification || '',
           });
@@ -650,10 +548,11 @@ export default function PreCostingDetailPage() {
     useFlatSewingRate,
     flatSewingRate,
     flatSewingDesc,
+    cmtScope,
     // Certification requirement summary ("generate certificate" on save) — not used by the calc.
     cert_summary: certSummary({ fabrics, yarns, trims }),
   }), [fabrics, yarns, trims, embellishments, processes, cuttingOps, sewingOps, finishingItems,
-    otherDirect, overhead, useYarnRecipe, useFlatSewingRate, flatSewingRate, flatSewingDesc]);
+    otherDirect, overhead, useYarnRecipe, useFlatSewingRate, flatSewingRate, flatSewingDesc, cmtScope]);
 
   // Same function as the server (lib/preCostingCalc mirrors server/src/modules/costing/preCostingCalc).
   const calc = useMemo(() => computePreCosting(sheetJson, {
@@ -681,6 +580,18 @@ export default function PreCostingDetailPage() {
   const profitAmountPerPc = calc.profit_per_pc;
   const markupPct = calc.markup_pct;
 
+  // Quote currency: rates are ₹; the FOB is quoted in the costing currency at the exchange rate (₹ per 1 unit)
+  const curRow: any = currencies.data?.find((c: any) => String(c.id) === String(head.currency_id));
+  const curCode = String(curRow?.code ?? head.currency_code ?? 'INR').toUpperCase();
+  const curSym = curCode === 'INR' ? '₹' : (curRow?.symbol || `${curCode} `);
+  const isForeign = curCode !== 'INR';
+  const fxRate = Number(head.exchange_rate) || 0;
+  const fobFc = isForeign ? (fxRate > 0 ? quotedFobPerPc / fxRate : null) : quotedFobPerPc;
+  const cmtAll = cmtCoversCutToFinish({ useFlatSewingRate, cmtScope });
+  // Approved = read-only baseline; changes go through Revise (v + 1). Approving needs COSTING.APPROVE.
+  const isApproved = head.status_code === 'APPROVED';
+  const canApprove = can('COSTING.APPROVE');
+
   // Order Totals
   const orderQty = Number(head.order_qty) || 0;
   const totalOrderCost = totalCostPerPc * orderQty;
@@ -706,6 +617,14 @@ export default function PreCostingDetailPage() {
       toast(calc.error, 'warning');
       return;
     }
+    if (isForeign && !(fxRate > 0)) {
+      toast(`Enter the exchange rate — ₹ per 1 ${curCode}`, 'warning');
+      return;
+    }
+    if (statusOverride === 'Approved' && !(orderQty > 0)) {
+      toast('Enter the order quantity before approving', 'warning');
+      return;
+    }
 
     setSaving(true);
     try {
@@ -717,6 +636,8 @@ export default function PreCostingDetailPage() {
         style_id: Number(head.style_id),
         buyer_id: head.buyer_id ? Number(head.buyer_id) : undefined,
         currency_id: head.currency_id ? Number(head.currency_id) : 1,
+        exchange_rate: isForeign ? fxRate : 1,
+        fx_rate_date: isForeign ? (head.fx_rate_date || head.costing_date) : undefined,
         status_id: costingStatuses.data?.find((st) => String(st.code).toUpperCase() === statusOverride.toUpperCase())?.id ?? undefined,
         season: head.season,
         buyer_ref: head.buyer_ref,
@@ -743,7 +664,7 @@ export default function PreCostingDetailPage() {
 
       const saved = res.data;
       setCostId(saved.id);
-      setHead((h) => ({ ...h, costing_no: saved.costing_no, status: statusOverride }));
+      setHead((h) => ({ ...h, costing_no: saved.costing_no, status: statusOverride, status_code: statusOverride.toUpperCase() }));
       const stored: Partial<Record<PreCostHeadKey, number>> = {};
       for (const h of PRE_COST_HEADS) stored[h] = Number(saved[h]) || 0;
       setStoredHeads(stored);
@@ -760,6 +681,36 @@ export default function PreCostingDetailPage() {
     }
   };
 
+  const [revising, setRevising] = useState(false);
+  const handleRevise = async () => {
+    if (!costId) return;
+    const reason = window.prompt(`Reason for revising ${head.costing_no} v${head.version} (kept on the new version)`, '');
+    if (reason === null) return;
+    setRevising(true);
+    try {
+      const r = await http.post<{ data: { id: number } }>(`/pre-costings/${costId}/revise`, { reason: reason.trim() || null });
+      toast(`${head.costing_no} v${Number(head.version) + 1} created as a draft — v${head.version} stays approved`, 'success');
+      qc.invalidateQueries({ queryKey: ['pre-costings'] });
+      qc.invalidateQueries({ queryKey: ['costings'] });
+      nav(`/sales/pre-costings/${r.data.id}`);
+    } catch (err) {
+      toast((err as ApiError).message || 'Could not revise the costing', 'error');
+    } finally {
+      setRevising(false);
+    }
+  };
+
+  // when a foreign currency is picked, pre-fill its latest exchange rate (₹ per 1 unit) if none is entered
+  const pickCurrency = async (val: string) => {
+    const row: any = currencies.data?.find((c: any) => String(c.id) === val);
+    setHead((h) => ({ ...h, currency_id: val, currency_code: row?.code ?? h.currency_code }));
+    if (!row || String(row.code).toUpperCase() === 'INR' || Number(head.exchange_rate) > 0) return;
+    try {
+      const r = await http.get<{ data: { rate: number | null; rate_date: string | null } }>('/pre-costings/fx-rate', { params: { currency_id: val, on: head.costing_date } });
+      if (r.data.rate) setHead((h) => (Number(h.exchange_rate) > 0 ? h : { ...h, exchange_rate: r.data.rate!, fx_rate_date: toDateInput(r.data.rate_date) || h.fx_rate_date }));
+    } catch { /* the merchandiser types the rate */ }
+  };
+
   const tabs = [
     'Fabric',
     'Yarn Recipe',
@@ -767,7 +718,7 @@ export default function PreCostingDetailPage() {
     'Printing & Emb',
     'Processes',
     'Cutting',
-    'Sewing (SMV)',
+    'CMT / Sewing',
     'Finishing & Packing',
     'Other Direct',
     'Overhead',
@@ -808,37 +759,61 @@ export default function PreCostingDetailPage() {
             type="button"
             className="btn-secondary btn-sm flex items-center gap-1.5"
             onClick={() => handleLoadStyleBOM()}
-            disabled={loadingBOM || !head.style_id}
+            disabled={loadingBOM || !head.style_id || isApproved}
           >
             <RefreshCw size={14} className={loadingBOM ? 'animate-spin text-brand-600' : ''} />
             {loadingBOM ? 'Loading BOM…' : 'Load Style BOM & Rates'}
           </button>
 
-          <button
-            type="button"
-            className="btn-primary btn-sm flex items-center gap-1.5"
-            onClick={() => handleSave('Draft')}
-            disabled={saving}
-          >
-            <Save size={14} /> Save Draft
-          </button>
-
-          {costId && (
+          {isApproved ? (
             <button
               type="button"
-              className="btn-success btn-sm flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
-              onClick={() => handleSave('Approved')}
-              disabled={saving}
+              id="pc-revise"
+              className="btn-primary btn-sm flex items-center gap-1.5"
+              onClick={handleRevise}
+              disabled={revising}
+              title="An approved costing is read-only; Revise creates the next version as a draft"
             >
-              <CheckCircle size={14} /> Approve Costing
+              <GitBranch size={14} /> {revising ? 'Creating…' : `Revise (create v${Number(head.version) + 1})`}
             </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                id="pc-save"
+                className="btn-primary btn-sm flex items-center gap-1.5"
+                onClick={() => handleSave('Draft')}
+                disabled={saving}
+              >
+                <Save size={14} /> Save Draft
+              </button>
+              {costId && canApprove && (
+                <button
+                  type="button"
+                  id="pc-approve"
+                  className="btn-success btn-sm flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                  onClick={() => handleSave('Approved')}
+                  disabled={saving}
+                >
+                  <CheckCircle size={14} /> Approve Costing
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
 
+      {isApproved && (
+        <div id="pc-approved-banner" className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-2.5 text-xs text-emerald-900">
+          <Lock size={14} /> <b>Approved — read-only.</b> This version is the baseline for quotations and production costing.
+          To change it, click Revise: v{Number(head.version) + 1} is created as a draft and v{head.version} stays as it is.
+        </div>
+      )}
+
       {/* 2. Top Header Grid */}
+      <fieldset disabled={isApproved} className="contents">
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-3.5">
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
               Style Code *
@@ -903,13 +878,36 @@ export default function PreCostingDetailPage() {
               Currency
             </label>
             <Select
+              id="pc-currency"
               value={head.currency_id}
-              onChange={(e) => setHead((h) => ({ ...h, currency_id: e.target.value }))}
-              options={toOptions(currencies.data)}
+              onChange={(e) => pickCurrency(e.target.value)}
+              options={(currencies.data ?? []).map((c: any) => ({ value: String(c.id), label: `${c.code} — ${c.label}` }))}
             />
           </div>
+
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+              {isForeign ? `Exchange Rate (₹ per 1 ${curCode}) *` : 'Exchange Rate'}
+            </label>
+            {isForeign ? (
+              <Input
+                id="pc-fx"
+                type="number"
+                step="0.0001"
+                value={head.exchange_rate}
+                placeholder={`₹ for 1 ${curCode}`}
+                onChange={(e) => setHead((h) => ({ ...h, exchange_rate: e.target.value === '' ? '' : Number(e.target.value) }))}
+              />
+            ) : (
+              <p className="h-10 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-500">INR — no conversion</p>
+            )}
+          </div>
         </div>
+        <p className="mt-2 text-[11px] text-slate-500">
+          All rates on the tabs are in <b>₹ (INR)</b>.{isForeign ? <> The quoted FOB is shown in <b>{curCode}</b> (₹ ÷ exchange rate) with the ₹ value under it.</> : null}
+        </p>
       </div>
+      </fieldset>
 
       {/* 3. Top Summary Banner */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -939,12 +937,26 @@ export default function PreCostingDetailPage() {
           <p className="text-[11px] text-emerald-800 font-medium mt-0.5">Commercial profit target</p>
         </div>
 
-        <div className="rounded-xl border border-brand-300 bg-brand-50 p-3.5 shadow-xs">
-          <span className="text-xs font-black uppercase tracking-wider text-brand-900">Quoted FOB Price / Pc</span>
-          <p className="text-2xl font-black text-brand-900 font-mono mt-1">₹{fmtDecimal(quotedFobPerPc, 2)}</p>
-          <p className="text-[11px] text-brand-800 font-bold mt-0.5">
-            Total Order FOB: ₹{fmtDecimal(totalOrderFob, 0)}
-          </p>
+        <div className="rounded-xl border border-brand-300 bg-brand-50 p-3.5 shadow-xs" id="pc-fob">
+          <span className="text-xs font-black uppercase tracking-wider text-brand-900">Quoted FOB Price / Pc{isForeign ? ` (${curCode})` : ''}</span>
+          {isForeign ? (
+            <>
+              <p className="text-2xl font-black text-brand-900 font-mono mt-1" data-fob-fc>
+                {fobFc != null ? `${curSym}${fmtDecimal(fobFc, 4)}` : <span className="text-base text-amber-700">enter exchange rate</span>}
+              </p>
+              <p className="text-[11px] text-brand-800 font-bold mt-0.5" data-fob-inr>
+                ₹{fmtDecimal(quotedFobPerPc, 2)} / pc · @ ₹{fxRate || '—'} per {curCode}
+              </p>
+              <p className="text-[11px] text-brand-800 mt-0.5">
+                Order FOB: {fobFc != null ? `${curSym}${fmtDecimal(fobFc * orderQty, 2)}` : '—'} · ₹{fmtDecimal(totalOrderFob, 0)}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-2xl font-black text-brand-900 font-mono mt-1">₹{fmtDecimal(quotedFobPerPc, 2)}</p>
+              <p className="text-[11px] text-brand-800 font-bold mt-0.5">Total Order FOB: ₹{fmtDecimal(totalOrderFob, 0)}</p>
+            </>
+          )}
         </div>
       </div>
 
@@ -975,7 +987,7 @@ export default function PreCostingDetailPage() {
       </div>
 
       {/* 5. Tab Panels */}
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+      <fieldset disabled={isApproved} className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs min-w-0">
         {/* TAB 1: FABRICS */}
         {activeTab === 'Fabric' && (
           <div className="space-y-4">
@@ -1266,12 +1278,12 @@ export default function PreCostingDetailPage() {
         )}
 
         {/* TAB 7: SEWING (SMV ENGINE) */}
-        {activeTab === 'Sewing (SMV)' && (
+        {activeTab === 'CMT / Sewing' && (
           <div className="space-y-4">
             {/* Mode Selector */}
             <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg bg-indigo-50 border border-indigo-200">
               <div className="flex items-center gap-3">
-                <span className="text-xs font-bold text-indigo-950 uppercase tracking-wider">Sewing Cost Mode:</span>
+                <span className="text-xs font-bold text-indigo-950 uppercase tracking-wider">CMT / Sewing Cost:</span>
                 <div className="inline-flex rounded-md shadow-sm">
                   <button
                     type="button"
@@ -1282,7 +1294,7 @@ export default function PreCostingDetailPage() {
                         : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
                     }`}
                   >
-                    👔 Merchandiser Flat Rate (₹/pc)
+                    Flat CMT rate (₹ / pc) — main
                   </button>
                   <button
                     type="button"
@@ -1293,53 +1305,61 @@ export default function PreCostingDetailPage() {
                         : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
                     }`}
                   >
-                    ⚙️ Detailed SMV Operations
+                    Detailed SMV operations — optional
                   </button>
                 </div>
               </div>
               <span className="font-mono font-black text-sm text-brand-950 bg-white border border-indigo-200 px-3 py-1 rounded-md">
-                Sewing Cost: ₹{sewingCostPerPc.toFixed(2)} / Pc
+                {useFlatSewingRate && cmtAll ? 'CMT' : 'Sewing'} Cost: ₹{sewingCostPerPc.toFixed(2)} / Pc
               </span>
             </div>
 
             {/* Flat Rate View */}
             {useFlatSewingRate ? (
-              <div className="p-4 bg-white rounded-lg border border-slate-200 shadow-sm space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 bg-white rounded-lg border border-slate-200 shadow-sm space-y-4" id="pc-flat-cmt">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="label text-xs font-bold text-slate-800">Flat Sewing & Ironing Rate (₹ / Piece) *</label>
+                    <label className="label text-xs font-bold text-slate-800">Flat CMT rate (₹ / piece) *</label>
                     <input
+                      id="pc-flat-rate"
                       type="number"
                       step="0.50"
                       value={flatSewingRate}
-                      onChange={(e) => setFlatSewingRate(parseFloat(e.target.value) || 0)}
+                      onChange={(e) => setFlatSewingRate(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
                       className="input font-mono font-black text-base text-brand-800 w-full"
-                      placeholder="20.00"
+                      placeholder="e.g. 25.00"
                     />
-                    <p className="text-[11px] text-slate-500 mt-1">
-                      Standard merchant rate covering stitching, trimming, checking, and ironing.
-                    </p>
                   </div>
                   <div>
-                    <label className="label text-xs font-bold text-slate-800">Description / Operations Covered</label>
+                    <label className="label text-xs font-bold text-slate-800">The flat rate covers</label>
+                    <select id="pc-cmt-scope" className="input text-xs w-full" value={cmtScope} onChange={(e) => setCmtScope(e.target.value as any)}>
+                      <option value="CUT_TO_FINISH">Cutting → finishing (cutting, stitching, checking, ironing)</option>
+                      <option value="STITCHING">Stitching only (cutting &amp; finishing on their own tabs)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label text-xs font-bold text-slate-800">Description / operations covered</label>
                     <input
                       type="text"
                       value={flatSewingDesc}
                       onChange={(e) => setFlatSewingDesc(e.target.value)}
                       className="input text-xs w-full"
-                      placeholder="e.g. Stitching to Ironing Complete"
+                      placeholder="e.g. Cutting to ironing complete"
                     />
                   </div>
                 </div>
-                <div className="p-2.5 rounded bg-amber-50 border border-amber-200 text-xs text-amber-800">
-                  💡 <strong>Merchandiser Note:</strong> Using flat rate simplifies costing quotation without having to calculate individual SMVs for shoulder join, neck attach, sleeve hemming, etc.
+                <div className="p-2.5 rounded bg-amber-50 border border-amber-200 text-xs text-amber-900">
+                  The merchandiser quotes one flat rate per piece. Detailed SMV operations are entered by Production on
+                  <b> Production Rate Fixing</b> (SMV × ₹ / min); Production Costing then compares this flat rate with
+                  production's operation rates and the actual cost.
+                  {cmtAll && <> Cutting rows and Finishing rows are inside this rate, so they are not added again (packing still counts).</>}
                 </div>
               </div>
             ) : (
               /* Detailed SMV View */
               <div className="space-y-3">
                 <div className="flex items-center justify-between p-2 rounded bg-slate-50 border border-slate-200 text-xs">
-                  <span>SMV Calculation: Total SMV ({totalSmv.toFixed(2)} mins) × Rate/Min</span>
+                  <span>Optional — counted only in this mode: Total SMV ({totalSmv.toFixed(2)} mins) × Rate/Min</span>
                   <div className="flex items-center gap-2">
                     <TopAddButton testId="sewing" label="Add Operation" onClick={addSewingOp} />
                     <span className="font-bold">Rate / Min (₹):</span>
@@ -1364,7 +1384,7 @@ export default function PreCostingDetailPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {sewingOps.map((op, i) => {
-                    const opCost = (Number(op.smv) || 0) * (Number(head.smv_rate_per_min) || 0.85);
+                    const opCost = (Number(op.smv) || 0) * (Number(head.smv_rate_per_min) || 0);
                     return (
                       <tr key={op._key || i}>
                         <td className="py-2 px-3 text-slate-400">{i + 1}</td>
@@ -1463,7 +1483,7 @@ export default function PreCostingDetailPage() {
                       ['Embroidery', H.embroidery_cost],
                       ['Washing / Other Process', H.washing_cost],
                       ['Cutting', cuttingCostPerPc],
-                      ['Sewing (SMV / Flat)', sewingCostPerPc],
+                      [useFlatSewingRate ? (cmtAll ? 'CMT flat (cutting → finishing)' : 'Sewing (flat)') : 'Sewing (SMV)', sewingCostPerPc],
                       ['Finishing', finishingCostPerPc],
                       ['Packing', packingCostPerPc],
                       ['Testing', H.testing_cost],
@@ -1503,7 +1523,7 @@ export default function PreCostingDetailPage() {
                   </div>
 
                   <div className="flex items-center justify-between">
-                    <span className="font-sans text-slate-700">Target Profit Margin %:</span>
+                    <span className="font-sans text-slate-700">Target Gross Margin % (on selling price):</span>
                     <div className="flex items-center gap-1">
                       <input
                         type="number"
@@ -1517,7 +1537,7 @@ export default function PreCostingDetailPage() {
                   </div>
 
                   <div className="flex items-center justify-between">
-                    <span className="font-sans text-slate-700">Equivalent Markup on Cost:</span>
+                    <span className="font-sans text-slate-700">Markup % (on cost) — not the same as margin:</span>
                     <strong className="text-emerald-700">{markupPct.toFixed(2)}%</strong>
                   </div>
 
@@ -1527,9 +1547,17 @@ export default function PreCostingDetailPage() {
                   </div>
 
                   <div className="flex items-center justify-between border-t-2 border-brand-400 pt-3 text-brand-950">
-                    <span className="font-sans font-bold text-sm">Quoted FOB Selling Price / Pc:</span>
-                    <strong className="text-xl font-black text-brand-900">₹{quotedFobPerPc.toFixed(2)}</strong>
+                    <span className="font-sans font-bold text-sm">Quoted FOB Selling Price / Pc{isForeign ? ` (${curCode})` : ''}:</span>
+                    <strong className="text-xl font-black text-brand-900" id="pc-summary-fob">
+                      {isForeign ? (fobFc != null ? `${curSym}${fobFc.toFixed(4)}` : '—') : `₹${quotedFobPerPc.toFixed(2)}`}
+                    </strong>
                   </div>
+                  {isForeign && (
+                    <div className="flex items-center justify-between text-slate-600">
+                      <span className="font-sans">INR value (₹ / pc) @ ₹{fxRate || '—'} per {curCode}:</span>
+                      <strong>₹{quotedFobPerPc.toFixed(2)}</strong>
+                    </div>
+                  )}
 
                   <div className="rounded-lg bg-white border border-brand-200 p-3 mt-4 space-y-1.5 font-mono">
                     <div className="flex justify-between text-slate-600">
@@ -1546,7 +1574,7 @@ export default function PreCostingDetailPage() {
                     </div>
                     <div className="flex justify-between text-brand-900 font-black text-sm border-t border-slate-200 pt-1.5">
                       <span>Total Quoted FOB Order Value:</span>
-                      <span>₹{fmtDecimal(totalOrderFob, 0)}</span>
+                      <span>{isForeign && fobFc != null ? `${curSym}${fmtDecimal(fobFc * orderQty, 2)} · ` : ''}₹{fmtDecimal(totalOrderFob, 0)}</span>
                     </div>
                   </div>
                 </div>
@@ -1638,6 +1666,7 @@ export default function PreCostingDetailPage() {
               <div>
                 <h3 className="text-sm font-bold text-slate-900">Cutting Operations</h3>
                 <p className="text-xs text-slate-500">Spreading, cutting, numbering / bundling — rate per piece. Total → Cutting head.</p>
+                {cmtAll && <p className="mt-1 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-900" data-cmt-covered="cutting">Covered by the flat CMT rate (cutting → finishing) — these rows are not added.</p>}
               </div>
               <TopAddButton testId="cutting" label="Add Operation" onClick={() => addTop(setCuttingOps, 'cutting', { operation: '', rate: '' })} />
             </div>
@@ -1667,6 +1696,7 @@ export default function PreCostingDetailPage() {
                 <p className="text-xs text-slate-500">
                   Thread cutting, checking, ironing, folding, polybag, carton, tags — Qty / Pc × Rate. Each row goes to the Finishing or Packing head.
                 </p>
+                {cmtAll && <p className="mt-1 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-900" data-cmt-covered="finishing">Finishing rows are covered by the flat CMT rate (cutting → finishing) and are not added; Packing rows still count.</p>}
               </div>
               <div className="flex gap-2 font-mono text-[11px]">
                 <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1">Finishing ₹{finishingCostPerPc.toFixed(2)}</span>
@@ -1782,7 +1812,7 @@ export default function PreCostingDetailPage() {
             </div>
           </div>
         )}
-      </div>
+      </fieldset>
     </div>
   );
 }
