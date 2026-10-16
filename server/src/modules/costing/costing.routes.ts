@@ -1034,6 +1034,7 @@ costingRouter.get('/pre-costings/style-data/:styleId', requirePermission('COSTIN
     SELECT l.*,
            y.yarn_name, y.yarn_code, y.std_rate AS yarn_std_rate,
            fb.fabric_name, fb.fabric_code, fb.std_rate AS fabric_std_rate,
+           (SELECT g.gsm_value FROM mst_gsm g WHERE g.id = fb.gsm_id) AS fabric_gsm,
            tr.trim_name, tr.trim_code, tr.std_rate AS trim_std_rate,
            CASE l.material_type WHEN 'FABRIC' THEN fbase.certification WHEN 'YARN' THEN ybase.certification
                                 WHEN 'TRIM' THEN tr.certification END AS certification,

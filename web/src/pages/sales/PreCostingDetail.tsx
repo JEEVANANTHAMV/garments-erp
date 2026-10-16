@@ -336,6 +336,22 @@ function PreCostingSheet() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [costingQuery.data, costingStatuses.data]);
 
+  // Fabric rows saved before the GSM column existed (client 16-Oct-2026) show their fabric master's GSM.
+  useEffect(() => {
+    if (!fabricMaster.data?.length) return;
+    setFabrics((prev) => {
+      let changed = false;
+      const next = prev.map((r) => {
+        if (r?.gsm !== undefined || !r?.fabric_id) return r;
+        const m: any = fabricMaster.data?.find((x: any) => String(x.id) === String(r.fabric_id));
+        if (!m) return r;
+        changed = true;
+        return { ...r, gsm: m.gsm_value ?? m.min_gsm ?? '' };
+      });
+      return changed ? next : prev;
+    });
+  }, [fabricMaster.data, costingQuery.data]);
+
   // Rows saved / defaulted before the Certification column existed take the master's certification.
   useEffect(() => {
     if (!materialCerts.data) return;
@@ -359,6 +375,7 @@ function PreCostingSheet() {
     component: '',
     fabric_id: '',
     fabric_name: '',
+    gsm: '',
     color: '',
     size: 'All',
     consumption: '',
@@ -471,6 +488,7 @@ function PreCostingSheet() {
             component: l.part_name || l.component || (idx === 0 ? 'Body' : ''),
             fabric_id: String(l.fabric_id),
             fabric_name: l.fabric_name,
+            gsm: l.fabric_gsm ?? '',
             color: l.color_name || '',
             size: l.size_code || 'All',
             consumption: cons,
@@ -1024,6 +1042,7 @@ function PreCostingSheet() {
                   <tr>
                     <th className="py-2.5 px-3">Component</th>
                     <th className="py-2.5 px-3">Fabric Description</th>
+                    <th className="py-2.5 px-3 text-right" title="From the fabric master when a fabric is picked; editable">GSM</th>
                     <th className="py-2.5 px-3">Color</th>
                     <th className="py-2.5 px-3">Certification</th>
                     <th className="py-2.5 px-3 text-right">Cons/Pc (KG)</th>
@@ -1064,11 +1083,26 @@ function PreCostingSheet() {
                                 ...row,
                                 fabric_id: String(m.id),
                                 fabric_name: m.label,
+                                gsm: (m as any).gsm_value ?? (m as any).min_gsm ?? row.gsm ?? '',
                                 rate: stdRate > 0 ? stdRate : row.rate,
                                 rate_source: stdRate > 0 ? 'Fabric Master Std Rate' : row.rate_source,
                                 certification: certOf('fabrics', m.id) || row.certification || '',
                               } : row));
                             }}
+                          />
+                        </td>
+                        <td className="py-1 px-2 text-right">
+                          <input
+                            type="number"
+                            min={0}
+                            data-gsm-fabric={i}
+                            value={f.gsm ?? ''}
+                            placeholder="GSM"
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? '' : Number(e.target.value);
+                              setFabrics((prev) => prev.map((row, idx) => idx === i ? { ...row, gsm: val } : row));
+                            }}
+                            className="w-16 rounded border border-slate-200 px-1.5 py-0.5 text-right font-mono text-xs"
                           />
                         </td>
                         <td className="py-1 px-2 font-sans">
@@ -1155,7 +1189,7 @@ function PreCostingSheet() {
                 </tbody>
                 <tfoot className="bg-slate-50 font-bold border-t border-slate-200">
                   <tr>
-                    <td colSpan={8} className="py-2.5 px-3 text-right font-sans">Total Fabric Cost Per Piece:</td>
+                    <td colSpan={9} className="py-2.5 px-3 text-right font-sans">Total Fabric Cost Per Piece:</td>
                     <td className="py-2.5 px-3 text-right text-brand-900 font-black">₹{totalFabricCostPerPc.toFixed(2)}</td>
                     <td colSpan={2} />
                   </tr>
