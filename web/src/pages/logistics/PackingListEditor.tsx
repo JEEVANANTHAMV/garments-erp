@@ -14,12 +14,17 @@ import { PackingListDocument, PackingListPrintPortal } from './PackingListPrint'
 import { JobSelect } from '../../components/JobSelect';
 
 const TYPE_COLOR: Record<string, string> = { ASSORTED: 'indigo', SOLID: 'amber', MIXED: 'violet' };
-const STATUS_COLOR: Record<string, string> = { DRAFT: 'slate', CONFIRMED: 'emerald', CLOSED: 'gray' };
+const STATUS_COLOR: Record<string, string> = { DRAFT: 'slate', PLANNED: 'blue', CONFIRMED: 'emerald', CLOSED: 'gray' };
+const PLAN_STATE: Record<string, { label: string; color: string }> = {
+  NOT_PACKED: { label: 'Not packed', color: 'slate' }, IN_PROGRESS: { label: 'Packing', color: 'amber' },
+  READY: { label: 'Packed', color: 'emerald' }, READY_SHORT: { label: 'Packed short', color: 'red' },
+};
 const TYPE_HELP: Record<PlType, string> = {
   ASSORTED: 'Each carton holds a size ratio (e.g. S1 M2 L3 XL3 XXL2 XXXL1 = 12 pcs/ctn).',
   SOLID: 'One colour in one size per carton (e.g. numeric sizes 36 – 52), grouped per style/colour.',
   MIXED: 'Kids + adult size sets on one list, PCS/PACK × PACK/CTN rows and cartons mixing colours/styles.',
 };
+const n0 = (v: unknown) => Number(v ?? 0) || 0;
 const errMsg = (e: any) => e?.message || e?.response?.data?.error?.message || 'Request failed';
 
 /* ============================================================
@@ -51,7 +56,7 @@ export function PackingListPage() {
           <Select className="w-80" label="Template" value={flt.type} onChange={(e) => setFlt((f) => ({ ...f, type: e.target.value }))}
             options={[{ value: '', label: 'All models' }, ...(['ASSORTED', 'SOLID', 'MIXED'] as const).map((t) => ({ value: t, label: FORMAT_LABEL[t] }))]} />
           <Select className="w-40" label="Status" value={flt.status} onChange={(e) => setFlt((f) => ({ ...f, status: e.target.value }))}
-            options={[{ value: '', label: 'All' }, { value: 'DRAFT', label: 'Draft' }, { value: 'CONFIRMED', label: 'Confirmed' }, { value: 'CLOSED', label: 'Closed' }]} />
+            options={[{ value: '', label: 'All' }, { value: 'DRAFT', label: 'Draft' }, { value: 'PLANNED', label: 'Planned (packing)' }, { value: 'CONFIRMED', label: 'Confirmed' }, { value: 'CLOSED', label: 'Closed' }]} />
         </div>
         <DataTable
           data={shown} loading={loading}
@@ -68,7 +73,8 @@ export function PackingListPage() {
             { key: 'total_qty', header: 'Qty (PCS)', align: 'right' as const, render: (r: any) => fmtNumber(r.total_qty) },
             { key: 'gross_weight_kg', header: 'Gross (KG)', align: 'right' as const, render: (r: any) => fmtDecimal(r.gross_weight_kg) },
             { key: 'total_cbm', header: 'CBM', align: 'right' as const, render: (r: any) => fmtDecimal(r.total_cbm, 3) },
-            { key: 'status', header: 'Status', render: (r: any) => <span className="flex items-center gap-1"><Badge color={STATUS_COLOR[r.status] || 'slate'}>{r.status}</Badge>{r.revision_no > 0 && <Badge color="amber">Rev {r.revision_no}</Badge>}</span> },
+            { key: 'status', header: 'Status', render: (r: any) => <span className="flex items-center gap-1"><Badge color={STATUS_COLOR[r.status] || 'slate'}>{r.status}</Badge>{r.revision_no > 0 && <Badge color="amber">Rev {r.revision_no}</Badge>}
+              {r.list_mode === 'PLAN' && <Badge color="blue">Plan</Badge>}{r.short_action && r.short_action !== 'NONE' && <Badge color="red">{r.short_action === 'TO_FOLLOW' ? `Short ${r.short_qty} to follow` : `Short ${r.short_qty} debit`}</Badge>}</span> },
             { key: 'shipment_no', header: 'Shipment', render: (r: any) => r.shipment_no || '—' },
           ]}
         />
@@ -83,7 +89,7 @@ export function PackingListPage() {
 const EMPTY_HEADER = {
   pl_no: '', pl_date: today(), io_no: '', so_id: null as number | null, packing_id: null as number | null,
   invoice_id: null as number | null, buyer_id: null as number | null, consignee_id: null as number | null,
-  shipment_type: 'EXPORT', destination: '', pl_type: 'ASSORTED' as PlType, status: 'DRAFT', ctn_numbering: 'SEQUENCE' as 'SEQUENCE' | 'CARTON_NO',
+  shipment_type: 'EXPORT', destination: '', pl_type: 'ASSORTED' as PlType, list_mode: 'DOCUMENT' as 'DOCUMENT' | 'PLAN', status: 'DRAFT', ctn_numbering: 'SEQUENCE' as 'SEQUENCE' | 'CARTON_NO',
   allow_ctn_gaps: false, carton_tare_kg: '' as string | number,
   invoice_no: '', invoice_date: '', buyer_order_no: '', buyer_order_date: '', other_references: '',
   exporter_details: '', consignee_details: '', notify_label: 'Notify Party :-', notify_details: '',
@@ -137,9 +143,17 @@ export function PackingListDetailPage() {
   const [revView, setRevView] = useState<any>(null);         // frozen revision shown in the print modal
   const [overOpen, setOverOpen] = useState(false);
   const [overReason, setOverReason] = useState('');
+  const [finishOpen, setFinishOpen] = useState(false);
+  const [shortAction, setShortAction] = useState<'TO_FOLLOW' | 'DEBIT'>('TO_FOLLOW');
+  const [shortReason, setShortReason] = useState('');
   const { can } = useAuth();
 
   const ro = !isNew && header.status !== 'DRAFT';
+  // packing list as the plan (buyer list entered first, cartons packed against its carton numbers)
+  const isPlan = header.list_mode === 'PLAN';
+  const planFinished = isPlan && !!saved?.plan_finished_at;
+  const planDraft = isPlan && header.status === 'DRAFT' && !planFinished;
+  const ps = saved?.plan_status;
 
   useEffect(() => {
     Promise.all([
@@ -362,7 +376,7 @@ export function PackingListDetailPage() {
       const d = await fillFromSo(soForHeader);
       if (d?.buyer_template && !formatTouched) fmt = d.buyer_template.pl_type;
     }
-    if (!ro && (autoRows || !hasTypedQty())) await buildFromPacking({ src, format: fmt, auto: true });
+    if (!ro && header.list_mode !== 'PLAN' && (autoRows || !hasTypedQty())) await buildFromPacking({ src, format: fmt, auto: true });
   };
   /** Format changed: rows that came from the auto-fill are regrouped for the new format. */
   const changeFormat = (v: PlType) => {
@@ -421,6 +435,29 @@ export function PackingListDetailPage() {
       const r = await api.post(`/packing-lists/${id}/confirm`, reason ? { over_ship_reason: reason } : {});
       applyServer(r.data.data); setOverOpen(false); setOverReason(''); toast('Packing list confirmed and frozen');
     } catch (e) { toast(errMsg(e), 'error'); }
+  };
+  const planAction = async (path: 'release' | 'unrelease' | 'finish' | 'reopen', body: any, done: string) => {
+    if (dirty) { toast('Save your changes first', 'warning'); return false; }
+    try {
+      const r = await api.post(`/packing-lists/${id}/plan/${path}`, body);
+      applyServer(r.data.data); toast(done);
+      if (r.data.warnings?.length) toast(r.data.warnings.join('; '), 'warning');
+      return true;
+    } catch (e) { toast(errMsg(e), 'error'); return false; }
+  };
+  const changeMode = (v: 'DOCUMENT' | 'PLAN') => {
+    if (v === 'PLAN' && blocks.some((b) => b.rows.some((r) => r.source_carton_ids?.length))) {
+      if (!window.confirm('A packing plan is the buyer list entered before packing — clear the rows built from packed cartons?')) return;
+      setBlocks([newBlock()]); setCartonInfo({}); setAutoRows(false);
+    }
+    setField('list_mode', v);
+  };
+  const finishPlan = async () => {
+    const short = n0(ps?.short_qty) > 0;
+    const ok = await planAction('finish', short ? { short_action: shortAction, short_reason: shortReason.trim() } : {},
+      short ? (shortAction === 'TO_FOLLOW' ? 'Packing finished — a follow-up packing list was made for the shortage' : 'Packing finished — the shortage is recorded as debited by the buyer')
+            : 'Packing finished — the list is built from the packed cartons');
+    if (ok) { setFinishOpen(false); setShortReason(''); }
   };
   const handleReopen = async () => {
     try {
@@ -496,7 +533,11 @@ export function PackingListDetailPage() {
           <Button variant="ghost" onClick={() => nav('/logistics/packing-lists')}>← Back</Button>
           {!isNew && <Button variant="outline" onClick={() => setShowPrint(true)} disabled={dirty} title={dirty ? 'Save first' : ''}>Print view</Button>}
           {!isNew && <Button variant="outline" onClick={handleExcel} disabled={dirty || !saved?.blocks?.length} title={dirty ? 'Save first' : ''}>Download Excel</Button>}
-          {!isNew && header.status === 'DRAFT' && <Button variant="outline" onClick={() => handleConfirm()} id="pl-confirm">✓ Confirm &amp; Freeze</Button>}
+          {!isNew && planDraft && <Button onClick={() => { if (window.confirm('Release this buyer list to packing? Its rows are frozen and cartons are packed against its carton numbers.')) void planAction('release', {}, 'Plan released — pack the cartons against it'); }} id="pl-release">Release plan to packing</Button>}
+          {!isNew && header.status === 'PLANNED' && <Button variant="outline" onClick={() => void planAction('unrelease', {}, 'Plan back to draft')} id="pl-unrelease" disabled={!!ps?.cartons?.some((c: any) => c.carton_id)} title="Only before any carton is packed for it">Back to draft</Button>}
+          {!isNew && header.status === 'PLANNED' && <Button onClick={() => setFinishOpen(true)} id="pl-finish">Finish packing</Button>}
+          {!isNew && planFinished && header.status === 'DRAFT' && <Button variant="outline" onClick={() => { if (window.confirm('Reopen the plan? The plan rows come back so more cartons can be packed; an unused follow-up list is removed.')) void planAction('reopen', {}, 'Plan reopened'); }} id="pl-plan-reopen">Reopen plan</Button>}
+          {!isNew && header.status === 'DRAFT' && !planDraft && <Button variant="outline" onClick={() => handleConfirm()} id="pl-confirm">✓ Confirm &amp; Freeze</Button>}
           {!isNew && header.status === 'CONFIRMED' && <Button variant="outline" onClick={() => setReopenOpen(true)} id="pl-revise">Revise (new revision)</Button>}
           {!ro && <Button onClick={handleSave} loading={saving}>{dirty || isNew ? 'Save' : 'Saved'}</Button>}
         </div>
@@ -507,6 +548,9 @@ export function PackingListDetailPage() {
           <Badge color={STATUS_COLOR[header.status] || 'slate'} size="lg">{header.status}</Badge>
           <Badge color={TYPE_COLOR[header.pl_type]} size="lg">{header.pl_type}</Badge>
           {saved?.revision_no > 0 && <Badge color="amber" size="lg">Rev {saved.revision_no}</Badge>}
+          {isPlan && <Badge color="blue" size="lg">Packing plan</Badge>}
+          {saved?.follow_of_no && <span className="text-xs text-blue-700" data-testid="pl-follow-of">Shortage to follow from <button className="font-semibold hover:underline" onClick={() => nav(`/logistics/packing-lists/${saved.follow_of_id}`)}>{saved.follow_of_no}</button></span>}
+          {saved?.short_action && saved.short_action !== 'NONE' && <span className="text-xs text-red-700" data-testid="pl-short-note">Short {fmtNumber(saved.short_qty)} PCS — {saved.short_action === 'TO_FOLLOW' ? 'to follow' : 'debited by the buyer'}{saved.short_reason ? `: ${saved.short_reason}` : ''}</span>}
           {header.shipment_type === 'EXPORT' && <Badge color="blue" size="lg">EXPORT</Badge>}
           {saved?.confirmed_at && <span className="text-xs text-slate-500">Confirmed {fmtDate(saved.confirmed_at)} by {saved.confirmed_by_name || '—'}</span>}
           {saved?.reopen_reason && header.status === 'DRAFT' && <span className="text-xs text-amber-700">Revision {saved.revision_no} opened: {saved.reopen_reason}</span>}
@@ -534,6 +578,56 @@ export function PackingListDetailPage() {
           <b>The packed cartons changed since this list was made</b> — {saved.carton_check.issues.slice(0, 5).join('; ')}.
           {header.status === 'CONFIRMED' ? ' Revise the list and rebuild the rows.' : ' Rebuild the rows from the packed cartons.'}
         </div>
+      )}
+
+      {/* ---------- packing plan: the buyer list released to packing */}
+      {planDraft && !isNew && (
+        <div className="no-print rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900" data-testid="pl-plan-hint">
+          <b>Packing plan (buyer list)</b> — enter the buyer's cartons as rows (style and colour from the order, size ratio per carton), save, then
+          <b> Release plan to packing</b>. Cartons are then packed against these carton numbers on the Carton screen; one list per country / selling point.
+        </div>
+      )}
+      {ps && (
+        <div id="pl-plan-status"><Card title="Packing against the plan" subtitle={`${saved?.plan_released_at ? `Released ${fmtDate(saved.plan_released_at)}${saved.plan_released_by_name ? ` by ${saved.plan_released_by_name}` : ''}` : ''}${saved?.plan_finished_at ? ` · finished ${fmtDate(saved.plan_finished_at)}` : ''}`}>
+          <div className="grid grid-cols-2 gap-4 p-4 text-center md:grid-cols-5">
+            <Stat label="Planned" value={`${fmtNumber(ps.total_cartons)} CTNS / ${fmtNumber(ps.total_qty)}`} />
+            <Stat label="Packed (posted)" value={`${fmtNumber(ps.ready_cartons)} / ${fmtNumber(ps.ready_qty)}`} tone="text-emerald-700" />
+            <Stat label="Packing (not posted)" value={`${fmtNumber(ps.in_progress_cartons)} / ${fmtNumber(ps.in_progress_qty)}`} tone="text-amber-700" />
+            <Stat label="Not packed (cartons)" value={fmtNumber(ps.not_packed_cartons)} />
+            <Stat label="Short (PCS)" value={fmtNumber(ps.short_qty)} tone={ps.short_qty > 0 ? 'text-red-700' : 'text-slate-800'} />
+          </div>
+          <div className="grid gap-4 border-t border-surface-border p-4 lg:grid-cols-2">
+            <div className="max-h-72 overflow-auto">
+              <table className="w-full text-xs" id="plan-cartons">
+                <thead><tr className="text-left text-slate-500"><th className="py-1">Ctn</th><th>Block</th><th className="text-right">Plan</th><th className="text-right">Packed</th><th>Carton</th><th>State</th></tr></thead>
+                <tbody>{ps.cartons.map((c: any) => (
+                  <tr key={c.ctn_no} data-ctn={c.ctn_no} data-state={c.state} className="border-t border-slate-100">
+                    <td className="py-1 font-mono">{c.ctn_no}</td><td>{c.label ?? c.block_no}</td>
+                    <td className="text-right">{c.planned}</td><td className="text-right">{c.carton_id ? c.packed : '—'}</td>
+                    <td className="font-mono">{c.carton_no ?? ''}{c.pack_no ? <span className="ml-1 font-sans text-slate-400">{c.pack_no}</span> : null}</td>
+                    <td><Badge color={PLAN_STATE[c.state]?.color ?? 'slate'}>{PLAN_STATE[c.state]?.label ?? c.state}</Badge></td>
+                  </tr>))}</tbody>
+              </table>
+            </div>
+            <div className="max-h-72 overflow-auto">
+              <table className="w-full text-xs" id="plan-cells">
+                <thead><tr className="text-left text-slate-500"><th className="py-1">Style / colour / size</th><th className="text-right">Plan</th><th className="text-right">Packed</th><th className="text-right">Packing</th><th className="text-right">Short</th></tr></thead>
+                <tbody>{ps.cells.map((g: any) => (
+                  <tr key={`${g.style_no}|${g.color_id}:${g.size_id}`} className="border-t border-slate-100">
+                    <td className="py-1">{g.style_no} {g.colour} <b>{g.size_label}</b></td><td className="text-right">{g.planned}</td>
+                    <td className="text-right text-emerald-700">{g.ready}</td><td className="text-right text-amber-700">{g.in_progress || ''}</td>
+                    <td className={`text-right ${g.short > 0 ? 'font-semibold text-red-700' : ''}`}>{g.short || ''}</td>
+                  </tr>))}</tbody>
+              </table>
+            </div>
+          </div>
+          {saved?.follow_ups?.length > 0 && (
+            <div className="border-t border-surface-border px-4 py-2 text-xs text-slate-700" id="pl-follow-ups">
+              Follow-up list(s) for the shortage: {saved.follow_ups.map((f: any) => (
+                <button key={f.id} className="mr-3 font-semibold text-brand-700 hover:underline" onClick={() => nav(`/logistics/packing-lists/${f.id}`)}>{f.pl_no} ({f.status}, {fmtNumber(f.total_cartons)} ctns / {fmtNumber(f.total_qty)} pcs)</button>))}
+            </div>
+          )}
+        </Card></div>
       )}
 
       {/* ---------- packed vs order (posted cartons) */}
@@ -574,6 +668,9 @@ export function PackingListDetailPage() {
               options={(['ASSORTED', 'SOLID', 'MIXED'] as const).map((t) => ({ value: t, label: FORMAT_LABEL[t] }))} />
             {buyerTpl && <p className="mt-1 text-[11px] text-slate-500" data-testid="pl-buyer-default">Buyer default: <b>{buyerTpl.pl_type}</b>{buyerTpl.pl_type !== header.pl_type && ' (another format picked)'}</p>}
           </div>
+          <Select label="List type" value={header.list_mode} id="pl-mode" disabled={planFinished}
+            onChange={(e) => changeMode(e.target.value as 'DOCUMENT' | 'PLAN')}
+            options={[{ value: 'DOCUMENT', label: 'Document — from packed cartons' }, { value: 'PLAN', label: 'Packing plan — buyer list first' }]} />
           <Select label="Shipment type" value={header.shipment_type} onChange={(e) => setField('shipment_type', e.target.value)}
             options={[{ value: 'EXPORT', label: 'Export' }, { value: 'DOMESTIC', label: 'Domestic' }]} />
           <div className="flex items-end gap-2">
@@ -649,7 +746,7 @@ export function PackingListDetailPage() {
                   onBlur={() => { if (autoRows) void buildFromPacking({ auto: true }); }} />
               )}
             </div>
-            {!ro && canBuild && (
+            {!ro && canBuild && !planDraft && (
               <Button variant="outline" size="sm" onClick={() => buildFromPacking()} id="pl-build-from-cartons"
                 title="Rows from the posted (verified / sealed) cartons of the source packing, else of the sales order / job, that are not on another list — grouped for the chosen format">
                 {autoRows ? '↻ Rebuild rows from packed cartons' : 'Build rows from packed cartons'}
@@ -878,6 +975,21 @@ export function PackingListDetailPage() {
         subtitle={revView ? `Revised ${fmtDate(revView.created_at)} by ${revView.created_by_name || '—'}: ${revView.reason}` : ''}
         footer={<Button variant="secondary" onClick={() => setRevView(null)}>Close</Button>}>
         {revView?.snapshot && <PackingListDocument pl={revView.snapshot} />}
+      </Modal>
+      <Modal open={finishOpen} onClose={() => setFinishOpen(false)} title="Finish packing against the plan" size="md"
+        footer={<><Button variant="secondary" onClick={() => setFinishOpen(false)}>Cancel</Button>
+          <Button onClick={finishPlan} id="pl-finish-go" disabled={n0(ps?.short_qty) > 0 && !shortReason.trim()}>Finish packing</Button></>}>
+        <div className="space-y-3 text-sm text-slate-700" id="pl-finish-modal">
+          <p>The list is rebuilt from the {fmtNumber(ps?.ready_cartons ?? 0)} packed carton(s) — same carton numbers as the buyer list — and goes back to draft for weights and Confirm. Every carton packed for it must be posted and verified / sealed.</p>
+          {n0(ps?.short_qty) > 0 ? (<>
+            <p className="rounded-md bg-red-50 p-2 text-red-800"><b>{fmtNumber(ps.short_qty)} PCS of the plan are not packed</b> ({ps.not_packed_cartons} carton(s) not packed, {ps.short_cartons} packed short).</p>
+            <label className="flex items-start gap-2"><input type="radio" name="short" id="short-follow" checked={shortAction === 'TO_FOLLOW'} onChange={() => setShortAction('TO_FOLLOW')} />
+              <span><b>We make it and send it later</b> — a follow-up packing list (plan) is made with the balance, same buyer / destination.</span></label>
+            <label className="flex items-start gap-2"><input type="radio" name="short" id="short-debit" checked={shortAction === 'DEBIT'} onChange={() => setShortAction('DEBIT')} />
+              <span><b>The buyer debits it</b> — the shortage is recorded on this list.</span></label>
+            <Textarea label="Reason" required rows={2} value={shortReason} onChange={(e) => setShortReason(e.target.value)} id="short-reason" />
+          </>) : <p className="text-emerald-700">Everything on the plan is packed.</p>}
+        </div>
       </Modal>
       <Modal open={overOpen} onClose={() => setOverOpen(false)} title="Confirm with over-shipment" size="sm"
         subtitle={`${fmtNumber(saved?.over_shipment?.qty ?? 0)} PCS above the order qty`}

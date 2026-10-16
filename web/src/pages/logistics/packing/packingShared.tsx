@@ -75,9 +75,9 @@ const TABS = [
   { to: '/logistics/packing/rules', label: 'Packing rule', icon: Settings2, step: 2, hint: 'How the buyer packs: pieces per polybag / carton, mixing — needed before a packing order' },
   { to: '/logistics/packing/orders', label: 'Packing order', icon: Package, step: 3, hint: 'Plan the job / style from the FG store, then approve' },
   { to: '/logistics/packing/polybag', label: 'Piece / polybag entry', icon: Shirt, step: 4, hint: 'Bag the pieces (needed for individual-piece rules)' },
-  { to: '/logistics/packing/cartons', label: 'Carton box entry', icon: Rows3, step: 5, hint: 'Put the pieces into cartons' },
+  { to: '/logistics/packing/cartons', label: 'Carton box entry', icon: Rows3, step: 5, hint: 'Put the pieces into cartons — against a released buyer packing list (plan) when there is one' },
   { to: '/logistics/packing/verify', label: 'Verify / seal / post', icon: ScanLine, step: 6, hint: 'Verify, seal and post the cartons' },
-  { to: '/logistics/packing-lists', label: 'Packing list', icon: ListChecks, step: 7, hint: 'Make the packing list from the posted cartons, then ship' },
+  { to: '/logistics/packing-lists', label: 'Packing list', icon: ListChecks, step: 7, hint: 'Buyer list first? Enter it as a packing plan and release it before carton entry (step 5 packs against its carton numbers). Otherwise make the list from the posted cartons, then ship' },
   { to: '/logistics/packing/reports', label: 'Reports', icon: BarChart3, step: 0, hint: 'Packing reports' },
 ];
 
