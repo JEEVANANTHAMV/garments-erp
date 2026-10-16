@@ -48,7 +48,7 @@ export function CartonEntryPage() {
                 <th className="th">Carton type</th><th className="th text-right">Gross kg</th><th className="th">Status</th><th className="th" /></tr></thead>
               <tbody>{cartons.map((c) => (
                 <tr key={c.id} className={c.carton_status === 'VOID' ? 'opacity-50' : ''}>
-                  <td className="td">{c.carton_seq}</td><td className="td font-mono">{c.carton_no}</td><td className="td">{c.contents}</td>
+                  <td className="td">{c.carton_seq}</td><td className="td font-mono">{c.carton_no}{c.pl_plan_no && <div className="font-sans text-[11px] text-blue-700" data-plan-ctn={c.carton_no}>{c.pl_plan_no} · ctn {c.pl_ctn_no}</div>}</td><td className="td">{c.contents}</td>
                   <td className="td text-right">{c.pieces_total}{n(c.is_partial) ? <span className="ml-1 text-[11px] text-amber-700">partial</span> : null}</td>
                   <td className="td text-right">{c.polybag_qty} <span className="text-slate-400">({c.std_polybag_qty})</span></td>
                   <td className="td">{c.carton_trim_name}</td><td className="td text-right">{c.gross_weight_kg ?? '—'}</td>

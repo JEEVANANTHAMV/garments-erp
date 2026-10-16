@@ -32,6 +32,7 @@ export interface CartonRow {
   id: number; carton_no: string; carton_seq: number; carton_status: string; is_posted: number; pieces_total: number; polybag_qty: number;
   std_polybag_qty: number; is_partial: number; net_weight_kg: number | null; gross_weight_kg: number | null; contents: string | null;
   carton_trim_name?: string; polybag_trim_name?: string; seal_no?: string | null; posted_at?: string | null;
+  pl_plan_id?: number | null; pl_ctn_no?: number | null; pl_plan_no?: string | null;
 }
 export interface Order {
   id: number; pack_no: string; pack_date: string; so_id: number; io_no: string; job_no: string; so_no: string; buyer_po_no: string | null;
@@ -194,6 +195,17 @@ export function CartonEditor({ order, carton, onClose, onSaved }: {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const set = (k: keyof typeof f) => (e: any) => setF((s) => ({ ...s, [k]: e.target.value }));
+  // packed for a released buyer packing list (plan): the list + its carton number fill the lines
+  const plans = useQuery({ queryKey: ['packing-order-plans', order.id], queryFn: () => http.get<{ data: PlanForOrder[] }>(`/packing/orders/${order.id}/plans`).then((r) => r.data) });
+  const [plan, setPlan] = useState<{ id: string; ctn: string }>({ id: carton?.pl_plan_id ? String(carton.pl_plan_id) : '', ctn: carton?.pl_ctn_no ? String(carton.pl_ctn_no) : '' });
+  const planList = (plans.data ?? []).find((p) => String(p.id) === plan.id);
+  const planCtn = planList?.cartons.find((c) => String(c.ctn_no) === plan.ctn);
+  const pickPlanCtn = (ctn: string) => {
+    setPlan((p) => ({ ...p, ctn }));
+    const pc = planList?.cartons.find((c) => String(c.ctn_no) === ctn);
+    if (pc) setRows(pc.lines.map((l, i) => ({ key: `p${ctn}-${i}`, color_id: l.color_id, size_id: l.size_id, qty: String(l.qty), polybag_qty: '' })));
+  };
+  const plannedOf = (c: number | '', sz: number | '') => planCtn?.lines.find((l) => l.color_id === c && l.size_id === sz)?.qty;
   const own = useMemo(() => new Map<string, number>((carton?.lines ?? []).map((l: any) => [lk(l.color_id, l.size_id), n(l.qty)])), [carton]);
 
   const total = rows.reduce((a, r) => a + n(r.qty), 0);
@@ -214,6 +226,7 @@ export function CartonEditor({ order, carton, onClose, onSaved }: {
       carton_no: f.carton_no || null, carton_trim_id: num(f.carton_trim_id), polybag_trim_id: num(f.polybag_trim_id),
       net_weight_kg: num(f.net_weight_kg), gross_weight_kg: num(f.gross_weight_kg), length_cm: num(f.length_cm), width_cm: num(f.width_cm), height_cm: num(f.height_cm),
       seal_no: f.seal_no || null, remarks: f.remarks || null, save_as_draft: draft,
+      pl_plan_id: plan.id && plan.ctn ? Number(plan.id) : null, pl_ctn_no: plan.id && plan.ctn ? Number(plan.ctn) : null,
       lines: rows.filter((r) => r.color_id && r.size_id && n(r.qty)).map((r) => ({ color_id: r.color_id, size_id: r.size_id, qty: n(r.qty), polybag_qty: r.polybag_qty === '' ? null : n(r.polybag_qty) })),
     };
     try {
@@ -237,6 +250,21 @@ export function CartonEditor({ order, carton, onClose, onSaved }: {
         <Button id="carton-save" loading={busy} onClick={() => save(false)}>Save carton</Button>
       </>}>
       {err && <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-700" id="carton-error">{err}</div>}
+      {((plans.data ?? []).length > 0 || plan.id) && (
+        <FormSection title="Pack for buyer packing list" cols={3} description="A released packing plan (buyer list, one per country): pick its carton number — the lines fill from the plan; less is a short carton, more is refused.">
+          <Select id="carton-plan" label="Packing list (plan)" value={plan.id} onChange={(e) => setPlan({ id: e.target.value, ctn: '' })} placeholder="— Not for a plan —"
+            options={(plans.data ?? []).map((p) => ({ value: p.id, label: `${p.pl_no}${p.destination ? ` · ${p.destination}` : ''} (${p.ready_cartons}/${p.total_cartons} packed)` }))} />
+          <Select id="carton-plan-ctn" label="Carton no on the list" value={plan.ctn} onChange={(e) => pickPlanCtn(e.target.value)} placeholder="— Carton —" disabled={!planList}
+            options={(planList?.cartons ?? []).map((c) => {
+              const mine = carton && String(carton.pl_ctn_no) === String(c.ctn_no) && String(carton.pl_plan_id) === plan.id;
+              return { value: c.ctn_no, disabled: !!c.packed && !mine,
+                label: `${c.ctn_no} · ${c.lines.map((l) => `${l.colour ?? ''} ${l.size_label}×${l.qty}`).join(', ')}${c.packed && !mine ? ` — packed (${c.packed})` : ''}` };
+            })} />
+          <div className="self-end pb-2 text-[12px] text-slate-600" id="carton-plan-info">
+            {planCtn ? <>Plan: <b>{planCtn.qty}</b> pcs{total !== planCtn.qty && <span className={total < planCtn.qty ? 'text-amber-700' : 'text-red-700'}> · {total < planCtn.qty ? `${planCtn.qty - total} short` : `${total - planCtn.qty} over`}</span>}</> : planList ? `${planList.cartons.filter((c) => !c.packed).length} carton(s) still to pack` : ''}
+          </div>
+        </FormSection>
+      )}
       <FormSection title="Carton" cols={3}>
         <Input id="carton-no" label="Carton no" value={f.carton_no} onChange={set('carton_no')} disabled={!!carton} hint={carton ? 'Never changes' : 'Blank = next number (never reused)'} />
         <Select id="carton-trim" label="Carton type" required value={f.carton_trim_id} onChange={set('carton_trim_id')} placeholder="— Carton item —"
@@ -248,7 +276,7 @@ export function CartonEditor({ order, carton, onClose, onSaved }: {
         <TableHead title="Colour / size lines" actions={
           <Button size="sm" variant="secondary" id="carton-add-line" onClick={() => setRows((r) => [...r, { key: `l${Date.now()}`, color_id: '', size_id: '', qty: '', polybag_qty: '' }])}>Add line</Button>} />
         <table className="w-full text-[12.5px]">
-          <thead><tr><th className="th">Colour / size</th><th className="th text-right">Available</th><th className="th text-right">Pieces</th><th className="th text-right">Polybags (std)</th><th className="th" /></tr></thead>
+          <thead><tr><th className="th">Colour / size</th><th className="th text-right">Available</th>{planCtn && <th className="th text-right">Plan</th>}<th className="th text-right">Pieces</th><th className="th text-right">Polybags (std)</th><th className="th" /></tr></thead>
           <tbody>
             {rows.map((r, i) => {
               const el = lines.find((l) => lk(l.color_id, l.size_id) === lk(r.color_id, r.size_id));
@@ -264,6 +292,7 @@ export function CartonEditor({ order, carton, onClose, onSaved }: {
                     </select>
                   </td>
                   <td className="td text-right tabular-nums">{avail == null ? '—' : fmtNumber(avail)}</td>
+                  {planCtn && <td className="td text-right tabular-nums" data-plan-qty={i}>{plannedOf(r.color_id, r.size_id) ?? <span className="text-red-600">not on plan</span>}</td>}
                   <td className="td w-28"><input className="input text-right" data-qty={i} inputMode="numeric" value={r.qty}
                     onChange={(e) => setRows((x) => x.map((y) => (y.key === r.key ? { ...y, qty: e.target.value.replace(/\D/g, '') } : y)))} /></td>
                   <td className="td w-36"><div className="flex items-center gap-1.5"><input className="input text-right" data-bags={i} inputMode="numeric" placeholder={String(std)} value={r.polybag_qty}
@@ -289,6 +318,14 @@ export function CartonEditor({ order, carton, onClose, onSaved }: {
       </FormSection>
     </Modal>
   );
+}
+
+/** Released buyer packing list (plan) a packing order can pack cartons for — GET /packing/orders/:id/plans. */
+export interface PlanForOrder {
+  id: number; pl_no: string; destination: string | null; buyer_order_no: string | null;
+  total_cartons: number; ready_cartons: number; in_progress_cartons: number;
+  cartons: { ctn_no: number; label: string | null; qty: number; packed: string | null; state: string;
+             lines: { color_id: number; colour: string | null; size_id: number; size_label: string; qty: number }[] }[];
 }
 
 /* ─────────────────────────────────────────────── carton label (Code 128) */

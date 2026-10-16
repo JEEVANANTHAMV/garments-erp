@@ -56,7 +56,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
 Input.displayName = 'Input';
 
 export const Select = forwardRef<HTMLSelectElement,
-  SelectHTMLAttributes<HTMLSelectElement> & FieldProps & { options?: { value: string | number; label: string }[]; placeholder?: string }>(
+  SelectHTMLAttributes<HTMLSelectElement> & FieldProps & { options?: { value: string | number; label: string; disabled?: boolean }[]; placeholder?: string }>(
   ({ label, error, required, hint, className, options, placeholder, children, ...rest }, ref) => (
     <Field label={label} error={error} required={required} hint={hint} className={className}>
       <select ref={ref} className={clsx('input appearance-none bg-no-repeat pr-8', error && 'input-error')}
@@ -65,7 +65,7 @@ export const Select = forwardRef<HTMLSelectElement,
           backgroundPosition: 'right 0.6rem center',
         }} {...rest}>
         {placeholder !== undefined && <option value="">{placeholder}</option>}
-        {options?.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        {options?.map((o) => <option key={o.value} value={o.value} disabled={o.disabled}>{o.label}</option>)}
         {children}
       </select>
     </Field>
