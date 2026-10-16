@@ -180,8 +180,11 @@ export async function fgJobInfo(cid: number, ioNo: string, styleId?: number | nu
   });
   // a part key '' next to real parts is only an order line without a part: fold it into the matching part cells
   const real = parts.filter((x) => x);
-  const out = real.length ? cells.filter((c) => c.part_name || !cells.some((x) => x.part_name && x.color_id === c.color_id && x.size_id === c.size_id)) : cells;
-  return { ...base, parts: parts.filter((x) => x || !real.length).map((x) => x || null), colors, sizes, cells: out };
+  let out = real.length ? cells.filter((c) => c.part_name || !cells.some((x) => x.part_name && x.color_id === c.color_id && x.size_id === c.size_id)) : cells;
+  // one part on the job (bundles tagged TOP, order lines without a part): the rest of the order belongs to that part too
+  if (real.length === 1) out = out.map((c) => (c.part_name ? c : { ...c, part_name: real[0] }));
+  const shown = new Set(out.map((c) => c.part_name ?? ''));
+  return { ...base, parts: parts.filter((x) => shown.has(x)).map((x) => x || null), colors, sizes, cells: out };
 
 }
 
