@@ -169,8 +169,8 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
       )}
       <FormSection title="Logistics" cols={3}>
         <Input label="Target date" type="date" value={f.target_date} onChange={(e) => setF({ ...f, target_date: e.target.value })} />
-        <Select label="Packaging store (warehouse)" value={f.warehouse_id} onChange={(e) => setF({ ...f, warehouse_id: e.target.value })} placeholder="Any store"
-          options={(wh.data ?? []).map((w) => ({ value: w.id, label: w.label }))} hint="Polybag / carton stock is taken from here" />
+        <Select label="Polybag / carton stock — take first from" value={f.warehouse_id} onChange={(e) => setF({ ...f, warehouse_id: e.target.value })} placeholder="Any store"
+          options={(wh.data ?? []).map((w) => ({ value: w.id, label: w.label }))} hint="Trims store where the polybags / cartons were received (GRN). Other stores are used when it runs out." />
         <Textarea label="Remarks" rows={1} value={f.remarks} onChange={(e) => setF({ ...f, remarks: e.target.value })} />
       </FormSection>
       {loading && <LoadingBlock rows={3} />}

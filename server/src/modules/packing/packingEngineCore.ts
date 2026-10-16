@@ -85,9 +85,60 @@ export function ruleOf(order: any): Rule {
   return r as Rule;
 }
 
-/** Expected cartons for colour × size quantities, honouring the mixed size / colour rule (doc §9). */
-export function expectedCartons(lines: { color_id: number; size_id: number; qty: number }[], r: Rule): number {
+// ─────────────────────────────────────────────────────────── size ratio (client audio 16-Oct-2026)
+/**
+ * Size ratio of a packing order (S1 M2 L2 XL1): a full carton holds the ratio scaled to the carton capacity
+ * (12 pcs → S2 M4 L4 XL2); for a master-polybag order each master bag holds the ratio scaled to its pieces
+ * and the carton whole master bags. Per colour (a carton of mixed colours keeps the ratio per colour).
+ */
+export interface RatioPart { size_id: number; ratio: number }
+export function ratioOf(order: any): RatioPart[] | null {
+  let v = order?.size_ratio;
+  if (typeof v === 'string') { try { v = JSON.parse(v); } catch { v = null; } }
+  return Array.isArray(v) && v.length ? v.map((x: any) => ({ size_id: Number(x.size_id), ratio: Number(x.ratio) })).filter((x) => x.ratio > 0) : null;
+}
+/** Pieces per size in one full carton (null = no ratio). */
+export function ratioPerCarton(order: any, r: Rule): Map<number, number> | null {
+  const ra = ratioOf(order);
+  if (!ra) return null;
+  const sum = ra.reduce((a, x) => a + x.ratio, 0);
+  const k = Math.max(Math.floor(n(r.standard_pieces_per_carton) / sum), 1);
+  return new Map(ra.map((x) => [x.size_id, x.ratio * k]));
+}
+/** A ratio must fit the rule: several sizes need mixed sizes; carton (and master bag) capacity a whole multiple of the ratio total. */
+export function assertRatio(ra: RatioPart[] | null, r: Rule, unit: string, ppmb: number | null, plannedSizes: number[], sizeName: (id: number) => string) {
+  if (!ra) return;
+  const seen = new Set<number>();
+  for (const x of ra) {
+    if (!Number.isInteger(x.ratio) || x.ratio < 1) throw BadRequest('Each size of the ratio needs a whole number from 1');
+    if (seen.has(x.size_id)) throw BadRequest(`Size ${sizeName(x.size_id)} is twice in the ratio`);
+    seen.add(x.size_id);
+  }
+  const sum = ra.reduce((a, x) => a + x.ratio, 0);
+  const txt = ra.map((x) => `${sizeName(x.size_id)} ${x.ratio}`).join(' : ');
+  if (ra.length > 1 && !Number(r.allow_mixed_sizes)) throw BadRequest(`The ratio ${txt} puts several sizes in one carton — the packing rule ${r.rule_code} must allow mixed sizes`);
+  const cap = n(r.standard_pieces_per_carton);
+  if (cap % sum) throw BadRequest(`Pieces per carton (${cap}) must be a whole multiple of the ratio total ${sum} (${txt}) — e.g. ${sum * Math.max(Math.round(cap / sum), 1)}`);
+  if (unit === 'MASTER_POLYBAG' && ppmb && ppmb % sum) throw BadRequest(`Pieces per master polybag (${ppmb}) must be a whole multiple of the ratio total ${sum} (${txt})`);
+  const missing = plannedSizes.filter((sz) => !seen.has(sz));
+  if (missing.length) throw BadRequest(`Size(s) ${missing.map(sizeName).join(', ')} are planned but not in the ratio — give each planned size a ratio`);
+}
+
+/** Expected cartons for colour × size quantities, honouring the mixed size / colour rule (doc §9) and the size ratio. */
+export function expectedCartons(lines: { color_id: number; size_id: number; qty: number }[], r: Rule, perCtn?: Map<number, number> | null): number {
   const cap = Math.max(n(r.standard_pieces_per_carton), 1);
+  if (perCtn?.size) {
+    // per colour: full ratio cartons, then the rest in (partial) cartons
+    const byColour = new Map<number, Map<number, number>>();
+    for (const l of lines) if (l.qty > 0) { const m = byColour.get(l.color_id) ?? new Map(); m.set(l.size_id, (m.get(l.size_id) ?? 0) + l.qty); byColour.set(l.color_id, m); }
+    let total = 0;
+    for (const m of byColour.values()) {
+      const full = Math.min(...[...perCtn].map(([sz, q]) => Math.floor((m.get(sz) ?? 0) / q)));
+      const rest = [...m.values()].reduce((a, q) => a + q, 0) - full * [...perCtn.values()].reduce((a, q) => a + q, 0);
+      total += full + Math.ceil(Math.max(rest, 0) / cap);
+    }
+    return total;
+  }
   const groups = new Map<string, number>();
   for (const l of lines) {
     if (!(l.qty > 0)) continue;
@@ -425,6 +476,17 @@ export async function validateCarton(tx: Tx, order: any, lines: CartonLineIn[], 
   if (ppmb > 1 && total % ppmb !== 0 && (opts.stage !== 'save' && !Number(r.allow_partial_carton))) {
     throw BadRequest(`Carton holds ${total} pcs — master polybags of ${ppmb} pcs need a multiple of ${ppmb} (partial cartons are not allowed by the rule)`);
   }
+  const perCtn = ratioPerCarton(order, r);
+  if (perCtn) {
+    for (const l of lines) {
+      const cap = perCtn.get(Number(l.size_id));
+      if (cap == null) throw BadRequest(`Size #${l.size_id} is not in the order's size ratio`);
+      if (l.qty > cap) {
+        const sz = await txQueryOne<any>(tx, `SELECT size_code FROM mst_size WHERE id = ?`, [l.size_id]);
+        throw BadRequest(`Size ${sz?.size_code ?? l.size_id}: ${l.qty} pcs in the carton — the size ratio gives ${cap} per carton (${[...perCtn.values()].reduce((a, q) => a + q, 0)} pcs)`);
+      }
+    }
+  }
   const elig = await eligibility(tx, jobKeyOf(order), Number(order.so_id), order.id);
   const own = opts.cartonId ? await txQuery<any>(tx,
     `SELECT cc.color_id, cc.size_id, cc.qty, c.is_posted FROM trx_carton_content cc JOIN trx_carton c ON c.id = cc.carton_id
@@ -487,19 +549,24 @@ export async function lockCarton(tx: Tx, cid: number, id: number) {
 
 // ─────────────────────────────────────────────────────────── packaging stock
 
-/** Take `qty` of a trim from stock lots FIFO (job lots first, then general), recording consumption + ledger. */
+/**
+ * Take `qty` of a trim from stock lots FIFO, recording consumption + ledger. Lots of this job or general stock
+ * (never another job's); the order's packaging store first, then the job's lots, then any other store
+ * (16-Oct-2026: the trims GRN went into the Raw Material Store while the order named the FG store, and posting
+ * refused although the polybags were in stock — the store is a preference, not a reason to stop the line).
+ */
 async function consumeTrim(tx: Tx, req: Request, order: any, carton: any, seq: number, kind: 'POLYBAG' | 'CARTON' | 'MASTER_POLYBAG', trimId: number, qty: number, stdQty: number, allowNeg: boolean) {
   const cid = req.user!.companyId;
   if (qty <= 0) return [];
+  const pref = order.warehouse_id ? Number(order.warehouse_id) : 0;
   const lots = await txQuery<any>(tx,
     `SELECT ts.*, t.trim_name FROM trx_trim_stock ts JOIN mst_trim t ON t.id = ts.trim_id
       WHERE ts.company_id = ? AND ts.trim_id = ? AND (ts.so_key = ? OR ts.so_key = 0)
-        ${order.warehouse_id ? 'AND ts.warehouse_id = ?' : ''}
-      ORDER BY (ts.so_key = ?) DESC, ts.id FOR UPDATE OF ts`,
-    order.warehouse_id ? [cid, trimId, Number(order.so_id), order.warehouse_id, Number(order.so_id)] : [cid, trimId, Number(order.so_id), Number(order.so_id)]);
+      ORDER BY (ts.warehouse_id = ?) DESC, (ts.so_key = ?) DESC, ts.id FOR UPDATE OF ts`,
+    [cid, trimId, Number(order.so_id), pref, Number(order.so_id)]);
   const name = lots[0]?.trim_name ?? (await txQueryOne<any>(tx, `SELECT trim_name FROM mst_trim WHERE id = ?`, [trimId]))?.trim_name ?? `#${trimId}`;
   const free = lots.reduce((a, l) => a + Math.max(n(l.stock_qty) - n(l.allocated_qty), 0), 0);
-  if (!lots.length) throw BadRequest(`No stock lot of ${name}${order.warehouse_id ? ' in the packing warehouse' : ''} — receive it (trims GRN) before posting`);
+  if (!lots.length) throw BadRequest(`No stock of ${name} for this job (or general stock) in any store — receive it on a trims GRN before posting`);
   if (free + 1e-6 < qty && !allowNeg) {
     throw BadRequest(`${name}: ${qty} needed for carton ${carton.carton_no}, only ${Math.round(free * 100) / 100} in stock (negative packaging stock is not allowed — PACKING_ALLOW_NEGATIVE_PACKAGING)`);
   }
@@ -540,7 +607,7 @@ export async function orderVariance(tx: Tx, order: any, extraCartonIds: number[]
   const bagsActual = set.reduce((a, c) => a + n(c.polybag_qty), 0);
   const bagsExpected = set.reduce((a, c) => a + n(c.std_polybag_qty), 0);
   const ctnActual = set.length;
-  const ctnExpected = expectedCartons(lines.map((l) => ({ color_id: Number(l.color_id), size_id: Number(l.size_id), qty: n(l.qty) })), r);
+  const ctnExpected = expectedCartons(lines.map((l) => ({ color_id: Number(l.color_id), size_id: Number(l.size_id), qty: n(l.qty) })), r, ratioPerCarton(order, r));
   const tol = Number(await setting(tx, Number(order.company_id), 'PACKING_VARIANCE_TOLERANCE_PCT', '2')) || 0;
   const bagPct = pct(bagsActual, bagsExpected); const ctnPct = pct(ctnActual, ctnExpected);
   return {

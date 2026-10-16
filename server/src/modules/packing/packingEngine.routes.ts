@@ -12,6 +12,7 @@ import {
   OPEN_ORDER, WORKING_ORDER, EDITABLE_CARTON, key, assertApprove, canApprove, resolveRule, ruleOf, expectedCartons, stdPolybags,
   loadOrder, lockJob, eligibility, jobKeyOf, openBagged, recalcOrder, cartonEvent, assertPackagingTrim, validateCarton,
   cartonLines, assertNotDownstream, lockCarton, orderVariance, postCarton, reverseCarton, jobBundles, setting,
+  ratioOf, ratioPerCarton, assertRatio,
   type PackingUnit, type SetDef,
 } from './packingEngineCore.js';
 import { packingReportsRouter } from './packingEngineReports.js';
@@ -253,6 +254,9 @@ async function jobParts(tx: any, cid: number, soId: number, ioNo: string, styleI
 }
 
 const orderLineSchema = z.object({ color_id: z.coerce.number().int().positive(), size_id: z.coerce.number().int().positive(), planned_qty: z.coerce.number().int().min(0) });
+// size ratio per carton / master polybag (client audio 16-Oct-2026): S1 M2 L2 XL1
+const ratioPartSchema = z.object({ size_id: z.coerce.number().int().positive(), ratio: z.coerce.number().int('Ratio must be a whole number').min(1).max(1000) });
+
 const orderSchema = z.object({
   so_id: z.coerce.number().int().positive('Pick the job'),
   style_id: z.coerce.number().int().positive('Pick the style'),
@@ -265,6 +269,7 @@ const orderSchema = z.object({
   master_bag_trim_id: idOpt(),
   pack_date: str(10), target_date: str(10), warehouse_id: idOpt(), remarks: str(500),
   lines: z.array(orderLineSchema).optional(),
+  size_ratio: z.array(ratioPartSchema).max(40).nullish(),
 });
 
 /** Validate planned lines against eligibility (planned never above eligible) and write them. */
@@ -300,9 +305,16 @@ async function writeOrderLines(tx: any, order: any, lines: z.infer<typeof orderL
       `INSERT INTO trx_packing_order_line (packing_id, color_id, size_id, sku_id, order_qty, eligible_at_create, planned_qty) VALUES (?,?,?,?,?,?,?)`,
       [order.id, l.color_id, l.size_id, e?.sku_id ?? null, e?.order_qty ?? 0, e?.eligible ?? 0, l.planned_qty]);
   }
+  const ra = ratioOf(order);
+  if (ra) {
+    const names = new Map<number, string>((await txQuery<any>(tx, `SELECT id, size_code FROM mst_size WHERE id IN (?)`,
+      [[...new Set([...ra.map((x) => x.size_id), ...keep.map((l) => l.size_id)])]])).map((x: any) => [Number(x.id), x.size_code]));
+    assertRatio(ra, rule, order.packing_unit, order.pieces_per_master_bag ? Number(order.pieces_per_master_bag) : null,
+      [...new Set(keep.filter((l) => l.planned_qty > 0).map((l) => Number(l.size_id)))], (id) => names.get(id) ?? `#${id}`);
+  }
   const plannedQty = keep.reduce((a, l) => a + l.planned_qty, 0);
   const bags = keep.reduce((a, l) => a + stdPolybags(l.planned_qty, rule), 0);
-  const ctns = expectedCartons(keep.map((l) => ({ color_id: l.color_id, size_id: l.size_id, qty: l.planned_qty })), rule);
+  const ctns = expectedCartons(keep.map((l) => ({ color_id: l.color_id, size_id: l.size_id, qty: l.planned_qty })), rule, ratioPerCarton(order, rule));
   await txExecute(tx, `UPDATE trx_packing SET planned_qty = ?, planned_polybags = ?, planned_cartons = ?, updated_at = NOW() WHERE id = ?`, [plannedQty, bags, ctns, order.id]);
 }
 
@@ -353,11 +365,12 @@ packingEngineRouter.post('/orders', requirePermission('PACKING.CREATE'), ah(asyn
     const no = await nextDocNumber(tx, cid, 'PACKING_ORDER');
     const r = await txExecute(tx,
       `INSERT INTO trx_packing (company_id, pack_no, io_no, style_id, pack_date, so_id, part_name, pack_method, packing_mode, packing_unit, pieces_per_master_bag,
-         master_bag_trim_id, order_status, is_engine, buyer_id, packing_rule_id, rule_revision, rule_snapshot, warehouse_id, target_date, remarks, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?, 'DRAFT', 1, ?,?,?,?,?,?,?,?)`,
+         master_bag_trim_id, order_status, is_engine, buyer_id, packing_rule_id, rule_revision, rule_snapshot, warehouse_id, target_date, remarks, created_by, size_ratio)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?, 'DRAFT', 1, ?,?,?,?,?,?,?,?,?)`,
       [cid, no, so.job_no, b.style_id, b.pack_date ?? new Date().toISOString().slice(0, 10), b.so_id, part,
        rule.allow_mixed_colours ? 'ASSORTED_COLOR_ASSORTED_SIZE' : rule.allow_mixed_sizes ? 'SOLID_COLOR_ASSORTED_SIZE' : 'SOLID_COLOR_SOLID_SIZE',
-       mode, unit, ppmb, masterTrim, so.buyer_id, rule.id, rule.revision, JSON.stringify(rule), b.warehouse_id ?? null, b.target_date, b.remarks, req.user!.id]);
+       mode, unit, ppmb, masterTrim, so.buyer_id, rule.id, rule.revision, JSON.stringify(rule), b.warehouse_id ?? null, b.target_date, b.remarks, req.user!.id,
+       b.size_ratio?.length ? JSON.stringify(b.size_ratio) : null]);
     for (const d of sets) {
       await txExecute(tx, `INSERT INTO trx_packing_set (packing_id, top_part, top_color_id, bottom_part, bottom_color_id) VALUES (?,?,?,?,?)`,
         [r.insertId, d.top_part, d.top_color_id, d.bottom_part, d.bottom_color_id]);
@@ -414,13 +427,24 @@ packingEngineRouter.post('/orders/:id/apply-rule', requirePermission('PACKING.UP
 packingEngineRouter.put('/orders/:id', requirePermission('PACKING.UPDATE'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = Number(req.params.id);
-  const b = z.object({ target_date: str(10), warehouse_id: idOpt(), remarks: str(500), lines: z.array(orderLineSchema).optional() }).parse(req.body);
+  const b = z.object({ target_date: str(10), warehouse_id: idOpt(), remarks: str(500), lines: z.array(orderLineSchema).optional(),
+    size_ratio: z.array(ratioPartSchema).max(40).nullish() }).parse(req.body);
   await transaction(async (tx) => {
     const o = await loadOrder(tx, cid, id, true);
     if (!OPEN_ORDER.includes(o.order_status)) throw BadRequest(`Packing order is ${o.order_status}`);
     await lockJob(tx, Number(o.so_id));
     await txExecute(tx, `UPDATE trx_packing SET target_date = ?, warehouse_id = ?, remarks = ? WHERE id = ?`, [b.target_date, b.warehouse_id ?? null, b.remarks, id]);
-    if (b.lines) await writeOrderLines(tx, o, b.lines, ruleOf(o));
+    // the size ratio changes only before cartons are packed (sent = replace, null / [] = clear, absent = keep)
+    if (b.size_ratio !== undefined && JSON.stringify(ratioOf({ size_ratio: b.size_ratio })) !== JSON.stringify(ratioOf(o))) {
+      const ctn = await txQueryOne<any>(tx, `SELECT COUNT(*) k FROM trx_carton WHERE packing_id = ? AND carton_status <> 'VOID'`, [id]);
+      if (n(ctn?.k)) throw BadRequest(`${o.pack_no} already has ${ctn.k} carton(s) — the size ratio cannot change now (void them first)`);
+      o.size_ratio = b.size_ratio?.length ? JSON.stringify(b.size_ratio) : null;
+      await txExecute(tx, `UPDATE trx_packing SET size_ratio = ? WHERE id = ?`, [o.size_ratio, id]);
+    }
+    if (b.lines || b.size_ratio !== undefined) {
+      const cur = await txQuery<any>(tx, `SELECT color_id, size_id, planned_qty FROM trx_packing_order_line WHERE packing_id = ?`, [id]);
+      await writeOrderLines(tx, o, b.lines ?? cur.map((l: any) => ({ color_id: Number(l.color_id), size_id: Number(l.size_id), planned_qty: n(l.planned_qty) })), ruleOf(o));
+    }
     await audit(req, 'trx_packing', id, 'UPDATE', { target_date: o.target_date, remarks: o.remarks }, b, tx);
   });
   res.json({ data: await orderDetail(cid, id) });
@@ -506,7 +530,14 @@ async function orderDetail(cid: number, id: number) {
       `SELECT (SELECT COUNT(*) FROM trx_packing_polybag WHERE packing_id = ? AND status <> 'VOID') + (SELECT COUNT(*) FROM trx_carton WHERE packing_id = ? AND carton_status <> 'VOID') q`, [id, id]);
     const rule_latest = latest ? { revision: Number(latest.revision), is_active: !!Number(latest.is_active), packing_mode: latest.packing_mode,
       newer: Number(latest.revision) > Number(head.rule_revision) || !Number(latest.is_active) } : null;
-    return { ...head, rule: ruleOf(head), rule_latest, can_apply_rule: ['DRAFT', 'APPROVED'].includes(head.order_status) && !n(started?.q) && !!rule_latest?.newer,
+    // size ratio: pieces per size in a full carton / in one master polybag
+    const ra = ratioOf(head);
+    const perCtn = ratioPerCarton(head, ruleOf(head));
+    const rsum = ra ? ra.reduce((x, y) => x + y.ratio, 0) : 0;
+    const ppmbH = n(head.pieces_per_master_bag);
+    const ratio = ra ? ra.map((x) => ({ ...x, size_code: lines.find((l) => l.size_id === x.size_id)?.size_code ?? null, per_carton: perCtn!.get(x.size_id) ?? 0,
+      per_master_bag: head.packing_unit === 'MASTER_POLYBAG' && ppmbH && rsum ? x.ratio * Math.floor(ppmbH / rsum) : null })) : null;
+    return { ...head, size_ratio: ratio, rule: ruleOf(head), rule_latest, can_apply_rule: ['DRAFT', 'APPROVED'].includes(head.order_status) && !n(started?.q) && !!rule_latest?.newer,
       lines, cartons, variance, variance_needs_approval: variance.beyond_tolerance && !head.variance_approved_at };
   });
 }
