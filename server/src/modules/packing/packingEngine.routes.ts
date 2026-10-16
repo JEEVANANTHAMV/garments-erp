@@ -611,7 +611,18 @@ const polybagSchema = z.object({
   pieces: z.coerce.number().int().positive('Pieces must be a positive whole number').nullish(),
   polybag_qty: z.coerce.number().int().min(0).nullish(),
   polybag_trim_id: idOpt(), operator_name: str(100), remarks: str(300),
+  // "Bag" from the list (client 16-Oct-2026: one click must bag the whole row, not one polybag per click):
+  // all that can be bagged, capped at the planned qty; polybags from the rule's pieces per polybag
+  bag_all: z.boolean().optional(),
 });
+
+/** Pieces of one entry: typed → as typed; Bag (bag_all) → everything baggable up to the plan; scan in individual mode → one polybag. */
+function entryPieces(b: { pieces?: number | null; bag_all?: boolean }, mode: string, ppp: number, baggable: number, planLeft: number, overpack: boolean) {
+  if (b.pieces != null) return b.pieces;
+  const all = overpack ? baggable : Math.min(baggable, Math.max(planLeft, 0));
+  if (b.bag_all || mode !== 'INDIVIDUAL_PIECE') return all > 0 ? all : baggable;
+  return Math.min(ppp, baggable);
+}
 
 packingEngineRouter.post('/orders/:id/polybags', requirePermission('PACKING.CREATE'), ah(async (req, res) => {
   const cid = req.user!.companyId;
@@ -647,9 +658,9 @@ packingEngineRouter.post('/orders/:id/polybags', requirePermission('PACKING.CREA
         + (qcPending ? ` — QC hold: ${qcPending} pcs waiting for Final QC` : !n(bd.fin_good_qty) ? ' — no finished (ironed) pieces yet' : ''));
     }
     const ppp = Math.max(n(r.pieces_per_polybag), 1);
-    const pieces = b.pieces ?? (o.packing_mode === 'INDIVIDUAL_PIECE' ? Math.min(ppp, baggable) : baggable);
-    if (pieces > baggable) throw BadRequest(`Bundle ${bd.bundle_no}: only ${baggable} pcs can be bagged (ready ${ready}, already bagged ${bagged}) — ${pieces} entered`);
     const onOrder = await txQueryOne<any>(tx, `SELECT COALESCE(SUM(pieces),0) q FROM trx_packing_polybag WHERE packing_id = ? AND color_id = ? AND size_id = ? AND status <> 'VOID'`, [id, bd.color_id, bd.size_id]);
+    const pieces = entryPieces(b, o.packing_mode, ppp, baggable, n(plan.planned_qty) - n(onOrder?.q), !!Number(r.allow_overpack));
+    if (pieces > baggable) throw BadRequest(`Bundle ${bd.bundle_no}: only ${baggable} pcs can be bagged (ready ${ready}, already bagged ${bagged}) — ${pieces} entered`);
     if (n(onOrder?.q) + pieces > n(plan.planned_qty) && !Number(r.allow_overpack)) {
       throw BadRequest(`Bundle ${bd.bundle_no}: ${n(onOrder?.q) + pieces} pcs would be bagged for this colour / size — planned ${plan.planned_qty}`);
     }
@@ -713,9 +724,9 @@ async function bagFromFgStore(tx: any, req: any, id: number, b: z.infer<typeof p
         + (n(e?.awaiting_fg) ? ` — ${e!.awaiting_fg} PCS finished ironing are waiting for an FG receipt` : ''));
   }
   const ppp = Math.max(n(r.pieces_per_polybag), 1);
-  const pieces = b.pieces ?? (o.packing_mode === 'INDIVIDUAL_PIECE' ? Math.min(ppp, baggable) : baggable);
-  if (pieces > baggable) throw BadRequest(`Only ${baggable} PCS can be bagged from the FG store${bd ? ` for bundle ${bd.bundle_no}` : ''} — ${pieces} entered`);
   const onOrder = await txQueryOne<any>(tx, `SELECT COALESCE(SUM(pieces),0) q FROM trx_packing_polybag WHERE packing_id = ? AND color_id = ? AND size_id = ? AND status <> 'VOID'`, [id, colorId, sizeId]);
+  const pieces = entryPieces(b, o.packing_mode, ppp, baggable, n(plan.planned_qty) - n(onOrder?.q), !!Number(r.allow_overpack));
+  if (pieces > baggable) throw BadRequest(`Only ${baggable} PCS can be bagged from the FG store${bd ? ` for bundle ${bd.bundle_no}` : ''} — ${pieces} entered`);
   if (n(onOrder?.q) + pieces > n(plan.planned_qty) && !Number(r.allow_overpack)) {
     throw BadRequest(`${n(onOrder?.q) + pieces} PCS would be bagged for this colour / size — planned ${plan.planned_qty}`);
   }

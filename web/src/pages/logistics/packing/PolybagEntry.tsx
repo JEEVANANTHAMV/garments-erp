@@ -44,7 +44,7 @@ export function PolybagEntryPage() {
   const entries = useQuery({ queryKey: ['packing-polybags', orderId], enabled: !!orderId, queryFn: async () => (await http.get<{ data: any[] }>(`/packing/orders/${orderId}/polybags`)).data });
   const refresh = () => { ['packing-bundles', 'packing-polybags', 'packing-order'].forEach((k) => qc.invalidateQueries({ queryKey: [k] })); };
 
-  const submit = async (ref: { barcode?: string; bundle_id?: number; color_id?: number; size_id?: number }) => {
+  const submit = async (ref: { barcode?: string; bundle_id?: number; color_id?: number; size_id?: number; bag_all?: boolean }) => {
     setErr(''); setBusy(true);
     try {
       try { localStorage.setItem('pk-operator', operator); } catch { /* ignore */ }
@@ -71,7 +71,7 @@ export function PolybagEntryPage() {
               {o.job_no} · {o.style_code}{o.buyer_po_no ? ` · PO ${o.buyer_po_no}` : ''}<br />
               Mode <b>{individual ? 'Individual piece' : 'Bundle / quantity'}</b> · {ppp} pc / polybag · <PkStatus value={o.order_status} />
             </div>}
-            {individual && <p className="text-[11.5px] text-slate-500">Pieces are not individually barcoded in this system: each scan bags {ppp} piece(s) from the scanned bundle. The bundle quantity limits repeat scans.</p>}
+            {individual && <p className="text-[11.5px] text-slate-500"><b>Bag</b> in the list bags everything that row can take (up to the plan) in one entry — polybags = pieces ÷ {ppp}. Type Pieces first to bag less. A barcode scan bags one polybag ({ppp} pc).</p>}
             <Input id="bundle-scan" ref={scanRef} label="Bundle barcode" value={code} disabled={!o || busy} autoFocus placeholder="Scan or type, then Enter"
               onChange={(e) => setCode(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && code.trim()) submit({ barcode: code.trim() }); }} />
             <div className="grid grid-cols-2 gap-3">
@@ -103,7 +103,7 @@ export function PolybagEntryPage() {
                       <tr key={`${b.color_id}:${b.size_id}`} data-fg-row={`${b.color_id}:${b.size_id}`}><td className="td">{b.color_name} / {b.size_code}</td><td className="td text-right">{b.planned}</td><td className="td text-right">{b.in_fg}</td>
                         <td className="td text-right">{b.bagged_open}</td><td className="td text-right font-medium">{b.baggable}</td><td className="td text-right">{b.packed}</td>
                         <td className="td text-right">{b.awaiting_fg ? <span className="text-amber-700">{b.awaiting_fg}</span> : '—'}</td>
-                        <td className="td text-right">{b.baggable > 0 && can('PACKING.CREATE') && <Button size="sm" variant="secondary" disabled={busy} onClick={() => submit({ color_id: b.color_id, size_id: b.size_id })}>Bag</Button>}</td></tr>
+                        <td className="td text-right">{b.baggable > 0 && can('PACKING.CREATE') && <Button size="sm" variant="secondary" disabled={busy} data-bag-fg={`${b.color_id}:${b.size_id}`} title={pieces ? `Bag ${pieces} pcs` : `Bag all ${b.baggable} pcs in ${Math.ceil(b.baggable / ppp)} polybag(s) (${ppp} pc / polybag)`} onClick={() => submit({ color_id: b.color_id, size_id: b.size_id, bag_all: true })}>Bag</Button>}</td></tr>
                     ))}</tbody>
                   </table>
                 </>
@@ -113,7 +113,7 @@ export function PolybagEntryPage() {
                   <tbody>{bundles.data.map((b) => (
                     <tr key={b.id}><td className="td font-mono">{b.bundle_no}</td><td className="td">{b.color_name} / {b.size_code}</td><td className="td text-right">{b.ready}{b.qc_pending ? <span className="ml-1 text-[11px] text-amber-700">QC {b.qc_pending}</span> : null}</td>
                       <td className="td text-right">{b.bagged_open}</td><td className="td text-right font-medium">{b.baggable}</td><td className="td text-right">{b.packed}</td>
-                      <td className="td text-right">{b.baggable > 0 && can('PACKING.CREATE') && <Button size="sm" variant="secondary" disabled={busy} onClick={() => submit({ bundle_id: b.id })}>Bag</Button>}</td></tr>
+                      <td className="td text-right">{b.baggable > 0 && can('PACKING.CREATE') && <Button size="sm" variant="secondary" disabled={busy} data-bag-bundle={b.id} title={pieces ? `Bag ${pieces} pcs` : `Bag all ${b.baggable} pcs in ${Math.ceil(b.baggable / ppp)} polybag(s)`} onClick={() => submit({ bundle_id: b.id, bag_all: true })}>Bag</Button>}</td></tr>
                   ))}</tbody>
                 </table>
               )}
