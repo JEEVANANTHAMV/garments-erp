@@ -3,8 +3,9 @@ import { txQuery, txQueryOne, txExecute, type Tx } from '../../config/db.js';
 import { BadRequest, NotFound, Forbidden } from '../../core/errors.js';
 import { audit } from '../../core/audit.js';
 import {
-  bundleAvail, availAt, packingRequiresQc, linkBundlesToCarton, unlinkBundleFromCarton, TERMINAL,
+  bundleAvail, availAt, packingRequiresQc, linkBundlesToCarton, linkFgBundlesToCarton, unlinkBundleFromCarton, TERMINAL,
 } from '../production/bundleLedger.js';
+import { fgMode, fgOnHand } from '../production/fgReceipt.routes.js';
 
 /**
  * Packing engine core (client "Garment Packing Module Developer Document", 14-Oct-2026).
@@ -13,8 +14,10 @@ import {
  *        → verify → seal → POST (bundle packed_qty + packaging trim stock, one transaction) → packing list / shipment
  *
  * Quantities (per job + style + colour + size):
- *   ready      = Σ bundle "pack" availability (bundleLedger.bundleAvail; Final-QC passed only when
- *                PACKING_REQUIRES_FINAL_QC = 1). Posted cartons already left this number (bundle packed_qty).
+ *   ready      = PACKING_FROM_FG_RECEIPT = 1 (default, client call 16-Oct-2026): PCS on hand in the FG store —
+ *                FG receipts (in-house bundles, job work, returns, surplus) − cartons posted from the store.
+ *                Otherwise Σ bundle "pack" availability (bundleLedger.bundleAvail; Final-QC passed only when
+ *                PACKING_REQUIRES_FINAL_QC = 1). Posted cartons already left this number.
  *   reserved   = what OTHER open packing orders (DRAFT / APPROVED / IN_PROGRESS) still hold:
  *                max(planned − posted, unposted carton pieces) per order.
  *   eligible   = ready − reserved  (for this order, including its own unposted cartons)
@@ -184,6 +187,8 @@ export interface EligRow {
   color_id: number; size_id: number; color_name?: string; size_code?: string; sort_order?: number; sku_id?: number | null;
   order_qty: number; ready: number; reserved_other: number; eligible: number; planned: number;
   posted: number; draft: number; available: number; balance: number; bagged: number; bagged_open: number; qc_pending: number;
+  /** FG mode: in-house PCS finished (ironing / QC) but not yet received into the FG store */
+  awaiting_fg?: number;
 }
 
 /**
@@ -192,12 +197,15 @@ export interface EligRow {
  */
 export async function eligibility(tx: Tx, j: JobKey, soId: number, orderId?: number | null): Promise<EligRow[]> {
   const bundles = await jobBundles(tx, j);
-  const ready = new Map<string, number>(); const qcp = new Map<string, number>();
+  const ready = new Map<string, number>(); const qcp = new Map<string, number>(); const awaiting = new Map<string, number>();
+  const fg = await fgMode(tx, j.cid);
   for (const b of bundles) {
     const k = key(b.color_id, b.size_id);
-    ready.set(k, (ready.get(k) ?? 0) + b.ready);
+    if (fg) awaiting.set(k, (awaiting.get(k) ?? 0) + b.ready);
+    else ready.set(k, (ready.get(k) ?? 0) + b.ready);
     qcp.set(k, (qcp.get(k) ?? 0) + (b.strict ? b.qc_pending : 0));
   }
+  if (fg) for (const [k, v] of await fgOnHand(tx, j.cid, j.io_no, j.style_id)) ready.set(k, v.on_hand);
   const orderQty = new Map<string, { q: number; sku: number }>();
   const so = await txQuery<any>(tx,
     `SELECT k.color_id, k.size_id, k.id sku_id, SUM(sk.qty - sk.cancelled_qty) q
@@ -217,7 +225,7 @@ export async function eligibility(tx: Tx, j: JobKey, soId: number, orderId?: num
          FROM trx_packing_polybag WHERE packing_id = ? AND status <> 'VOID' GROUP BY color_id, size_id`, [orderId]);
     for (const b of bags) { bagged.set(key(b.color_id, b.size_id), n(b.p)); baggedOpen.set(key(b.color_id, b.size_id), n(b.o)); }
   }
-  const keys = new Set([...ready.keys(), ...orderQty.keys(), ...plan.keys(), ...posted.keys(), ...draft.keys()]);
+  const keys = new Set([...ready.keys(), ...orderQty.keys(), ...plan.keys(), ...posted.keys(), ...draft.keys(), ...awaiting.keys()]);
   const out: EligRow[] = [];
   for (const k of keys) {
     const [c, s] = k.split(':').map(Number);
@@ -228,6 +236,7 @@ export async function eligibility(tx: Tx, j: JobKey, soId: number, orderId?: num
       color_id: c, size_id: s, sku_id: orderQty.get(k)?.sku ?? null, order_qty: orderQty.get(k)?.q ?? 0, ready: rdy, reserved_other: rsv,
       eligible: elig, planned: pl, posted: pst, draft: dr, available: Math.max(elig - dr, 0), balance: Math.max(pl - pst, 0),
       bagged: bagged.get(k) ?? 0, bagged_open: baggedOpen.get(k) ?? 0, qc_pending: qcp.get(k) ?? 0,
+      ...(fg ? { awaiting_fg: awaiting.get(k) ?? 0 } : {}),
     });
   }
   if (out.length) {
@@ -445,6 +454,9 @@ export async function postCarton(tx: Tx, req: Request, order: any, cartonId: num
   if (!cartonTrim) throw BadRequest(`Carton ${c.carton_no} has no carton type (packaging item) — set it before posting`);
   if (n(c.polybag_qty) > 0 && !polybagTrim) throw BadRequest(`Carton ${c.carton_no} has no polybag type — set it before posting`);
 
+  // FG store (PACKING_FROM_FG_RECEIPT): the PCS come out of the store — bundle fg_qty → packed for in-house
+  // bundles (chosen / bagged / oldest first); the rest are FG-received garments with no bundle (job work, returns).
+  if (await fgMode(tx, cid)) return postCartonFromFg(tx, req, order, c, lines, polybagTrim ?? null, Number(cartonTrim));
   // bundles: chosen bundle first, else bundles this order bagged, else oldest ready bundle
   const jk = jobKeyOf(order);
   const items = new Map<number, number>();
@@ -499,6 +511,61 @@ export async function postCarton(tx: Tx, req: Request, order: any, cartonId: num
   return { carton_id: c.id, carton_no: c.carton_no, skipped: false, bundles: link.bundles, packaging: used };
 }
 
+async function postCartonFromFg(tx: Tx, req: Request, order: any, c: any, lines: CartonLineIn[], polybagTrim: number | null, cartonTrim: number) {
+  const cid = req.user!.companyId;
+  const jk = jobKeyOf(order);
+  const items = new Map<number, number>();
+  for (const l of lines) {
+    let need = l.qty;
+    const bundles = (await jobBundles(tx, jk, l.color_id, l.size_id)).filter((b) => n(b.fg_qty) > 0);
+    const mine = await txQuery<any>(tx,
+      `SELECT bundle_id FROM trx_packing_polybag WHERE packing_id = ? AND status = 'OPEN' AND color_id = ? AND size_id = ? AND bundle_id IS NOT NULL`,
+      [order.id, l.color_id, l.size_id]);
+    const mineSet = new Set(mine.map((m) => Number(m.bundle_id)));
+    const ordered = [...bundles].sort((a, b) =>
+      (Number(b.id) === l.bundle_id ? 1 : 0) - (Number(a.id) === l.bundle_id ? 1 : 0)
+      || (mineSet.has(Number(b.id)) ? 1 : 0) - (mineSet.has(Number(a.id)) ? 1 : 0) || Number(a.id) - Number(b.id));
+    for (const b of ordered) {
+      if (need <= 0) break;
+      const q = Math.min(n(b.fg_qty) - (items.get(Number(b.id)) ?? 0), need);
+      if (q > 0) { items.set(Number(b.id), (items.get(Number(b.id)) ?? 0) + q); need -= q; }
+    }
+    // the rest are FG-store PCS without a bundle; validateCarton already capped the line at the FG on hand
+  }
+  const link = items.size
+    ? await linkFgBundlesToCarton(tx, req, c.id, [...items.entries()].map(([bundle_id, qty]) => ({ bundle_id, qty })))
+    : { bundles: [] as any[] };
+
+  // this order's open polybag entries of each colour / size are cartoned first-in first-out
+  for (const l of lines) {
+    let left = l.qty;
+    const bags = await txQuery<any>(tx,
+      `SELECT id, pieces, cartoned_qty FROM trx_packing_polybag WHERE packing_id = ? AND color_id = ? AND size_id = ? AND status = 'OPEN' ORDER BY id FOR UPDATE`,
+      [order.id, l.color_id, l.size_id]);
+    for (const b of bags) {
+      if (left <= 0) break;
+      const q = Math.min(n(b.pieces) - n(b.cartoned_qty), left);
+      if (q <= 0) continue;
+      await txExecute(tx, `UPDATE trx_packing_polybag SET cartoned_qty = cartoned_qty + ?, status = IF(cartoned_qty >= pieces, 'CARTONED', 'OPEN') WHERE id = ?`, [q, b.id]);
+      await txExecute(tx, `INSERT INTO trx_packing_polybag_use (polybag_id, carton_id, qty) VALUES (?,?,?)`, [b.id, c.id, q]);
+      left -= q;
+    }
+  }
+
+  const allowNeg = (await setting(tx, cid, 'PACKING_ALLOW_NEGATIVE_PACKAGING', '0')) === '1';
+  const seq = n(c.post_seq) + 1;
+  const used = [
+    ...(polybagTrim ? await consumeTrim(tx, req, order, c, seq, 'POLYBAG', Number(polybagTrim), n(c.polybag_qty), n(c.std_polybag_qty), allowNeg) : []),
+    ...await consumeTrim(tx, req, order, c, seq, 'CARTON', Number(cartonTrim), 1, 1, allowNeg),
+  ];
+  await txExecute(tx,
+    `UPDATE trx_carton SET is_posted = 1, from_fg = 1, posted_at = NOW(), posted_by = ?, post_seq = ?, polybag_trim_id = ?, carton_trim_id = ?, updated_at = NOW() WHERE id = ?`,
+    [req.user!.id, seq, polybagTrim ?? null, cartonTrim, c.id]);
+  await cartonEvent(tx, req, c, 'POST', c.carton_status, c.carton_status, null, { from_fg_store: true, bundles: link.bundles, packaging: used });
+  await audit(req, 'trx_carton', c.id, 'UPDATE', { is_posted: 0 }, { is_posted: 1, from_fg: 1, post_seq: seq, bundles: link.bundles, packaging: used }, tx);
+  return { carton_id: c.id, carton_no: c.carton_no, skipped: false, from_fg: true, bundles: link.bundles, packaging: used };
+}
+
 /** Authorised reversal of a posted carton: packaging back to the same lots, bundles un-packed, polybag entries reopened. */
 export async function reverseCarton(tx: Tx, req: Request, c: any, reason: string) {
   if (!Number(c.is_posted)) return { reversed: false };
@@ -519,7 +586,8 @@ export async function reverseCarton(tx: Tx, req: Request, c: any, reason: string
     await txExecute(tx, `UPDATE trx_packing_polybag SET cartoned_qty = GREATEST(cartoned_qty - ?, 0), status = 'OPEN' WHERE id = ? AND status <> 'VOID'`, [u.qty, u.polybag_id]);
   }
   await txExecute(tx, `DELETE FROM trx_packing_polybag_use WHERE carton_id = ?`, [c.id]);
-  await txExecute(tx, `UPDATE trx_carton SET is_posted = 0, posted_at = NULL, posted_by = NULL, updated_at = NOW() WHERE id = ?`, [c.id]);
+  // from_fg = 0: the PCS are back in the FG store (FG on hand counts only posted FG cartons)
+  await txExecute(tx, `UPDATE trx_carton SET is_posted = 0, from_fg = 0, posted_at = NULL, posted_by = NULL, updated_at = NOW() WHERE id = ?`, [c.id]);
   await cartonEvent(tx, req, c, 'REVERSE', c.carton_status, c.carton_status, reason, { packaging_returned: cons.map((k) => ({ trim_id: k.trim_id, lot: k.lot_no, qty: Number(k.qty) })), bundles: links.length });
   await audit(req, 'trx_carton', c.id, 'UPDATE', { is_posted: 1 }, { is_posted: 0, reason }, tx);
   return { reversed: true };

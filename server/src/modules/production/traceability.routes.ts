@@ -142,7 +142,7 @@ traceabilityRouter.get('/style/:styleNo/production-history', requirePermission('
              FROM trx_cutting_plan cp
             WHERE cp.style_id = ? AND cp.company_id = ?`, [style.id, cid]),
     queryOne<any>(`SELECT COALESCE(SUM(actual_cut_qty),0) AS total_cut FROM trx_cutting_plan WHERE style_id = ? AND company_id = ?`, [style.id, cid]),
-    queryOne<any>(`SELECT COALESCE(SUM(total_qty),0) AS total_fg FROM trx_fg_receipt WHERE style_id = ? AND company_id = ?`, [style.id, cid]),
+    queryOne<any>(`SELECT COALESCE(SUM(total_qty),0) AS total_fg FROM trx_fg_receipt WHERE style_id = ? AND company_id = ? AND status <> 'CANCELLED'`, [style.id, cid]),
     queryOne<any>(`SELECT COALESCE(SUM(total_qty),0) AS total_packed FROM trx_packing WHERE style_id = ? AND company_id = ?`, [style.id, cid]),
     // trx_shipment has no style_id: a shipment belongs to a style through its
     // sales order lines or through the packing of its packing list.

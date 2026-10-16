@@ -7,6 +7,7 @@ import { requirePermission, requireAny } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { lockBundle, availAt, packingRequiresQc, TERMINAL } from '../production/bundleLedger.js';
+import { fgMode } from '../production/fgReceipt.routes.js';
 import {
   OPEN_ORDER, WORKING_ORDER, EDITABLE_CARTON, key, assertApprove, canApprove, resolveRule, ruleOf, expectedCartons, stdPolybags,
   loadOrder, lockJob, eligibility, jobKeyOf, openBagged, recalcOrder, cartonEvent, assertPackagingTrim, validateCarton,
@@ -450,7 +451,7 @@ packingEngineRouter.get('/orders/:id/polybags', requirePermission('PACKING.VIEW'
   const id = Number(req.params.id);
   const rows = await query(
     `SELECT pb.*, cb.bundle_no, cb.barcode, col.color_name, sz.size_code, t.trim_name polybag_trim_name
-       FROM trx_packing_polybag pb JOIN trx_cutting_bundle cb ON cb.id = pb.bundle_id
+       FROM trx_packing_polybag pb LEFT JOIN trx_cutting_bundle cb ON cb.id = pb.bundle_id
        LEFT JOIN mst_color col ON col.id = pb.color_id LEFT JOIN mst_size sz ON sz.id = pb.size_id LEFT JOIN mst_trim t ON t.id = pb.polybag_trim_id
       WHERE pb.packing_id = ? AND pb.company_id = ? ORDER BY pb.id DESC`, [id, cid]);
   res.json({ data: rows });
@@ -458,6 +459,8 @@ packingEngineRouter.get('/orders/:id/polybags', requirePermission('PACKING.VIEW'
 
 const polybagSchema = z.object({
   bundle_id: idOpt(), barcode: str(80),
+  // FG store packing: garments without a bundle (job work, returns) are bagged by colour / size
+  color_id: idOpt(), size_id: idOpt(),
   pieces: z.coerce.number().int().positive('Pieces must be a positive whole number').nullish(),
   polybag_qty: z.coerce.number().int().min(0).nullish(),
   polybag_trim_id: idOpt(), operator_name: str(100), remarks: str(300),
@@ -467,6 +470,11 @@ packingEngineRouter.post('/orders/:id/polybags', requirePermission('PACKING.CREA
   const cid = req.user!.companyId;
   const id = Number(req.params.id);
   const b = polybagSchema.parse(req.body);
+  if (await fgMode(null, cid)) {
+    const row = await transaction((tx) => bagFromFgStore(tx, req, id, b));
+    res.status(201).json({ data: row });
+    return;
+  }
   if (!b.bundle_id && !b.barcode) throw BadRequest('Scan a bundle barcode or pick a bundle');
   const row = await transaction(async (tx) => {
     const o = await loadOrder(tx, cid, id, true);
@@ -514,6 +522,67 @@ packingEngineRouter.post('/orders/:id/polybags', requirePermission('PACKING.CREA
   });
   res.status(201).json({ data: row });
 }));
+
+/**
+ * Polybag / individual piece entry from the FG store (PACKING_FROM_FG_RECEIPT, client call 16-Oct-2026): only PCS
+ * received into the FG store can be bagged. A bundle scan fills colour / size and is capped by that bundle's PCS in
+ * the store; colour / size alone bags FG garments with no bundle. Both are capped by the store PCS the order may take.
+ */
+async function bagFromFgStore(tx: any, req: any, id: number, b: z.infer<typeof polybagSchema>) {
+  const cid = req.user!.companyId;
+  const o = await loadOrder(tx, cid, id, true);
+  if (!WORKING_ORDER.includes(o.order_status)) throw BadRequest(`Packing order ${o.pack_no} is ${o.order_status} — approve it before entering polybags`);
+  const r = ruleOf(o);
+  await lockJob(tx, Number(o.so_id));
+  let bd: any = null;
+  let colorId = b.color_id ?? null; let sizeId = b.size_id ?? null;
+  if (b.bundle_id || b.barcode) {
+    bd = await lockBundle(tx, cid, { id: b.bundle_id ?? null, code: b.barcode ?? null });
+    if (bd.io_no !== o.io_no || Number(bd.style_id) !== Number(o.style_id)) {
+      throw BadRequest(`Wrong job: bundle ${bd.bundle_no} is ${bd.io_no ?? 'no job'} — packing order ${o.pack_no} is ${o.io_no}`);
+    }
+    if (o.part_name && bd.part_name && bd.part_name !== o.part_name) throw BadRequest(`Bundle ${bd.bundle_no} is part ${bd.part_name}; this order packs ${o.part_name}`);
+    colorId = Number(bd.color_id); sizeId = Number(bd.size_id);
+  }
+  if (!colorId || !sizeId) throw BadRequest('Scan a bundle, or pick the colour and size of the FG garments to bag');
+  const plan = await txQueryOne<any>(tx, `SELECT planned_qty FROM trx_packing_order_line WHERE packing_id = ? AND color_id = ? AND size_id = ?`, [id, colorId, sizeId]);
+  if (!plan || !n(plan.planned_qty)) throw BadRequest(`This colour / size is not on packing order ${o.pack_no}`);
+  const e = (await eligibility(tx, jobKeyOf(o), Number(o.so_id), id)).find((x) => x.color_id === colorId && x.size_id === sizeId);
+  const storeFree = Math.max(n(e?.eligible) - n(e?.bagged_open), 0);
+  let baggable = storeFree;
+  let bundleFree: number | null = null;
+  if (bd) {
+    const openOnBundle = await txQueryOne<any>(tx, `SELECT COALESCE(SUM(pieces - cartoned_qty),0) q FROM trx_packing_polybag WHERE bundle_id = ? AND status = 'OPEN'`, [bd.id]);
+    bundleFree = Math.max(n(bd.fg_qty) - n(openOnBundle?.q), 0);
+    baggable = Math.min(baggable, bundleFree);
+  }
+  if (!baggable) {
+    throw BadRequest(bd
+      ? `Bundle ${bd.bundle_no}: no PCS of it are in the FG store to bag (${n(bd.fg_qty)} in the store, already bagged ${n(bd.fg_qty) - (bundleFree ?? 0)}) — receive them on an FG Receipt first`
+      : `Nothing of this colour / size is in the FG store to bag (in store for this order ${n(e?.eligible)}, already bagged ${n(e?.bagged_open)})`
+        + (n(e?.awaiting_fg) ? ` — ${e!.awaiting_fg} PCS finished ironing are waiting for an FG receipt` : ''));
+  }
+  const ppp = Math.max(n(r.pieces_per_polybag), 1);
+  const pieces = b.pieces ?? (o.packing_mode === 'INDIVIDUAL_PIECE' ? Math.min(ppp, baggable) : baggable);
+  if (pieces > baggable) throw BadRequest(`Only ${baggable} PCS can be bagged from the FG store${bd ? ` for bundle ${bd.bundle_no}` : ''} — ${pieces} entered`);
+  const onOrder = await txQueryOne<any>(tx, `SELECT COALESCE(SUM(pieces),0) q FROM trx_packing_polybag WHERE packing_id = ? AND color_id = ? AND size_id = ? AND status <> 'VOID'`, [id, colorId, sizeId]);
+  if (n(onOrder?.q) + pieces > n(plan.planned_qty) && !Number(r.allow_overpack)) {
+    throw BadRequest(`${n(onOrder?.q) + pieces} PCS would be bagged for this colour / size — planned ${plan.planned_qty}`);
+  }
+  const trim = b.polybag_trim_id ?? r.polybag_trim_id ?? null;
+  await assertPackagingTrim(tx, cid, trim, 'POLYBAG');
+  const bags = b.polybag_qty ?? Math.ceil(pieces / ppp);
+  const ins = await txExecute(tx,
+    `INSERT INTO trx_packing_polybag (company_id, packing_id, entry_mode, bundle_id, io_no, style_id, color_id, size_id, pieces, pieces_per_polybag, polybag_qty,
+       polybag_trim_id, operator_name, remarks, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [cid, id, o.packing_mode, bd?.id ?? null, o.io_no, o.style_id, colorId, sizeId, pieces, ppp, bags, trim, b.operator_name, b.remarks, req.user!.id]);
+  if (o.order_status === 'APPROVED') await txExecute(tx, `UPDATE trx_packing SET order_status = 'IN_PROGRESS' WHERE id = ?`, [id]);
+  const row = await txQueryOne<any>(tx,
+    `SELECT pb.*, cb.bundle_no, col.color_name, sz.size_code FROM trx_packing_polybag pb LEFT JOIN trx_cutting_bundle cb ON cb.id = pb.bundle_id
+       LEFT JOIN mst_color col ON col.id = pb.color_id LEFT JOIN mst_size sz ON sz.id = pb.size_id WHERE pb.id = ?`, [ins.insertId]);
+  await audit(req, 'trx_packing_polybag', ins.insertId, 'INSERT', undefined, row, tx);
+  return { ...row, from_fg_store: true, std_polybags: Math.ceil(pieces / ppp), variance: bags - Math.ceil(pieces / ppp) };
+}
 
 packingEngineRouter.post('/polybags/:id/void', requirePermission('PACKING.UPDATE'), ah(async (req, res) => {
   const cid = req.user!.companyId;

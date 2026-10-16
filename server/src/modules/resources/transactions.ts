@@ -1286,6 +1286,9 @@ export const transactionResources: ResourceConfig[] = [
   // ------------------------------------------------ FG Receipt
   {
     path: 'fg-receipts', table: 'trx_fg_receipt', permission: 'PRODUCTION', label: 'FG Receipt',
+    // posted / cancelled only through /fg-receipts (fgReceipt.routes.ts) — FG stock and bundles move with them
+    readOnly: 'FG receipts are posted on the FG Receipt screen and cancelled there, never edited or deleted here',
+    beforeDelete: async () => { throw BadRequest('An FG receipt is cancelled on the FG Receipt screen, never deleted'); },
     searchable: ['fg_receipt_no'], sortable: ['fg_receipt_no', 'receipt_date'],
     defaultSort: 't.receipt_date DESC', hasIsActive: false, softDelete: false, hasAuditCols: false,
     filters: ['prod_order_id', 'so_id', 'warehouse_id', 'status'],

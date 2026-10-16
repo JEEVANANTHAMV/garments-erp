@@ -30,6 +30,8 @@ export const COUNTERS = [
   'out_cut_qty', 'out_sewn_qty', 'out_pack_qty',
   'chk_pass_qty', 'chk_reject_qty', 'chk_rework_qty',
   'out_wip_qty', 'wip_loss_qty',
+  // PCS received into the FG store by an FG receipt, not yet in a posted carton (db/132, client 16-Oct-2026)
+  'fg_qty',
 ] as const;
 export type Counter = typeof COUNTERS[number];
 /** CUT cut panels · WIP part-stitched PCS (sewing WIP) · SEWN stitched · FIN finished · PACK ready to pack */
@@ -74,7 +76,8 @@ export function ironingAvail(b: Record<string, any>, strictChecking: boolean): n
 /** PCS available at each stage of a bundle. */
 export function bundleAvail(b: Record<string, any>, strictQc = false) {
   const qcDone = n(b.qc_pass_qty);
-  const packedish = n(b.packed_qty) + n(b.out_pack_qty) + n(b.pack_loss_qty);
+  // PCS already in the FG store count as gone from the floor (they are packed from the store)
+  const packedish = n(b.packed_qty) + n(b.out_pack_qty) + n(b.pack_loss_qty) + n(b.fg_qty);
   const cut = Math.max(n(b.balance_qty), 0);
   // PCS out on a process DC from stitching are not on the line until they come back
   const sewing_wip = Math.max(n(b.sew_in_qty) - n(b.sew_good_qty) - n(b.sew_reject_qty) - n(b.out_wip_qty) - n(b.wip_loss_qty), 0);
@@ -94,7 +97,7 @@ export function bundleAvail(b: Record<string, any>, strictQc = false) {
   const alive = b.status === 'SPLIT' || b.status === 'CLOSED' ? 0 : Math.max(n(b.qty) - rejected, 0);
   return {
     cut, out_cut: n(b.out_cut_qty), sewing_wip, out_wip: n(b.out_wip_qty), sewn, checking: sewn - checked, checked, out_sewn: n(b.out_sewn_qty), finishing_wip,
-    qc, pack, out_pack: n(b.out_pack_qty), packed: n(b.packed_qty), rejected, alive,
+    qc, pack, out_pack: n(b.out_pack_qty), packed: n(b.packed_qty), fg: n(b.fg_qty), rejected, alive,
   };
 }
 
@@ -278,6 +281,33 @@ export async function linkBundlesToCarton(tx: Tx, req: Request, cartonId: number
   return { carton_id: cartonId, carton_no: carton.carton_no, bundles: linked };
 }
 
+/**
+ * FG-store packing (PACKING_FROM_FG_RECEIPT): a posted carton takes PCS the FG receipt put in the store —
+ * bundle fg_qty → packed_qty (no second availability check against the floor).
+ */
+export async function linkFgBundlesToCarton(tx: Tx, req: Request, cartonId: number, items: { bundle_id: number; qty: number }[]) {
+  const cid = req.user!.companyId;
+  const carton = await txQueryOne<any>(tx,
+    `SELECT ct.*, p.pack_no FROM trx_carton ct JOIN trx_packing p ON p.id = ct.packing_id WHERE ct.id = ? AND p.company_id = ?`, [cartonId, cid]);
+  if (!carton) throw NotFound('Carton not found');
+  const linked: any[] = [];
+  for (const it of [...items].sort((a, b) => a.bundle_id - b.bundle_id)) {
+    if (it.qty <= 0) continue;
+    const b = await lockBundle(tx, cid, { id: it.bundle_id });
+    if (it.qty > n(b.fg_qty)) throw BadRequest(`Bundle ${b.bundle_no}: only ${n(b.fg_qty)} PCS are in the FG store, ${it.qty} needed`);
+    await txExecute(tx,
+      `INSERT INTO trx_carton_bundle (carton_id, bundle_id, qty, from_fg, created_by) VALUES (?,?,?,1,?)
+       ON DUPLICATE KEY UPDATE qty = qty + VALUES(qty), from_fg = 1`, [cartonId, b.id, it.qty, req.user!.id]);
+    const after = await applyBundle(tx, b, { fg_qty: -it.qty, packed_qty: it.qty });
+    await addMovement(tx, req, b, {
+      txn_type: 'PACK', from_stage: b.status, to_stage: after.status, qty: it.qty, good: it.qty,
+      destination: carton.carton_no, location: carton.pack_no, ref_table: 'trx_carton', ref_id: cartonId, remarks: 'from FG store',
+    });
+    linked.push({ bundle_id: b.id, bundle_no: b.bundle_no, qty: it.qty, status: after.status });
+  }
+  return { carton_id: cartonId, carton_no: carton.carton_no, bundles: linked };
+}
+
 /** Reverse a carton ← bundle link (unpack) while the carton is not dispatched. */
 export async function unlinkBundleFromCarton(tx: Tx, req: Request, cartonId: number, bundleId: number, reason: string) {
   const cid = req.user!.companyId;
@@ -293,7 +323,8 @@ export async function unlinkBundleFromCarton(tx: Tx, req: Request, cartonId: num
   if (!link) throw NotFound('Bundle is not in this carton');
   const b = await lockBundle(tx, cid, { id: bundleId });
   await txExecute(tx, `DELETE FROM trx_carton_bundle WHERE id = ?`, [link.id]);
-  const after = await applyBundle(tx, b, { packed_qty: -Number(link.qty) });
+  // a carton packed from the FG store puts its PCS back into the store
+  const after = await applyBundle(tx, b, Number(link.from_fg) ? { packed_qty: -Number(link.qty), fg_qty: Number(link.qty) } : { packed_qty: -Number(link.qty) });
   await addMovement(tx, req, b, {
     txn_type: 'UNPACK', from_stage: b.status, to_stage: after.status, qty: Number(link.qty),
     destination: carton.carton_no, ref_table: 'trx_carton', ref_id: cartonId, remarks: reason,

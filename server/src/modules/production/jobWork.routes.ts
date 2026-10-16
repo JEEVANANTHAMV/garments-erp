@@ -22,6 +22,7 @@ import { orderLineBalances, refreshJwOrder, resolveJwRate } from './jwOrderStatu
 import { postReceipt, DC_PENDING } from './processDc.routes.js';
 import { RESERVED_KG_SQL, refreshFabricRollStatus } from './cuttingEngine.js';
 import { resolveSoId } from '../stock/jobStock.routes.js';
+import { postFgReceipt } from './fgReceipt.routes.js';
 
 export const jobWorkRouter = Router();
 jobWorkRouter.param('id', (_req, _res, next, v) => (/^\d+$/.test(String(v)) ? next() : next(NotFound('Not found'))));
@@ -409,18 +410,26 @@ jobWorkRouter.post('/job-work/fabric-dcs/:id/inward', requireAny('PRODUCTION.CRE
     const goodTotal = outs.reduce((a, x) => a + x.good_qty, 0);
     if (b.to_fg && goodTotal > 0 && line && ['PACKED', 'GARMENT'].includes(line.output_kind) && dc.style_id && dc.io_no) {
       const lines = await txQuery<any>(tx, `SELECT * FROM trx_jobwork_challan_line WHERE challan_id = ?`, [id]);
-      const fgNo = await nextDocNumber(tx, cid, 'FG_RECEIPT');
-      const fr = await txExecute(tx,
-        `INSERT INTO trx_fg_receipt (company_id, receipt_no, receipt_date, io_no, so_id, style_id, warehouse_id, source_stage, source_ref, total_qty, total_reject, status, remarks, created_by)
-         VALUES (?,?,?,?,?,?,?,'JOBWORK',?,?,?,'RECEIVED',?,?)`,
-        [cid, fgNo, b.inward_date, dc.io_no, order?.so_id ?? null, dc.style_id, b.warehouse_id ?? null, dc.challan_no, goodTotal,
-         outs.reduce((a, x) => a + x.reject_qty, 0), `Job work ${order?.jw_no ?? ''} DC ${dc.challan_no}`, req.user!.id]);
-      fgId = fr.insertId;
-      for (const x of outs) {
-        const l = lines.find((y) => Number(y.id) === x.line_id);
-        if (!l?.color_id || !l?.size_id) continue;
-        await txExecute(tx, `INSERT INTO trx_fg_receipt_line (fg_receipt_id, color_id, size_id, sku_id, good_qty, reject_qty) VALUES (?,?,?,?,?,?)`,
-          [fgId, l.color_id, l.size_id, l.sku_id ?? null, x.good_qty, x.reject_qty]);
+      // posted like any FG receipt (16-Oct-2026: FG receipt is the gate into packing) — into the FG store, so packing sees it
+      const whId = b.warehouse_id ?? (await txQueryOne<any>(tx,
+        `SELECT id FROM mst_warehouse WHERE company_id = ? AND warehouse_type = 'FINISHED_GOODS' AND is_active = 1 ORDER BY id LIMIT 1`, [cid]))?.id;
+      if (!whId) throw BadRequest('Pick the FG store the garments go into (no finished-goods warehouse is set up)');
+      const fgLines = outs.map((x) => ({ x, l: lines.find((y) => Number(y.id) === x.line_id) }))
+        .filter(({ l }) => l?.color_id && l?.size_id)
+        .map(({ x, l }) => ({ color_id: Number(l.color_id), size_id: Number(l.size_id), good_qty: x.good_qty, reject_qty: x.reject_qty, batch_no: null }));
+      const merged = new Map<string, { color_id: number; size_id: number; good_qty: number; reject_qty: number; batch_no: null }>();
+      for (const fl of fgLines) {
+        const key = `${fl.color_id}:${fl.size_id}`;
+        const cur = merged.get(key);
+        if (cur) { cur.good_qty += fl.good_qty; cur.reject_qty += fl.reject_qty; } else merged.set(key, { ...fl });
+      }
+      if (merged.size) {
+        const fr = await postFgReceipt(tx, req, {
+          receipt_date: b.inward_date, io_no: dc.io_no, style_id: Number(dc.style_id), source_type: 'JOB_WORK', source_stage: 'JOBWORK',
+          warehouse_id: Number(whId), source_ref: dc.challan_no, prod_order_id: null, so_id: order?.so_id ?? null,
+          remarks: `Job work ${order?.jw_no ?? ''} DC ${dc.challan_no}`, lines: [...merged.values()], no_order_cap: true,
+        });
+        fgId = fr.id;
       }
     }
     const no = await nextDocNumber(tx, cid, 'JW_FAB_INWARD');

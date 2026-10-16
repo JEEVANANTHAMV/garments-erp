@@ -121,7 +121,7 @@ export async function buildOrderData(companyId: number, prodOrderId: number) {
   `, [companyId, ioNo, styleId, styleId]) : null;
   const fg = await queryOne<any>(`
     SELECT COALESCE(SUM(total_qty),0) AS qty, COUNT(*) AS docs FROM trx_fg_receipt
-     WHERE company_id = ? AND (prod_order_id = ? OR (? IS NOT NULL AND io_no = ? AND (? IS NULL OR style_id = ?)))
+     WHERE company_id = ? AND status <> 'CANCELLED' AND (prod_order_id = ? OR (? IS NOT NULL AND io_no = ? AND (? IS NULL OR style_id = ?)))
   `, [companyId, prodOrderId, ioNo, ioNo, styleId, styleId]);
   const rw = ioNo ? await queryOne<any>(`
     SELECT (SELECT COALESCE(SUM(rework_qty),0) FROM trx_sewing_output WHERE company_id = ? AND io_no = ?)

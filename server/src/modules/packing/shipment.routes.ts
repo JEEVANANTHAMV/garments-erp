@@ -1340,10 +1340,29 @@ shipmentRouter.post('/dispatches', requirePermission('PACKING.CREATE'), ah(async
     if (body.shipment_id) {
       await txExecute(tx,
         `UPDATE trx_shipment_package SET status = 'DISPATCHED' WHERE shipment_id = ? AND status = 'ALLOCATED'`, [body.shipment_id]);
+      // cartons packed from the FG store leave the store now (FINISHED out of the stock ledger, client call 16-Oct-2026)
+      const leaving = await txQuery<any>(tx,
+        `SELECT c.id, c.carton_no, p.io_no, p.style_id, p.so_id, cc.color_id, cc.size_id, cc.qty
+           FROM trx_carton c JOIN trx_shipment_package sp ON sp.carton_id = c.id JOIN trx_packing p ON p.id = c.packing_id
+           JOIN trx_carton_content cc ON cc.carton_id = c.id
+          WHERE sp.shipment_id = ? AND sp.status = 'DISPATCHED' AND c.carton_status <> 'DISPATCHED' AND c.from_fg = 1 AND c.is_posted = 1`, [body.shipment_id]);
       await txExecute(tx,
         `UPDATE trx_carton c JOIN trx_shipment_package sp ON sp.carton_id = c.id
             SET c.carton_status = 'DISPATCHED'
           WHERE sp.shipment_id = ? AND sp.status = 'DISPATCHED' AND c.carton_status <> 'DISPATCHED'`, [body.shipment_id]);
+      for (const x of leaving) {
+        // the store and value the job's FG receipts used (latest), so the FG stock of that store goes down
+        const src = await txQueryOne<any>(tx,
+          `SELECT sl.warehouse_id, sl.rate, sl.uom_id, sl.sku_id FROM trx_stock_ledger sl JOIN trx_fg_receipt r ON r.id = sl.ref_id AND sl.ref_type = 'FG_RECEIPT'
+            WHERE r.company_id = ? AND r.io_no = ? AND r.style_id = ? AND sl.color_id = ? AND r.status <> 'CANCELLED'
+              AND sl.sku_id = (SELECT k.id FROM mst_style_sku k WHERE k.style_id = ? AND k.color_id = ? AND k.size_id = ? LIMIT 1)
+            ORDER BY sl.id DESC LIMIT 1`, [cid, x.io_no, x.style_id, x.color_id, x.style_id, x.color_id, x.size_id]);
+        if (!src) continue; // carton posted before FG receipts existed for this colour / size
+        await txExecute(tx,
+          `INSERT INTO trx_stock_ledger (company_id, warehouse_id, material_type, sku_id, color_id, txn_type, ref_type, ref_id, qty_in, qty_out, uom_id, rate, so_id, created_by)
+           VALUES (?,?,'FINISHED',?,?,'DISPATCH','DISPATCH',?,0,?,?,?,?,?)`,
+          [cid, src.warehouse_id, src.sku_id, x.color_id, r.insertId, x.qty, src.uom_id, src.rate, x.so_id ?? null, req.user!.id]);
+      }
       await txExecute(tx, `UPDATE trx_shipment SET tracking_status = 'GATED_IN' WHERE id = ?`, [body.shipment_id]);
     }
 
