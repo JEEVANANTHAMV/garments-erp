@@ -10,7 +10,8 @@ export interface RowColumn {
   key: string;
   label: string;
   type: 'text' | 'number' | 'select';
-  options?: { value: string; label: string }[];
+  /** Fixed list, or per row (e.g. a master list plus the row's own older value). */
+  options?: { value: string; label: string }[] | ((row: any) => { value: string; label: string }[]);
   step?: string;
   placeholder?: string;
   /** Cell is read-only for this row (e.g. consumption on a per-PC process). */
@@ -93,7 +94,7 @@ export function PreCostingRowTable({
                           onChange={(e) => setCell(i, c.key, e.target.value)}
                           className={`${cellCls} font-sans ${c.width ?? 'w-full'}`}
                         >
-                          {(c.options ?? []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          {(typeof c.options === 'function' ? c.options(row) : c.options ?? []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </select>
                       ) : c.type === 'number' ? (
                         <>

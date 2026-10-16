@@ -162,6 +162,30 @@ function PreCostingSheet() {
   const fabricMaster = useLookup('fabrics');
   const yarnMaster = useLookup('yarns');
   const trimMaster = useLookup('trims');
+  // Colour and size are picked from the masters (client 16-Oct-2026: typed values kept mismatching)
+  const colorMaster = useLookup('colors');
+  const sizeMaster = useLookup('sizes');
+  /** Master colours; a row's older typed colour that is not in the master stays visible, marked. */
+  const colorOptions = (current?: string) => {
+    const names = (colorMaster.data ?? []).map((c: any) => String(c.label));
+    const cur = String(current ?? '').trim();
+    return [
+      { value: '', label: '— colour —' },
+      ...(cur && !names.some((n) => n.toLowerCase() === cur.toLowerCase()) ? [{ value: cur, label: `${cur} (not in master)` }] : []),
+      ...names.map((n) => ({ value: n, label: n })),
+    ];
+  };
+  /** "All sizes", then the size master (code, with its size group); an older value not in the master stays, marked. */
+  const sizeOptions = (current?: string) => {
+    const list = (sizeMaster.data ?? []).map((z: any) => ({ value: String(z.code), label: `${z.code}${z.group_name ? ` · ${z.group_name}` : ''}` }));
+    const uniq = [...new Map(list.map((o) => [o.value, o])).values()];
+    const cur = String(current ?? '').trim();
+    return [
+      { value: 'All', label: 'All sizes' },
+      ...(cur && cur !== 'All' && !uniq.some((o) => o.value === cur) ? [{ value: cur, label: `${cur} (not in master)` }] : []),
+      ...uniq,
+    ];
+  };
   // Certification of each material master (fabric / yarn from their base) — the row default.
   const materialCerts = useQuery({
     queryKey: ['pre-costings', 'material-certs'],
@@ -390,7 +414,7 @@ function PreCostingSheet() {
     consumption: '', wastage_pct: '', rate: '', rate_source: 'Manual Rate', certification: '',
   });
   const newTrimRow = () => ({
-    trim_id: '', trim_code: '', description: '', size: 'Standard', color: '',
+    trim_id: '', trim_code: '', description: '', size: 'All', color: '',
     consumption: 1, uom: 'Nos', wastage_pct: '', rate: '', certification: '',
   });
   const newEmbRow = () => ({ type: 'PRINTING', method: '', artwork: '', position: '', colors: '', rate: '' });
@@ -509,8 +533,8 @@ function PreCostingSheet() {
             trim_id: String(l.trim_id),
             trim_code: l.trim_code,
             description: l.trim_name,
-            size: l.size_code || 'Standard',
-            color: l.color_name || 'Standard',
+            size: l.size_code || 'All',
+            color: l.color_name || '',
             consumption: cons,
             uom: l.uom_code || 'Nos',
             wastage_pct: wastage,
@@ -1015,7 +1039,7 @@ function PreCostingSheet() {
               <div>
                 <h3 className="text-sm font-bold text-slate-900">Fabric Consumption & Costing</h3>
                 <p className="text-xs text-slate-500">
-                  Gross Qty = Consumption × (1 + Wastage %) × Order Qty
+                  Gross Qty = Consumption × (1 + Wastage %) × Order Qty · Colour and size are picked from Masters → Colors / Sizes
                 </p>
               </div>
               <div className="flex items-center gap-3">
@@ -1045,7 +1069,8 @@ function PreCostingSheet() {
                     <th className="py-2.5 px-3">Component</th>
                     <th className="py-2.5 px-3">Fabric Description</th>
                     <th className="py-2.5 px-3 text-right" title="From the fabric master when a fabric is picked; editable">GSM</th>
-                    <th className="py-2.5 px-3">Color</th>
+                    <th className="py-2.5 px-3">Colour</th>
+                    <th className="py-2.5 px-3">Size</th>
                     <th className="py-2.5 px-3">Certification</th>
                     <th className="py-2.5 px-3 text-right">Cons/Pc (KG)</th>
                     <th className="py-2.5 px-3 text-right">Wastage %</th>
@@ -1108,15 +1133,30 @@ function PreCostingSheet() {
                           />
                         </td>
                         <td className="py-1 px-2 font-sans">
-                          <input
-                            type="text"
+                          <select
+                            data-color-fabric={i}
                             value={f.color ?? ''}
                             onChange={(e) => {
                               const val = e.target.value;
                               setFabrics((prev) => prev.map((row, idx) => idx === i ? { ...row, color: val } : row));
                             }}
-                            className="w-24 rounded border border-slate-200 px-1.5 py-0.5 text-xs text-slate-600"
-                          />
+                            className="w-32 rounded border border-slate-200 px-1.5 py-0.5 text-xs"
+                          >
+                            {colorOptions(f.color).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          </select>
+                        </td>
+                        <td className="py-1 px-2 font-sans">
+                          <select
+                            data-size-fabric={i}
+                            value={f.size || 'All'}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setFabrics((prev) => prev.map((row, idx) => idx === i ? { ...row, size: val } : row));
+                            }}
+                            className="w-28 rounded border border-slate-200 px-1.5 py-0.5 text-xs"
+                          >
+                            {sizeOptions(f.size).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          </select>
                         </td>
                         <td className="py-1 px-2 font-sans">
                           <select
@@ -1191,7 +1231,7 @@ function PreCostingSheet() {
                 </tbody>
                 <tfoot className="bg-slate-50 font-bold border-t border-slate-200">
                   <tr>
-                    <td colSpan={9} className="py-2.5 px-3 text-right font-sans">Total Fabric Cost Per Piece:</td>
+                    <td colSpan={10} className="py-2.5 px-3 text-right font-sans">Total Fabric Cost Per Piece:</td>
                     <td className="py-2.5 px-3 text-right text-brand-900 font-black">₹{totalFabricCostPerPc.toFixed(2)}</td>
                     <td colSpan={2} />
                   </tr>
@@ -1253,7 +1293,7 @@ function PreCostingSheet() {
               <div>
                 <h3 className="text-sm font-bold text-slate-900">Trims & Accessories</h3>
                 <p className="text-xs text-slate-500">
-                  Labels, buttons, zippers, hangtags, threads — add as many lines as the style needs. Pick from the master (rate and certification default) or type a manual line.
+                  Labels, buttons, zippers, hangtags, threads — add as many lines as the style needs. Pick from the master (rate and certification default) or type a manual line. Colour and size come from Masters → Colors / Sizes.
                 </p>
               </div>
               <TopAddButton testId="trims" label="Add Trim Line" onClick={() => addTop(setTrims, 'trims', newTrimRow())} />
@@ -1265,7 +1305,8 @@ function PreCostingSheet() {
               columns={[
                 { key: 'trim_id', label: 'Trim (master)', type: 'select', options: masterOptions(trimMaster.data, '— manual —'), width: 'w-56' },
                 { key: 'description', label: 'Description', type: 'text', placeholder: 'e.g. Woven main label' },
-                { key: 'color', label: 'Colour', type: 'text', placeholder: 'e.g. Black', width: 'w-24' },
+                { key: 'color', label: 'Colour', type: 'select', options: (r: any) => colorOptions(r.color), width: 'w-32' },
+                { key: 'size', label: 'Size', type: 'select', options: (r: any) => sizeOptions(r.size), width: 'w-28' },
                 { key: 'uom', label: 'UOM', type: 'text', width: 'w-16' },
                 { key: 'certification', label: 'Certification', type: 'select', options: TRIM_CERT_OPTIONS, width: 'w-24' },
                 { key: 'consumption', label: 'Cons / Pc', type: 'number', step: '0.001', width: 'w-20' },
