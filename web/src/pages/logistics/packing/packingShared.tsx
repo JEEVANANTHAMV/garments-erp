@@ -196,7 +196,8 @@ export function CartonEditor({ order, carton, onClose, onSaved }: {
   const [err, setErr] = useState('');
   const set = (k: keyof typeof f) => (e: any) => setF((s) => ({ ...s, [k]: e.target.value }));
   // packed for a released buyer packing list (plan): the list + its carton number fill the lines
-  const plans = useQuery({ queryKey: ['packing-order-plans', order.id], queryFn: () => http.get<{ data: PlanForOrder[] }>(`/packing/orders/${order.id}/plans`).then((r) => r.data) });
+  const plans = useQuery({ queryKey: ['packing-order-plans', order.id], queryFn: () => http.get<{ data: PlanForOrder[] }>(`/packing/orders/${order.id}/plans`).then((r) => r.data),
+    refetchOnMount: 'always', staleTime: 0 });
   const [plan, setPlan] = useState<{ id: string; ctn: string }>({ id: carton?.pl_plan_id ? String(carton.pl_plan_id) : '', ctn: carton?.pl_ctn_no ? String(carton.pl_ctn_no) : '' });
   const planList = (plans.data ?? []).find((p) => String(p.id) === plan.id);
   const planCtn = planList?.cartons.find((c) => String(c.ctn_no) === plan.ctn);
