@@ -7,7 +7,7 @@ import { http } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth';
 import { useLookup } from '../../../hooks/useLookup';
 import { fmtDate, fmtNumber, today } from '../../../lib/format';
-import { PackingNav, PkStatus, useOrders, errMsg, n, type EligRow, type Rule } from './packingShared';
+import { PackingNav, PkStatus, useOrders, errMsg, n, RatioEditor, ratioPayload, type EligRow, type Rule } from './packingShared';
 import { RuleModal, UNIT_LABEL, UNIT_OPTIONS } from './PackingRules';
 
 /** Screen A — packing orders list (replaces the old generic "Packing" page). */
@@ -75,6 +75,7 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
   const [part, setPart] = useState('');
   const [pairs, setPairs] = useState<Record<number, string>>({});
   const [ppmb, setPpmb] = useState('');
+  const [ratio, setRatio] = useState<Record<number, string>>({});   // size ratio per carton / master polybag
   const colorsLk = useLookup('colors');
   const colorName = (id: number) => (colorsLk.data ?? []).find((c: any) => Number(c.id) === id)?.label ?? `#${id}`;
   const [preview, setPreview] = useState<{ rule: Rule | null; rows: EligRow[]; strict_qc: boolean; packing_unit?: string; parts?: string[]; part_colors?: Record<string, number[]> } | null>(null);
@@ -114,6 +115,7 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
         packing_unit: effUnit, part_name: effUnit === 'SET' ? null : part || null, sets: effUnit === 'SET' ? setsParam : undefined,
         pieces_per_master_bag: effUnit === 'MASTER_POLYBAG' && ppmb ? Number(ppmb) : null,
         lines: preview!.rows.map((x) => ({ color_id: x.color_id, size_id: x.size_id, planned_qty: n(plan[`${x.color_id}:${x.size_id}`]) })).filter((l) => l.planned_qty > 0),
+        size_ratio: ratioPayload(ratio).length ? ratioPayload(ratio) : null,
       });
       onCreated(r.data.id);
     } catch (e) { setErr(errMsg(e)); } finally { setBusy(false); }
@@ -166,6 +168,14 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
               </table>
             )}
         </section>
+      )}
+      {preview && rule && preview.rows.length > 0 && (
+        <FormSection title="Size ratio per carton / master polybag (optional)" cols={1}
+          description="The buyer's assortment, e.g. S 1 : M 2 : L 2 : XL 1 — cartons (and master polybags) then fill automatically in this ratio. Leave blank for single-size packing.">
+          <RatioEditor value={ratio} onChange={setRatio} ppc={n(rule.standard_pieces_per_carton)} mixedSizes={!!n(rule.allow_mixed_sizes)}
+            ppmb={effUnit === 'MASTER_POLYBAG' ? n(ppmb || rule.pieces_per_master_bag) || null : null}
+            sizes={[...new Map(preview.rows.filter((x) => n(plan[`${x.color_id}:${x.size_id}`]) > 0).map((x) => [x.size_id, { size_id: x.size_id, size_code: x.size_code }])).values()]} />
+        </FormSection>
       )}
       <FormSection title="Logistics" cols={3}>
         <Input label="Target date" type="date" value={f.target_date} onChange={(e) => setF({ ...f, target_date: e.target.value })} />

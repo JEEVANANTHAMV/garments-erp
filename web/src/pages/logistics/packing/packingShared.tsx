@@ -42,7 +42,10 @@ export interface Order {
   variance_approved_at: string | null; variance_note: string | null; cartons_total: number; cartons_posted: number; pieces_posted: number; pieces_unposted: number;
   rule?: Rule; lines?: EligRow[]; cartons?: CartonRow[]; variance?: Variance; variance_needs_approval?: boolean; rule_revision?: number;
   rule_latest?: { revision: number; is_active: boolean; packing_mode: string; newer: boolean } | null; can_apply_rule?: boolean;
+  size_ratio?: RatioRow[] | null;
 }
+/** Size ratio of a packing order with what it means per full carton / master polybag. */
+export interface RatioRow { size_id: number; ratio: number; size_code: string | null; per_carton: number; per_master_bag: number | null }
 export interface Trim { id: number; trim_code: string; trim_name: string; trim_type: 'POLYBAG' | 'CARTON'; uom: string; stock_qty: number }
 export interface Meta { trims: Trim[]; settings: Record<string, string>; can_approve: boolean }
 
@@ -207,6 +210,19 @@ export function CartonEditor({ order, carton, onClose, onSaved }: {
     if (pc) setRows(pc.lines.map((l, i) => ({ key: `p${ctn}-${i}`, color_id: l.color_id, size_id: l.size_id, qty: String(l.qty), polybag_qty: '' })));
   };
   const plannedOf = (c: number | '', sz: number | '') => planCtn?.lines.find((l) => l.color_id === c && l.size_id === sz)?.qty;
+  // size ratio (client audio 16-Oct-2026): a carton fills in the order's ratio for one colour
+  const ratio = order.size_ratio ?? [];
+  const ratioCap = new Map(ratio.map((x) => [x.size_id, x.per_carton]));
+  const ratioColours = [...new Map(lines.map((l) => [l.color_id, l.color_name])).entries()];
+  const availOf = (c: number, sz: number) => { const el = lines.find((l) => l.color_id === c && l.size_id === sz); return el ? el.available + (own.get(lk(c, sz)) ?? 0) : 0; };
+  const [ratioColour, setRatioColour] = useState<string>(() => String(ratioColours.find(([c]) => ratio.every((x) => availOf(c, x.size_id) >= x.per_carton))?.[0] ?? ratioColours[0]?.[0] ?? ''));
+  const fillRatio = (c: number) => {
+    const next = ratio.map((x, i) => ({ key: `r${c}-${i}-${Date.now()}`, color_id: c, size_id: x.size_id, qty: String(Math.min(x.per_carton, Math.max(availOf(c, x.size_id), 0))), polybag_qty: '' }))
+      .filter((x) => n(x.qty) > 0);
+    setRows(next.length ? next : [{ key: 'l0', color_id: '', size_id: '', qty: '', polybag_qty: '' }]);
+  };
+  // a new carton of a ratio order starts filled in the ratio (not when packing for a buyer plan — that fills from the plan)
+  useEffect(() => { if (!carton && ratio.length && ratioColour && !plan.id) fillRatio(Number(ratioColour)); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const own = useMemo(() => new Map<string, number>((carton?.lines ?? []).map((l: any) => [lk(l.color_id, l.size_id), n(l.qty)])), [carton]);
 
   const total = rows.reduce((a, r) => a + n(r.qty), 0);
@@ -274,14 +290,30 @@ export function CartonEditor({ order, carton, onClose, onSaved }: {
           options={trims.filter((t) => t.trim_type === 'POLYBAG').map((t) => ({ value: t.id, label: `${t.trim_name} (stock ${fmtNumber(t.stock_qty)})` }))} />
       </FormSection>
       <section className="mb-4">
+        {ratio.length > 0 && (
+          <div className="mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-[12.5px]" id="ratio-bar">
+            <span>Size ratio <b>{ratio.map((x) => `${x.size_code} ${x.ratio}`).join(' : ')}</b> → full carton <b>{ratio.map((x) => `${x.size_code} ${x.per_carton}`).join(' · ')}</b></span>
+            {ratioColours.length > 1 && <select className="input !h-8 w-40 !py-0 text-xs" id="ratio-colour" value={ratioColour} onChange={(e) => setRatioColour(e.target.value)}>
+              {ratioColours.map(([c, name]) => <option key={c} value={c}>{name}</option>)}</select>}
+            <Button size="sm" variant="secondary" id="ratio-fill" disabled={!ratioColour} onClick={() => fillRatio(Number(ratioColour))}>Fill by ratio</Button>
+          </div>
+        )}
         <TableHead title="Colour / size lines" actions={
           <Button size="sm" variant="secondary" id="carton-add-line" onClick={() => setRows((r) => [...r, { key: `l${Date.now()}`, color_id: '', size_id: '', qty: '', polybag_qty: '' }])}>Add line</Button>} />
         <table className="w-full text-[12.5px]">
-          <thead><tr><th className="th">Colour / size</th><th className="th text-right">Available</th>{planCtn && <th className="th text-right">Plan</th>}<th className="th text-right">Pieces</th><th className="th text-right">Polybags (std)</th><th className="th" /></tr></thead>
+          <thead><tr><th className="th">Colour / size</th>{ratio.length > 0 && <th className="th text-right" title="Pieces of this size in a full carton by the size ratio">Ratio / ctn</th>}
+            <th className="th text-right" title="Planned on the packing order">Planned</th><th className="th text-right" title="In posted cartons">Packed</th>
+            <th className="th text-right" title="In other cartons not yet posted">Other cartons</th><th className="th text-right" title="Can still go into this carton (ready, not in other cartons)">Available</th>
+            {planCtn && <th className="th text-right">Plan</th>}<th className="th text-right">This carton</th>
+            <th className="th text-right" title="Planned − packed − other cartons − this carton">Balance after</th><th className="th text-right">Polybags (std)</th><th className="th" /></tr></thead>
           <tbody>
             {rows.map((r, i) => {
               const el = lines.find((l) => lk(l.color_id, l.size_id) === lk(r.color_id, r.size_id));
-              const avail = el ? el.available + (own.get(lk(r.color_id, r.size_id)) ?? 0) : null;
+              const mine = own.get(lk(r.color_id, r.size_id)) ?? 0;
+              const avail = el ? el.available + mine : null;
+              const other = el ? Math.max(n(el.draft) - mine, 0) : 0;
+              const after = el ? n(el.planned) - n(el.posted) - other - n(r.qty) : null;
+              const rc = r.size_id ? ratioCap.get(Number(r.size_id)) : undefined;
               const std = n(r.qty) ? Math.ceil(n(r.qty) / ppp) : 0;
               return (
                 <tr key={r.key}>
@@ -292,10 +324,16 @@ export function CartonEditor({ order, carton, onClose, onSaved }: {
                       {lines.map((l) => <option key={lk(l.color_id, l.size_id)} value={lk(l.color_id, l.size_id)}>{l.color_name} / {l.size_code}</option>)}
                     </select>
                   </td>
-                  <td className="td text-right tabular-nums">{avail == null ? '—' : fmtNumber(avail)}</td>
+                  {ratio.length > 0 && <td className="td text-right tabular-nums" data-ratio-cap={i}>{r.size_id ? (rc ?? <span className="text-red-600">not in ratio</span>) : ''}</td>}
+                  <td className="td text-right tabular-nums">{el ? fmtNumber(el.planned) : '—'}</td>
+                  <td className="td text-right tabular-nums">{el ? fmtNumber(el.posted) : '—'}</td>
+                  <td className="td text-right tabular-nums">{el ? fmtNumber(other) : '—'}</td>
+                  <td className={clsx('td text-right tabular-nums', avail != null && n(r.qty) > avail && 'font-semibold text-red-600')}>{avail == null ? '—' : fmtNumber(avail)}</td>
                   {planCtn && <td className="td text-right tabular-nums" data-plan-qty={i}>{plannedOf(r.color_id, r.size_id) ?? <span className="text-red-600">not on plan</span>}</td>}
                   <td className="td w-28"><input className="input text-right" data-qty={i} inputMode="numeric" value={r.qty}
-                    onChange={(e) => setRows((x) => x.map((y) => (y.key === r.key ? { ...y, qty: e.target.value.replace(/\D/g, '') } : y)))} /></td>
+                    onChange={(e) => setRows((x) => x.map((y) => (y.key === r.key ? { ...y, qty: e.target.value.replace(/\D/g, '') } : y)))} />
+                    {rc != null && n(r.qty) > rc && <div className="text-[10.5px] text-red-600">ratio {rc}</div>}</td>
+                  <td className={clsx('td text-right tabular-nums font-medium', after != null && after < 0 ? 'text-red-600' : 'text-slate-700')} data-after={i}>{after == null ? '—' : fmtNumber(after)}</td>
                   <td className="td w-36"><div className="flex items-center gap-1.5"><input className="input text-right" data-bags={i} inputMode="numeric" placeholder={String(std)} value={r.polybag_qty}
                     onChange={(e) => setRows((x) => x.map((y) => (y.key === r.key ? { ...y, polybag_qty: e.target.value.replace(/\D/g, '') } : y)))} /><span className="text-slate-400">({std})</span></div></td>
                   <td className="td w-10 text-right">{rows.length > 1 && <button className="text-[12px] text-red-600 hover:underline" onClick={() => setRows((x) => x.filter((y) => y.key !== r.key))}>Remove</button>}</td>
@@ -305,6 +343,21 @@ export function CartonEditor({ order, carton, onClose, onSaved }: {
           </tbody>
         </table>
         {warn.length > 0 && <div className="mt-2 text-[12px] text-amber-700">{warn.join(' · ')}</div>}
+        {(() => {
+          // running balance of the whole order (live while typing)
+          const planned = lines.reduce((a, l) => a + n(l.planned), 0), posted = lines.reduce((a, l) => a + n(l.posted), 0);
+          const others = lines.reduce((a, l) => a + Math.max(n(l.draft) - (own.get(lk(l.color_id, l.size_id)) ?? 0), 0), 0);
+          const left = planned - posted - others - total;
+          return (
+            <div className="mt-2 grid grid-cols-2 gap-2 rounded-lg bg-surface-muted px-3 py-2 text-[12px] sm:grid-cols-5" id="carton-balance">
+              <span>Order planned <b className="block text-[14px]">{fmtNumber(planned)}</b></span>
+              <span>Packed (posted) <b className="block text-[14px] text-emerald-700">{fmtNumber(posted)}</b></span>
+              <span>Other open cartons <b className="block text-[14px] text-amber-700">{fmtNumber(others)}</b></span>
+              <span>This carton <b className="block text-[14px] text-blue-700">− {fmtNumber(total)}</b></span>
+              <span>Left to pack after this <b className={clsx('block text-[14px]', left < 0 ? 'text-red-600' : 'text-slate-800')} data-left>{fmtNumber(left)}</b></span>
+            </div>
+          );
+        })()}
       </section>
       <FormSection title="Dimensions, weight & seal" cols={3} description="Optional. Gross must be at least net.">
         <Input label="Length (cm)" inputMode="decimal" value={f.length_cm} onChange={set('length_cm')} />
@@ -328,6 +381,46 @@ export interface PlanForOrder {
   cartons: { ctn_no: number; label: string | null; qty: number; packed: string | null; state: string;
              lines: { color_id: number; colour: string | null; size_id: number; size_label: string; qty: number }[] }[];
 }
+
+/* ─────────────────────────────────────────────── size ratio (client audio 16-Oct-2026) */
+
+/**
+ * Size ratio inputs (S 1 : M 2 : L 2 : XL 1) with what a full carton / master polybag then holds.
+ * Blank everywhere = no ratio (single packs do not need one).
+ */
+export function RatioEditor({ sizes, value, onChange, ppc, ppmb, mixedSizes, disabled }: {
+  sizes: { size_id: number; size_code: string }[]; value: Record<number, string>; onChange: (v: Record<number, string>) => void;
+  ppc: number; ppmb?: number | null; mixedSizes: boolean; disabled?: boolean;
+}) {
+  const used = sizes.filter((z) => n(value[z.size_id]) > 0);
+  const sum = used.reduce((a, z) => a + n(value[z.size_id]), 0);
+  const k = sum && ppc % sum === 0 ? ppc / sum : 0;
+  const kb = sum && ppmb && ppmb % sum === 0 ? ppmb / sum : 0;
+  const problem = !sum ? '' : used.length > 1 && !mixedSizes ? 'The packing rule must allow mixed sizes for a ratio carton'
+    : ppc % sum ? `Pieces per carton ${ppc} is not a whole multiple of the ratio total ${sum}`
+    : ppmb && ppmb % sum ? `Pieces per master polybag ${ppmb} is not a whole multiple of the ratio total ${sum}`
+    : used.length < sizes.length ? `Give every planned size a ratio (${sizes.filter((z) => !n(value[z.size_id])).map((z) => z.size_code).join(', ')} missing)` : '';
+  return (
+    <div id="size-ratio">
+      <div className="flex flex-wrap items-end gap-2">
+        {sizes.map((z, i) => (
+          <label key={z.size_id} className="flex items-center gap-1 text-[12.5px] text-slate-600">
+            {i > 0 && <span className="text-slate-300">:</span>}<span className="font-semibold">{z.size_code}</span>
+            <input className="input !h-8 w-14 text-center" inputMode="numeric" data-ratio={z.size_id} disabled={disabled} placeholder="–"
+              value={value[z.size_id] ?? ''} onChange={(e) => onChange({ ...value, [z.size_id]: e.target.value.replace(/\D/g, '') })} />
+          </label>
+        ))}
+      </div>
+      <div className="mt-1.5 text-[12px]" id="ratio-preview">
+        {!sum ? <span className="text-slate-400">No ratio — cartons are filled by hand.</span>
+          : problem ? <span className="text-red-600">{problem}</span>
+          : <span className="text-emerald-700">Full carton ({ppc} pcs): <b>{used.map((z) => `${z.size_code} ${n(value[z.size_id]) * k}`).join(' · ')}</b>
+              {kb ? <> · each master polybag ({ppmb} pcs): <b>{used.map((z) => `${z.size_code} ${n(value[z.size_id]) * kb}`).join(' · ')}</b></> : null}</span>}
+      </div>
+    </div>
+  );
+}
+export const ratioPayload = (v: Record<number, string>) => Object.entries(v).filter(([, r]) => n(r) > 0).map(([size_id, ratio]) => ({ size_id: Number(size_id), ratio: n(ratio) }));
 
 /* ─────────────────────────────────────────────── carton label (Code 128) */
 

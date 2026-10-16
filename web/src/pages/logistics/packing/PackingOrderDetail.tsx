@@ -7,7 +7,7 @@ import { http } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth';
 import { useToast } from '../../../hooks/useToast';
 import { fmtDate, fmtDateTime, fmtNumber } from '../../../lib/format';
-import { PackingNav, PkStatus, Stat, useOrder, errMsg, n, CartonEditor, ReasonModal, TableHead, printCartonLabel } from './packingShared';
+import { PackingNav, PkStatus, Stat, useOrder, errMsg, n, CartonEditor, ReasonModal, TableHead, printCartonLabel, RatioEditor, ratioPayload, type Order } from './packingShared';
 
 /** Screen A detail — plan & balance, cartons, polybag entries, reconciliation; approve / post / complete / cancel. */
 export function PackingOrderDetailPage() {
@@ -83,6 +83,7 @@ export function PackingOrderDetailPage() {
         { key: 'polybags', label: 'Polybag entries' }, { key: 'recon', label: 'Reconciliation' }, { key: 'info', label: 'Rule & details' },
       ]} />
 
+      {tab === 'plan' && <RatioCard o={o} onSaved={refresh} />}
       {tab === 'plan' && (
         <Card>
           <div className="p-3">
@@ -213,5 +214,50 @@ function Reconciliation({ orderId }: { orderId: number }) {
         </div>
       </Card>
     </div>
+  );
+}
+
+/** Size ratio of the order (client audio 16-Oct-2026): shown on the plan; changed only before any carton is packed. */
+function RatioCard({ o, onSaved }: { o: Order; onSaved: () => void }) {
+  const { can } = useAuth();
+  const toast = useToast();
+  const [edit, setEdit] = useState<Record<number, string> | null>(null);
+  const [busy, setBusy] = useState(false);
+  const rule = o.rule!;
+  const live = (o.cartons ?? []).filter((c) => c.carton_status !== 'VOID').length;
+  const canEdit = ['DRAFT', 'APPROVED', 'IN_PROGRESS'].includes(o.order_status) && !live && can('PACKING.UPDATE');
+  const sizes = [...new Map((o.lines ?? []).filter((l) => l.planned > 0).map((l) => [l.size_id, { size_id: l.size_id, size_code: l.size_code }])).values()];
+  const ra = o.size_ratio ?? [];
+  if (!ra.length && !canEdit) return null;
+  const save = async () => {
+    setBusy(true);
+    try {
+      await http.put(`/packing/orders/${o.id}`, { target_date: o.target_date ? String(o.target_date).slice(0, 10) : null, warehouse_id: o.warehouse_id, remarks: o.remarks,
+        size_ratio: ratioPayload(edit ?? {}) });
+      toast('Size ratio saved'); setEdit(null); onSaved();
+    } catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(false); }
+  };
+  return (
+    <Card className="mb-4"><div className="p-4 text-[12.5px]" id="order-ratio">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="font-semibold uppercase tracking-wider text-slate-500 text-[11.5px]">Size ratio per carton{o.packing_unit === 'MASTER_POLYBAG' ? ' / master polybag' : ''}</div>
+        {canEdit && edit === null && <Button size="sm" variant="secondary" id="ratio-edit" onClick={() => setEdit(Object.fromEntries(ra.map((x) => [x.size_id, String(x.ratio)])))}>{ra.length ? 'Change ratio' : 'Set size ratio'}</Button>}
+      </div>
+      {edit !== null ? (
+        <>
+          <RatioEditor sizes={sizes} value={edit} onChange={setEdit} ppc={n(rule.standard_pieces_per_carton)} mixedSizes={!!n(rule.allow_mixed_sizes)}
+            ppmb={o.packing_unit === 'MASTER_POLYBAG' ? n(o.pieces_per_master_bag) || null : null} />
+          <div className="mt-2 flex gap-2"><Button size="sm" id="ratio-save" loading={busy} onClick={save}>Save ratio</Button><Button size="sm" variant="secondary" onClick={() => setEdit(null)}>Cancel</Button></div>
+        </>
+      ) : ra.length ? (
+        <div id="ratio-show">
+          <b>{ra.map((x) => `${x.size_code} ${x.ratio}`).join(' : ')}</b>
+          <span className="ml-3 text-slate-600">full carton ({rule.standard_pieces_per_carton} pcs): {ra.map((x) => `${x.size_code} ${x.per_carton}`).join(' · ')}</span>
+          {ra[0]?.per_master_bag ? <span className="ml-3 text-slate-600">master polybag ({o.pieces_per_master_bag} pcs): {ra.map((x) => `${x.size_code} ${x.per_master_bag}`).join(' · ')}</span> : null}
+          <span className="ml-3 text-slate-500">→ {o.planned_cartons} carton(s) expected</span>
+          {live > 0 && <span className="ml-3 text-[11.5px] text-slate-400">(fixed — cartons are packed)</span>}
+        </div>
+      ) : <p className="text-slate-400">No size ratio — cartons are filled by hand. Set one if the buyer gives an assortment (e.g. S 1 : M 2 : L 2 : XL 1).</p>}
+    </div></Card>
   );
 }
