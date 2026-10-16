@@ -10,6 +10,14 @@ import { useLookup } from '../../../hooks/useLookup';
 import { fmtDate } from '../../../lib/format';
 import { PackingNav, usePackingMeta, errMsg, n, type Rule } from './packingShared';
 
+/** The three packing units the client uses (call 16-Oct-2026). */
+export const UNIT_LABEL: Record<string, string> = { SINGLE: 'Single piece', SET: 'Set (TOP + BOTTOM)', MASTER_POLYBAG: 'Master polybag' };
+export const UNIT_OPTIONS = [
+  { value: 'SINGLE', label: 'Single piece — one garment per polybag (also TOP / BOTTOM packed separately)' },
+  { value: 'SET', label: 'Set — one TOP + one BOTTOM of the same size in one polybag' },
+  { value: 'MASTER_POLYBAG', label: 'Master polybag — N individually bagged pieces in one big bag' },
+];
+
 /** Packing rules master (doc §4): priority PO → style → buyer → company default; used rules are deactivated, never deleted. */
 export function PackingRulesPage() {
   const { can } = useAuth();
@@ -25,7 +33,7 @@ export function PackingRulesPage() {
     <div>
       <PageHeader title="Packing rules" breadcrumb={['Logistics', 'Packing']}
         subtitle="Buyer / style / PO packing configuration. The most specific active rule wins (PO → style → buyer → company default) and is snapshotted into each packing order."
-        actions={can('PACKING.CREATE') && <Button id="new-rule" onClick={() => setEditing({ packing_mode: 'BUNDLE_QUANTITY', pieces_per_polybag: 1, standard_pieces_per_carton: 50, allow_partial_carton: 1, is_active: 1 })}><Plus size={15} />New rule</Button>} />
+        actions={can('PACKING.CREATE') && <Button id="new-rule" onClick={() => setEditing({ packing_mode: 'INDIVIDUAL_PIECE', packing_unit: 'SINGLE', pieces_per_polybag: 1, standard_pieces_per_carton: 50, allow_partial_carton: 1, is_active: 1 })}><Plus size={15} />New rule</Button>} />
       <PackingNav active="/logistics/packing/rules" />
       <Card>
         {rules.isLoading ? <LoadingBlock /> : !rules.data?.length ? <EmptyState title="No packing rules" message="Add a company default rule first (no buyer / style / PO)." /> : (
@@ -35,7 +43,8 @@ export function PackingRulesPage() {
             <tbody>{rules.data.map((r) => (
               <tr key={r.id} className={n(r.is_active) ? '' : 'opacity-50'}>
                 <td className="td font-mono">{r.rule_code} <span className="text-slate-400">r{r.revision}</span></td><td className="td">{r.rule_name}</td><td className="td">{scope(r)}</td>
-                <td className="td">{r.packing_mode === 'INDIVIDUAL_PIECE' ? 'Individual piece' : 'Bundle / qty'}</td><td className="td text-right">{r.pieces_per_polybag}</td><td className="td text-right">{r.standard_pieces_per_carton}</td>
+                <td className="td">{UNIT_LABEL[r.packing_unit ?? 'SINGLE']}{r.packing_unit === 'MASTER_POLYBAG' && r.pieces_per_master_bag ? ` (${r.pieces_per_master_bag} / bag)` : ''}
+                  <div className="text-[11px] text-slate-500">{r.packing_mode === 'INDIVIDUAL_PIECE' ? 'bag each piece' : 'bundle / qty'}</div></td><td className="td text-right">{r.pieces_per_polybag}</td><td className="td text-right">{r.standard_pieces_per_carton}</td>
                 <td className="td">{[n(r.allow_mixed_sizes) && 'sizes', n(r.allow_mixed_colours) && 'colours'].filter(Boolean).join(' + ') || 'solid'}{n(r.allow_partial_carton) ? ' · partial' : ''}{n(r.allow_overpack) ? ' · overpack' : ''}</td>
                 <td className="td">{r.polybag_trim_name ?? '—'} / {r.carton_trim_name ?? '—'}</td>
                 <td className="td">{r.effective_from ? fmtDate(r.effective_from) : '…'} – {r.effective_to ? fmtDate(r.effective_to) : '…'}</td>
@@ -74,6 +83,7 @@ export function RuleModal({ rule, onClose, onSaved }: { rule: Partial<Rule>; onC
     setBusy(true); setErr('');
     const id = (v: unknown) => (v ? Number(v) : null);
     const body = { ...f, buyer_id: id(f.buyer_id), style_id: id(f.style_id), so_id: id(f.so_id), polybag_trim_id: id(f.polybag_trim_id), carton_trim_id: id(f.carton_trim_id),
+      packing_unit: f.packing_unit ?? 'SINGLE', master_bag_trim_id: id(f.master_bag_trim_id), pieces_per_master_bag: f.pieces_per_master_bag ? Number(f.pieces_per_master_bag) : null,
       effective_from: f.effective_from || null, effective_to: f.effective_to || null };
     try {
       const r = rule.id ? await http.put<{ data: any }>(`/packing/rules/${rule.id}`, body) : await http.post<{ data: any }>('/packing/rules', body);
@@ -99,7 +109,15 @@ export function RuleModal({ rule, onClose, onSaved }: { rule: Partial<Rule>; onC
         <JobSelect label="PO / job" by="so_id" placeholder="Any PO" value={f.so_id ?? ''} onPick={(j) => setF((s: any) => ({ ...s, so_id: j?.id ?? null, buyer_id: j?.buyer_id ?? s.buyer_id }))} />
       </FormSection>
       <FormSection title="Packing" cols={4}>
-        <Select id="rule-mode" label="Packing mode" value={f.packing_mode} onChange={set('packing_mode')} options={[{ value: 'BUNDLE_QUANTITY', label: 'Bundle / quantity' }, { value: 'INDIVIDUAL_PIECE', label: 'Individual piece' }]} />
+        <Select id="rule-unit" label="Packing unit" className="sm:col-span-4" value={f.packing_unit ?? 'SINGLE'} onChange={set('packing_unit')} options={UNIT_OPTIONS} />
+        {(f.packing_unit ?? 'SINGLE') === 'MASTER_POLYBAG' && <>
+          <Input id="rule-ppmb" label="Pieces per master polybag" required inputMode="numeric" value={f.pieces_per_master_bag ?? ''} onChange={set('pieces_per_master_bag')}
+            hint="Default — the buyer can give another count per order" />
+          <Select id="rule-master-bag" label="Master polybag item" className="sm:col-span-3" value={f.master_bag_trim_id ?? ''} onChange={set('master_bag_trim_id')} placeholder="— Master polybag (trims master) —"
+            options={trims.filter((t) => t.trim_type === 'POLYBAG').map((t) => ({ value: t.id, label: `${t.trim_code} · ${t.trim_name}` }))} />
+        </>}
+        <Select id="rule-mode" label="Bagging" value={f.packing_mode} onChange={set('packing_mode')}
+          options={[{ value: 'INDIVIDUAL_PIECE', label: 'Bag each piece (polybag entry first)' }, { value: 'BUNDLE_QUANTITY', label: 'By quantity (polybag entry optional)' }]} />
         <Input id="rule-ppp" label="Pieces per polybag" required inputMode="numeric" value={f.pieces_per_polybag ?? ''} onChange={set('pieces_per_polybag')} />
         <Input id="rule-ppc" label="Pieces per carton" required inputMode="numeric" value={f.standard_pieces_per_carton ?? ''} onChange={set('standard_pieces_per_carton')} />
         <Input label="Label template" value={f.label_template ?? ''} onChange={set('label_template')} placeholder="Standard" />

@@ -16,6 +16,7 @@ export interface Rule {
   standard_pieces_per_carton: number; allow_mixed_sizes: number; allow_mixed_colours: number; allow_partial_carton: number; allow_overpack: number;
   label_template: string | null; effective_from: string | null; effective_to: string | null; is_active: number; revision: number; remarks?: string | null;
   buyer_name?: string; style_code?: string; job_no?: string; buyer_po_no?: string; polybag_trim_name?: string; carton_trim_name?: string; used_by?: number; open_old_rev?: number; scope?: string;
+  packing_unit?: 'SINGLE' | 'SET' | 'MASTER_POLYBAG'; pieces_per_master_bag?: number | null; master_bag_trim_id?: number | null;
 }
 export interface EligRow {
   color_id: number; size_id: number; color_name: string; size_code: string; sku_id: number | null; order_qty: number; ready: number;
@@ -35,7 +36,7 @@ export interface CartonRow {
 export interface Order {
   id: number; pack_no: string; pack_date: string; so_id: number; io_no: string; job_no: string; so_no: string; buyer_po_no: string | null;
   buyer_name: string | null; style_id: number; style_code: string; style_name: string; part_name: string | null; order_status: string;
-  packing_mode: string; planned_qty: number; planned_polybags: number; planned_cartons: number; target_date: string | null; warehouse_id: number | null;
+  packing_mode: string; packing_unit?: "SINGLE" | "SET" | "MASTER_POLYBAG"; pieces_per_master_bag?: number | null; planned_qty: number; planned_polybags: number; planned_cartons: number; target_date: string | null; warehouse_id: number | null;
   warehouse_name: string | null; remarks: string | null; approved_at: string | null; approved_by_name: string | null; cancel_reason: string | null;
   variance_approved_at: string | null; variance_note: string | null; cartons_total: number; cartons_posted: number; pieces_posted: number; pieces_unposted: number;
   rule?: Rule; lines?: EligRow[]; cartons?: CartonRow[]; variance?: Variance; variance_needs_approval?: boolean; rule_revision?: number;

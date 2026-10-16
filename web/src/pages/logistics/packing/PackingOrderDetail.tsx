@@ -140,7 +140,9 @@ export function PackingOrderDetailPage() {
       {tab === 'info' && (
         <Card><div className="grid gap-x-6 gap-y-2 p-4 text-[12.5px] sm:grid-cols-2 lg:grid-cols-3">
           <div>Rule: <b>{rule.rule_code}</b> {rule.rule_name} (rev {rule.revision}, {rule.scope ?? 'snapshot'})</div>
-          <div>Mode: <b>{o.packing_mode === 'INDIVIDUAL_PIECE' ? 'Individual piece' : 'Bundle / quantity'}</b></div>
+          <div>Packing unit: <b>{({ SINGLE: 'Single piece', SET: 'Set (TOP + BOTTOM)', MASTER_POLYBAG: 'Master polybag' } as Record<string, string>)[o.packing_unit ?? 'SINGLE']}</b>
+            {o.part_name ? ` · part ${o.part_name}` : ''}{o.packing_unit === 'MASTER_POLYBAG' && o.pieces_per_master_bag ? ` · ${o.pieces_per_master_bag} pcs / master bag` : ''}</div>
+          <div>Bagging: <b>{o.packing_mode === 'INDIVIDUAL_PIECE' ? 'Bag each piece' : 'By quantity'}</b></div>
           <div>Carton: <b>{rule.standard_pieces_per_carton}</b> pcs · polybag: <b>{rule.pieces_per_polybag}</b> pc</div>
           <div>Mixed sizes: {n(rule.allow_mixed_sizes) ? 'yes' : 'no'} · mixed colours: {n(rule.allow_mixed_colours) ? 'yes' : 'no'}</div>
           <div>Partial cartons: {n(rule.allow_partial_carton) ? 'yes' : 'no'} · overpack: {n(rule.allow_overpack) ? 'yes' : 'no'}</div>
