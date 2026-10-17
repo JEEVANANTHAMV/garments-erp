@@ -166,6 +166,19 @@ export const NAV: NavSection[] = [
     ],
   },
   {
+    // client 17-Oct-2026: "we had a Quality menu — bring it back". Every QC / reject screen in one place; the
+    // screens also stay in their process steps (the step bar keeps showing the process step, the first match).
+    label: 'Quality',
+    items: [
+      { label: 'Cut QC & Bundles',         to: '/production/cut-qc-bundles', icon: Scissors, perms: ['PRODUCTION.VIEW', 'QC.VIEW'] },
+      { label: 'Checking Entry (QC)',      to: '/production/checking-qc-entry', icon: ClipboardCheck, perms: ['PRODUCTION.VIEW', 'QC.VIEW'] },
+      { label: 'QC Inspections (AQL)',     to: '/quality/inspections', icon: ClipboardCheck, perms: ['QC.VIEW'] },
+      { label: 'Collar – Yarn Issue / QC', to: '/production/process-execution', icon: ClipboardCheck, perms: ['PRODUCTION.VIEW', 'QC.VIEW'] },
+      { label: 'Scrap & Rejection',        to: '/stores/scrap-rejection', icon: ShieldAlert, perms: ['INVENTORY.VIEW', 'QC.VIEW'] },
+      { label: 'Defect Master',            to: '/quality/defects', icon: Shield, perms: ['QC.VIEW'] },
+    ],
+  },
+  {
     label: '9 · Embroidery & Printing',
     items: [
       { label: 'Embroidery – Machine Output & Cost', to: '/production/embroidery', icon: Palette, perms: ['EMBROIDERY.VIEW'] },
