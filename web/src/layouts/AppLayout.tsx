@@ -100,24 +100,24 @@ export default function AppLayout() {
   const stepBar = step && match && activeTo !== '/' && (
     <div id="step-bar" className="mb-4 rounded-xl border border-surface-border bg-white px-3.5 py-2.5 shadow-card">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[12px]">
-        <span className="font-semibold text-slate-500">{step.label.replace(/^(\d+) · /, 'Step $1 · ')}</span>
-        <ChevronRight size={12} className="text-slate-300" />
+        <span className="font-bold text-slate-700">{step.label.replace(/^(\d+) · /, 'Step $1 · ')}</span>
+        <ChevronRight size={12} className="text-slate-400" />
         {match.detail ? (
-          <Link to={match.item.to} className="inline-flex items-center gap-1 font-semibold text-brand-700 hover:underline" id="step-back">
+          <Link to={match.item.to} className="inline-flex items-center gap-1 font-bold text-brand-700 hover:underline" id="step-back">
             <ArrowLeft size={12} /> {match.item.label}
           </Link>
-        ) : <span className="font-bold text-slate-900">{match.item.label}</span>}
+        ) : <span className="font-extrabold text-slate-900">{match.item.label}</span>}
         {!match.detail && (prevStep || nextStep) && (
           <div className="ml-auto flex gap-1.5">
             {prevStep && (
               <Link to={prevStep.items[0].to} id="step-prev" title={`Previous step: ${prevStep.label}`}
-                className="inline-flex items-center gap-1 rounded-lg border border-surface-border bg-white px-2.5 py-1 text-[11.5px] font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900 shadow-subtle transition-all">
+                className="inline-flex items-center gap-1 rounded-lg border border-surface-border bg-white px-2.5 py-1 text-[11.5px] font-semibold text-slate-700 hover:border-slate-300 hover:text-slate-900 shadow-subtle transition-all">
                 <ArrowLeft size={12} /> {prevStep.label}
               </Link>
             )}
             {nextStep && (
               <Link to={nextStep.items[0].to} id="step-next" title={`Next step: ${nextStep.label}`}
-                className="inline-flex items-center gap-1 rounded-lg border border-brand-200 bg-brand-50 px-2.5 py-1 text-[11.5px] font-semibold text-brand-700 hover:bg-brand-100 shadow-subtle transition-all">
+                className="inline-flex items-center gap-1 rounded-lg border border-brand-200 bg-brand-50 px-2.5 py-1 text-[11.5px] font-bold text-brand-700 hover:bg-brand-100 shadow-subtle transition-all">
                 {nextStep.label} <ArrowRight size={12} />
               </Link>
             )}
@@ -128,10 +128,10 @@ export default function AppLayout() {
         <div className="mt-2.5 flex gap-1.5 overflow-x-auto pb-0.5" id="step-screens">
           {step.items.map((i) => (
             <Link key={i.to} to={i.to} aria-current={i.to === activeTo ? 'page' : undefined}
-              className={clsx('whitespace-nowrap rounded-lg border px-3 py-1 text-[11.5px] font-medium transition-colors',
+              className={clsx('whitespace-nowrap rounded-lg border px-3 py-1 text-[11.5px] font-semibold transition-colors',
                 i.to === activeTo
-                  ? 'border-brand-600 bg-brand-600 font-semibold text-white shadow-subtle'
-                  : 'border-surface-border bg-white text-slate-600 hover:border-brand-300 hover:text-brand-700')}>
+                  ? 'border-brand-600 bg-brand-600 text-white shadow-subtle'
+                  : 'border-surface-border bg-white text-slate-700 hover:border-slate-400 hover:text-slate-900')}>
               {i.label}
             </Link>
           ))}
@@ -140,11 +140,11 @@ export default function AppLayout() {
     </div>
   );
 
-  const { data: notifications } = useQuery({
+  const notifications = useQuery({
     queryKey: ['notifications'],
     queryFn: async () => (await http.get<{ data: { id: number; title: string; body: string; is_read: number }[] }>('/admin/notifications')).data,
     refetchInterval: 60_000,
-  });
+  }).data;
   // live alerts (GRN bills pending, process DCs overdue …) — computed by the server every minute
   const { data: alerts } = useQuery({
     queryKey: ['alerts'],
@@ -159,11 +159,11 @@ export default function AppLayout() {
     <div key={item.to} className="group relative">
       <Link to={item.to} onClick={() => setMobileOpen(false)} aria-current={item.to === activeTo ? 'page' : undefined}
         className={clsx(
-          'flex items-center gap-2.5 rounded-lg py-[7px] pl-2.5 pr-7 text-[12.5px] transition-all',
+          'flex items-center gap-2.5 rounded-lg py-[7.5px] pl-2.5 pr-7 text-[12.5px] transition-all',
           item.to === activeTo
-            ? 'bg-brand-50 font-semibold text-brand-800 shadow-subtle'
-            : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900')}>
-        <item.icon size={15} className={clsx('shrink-0 transition-colors', item.to === activeTo ? 'text-brand-600' : 'text-slate-400 group-hover:text-slate-600')} />
+            ? 'bg-brand-50 font-bold text-brand-900 shadow-subtle border border-brand-200/80'
+            : 'font-semibold text-slate-800 hover:bg-slate-100 hover:text-slate-950')}>
+        <item.icon size={15} className={clsx('shrink-0 transition-colors', item.to === activeTo ? 'text-brand-600' : 'text-slate-500 group-hover:text-slate-900')} />
         <span className="truncate" title={item.label}>{item.label}</span>
       </Link>
       {item.to !== '/' && (
@@ -178,7 +178,7 @@ export default function AppLayout() {
   );
 
   const sidebar = (
-    <div className="flex h-full flex-col bg-white border-r border-surface-border text-slate-700">
+    <div className="flex h-full flex-col bg-white border-r border-surface-border text-slate-800">
       <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-surface-border px-4">
         <div className="grid h-8 w-8 place-items-center rounded-lg bg-brand-50 border border-brand-200/80 text-sm font-bold text-brand-700 shadow-subtle">
           {company ? initials(company.trade_name || company.legal_name) : 'ER'}
@@ -187,33 +187,33 @@ export default function AppLayout() {
           <p className="truncate text-[13px] font-bold text-slate-900 tracking-tight">
             {company?.trade_name || company?.legal_name || 'Garment ERP'}
           </p>
-          <p className="truncate text-[10.5px] font-medium text-slate-400">Manufacturing SaaS</p>
+          <p className="truncate text-[10.5px] font-semibold text-slate-500">Manufacturing SaaS</p>
         </div>
-        <button className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 lg:hidden" onClick={() => setMobileOpen(false)} aria-label="Close menu">
+        <button className="rounded-md p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800 lg:hidden" onClick={() => setMobileOpen(false)} aria-label="Close menu">
           <X size={18} />
         </button>
       </div>
 
       <div className="shrink-0 px-3 py-2.5">
         <div className="relative">
-          <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
           <input value={filter} onChange={(e) => setFilter(e.target.value)}
             placeholder="Find a screen…"
-            className="w-full rounded-lg border border-surface-border bg-slate-50/70 py-1.5 pl-8 pr-2.5 text-xs text-slate-900
-                       placeholder:text-slate-400 transition focus:bg-white focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-500/15" />
+            className="w-full rounded-lg border border-surface-border bg-slate-50/80 py-1.5 pl-8 pr-2.5 text-xs font-medium text-slate-900
+                       placeholder:text-slate-500 transition focus:bg-white focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-500/15" />
         </div>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2.5 pb-4" id="side-nav">
         {!filter && favItems.length > 0 && (
           <div className="mb-2">
-            <p className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-amber-600"><Star size={11} /> Favourites</p>
+            <p className="flex items-center gap-1.5 px-2 py-1.5 text-[10.5px] font-bold uppercase tracking-wider text-amber-700"><Star size={12} /> Favourites</p>
             <div className="space-y-0.5" id="nav-favs">{favItems.map((item) => navLink(item, true))}</div>
           </div>
         )}
         {!filter && recentItems.length > 0 && (
           <div className="mb-2">
-            <p className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400"><Clock size={11} /> Recent</p>
+            <p className="flex items-center gap-1.5 px-2 py-1.5 text-[10.5px] font-bold uppercase tracking-wider text-slate-700"><Clock size={12} /> Recent</p>
             <div className="space-y-0.5" id="nav-recent">{recentItems.map((item) => navLink(item, false))}</div>
           </div>
         )}
@@ -222,20 +222,20 @@ export default function AppLayout() {
           const single = section.label === 'Overview'; // only the dashboard has no step header (a role may see one screen of a step — it still gets its header)
           const open = !!filter || single || openSecs.includes(section.label);
           return (
-            <div key={section.label} className={clsx('mb-1 rounded-lg', open && !single && 'bg-slate-50/40')}>
+            <div key={section.label} className={clsx('mb-1 rounded-lg', open && !single && 'bg-slate-50/50')}>
               {!single && (
                 // open step: lit header; the step of the page you are on: brand accent bar + brand count
                 <button onClick={() => toggleSec(section.label)} aria-expanded={open} data-section={section.label}
                   data-current={section.label === currentSection || undefined}
-                  className={clsx('relative flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider transition-colors',
+                  className={clsx('relative flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-bold uppercase tracking-wider transition-colors',
                     section.label === currentSection
-                      ? 'bg-brand-50/80 text-brand-800'
-                      : open ? 'bg-slate-100/70 text-slate-800' : 'text-slate-500 hover:bg-slate-100/60 hover:text-slate-700')}>
+                      ? 'bg-brand-50 text-brand-900'
+                      : open ? 'bg-slate-100/90 text-slate-900' : 'text-slate-700 hover:bg-slate-100/70 hover:text-slate-950')}>
                   {section.label === currentSection && <span className="absolute inset-y-1 left-0 w-[3px] rounded-full bg-brand-600" />}
-                  {open ? <ChevronDown size={12} className="shrink-0 text-slate-400" /> : <ChevronRight size={12} className="shrink-0 text-slate-400" />}
+                  {open ? <ChevronDown size={12} className="shrink-0 text-slate-600" /> : <ChevronRight size={12} className="shrink-0 text-slate-600" />}
                   <span className="flex-1 truncate">{section.label}</span>
-                  <span className={clsx('rounded-full px-1.5 text-[9.5px] font-medium',
-                    section.label === currentSection ? 'bg-brand-200/70 text-brand-800' : open ? 'bg-slate-200/60 text-slate-600' : 'bg-slate-100 text-slate-400')}>
+                  <span className={clsx('rounded-full px-1.5 text-[9.5px] font-bold',
+                    section.label === currentSection ? 'bg-brand-200 text-brand-900' : open ? 'bg-slate-200 text-slate-800' : 'bg-slate-200/70 text-slate-700')}>
                     {section.items.length}
                   </span>
                 </button>
@@ -245,7 +245,7 @@ export default function AppLayout() {
           );
         })}
         {!sections.length && (
-          <p className="px-3 py-6 text-center text-xs text-slate-400">No matching screens</p>
+          <p className="px-3 py-6 text-center text-xs font-medium text-slate-500">No matching screens</p>
         )}
       </nav>
     </div>
@@ -352,17 +352,17 @@ export default function AppLayout() {
             >
               <Building2 size={15} className="shrink-0 text-brand-600" />
               <div className="hidden max-w-[170px] truncate md:block">
-                <p className="truncate text-[12px] font-semibold leading-tight text-slate-900">
+                <p className="truncate text-[12px] font-bold leading-tight text-slate-900">
                   {company?.trade_name || company?.legal_name || 'Select Company'}
                 </p>
                 {company?.gstin && (
-                  <p className="font-mono text-[10px] leading-tight text-slate-500">
+                  <p className="font-mono text-[10px] font-semibold leading-tight text-slate-600">
                     GST: {company.gstin}
                   </p>
                 )}
               </div>
               {companies.length > 1 && (
-                <ChevronDown size={13} className="text-slate-400" />
+                <ChevronDown size={13} className="text-slate-500" />
               )}
             </button>
 
@@ -370,7 +370,7 @@ export default function AppLayout() {
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setCompanyDropdown(false)} />
                 <div className="absolute right-0 top-full z-20 mt-1.5 w-72 animate-fade-in rounded-xl border border-surface-border bg-white p-1.5 shadow-popover">
-                  <p className="px-2.5 py-1 text-[10.5px] font-semibold uppercase tracking-wider text-slate-400">
+                  <p className="px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wider text-slate-600">
                     Switch Company
                   </p>
                   <div className="mt-1 space-y-1">
@@ -397,14 +397,14 @@ export default function AppLayout() {
                             className={clsx('mt-0.5 shrink-0', isCurrent ? 'text-brand-600' : 'text-slate-400')}
                           />
                           <div className="flex-1 min-w-0">
-                            <p className="truncate text-[12.5px] font-semibold">
+                            <p className="truncate text-[12.5px] font-bold text-slate-900">
                               {c.legal_name}
                             </p>
                             {c.trade_name && (
-                              <p className="text-[11px] text-slate-500">{c.trade_name}</p>
+                              <p className="text-[11px] font-medium text-slate-600">{c.trade_name}</p>
                             )}
                             {c.gstin && (
-                              <p className="font-mono text-[10px] text-slate-400">GST: {c.gstin}</p>
+                              <p className="font-mono text-[10px] font-medium text-slate-500">GST: {c.gstin}</p>
                             )}
                           </div>
                           {isCurrent && (
@@ -428,14 +428,14 @@ export default function AppLayout() {
                 {initials(user?.fullName ?? '?')}
               </div>
               <div className="hidden text-left sm:block">
-                <p className="max-w-[140px] truncate text-[12.5px] font-medium leading-tight text-slate-800">
+                <p className="max-w-[140px] truncate text-[12.5px] font-bold leading-tight text-slate-900">
                   {user?.fullName}
                 </p>
-                <p className="text-[10.5px] leading-tight text-slate-500">
+                <p className="text-[10.5px] font-semibold leading-tight text-slate-600">
                   {user?.roles?.[0]?.replace(/_/g, ' ') ?? 'User'}
                 </p>
               </div>
-              <ChevronDown size={14} className="text-slate-400" />
+              <ChevronDown size={14} className="text-slate-500" />
             </button>
 
             {userMenu && (

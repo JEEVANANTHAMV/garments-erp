@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import {
   ShoppingCart, Factory, Ship, ClipboardCheck, AlertTriangle, ArrowRight, Clock,
-  Plus, Layers, Package, ShieldCheck,
+  Layers, Package, ShieldCheck,
   Wallet, BarChart3, Settings as SettingsIcon, Boxes
 } from 'lucide-react';
 import { http } from '../lib/api';
@@ -74,64 +74,48 @@ export default function Dashboard() {
 
   return (
     <>
-      {/* Top Banner & Quick Actions (Reference 2 Information Architecture + Reference 1 White Theme) */}
+      {/* Top Banner (Pure White Minimal Architecture) */}
       <div className="mb-6 rounded-2xl border border-surface-border bg-white p-5 shadow-card">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="inline-flex h-2 w-2 rounded-full bg-brand-500 animate-pulse" />
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-brand-700">Enterprise Workspace</span>
-            </div>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">
-              Manufacturing Operations Dashboard
-            </h1>
-            <p className="mt-0.5 text-[13px] text-slate-500">
-              Fashion Knits &amp; Garments Export Management System
-            </p>
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-2 w-2 rounded-full bg-brand-500 animate-pulse" />
+            <span className="text-[11.5px] font-bold uppercase tracking-wider text-brand-700">Enterprise Workspace</span>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Link to="/sales/orders" className="btn-primary">
-              <Plus size={14} /> New Sales Order
-            </Link>
-            <Link to="/procurement/purchase-orders" className="btn-secondary">
-              <Plus size={14} /> New Purchase Order
-            </Link>
-            <Link to="/production/sewing-daily-output" className="btn-secondary">
-              <Factory size={14} className="text-brand-600" /> Production Entry
-            </Link>
-            <Link to="/reports" className="btn-secondary">
-              <BarChart3 size={14} className="text-slate-500" /> View Reports
-            </Link>
-          </div>
+          <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-slate-900">
+            Manufacturing Operations Dashboard
+          </h1>
+          <p className="mt-0.5 text-[13px] font-medium text-slate-600">
+            Fashion Knits &amp; Garments Export Management System
+          </p>
         </div>
 
-        {/* Enterprise Workspaces Grid (Reference 2 inspired) */}
+        {/* Enterprise Workspaces Grid (with tasteful distinct icon color badges) */}
         <div className="mt-5 border-t border-surface-divider pt-4">
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Workspaces</p>
+          <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-600">Workspaces</p>
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-5">
             {[
-              { label: 'Orders & Sales', sub: 'Orders, BOM, T&A', to: '/sales/orders', icon: ShoppingCart },
-              { label: 'Procurement', sub: 'Yarn, Fabric, Trims', to: '/procurement/purchase-orders', icon: Layers },
-              { label: 'Gate & Stores', sub: 'Stock, Issues, Bins', to: '/inventory/stock', icon: Boxes },
-              { label: 'Production', sub: 'Cutting, Sewing, Line', to: '/production/orders', icon: Factory },
-              { label: 'Quality & QC', sub: 'AQL, Inspection, Defects', to: '/quality/inspections', icon: ShieldCheck },
-              { label: 'Logistics & Export', sub: 'Packing, Shipment, BL', to: '/logistics/shipments', icon: Ship },
-              { label: 'Finance & Bills', sub: 'Vouchers, Invoices, AP', to: '/finance/vouchers', icon: Wallet },
-              { label: 'Masters', sub: 'Styles, Buyers, Colors', to: '/masters/parties', icon: Package },
-              { label: 'MIS Reports', sub: 'Production, Cost, WIP', to: '/reports', icon: BarChart3 },
-              { label: 'Administration', sub: 'Users, Roles, Config', to: '/admin/settings', icon: SettingsIcon },
+              { label: 'Orders & Sales', sub: 'Orders, BOM, T&A', to: '/sales/orders', icon: ShoppingCart, iconClass: 'bg-emerald-50 text-emerald-700 border-emerald-200/90' },
+              { label: 'Procurement', sub: 'Yarn, Fabric, Trims', to: '/procurement/purchase-orders', icon: Layers, iconClass: 'bg-blue-50 text-blue-700 border-blue-200/90' },
+              { label: 'Gate & Stores', sub: 'Stock, Issues, Bins', to: '/inventory/stock', icon: Boxes, iconClass: 'bg-amber-50 text-amber-700 border-amber-200/90' },
+              { label: 'Production', sub: 'Cutting, Sewing, Line', to: '/production/orders', icon: Factory, iconClass: 'bg-indigo-50 text-indigo-700 border-indigo-200/90' },
+              { label: 'Quality & QC', sub: 'AQL, Inspection, Defects', to: '/quality/inspections', icon: ShieldCheck, iconClass: 'bg-rose-50 text-rose-700 border-rose-200/90' },
+              { label: 'Logistics & Export', sub: 'Packing, Shipment, BL', to: '/logistics/shipments', icon: Ship, iconClass: 'bg-teal-50 text-teal-700 border-teal-200/90' },
+              { label: 'Finance & Bills', sub: 'Vouchers, Invoices, AP', to: '/finance/vouchers', icon: Wallet, iconClass: 'bg-violet-50 text-violet-700 border-violet-200/90' },
+              { label: 'Masters', sub: 'Styles, Buyers, Colors', to: '/masters/parties', icon: Package, iconClass: 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200/90' },
+              { label: 'MIS Reports', sub: 'Production, Cost, WIP', to: '/reports', icon: BarChart3, iconClass: 'bg-sky-50 text-sky-700 border-sky-200/90' },
+              { label: 'Administration', sub: 'Users, Roles, Config', to: '/admin/settings', icon: SettingsIcon, iconClass: 'bg-slate-100 text-slate-800 border-slate-300' },
             ].map((ws) => (
               <Link key={ws.to} to={ws.to}
-                className="group flex flex-col justify-between rounded-xl border border-surface-border bg-white p-3 transition-all hover:border-brand-200 hover:bg-brand-50/30 hover:shadow-subtle">
+                className="group flex flex-col justify-between rounded-xl border border-surface-border bg-white p-3.5 transition-all hover:border-slate-300 hover:shadow-card">
                 <div className="flex items-center justify-between">
-                  <div className="grid h-7 w-7 place-items-center rounded-lg bg-slate-50 text-slate-600 group-hover:bg-brand-50 group-hover:text-brand-700 transition-colors">
-                    <ws.icon size={15} />
+                  <div className={`grid h-8 w-8 place-items-center rounded-lg border shadow-subtle ${ws.iconClass} transition-transform group-hover:scale-105`}>
+                    <ws.icon size={16} />
                   </div>
-                  <ArrowRight size={12} className="text-slate-300 opacity-0 group-hover:opacity-100 group-hover:text-brand-600 transition-all -translate-x-1 group-hover:translate-x-0" />
+                  <ArrowRight size={13} className="text-slate-400 opacity-0 group-hover:opacity-100 group-hover:text-slate-700 transition-all -translate-x-1 group-hover:translate-x-0" />
                 </div>
-                <div className="mt-2 min-w-0">
-                  <p className="truncate text-[12px] font-semibold text-slate-800 group-hover:text-brand-900">{ws.label}</p>
-                  <p className="truncate text-[10.5px] text-slate-400">{ws.sub}</p>
+                <div className="mt-2.5 min-w-0">
+                  <p className="truncate text-[12.5px] font-bold text-slate-900 group-hover:text-brand-800 transition-colors">{ws.label}</p>
+                  <p className="truncate text-[11px] font-medium text-slate-500">{ws.sub}</p>
                 </div>
               </Link>
             ))}
@@ -139,7 +123,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* KPI tiles (Reference 1 Visual Aesthetic: White Card, Crisp Value, Sparkline Wave, Trend Badge) */}
+      {/* KPI tiles with Circular Gauge and Activity Bar Status Indicators */}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi
           icon={ShoppingCart}
@@ -151,6 +135,8 @@ export default function Dashboard() {
           trend="+12% ↑"
           trendLabel="vs last period"
           trendPositive={true}
+          indicator="bars"
+          barHeights={[35, 60, 48, 80, 100]}
         />
         <Kpi
           icon={Factory}
@@ -163,6 +149,7 @@ export default function Dashboard() {
           trend={`${prodProgress.toFixed(0)}%`}
           trendLabel="plan achieved"
           trendPositive={prodProgress >= 80}
+          indicator="circular"
         />
         <Kpi
           icon={ClipboardCheck}
@@ -175,6 +162,7 @@ export default function Dashboard() {
           trend="+0.6% ↑"
           trendLabel="on target"
           trendPositive={true}
+          indicator="circular"
         />
         <Kpi
           icon={Ship}
@@ -186,6 +174,8 @@ export default function Dashboard() {
           trend="On track"
           trendLabel="schedule"
           trendPositive={true}
+          indicator="bars"
+          barHeights={[45, 65, 55, 85, 75]}
         />
       </div>
 
@@ -477,6 +467,49 @@ function Placeholder({ text, pad }: { text: string; pad?: boolean }) {
   );
 }
 
+function CircularRing({ percent, tone }: { percent: number; tone: string }) {
+  const radius = 15;
+  const circumference = 2 * Math.PI * radius; // ~94.25
+  const valid = Math.min(100, Math.max(0, percent));
+  const strokeDashoffset = circumference - (valid / 100) * circumference;
+  const strokeColor = tone === 'violet' ? '#7c3aed' : tone === 'emerald' || tone === 'brand' ? '#16a34a' : '#f59e0b';
+
+  return (
+    <div className="relative flex items-center justify-center w-11 h-11 shrink-0" title={`${valid.toFixed(0)}% completed`}>
+      <svg className="w-11 h-11 -rotate-90" viewBox="0 0 38 38">
+        <circle cx="19" cy="19" r={radius} fill="none" stroke="#f1f5f9" strokeWidth="3.5" />
+        <circle
+          cx="19" cy="19" r={radius} fill="none"
+          stroke={strokeColor}
+          strokeWidth="3.5"
+          strokeDasharray={circumference}
+          strokeDashoffset={strokeDashoffset}
+          strokeLinecap="round"
+          className="transition-all duration-700 ease-out"
+        />
+      </svg>
+      <span className="absolute text-[10px] font-bold text-slate-800 tracking-tighter">
+        {Math.round(valid)}%
+      </span>
+    </div>
+  );
+}
+
+function MiniSparkBars({ heights, tone }: { heights: number[]; tone: string }) {
+  const barColor = tone === 'brand' || tone === 'emerald' ? 'bg-emerald-600' : tone === 'amber' ? 'bg-amber-500' : 'bg-violet-600';
+  return (
+    <div className="flex items-end gap-1 h-7 px-1 shrink-0" title="Recent activity trend">
+      {heights.map((h, i) => (
+        <span
+          key={i}
+          className={`w-1.5 rounded-full ${barColor} opacity-85 transition-all`}
+          style={{ height: `${h}%` }}
+        />
+      ))}
+    </div>
+  );
+}
+
 function Kpi({
   icon: Icon,
   tone,
@@ -488,6 +521,8 @@ function Kpi({
   trend,
   trendLabel,
   trendPositive,
+  indicator,
+  barHeights,
 }: {
   icon: typeof ShoppingCart;
   tone: 'brand' | 'violet' | 'emerald' | 'amber';
@@ -499,12 +534,14 @@ function Kpi({
   trend?: string;
   trendLabel?: string;
   trendPositive?: boolean;
+  indicator?: 'circular' | 'bars';
+  barHeights?: number[];
 }) {
   const tones = {
-    brand: 'bg-brand-50 text-brand-700 border border-brand-200/60',
-    violet: 'bg-violet-50 text-violet-700 border border-violet-200/60',
-    emerald: 'bg-emerald-50 text-emerald-700 border border-emerald-200/60',
-    amber: 'bg-amber-50 text-amber-700 border border-amber-200/60',
+    brand: 'bg-brand-50 text-brand-700 border border-brand-200/80',
+    violet: 'bg-violet-50 text-violet-700 border border-violet-200/80',
+    emerald: 'bg-emerald-50 text-emerald-700 border border-emerald-200/80',
+    amber: 'bg-amber-50 text-amber-700 border border-amber-200/80',
   };
   const bars = {
     brand: 'bg-brand-600',
@@ -515,55 +552,59 @@ function Kpi({
 
   return (
     <div className="card p-5 hover:border-slate-300 transition-all">
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">{label}</p>
+          <p className="text-[12px] font-bold uppercase tracking-wider text-slate-700">{label}</p>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-[28px] sm:text-[30px] font-bold tracking-tight text-slate-900">{value}</span>
+            <span className="text-[28px] sm:text-[30px] font-extrabold tracking-tight text-slate-900">{value}</span>
           </div>
         </div>
 
-        {/* Reference 1 Sparkline wave & Icon */}
-        <div className="flex flex-col items-end gap-1 shrink-0">
-          <div className={`grid h-9 w-9 place-items-center rounded-xl ${tones[tone]} shadow-subtle`}>
+        {/* Status Indicator (Circular Status Gauge or Mini Activity Bars) + Icon Badge */}
+        <div className="flex items-center gap-2 shrink-0">
+          {indicator === 'circular' && progress !== undefined && (
+            <CircularRing percent={progress} tone={tone} />
+          )}
+          {indicator === 'bars' && barHeights && (
+            <MiniSparkBars heights={barHeights} tone={tone} />
+          )}
+          <div className={`grid h-9 w-9 place-items-center rounded-xl ${tones[tone]} shadow-subtle shrink-0`}>
             <Icon size={18} />
           </div>
-          {/* Subtle sparkline wave matching Reference 1 */}
-          <svg className="w-14 h-6 text-brand-600 opacity-80" viewBox="0 0 60 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            {tone === 'brand' || tone === 'emerald' ? (
-              <path d="M2 18 L15 14 L28 17 L40 8 L58 4" />
-            ) : tone === 'violet' ? (
-              <path d="M2 16 L14 12 L28 15 L42 9 L58 6" />
-            ) : (
-              <path d="M2 10 L15 14 L28 8 L42 16 L58 12" stroke="#f59e0b" />
-            )}
-          </svg>
         </div>
       </div>
 
       {trend && (
         <div className="mt-2.5 flex items-center gap-1.5 text-[11.5px]">
-          <span className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 font-semibold text-[10.5px] ${
+          <span className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 font-bold text-[10.5px] ${
             trendPositive
-              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
-              : 'bg-amber-50 text-amber-700 border border-amber-200/60'
+              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/80'
+              : 'bg-amber-50 text-amber-700 border border-amber-200/80'
           }`}>
             {trend}
           </span>
-          {trendLabel && <span className="text-slate-400 font-medium">{trendLabel}</span>}
+          {trendLabel && <span className="text-slate-600 font-medium">{trendLabel}</span>}
         </div>
       )}
 
-      {sub && <p className="mt-2 text-[12px] text-slate-500 font-medium">{sub}</p>}
+      {sub && <p className="mt-2 text-[12px] text-slate-700 font-medium">{sub}</p>}
 
       {progress !== undefined && (
-        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
-          <div className={`h-full rounded-full transition-all ${bars[tone]}`}
-            style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
+        <div className="mt-3">
+          <div className="flex items-center justify-between text-[11px] font-semibold text-slate-600 mb-1">
+            <span>Progress Status</span>
+            <span className="text-slate-800 font-bold">{progress.toFixed(0)}%</span>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 p-0.5">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${bars[tone]}`}
+              style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
+            />
+          </div>
         </div>
       )}
 
-      {foot && <p className="mt-3 border-t border-surface-divider pt-2.5 text-[11.5px] text-slate-400 font-medium">{foot}</p>}
+      {foot && <p className="mt-3 border-t border-surface-divider pt-2.5 text-[11.5px] text-slate-600 font-medium">{foot}</p>}
     </div>
   );
 }

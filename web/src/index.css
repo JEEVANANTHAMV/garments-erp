@@ -90,14 +90,14 @@
     padding-right: 1.6rem !important; /* also in compact table-cell selects (px-1), so text never runs under the chevron */
   }
   .input-error { @apply border-red-400 focus:border-red-500 focus:ring-red-500/20; }
-  .label { @apply block text-xs font-semibold text-slate-600 mb-1.5; }
+  .label { @apply block text-xs font-bold text-slate-800 mb-1.5; }
   .help-error { @apply mt-1 text-xs text-red-600; }
 
-  .badge { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium; }
+  .badge { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold; }
 
-  .th { @apply px-3.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500
-        bg-surface-muted border-b border-surface-border whitespace-nowrap; }
-  .td { @apply px-3.5 py-2.5 border-b border-surface-divider text-slate-800 align-middle; }
+  .th { @apply px-3.5 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-700
+        bg-slate-50/90 border-b border-surface-border whitespace-nowrap; }
+  .td { @apply px-3.5 py-2.5 border-b border-surface-divider text-slate-900 align-middle; }
   .row-hover { @apply hover:bg-brand-50/50 transition-colors; }
 
   .skeleton { @apply animate-pulse rounded bg-slate-100; }

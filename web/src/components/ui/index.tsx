@@ -13,16 +13,16 @@ export function PageHeader({ title, subtitle, actions, breadcrumb }: {
     <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
         {breadcrumb?.length ? (
-          <nav className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-slate-400">
+          <nav className="mb-1.5 flex items-center gap-1.5 text-[11.5px] font-semibold text-slate-600">
             {breadcrumb.map((b, i) => (
               <span key={i} className="flex items-center gap-1.5">
-                {i > 0 && <span className="text-slate-300">/</span>}<span className="hover:text-slate-600 transition-colors">{b}</span>
+                {i > 0 && <span className="text-slate-400">/</span>}<span className="hover:text-slate-900 transition-colors">{b}</span>
               </span>
             ))}
           </nav>
         ) : null}
-        <h1 className="truncate text-[24px] font-bold tracking-tight text-slate-900">{title}</h1>
-        {subtitle && <p className="mt-1 text-[13px] text-slate-500 leading-normal">{subtitle}</p>}
+        <h1 className="truncate text-[24px] font-extrabold tracking-tight text-slate-900">{title}</h1>
+        {subtitle && <p className="mt-1 text-[13px] font-medium text-slate-600 leading-normal">{subtitle}</p>}
       </div>
       {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
     </div>
