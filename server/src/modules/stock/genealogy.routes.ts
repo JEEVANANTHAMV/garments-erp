@@ -586,28 +586,43 @@ const REPORTS: Record<string, (cid: number, f: { so_id?: number; vendor_id?: num
       WHERE kp.company_id = ? AND kp.status <> 'CANCELLED' ${f.so_id ? 'AND kp.so_id = ?' : ''}
       GROUP BY kp.id ORDER BY kp.id DESC LIMIT 500`, [cid, ...(f.so_id ? [f.so_id] : [])]),
 
-  /** Fabric roll stock ledger: in / out / balance per roll (job or roll filter required). */
+  /**
+   * Fabric roll stock ledger: in / out / balance per roll. All jobs, one job or one roll (client 17-Oct-2026:
+   * "All" showed nothing). Each movement type is read once for all the rolls (batched), not per roll.
+   */
   'roll-ledger': async (cid, f) => {
-    if (!f.so_id && !f.roll_no) throw BadRequest('Pick a job or enter a roll no for the roll ledger');
     const rolls = await query<any>(`SELECT fr.id, fr.roll_no, fr.weight_kg, COALESCE(fr.issued_kg, 0) issued_kg, g.grn_no, g.grn_date, COALESCE(NULLIF(so.io_no, ''), so.so_no) job_no,
         fr.process_state, (SELECT h.event FROM trx_fabric_roll_history h WHERE h.roll_id = fr.id AND h.event IN ('SPLIT_FROM', 'MERGED_FROM') LIMIT 1) born
        FROM trx_fabric_roll fr JOIN trx_grn g ON g.id = fr.grn_id LEFT JOIN trx_sales_order so ON so.id = fr.so_id
-      WHERE fr.company_id = ? ${f.so_id ? 'AND fr.so_id = ?' : ''} ${f.roll_no ? 'AND fr.roll_no = ?' : ''} ORDER BY fr.id LIMIT 300`,
-      [cid, ...(f.so_id ? [f.so_id] : []), ...(f.roll_no ? [f.roll_no] : [])]);
+      WHERE fr.company_id = ? ${f.so_id ? 'AND fr.so_id = ?' : ''} ${f.roll_no ? 'AND fr.roll_no = ?' : ''}
+        ${f.from ? 'AND g.grn_date >= ?' : ''} ${f.to ? 'AND g.grn_date <= ?' : ''}
+      ORDER BY job_no, fr.id LIMIT 5000`,
+      [cid, ...(f.so_id ? [f.so_id] : []), ...(f.roll_no ? [f.roll_no] : []), ...(f.from ? [f.from] : []), ...(f.to ? [f.to] : [])]);
+    if (!rolls.length) return [];
+    const ids = rolls.map((r) => Number(r.id));
+    const evByRoll = new Map<number, any[]>();
+    const add = (rollId: number, e: any) => { const a = evByRoll.get(rollId) ?? []; a.push(e); evByRoll.set(rollId, a); };
+    const batch = async (sql: string, kind: 'in' | 'out', label: string) => {
+      for (let i = 0; i < ids.length; i += 1000) {
+        for (const x of await query<any>(sql, [ids.slice(i, i + 1000)])) {
+          add(Number(x.roll_id), { date: x.d, ref: x.ref, in_kg: kind === 'in' ? n(x.kg) : 0, out_kg: kind === 'out' ? n(x.kg) : 0, movement: label });
+        }
+      }
+    };
+    await batch(`SELECT ri.fabric_roll_id roll_id, o.fpo_date d, o.fpo_no ref, ri.weight_kg kg FROM trx_fabric_process_roll_in ri JOIN trx_fabric_process_order o ON o.id = ri.fpo_id
+        WHERE ri.fabric_roll_id IN (?) AND ri.status <> 'DRAFT' AND o.status NOT IN ('DRAFT', 'CANCELLED')`, 'out', 'Process outward');
+    await batch(`SELECT fir.fabric_roll_id roll_id, fi.issue_date d, fi.issue_no ref, fir.issue_kg kg FROM trx_fabric_issue_roll fir JOIN trx_fabric_issue fi ON fi.id = fir.fabric_issue_id
+        WHERE fir.fabric_roll_id IN (?)`, 'out', 'Issued to cutting');
+    await batch(`SELECT fr2.fabric_roll_id roll_id, fr2.return_date d, fr2.return_no ref, fr2.return_kg kg FROM trx_fabric_return fr2 WHERE fr2.fabric_roll_id IN (?)`, 'in', 'Returned from cutting');
+    await batch(`SELECT l.source_roll_id roll_id, pr.return_date d, pr.return_no ref, l.qty_kg kg FROM trx_fabric_process_return_line l JOIN trx_fabric_process_return pr ON pr.id = l.return_id
+        WHERE l.source_roll_id IN (?) AND COALESCE(pr.status, '') <> 'CANCELLED'`, 'out', 'Returned to process unit');
+    await batch(`SELECT l.fabric_roll_id roll_id, t.transfer_date d, t.transfer_no ref, l.qty kg FROM trx_job_transfer_line l JOIN trx_job_transfer t ON t.id = l.transfer_id
+        WHERE l.fabric_roll_id IN (?)`, 'out', 'Job transfer');
+    await batch(`SELECT h.roll_id, DATE(h.event_time) d, h.ref_no ref, h.qty_kg kg FROM trx_fabric_roll_history h WHERE h.roll_id IN (?) AND h.event IN ('SPLIT', 'MERGE')`, 'out', 'Split / merge');
     const out: any[] = [];
     for (const r of rolls) {
-      const ev: any[] = [{ date: r.grn_date, ref: r.born ? (r.born === 'SPLIT_FROM' ? 'Split' : 'Merge') : r.grn_no, in_kg: n(r.weight_kg), out_kg: 0, movement: r.born ? 'Created by split / merge' : 'Received' }];
-      const pushQ = async (sql: string, p: unknown[], kind: 'in' | 'out', label: string) => {
-        for (const x of await query<any>(sql, p)) ev.push({ date: x.d, ref: x.ref, in_kg: kind === 'in' ? n(x.kg) : 0, out_kg: kind === 'out' ? n(x.kg) : 0, movement: label });
-      };
-      await pushQ(`SELECT o.fpo_date d, o.fpo_no ref, ri.weight_kg kg FROM trx_fabric_process_roll_in ri JOIN trx_fabric_process_order o ON o.id = ri.fpo_id
-          WHERE ri.fabric_roll_id = ? AND ri.status <> 'DRAFT' AND o.status NOT IN ('DRAFT', 'CANCELLED')`, [r.id], 'out', 'Process outward');
-      await pushQ(`SELECT fi.issue_date d, fi.issue_no ref, fir.issue_kg kg FROM trx_fabric_issue_roll fir JOIN trx_fabric_issue fi ON fi.id = fir.fabric_issue_id WHERE fir.fabric_roll_id = ?`, [r.id], 'out', 'Issued to cutting');
-      await pushQ(`SELECT fr2.return_date d, fr2.return_no ref, fr2.return_kg kg FROM trx_fabric_return fr2 WHERE fr2.fabric_roll_id = ?`, [r.id], 'in', 'Returned from cutting');
-      await pushQ(`SELECT pr.return_date d, pr.return_no ref, l.qty_kg kg FROM trx_fabric_process_return_line l JOIN trx_fabric_process_return pr ON pr.id = l.return_id
-          WHERE l.source_roll_id = ? AND COALESCE(pr.status, '') <> 'CANCELLED'`, [r.id], 'out', 'Returned to process unit');
-      await pushQ(`SELECT t.transfer_date d, t.transfer_no ref, l.qty kg FROM trx_job_transfer_line l JOIN trx_job_transfer t ON t.id = l.transfer_id WHERE l.fabric_roll_id = ?`, [r.id], 'out', 'Job transfer');
-      await pushQ(`SELECT DATE(h.event_time) d, h.ref_no ref, h.qty_kg kg FROM trx_fabric_roll_history h WHERE h.roll_id = ? AND h.event IN ('SPLIT', 'MERGE')`, [r.id], 'out', 'Split / merge');
+      const ev: any[] = [{ date: r.grn_date, ref: r.born ? (r.born === 'SPLIT_FROM' ? 'Split' : 'Merge') : r.grn_no, in_kg: n(r.weight_kg), out_kg: 0, movement: r.born ? 'Created by split / merge' : 'Received' },
+        ...(evByRoll.get(Number(r.id)) ?? [])];
       ev.sort((a, b2) => String(a.date).localeCompare(String(b2.date)));
       let bal = 0;
       for (const e of ev) { bal = r3(bal + e.in_kg - e.out_kg); out.push({ roll_no: r.roll_no, job_no: r.job_no, state: r.process_state, date: e.date, ref: e.ref, movement: e.movement, in_kg: r3(e.in_kg), out_kg: r3(e.out_kg), balance_kg: bal }); }

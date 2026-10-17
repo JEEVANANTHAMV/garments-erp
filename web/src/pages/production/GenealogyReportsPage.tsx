@@ -18,7 +18,7 @@ const REPORTS: { key: string; label: string; filters: ('job' | 'vendor' | 'dates
   { key: 'job-fabric-availability', label: 'Job-wise fabric availability', filters: ['job'], cols: [['job_no', 'Job'], ['fabric_name', 'Fabric'], ['process_state', 'State'], ['colour', 'Colour'], ['gsm', 'GSM'], ['dia', 'Dia'], ['rolls', 'Rolls'], ['available_kg', 'Available', 'kg'], ['on_quotation_kg', 'On live quotations', 'kg']] },
   { key: 'bom-vs-actual-yarn', label: 'BOM vs actual yarn', filters: ['job'], cols: [['job_no', 'Job'], ['yarn', 'Yarn'], ['plan_source', 'Plan from'], ['planned_kg', 'Planned', 'kg'], ['purchased_kg', 'Purchased', 'kg'], ['issued_kg', 'Issued to knitting', 'kg'], ['variance_kg', 'Issued − planned', 'kg'], ['variance_pct', 'Variance %', 'pct']] },
   { key: 'yarn-input-fabric-output', label: 'Yarn input vs fabric output', filters: ['job'], cols: [['program_no', 'Program'], ['job_no', 'Job'], ['fabric_type', 'Fabric'], ['knitter', 'Knitter'], ['yarn_issued_kg', 'Yarn issued', 'kg'], ['yarn_consumed_kg', 'Yarn consumed', 'kg'], ['fabric_good_kg', 'Fabric good', 'kg'], ['fabric_reject_kg', 'Reject', 'kg'], ['loss_kg', 'Loss', 'kg'], ['yield_pct', 'Yield %', 'pct']] },
-  { key: 'roll-ledger', label: 'Fabric roll stock ledger', filters: ['job', 'roll'], cols: [['roll_no', 'Roll'], ['job_no', 'Job'], ['state', 'State'], ['date', 'Date', 'date'], ['ref', 'Ref'], ['movement', 'Movement'], ['in_kg', 'In', 'kg'], ['out_kg', 'Out', 'kg'], ['balance_kg', 'Balance', 'kg']] },
+  { key: 'roll-ledger', label: 'Fabric roll stock ledger', filters: ['job', 'roll', 'dates'], cols: [['roll_no', 'Roll'], ['job_no', 'Job'], ['state', 'State'], ['date', 'Date', 'date'], ['ref', 'Ref'], ['movement', 'Movement'], ['in_kg', 'In', 'kg'], ['out_kg', 'Out', 'kg'], ['balance_kg', 'Balance', 'kg']] },
   { key: 'pending-process', label: 'Pending dyeing / washing / compacting', filters: ['job'], cols: [['job_no', 'Job'], ['process', 'Process'], ['dcs', 'DCs'], ['oldest_dc', 'Oldest DC', 'date'], ['sent_kg', 'Sent', 'kg'], ['back_kg', 'Back', 'kg'], ['pending_kg', 'Pending at unit', 'kg'], ['grey_not_sent_kg', 'Grey not yet sent', 'kg']] },
   { key: 'job-process-cost', label: 'Job-wise process cost', filters: ['job', 'dates'], cols: [['job_no', 'Job'], ['process', 'Process'], ['dcs', 'DCs'], ['input_kg', 'Input', 'kg'], ['good_kg', 'Good', 'kg'], ['avg_rate', 'Rate / KG', 'amt'], ['amount', 'Amount', 'amt'], ['cost_per_input_kg', 'Cost / input KG', 'amt']] },
   { key: 'vendor-process-cost', label: 'Vendor-wise process cost', filters: ['vendor', 'dates'], cols: [['vendor', 'Process unit'], ['process', 'Process'], ['grns', 'GRNs'], ['input_kg', 'Input', 'kg'], ['good_kg', 'Good', 'kg'], ['value', 'Value', 'amt'], ['billed', 'Billed', 'amt'], ['unbilled_grns', 'Unbilled GRNs']] },
@@ -33,8 +33,7 @@ export default function GenealogyReportsPage() {
   const [f, setF] = useState({ so_id: '', job_no: '', vendor_id: '', from: '', to: '', roll_no: '' });
   const [run, setRun] = useState(0);
   const params = new URLSearchParams(Object.entries({ so_id: f.so_id, vendor_id: f.vendor_id, from: f.from, to: f.to, roll_no: f.roll_no }).filter(([k, v]) => v && (k !== 'roll_no' || rep.filters.includes('roll'))) as [string, string][]);
-  const q = useQuery({ queryKey: ['genealogy-report', key, params.toString(), run], queryFn: async () => (await http.get<{ data: any[] }>(`/genealogy-reports/${key}?${params}`)).data ?? [], retry: false,
-    enabled: key !== 'roll-ledger' || !!f.so_id || !!f.roll_no });
+  const q = useQuery({ queryKey: ['genealogy-report', key, params.toString(), run], queryFn: async () => (await http.get<{ data: any[] }>(`/genealogy-reports/${key}?${params}`)).data ?? [], retry: false });
   const rows = q.data ?? [];
   const csv = () => {
     const out = [rep.cols.map((c) => c[1]).join(','), ...rows.map((r) => rep.cols.map((c) => `"${String(r[c[0]] ?? '').replace(/"/g, '""')}"`).join(','))].join('\n');
@@ -53,8 +52,7 @@ export default function GenealogyReportsPage() {
         <Button variant="secondary" onClick={csv} disabled={!rows.length}><Download size={14} className="mr-1" /> CSV</Button>
       </div>
       <div className="card overflow-x-auto">
-        {key === 'roll-ledger' && !f.so_id && !f.roll_no ? <p className="p-6 text-center text-sm text-slate-500">Pick a job or enter a roll no</p>
-          : q.isLoading ? <LoadingBlock />
+        {q.isLoading ? <LoadingBlock />
           : q.error ? <p className="p-6 text-sm text-red-700">{q.error instanceof ApiError ? q.error.message : 'Failed'}</p>
           : (
             <table className="w-full text-xs" id="gr-table">
