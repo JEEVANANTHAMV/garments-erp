@@ -159,13 +159,13 @@ export function CrudPage<T extends { id: number }>(cfg: CrudConfig<T>) {
         <div className="flex justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
           {can(`${cfg.permission}.UPDATE`) && (
             <button onClick={() => openEdit(row)} title="Edit"
-              className="rounded-md p-1.5 text-slate-400 hover:bg-brand-50 hover:text-brand-600">
+              className="rounded-md p-1.5 text-slate-400 hover:bg-brand-50 hover:text-brand-700 transition-colors">
               <Pencil size={14} />
             </button>
           )}
           {can(`${cfg.permission}.DELETE`) && (
             <button onClick={() => setDeleting(row)} title="Delete"
-              className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600">
+              className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors">
               <Trash2 size={14} />
             </button>
           )}
@@ -186,12 +186,12 @@ export function CrudPage<T extends { id: number }>(cfg: CrudConfig<T>) {
           )}
         </>} />
 
-      <div className="mb-3 flex flex-wrap items-center gap-2">
+      <div className="mb-3.5 flex flex-wrap items-center gap-2">
         <SearchInput value={search} onChange={setSearch}
           placeholder={cfg.searchPlaceholder ?? `Search ${cfg.title.toLowerCase()}…`}
           className="w-full max-w-sm" />
         {cfg.filters?.length ? (
-          <button className={`btn-secondary ${activeFilters.length ? 'border-brand-400 text-brand-700' : ''}`}
+          <button className={`btn-secondary ${activeFilters.length ? 'border-brand-500 bg-brand-50 text-brand-800 font-semibold' : ''}`}
             onClick={() => setShowFilters((v) => !v)}>
             <FilterIcon size={14} /> Filters
             {activeFilters.length > 0 && (

@@ -58,51 +58,53 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-screen">
-      {/* Brand panel */}
-      <div className="relative hidden w-1/2 flex-col justify-between bg-slate-900 p-12 text-white lg:flex">
-        <div className="absolute inset-0 opacity-[0.07]"
-          style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '28px 28px' }} />
+    <div className="flex min-h-screen bg-white">
+      {/* Brand panel (Pure White / Light Canvas Enterprise Showcase) */}
+      <div className="relative hidden w-1/2 flex-col justify-between border-r border-surface-border bg-surface-canvas p-12 text-slate-900 lg:flex">
         <div className="relative flex items-center gap-3">
-          <div className="grid h-11 w-11 place-items-center rounded-xl bg-brand-600">
+          <div className="grid h-11 w-11 place-items-center rounded-xl bg-brand-50 border border-brand-200/80 text-brand-700 shadow-subtle">
             <Factory size={22} />
           </div>
           <div>
-            <p className="text-[15px] font-semibold">Garment Manufacturing ERP</p>
-            <p className="text-xs text-slate-400">Tiruppur Export House Edition</p>
+            <p className="text-[15px] font-bold text-slate-900 tracking-tight">Garment Manufacturing ERP</p>
+            <p className="text-xs text-slate-500">Tiruppur Export House Edition</p>
           </div>
         </div>
 
-        <div className="relative">
-          <h2 className="text-3xl font-semibold leading-tight">
+        <div className="relative max-w-lg">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-[11.5px] font-semibold text-brand-700 mb-4">
+            <span className="h-1.5 w-1.5 rounded-full bg-brand-600" />
+            Next-Gen Enterprise Platform
+          </div>
+          <h2 className="text-3xl font-bold leading-tight tracking-tight text-slate-900">
             From buyer enquiry<br />to bill of lading.
           </h2>
-          <p className="mt-4 max-w-md text-[14px] leading-relaxed text-slate-400">
+          <p className="mt-4 text-[14px] leading-relaxed text-slate-600">
             One connected system across sampling, costing, orders, MRP, procurement,
             production, quality, packing, export documentation and finance.
           </p>
-          <div className="mt-8 grid grid-cols-3 gap-4 border-t border-white/10 pt-6">
+          <div className="mt-8 grid grid-cols-3 gap-3 border-t border-surface-border pt-6">
             {[['111', 'Tables'], ['15', 'Modules'], ['133', 'Permissions']].map(([n, l]) => (
-              <div key={l}>
-                <p className="text-xl font-semibold text-white">{n}</p>
-                <p className="text-[11px] uppercase tracking-wide text-slate-500">{l}</p>
+              <div key={l} className="rounded-xl border border-surface-border bg-white p-3.5 shadow-subtle">
+                <p className="text-xl font-bold text-slate-900">{n}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mt-0.5">{l}</p>
               </div>
             ))}
           </div>
         </div>
-        <p className="relative text-[11px] text-slate-600">
+        <p className="relative text-[11px] text-slate-400">
           © {new Date().getFullYear()} Garment ERP · Built for export manufacturing
         </p>
       </div>
 
       {/* Form panel */}
-      <div className="flex w-full items-center justify-center bg-surface-muted px-6 py-10 lg:w-1/2">
+      <div className="flex w-full items-center justify-center bg-white px-6 py-10 lg:w-1/2">
         <div className="w-full max-w-[420px]">
           <div className="mb-7 lg:hidden">
-            <div className="mb-3 grid h-11 w-11 place-items-center rounded-xl bg-brand-600 text-white">
+            <div className="mb-3 grid h-11 w-11 place-items-center rounded-xl bg-brand-50 border border-brand-200/80 text-brand-700 shadow-subtle">
               <Factory size={22} />
             </div>
-            <h1 className="text-xl font-semibold text-slate-900">Garment ERP</h1>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900">Garment ERP</h1>
           </div>
 
           {companiesToSelect ? (

@@ -10,19 +10,19 @@ export function PageHeader({ title, subtitle, actions, breadcrumb }: {
   title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; breadcrumb?: string[];
 }) {
   return (
-    <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+    <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
         {breadcrumb?.length ? (
-          <nav className="mb-1 flex items-center gap-1.5 text-[11px] text-slate-400">
+          <nav className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-slate-400">
             {breadcrumb.map((b, i) => (
               <span key={i} className="flex items-center gap-1.5">
-                {i > 0 && <span>/</span>}<span>{b}</span>
+                {i > 0 && <span className="text-slate-300">/</span>}<span className="hover:text-slate-600 transition-colors">{b}</span>
               </span>
             ))}
           </nav>
         ) : null}
-        <h1 className="truncate text-[22px] font-semibold tracking-tight text-slate-900">{title}</h1>
-        {subtitle && <p className="mt-0.5 text-[13px] text-slate-500">{subtitle}</p>}
+        <h1 className="truncate text-[24px] font-bold tracking-tight text-slate-900">{title}</h1>
+        {subtitle && <p className="mt-1 text-[13px] text-slate-500 leading-normal">{subtitle}</p>}
       </div>
       {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
     </div>
@@ -96,15 +96,15 @@ export function Checkbox({ label, checked, onChange, disabled }: {
 
 /* ---------------------------------------------------------------- Badges */
 const TONE: Record<string, string> = {
-  slate: 'bg-slate-100 text-slate-700',
-  green: 'bg-emerald-100 text-emerald-800',
-  emerald: 'bg-emerald-100 text-emerald-800',
-  amber: 'bg-amber-100 text-amber-800',
-  red: 'bg-red-100 text-red-700',
-  blue: 'bg-blue-100 text-blue-700',
-  indigo: 'bg-indigo-100 text-indigo-700',
-  violet: 'bg-violet-100 text-violet-700',
-  gray: 'bg-slate-100 text-slate-700',
+  slate: 'bg-slate-100 text-slate-700 border border-slate-200/60',
+  green: 'bg-emerald-50 text-emerald-700 border border-emerald-200/60',
+  emerald: 'bg-emerald-50 text-emerald-700 border border-emerald-200/60',
+  amber: 'bg-amber-50 text-amber-700 border border-amber-200/60',
+  red: 'bg-red-50 text-red-700 border border-red-200/60',
+  blue: 'bg-sky-50 text-sky-700 border border-sky-200/60',
+  indigo: 'bg-indigo-50 text-indigo-700 border border-indigo-200/60',
+  violet: 'bg-violet-50 text-violet-700 border border-violet-200/60',
+  gray: 'bg-slate-100 text-slate-700 border border-slate-200/60',
 };
 
 export function Badge({
@@ -155,12 +155,12 @@ export function Card({
   className?: string;
 }) {
   return (
-    <div className={clsx('rounded-xl border border-surface-border bg-white shadow-sm overflow-hidden', className)}>
+    <div className={clsx('rounded-xl border border-surface-border bg-white shadow-card overflow-hidden', className)}>
       {(title || actions) && (
-        <div className="flex items-center justify-between border-b border-surface-border px-5 py-3.5 bg-surface-muted/30">
+        <div className="flex items-center justify-between border-b border-surface-border px-5 py-3.5 bg-white">
           <div>
             {typeof title === 'string' ? (
-              <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
+              <h3 className="text-[14px] font-semibold text-slate-900 tracking-tight">{title}</h3>
             ) : (
               title
             )}

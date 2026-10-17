@@ -98,26 +98,26 @@ export default function AppLayout() {
 
   // Every screen: where you are in the flow, the other screens of this step, and the steps either side.
   const stepBar = step && match && activeTo !== '/' && (
-    <div id="step-bar" className="mb-4 rounded-xl border border-surface-border bg-white px-3 py-2 shadow-xs">
+    <div id="step-bar" className="mb-4 rounded-xl border border-surface-border bg-white px-3.5 py-2.5 shadow-card">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[12px]">
-        <span className="font-medium text-slate-500">{step.label.replace(/^(\d+) · /, 'Step $1 · ')}</span>
+        <span className="font-semibold text-slate-500">{step.label.replace(/^(\d+) · /, 'Step $1 · ')}</span>
         <ChevronRight size={12} className="text-slate-300" />
         {match.detail ? (
-          <Link to={match.item.to} className="inline-flex items-center gap-1 font-medium text-brand-700 hover:underline" id="step-back">
+          <Link to={match.item.to} className="inline-flex items-center gap-1 font-semibold text-brand-700 hover:underline" id="step-back">
             <ArrowLeft size={12} /> {match.item.label}
           </Link>
-        ) : <span className="font-semibold text-slate-800">{match.item.label}</span>}
+        ) : <span className="font-bold text-slate-900">{match.item.label}</span>}
         {!match.detail && (prevStep || nextStep) && (
           <div className="ml-auto flex gap-1.5">
             {prevStep && (
               <Link to={prevStep.items[0].to} id="step-prev" title={`Previous step: ${prevStep.label}`}
-                className="inline-flex items-center gap-1 rounded-lg border border-surface-border px-2 py-1 text-[11.5px] text-slate-600 hover:border-brand-300 hover:text-brand-700">
+                className="inline-flex items-center gap-1 rounded-lg border border-surface-border bg-white px-2.5 py-1 text-[11.5px] font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900 shadow-subtle transition-all">
                 <ArrowLeft size={12} /> {prevStep.label}
               </Link>
             )}
             {nextStep && (
               <Link to={nextStep.items[0].to} id="step-next" title={`Next step: ${nextStep.label}`}
-                className="inline-flex items-center gap-1 rounded-lg border border-brand-200 bg-brand-50 px-2 py-1 text-[11.5px] font-medium text-brand-700 hover:bg-brand-100">
+                className="inline-flex items-center gap-1 rounded-lg border border-brand-200 bg-brand-50 px-2.5 py-1 text-[11.5px] font-semibold text-brand-700 hover:bg-brand-100 shadow-subtle transition-all">
                 {nextStep.label} <ArrowRight size={12} />
               </Link>
             )}
@@ -125,13 +125,13 @@ export default function AppLayout() {
         )}
       </div>
       {!match.detail && step.items.length > 1 && (
-        <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5" id="step-screens">
+        <div className="mt-2.5 flex gap-1.5 overflow-x-auto pb-0.5" id="step-screens">
           {step.items.map((i) => (
             <Link key={i.to} to={i.to} aria-current={i.to === activeTo ? 'page' : undefined}
-              className={clsx('whitespace-nowrap rounded-full border px-2.5 py-1 text-[11.5px] transition-colors',
+              className={clsx('whitespace-nowrap rounded-lg border px-3 py-1 text-[11.5px] font-medium transition-colors',
                 i.to === activeTo
-                  ? 'border-brand-600 bg-brand-600 font-semibold text-white'
-                  : 'border-surface-border text-slate-600 hover:border-brand-300 hover:text-brand-700')}>
+                  ? 'border-brand-600 bg-brand-600 font-semibold text-white shadow-subtle'
+                  : 'border-surface-border bg-white text-slate-600 hover:border-brand-300 hover:text-brand-700')}>
               {i.label}
             </Link>
           ))}
@@ -159,18 +159,18 @@ export default function AppLayout() {
     <div key={item.to} className="group relative">
       <Link to={item.to} onClick={() => setMobileOpen(false)} aria-current={item.to === activeTo ? 'page' : undefined}
         className={clsx(
-          'flex items-center gap-2.5 rounded-lg py-[7px] pl-2.5 pr-7 text-[12.5px] transition-colors',
+          'flex items-center gap-2.5 rounded-lg py-[7px] pl-2.5 pr-7 text-[12.5px] transition-all',
           item.to === activeTo
-            ? 'bg-brand-600 font-medium text-white'
-            : 'text-slate-400 hover:bg-white/5 hover:text-slate-100')}>
-        <item.icon size={15} className="shrink-0" />
+            ? 'bg-brand-50 font-semibold text-brand-800 shadow-subtle'
+            : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900')}>
+        <item.icon size={15} className={clsx('shrink-0 transition-colors', item.to === activeTo ? 'text-brand-600' : 'text-slate-400 group-hover:text-slate-600')} />
         <span className="truncate" title={item.label}>{item.label}</span>
       </Link>
       {item.to !== '/' && (
         <button type="button" onClick={() => toggleFav(item.to)} data-fav={item.to}
           title={isFav ? 'Remove from favourites' : 'Add to favourites'} aria-label={isFav ? `Unpin ${item.label}` : `Pin ${item.label}`}
           className={clsx('absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 transition-opacity',
-            isFav ? 'text-amber-400' : 'text-slate-500 opacity-0 hover:text-amber-300 focus:opacity-100 group-hover:opacity-100')}>
+            isFav ? 'text-amber-500' : 'text-slate-400 opacity-0 hover:text-amber-500 focus:opacity-100 group-hover:opacity-100')}>
           <Star size={12} fill={isFav ? 'currentColor' : 'none'} />
         </button>
       )}
@@ -178,42 +178,42 @@ export default function AppLayout() {
   );
 
   const sidebar = (
-    <div className="flex h-full flex-col bg-gradient-to-b from-[#16225a] via-[#111b47] to-[#0c1434] text-slate-300">
-      <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-white/10 px-4">
-        <div className="grid h-8 w-8 place-items-center rounded-lg bg-brand-600 text-sm font-bold text-white">
+    <div className="flex h-full flex-col bg-white border-r border-surface-border text-slate-700">
+      <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-surface-border px-4">
+        <div className="grid h-8 w-8 place-items-center rounded-lg bg-brand-50 border border-brand-200/80 text-sm font-bold text-brand-700 shadow-subtle">
           {company ? initials(company.trade_name || company.legal_name) : 'ER'}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-semibold text-white">
+          <p className="truncate text-[13px] font-bold text-slate-900 tracking-tight">
             {company?.trade_name || company?.legal_name || 'Garment ERP'}
           </p>
-          <p className="truncate text-[10px] text-slate-400">Manufacturing ERP</p>
+          <p className="truncate text-[10.5px] font-medium text-slate-400">Manufacturing SaaS</p>
         </div>
-        <button className="lg:hidden" onClick={() => setMobileOpen(false)} aria-label="Close menu">
+        <button className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 lg:hidden" onClick={() => setMobileOpen(false)} aria-label="Close menu">
           <X size={18} />
         </button>
       </div>
 
       <div className="shrink-0 px-3 py-2.5">
         <div className="relative">
-          <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+          <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input value={filter} onChange={(e) => setFilter(e.target.value)}
             placeholder="Find a screen…"
-            className="w-full rounded-lg border border-white/10 bg-white/5 py-1.5 pl-8 pr-2 text-xs text-slate-200
-                       placeholder:text-slate-500 focus:border-brand-500 focus:outline-none" />
+            className="w-full rounded-lg border border-surface-border bg-slate-50/70 py-1.5 pl-8 pr-2.5 text-xs text-slate-900
+                       placeholder:text-slate-400 transition focus:bg-white focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-500/15" />
         </div>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2.5 pb-4" id="side-nav">
         {!filter && favItems.length > 0 && (
           <div className="mb-2">
-            <p className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400/90"><Star size={11} /> Favourites</p>
+            <p className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-amber-600"><Star size={11} /> Favourites</p>
             <div className="space-y-0.5" id="nav-favs">{favItems.map((item) => navLink(item, true))}</div>
           </div>
         )}
         {!filter && recentItems.length > 0 && (
           <div className="mb-2">
-            <p className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500"><Clock size={11} /> Recent</p>
+            <p className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400"><Clock size={11} /> Recent</p>
             <div className="space-y-0.5" id="nav-recent">{recentItems.map((item) => navLink(item, false))}</div>
           </div>
         )}
@@ -222,20 +222,20 @@ export default function AppLayout() {
           const single = section.label === 'Overview'; // only the dashboard has no step header (a role may see one screen of a step — it still gets its header)
           const open = !!filter || single || openSecs.includes(section.label);
           return (
-            <div key={section.label} className={clsx('mb-1 rounded-lg', open && !single && 'bg-white/[0.03]')}>
+            <div key={section.label} className={clsx('mb-1 rounded-lg', open && !single && 'bg-slate-50/40')}>
               {!single && (
                 // open step: lit header; the step of the page you are on: brand accent bar + brand count
                 <button onClick={() => toggleSec(section.label)} aria-expanded={open} data-section={section.label}
                   data-current={section.label === currentSection || undefined}
-                  className={clsx('relative flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-[10.5px] font-semibold uppercase tracking-wider transition-colors',
+                  className={clsx('relative flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider transition-colors',
                     section.label === currentSection
-                      ? 'bg-brand-600/20 text-white'
-                      : open ? 'bg-white/[0.06] text-slate-100' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200')}>
-                  {section.label === currentSection && <span className="absolute inset-y-1 left-0 w-[3px] rounded-full bg-brand-400" />}
-                  {open ? <ChevronDown size={12} className="shrink-0" /> : <ChevronRight size={12} className="shrink-0" />}
+                      ? 'bg-brand-50/80 text-brand-800'
+                      : open ? 'bg-slate-100/70 text-slate-800' : 'text-slate-500 hover:bg-slate-100/60 hover:text-slate-700')}>
+                  {section.label === currentSection && <span className="absolute inset-y-1 left-0 w-[3px] rounded-full bg-brand-600" />}
+                  {open ? <ChevronDown size={12} className="shrink-0 text-slate-400" /> : <ChevronRight size={12} className="shrink-0 text-slate-400" />}
                   <span className="flex-1 truncate">{section.label}</span>
                   <span className={clsx('rounded-full px-1.5 text-[9.5px] font-medium',
-                    section.label === currentSection ? 'bg-brand-500 text-white' : open ? 'bg-white/10 text-slate-300' : 'bg-white/5 text-slate-500')}>
+                    section.label === currentSection ? 'bg-brand-200/70 text-brand-800' : open ? 'bg-slate-200/60 text-slate-600' : 'bg-slate-100 text-slate-400')}>
                     {section.items.length}
                   </span>
                 </button>
@@ -245,7 +245,7 @@ export default function AppLayout() {
           );
         })}
         {!sections.length && (
-          <p className="px-3 py-6 text-center text-xs text-slate-500">No matching screens</p>
+          <p className="px-3 py-6 text-center text-xs text-slate-400">No matching screens</p>
         )}
       </nav>
     </div>
@@ -347,7 +347,7 @@ export default function AppLayout() {
             <button
               type="button"
               onClick={() => setCompanyDropdown((v) => !v)}
-              className="flex items-center gap-2 rounded-lg border border-surface-border bg-slate-50 px-2.5 py-1.5 text-left text-slate-700 transition-colors hover:bg-slate-100"
+              className="flex items-center gap-2 rounded-lg border border-surface-border bg-white px-3 py-1.5 text-left text-slate-700 transition-all hover:bg-slate-50 hover:border-slate-300 shadow-subtle"
               title={companies.length > 1 ? 'Click to switch company' : company?.legal_name}
             >
               <Building2 size={15} className="shrink-0 text-brand-600" />
@@ -423,8 +423,8 @@ export default function AppLayout() {
 
           <div className="relative">
             <button onClick={() => setUserMenu((v) => !v)}
-              className="flex items-center gap-2 rounded-lg py-1 pl-1 pr-2 hover:bg-surface-hover">
-              <div className="grid h-7 w-7 place-items-center rounded-full bg-brand-100 text-[11px] font-semibold text-brand-700">
+              className="flex items-center gap-2 rounded-lg py-1 pl-1 pr-2 hover:bg-surface-hover transition-colors">
+              <div className="grid h-7 w-7 place-items-center rounded-full bg-brand-50 border border-brand-200/80 text-[11px] font-bold text-brand-700 shadow-subtle">
                 {initials(user?.fullName ?? '?')}
               </div>
               <div className="hidden text-left sm:block">
