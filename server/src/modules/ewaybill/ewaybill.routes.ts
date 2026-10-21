@@ -8,7 +8,7 @@ import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import {
   SUB_SUPPLY_TYPES, DOCUMENT_TYPES, CANCEL_REASONS, VEHICLE_REASONS, EXTEND_REASONS, GST_STATES,
-  stateName, computeValues, assertReady, validityUpto, cleanVehicle, VEHICLE_RE, type EwbItemIn,
+  stateName, computeValues, assertReady, validityUpto, cleanVehicle, istFromString, VEHICLE_RE, type EwbItemIn,
 } from './ewbRules.js';
 import { providerOf, type EwbProvider } from './providers.js';
 import { prefill, sourceDocs, SOURCE_TYPES, SOURCE_LABEL, SOURCE_EWB_COLUMN, type SourceType } from './prefill.js';
@@ -210,7 +210,10 @@ ewayBillRouter.post('/eway-bills', requirePermission('EWAY.CREATE'), ah(async (r
   const cid = req.user!.companyId;
   const { head, items } = normalise(ewbSchema.parse(req.body));
   const id = await transaction(async (tx) => {
+    if (head.source_type !== 'MANUAL' && !head.source_id) throw BadRequest('Pick the document the e-way bill is for (or make a manual e-way bill)');
     if (head.source_type !== 'MANUAL' && head.source_id) {
+      const col = SOURCE_EWB_COLUMN[head.source_type as SourceType];
+      if (col && !(await txQueryOne<any>(tx, `SELECT id FROM ${col[0]} WHERE id = ? AND company_id = ?`, [head.source_id, cid]))) throw NotFound(`${SOURCE_LABEL[head.source_type]} not found`);
       const dup = await txQueryOne<any>(tx, `SELECT doc_no, ewb_no FROM trx_eway_bill WHERE company_id = ? AND source_type = ? AND source_id = ? AND status <> 'CANCELLED' LIMIT 1 FOR UPDATE`,
         [cid, head.source_type, head.source_id]);
       if (dup) throw BadRequest(`This document already has e-way bill ${dup.ewb_no ?? dup.doc_no} — cancel it before making another`);
@@ -254,7 +257,13 @@ ewayBillRouter.delete('/eway-bills/:id', requirePermission('EWAY.CREATE'), ah(as
 
 // ─────────────────────────────────────────────────────────── portal actions
 
-const toDate = (v: string | null | undefined) => (v ? new Date(v.length === 10 ? `${v}T00:00:00` : v) : null);
+/** A date / date-time typed on the screen (IST) → Date; a value that is not a date is refused rather than stored as nothing. */
+const toDate = (v: string | null | undefined, what = 'date') => {
+  if (!v) return null;
+  const d = istFromString(v);
+  if (!d) throw BadRequest(`${what}: "${v}" is not a date (use YYYY-MM-DD HH:mm)`);
+  return d;
+};
 
 /**
  * Generate. Online provider: sent to the portal. MANUAL: the e-way bill was generated on the GST portal — record its
@@ -272,8 +281,14 @@ ewayBillRouter.post('/eway-bills/:id/generate', requirePermission('EWAY.UPDATE')
     try { result = await provider.generate(e0, e0.items); } catch (err) { await logFailure(id, 'GENERATE', provider.code, err, req.user!.id); throw err; }
   } else {
     if (!/^\d{12}$/.test(b.ewb_no ?? '')) throw BadRequest('Enter the 12-digit e-way bill number from the GST portal');
-    const when = toDate(b.ewb_date) ?? new Date();
-    result = { ewb_no: b.ewb_no, ewb_date: when, valid_upto: toDate(b.valid_upto) ?? (e0.vehicle_no || e0.transport_doc_no ? validityUpto(when, n(e0.distance_km), e0.vehicle_type) : null) };
+    const when = toDate(b.ewb_date, 'E-way bill date') ?? new Date();
+    if (when.getTime() > Date.now() + 10 * 60 * 1000) throw BadRequest('E-way bill date cannot be in the future');
+    if (when.getTime() < Date.now() - 15 * 24 * 3600 * 1000) throw BadRequest('E-way bill date is more than 15 days back — check the date on the portal');
+    const partB = !!(e0.vehicle_no || e0.transport_doc_no);
+    const given = toDate(b.valid_upto, 'Valid up to');
+    if (given && given.getTime() <= when.getTime()) throw BadRequest('Valid up to must be after the e-way bill date');
+    if (!given && partB && !(n(e0.distance_km) > 0)) throw BadRequest('Enter the "valid up to" shown on the portal (or the distance, to work it out)');
+    result = { ewb_no: b.ewb_no, ewb_date: when, valid_upto: given ?? (partB ? validityUpto(when, n(e0.distance_km), e0.vehicle_type) : null) };
   }
   await transaction(async (tx) => {
     const e = await lockEwb(tx, cid, id);
@@ -305,8 +320,8 @@ ewayBillRouter.post('/eway-bills/:id/cancel', requirePermission('EWAY.APPROVE'),
   await transaction(async (tx) => {
     const e = await lockEwb(tx, cid, id);
     if (e.status !== 'GENERATED') throw BadRequest('This e-way bill changed meanwhile');
-    await txExecute(tx, `UPDATE trx_eway_bill SET status = 'CANCELLED', cancel_reason = ?, cancel_remark = ?, cancelled_at = NOW(), cancelled_by = ?, updated_at = NOW() WHERE id = ?`,
-      [b.reason, b.remark, req.user!.id, id]);
+    await txExecute(tx, `UPDATE trx_eway_bill SET status = 'CANCELLED', cancel_reason = ?, cancel_remark = ?, cancelled_at = ?, cancelled_by = ?, updated_at = NOW() WHERE id = ?`,
+      [b.reason, b.remark, new Date(), req.user!.id, id]);
     const col = SOURCE_EWB_COLUMN[e.source_type as SourceType];
     if (col && e.source_id) await txExecute(tx, `UPDATE ${col[0]} SET ${col[1]} = NULL WHERE id = ? AND company_id = ? AND ${col[1]} = ?`, [e.source_id, cid, e.ewb_no]);
     await logEvent(tx, id, 'CANCEL', e.provider ?? provider.code, true, `${b.reason}: ${b.remark}`, result.request ?? b, result.raw ?? null, req.user!.id);
@@ -329,18 +344,21 @@ ewayBillRouter.post('/eway-bills/:id/part-b', requirePermission('EWAY.UPDATE'), 
   const b = partBSchema.parse(req.body ?? {});
   const vehicle = cleanVehicle(b.vehicle_no);
   if (b.transport_mode === 'Road' && !VEHICLE_RE.test(vehicle)) throw BadRequest(`Vehicle number "${b.vehicle_no}" is not in the RTO format (e.g. TN39AB1234)`);
-  if (b.transport_mode !== 'Road' && !b.transport_doc_no) throw BadRequest('Rail / air / ship needs the transport document number and date');
+  if (b.transport_mode !== 'Road' && vehicle && !VEHICLE_RE.test(vehicle)) throw BadRequest(`Vehicle number "${b.vehicle_no}" is not in the RTO format (e.g. TN39AB1234)`);
+  if (b.transport_mode !== 'Road' && (!b.transport_doc_no || !b.transport_doc_date)) throw BadRequest('Rail / air / ship needs the transport document number and date');
   if (!stateName(b.from_state)) throw BadRequest('State the vehicle starts from');
   const provider = await providerFor(cid);
   const e0 = await loadEwb(cid, id);
   if (!e0.can_part_b) throw BadRequest(`Vehicle can be updated only on an active e-way bill (this one is ${e0.view_status})`);
+  if (b.transport_doc_date && b.transport_doc_date < String(e0.document_date).slice(0, 10)) throw BadRequest('Transport document date cannot be before the document date');
   const p = { ...b, vehicle_no: vehicle, from_state: stateName(b.from_state) };
   let result: any = {};
   if (provider.online && e0.provider === provider.code) {
     try { result = await provider.updatePartB(e0, p); } catch (err) { await logFailure(id, 'PART_B', provider.code, err, req.user!.id); throw err; }
   }
   // the first Part B starts the validity (Part-A-only bill); later updates keep it
-  const valid = result.valid_upto ?? toDate(b.valid_upto) ?? (e0.valid_upto ? new Date(e0.valid_upto) : validityUpto(new Date(), n(e0.distance_km), b.vehicle_type));
+  const valid = result.valid_upto ?? toDate(b.valid_upto, 'Valid up to') ?? (e0.valid_upto ? new Date(e0.valid_upto) : validityUpto(new Date(), n(e0.distance_km), b.vehicle_type));
+  if (!valid && !provider.online) throw BadRequest('This e-way bill had no vehicle yet — enter the "valid up to" shown on the portal (or the distance on the draft)');
   await transaction(async (tx) => {
     await lockEwb(tx, cid, id);
     await txExecute(tx, `UPDATE trx_eway_bill SET vehicle_no = ?, vehicle_type = ?, transport_mode = ?, transport_doc_no = ?, transport_doc_date = ?, valid_upto = ?, ewb_url = COALESCE(?, ewb_url), last_error = NULL, updated_by = ?, updated_at = NOW() WHERE id = ?`,
@@ -366,6 +384,10 @@ ewayBillRouter.post('/eway-bills/:id/extend', requirePermission('EWAY.UPDATE'), 
   const b = extendSchema.parse(req.body ?? {});
   if (b.consignment_status === 'M' && !b.vehicle_no) throw BadRequest('In movement: give the vehicle number');
   if (b.consignment_status === 'T' && !b.transit_type) throw BadRequest('In transit: say where the goods are (road / warehouse / other)');
+  if (b.consignment_status === 'T' && !b.address1) throw BadRequest('In transit: give the address where the goods are');
+  if (b.consignment_status === 'M' && b.transport_mode === 'Road' && !VEHICLE_RE.test(cleanVehicle(b.vehicle_no))) throw BadRequest(`Vehicle number "${b.vehicle_no}" is not in the RTO format (e.g. TN39AB1234)`);
+  if (b.consignment_status === 'M' && b.transport_mode !== 'Road' && !b.transport_doc_no) throw BadRequest('Rail / air / ship needs the transport document number and date');
+  if (!stateName(b.from_state)) throw BadRequest('State where the goods are now');
   const provider = await providerFor(cid);
   const e0 = await loadEwb(cid, id);
   if (e0.status !== 'GENERATED') throw BadRequest(`Only a generated e-way bill is extended (this one is ${e0.status})`);
@@ -376,7 +398,7 @@ ewayBillRouter.post('/eway-bills/:id/extend', requirePermission('EWAY.UPDATE'), 
     try { result = await provider.extend(e0, p as any); } catch (err) { await logFailure(id, 'EXTEND', provider.code, err, req.user!.id); throw err; }
   }
   const base = new Date(Math.max(Date.now(), new Date(e0.valid_upto).getTime()));
-  const valid = result.valid_upto ?? toDate(b.valid_upto) ?? validityUpto(new Date(), b.remaining_km, e0.vehicle_type) ?? base;
+  const valid = result.valid_upto ?? toDate(b.valid_upto, 'Valid up to') ?? validityUpto(new Date(), b.remaining_km, e0.vehicle_type) ?? base;
   await transaction(async (tx) => {
     await lockEwb(tx, cid, id);
     await txExecute(tx, `UPDATE trx_eway_bill SET valid_upto = ?, vehicle_no = COALESCE(?, vehicle_no), ewb_url = COALESCE(?, ewb_url), last_error = NULL, updated_by = ?, updated_at = NOW() WHERE id = ?`,
@@ -397,7 +419,7 @@ ewayBillRouter.post('/eway-bills/:id/refresh', requirePermission('EWAY.VIEW'), a
   try { r = await provider.fetch(e0); } catch (err) { await logFailure(id, 'REFRESH', provider.code, err, req.user!.id); throw err; }
   await transaction(async (tx) => {
     await txExecute(tx, `UPDATE trx_eway_bill SET valid_upto = COALESCE(?, valid_upto), last_error = NULL WHERE id = ?`, [r.valid_upto ?? null, id]);
-    await logEvent(tx, id, 'REFRESH', provider.code, true, null, null, r.raw ?? null, req.user!.id);
+    await logEvent(tx, id, 'REFRESH', provider.code, true, r.portal_status ? `Portal status: ${r.portal_status}` : null, null, r.raw ?? null, req.user!.id);
   });
   res.json({ data: await loadEwb(cid, id) });
 }));
@@ -405,8 +427,8 @@ ewayBillRouter.post('/eway-bills/:id/refresh', requirePermission('EWAY.VIEW'), a
 /** Count of e-way bills expiring in the next 12 hours / already expired today (dashboard / register banner). */
 ewayBillRouter.get('/eway-bills-alerts', requirePermission('EWAY.VIEW'), ah(async (req, res) => {
   const r = await queryOne<any>(
-    `SELECT SUM(valid_upto > NOW() AND valid_upto < NOW() + INTERVAL 12 HOUR) expiring, SUM(valid_upto <= NOW() AND valid_upto > NOW() - INTERVAL 8 HOUR) just_expired
-       FROM trx_eway_bill WHERE company_id = ? AND status = 'GENERATED'`, [req.user!.companyId]);
+    `SELECT SUM(valid_upto > ? AND valid_upto < ? + INTERVAL 12 HOUR) expiring, SUM(valid_upto <= ? AND valid_upto > ? - INTERVAL 8 HOUR) just_expired
+       FROM trx_eway_bill WHERE company_id = ? AND status = 'GENERATED'`, [...Array(4).fill(new Date()), req.user!.companyId]);
   res.json({ data: { expiring: n(r?.expiring), just_expired: n(r?.just_expired) } });
 }));
 

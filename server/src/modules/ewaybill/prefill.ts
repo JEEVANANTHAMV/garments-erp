@@ -86,8 +86,10 @@ export async function prefill(cid: number, type: SourceType, id: number) {
   if (type === 'DISPATCH') {
     const d = await queryOne<any>(`SELECT * FROM trx_dispatch WHERE id = ? AND company_id = ?`, [id, cid]);
     if (!d) throw NotFound('Dispatch not found');
-    const to = await consignee(cid, d.buyer_id ? Number(d.buyer_id) : null);
-    const so = d.so_id ? await queryOne<any>(`SELECT so.id, so.exchange_rate, cu.code currency FROM trx_sales_order so LEFT JOIN cfg_currency cu ON cu.id = so.currency_id WHERE so.id = ?`, [d.so_id]) : null;
+    const so = d.so_id ? await queryOne<any>(`SELECT so.id, so.buyer_id, so.exchange_rate, cu.code currency FROM trx_sales_order so LEFT JOIN cfg_currency cu ON cu.id = so.currency_id WHERE so.id = ?`, [d.so_id]) : null;
+    // the dispatch carries the buyer only sometimes — the sales order always does
+    const buyerId = d.buyer_id ? Number(d.buyer_id) : so?.buyer_id ? Number(so.buyer_id) : null;
+    const to = await consignee(cid, buyerId);
     const fx = so && so.currency && so.currency !== 'INR' ? n(so.exchange_rate) : 1;
     const isExport = (so?.currency && so.currency !== 'INR') || to.party_type === 'EXPORT';
     // pieces by style: posted cartons of the packing / shipment, else the order
@@ -197,7 +199,8 @@ export async function prefill(cid: number, type: SourceType, id: number) {
 export async function sourceDocs(cid: number, type: SourceType, q: string) {
   const like = `%${q}%`;
   const sql: Record<SourceType, string> = {
-    DISPATCH: `SELECT d.id, d.dispatch_no no, d.dispatch_date dt, p.party_name party FROM trx_dispatch d LEFT JOIN mst_party p ON p.id = d.buyer_id WHERE d.company_id = ? AND (d.dispatch_no LIKE ? OR p.party_name LIKE ?) ORDER BY d.id DESC LIMIT 50`,
+    DISPATCH: `SELECT d.id, d.dispatch_no no, d.dispatch_date dt, p.party_name party FROM trx_dispatch d LEFT JOIN trx_sales_order so ON so.id = d.so_id
+      LEFT JOIN mst_party p ON p.id = COALESCE(d.buyer_id, so.buyer_id) WHERE d.company_id = ? AND (d.dispatch_no LIKE ? OR p.party_name LIKE ?) ORDER BY d.id DESC LIMIT 50`,
     PROCESS_DC: `SELECT c.id, c.challan_no no, c.challan_date dt, p.party_name party FROM trx_jobwork_challan c LEFT JOIN mst_party p ON p.id = c.vendor_id WHERE c.company_id = ? AND c.status <> 'CANCELLED' AND (c.challan_no LIKE ? OR p.party_name LIKE ?) ORDER BY c.id DESC LIMIT 50`,
     PURCHASE_RETURN: `SELECT r.id, r.return_no no, r.return_date dt, p.party_name party FROM trx_purchase_return r LEFT JOIN mst_party p ON p.id = r.supplier_id WHERE r.company_id = ? AND (r.return_no LIKE ? OR p.party_name LIKE ?) ORDER BY r.id DESC LIMIT 50`,
     GATE_OUTWARD: `SELECT g.id, g.pass_no no, g.pass_date dt, p.party_name party FROM trx_gate_outward g LEFT JOIN mst_party p ON p.id = g.party_id WHERE g.company_id = ? AND (g.pass_no LIKE ? OR p.party_name LIKE ?) ORDER BY g.id DESC LIMIT 50`,

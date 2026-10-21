@@ -110,8 +110,9 @@ export function computeValues(items: EwbItemIn[], interState: boolean, other: nu
     else { cgst += (it.taxable_amount * it.cgst_rate) / 100; sgst += (it.taxable_amount * it.sgst_rate) / 100; }
     cess += (it.taxable_amount * it.cess_rate) / 100;
   }
-  const total = taxable + cgst + sgst + igst + cess + other;
-  return { taxable_amount: r2(taxable), cgst_amount: r2(cgst), sgst_amount: r2(sgst), igst_amount: r2(igst), cess_amount: r2(cess), total_invoice_value: r2(total) };
+  // the total is the sum of the rounded figures shown (the portal checks it against them, not against unrounded tax)
+  const v = { taxable_amount: r2(taxable), cgst_amount: r2(cgst), sgst_amount: r2(sgst), igst_amount: r2(igst), cess_amount: r2(cess) };
+  return { ...v, total_invoice_value: r2(v.taxable_amount + v.cgst_amount + v.sgst_amount + v.igst_amount + v.cess_amount + r2(other)) };
 }
 
 /**

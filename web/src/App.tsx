@@ -144,6 +144,7 @@ import {
   ExportInvoicesPage, ShippingBillsPage, CertificatesPage,
 } from './pages/logistics';
 import { PackingEngineApp } from './pages/logistics/packing';
+import { EwayBillRegisterPage, EwayBillEditorPage } from './pages/logistics/EwayBills';
 
 /* Finance */
 import {
@@ -448,6 +449,9 @@ export default function App() {
                   <Route path="shipments" element={<ShipmentListPage />} />
                   <Route path="shipments/new" element={<ShipmentDetailPage />} />
                   <Route path="shipments/:id" element={<ShipmentDetailPage />} />
+                  <Route path="eway-bills" element={<EwayBillRegisterPage />} />
+                  <Route path="eway-bills/new" element={<EwayBillEditorPage />} />
+                  <Route path="eway-bills/:id" element={<EwayBillEditorPage />} />
                 </Route>
                 <Route path="export">
                   <Route path="invoices" element={<ExportInvoicesPage />} />
