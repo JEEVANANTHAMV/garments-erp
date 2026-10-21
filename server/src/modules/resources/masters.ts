@@ -84,7 +84,7 @@ export const masterResources: ResourceConfig[] = [
     path: 'parties', table: 'mst_party', permission: 'PARTY', label: 'Business Partner',
     searchable: ['party_code', 'party_name', 'legal_name', 'email', 'gstin', 'pan', 'udyam_no'],
     sortable: ['party_code', 'party_name', 'created_at'], defaultSort: 't.party_name',
-    filters: ['is_customer', 'is_buyer', 'is_supplier', 'is_vendor', 'is_agent', 'is_contractor', 'is_transporter', 'party_type', 'country_id'],
+    filters: ['is_customer', 'is_buyer', 'is_supplier', 'is_vendor', 'is_agent', 'is_contractor', 'is_transporter', 'is_merchandiser', 'is_draft', 'party_type', 'country_id'],
     selectExtra: 'c.name AS country_name, cur.code AS currency_code',
     joins: 'LEFT JOIN cfg_country c ON c.id = t.country_id LEFT JOIN cfg_currency cur ON cur.id = t.currency_id',
     // Every address of a completed (non-draft) partner must name its country —

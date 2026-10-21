@@ -111,6 +111,11 @@ export function PartyDetailPage() {
   const saveMutation = useSave<any>('parties', 'Business Partner');
 
   const isParamMerchandiser = isNew && searchParams.get('role') === 'merchandiser';
+  // client 21-Oct-2026: a new partner starts with no role ticked — or only the role of the list tab it was opened from —
+  // so a supplier / job worker is never saved as a buyer + customer by default (it then showed in the buyer lists)
+  const paramRole = isNew ? (searchParams.get('role') ?? '') : '';
+  const startBuyer = paramRole === 'buyer';
+  const roleOn = (r: string) => (paramRole === r ? 1 : 0);
 
   const [form, setForm] = useState<any>({
     party_code: '',
@@ -119,13 +124,13 @@ export function PartyDetailPage() {
     party_name: '',
     legal_name: '',
     short_name: '',
-    is_buyer: isParamMerchandiser ? 0 : 1,
-    is_customer: isParamMerchandiser ? 0 : 1,
-    is_supplier: 0,
-    is_vendor: 0,
-    is_agent: 0,
-    is_contractor: 0,
-    is_transporter: 0,
+    is_buyer: roleOn('buyer'),
+    is_customer: roleOn('customer'),
+    is_supplier: roleOn('supplier'),
+    is_vendor: roleOn('vendor'),
+    is_agent: roleOn('agent'),
+    is_contractor: roleOn('contractor'),
+    is_transporter: roleOn('transporter'),
     party_type: 'EXPORT',
     country_id: null, // defaulted to India once the countries lookup loads (new partners only)
     currency_id: null, // INR for an Indian partner, else USD — looked up by code once currencies load (new partners only)
@@ -146,8 +151,8 @@ export function PartyDetailPage() {
     tcs_applicable: 0,
     tcs_section: '',
     tcs_rate: 0,
-    payment_terms: isParamMerchandiser ? '' : 'LC 60 DAYS',
-    default_incoterm: isParamMerchandiser ? '' : 'FOB',
+    payment_terms: startBuyer ? 'LC 60 DAYS' : '',
+    default_incoterm: startBuyer ? 'FOB' : '',
     default_pol: 'Tuticorin (INTUT)',
     default_pod: '',
     default_aql: '2.5',
@@ -160,7 +165,7 @@ export function PartyDetailPage() {
     packing_instructions: '',
     special_instructions: '',
     credit_limit: 0,
-    credit_days: isParamMerchandiser ? 0 : 45,
+    credit_days: startBuyer ? 45 : 0,
     email: '',
     phone: '',
     website: '',
@@ -726,7 +731,7 @@ export function PartyDetailPage() {
     { key: 'contacts', label: 'Contacts', count: form.contacts.length, icon: Users },
     ...(!isMerchandiserOnly ? [{ key: 'statutory', label: 'Statutory', icon: ShieldCheck }] : []),
     ...(!isMerchandiserOnly ? [{ key: 'bank', label: 'Bank', count: form.banks.length, icon: Landmark }] : []),
-    ...(isBuyerRole  ? [{ key: 'buyer',    label: 'Buyer Details',    icon: ShoppingBag }] : []),
+    ...(isBuyerRole  ? [{ key: 'buyer',    label: form.is_buyer && form.is_customer ? 'Buyer / Customer Details' : form.is_buyer ? 'Buyer Details' : 'Customer Details', icon: ShoppingBag }] : []),
     ...(form.is_supplier ? [{ key: 'supplier', label: 'Supplier Details', icon: Truck }] : []),
     ...(form.is_vendor   ? [{ key: 'jobwork',  label: 'Job Work Details', icon: Factory }] : []),
     ...(form.is_agent    ? [{ key: 'agent',    label: 'Agent Details',    icon: Percent }] : []),
@@ -1013,6 +1018,12 @@ export function PartyDetailPage() {
                         const checked = e.target.checked ? 1 : 0;
                         setForm((prev: any) => {
                           const next = { ...prev, [r.key]: checked };
+                          // ticking Buyer on a new partner fills the usual buyer terms if they are still blank
+                          if (r.key === 'is_buyer' && checked && isNew) {
+                            if (!prev.payment_terms) next.payment_terms = 'LC 60 DAYS';
+                            if (!prev.default_incoterm) next.default_incoterm = 'FOB';
+                            if (!Number(prev.credit_days)) next.credit_days = 45;
+                          }
                           // If user specifically selects Merchandiser on new partner, clear buyer defaults
                           if (r.key === 'is_merchandiser' && checked) {
                             if (isNew && prev.is_buyer && prev.is_customer && !prev.is_supplier && !prev.is_vendor && !prev.is_agent) {

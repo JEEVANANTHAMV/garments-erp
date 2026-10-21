@@ -69,6 +69,8 @@ export interface CrudConfig<T> {
   onRowClick?: (row: T) => void;
   /** Extra header buttons. */
   headerActions?: ReactNode;
+  /** Shown between the page header and the search bar (e.g. role tabs). */
+  toolbar?: ReactNode;
   /** Transform a record into form values when editing. */
   toForm?: (row: T) => Record<string, unknown>;
   /** Transform form values into the API payload. */
@@ -185,6 +187,7 @@ export function CrudPage<T extends { id: number }>(cfg: CrudConfig<T>) {
             </button>
           )}
         </>} />
+      {cfg.toolbar}
 
       <div className="mb-3.5 flex flex-wrap items-center gap-2">
         <SearchInput value={search} onChange={setSearch}

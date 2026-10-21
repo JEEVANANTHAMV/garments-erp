@@ -1,7 +1,7 @@
 import { CrudPage } from '../../components/CrudPage';
 import { Badge } from '../../components/ui';
 import { fmtDecimal, fmtDate, humanize } from '../../lib/format';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { TRIM_CERTIFICATIONS } from '../../lib/certifications';
 
 const yesNo = [{ value: 1, label: 'Yes' }, { value: 0, label: 'No' }];
@@ -10,14 +10,34 @@ const activeField = { name: 'is_active', label: 'Active', type: 'checkbox' as co
 export { PartyDetailPage } from './PartyDetail';
 
 /* ------------------------------------------------------------ Parties */
+/** Role tabs of the partner list (client 21-Oct-2026: "a buyer list shows only buyers, a supplier list only suppliers…"). */
+export const PARTY_ROLES = [
+  { key: 'buyer', label: 'Buyers' }, { key: 'customer', label: 'Customers' }, { key: 'supplier', label: 'Suppliers' },
+  { key: 'vendor', label: 'Job Workers' }, { key: 'contractor', label: 'In-house Contractors' }, { key: 'transporter', label: 'Transporters' },
+  { key: 'agent', label: 'Buying Agents' }, { key: 'merchandiser', label: 'Merchandisers' },
+] as const;
+
 export function PartiesPage() {
   const nav = useNavigate();
-  return <CrudPage
+  const [sp, setSp] = useSearchParams();
+  const role = PARTY_ROLES.find((r) => r.key === sp.get('role'))?.key ?? '';
+  return <CrudPage key={role || 'all'}
     path="parties" title="Business Partners" permission="PARTY" singular="Partner"
-    subtitle="Buyers, suppliers, job-work vendors and agents"
+    subtitle="Buyers, customers, suppliers, job workers, contractors, transporters, agents — each tab lists only that role"
     searchPlaceholder="Search by code, name, email or GSTIN…"
     defaultSort={{ key: 'party_name', dir: 'asc' }}
-    onNew={() => nav('/masters/parties/new')}
+    baseParams={role ? { [`is_${role}`]: 1 } : undefined}
+    toolbar={<div className="mb-3 flex flex-wrap gap-1.5" id="party-role-tabs">
+      {[{ key: '', label: 'All' }, ...PARTY_ROLES].map((r) => (
+        <button key={r.key || 'all'} type="button" data-role-tab={r.key || 'all'}
+          onClick={() => setSp(r.key ? { role: r.key } : {})}
+          className={`rounded-full border px-3 py-1 text-[12.5px] font-medium ${role === r.key ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-surface-border bg-white text-slate-600 hover:bg-slate-50'}`}>
+          {r.label}
+        </button>
+      ))}
+    </div>}
+    // a new partner from a role tab starts with only that role ticked
+    onNew={() => nav(role ? `/masters/parties/new?role=${role}` : '/masters/parties/new')}
     onRowClick={(r) => nav(`/masters/parties/${r.id}`)}
     columns={[
       { key: 'party_code', header: 'Code', sortable: true,
@@ -57,8 +77,9 @@ export function PartiesPage() {
     ]}
     filters={[
       { name: 'is_buyer', label: 'Buyer', options: yesNo },
+      { name: 'is_customer', label: 'Customer', options: yesNo },
       { name: 'is_supplier', label: 'Supplier', options: yesNo },
-      { name: 'is_vendor', label: 'Vendor', options: yesNo },
+      { name: 'is_vendor', label: 'Job worker', options: yesNo },
       { name: 'is_contractor', label: 'In-house contractor', options: yesNo },
       { name: 'is_transporter', label: 'Transporter', options: yesNo },
       { name: 'is_agent', label: 'Agent', options: yesNo },
