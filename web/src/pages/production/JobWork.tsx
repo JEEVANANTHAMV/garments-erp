@@ -139,7 +139,7 @@ export function JobWorkInvoicesPage() {
         },
       ]}
       filters={[
-        { name: 'party_id', label: 'Party', lookup: 'parties' },
+        { name: 'party_id', label: 'Party', lookup: 'jobwork-parties' },
         { name: 'division_id', label: 'Division', lookup: 'divisions' },
         { name: 'invoice_type', label: 'Type', options: TYPES.map((v) => ({ value: v, label: humanize(v) })) },
         { name: 'status', label: 'Status', options: STATES.map((v) => ({ value: v, label: humanize(v) })) },
@@ -149,7 +149,7 @@ export function JobWorkInvoicesPage() {
         { name: 'invoice_no', label: 'Invoice no', hint: 'Blank to auto-generate' },
         { name: 'invoice_date', label: 'Date', type: 'date', required: true, defaultValue: today() },
         { name: 'invoice_type', label: 'Invoice type', required: true, options: TYPES.map((v) => ({ value: v, label: humanize(v) })) },
-        { name: 'party_id', label: 'Party (Customer/Vendor)', required: true, lookup: 'parties' },
+        { name: 'party_id', label: 'Party (customer / job worker)', required: true, lookup: 'jobwork-parties' },
         { name: 'jwin_id', label: 'Job Work In Ref', lookup: 'jobwork-ins' },
         { name: 'division_id', label: 'Billing division', lookup: 'divisions', hint: 'Blank: taken from the Job Work In. Division bills use its own number series' },
         { name: 'challan_id', label: 'Job Work Challan Ref', lookup: 'jobwork-challans' },

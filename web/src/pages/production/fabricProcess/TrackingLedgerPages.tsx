@@ -69,7 +69,7 @@ export function FabricProcessLedgerPage() {
   const [f, setF] = useState({ from: '', to: '', vendor_id: '', sub_process: '' });
   const [applied, setApplied] = useState(f);
   const types = useProcessTypes();
-  const suppliers = useLookup('suppliers');
+  const suppliers = useLookup('process-units');   // process unit: job worker / in-house contractor
   const qs = new URLSearchParams(Object.entries(applied).filter(([, v]) => v) as [string, string][]).toString();
   const summary = useQuery({ queryKey: ['fabric-process', 'summary', qs], queryFn: async () => (await http.get<{ data: any }>(`/fabric-process/summary?${qs}`)).data });
   const jobs = useQuery({ queryKey: ['fabric-process', 'job-status', qs], queryFn: async () => (await http.get<{ data: any[] }>(`/fabric-process/job-status?${qs}`)).data ?? [], enabled: tab === 'jobs' });

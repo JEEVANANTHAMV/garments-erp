@@ -83,7 +83,7 @@ function BillEditor({ doc, onClose, onSaved }: { doc: any | null; onClose: () =>
     bill_date: doc?.bill_date ?? '', supplier_id: doc?.supplier_id ? String(doc.supplier_id) : '', purchase_or_process: doc?.purchase_or_process ?? '', amount: doc?.amount ? String(doc.amount) : '',
     supplier_bill_id: doc?.supplier_bill_id ? String(doc.supplier_bill_id) : '', grn_id: doc?.grn_id ? String(doc.grn_id) : '', remarks: doc?.remarks ?? '',
   });
-  const parties = useLookup('parties');
+  const parties = useLookup('payables');   // purchase / process bills: supplier, job worker, in-house contractor
   const src = useQuery({ queryKey: ['stores', 'bill-sources', b.supplier_id], enabled: !!b.supplier_id,
     queryFn: async () => (await http.get<{ data: { bills: any[]; grns: any[] } }>(`/stores/bill-tracker/sources?supplier_id=${b.supplier_id}`)).data });
   const act = useAction();

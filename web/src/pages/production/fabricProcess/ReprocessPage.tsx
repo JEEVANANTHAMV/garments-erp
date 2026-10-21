@@ -92,7 +92,7 @@ function ReprocessEditor({ returnId, onBack, onDone }: { returnId: number | null
   const qc = useQueryClient();
   const types = useProcessTypes();
   const reasons = useReasons();
-  const suppliers = useLookup('suppliers');
+  const suppliers = useLookup('process-units');   // process unit: job worker / in-house contractor
   const returns = useQuery({ queryKey: ['fabric-process', 'returns'], queryFn: async () => (await http.get<{ data: any[] }>('/fabric-process/returns')).data ?? [] });
   const [head, setHead] = useState({ reprocess_date: today(), source_type: 'RETURN', return_id: returnId ? String(returnId) : '', sub_process: 'RE_DYEING', vendor_id: '', color_name: '', reason_id: '', remarks: '' });
   const [b, setBState] = useState<any>({ billing_type: 'NON_BILLABLE', bill_required: 'NO', billing_reason_id: '', cost_treatment: 'INTERNAL_COST', rate_per_kg: 0, bill_amount: '', internal_cost: 0, billing_remarks: '' });

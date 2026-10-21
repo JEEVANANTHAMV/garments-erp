@@ -67,7 +67,7 @@ function OpeningEditor({ doc, onClose, onSaved }: { doc: any | null; onClose: ()
     material_type: l.material_type, yarn_id: String(l.yarn_id ?? ''), fabric_id: String(l.fabric_id ?? ''), trim_id: String(l.trim_id ?? ''), item_description: l.item_description ?? '',
     color_name: l.color_name ?? '', sizes: l.sizes ?? '', lot_no: l.lot_no ?? '', roll_no: l.roll_no ?? '', uom_id: String(l.uom_id ?? ''), qty: String(l.qty ?? ''), rate: String(l.rate ?? ''), remarks: l.remarks ?? '',
   })) : [blank()]);
-  const whs = useLookup('warehouses'); const parties = useLookup('parties'); const sos = useLookup('sales-orders');
+  const whs = useLookup('warehouses'); const parties = useLookup('suppliers'); const sos = useLookup('sales-orders');
   const yarns = useLookup('yarns'); const fabrics = useLookup('fabrics'); const trims = useLookup('trims'); const uoms = useLookup('uoms');
   const act = useAction();
   const set = (i: number, p: Partial<Line>) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...p } : l)));

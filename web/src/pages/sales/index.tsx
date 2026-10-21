@@ -200,7 +200,7 @@ export function QuotationsPage() {
         { value: 'PROCESS', label: 'Process / Job Work' },
       ] },
       { name: 'buyer_id', label: 'Buyer', lookup: 'buyers' },
-      { name: 'supplier_id', label: 'Supplier', lookup: 'suppliers' },
+      { name: 'supplier_id', label: 'Supplier / job worker', lookup: 'payables' },
       { name: 'status_id', label: 'Status', statusDomain: 'QUOTATION' },
     ]}
     fields={[]} />

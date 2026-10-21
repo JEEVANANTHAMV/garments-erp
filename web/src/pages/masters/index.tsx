@@ -27,9 +27,11 @@ export function PartiesPage() {
       { key: 'roles', header: 'Roles', render: (r: any) => (
         <div className="flex flex-wrap gap-1">
           {r.is_buyer ? <Badge tone="blue">Buyer</Badge> : null}
+          {r.is_customer ? <Badge tone="indigo">Customer</Badge> : null}
           {r.is_supplier ? <Badge tone="green">Supplier</Badge> : null}
-          {r.is_vendor ? <Badge tone="violet">Vendor</Badge> : null}
+          {r.is_vendor ? <Badge tone="violet">Job Worker</Badge> : null}
           {r.is_contractor ? <Badge tone="amber">Contractor</Badge> : null}
+          {r.is_transporter ? <Badge tone="slate">Transporter</Badge> : null}
           {r.is_agent ? <Badge tone="amber">Agent</Badge> : null}
           {r.is_merchandiser ? <Badge tone="sky">Merchandiser</Badge> : null}
         </div>) },
@@ -58,6 +60,7 @@ export function PartiesPage() {
       { name: 'is_supplier', label: 'Supplier', options: yesNo },
       { name: 'is_vendor', label: 'Vendor', options: yesNo },
       { name: 'is_contractor', label: 'In-house contractor', options: yesNo },
+      { name: 'is_transporter', label: 'Transporter', options: yesNo },
       { name: 'is_agent', label: 'Agent', options: yesNo },
       { name: 'is_merchandiser', label: 'Merchandiser', options: yesNo },
       { name: 'is_draft', label: 'Draft Status', options: [{ value: 1, label: 'Drafts' }, { value: 0, label: 'Finalized' }] },

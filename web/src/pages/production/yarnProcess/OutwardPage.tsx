@@ -84,7 +84,7 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
   const nav = useNavigate();
   const types = useYarnTypes();
   const jobs = useJobs();
-  const suppliers = useLookup('suppliers');
+  const suppliers = useLookup('process-units');   // process unit: job worker / in-house contractor
   const warehouses = useLookup('warehouses');
   const detail = useQuery({ queryKey: ['yarn-process', 'outward', id], queryFn: async () => (await http.get<{ data: any }>(`/yarn-process/outward/${id}`)).data, enabled: !!id });
   const d = detail.data;

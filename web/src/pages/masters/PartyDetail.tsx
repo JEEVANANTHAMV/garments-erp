@@ -125,6 +125,7 @@ export function PartyDetailPage() {
     is_vendor: 0,
     is_agent: 0,
     is_contractor: 0,
+    is_transporter: 0,
     party_type: 'EXPORT',
     country_id: null, // defaulted to India once the countries lookup loads (new partners only)
     currency_id: null, // INR for an Indian partner, else USD — looked up by code once currencies load (new partners only)
@@ -258,7 +259,7 @@ export function PartyDetailPage() {
   const isMerchandiserOnly =
     !!form.is_merchandiser && !isBuyerRole && !form.is_supplier && !form.is_vendor && !form.is_agent && !form.is_contractor;
   const hasAnyRole =
-    isBuyerRole || !!form.is_supplier || !!form.is_vendor || !!form.is_agent || !!form.is_merchandiser || !!form.is_contractor;
+    isBuyerRole || !!form.is_supplier || !!form.is_vendor || !!form.is_agent || !!form.is_merchandiser || !!form.is_contractor || !!form.is_transporter;
 
   // If the user unticks a role while its tab is open, fall back to General
   // so the form never sits on a tab that no longer exists.
@@ -999,6 +1000,7 @@ export function PartyDetailPage() {
                   { key: 'is_supplier', label: 'Supplier', color: 'emerald' },
                   { key: 'is_vendor', label: 'Job Worker / CMT', color: 'purple' },
                   { key: 'is_contractor', label: 'In-house Contractor', color: 'amber' },
+                  { key: 'is_transporter', label: 'Transporter', color: 'slate' },
                   { key: 'is_agent', label: 'Buying Agent', color: 'amber' },
                   { key: 'is_merchandiser', label: 'Merchandiser', color: 'sky' },
                 ].map((r) => (

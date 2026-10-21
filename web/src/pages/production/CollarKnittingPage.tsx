@@ -76,7 +76,7 @@ export default function CollarKnittingPage() {
   });
   const { data: yarns = [] } = lk('yarns');
   const { data: styles = [] } = lk('styles');
-  const { data: parties = [] } = lk('parties');
+  const { data: parties = [] } = lk('process-units');   // knitter: job worker / in-house contractor
   const { data: sizes = [] } = lk('sizes-all');
   const { data: soLines = [] } = lk('sales-order-lines');
   const { data: warehouses = [] } = lk('warehouses');

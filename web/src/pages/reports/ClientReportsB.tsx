@@ -14,7 +14,7 @@ const DONE_PENDING: ReportFilter = { key: 'status', label: 'Status', type: 'sele
   options: [{ value: 'pending', label: 'Pending' }, { value: 'done', label: 'Done' }, { value: 'all', label: 'All' }] };
 const FROM: ReportFilter = { key: 'dateFrom', label: 'From', type: 'date' };
 const TO: ReportFilter = { key: 'dateTo', label: 'To', type: 'date' };
-const PARTY: ReportFilter = { key: 'party_id', label: 'Party', type: 'select', lookup: 'parties' };
+const PARTY: ReportFilter = { key: 'party_id', label: 'Supplier / job worker', type: 'select', lookup: 'payables' };
 const ITEM_GROUPS = [{ value: 'YARN', label: 'Yarn' }, { value: 'FABRIC', label: 'Fabric' }, { value: 'TRIM', label: 'Trims / accessories' },
   { value: 'WIP', label: 'WIP (cut panel / garment)' }, { value: 'FINISHED', label: 'Finished goods' }];
 const link = (k: string) => (r: any) => r[k] || null;

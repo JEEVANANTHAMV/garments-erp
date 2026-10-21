@@ -13,6 +13,15 @@ export const lookupRouter = Router();
  */
 type LookupDef = { sql: string; scoped: boolean };
 
+/** A business-partner list for one role filter; label carries "(in-house)" for in-house contractors. */
+const partyLookup = (where: string, extra = ''): LookupDef => ({ scoped: true, sql:
+  `SELECT p.id, p.party_code AS code, IF(p.is_contractor = 1 AND p.is_vendor = 0 AND ${where.includes('is_contractor') ? 1 : 0} = 1, CONCAT(p.party_name, ' (in-house)'), p.party_name) AS label,
+          p.party_name, p.is_buyer, p.is_customer, p.is_supplier, p.is_vendor, p.is_contractor, p.is_agent, p.is_merchandiser, p.is_transporter, p.gstin${extra},
+          (SELECT CONCAT_WS(', ', pa.address_line1, pa.address_line2, pa.city, pa.state, pa.pincode, pc.name)
+             FROM mst_party_address pa LEFT JOIN cfg_country pc ON pc.id = pa.country_id
+            WHERE pa.party_id = p.id AND pa.is_active = 1 ORDER BY pa.is_default DESC, pa.id ASC LIMIT 1) AS default_address
+     FROM mst_party p WHERE p.company_id = ? AND ${where} AND p.is_active = 1 AND p.is_deleted = 0 ORDER BY p.party_name` });
+
 const LOOKUPS: Record<string, LookupDef> = {
   countries:   { sql: `SELECT id, iso2, iso3, name AS label, dial_code FROM cfg_country WHERE is_active=1 ORDER BY name`, scoped: false },
   currencies:  { sql: `SELECT id, code, name AS label, symbol, decimal_place FROM cfg_currency WHERE is_active=1 ORDER BY code`, scoped: false },
@@ -24,19 +33,30 @@ const LOOKUPS: Record<string, LookupDef> = {
   warehouses:  { sql: `SELECT id, warehouse_code AS code, warehouse_name AS label, warehouse_type FROM mst_warehouse WHERE company_id=? AND is_active=1 ORDER BY warehouse_name`, scoped: true },
   'financial-years': { sql: `SELECT id, fy_code AS code, fy_code AS label, start_date, end_date, is_current FROM mst_financial_year WHERE company_id=? ORDER BY start_date DESC`, scoped: true },
 
-  buyers:      { sql: `SELECT id, party_code AS code, party_name AS label, legal_name, io_prefix, currency_id, country_id, payment_terms FROM mst_party WHERE company_id=? AND is_buyer=1 AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },
-  customers:   { sql: `SELECT id, party_code AS code, party_name AS label, legal_name, io_prefix, currency_id, country_id, payment_terms FROM mst_party WHERE company_id=? AND (is_buyer=1 OR is_vendor=1) AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },
-  suppliers:   { sql: `SELECT id, party_code AS code, party_name AS label, currency_id FROM mst_party WHERE company_id=? AND is_supplier=1 AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },
-  vendors:     { sql: `SELECT id, party_code AS code, party_name AS label FROM mst_party WHERE company_id=? AND is_vendor=1 AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },
-  agents:      { sql: `SELECT id, party_code AS code, party_name AS label FROM mst_party WHERE company_id=? AND is_agent=1 AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },
-  merchandisers: { sql: `SELECT id, party_code AS code, party_name AS label, group_code FROM mst_party WHERE company_id=? AND is_merchandiser=1 AND is_active=1 AND is_deleted=0 ORDER BY party_name`, scoped: true },
-  parties:     { sql: `SELECT p.id, p.party_code AS code, p.party_name AS label, p.is_buyer, p.is_supplier, p.is_vendor, p.is_agent, p.is_merchandiser, p.gstin,
-       (SELECT CONCAT_WS(', ', pa.address_line1, pa.address_line2, pa.city, pa.state, pa.pincode, pc.name)
-          FROM mst_party_address pa
-          LEFT JOIN cfg_country pc ON pc.id = pa.country_id
-         WHERE pa.party_id = p.id AND pa.is_active = 1
-         ORDER BY pa.is_default DESC, pa.id ASC LIMIT 1) AS default_address
-  FROM mst_party p WHERE p.company_id=? AND p.is_active=1 AND p.is_deleted=0 ORDER BY p.party_name`, scoped: true },
+  // ── business partners by role (client 21-Oct-2026: "a buyer field lists only buyers, a supplier field only suppliers,
+  //    a job-worker field only job workers"). Each list carries the role flags, GSTIN and default address (ship-to pickers).
+  buyers:          partyLookup(`p.is_buyer = 1`, `, p.legal_name, p.io_prefix, p.currency_id, p.country_id, p.payment_terms`),
+  customers:       partyLookup(`p.is_customer = 1`, `, p.legal_name, p.io_prefix, p.currency_id, p.country_id, p.payment_terms`),
+  suppliers:       partyLookup(`p.is_supplier = 1`, `, p.currency_id`),
+  vendors:         partyLookup(`p.is_vendor = 1`),                                     // job worker / CMT
+  contractors:     partyLookup(`p.is_contractor = 1`),                                 // in-house contractor
+  agents:          partyLookup(`p.is_agent = 1`),
+  merchandisers:   partyLookup(`p.is_merchandiser = 1`, `, p.group_code`),
+  transporters:    partyLookup(`p.is_transporter = 1`),
+  // the unit a process / job work goes to: job worker or in-house contractor
+  'process-units': partyLookup(`(p.is_vendor = 1 OR p.is_contractor = 1)`),
+  // we pay them for goods or work: supplier, job worker, in-house contractor
+  payables:        partyLookup(`(p.is_supplier = 1 OR p.is_vendor = 1 OR p.is_contractor = 1)`),
+  // payments also go to buying agents (commission)
+  payees:          partyLookup(`(p.is_supplier = 1 OR p.is_vendor = 1 OR p.is_contractor = 1 OR p.is_agent = 1)`),
+  // they pay us: buyer, customer
+  receivables:     partyLookup(`(p.is_buyer = 1 OR p.is_customer = 1)`),
+  // job-work billing: the customer whose goods we work on, or the job worker / contractor who works for us
+  'jobwork-parties': partyLookup(`(p.is_customer = 1 OR p.is_vendor = 1 OR p.is_contractor = 1)`),
+  // goods physically move in / out (gate, deliveries): any trading party, never an agent / merchandiser only
+  'trade-parties': partyLookup(`(p.is_buyer = 1 OR p.is_customer = 1 OR p.is_supplier = 1 OR p.is_vendor = 1 OR p.is_contractor = 1 OR p.is_transporter = 1)`),
+  // every partner (admin / audit screens only — a document field uses a role list above)
+  parties:         partyLookup(`1 = 1`),
 
   departments: { sql: `SELECT id, dept_code AS code, dept_name AS label FROM mst_department WHERE company_id=? AND is_active=1 ORDER BY dept_name`, scoped: true },
   colors:      { sql: `SELECT id, color_code AS code, color_name AS label, hex_value FROM mst_color WHERE company_id=? AND is_active=1 ORDER BY color_name`, scoped: true },

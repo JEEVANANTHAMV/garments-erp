@@ -67,7 +67,7 @@ interface InwardBillModalProps {
 
 function InwardBillModal({ open, billId, initialType, onClose, onSaved }: InwardBillModalProps) {
   const toast = useToast();
-  const suppliers = useLookup('suppliers');
+  const suppliers = useLookup('payables');   // supplier / mill / processor
   // GRNs a bill may pull: the supplier's purchase GRNs (not job-work inward), not already billed elsewhere
   const [billSupplier, setBillSupplier] = useState('');
   const billGrns = useQuery({

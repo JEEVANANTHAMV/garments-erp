@@ -157,7 +157,7 @@ export function PackingListDetailPage() {
 
   useEffect(() => {
     Promise.all([
-      api.get('/lookups/sales-orders'), api.get('/lookups/packings'), api.get('/lookups/parties'),
+      api.get('/lookups/sales-orders'), api.get('/lookups/packings'), api.get('/lookups/buyers'),   // buyer + consignee: buyers only
       api.get('/lookups/commercial-invoices').catch(() => ({ data: { data: [] } })),
     ]).then(([so, pk, pt, ci]) => setLk({ so: so.data.data || [], packings: pk.data.data || [], parties: pt.data.data || [], invoices: ci.data.data || [] }));
   }, []);

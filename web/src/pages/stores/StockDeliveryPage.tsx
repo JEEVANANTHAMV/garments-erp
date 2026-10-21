@@ -91,7 +91,7 @@ function DeliveryEditor({ kind, doc, onClose, onSaved }: { kind: Kind; doc: any 
   const [lines, setLines] = useState<Line[]>(doc?.lines?.map((l: any) => ({ source_ref: l.source_ref, material_type: l.material_type, item_name: l.item_name, item_description: l.item_description ?? '',
     color_name: l.color_name ?? '', sizes: l.sizes ?? '', uom_id: l.uom_id, uom_code: l.uom_code, stock_qty: num(l.stock_qty), qty: String(l.qty), rate: String(l.rate ?? ''), remarks: l.remarks ?? '' })) ?? []);
   const [picker, setPicker] = useState(false);
-  const whs = useLookup('warehouses'); const parties = useLookup('parties'); const sos = useLookup('sales-orders'); const uoms = useLookup('uoms');
+  const whs = useLookup('warehouses'); const parties = useLookup('trade-parties'); const sos = useLookup('sales-orders'); const uoms = useLookup('uoms');
   const act = useAction();
   const set = (i: number, p: Partial<Line>) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...p } : l)));
   const add = (rows: StockRow[]) => setLines((ls) => [...ls, ...rows.filter((r) => !ls.some((l) => l.source_ref === r.source_ref)).map((r) => ({

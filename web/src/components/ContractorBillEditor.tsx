@@ -23,7 +23,7 @@ const errText = (e: unknown) => (e instanceof ApiError ? e.message : (e as any)?
 export function ContractorBillEditor({ kind, title, onBack, onDone }: { kind: 'fabric' | 'yarn'; title: ReactNode; onBack: () => void; onDone: (id: number) => void }) {
   const toast = useToast();
   const qc = useQueryClient();
-  const suppliers = useLookup('suppliers');
+  const suppliers = useLookup('process-units');   // process unit: job worker / in-house contractor
   const base = kind === 'fabric' ? '/fabric-process' : '/yarn-process';
   const px = kind === 'fabric' ? 'fpb' : 'ypb';
   const [h, setHState] = useState<PbHead>(emptyPbHead('5'));

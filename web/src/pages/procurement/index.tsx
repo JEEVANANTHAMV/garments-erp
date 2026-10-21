@@ -34,7 +34,7 @@ export function PurchaseOrdersPage() {
       { key: 'approval_state', header: 'State', render: (r: any) => <StatusBadge value={r.approval_state} /> },
     ]}
     filters={[
-      { name: 'supplier_id', label: 'Supplier', lookup: 'suppliers' },
+      { name: 'supplier_id', label: 'Supplier / job worker', lookup: 'payables' },
       { name: 'po_type', label: 'PO type', options: ['MATERIAL','JOBWORK','SERVICE','CAPEX'].map((v) => ({ value: v, label: humanize(v) })) },
       { name: 'approval_state', label: 'State', options: ['DRAFT','PENDING','APPROVED','REJECTED','CLOSED','CANCELLED'].map((v) => ({ value: v, label: humanize(v) })) },
     ]}
@@ -42,7 +42,7 @@ export function PurchaseOrdersPage() {
     fields={[
       { name: 'po_no', label: 'PO number', hint: 'Blank to auto-generate' },
       { name: 'po_date', label: 'PO date', type: 'date', required: true, defaultValue: today() },
-      { name: 'supplier_id', label: 'Supplier', required: true, lookup: 'suppliers' },
+      { name: 'supplier_id', label: 'Supplier / job worker', required: true, lookup: 'payables' },
       { name: 'po_type', label: 'PO type', options: ['MATERIAL','JOBWORK','SERVICE','CAPEX'].map((v) => ({ value: v, label: humanize(v) })), defaultValue: 'MATERIAL' },
       { name: 'so_id', label: 'Against job (I/O / sales order)', lookup: 'sales-orders' },
       { name: 'currency_id', label: 'Currency', required: true, lookup: 'currencies' },

@@ -241,7 +241,7 @@ export default function QuotationDetailPage() {
 
   /* ── lookups ── */
   const buyers     = useLookup('buyers');
-  const suppliers  = useLookup('suppliers');
+  const suppliers  = useLookup('payables');   // purchase → supplier, process / job work → job worker or contractor
   const currencies = useLookup('currencies');
   const branches   = useLookup('branches');
   const agents     = useLookup('agents');

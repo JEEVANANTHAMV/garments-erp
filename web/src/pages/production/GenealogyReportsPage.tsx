@@ -29,7 +29,7 @@ const fmt = (v: unknown, kind?: string) => (v == null || v === '' ? '—' : kind
 export default function GenealogyReportsPage() {
   const [key, setKey] = useState(REPORTS[0].key);
   const rep = REPORTS.find((r) => r.key === key)!;
-  const suppliers = useLookup('suppliers');
+  const suppliers = useLookup('process-units');   // process unit: job worker / in-house contractor
   const [f, setF] = useState({ so_id: '', job_no: '', vendor_id: '', from: '', to: '', roll_no: '' });
   const [run, setRun] = useState(0);
   const params = new URLSearchParams(Object.entries({ so_id: f.so_id, vendor_id: f.vendor_id, from: f.from, to: f.to, roll_no: f.roll_no }).filter(([k, v]) => v && (k !== 'roll_no' || rep.filters.includes('roll'))) as [string, string][]);

@@ -41,8 +41,9 @@ export default function KnittingPage() {
   });
 
   const { data: parties = [] } = useQuery({
-    queryKey: ['lookups', 'parties'],
-    queryFn: async () => (await http.get<{ data: any[] }>('/lookups/parties')).data || [],
+    // the unit that knits for us: job worker / in-house contractor (client 21-Oct-2026: each list only its own role)
+    queryKey: ['lookups', 'process-units'],
+    queryFn: async () => (await http.get<{ data: any[] }>('/lookups/process-units')).data || [],
   });
 
   // Orders list

@@ -84,7 +84,7 @@ export const masterResources: ResourceConfig[] = [
     path: 'parties', table: 'mst_party', permission: 'PARTY', label: 'Business Partner',
     searchable: ['party_code', 'party_name', 'legal_name', 'email', 'gstin', 'pan', 'udyam_no'],
     sortable: ['party_code', 'party_name', 'created_at'], defaultSort: 't.party_name',
-    filters: ['is_customer', 'is_buyer', 'is_supplier', 'is_vendor', 'is_agent', 'is_contractor', 'party_type', 'country_id'],
+    filters: ['is_customer', 'is_buyer', 'is_supplier', 'is_vendor', 'is_agent', 'is_contractor', 'is_transporter', 'party_type', 'country_id'],
     selectExtra: 'c.name AS country_name, cur.code AS currency_code',
     joins: 'LEFT JOIN cfg_country c ON c.id = t.country_id LEFT JOIN cfg_currency cur ON cur.id = t.currency_id',
     // Every address of a completed (non-draft) partner must name its country —
@@ -170,7 +170,7 @@ export const masterResources: ResourceConfig[] = [
       f('short_code', s.nullableStr(3)),
       f('legal_name', s.nullableStr(200)), f('short_name', s.nullableStr(80)),
       f('is_customer', s.bool()), f('is_buyer', s.bool()), f('is_supplier', s.bool()),
-      f('is_vendor', s.bool()), f('is_agent', s.bool()), f('is_contractor', s.bool()),
+      f('is_vendor', s.bool()), f('is_agent', s.bool()), f('is_contractor', s.bool()), f('is_transporter', s.bool()),
       f('jw_bill_basis', s.nullableStr(12)),
       f('party_type', s.enum(['DOMESTIC','EXPORT','BOTH'])),
       f('country_id', s.id()), f('currency_id', s.id()),

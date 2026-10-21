@@ -74,7 +74,7 @@ export default function YarnProcessPage() {
     queryFn: async () => (await http.get<{ data: any[] }>(`/lookups/${name}`)).data || [],
   });
   const { data: yarns = [] } = lk('yarns');
-  const { data: parties = [] } = lk('parties');
+  const { data: parties = [] } = lk('process-units');   // processor: job worker / in-house contractor
   const { data: warehouses = [] } = lk('warehouses');
   const { data: styles = [] } = lk('styles');
   const { data: soLines = [] } = lk('sales-order-lines');

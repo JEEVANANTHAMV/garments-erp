@@ -189,7 +189,7 @@ export function FabricProcessReportsPage() {
   const [tab, setTab] = useState(REPORTS[0].key);
   const [f, setF] = useState({ from: '', to: '', vendor_id: '', sub_process: '' });
   const [applied, setApplied] = useState(f);
-  const suppliers = useLookup('suppliers');
+  const suppliers = useLookup('process-units');   // process unit: job worker / in-house contractor
   const types = useProcessTypes();
   const rep = REPORTS.find((r) => r.key === tab)!;
   const qs = new URLSearchParams(Object.entries(applied).filter(([, v]) => v) as [string, string][]).toString();

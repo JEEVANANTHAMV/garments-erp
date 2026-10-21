@@ -155,8 +155,9 @@ export default function KnittingProgramPage() {
     queryFn: async () => (await http.get<{ data: any[] }>('/lookups/sales-order-lines')).data || [],
   });
   const { data: parties = [] } = useQ({
-    queryKey: ['lookups', 'parties'],
-    queryFn: async () => (await http.get<{ data: any[] }>('/lookups/parties')).data || [],
+    // the unit that knits for us: job worker / in-house contractor (client 21-Oct-2026: each list only its own role)
+    queryKey: ['lookups', 'process-units'],
+    queryFn: async () => (await http.get<{ data: any[] }>('/lookups/process-units')).data || [],
   });
   // the I/O (job) list — picking it fills SO, buyer PO and style
   const { data: jobs = [] } = useQ({

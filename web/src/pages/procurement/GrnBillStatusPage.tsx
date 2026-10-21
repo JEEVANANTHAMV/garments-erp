@@ -21,7 +21,7 @@ export default function GrnBillStatusPage() {
   const [params] = useSearchParams();
   const [tab, setTab] = useState(params.get('status') ?? 'OPEN');
   const [f, setF] = useState({ source: params.get('source') ?? '', supplier_id: '', from: '', to: '', overdue: false });
-  const suppliers = useLookup('suppliers');
+  const suppliers = useLookup('payables');   // supplier / contractor
   const qs = new URLSearchParams(Object.entries({ status: tab === 'ALL' ? '' : tab, source: f.source, supplier_id: f.supplier_id, from: f.from, to: f.to, overdue: f.overdue ? '1' : '' }).filter(([, v]) => v) as [string, string][]).toString();
   const q = useQuery({ queryKey: ['grn-bill-status', qs], queryFn: async () => (await http.get<{ data: any[]; summary: any }>(`/procurement/grn-bill-status?${qs}`)) });
   const rows = q.data?.data ?? [];

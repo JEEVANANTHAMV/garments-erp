@@ -22,7 +22,7 @@ export default function TnaListPage() {
   const [newModalOpen, setNewModalOpen] = useState(false);
 
   // Lookups
-  const buyers = useLookup('parties');
+  const buyers = useLookup('buyers');
   const salesOrders = useLookup('sales-orders');
   const templatesQuery = useQuery({
     queryKey: ['tna-templates'],

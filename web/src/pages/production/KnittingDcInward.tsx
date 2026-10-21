@@ -160,7 +160,7 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
   const toast = useToast();
   const qc = useQueryClient();
   const { data: warehouses = [] } = useLookup('warehouses');
-  const { data: suppliers = [] } = useLookup('suppliers');
+  const { data: suppliers = [] } = useLookup('process-units');   // knitting unit: job worker / in-house contractor
   // One knitting DC can carry several jobs (programs) to the same knitter
   const { data: allPrograms = [] } = useQuery({
     queryKey: ['knitting-programs', 'dc-ready'],

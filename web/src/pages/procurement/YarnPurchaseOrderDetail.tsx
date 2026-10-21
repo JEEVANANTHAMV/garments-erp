@@ -156,7 +156,7 @@ export default function YarnPurchaseOrderDetailPage() {
     } catch (e: any) { toast(e?.message || 'Could not resolve the yarn item', 'error'); }
   };
   const styles = useLookup('styles');
-  const parties = useLookup('parties');
+  const parties = useLookup('process-units');   // ship-to unit: job worker / in-house contractor (with GSTIN + address)
   const currencies = useLookup('currencies');
 
   // "Bill to" default = the signed-in company (name, address, GSTIN) — was hard-coded to one company.

@@ -211,7 +211,7 @@ function ReprocessEditor({ returnId, onBack, onDone }: { returnId: number | null
   const qc = useQueryClient();
   const types = useYarnTypes();
   const reasons = useReasons();
-  const suppliers = useLookup('suppliers');
+  const suppliers = useLookup('process-units');   // process unit: job worker / in-house contractor
   const returns = useQuery({ queryKey: ['yarn-process', 'returns'], queryFn: async () => (await http.get<{ data: any[] }>('/yarn-process/returns')).data ?? [] });
   const rejectLots = useQuery({ queryKey: ['yarn-process', 'reject-lots'], queryFn: async () => (await http.get<{ data: any[] }>('/yarn-process/reject-lots')).data ?? [] });
   const [head, setHead] = useState({ reprocess_date: today(), source_type: returnId ? 'RETURN' : 'RETURN', return_id: returnId ? String(returnId) : '', process_code: 'RE_YARN_DYEING', vendor_id: '', target_shade: '', reason_id: '', remarks: '' });

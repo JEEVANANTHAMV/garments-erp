@@ -50,7 +50,7 @@ export function ShipmentPlanPage() {
     fetchPlans();
     Promise.all([
       api.get('/available-packages'),
-      api.get('/lookups/parties'),
+      api.get('/lookups/buyers'),
       api.get('/packing-lists', { params: { for_shipment: 1 } }),
     ]).then(([pk, pt, pl]) => {
       setAvailablePkgs(pk.data.data || []);
@@ -298,7 +298,7 @@ export function ShipmentDetailPage() {
     Promise.all([
       api.get('/lookups/sales-orders'),
       api.get('/packing-lists', { params: isNew ? { for_shipment: 1 } : {} }),
-      api.get('/lookups/parties'),
+      api.get('/lookups/buyers'),
     ]).then(([so, pl, pt]) => {
       setSalesOrders(so.data.data || []);
       setPackingLists(pl.data.data || []);
@@ -879,18 +879,21 @@ export function DispatchDetailPage() {
 
   const [salesOrders, setSalesOrders] = useState<any[]>([]);
   const [buyers, setBuyers] = useState<any[]>([]);
+  const [transporters, setTransporters] = useState<any[]>([]);
   const [shipments, setShipments] = useState<any[]>([]);
   const toast = useToast();
 
   useEffect(() => {
     Promise.all([
       api.get('/lookups/sales-orders'),
-      api.get('/lookups/parties'),
+      api.get('/lookups/receivables'),      // dispatch goes to a buyer or a (domestic) customer
       api.get('/shipments'),
-    ]).then(([so, pt, sh]) => {
+      api.get('/lookups/transporters'),
+    ]).then(([so, pt, sh, tr]) => {
       setSalesOrders(so.data.data || []);
       setBuyers(pt.data.data || []);
       setShipments(sh.data.data || []);
+      setTransporters(tr.data.data || []);
     });
   }, []);
 
@@ -971,7 +974,7 @@ export function DispatchDetailPage() {
                 ...(so && !p.shipment_id && !p.packing_list_id ? { io_no: so.job_no || so.io_no || so.so_no } : {}), ...(so?.buyer_id && !p.buyer_id ? { buyer_id: so.buyer_id } : {}) }));
             }}
             options={[{ value: '', label: '— Select —' }, ...salesOrders.map((s: any) => ({ value: s.id, label: s.label || s.code }))]} />
-          <Select label="Buyer" value={header.buyer_id || ''}
+          <Select label="Buyer / customer" value={header.buyer_id || ''}
             onChange={e => setField('buyer_id', e.target.value ? Number(e.target.value) : null)}
             options={[{ value: '', label: '— Select —' }, ...buyers.map((s: any) => ({ value: s.id, label: s.label || s.code }))]} />
         </div>
@@ -979,9 +982,9 @@ export function DispatchDetailPage() {
 
       <Card title="Transport Details">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4">
-          <Select label="Transporter" value={header.transporter_id || ''}
+          <Select label="Transporter" value={header.transporter_id || ''} hint={transporters.length ? undefined : 'Tick the Transporter role on the logistics partner (Business Partners)'}
             onChange={e => setField('transporter_id', e.target.value ? Number(e.target.value) : null)}
-            options={[{ value: '', label: '— Select —' }, ...buyers.map((s: any) => ({ value: s.id, label: s.label || s.code }))]} />
+            options={[{ value: '', label: '— Select —' }, ...transporters.map((s: any) => ({ value: s.id, label: s.label || s.code }))]} />
           <Input label="Vehicle No" value={header.vehicle_no || ''} onChange={e => setField('vehicle_no', e.target.value)}
             placeholder="TN 39 AB 1234" />
           <Input label="Driver Name" value={header.driver_name || ''} onChange={e => setField('driver_name', e.target.value)} />

@@ -54,13 +54,13 @@ export function ReceiptsPage() {
       { key: 'bank_ref', header: 'Bank ref' },
     ]}
     filters={[
-      { name: 'party_id', label: 'Party', lookup: 'parties' },
+      { name: 'party_id', label: 'Party', lookup: 'receivables' },
       { name: 'mode', label: 'Mode', options: ['BANK_TRANSFER','CASH','CHEQUE','LC_REALISATION','DD','NEFT','RTGS'].map((v) => ({ value: v, label: humanize(v) })) },
     ]}
     fields={[
       { name: 'receipt_no', label: 'Receipt no', hint: 'Blank to auto-generate' },
       { name: 'receipt_date', label: 'Receipt date', type: 'date', required: true, defaultValue: today() },
-      { name: 'party_id', label: 'Party', required: true, lookup: 'parties' },
+      { name: 'party_id', label: 'Party (buyer / customer)', required: true, lookup: 'receivables' },
       { name: 'mode', label: 'Payment mode', required: true,
         options: ['BANK_TRANSFER','CASH','CHEQUE','LC_REALISATION','DD','NEFT','RTGS'].map((v) => ({ value: v, label: humanize(v) })) },
       { name: 'amount', label: 'Amount', type: 'number', required: true },
@@ -90,13 +90,13 @@ export function PaymentsPage() {
       { key: 'bank_ref', header: 'Bank ref' },
     ]}
     filters={[
-      { name: 'party_id', label: 'Party', lookup: 'parties' },
+      { name: 'party_id', label: 'Party', lookup: 'payees' },
       { name: 'mode', label: 'Mode', options: ['BANK_TRANSFER','CASH','CHEQUE','DD','NEFT','RTGS'].map((v) => ({ value: v, label: humanize(v) })) },
     ]}
     fields={[
       { name: 'payment_no', label: 'Payment no', hint: 'Blank to auto-generate' },
       { name: 'payment_date', label: 'Payment date', type: 'date', required: true, defaultValue: today() },
-      { name: 'party_id', label: 'Party', required: true, lookup: 'parties' },
+      { name: 'party_id', label: 'Party (supplier / job worker / contractor / agent)', required: true, lookup: 'payees' },
       { name: 'mode', label: 'Payment mode', required: true,
         options: ['BANK_TRANSFER','CASH','CHEQUE','DD','NEFT','RTGS'].map((v) => ({ value: v, label: humanize(v) })) },
       { name: 'amount', label: 'Amount', type: 'number', required: true },

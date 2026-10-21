@@ -154,7 +154,7 @@ export default function FabricPurchaseOrderDetailPage() {
     return cur && !vals.includes(String(cur)) ? [String(cur), ...vals] : vals;
   };
   const uoms = useLookup('uoms');
-  const parties = useLookup('parties');
+  const parties = useLookup('process-units');   // ship-to unit: job worker / in-house contractor (with GSTIN + address)
   const currencies = useLookup('currencies');
 
   // "Bill to" default = the signed-in company (name, address, GSTIN) — was hard-coded to one company.

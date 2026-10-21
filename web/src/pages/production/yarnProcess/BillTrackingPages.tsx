@@ -151,7 +151,7 @@ export function YarnProcessReportsPage() {
   const [tab, setTab] = useState(REPORTS[0].key);
   const [f, setF] = useState({ from: '', to: '', vendor_id: '', process_code: '' });
   const [applied, setApplied] = useState(f);
-  const suppliers = useLookup('suppliers');
+  const suppliers = useLookup('process-units');   // process unit: job worker / in-house contractor
   const types = useYarnTypes();
   const rep = REPORTS.find((r) => r.key === tab)!;
   const qs = new URLSearchParams(Object.entries(applied).filter(([, v]) => v) as [string, string][]).toString();

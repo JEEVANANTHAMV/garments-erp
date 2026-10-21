@@ -116,7 +116,7 @@ export function ProductionOrdersPage() {
       { name: 'planned_qty', label: 'Planned quantity', type: 'number' },
       { name: 'produced_qty', label: 'Produced quantity', type: 'number' },
       { name: 'is_jobwork', label: 'Outsourced (job work)', type: 'checkbox' },
-      { name: 'vendor_id', label: 'Job-work vendor', lookup: 'vendors' },
+      { name: 'vendor_id', label: 'Job-work vendor', lookup: 'process-units' },
       { name: 'approval_state', label: 'State', options: STATES.map((v) => ({ value: v, label: humanize(v) })), defaultValue: 'DRAFT' },
       { name: 'status_id', label: 'Status', statusDomain: 'PROD_ORDER' },
       { name: 'remarks', label: 'Remarks', type: 'textarea' },
@@ -183,7 +183,7 @@ export function StitchingPage() {
       { name: 'prod_order_id', label: 'Work order', required: true, lookup: 'production-orders' },
       { name: 'unit_id', label: 'Unit', lookup: 'units' },
       { name: 'line_no', label: 'Line number' },
-      { name: 'vendor_id', label: 'CMT vendor', lookup: 'vendors' },
+      { name: 'vendor_id', label: 'CMT vendor', lookup: 'process-units' },
       ...qtyFields,
       { name: 'smv', label: 'SMV', type: 'number', hint: 'Standard minute value' },
       { name: 'rate', label: 'Rate per piece', type: 'number' },
@@ -208,7 +208,7 @@ export function PrintingPage() {
       ...qtyCols,
     ]}
     filters={[{ name: 'print_type', label: 'Print type', options: TYPES.map((v) => ({ value: v, label: humanize(v) })) },
-              { name: 'vendor_id', label: 'Vendor', lookup: 'vendors' }]}
+              { name: 'vendor_id', label: 'Vendor', lookup: 'process-units' }]}
     fields={[
       { name: 'print_no', label: 'Print no', hint: 'Blank to auto-generate' },
       { name: 'print_date', label: 'Date', type: 'date', required: true, defaultValue: today() },
@@ -216,7 +216,7 @@ export function PrintingPage() {
       { name: 'print_type', label: 'Print type', required: true, options: TYPES.map((v) => ({ value: v, label: humanize(v) })) },
       { name: 'placement', label: 'Placement', placeholder: 'e.g. Front chest' },
       { name: 'no_of_colors', label: 'Number of colours', type: 'number' },
-      { name: 'vendor_id', label: 'Vendor', lookup: 'vendors' },
+      { name: 'vendor_id', label: 'Vendor', lookup: 'process-units' },
       ...qtyFields,
       { name: 'rate', label: 'Rate per piece', type: 'number' },
       { name: 'status_id', label: 'Status', statusDomain: 'PROCESS' },
@@ -239,7 +239,7 @@ export function EmbroideryPage() {
       { key: 'vendor_name', header: 'Vendor' },
       ...qtyCols,
     ]}
-    filters={[{ name: 'vendor_id', label: 'Vendor', lookup: 'vendors' }]}
+    filters={[{ name: 'vendor_id', label: 'Vendor', lookup: 'process-units' }]}
     fields={[
       { name: 'emb_no', label: 'Embroidery no', hint: 'Blank to auto-generate' },
       { name: 'emb_date', label: 'Date', type: 'date', required: true, defaultValue: today() },
@@ -247,7 +247,7 @@ export function EmbroideryPage() {
       { name: 'design_ref', label: 'Design reference' },
       { name: 'stitch_count', label: 'Stitch count', type: 'number' },
       { name: 'placement', label: 'Placement' },
-      { name: 'vendor_id', label: 'Vendor', lookup: 'vendors' },
+      { name: 'vendor_id', label: 'Vendor', lookup: 'process-units' },
       ...qtyFields,
       { name: 'rate', label: 'Rate per piece', type: 'number' },
       { name: 'status_id', label: 'Status', statusDomain: 'PROCESS' },
@@ -272,13 +272,13 @@ export function WashingPage() {
         render: (r: any) => r.shrinkage_pct ? `${fmtDecimal(r.shrinkage_pct, 2)}%` : '—' },
     ]}
     filters={[{ name: 'wash_type', label: 'Wash type', options: TYPES.map((v) => ({ value: v, label: humanize(v) })) },
-              { name: 'vendor_id', label: 'Vendor', lookup: 'vendors' }]}
+              { name: 'vendor_id', label: 'Vendor', lookup: 'process-units' }]}
     fields={[
       { name: 'wash_no', label: 'Wash no', hint: 'Blank to auto-generate' },
       { name: 'wash_date', label: 'Date', type: 'date', required: true, defaultValue: today() },
       { name: 'prod_order_id', label: 'Work order', required: true, lookup: 'production-orders' },
       { name: 'wash_type', label: 'Wash type', required: true, options: TYPES.map((v) => ({ value: v, label: humanize(v) })) },
-      { name: 'vendor_id', label: 'Vendor', lookup: 'vendors' },
+      { name: 'vendor_id', label: 'Vendor', lookup: 'process-units' },
       ...qtyFields,
       { name: 'shrinkage_pct', label: 'Shrinkage %', type: 'number' },
       { name: 'rate', label: 'Rate per piece', type: 'number' },
@@ -335,7 +335,7 @@ export function ProcessTransactionsPage() {
     filters={[
       { name: 'prod_order_id', label: 'Work order', lookup: 'production-orders' },
       { name: 'stage_id', label: 'Stage', lookup: 'process-stages' },
-      { name: 'vendor_id', label: 'Vendor', lookup: 'vendors' },
+      { name: 'vendor_id', label: 'Vendor', lookup: 'process-units' },
     ]}
     fields={[
       { name: 'txn_no', label: 'Transaction no', hint: 'Blank to auto-generate' },
@@ -344,7 +344,7 @@ export function ProcessTransactionsPage() {
       { name: 'stage_id', label: 'Process stage', required: true, lookup: 'process-stages' },
       { name: 'from_unit', label: 'From unit', lookup: 'units' },
       { name: 'to_unit', label: 'To unit', lookup: 'units' },
-      { name: 'vendor_id', label: 'Job-work vendor', lookup: 'vendors' },
+      { name: 'vendor_id', label: 'Job-work vendor', lookup: 'process-units' },
       ...qtyFields,
       { name: 'received_qty', label: 'Received back qty', type: 'number' },
       { name: 'jobwork_rate', label: 'Job-work rate', type: 'number' },

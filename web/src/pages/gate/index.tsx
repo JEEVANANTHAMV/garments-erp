@@ -214,7 +214,7 @@ export function GateInwardsPage() {
         { name: 'entry_type', label: 'Entry Type', options: ENTRY_TYPES },
         { name: 'material_type', label: 'Material', options: MATERIAL_TYPES },
         { name: 'status', label: 'Status', options: INWARD_STATUSES },
-        { name: 'party_id', label: 'Supplier', lookup: 'parties' },
+        { name: 'party_id', label: 'Party', lookup: 'trade-parties' },
       ]}
       fields={[
         // Stamped from the system clock when the entry is opened (and by the server on save)
@@ -222,7 +222,7 @@ export function GateInwardsPage() {
         { name: 'entry_time', label: 'Entry Time', type: 'time', readOnly: true, defaultValue: () => nowStamp().time, hint: 'System time' },
         { name: 'ref_no', label: 'Against our DC (scanned)', readOnly: true, hint: 'Filled by scanning our DC barcode' },
         { name: 'entry_type', label: 'Entry Type', required: true, options: ENTRY_TYPES, defaultValue: 'PURCHASE_INWARD' },
-        { name: 'party_id', label: 'Supplier / Vendor', required: true, lookup: 'parties' },
+        { name: 'party_id', label: 'Supplier / Job worker / Customer', required: true, lookup: 'trade-parties' },
         { name: 'vehicle_no', label: 'Vehicle Number', required: true, placeholder: 'e.g. TN 38 BJ 1234' },
         { name: 'driver_name', label: 'Driver Name', placeholder: 'Driver full name' },
         { name: 'driver_phone', label: 'Driver Phone', placeholder: '+91 98765 43210' },
@@ -351,14 +351,14 @@ export function GateOutwardsPage() {
       filters={[
         { name: 'pass_type', label: 'Pass Type', options: PASS_TYPES },
         { name: 'status', label: 'Status', options: OUTWARD_STATUSES },
-        { name: 'party_id', label: 'Recipient Vendor', lookup: 'parties' },
+        { name: 'party_id', label: 'Recipient', lookup: 'payables' },
       ]}
       fields={[
         { name: 'pass_date', label: 'Pass Date', type: 'date', readOnly: true, defaultValue: () => nowStamp().date, hint: 'System date' },
         { name: 'pass_time', label: 'Pass Time', type: 'time', readOnly: true, defaultValue: () => nowStamp().time, hint: 'System time' },
         { name: 'ref_no', label: 'DC (scanned)', readOnly: true, hint: 'Filled by scanning the DC barcode' },
         { name: 'pass_type', label: 'Pass Type', required: true, options: PASS_TYPES, defaultValue: 'RETURNABLE_JOBWORK' },
-        { name: 'party_id', label: 'Recipient Vendor / Subcontractor', lookup: 'parties' },
+        { name: 'party_id', label: 'Recipient job worker / contractor / supplier', lookup: 'payables' },
         { name: 'to_unit_id', label: 'Or Internal Destination Unit', lookup: 'units' },
         { name: 'vehicle_no', label: 'Vehicle Number', required: true, placeholder: 'e.g. TN 38 BJ 5678' },
         { name: 'driver_name', label: 'Driver Name', placeholder: 'Driver full name' },

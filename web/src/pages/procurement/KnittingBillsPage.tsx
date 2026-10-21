@@ -65,7 +65,7 @@ function KnittingBillList({ onOpen }: { onOpen: (v: 'new' | number) => void }) {
 function KnittingBillEditor({ onBack, onDone }: { onBack: () => void; onDone: (id: number) => void }) {
   const toast = useToast();
   const qc = useQueryClient();
-  const suppliers = useLookup('suppliers');
+  const suppliers = useLookup('process-units');   // process unit: job worker / in-house contractor
   const [h, setHState] = useState<PbHead>(emptyPbHead('5'));
   const setH = (f: (x: PbHead) => PbHead) => setHState(f);
   const [charges, setChargesState] = useState<InvoiceCharges>(emptyPbCharges());
