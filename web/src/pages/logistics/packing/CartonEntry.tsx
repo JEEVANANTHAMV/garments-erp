@@ -57,9 +57,9 @@ export function CartonEntryPage() {
   const working = !!o && ['APPROVED', 'IN_PROGRESS'].includes(o.order_status);
   const valOf = (c: CartonRow, k: keyof Dims, f: keyof CartonRow) => edits[c.id]?.[k] ?? str(c[f]);
   const dirty = useMemo(() => cartons.filter((c) => editable(c) && DIM_KEYS.some(([k, f]) => edits[c.id]?.[k] !== undefined && edits[c.id]![k] !== str(c[f]))), [cartons, edits]);
-  const selected = live.filter((c) => sel.has(c.id));
-  const toggle = (id: number) => setSel((x) => { const y = new Set(x); if (y.has(id)) y.delete(id); else y.add(id); return y; });
   const selectable = live.filter((c) => !n(c.is_posted));
+  const selected = selectable.filter((c) => sel.has(c.id));   // a carton posted / voided since it was ticked drops out
+  const toggle = (id: number) => setSel((x) => { const y = new Set(x); if (y.has(id)) y.delete(id); else y.add(id); return y; });
 
   const bulk = async (action: string, extra: Record<string, unknown>, done: (d: any) => string) => {
     if (!o) return;
