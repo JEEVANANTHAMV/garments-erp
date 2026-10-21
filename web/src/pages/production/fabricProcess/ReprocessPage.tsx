@@ -133,7 +133,7 @@ function ReprocessEditor({ returnId, onBack, onDone }: { returnId: number | null
         {head.source_type === 'RETURN' && <Select label="Return no *" value={head.return_id} placeholder="— Return —" onChange={(e) => { setHead({ ...head, return_id: e.target.value }); setSel({}); }}
           options={(returns.data ?? []).filter((r) => n(r.total_kg) - n(r.reprocessed_kg) > 0.0005).map((r) => ({ value: r.id, label: `${r.return_no} · ${r.inward_no ?? ''} · ${kg(n(r.total_kg) - n(r.reprocessed_kg))} KG open` }))} />}
         <Select label="Process *" value={head.sub_process} onChange={(e) => setHead({ ...head, sub_process: e.target.value })} options={(types.data ?? []).filter((t) => t.is_reprocess).map((t) => ({ value: t.code, label: t.name }))} />
-        <Select label="Process unit (Supplier / Vendor) *" value={head.vendor_id} placeholder="—" onChange={(e) => setHead({ ...head, vendor_id: e.target.value })} options={toOptions(suppliers.data)} />
+        <Select label="Process unit (job worker / contractor) *" value={head.vendor_id} placeholder="—" onChange={(e) => setHead({ ...head, vendor_id: e.target.value })} options={toOptions(suppliers.data)} />
         <Input label="New colour" value={head.color_name} onChange={(e) => setHead({ ...head, color_name: e.target.value })} />
         <Select label="Reason *" value={head.reason_id} placeholder="—" onChange={(e) => setHead({ ...head, reason_id: e.target.value })} options={(reasons.data ?? []).map((r) => ({ value: r.id, label: r.reason }))} />
         <Textarea label="Remarks" className="col-span-2 md:col-span-5" rows={1} value={head.remarks} onChange={(e) => setHead({ ...head, remarks: e.target.value })} />

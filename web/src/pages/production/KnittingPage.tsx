@@ -510,7 +510,7 @@ export default function KnittingPage() {
               >
                 <option value="">-- In-House or Select Party --</option>
                 {parties.map((p: any) => (
-                  <option key={p.id} value={p.id}>{p.party_name}</option>
+                  <option key={p.id} value={p.id}>{p.label}</option>
                 ))}
               </select>
             </div>

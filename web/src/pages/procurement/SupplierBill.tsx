@@ -1381,7 +1381,7 @@ export function SupplierBillsPage() {
             label: 'Bill Category',
             options: BILL_TYPES.map((b) => ({ value: b.value, label: b.label })),
           },
-          { name: 'supplier_id', label: 'Supplier', lookup: 'suppliers' },
+          { name: 'supplier_id', label: 'Supplier / job worker', lookup: 'payables' },
           { name: 'po_id', label: 'PO', lookup: 'purchase-orders' },
           { name: 'grn_id', label: 'GRN', lookup: 'grns' },
           {

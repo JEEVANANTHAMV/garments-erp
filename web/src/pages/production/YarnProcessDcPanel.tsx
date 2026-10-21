@@ -170,7 +170,7 @@ export function YarnProcessDcPanel({ process, yarns, parties, warehouses, onChan
         footer={<><Button variant="secondary" onClick={() => setOutOpen(false)}>Cancel</Button><Button loading={saving} onClick={saveOutward}>Save DC</Button></>}>
         <FormSection title="Document & processor">
           <Input label="DC date *" type="date" value={out.dc_date} onChange={(e) => setOut({ ...out, dc_date: e.target.value })} />
-          <Select label="Processor (Supplier / Vendor) *" value={out.vendor_id} onChange={(e) => setOut({ ...out, vendor_id: e.target.value })} placeholder="Select" options={vendorOpts} />
+          <Select label="Processor (job worker / contractor) *" value={out.vendor_id} onChange={(e) => setOut({ ...out, vendor_id: e.target.value })} placeholder="Select" options={vendorOpts} />
           <Select label="From store *" value={out.warehouse_id} onChange={(e) => setOut({ ...out, warehouse_id: e.target.value })} placeholder="Select" options={whOpts} />
           <Input label="Vehicle no" value={out.vehicle_no} onChange={(e) => setOut({ ...out, vehicle_no: e.target.value })} />
         </FormSection>

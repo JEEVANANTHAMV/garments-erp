@@ -209,7 +209,7 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
         <Input label="DC date *" type="date" value={head.ypo_date} disabled={!editable} onChange={(e) => setHead({ ...head, ypo_date: e.target.value })} />
         <Select label="Process *" value={head.process_code} disabled={!editable} onChange={(e) => setHead({ ...head, process_code: e.target.value })}
           options={(types.data ?? []).filter((t) => t.is_active && (!t.is_reprocess || head.process_code === t.code)).map((t) => ({ value: t.code, label: t.name }))} />
-        <Select label="Process unit (Supplier / Vendor) *" value={head.vendor_id} disabled={!editable} placeholder="— Process unit —" onChange={(e) => setHead({ ...head, vendor_id: e.target.value })} options={toOptions(suppliers.data)} />
+        <Select label="Process unit (job worker / contractor) *" value={head.vendor_id} disabled={!editable} placeholder="— Process unit —" onChange={(e) => setHead({ ...head, vendor_id: e.target.value })} options={toOptions(suppliers.data)} />
         <Select label="From store" value={head.from_warehouse_id} disabled={!editable} placeholder="— Yarn store —" onChange={(e) => setHead({ ...head, from_warehouse_id: e.target.value })} options={toOptions(warehouses.data)} />
         <Input label="To process location" value={head.to_location} disabled={!editable} onChange={(e) => setHead({ ...head, to_location: e.target.value })} />
         <Input label="Challan no" value={head.challan_no} disabled={!editable} onChange={(e) => setHead({ ...head, challan_no: e.target.value })} />

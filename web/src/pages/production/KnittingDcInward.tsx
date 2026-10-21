@@ -270,7 +270,7 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
         <div className="space-y-4">
           <FormSection cols={4} className="!mb-0">
             <Input label="DC Date" type="date" value={h.dc_date ?? ''} onChange={(e) => setH({ ...h, dc_date: e.target.value })} id="kdc-date" />
-            <Select label="Knitting unit (Supplier / Vendor)" required value={h.vendor_id ?? ''} placeholder="— Select —"
+            <Select label="Knitting unit (job worker / contractor)" required value={h.vendor_id ?? ''} placeholder="— Select —"
               onChange={(e) => { setH({ ...h, vendor_id: e.target.value }); setJobs((js) => js.map((j) => ({ ...j, quote: { quotation_id: '', quotation_line_id: '', rate_per_kg: '' } }))); }} id="kdc-vendor">
               {suppliers.map((p: any) => <option key={p.id} value={p.id}>{p.label}</option>)}
             </Select>

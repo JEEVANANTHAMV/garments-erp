@@ -82,7 +82,7 @@ export function FabricProcessLedgerPage() {
       <FpTitle no={8} title="Process Ledger / Summary" sub="Outward, good, reject, loss, return, reprocess and balance — process, job and date wise" />
       <div className="card mb-3 grid grid-cols-2 items-end gap-3 p-4 md:grid-cols-6">
         <Select label="Process" value={f.sub_process} placeholder="All" onChange={(e) => setF({ ...f, sub_process: e.target.value })} options={(types.data ?? []).map((t) => ({ value: t.code, label: t.name }))} />
-        <Select label="Contractor" value={f.vendor_id} placeholder="All" onChange={(e) => setF({ ...f, vendor_id: e.target.value })} options={toOptions(suppliers.data)} />
+        <Select label="Process unit" value={f.vendor_id} placeholder="All" onChange={(e) => setF({ ...f, vendor_id: e.target.value })} options={toOptions(suppliers.data)} />
         <Input label="From date" type="date" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} />
         <Input label="To date" type="date" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} />
         <Button onClick={() => setApplied(f)}><Search size={14} className="mr-1" /> Search</Button>
