@@ -887,11 +887,8 @@ packingEngineRouter.get('/orders/:id/cartons', requirePermission('PACKING.VIEW')
   res.json({ data: d.cartons });
 }));
 
-packingEngineRouter.post('/orders/:id/cartons', requirePermission('PACKING.CREATE'), ah(async (req, res) => {
-  const cid = req.user!.companyId;
-  const id = Number(req.params.id);
-  const b = cartonSchema.parse(req.body);
-  const cartonId = await transaction(async (tx) => {
+/** Create one carton on a loaded + locked working order (single screen, generate, bulk). */
+async function createCartonTx(tx: any, req: any, cid: number, id: number, b: z.infer<typeof cartonSchema>) {
     const o = await loadOrder(tx, cid, id, true);
     if (!WORKING_ORDER.includes(o.order_status)) throw BadRequest(`Packing order ${o.pack_no} is ${o.order_status} — cartons are packed on an approved order`);
     await lockJob(tx, Number(o.so_id));
@@ -926,15 +923,18 @@ packingEngineRouter.post('/orders/:id/cartons', requirePermission('PACKING.CREAT
     await cartonEvent(tx, req, { id: ins.insertId, packing_id: id }, 'CREATE', null, status, null, { lines: b.lines, polybags: bags });
     await audit(req, 'trx_carton', ins.insertId, 'INSERT', undefined, { carton_no: cartonNo, lines: b.lines, polybag_qty: bags }, tx);
     return ins.insertId;
-  });
-  res.status(201).json({ data: await cartonDetail(cid, cartonId) });
-}));
+}
 
-packingEngineRouter.put('/cartons/:id', requirePermission('PACKING.UPDATE'), ah(async (req, res) => {
+packingEngineRouter.post('/orders/:id/cartons', requirePermission('PACKING.CREATE'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = Number(req.params.id);
   const b = cartonSchema.parse(req.body);
-  await transaction(async (tx) => {
+  const cartonId = await transaction((tx) => createCartonTx(tx, req, cid, id, b));
+  res.status(201).json({ data: await cartonDetail(cid, cartonId) });
+}));
+
+/** Update one draft / open carton (single screen and bulk save). */
+async function updateCartonTx(tx: any, req: any, cid: number, id: number, b: z.infer<typeof cartonSchema>) {
     const c = await lockCarton(tx, cid, id);
     const o = await loadOrder(tx, cid, Number(c.packing_id), true);
     if (Number(c.is_posted) || !EDITABLE_CARTON.includes(c.carton_status)) {
@@ -963,7 +963,13 @@ packingEngineRouter.put('/cartons/:id', requirePermission('PACKING.UPDATE'), ah(
     await writeCartonLines(tx, id, o, b.lines);
     await cartonEvent(tx, req, c, 'UPDATE', c.carton_status, status, null, { lines: b.lines, polybags: bags });
     await audit(req, 'trx_carton', id, 'UPDATE', before, { lines: b.lines, polybag_qty: bags }, tx);
-  });
+}
+
+packingEngineRouter.put('/cartons/:id', requirePermission('PACKING.UPDATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = Number(req.params.id);
+  const b = cartonSchema.parse(req.body);
+  await transaction((tx) => updateCartonTx(tx, req, cid, id, b));
   res.json({ data: await cartonDetail(cid, id) });
 }));
 
@@ -986,11 +992,7 @@ const verifySchema = z.object({ net_weight_kg: nonNeg(), gross_weight_kg: nonNeg
   .refine((b) => b.gross_weight_kg == null || b.net_weight_kg == null || b.gross_weight_kg >= b.net_weight_kg,
     { message: 'Gross weight must be at least the net weight', path: ['gross_weight_kg'] });
 
-packingEngineRouter.post('/cartons/:id/verify', requirePermission('PACKING.UPDATE'), ah(async (req, res) => {
-  const cid = req.user!.companyId;
-  const id = Number(req.params.id);
-  const b = verifySchema.parse(req.body ?? {});
-  await transaction(async (tx) => {
+async function verifyCartonTx(tx: any, req: any, cid: number, id: number, b: z.infer<typeof verifySchema>) {
     const c = await lockCarton(tx, cid, id);
     const o = await loadOrder(tx, cid, Number(c.packing_id), true);
     if (!EDITABLE_CARTON.includes(c.carton_status)) throw BadRequest(`Carton ${c.carton_no} is ${c.carton_status} — only a draft / open carton is verified`);
@@ -1005,21 +1007,29 @@ packingEngineRouter.post('/cartons/:id/verify', requirePermission('PACKING.UPDAT
       [req.user!.id, net ?? null, gross ?? null, v.is_partial, id]);
     await cartonEvent(tx, req, c, 'VERIFY', c.carton_status, 'VERIFIED', null, { pieces: v.total, capacity: v.cap, polybags: c.polybag_qty, std_polybags: v.std_polybags, labels_ok: b.labels_ok ?? null });
     await audit(req, 'trx_carton', id, 'UPDATE', { carton_status: c.carton_status }, { carton_status: 'VERIFIED' }, tx);
-  });
+}
+
+packingEngineRouter.post('/cartons/:id/verify', requirePermission('PACKING.UPDATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = Number(req.params.id);
+  const b = verifySchema.parse(req.body ?? {});
+  await transaction((tx) => verifyCartonTx(tx, req, cid, id, b));
   res.json({ data: await cartonDetail(cid, id) });
 }));
 
-packingEngineRouter.post('/cartons/:id/seal', requirePermission('PACKING.UPDATE'), ah(async (req, res) => {
-  const cid = req.user!.companyId;
-  const id = Number(req.params.id);
-  const b = z.object({ seal_no: str(60) }).parse(req.body ?? {});
-  await transaction(async (tx) => {
+async function sealCartonTx(tx: any, req: any, cid: number, id: number, b: { seal_no?: string | null }) {
     const c = await lockCarton(tx, cid, id);
     if (c.carton_status !== 'VERIFIED') throw BadRequest(`Carton ${c.carton_no} is ${c.carton_status} — verify it before sealing`);
     await txExecute(tx, `UPDATE trx_carton SET carton_status = 'SEALED', sealed_by = ?, sealed_at = NOW(), seal_no = COALESCE(?, seal_no) WHERE id = ?`, [req.user!.id, b.seal_no, id]);
     await cartonEvent(tx, req, c, 'SEAL', 'VERIFIED', 'SEALED', null, { seal_no: b.seal_no ?? c.seal_no });
     await audit(req, 'trx_carton', id, 'UPDATE', { carton_status: 'VERIFIED' }, { carton_status: 'SEALED', seal_no: b.seal_no }, tx);
-  });
+}
+
+packingEngineRouter.post('/cartons/:id/seal', requirePermission('PACKING.UPDATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = Number(req.params.id);
+  const b = z.object({ seal_no: str(60) }).parse(req.body ?? {});
+  await transaction((tx) => sealCartonTx(tx, req, cid, id, b));
   res.json({ data: await cartonDetail(cid, id) });
 }));
 
@@ -1045,11 +1055,7 @@ packingEngineRouter.post('/cartons/:id/reopen', requirePermission('PACKING.APPRO
 }));
 
 /** Void a carton (reason). A posted carton needs PACKING.APPROVE and is reversed first. The number is never reused. */
-packingEngineRouter.post('/cartons/:id/void', requireAny('PACKING.UPDATE', 'PACKING.APPROVE'), ah(async (req, res) => {
-  const cid = req.user!.companyId;
-  const id = Number(req.params.id);
-  const { reason } = reasonSchema.parse(req.body ?? {});
-  await transaction(async (tx) => {
+async function voidCartonTx(tx: any, req: any, cid: number, id: number, reason: string) {
     const c = await lockCarton(tx, cid, id);
     if (c.carton_status === 'VOID') throw BadRequest('Carton is already void');
     await assertNotDownstream(tx, c);
@@ -1061,7 +1067,13 @@ packingEngineRouter.post('/cartons/:id/void', requireAny('PACKING.UPDATE', 'PACK
     await cartonEvent(tx, req, c, 'VOID', c.carton_status, 'VOID', reason, { reversed: rev.reversed });
     await recalcOrder(tx, o.id);
     await audit(req, 'trx_carton', id, 'UPDATE', { carton_status: c.carton_status }, { carton_status: 'VOID', reason }, tx);
-  });
+}
+
+packingEngineRouter.post('/cartons/:id/void', requireAny('PACKING.UPDATE', 'PACKING.APPROVE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = Number(req.params.id);
+  const { reason } = reasonSchema.parse(req.body ?? {});
+  await transaction((tx) => voidCartonTx(tx, req, cid, id, reason));
   res.json({ data: await cartonDetail(cid, id) });
 }));
 
@@ -1080,6 +1092,166 @@ packingEngineRouter.post('/cartons/:id/reverse', requirePermission('PACKING.APPR
     if (o.order_status === 'COMPLETED') await txExecute(tx, `UPDATE trx_packing SET order_status = 'IN_PROGRESS', completed_at = NULL WHERE id = ?`, [o.id]);
   });
   res.json({ data: await cartonDetail(cid, id) });
+}));
+
+// ═══════════════════════════════════════════════════════════════ generate + bulk cartons (client call 21-Oct-2026)
+// "The system already works out N cartons for the pieces — make all N at once, let us delete what is not needed,
+//  then just fill the weights and save. 100 boxes one by one is too slow."
+
+/**
+ * Cartons still to pack on the order, from what can go into a carton now (ready, not in other cartons, within the plan;
+ * bagged first for individual-piece bagging). Size ratio → full ratio cartons per colour, then the rest in partial
+ * cartons (each size at most its ratio share); no ratio → filled to the carton capacity, honouring mixed size / colour.
+ */
+function planCartons(o: any, elig: any[], opts: { color_id?: number | null; max: number }) {
+  const r = ruleOf(o);
+  const cap = Math.max(n(r.standard_pieces_per_carton), 1);
+  const individual = o.packing_mode === 'INDIVIDUAL_PIECE';
+  const perCtn = ratioPerCarton(o, r);
+  const pool = elig.filter((e) => n(e.planned) > 0 && (!opts.color_id || Number(e.color_id) === opts.color_id))
+    .map((e) => ({ e, left: Math.max(0, Math.min(n(e.available), n(e.planned) - n(e.posted) - n(e.draft), individual ? n(e.bagged_open) - n(e.draft) : Infinity)) }))
+    .filter((x) => x.left > 0);
+  const cartons: { color_id: number; size_id: number; qty: number }[][] = [];
+  let skipped = 0;
+  if (perCtn) {
+    const colours = [...new Set(pool.map((x) => Number(x.e.color_id)))];
+    for (const c of colours) {
+      const items = pool.filter((x) => Number(x.e.color_id) === c);
+      skipped += items.filter((x) => !perCtn.has(Number(x.e.size_id))).reduce((a, x) => a + x.left, 0);
+      for (;;) {
+        const lines = [...perCtn].map(([sz, q]) => {
+          const it = items.find((x) => Number(x.e.size_id) === sz);
+          const take = Math.min(q, it?.left ?? 0);
+          if (it) it.left -= take;
+          return { color_id: c, size_id: sz, qty: take };
+        }).filter((l) => l.qty > 0);
+        if (!lines.length) break;
+        cartons.push(lines);
+      }
+    }
+  } else {
+    const groupOf = (e: any) => (Number(r.allow_mixed_sizes) && Number(r.allow_mixed_colours) ? 'all'
+      : Number(r.allow_mixed_sizes) ? `c${e.color_id}` : Number(r.allow_mixed_colours) ? `s${e.size_id}` : `${e.color_id}:${e.size_id}`);
+    const groups = new Map<string, typeof pool>();
+    for (const x of pool) { const g = groupOf(x.e); groups.set(g, [...(groups.get(g) ?? []), x]); }
+    for (const items of groups.values()) {
+      let cur: { color_id: number; size_id: number; qty: number }[] = []; let q = 0;
+      for (const it of items) {
+        while (it.left > 0) {
+          const take = Math.min(it.left, cap - q);
+          const same = cur.find((l) => l.color_id === Number(it.e.color_id) && l.size_id === Number(it.e.size_id));
+          if (same) same.qty += take; else cur.push({ color_id: Number(it.e.color_id), size_id: Number(it.e.size_id), qty: take });
+          it.left -= take; q += take;
+          if (q >= cap) { cartons.push(cur); cur = []; q = 0; }
+        }
+      }
+      if (cur.length) cartons.push(cur);
+    }
+  }
+  const name = (c: number, sz: number) => elig.find((e) => Number(e.color_id) === c && Number(e.size_id) === sz);
+  const out = cartons.slice(0, opts.max).map((lines, i) => {
+    const total = lines.reduce((a, l) => a + l.qty, 0);
+    return { seq: i + 1, total, partial: total < cap, lines: lines.map((l) => ({ ...l, color_name: name(l.color_id, l.size_id)?.color_name, size_code: name(l.color_id, l.size_id)?.size_code })) };
+  });
+  return { cap, cartons: out, more: Math.max(cartons.length - opts.max, 0), skipped_not_in_ratio: skipped,
+    pieces: out.reduce((a, c) => a + c.total, 0), full: out.filter((c) => !c.partial).length, partial: out.filter((c) => c.partial).length };
+}
+
+const generateSchema = z.object({
+  preview: z.boolean().optional(),
+  color_id: idOpt(),
+  max_cartons: z.coerce.number().int().min(1).max(500).default(500),
+  carton_trim_id: idOpt(), polybag_trim_id: idOpt(),
+  net_weight_kg: nonNeg(), gross_weight_kg: nonNeg(), length_cm: nonNeg(), width_cm: nonNeg(), height_cm: nonNeg(),
+}).refine((b) => b.gross_weight_kg == null || b.net_weight_kg == null || b.gross_weight_kg >= b.net_weight_kg,
+  { message: 'Gross weight must be at least the net weight', path: ['gross_weight_kg'] });
+
+/** POST /orders/:id/cartons/generate — preview, or create all the cartons the order still needs as draft cartons (one transaction). */
+packingEngineRouter.post('/orders/:id/cartons/generate', requirePermission('PACKING.CREATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = Number(req.params.id);
+  const b = generateSchema.parse(req.body ?? {});
+  const out = await transaction(async (tx) => {
+    const o = await loadOrder(tx, cid, id, true);
+    if (!WORKING_ORDER.includes(o.order_status)) throw BadRequest(`Packing order ${o.pack_no} is ${o.order_status} — cartons are packed on an approved order`);
+    await lockJob(tx, Number(o.so_id));
+    const plan = planCartons(o, await eligibility(tx, jobKeyOf(o), Number(o.so_id), id), { color_id: b.color_id ?? null, max: b.max_cartons });
+    if (b.preview) return { ...plan, created: [] as any[] };
+    if (!plan.cartons.length) {
+      throw BadRequest(o.packing_mode === 'INDIVIDUAL_PIECE'
+        ? 'Nothing left to put in cartons — every bagged piece is already in a carton (bag more pieces on the Polybag screen first)'
+        : 'Nothing left to put in cartons — the planned pieces are already in cartons or not yet in the FG store');
+    }
+    const created: { id: number; carton_no: string }[] = [];
+    for (const c of plan.cartons) {
+      try {
+        const cartonId = await createCartonTx(tx, req, cid, id, cartonSchema.parse({
+          carton_trim_id: b.carton_trim_id ?? null, polybag_trim_id: b.polybag_trim_id ?? null,
+          net_weight_kg: b.net_weight_kg ?? null, gross_weight_kg: b.gross_weight_kg ?? null,
+          length_cm: b.length_cm ?? null, width_cm: b.width_cm ?? null, height_cm: b.height_cm ?? null,
+          lines: c.lines.map((l) => ({ color_id: l.color_id, size_id: l.size_id, qty: l.qty })), save_as_draft: true,
+        }));
+        created.push({ id: cartonId, carton_no: (await txQueryOne<any>(tx, `SELECT carton_no FROM trx_carton WHERE id = ?`, [cartonId])).carton_no });
+      } catch (e: any) { throw BadRequest(`Carton ${c.seq} of ${plan.cartons.length}: ${e?.message ?? e}`); }
+    }
+    await audit(req, 'trx_packing', id, 'UPDATE', undefined, { action: 'GENERATE_CARTONS', cartons: created.map((c) => c.carton_no), pieces: plan.pieces }, tx);
+    return { ...plan, created };
+  });
+  res.status(b.preview ? 200 : 201).json({ data: out });
+}));
+
+const bulkSchema = z.object({
+  action: z.enum(['save', 'verify', 'seal', 'verify_seal', 'void', 'post']),
+  ids: z.array(z.coerce.number().int().positive()).max(500).optional(),
+  // save: per carton only what changes (weights, dims, seal no, lines…); the rest is kept
+  items: z.array(z.object({ id: z.coerce.number().int().positive() }).passthrough()).max(500).optional(),
+  reason: z.string().trim().max(300).optional(),
+});
+
+/** POST /orders/:id/cartons/bulk — save / verify / seal / verify + seal / void many cartons of the order, all or nothing. */
+packingEngineRouter.post('/orders/:id/cartons/bulk', requireAny('PACKING.UPDATE', 'PACKING.CREATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = Number(req.params.id);
+  const b = bulkSchema.parse(req.body ?? {});
+  const ids = b.action === 'save' ? (b.items ?? []).map((x) => x.id) : (b.ids ?? []);
+  if (!ids.length) throw BadRequest('Select the cartons first');
+  if (new Set(ids).size !== ids.length) throw BadRequest('A carton is listed twice');
+  if (b.action === 'void' && (b.reason ?? '').length < 3) throw BadRequest('Give a reason for deleting the cartons (at least 3 characters)');
+  if (b.action !== 'save' && b.action !== 'void' && !req.user!.permissions.has('PACKING.UPDATE')) throw BadRequest('Verifying / sealing / posting needs the Update Packing right');
+  if (b.action === 'post') {
+    const own = await query<any>(`SELECT c.id FROM trx_carton c JOIN trx_packing p ON p.id = c.packing_id WHERE c.id IN (?) AND c.packing_id = ? AND p.company_id = ?`, [ids, id, cid]);
+    if (own.length !== ids.length) throw BadRequest(`${ids.length - own.length} of the selected cartons are not on this packing order`);
+    res.json({ data: { action: 'post', ...(await postMany(req, id, ids)) } });
+    return;
+  }
+  const done = await transaction(async (tx) => {
+    const own = await txQuery<any>(tx, `SELECT c.id, c.carton_no FROM trx_carton c JOIN trx_packing p ON p.id = c.packing_id WHERE c.id IN (?) AND c.packing_id = ? AND p.company_id = ?`, [ids, id, cid]);
+    if (own.length !== ids.length) throw BadRequest(`${ids.length - own.length} of the selected cartons are not on this packing order`);
+    const noOf = new Map(own.map((c: any) => [Number(c.id), c.carton_no]));
+    const results: { id: number; carton_no: string }[] = [];
+    for (const cid2 of ids) {
+      const tag = noOf.get(cid2);
+      try {
+        if (b.action === 'save') {
+          const cur = await txQueryOne<any>(tx, `SELECT * FROM trx_carton WHERE id = ?`, [cid2]);
+          const item = (b.items ?? []).find((x) => x.id === cid2)!;
+          const base = { carton_trim_id: cur.carton_trim_id, polybag_trim_id: cur.polybag_trim_id, polybag_qty: cur.polybag_qty,
+            net_weight_kg: cur.net_weight_kg, gross_weight_kg: cur.gross_weight_kg, length_cm: cur.length_cm, width_cm: cur.width_cm, height_cm: cur.height_cm,
+            seal_no: cur.seal_no, remarks: cur.remarks, lines: await cartonLines(tx, cid2) };
+          const { id: _i, ...patch } = item as any;
+          // lines changed → polybags follow the standard again unless given
+          if (patch.lines && patch.polybag_qty === undefined) delete (base as any).polybag_qty;
+          await updateCartonTx(tx, req, cid, cid2, cartonSchema.parse({ ...base, ...patch, save_as_draft: false }));
+        } else if (b.action === 'verify') await verifyCartonTx(tx, req, cid, cid2, verifySchema.parse({}));
+        else if (b.action === 'seal') await sealCartonTx(tx, req, cid, cid2, { seal_no: null });
+        else if (b.action === 'verify_seal') { await verifyCartonTx(tx, req, cid, cid2, verifySchema.parse({})); await sealCartonTx(tx, req, cid, cid2, { seal_no: null }); }
+        else await voidCartonTx(tx, req, cid, cid2, b.reason!);
+      } catch (e: any) { throw BadRequest(`Carton ${tag}: ${e?.message ?? e}`); }
+      results.push({ id: cid2, carton_no: tag });
+    }
+    return results;
+  });
+  res.json({ data: { action: b.action, cartons: done } });
 }));
 
 async function postMany(req: any, orderId: number, cartonIds: number[] | null) {

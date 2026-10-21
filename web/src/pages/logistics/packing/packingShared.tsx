@@ -33,6 +33,7 @@ export interface CartonRow {
   std_polybag_qty: number; is_partial: number; net_weight_kg: number | null; gross_weight_kg: number | null; contents: string | null;
   carton_trim_name?: string; polybag_trim_name?: string; seal_no?: string | null; posted_at?: string | null;
   pl_plan_id?: number | null; pl_ctn_no?: number | null; pl_plan_no?: string | null;
+  length_cm?: number | null; width_cm?: number | null; height_cm?: number | null;
 }
 export interface Order {
   id: number; pack_no: string; pack_date: string; so_id: number; io_no: string; job_no: string; so_no: string; buyer_po_no: string | null;

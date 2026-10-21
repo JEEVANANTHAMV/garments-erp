@@ -134,8 +134,11 @@ export function expectedCartons(lines: { color_id: number; size_id: number; qty:
     let total = 0;
     for (const m of byColour.values()) {
       const full = Math.min(...[...perCtn].map(([sz, q]) => Math.floor((m.get(sz) ?? 0) / q)));
-      const rest = [...m.values()].reduce((a, q) => a + q, 0) - full * [...perCtn.values()].reduce((a, q) => a + q, 0);
-      total += full + Math.ceil(Math.max(rest, 0) / cap);
+      // the rest: a size never goes above its ratio share in a carton, so the leftovers need max(rest ÷ share) cartons;
+      // sizes outside the ratio are counted by the capacity
+      const ratioRest = Math.max(0, ...[...perCtn].map(([sz, q]) => Math.ceil(Math.max((m.get(sz) ?? 0) - full * q, 0) / q)));
+      const outside = [...m].filter(([sz]) => !perCtn.has(sz)).reduce((a, [, q]) => a + q, 0);
+      total += full + ratioRest + Math.ceil(outside / cap);
     }
     return total;
   }
