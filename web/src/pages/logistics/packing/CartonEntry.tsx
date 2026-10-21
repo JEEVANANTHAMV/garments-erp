@@ -15,6 +15,17 @@ const DIM_KEYS: [keyof Dims, keyof CartonRow, string][] = [
   ['net', 'net_weight_kg', 'Net kg'], ['gross', 'gross_weight_kg', 'Gross kg'], ['l', 'length_cm', 'L cm'], ['w', 'width_cm', 'W cm'], ['h', 'height_cm', 'H cm'],
 ];
 const str = (v: unknown) => (v == null || v === '' ? '' : String(Number(v)));
+/** "Black/S:2, Black/M:4" → "Black · S2 M4" (one short line per colour, so 100 cartons stay readable). */
+const shortContents = (v: string | null) => {
+  if (!v) return '';
+  const by = new Map<string, string[]>();
+  for (const part of v.split(', ')) {
+    const m = /^(.*)\/([^/:]+):(\d+)$/.exec(part.trim());
+    if (!m) return v;
+    by.set(m[1], [...(by.get(m[1]) ?? []), `${m[2]}${m[3]}`]);
+  }
+  return [...by].map(([c, xs]) => `${c} · ${xs.join(' ')}`).join(' | ');
+};
 const editable = (c: CartonRow) => ['DRAFT', 'OPEN'].includes(c.carton_status) && !n(c.is_posted);
 
 /**
@@ -142,7 +153,7 @@ export function CartonEntryPage() {
                         <td className="td">{c.carton_status !== 'VOID' && !n(c.is_posted) && <input type="checkbox" data-sel={c.carton_no} checked={sel.has(c.id)} onChange={() => toggle(c.id)} />}</td>
                         <td className="td">{c.carton_seq}</td>
                         <td className="td font-mono">{c.carton_no}{c.pl_plan_no && <div className="font-sans text-[11px] text-blue-700" data-plan-ctn={c.carton_no}>{c.pl_plan_no} · ctn {c.pl_ctn_no}</div>}</td>
-                        <td className="td">{c.contents}</td>
+                        <td className="td whitespace-nowrap" title={c.contents ?? ''}>{shortContents(c.contents)}</td>
                         <td className="td text-right">{c.pieces_total}{n(c.is_partial) ? <span className="ml-1 text-[11px] text-amber-700">partial</span> : null}</td>
                         <td className="td text-right">{c.polybag_qty} <span className="text-slate-400">({c.std_polybag_qty})</span></td>
                         {DIM_KEYS.map(([k, f]) => (
