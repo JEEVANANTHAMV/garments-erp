@@ -215,6 +215,16 @@ export function EwayBillEditorPage() {
 
   const save = async (quiet = false): Promise<boolean> => {
     if (!payload) return false;
+    // what the server would reject outright (a raw 400) — say it in plain words first
+    const missing = [
+      !payload.to_name && 'Consignee name is required — the document has no party, type the consignee (To) name',
+      !payload.from_name && 'Consignor name is required',
+      !payload.document_number && 'Document number is required',
+      !/^\d{4}-\d{2}-\d{2}$/.test(String(payload.document_date ?? '')) && 'Document date is required',
+      !items.length && 'Add at least one item',
+      ...items.map((it, i) => !it.product_name.trim() && `Item ${i + 1}: product name is required`),
+    ].filter(Boolean) as string[];
+    if (missing.length) { setErr({ message: 'Fill these before saving', problems: missing }); return false; }
     setBusy('save'); setErr(null);
     try {
       if (isNew) {
@@ -380,7 +390,9 @@ export function EwayBillEditorPage() {
           <FormSection title="To — consignee" cols={4}>
             <Input label="GSTIN" required id="ewb-to-gstin" maxLength={15} value={f.to_gstin} hint="URP = unregistered person"
               onChange={(x) => set({ to_gstin: x.target.value.toUpperCase() })} />
-            <Input label="Name" required className="sm:col-span-2 lg:col-span-3" maxLength={100} value={f.to_name} onChange={(x) => set({ to_name: x.target.value })} />
+            <Input label="Name" required id="ewb-to-name" className="sm:col-span-2 lg:col-span-3" maxLength={100} value={f.to_name}
+              error={!ro && !f.to_name.trim() ? 'Consignee name is required — the document has no party, type it here' : undefined}
+              onChange={(x) => set({ to_name: x.target.value })} />
             <Input label="Address line 1" className="sm:col-span-2" maxLength={120} value={f.to_address1} onChange={(x) => set({ to_address1: x.target.value })} />
             <Input label="Address line 2" className="sm:col-span-2" maxLength={120} value={f.to_address2} onChange={(x) => set({ to_address2: x.target.value })} />
             <Input label="Place" id="ewb-to-place" maxLength={50} value={f.to_place} onChange={(x) => set({ to_place: x.target.value })} />

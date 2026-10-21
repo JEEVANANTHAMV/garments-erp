@@ -120,6 +120,8 @@ export function PartBModal({ open, onClose, meta, run, e }: { open: boolean; onC
   });
   const set = (p: Partial<typeof f>) => setF((x) => ({ ...x, ...p }));
   const a = useAction(run, onClose);
+  // manual mode, first vehicle and no distance on the draft: the validity cannot be worked out — take it from the portal
+  const needValid = !meta.online && !e.valid_upto && !(Number(e.distance_km) > 0);
   const submit = () => a.go('part-b', {
     ...f, transport_doc_no: f.transport_doc_no || null, transport_doc_date: f.transport_doc_date || null, remark: f.remark || null,
     valid_upto: meta.online ? undefined : localToIso(f.valid_upto),
@@ -128,7 +130,7 @@ export function PartBModal({ open, onClose, meta, run, e }: { open: boolean; onC
     <Modal open={open} onClose={onClose} title="Update vehicle (Part B)" icon={<Truck size={16} />} size="md"
       subtitle={e.valid_upto ? 'Change of vehicle — breakdown, transhipment. Validity stays as it is.' : 'First Part B starts the validity of the e-way bill.'}
       footer={<><Button variant="secondary" onClick={onClose} disabled={a.busy}>Cancel</Button>
-        <Button id="ewb-partb-save" loading={a.busy} disabled={!f.reason || !f.from_place} onClick={submit}>Update vehicle</Button></>}>
+        <Button id="ewb-partb-save" loading={a.busy} disabled={!f.reason || !f.from_place || (needValid && !f.valid_upto)} onClick={submit}>Update vehicle</Button></>}>
       <ErrorBox err={a.err} id="ewb-partb-error" />
       <div className="grid gap-3 sm:grid-cols-2">
         <Select label="Mode" value={f.transport_mode} onChange={(ev) => set({ transport_mode: ev.target.value })} options={TRANSPORT_MODES.map((m) => ({ value: m, label: m }))} />
@@ -142,8 +144,10 @@ export function PartBModal({ open, onClose, meta, run, e }: { open: boolean; onC
         <Input label="From place" required id="ewb-partb-place" value={f.from_place} onChange={(ev) => set({ from_place: ev.target.value })} />
         <Select label="From state" required value={f.from_state} onChange={(ev) => set({ from_state: ev.target.value })} placeholder="Select…" options={meta.states.map((s) => ({ value: s, label: s }))} />
         <Input label="Remark" className="sm:col-span-2" maxLength={50} value={f.remark} onChange={(ev) => set({ remark: ev.target.value })} />
-        {!meta.online && <Input label="Valid upto (from the portal)" type="datetime-local" className="sm:col-span-2" value={f.valid_upto}
-          onChange={(ev) => set({ valid_upto: ev.target.value })} hint="Leave blank to keep the validity (or work it out from the distance on the first Part B)" />}
+        {!meta.online && <Input label="Valid upto (from the portal)" type="datetime-local" className="sm:col-span-2" id="ewb-partb-valid" required={needValid}
+          value={f.valid_upto} onChange={(ev) => set({ valid_upto: ev.target.value })}
+          hint={needValid ? 'The draft has no distance, so the validity cannot be worked out — enter the “valid upto” shown on the portal'
+            : e.valid_upto ? 'Leave blank to keep the validity' : 'Leave blank to work it out from the distance'} />}
       </div>
     </Modal>
   );
