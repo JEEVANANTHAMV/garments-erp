@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react';
 import { ScanLine } from 'lucide-react';
 import { CrudPage } from '../../components/CrudPage';
+import { EwayBillButton } from '../../components/EwayBillButton';
+import { useAuth } from '../../lib/auth';
 import { Badge } from '../../components/ui';
 import { http, ApiError } from '../../lib/api';
 import { fmtDecimal, fmtDate, humanize } from '../../lib/format';
@@ -250,6 +252,7 @@ export function GateInwardsPage() {
 /* ------------------------------------------------ Outward Gate Pass (OGP) */
 export function GateOutwardsPage() {
   const [nw, setNw] = useState<{ key: number; values: Record<string, unknown> } | null>(null);
+  const { can } = useAuth();
   return (
     <>
     <DcScanBar mode="OUT" onLoad={(values) => setNw({ key: Date.now(), values })} />
@@ -347,6 +350,11 @@ export function GateOutwardsPage() {
             return <Badge tone={tone}>{humanize(r.status)}</Badge>;
           },
         },
+        ...(can('EWAY.VIEW') ? [{
+          key: 'ewb',
+          header: 'E-way bill',
+          render: (r: any) => <EwayBillButton sourceType="GATE_OUTWARD" sourceId={r.id} compact />,
+        }] : []),
       ]}
       filters={[
         { name: 'pass_type', label: 'Pass Type', options: PASS_TYPES },

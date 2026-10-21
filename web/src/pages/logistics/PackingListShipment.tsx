@@ -6,6 +6,7 @@ import { api } from '../../lib/api';
 import { fmtDate, fmtNumber, fmtDecimal, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
 import { JobSelect } from '../../components/JobSelect';
+import { EwayBillButton, useEwayBill } from '../../components/EwayBillButton';
 
 /* ============================================================
    1-2. PACKING LISTS — register + ASSORTED / SOLID / MIXED editor
@@ -876,6 +877,7 @@ export function DispatchDetailPage() {
     status_id: null, remarks: '',
   });
   const [saving, setSaving] = useState(false);
+  const { data: ewb } = useEwayBill('DISPATCH', isNew ? null : id);   // generated EWB owns header.eway_bill_no
 
   const [salesOrders, setSalesOrders] = useState<any[]>([]);
   const [buyers, setBuyers] = useState<any[]>([]);
@@ -948,6 +950,7 @@ export function DispatchDetailPage() {
         </div>
         <div className="flex gap-2">
           <Button variant="ghost" onClick={() => nav('/logistics/dispatches')}>← Back</Button>
+          {!isNew && <EwayBillButton sourceType="DISPATCH" sourceId={id} />}
           {isNew && <Button onClick={handleSave} loading={saving}>Create Dispatch</Button>}
         </div>
       </div>
@@ -990,7 +993,8 @@ export function DispatchDetailPage() {
           <Input label="Driver Name" value={header.driver_name || ''} onChange={e => setField('driver_name', e.target.value)} />
           <Input label="LR No" value={header.lr_no || ''} onChange={e => setField('lr_no', e.target.value)} />
           <Input label="LR Date" type="date" value={header.lr_date || ''} onChange={e => setField('lr_date', e.target.value)} />
-          <Input label="E-Way Bill No" value={header.eway_bill_no || ''} onChange={e => setField('eway_bill_no', e.target.value)} />
+          <Input label="E-Way Bill No" value={header.eway_bill_no || ''} onChange={e => setField('eway_bill_no', e.target.value)}
+            readOnly={Boolean(ewb)} hint={ewb ? 'Set by the e-way bill — change it there' : undefined} />
           <Input label="Dispatch Time" type="time" value={header.dispatch_time || ''} onChange={e => setField('dispatch_time', e.target.value)} />
           <Input label="Delivery Location" value={header.delivery_location || ''} onChange={e => setField('delivery_location', e.target.value)} />
           <Select label="Mode" value={header.mode}

@@ -12,6 +12,7 @@ import { useAuth } from '../../lib/auth';
 import { fmtDate, fmtDateTime, fmtNumber, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
 import { useLookup, toOptions } from '../../hooks/useLookup';
+import { EwayBillButton } from '../../components/EwayBillButton';
 
 /**
  * Process Outward (DC) and Process Inward with bundle numbers.
@@ -327,6 +328,7 @@ export function ProcessDcPage() {
             { key: 'received_pcs', header: 'Recd (PCS)', align: 'right' as const, render: (r: any) => <span className="text-emerald-700">{fmtNumber(r.received_pcs)}</span> },
             { key: 'pending_pcs', header: 'Pending (PCS)', align: 'right' as const, render: (r: any) => Number(r.pending_pcs) > 0 && !['DRAFT', 'CANCELLED'].includes(r.status) ? <span className="font-semibold text-amber-700">{fmtNumber(r.pending_pcs)}</span> : '—' },
             { key: 'status', header: 'Status', render: (r: any) => <StatusChip value={r.status} /> },
+            { key: 'ewb', header: 'E-way bill', render: (r: any) => r.status === 'CANCELLED' ? '—' : <EwayBillButton sourceType="PROCESS_DC" sourceId={r.id} compact /> },
           ]}
         />
       </Card>
@@ -1364,6 +1366,7 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
         {canReceive && dc.dc_kind !== 'FABRIC' && (
           <Button variant="secondary" disabled={busy} id="dc-return-btn" onClick={() => setReturning(true)}>Return unprocessed</Button>
         )}
+        {dc.status !== 'CANCELLED' && <EwayBillButton sourceType="PROCESS_DC" sourceId={id} />}
         <Button variant="secondary" onClick={() => printDc(id, toast, false)}><Eye size={13} className="inline mr-1" />Preview DC</Button>
         <Button variant="secondary" onClick={() => printDc(id, toast)}><Printer size={13} className="inline mr-1" />Print DC</Button>
         {dc.status === 'DRAFT' && <Button variant="secondary" onClick={() => onEdit(id)}>Edit draft</Button>}

@@ -3,6 +3,7 @@ import { Plus, Trash2, Truck, Undo2, PackageSearch } from 'lucide-react';
 import { PageHeader, Tabs, Modal, FormSection, Input, Select, Button, LoadingBlock, StatusBadge, Checkbox, useDebounced } from '../../components/ui';
 import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useAuth } from '../../lib/auth';
+import { EwayBillButton } from '../../components/EwayBillButton';
 import { useToast } from '../../hooks/useToast';
 import { fmtDate, fmtDecimal } from '../../lib/format';
 import {
@@ -189,6 +190,7 @@ function DeliveryView({ id, onClose, onEdit }: { id: number; onClose: () => void
       footerStart={doc ? <StatusBadge value={doc.status} /> : null}
       footer={doc && <>
         <Button variant="secondary" onClick={onClose}>Close</Button>
+        {doc.status !== 'CANCELLED' && <EwayBillButton sourceType="STOCK_DELIVERY" sourceId={id} />}
         {doc.status === 'DRAFT' && <Button variant="secondary" id="delivery-cancel" onClick={() => setReason('cancel')}>Cancel DC</Button>}
         {doc.status === 'DRAFT' && <Button variant="secondary" id="delivery-edit" onClick={() => onEdit(doc)}>Edit</Button>}
         {outstanding && can('INVENTORY.ADJUST') && <Button variant="secondary" id="delivery-close" onClick={() => setReason('close')}>Close short</Button>}

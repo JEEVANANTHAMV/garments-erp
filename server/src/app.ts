@@ -40,6 +40,7 @@ import { cuttingPlanRouter } from './modules/production/cuttingPlan.routes.js';
 import { fgReceiptRouter } from './modules/production/fgReceipt.routes.js';
 import { layEngineRouter } from './modules/production/layEngine.routes.js';
 import { shipmentRouter } from './modules/packing/shipment.routes.js';
+import { ewayBillRouter } from './modules/ewaybill/ewaybill.routes.js';
 import { productionStagesRouter } from './modules/production/productionStages.routes.js';
 import { productionFloorRouter } from './modules/production/productionFloor.routes.js';
 import { processDcRouter } from './modules/production/processDc.routes.js';
@@ -140,6 +141,7 @@ export function createApp() {
   api.use('/', fgReceiptRouter);              // /fg-receipts — the gate into packing (16-Oct-2026)
   api.use('/', cuttingPlanRouter);            // /cutting-plans, /bundles, /fg-receipts
   api.use('/', shipmentRouter);               // /packing-lists, /shipments, /dispatches, /available-packages
+  api.use('/', ewayBillRouter);               // /eway-bills (GST e-way bill: Masters India API or manual)
   api.use('/', productionStagesRouter);       // /fabric-issues, /lay-plans, /cut-piece-qc, /bundles/generate-detailed
   api.use('/', productionFloorRouter);        // /bundles/scan, /sewing, /finishing, /final-qc
   api.use('/embroidery', machineProcessRouter('EMBROIDERY')); // embroidery machines, designs, recipes, jobs, material, production, costing, reports

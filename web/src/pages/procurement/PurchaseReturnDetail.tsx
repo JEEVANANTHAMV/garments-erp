@@ -12,6 +12,7 @@ import { http } from '../../lib/api';
 import { fmtDecimal, today } from '../../lib/format';
 import { Badge, Spinner } from '../../components/ui';
 import { JobSelect } from '../../components/JobSelect';
+import { EwayBillButton, useEwayBill } from '../../components/EwayBillButton';
 
 interface ReturnLine {
   id?: number;
@@ -71,6 +72,7 @@ export function PurchaseReturnDetailPage() {
 
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
+  const { data: ewb } = useEwayBill('PURCHASE_RETURN', isNew ? null : id);   // generated EWB owns head.eway_bill_no
   const [reasons, setReasons] = useState<any[]>([]);
 
   // Lookups
@@ -497,6 +499,8 @@ export function PurchaseReturnDetailPage() {
               <span>Post Stock Reduction</span>
             </button>
           )}
+
+          {!isNew && <EwayBillButton sourceType="PURCHASE_RETURN" sourceId={id} />}
         </div>
       </div>
 
@@ -1141,11 +1145,13 @@ export function PurchaseReturnDetailPage() {
           <div>
             <label className="label">E-Way Bill No</label>
             <input
-              className="input font-mono"
+              className={`input font-mono${ewb ? ' bg-slate-50' : ''}`}
               value={head.eway_bill_no || ''}
               onChange={(e) => setHead({ ...head, eway_bill_no: e.target.value })}
+              readOnly={Boolean(ewb)}
               placeholder="e.g. 181234567890"
             />
+            {ewb && <p className="mt-1 text-[11px] text-slate-400">Set by the e-way bill — change it there</p>}
           </div>
           <div>
             <label className="label">Transporter Name</label>
