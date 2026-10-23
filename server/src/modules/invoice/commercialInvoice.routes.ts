@@ -422,6 +422,9 @@ commercialInvoiceRouter.post('/commercial-invoices/:id/reopen', requirePermissio
   if (cur.doc_status !== 'FINAL') throw BadRequest('The invoice is not final');
   const sb = await queryOne<any>(`SELECT sb_no FROM trx_shipping_bill WHERE company_id = ? AND invoice_id = ? LIMIT 1`, [cid, id]);
   if (sb) throw BadRequest(`Shipping bill ${sb.sb_no} is filed on this invoice — the invoice stays final (delete the shipping bill entry first if it was wrong)`);
+  const ewb = await queryOne<any>(`SELECT doc_no, ewb_no, status FROM trx_eway_bill WHERE company_id = ? AND source_type = 'COMMERCIAL_INVOICE' AND source_id = ? AND status <> 'CANCELLED' LIMIT 1`, [cid, id]);
+  if (ewb) throw BadRequest(ewb.ewb_no ? `E-way bill ${ewb.ewb_no} is made on this invoice — cancel it first (within 24 hours), then reopen the invoice`
+    : `Draft e-way bill ${ewb.doc_no} is made from this invoice — delete it first, then reopen the invoice`);
   await query(`UPDATE trx_commercial_invoice SET doc_status = 'DRAFT', row_version = row_version + 1 WHERE id = ?`, [id]);
   await audit(req, 'trx_commercial_invoice', id, 'UPDATE', { doc_status: 'FINAL' }, { doc_status: 'DRAFT', reason });
   res.json({ data: { id, doc_status: 'DRAFT' } });
