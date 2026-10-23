@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Plus, Trash2, Save, CheckCircle2, Sparkles, Check, X, PackageSearch, Layers, PlayCircle, ExternalLink, AlertCircle, CheckCircle, FileText, FilePlus2, Lock } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { AddOrderSize } from './AddOrderSize';
+import { OrderSampleCost } from '../samples/OrderSampleCost';
 import { AmendOrderModal, AmendmentRequirementModal, AmendmentsTab, CloseOrderModal, CLOSURE_LABEL } from './SalesOrderAmendments';
 import { http, ApiError } from '../../lib/api';
 import { useLookup, toOptions, useStyleColors, useStyleSkus, useStatuses, toPlainOptions } from '../../hooks/useLookup';
@@ -563,6 +564,7 @@ export default function SalesOrderDetail() {
           { key: 'amendments', label: 'Amendments', count: d?.amendments?.length ?? 0 },
           { key: 'production', label: 'Production', count: d?.production_orders?.length ?? 0 },
           { key: 'invoices', label: 'Invoices', count: d?.invoices?.length ?? 0 },
+          ...(can('SAMPLE.VIEW') || can('REPORT.VIEW') ? [{ key: 'sample-cost', label: 'Sample cost' }] : []),
         ]} />
       )}
 
@@ -807,6 +809,8 @@ export default function SalesOrderDetail() {
           )}
         </div>
       )}
+
+      {!isNew && tab === 'sample-cost' && <OrderSampleCost soId={Number(id)} />}
 
       {!isNew && tab === 'invoices' && (
         <div className="card overflow-hidden">

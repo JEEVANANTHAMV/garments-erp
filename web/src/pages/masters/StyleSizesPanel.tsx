@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { http, ApiError } from '../../lib/api';
 import { useToast } from '../../hooks/useToast';
@@ -13,7 +13,11 @@ import { fmtDateTime } from '../../lib/format';
  */
 interface Row { size_id: number; size_code: string; size_label?: string; group_name?: string | null; is_default?: boolean | number; source_type?: string }
 
-export function StyleSizesPanel({ styleId, editable, onSaved }: { styleId: number; editable: boolean; onSaved?: () => void }) {
+/** The style screen saves pending size changes before its own Save / leaving the tab (client 23-Oct-2026: size edits
+ *  left unsaved here were lost, so Generate SKUs kept the first SKUs). */
+export interface StyleSizesHandle { isDirty: () => boolean; save: () => Promise<boolean> }
+
+export const StyleSizesPanel = forwardRef<StyleSizesHandle, { styleId: number; editable: boolean; onSaved?: () => void }>(function StyleSizesPanel({ styleId, editable, onSaved }, ref) {
   const toast = useToast();
   const qc = useQueryClient();
   const sizeGroups = useLookup('size-groups');
@@ -49,8 +53,10 @@ export function StyleSizesPanel({ styleId, editable, onSaved }: { styleId: numbe
       const sy = r.data.sync;
       toast(`Sizes saved${sy ? ` — SKUs: ${sy.added} added, ${sy.reactivated} back, ${sy.deactivated} retired` : ''}`);
       setReason(''); await refresh();
-    } catch (e) { toast(e instanceof ApiError ? e.message : 'Could not save the sizes', 'error'); } finally { setBusy(false); }
+      return true;
+    } catch (e) { toast(e instanceof ApiError ? e.message : 'Could not save the sizes', 'error'); return false; } finally { setBusy(false); }
   };
+  useImperativeHandle(ref, () => ({ isDirty: () => dirty, save }), [dirty, rows, reason]); // eslint-disable-line react-hooks/exhaustive-deps
   const importGroup = async (replace: boolean) => {
     if (!group) return;
     setBusy(true);
@@ -141,4 +147,4 @@ export function StyleSizesPanel({ styleId, editable, onSaved }: { styleId: numbe
       )}
     </div>
   );
-}
+});

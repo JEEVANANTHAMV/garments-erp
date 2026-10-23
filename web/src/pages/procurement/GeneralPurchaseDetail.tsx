@@ -72,6 +72,7 @@ export function GeneralPurchaseDetailPage() {
   const salesOrders = useLookup('sales-orders');
   const styles = useLookup('styles');
   const departments = useLookup('departments');
+  const samples = useLookup('samples');
   const gateInwards = useLookup('gate-inwards');
 
   // Available General POs for linking in GRN mode
@@ -976,17 +977,23 @@ export function GeneralPurchaseDetailPage() {
 
                   {line.allocation_type === 'SAMPLE' && (
                     <div className="grid grid-cols-2 gap-2">
-                      <Input
-                        label="Sample No *"
+                      {/* client 23-Oct-2026: the sample is picked (a typed sample no was never saved), so the line reaches the sample's cost ledger */}
+                      <Select
+                        label="Sample *"
+                        options={toOptions(samples.data || [])}
                         value={line.sample_id || ''}
-                        onChange={(e) => handleUpdateLine(line._key, 'sample_id', e.target.value)}
-                        placeholder="e.g. SMP-0042"
+                        onChange={(e) => {
+                          const smp = (samples.data || []).find((x) => String(x.id) === e.target.value) as any;
+                          handleUpdateLine(line._key, 'sample_id', e.target.value);
+                          handleUpdateLine(line._key, 'sample_type', smp?.sample_type ?? '');
+                        }}
+                        placeholder="Select sample"
                       />
                       <Input
                         label="Sample Type"
                         value={line.sample_type || ''}
-                        onChange={(e) => handleUpdateLine(line._key, 'sample_type', e.target.value)}
-                        placeholder="Proto / Fit / Size Set"
+                        disabled
+                        placeholder="From the sample"
                       />
                     </div>
                   )}

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { StyleSizesPanel } from './StyleSizesPanel';
+import { StyleSizesPanel, type StyleSizesHandle } from './StyleSizesPanel';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, ArrowLeft, Sparkles, Save, FileText, Check, ChevronDown, X, Search } from 'lucide-react';
@@ -287,7 +287,14 @@ export function StyleDetailPage() {
   const toast = useToast();
   const { can } = useAuth();
 
-  const [tab, setTab] = useState('details');
+  const [tab, setTabRaw] = useState('details');
+  const [showRetired, setShowRetired] = useState(false);
+  const sizesRef = useRef<StyleSizesHandle>(null);
+  // unsaved size changes are saved before leaving the Details tab (the SKUs tab would otherwise generate from the old sizes)
+  const setTab = async (t: string) => {
+    if (t !== 'details' && sizesRef.current?.isDirty() && !(await sizesRef.current.save())) return;
+    setTabRaw(t);
+  };
   const [v, setV] = useState<Record<string, any>>({ is_active: 1 });
   const [colorIds, setColorIds] = useState<number[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -321,6 +328,7 @@ export function StyleDetailPage() {
   const save = async (asDraft = false) => {
     setErrors({}); setSaving(true);
     try {
+      if (!isNew && sizesRef.current?.isDirty() && !(await sizesRef.current.save())) return;
       const body = {
         style_code: v.style_code, style_name: v.style_name, product_id: v.product_id,
         buyer_id: v.buyer_id || null, buyer_style_ref: v.buyer_style_ref || null,
@@ -351,7 +359,7 @@ export function StyleDetailPage() {
     try {
       const res = await http.post<{ data: { created: number; total: number } }>(`/styles/${id}/generate-skus`);
       const r: any = res.data;
-      toast(`${r.created} new SKU${r.created === 1 ? '' : 's'} generated${r.deactivated ? `, ${r.deactivated} retired (size / colour no longer on the style)` : ''} (${r.total} total)`);
+      toast(`${r.created} new SKU${r.created === 1 ? '' : 's'} generated${r.reactivated ? `, ${r.reactivated} brought back` : ''}${r.deactivated ? `, ${r.deactivated} retired (size / colour no longer on the style)` : ''}${r.renamed ? `, ${r.renamed} code(s) updated` : ''} — ${r.total} active`);
       void detail.refetch();
       void qc.invalidateQueries({ queryKey: ['lookup', 'style-skus'] });
     } catch (e) {
@@ -400,7 +408,7 @@ export function StyleDetailPage() {
         </>} />
 
       {!isNew && (
-        <Tabs active={tab} onChange={setTab} tabs={[
+        <Tabs active={tab} onChange={(k) => void setTab(k)} tabs={[
           { key: 'details', label: 'Details' },
           { key: 'skus', label: 'SKUs', count: d?.skus?.length ?? 0 },
           { key: 'boms', label: 'BOMs', count: d?.boms?.length ?? 0 },
@@ -441,7 +449,7 @@ export function StyleDetailPage() {
               </div>
             </div>
 
-            {!isNew && <div className="lg:col-span-3 order-last"><StyleSizesPanel styleId={Number(id)} editable={editable} onSaved={() => void detail.refetch()} /></div>}
+            {!isNew && <div className="lg:col-span-3 order-last"><StyleSizesPanel ref={sizesRef} styleId={Number(id)} editable={editable} onSaved={() => void detail.refetch()} /></div>}
 
             {/* Right 1 Col: Garment Photo & Sketch Upload */}
             <div className="card p-4">
@@ -463,7 +471,12 @@ export function StyleDetailPage() {
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-border px-4 py-3">
             <div>
               <h3 className="text-[13.5px] font-semibold text-slate-800">Style SKUs</h3>
-              <p className="text-[12px] text-slate-500">{d?.skus?.length ?? 0} SKUs · colour × size combinations</p>
+              <p className="text-[12px] text-slate-500">{d?.skus?.length ?? 0} active SKUs · colour × size of the style's current colours and sizes
+                {(d?.retired_skus?.length ?? 0) > 0 && (
+                  <button type="button" id="sku-show-retired" className="ml-2 text-brand-700 hover:underline" onClick={() => setShowRetired((x) => !x)}>
+                    {showRetired ? 'hide' : 'show'} {d.retired_skus.length} retired
+                  </button>
+                )}</p>
             </div>
             {can('STYLE.UPDATE') && (
               <button className="btn-primary btn-sm" onClick={() => void generateSkus()} disabled={generating}>
@@ -476,11 +489,11 @@ export function StyleDetailPage() {
               <table className="w-full">
                 <thead><tr>
                   <th className="th">SKU code</th><th className="th">Colour</th>
-                  <th className="th">Size</th><th className="th">Barcode</th>
+                  <th className="th">Size</th><th className="th">Barcode</th><th className="th">Status</th>
                 </tr></thead>
                 <tbody>
-                  {d.skus.map((s: any) => (
-                    <tr key={s.id} className="row-hover">
+                  {[...d.skus, ...(showRetired ? d.retired_skus ?? [] : [])].map((s: any) => (
+                    <tr key={s.id} className={Number(s.is_active) ? 'row-hover' : 'opacity-60'} data-sku={s.sku_code}>
                       <td className="td font-mono text-[12px] text-brand-700">{s.sku_code}</td>
                       <td className="td">
                         <span className="inline-flex items-center gap-1.5">
@@ -491,6 +504,8 @@ export function StyleDetailPage() {
                       </td>
                       <td className="td">{s.size_label}</td>
                       <td className="td font-mono text-[11.5px] text-slate-500">{s.barcode ?? '—'}</td>
+                      <td className="td">{Number(s.is_active) ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Retired</Badge>}
+                        {Number(s.order_uses) > 0 && <span className="ml-1 text-[11px] text-slate-500">on {s.order_uses} order line(s)</span>}</td>
                     </tr>
                   ))}
                 </tbody>

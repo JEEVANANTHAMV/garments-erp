@@ -43,49 +43,6 @@ export function EnquiriesPage() {
     ]} />;
 }
 
-export function SamplesPage() {
-  const TYPES = ['PROTO','FIT','SMS','SIZE_SET','PP','TOP','SHIPMENT','PHOTO'];
-  const APPROVALS = ['PENDING','APPROVED','REJECTED','APPROVED_WITH_COMMENTS'];
-  return <CrudPage
-    path="samples" title="Samples" permission="SAMPLE" singular="Sample"
-    subtitle="Sampling lifecycle from proto through to TOP"
-    defaultSort={{ key: 'request_date', dir: 'desc' }}
-    columns={[
-      { key: 'sample_no', header: 'Sample no', sortable: true,
-        render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.sample_no}</span> },
-      { key: 'sample_type', header: 'Type', render: (r: any) => <Badge tone="violet">{humanize(r.sample_type)}</Badge> },
-      { key: 'style_code', header: 'Style',
-        render: (r: any) => <div><p className="font-medium">{r.style_code}</p>
-          <p className="text-[11px] text-slate-500">{r.style_name}</p></div> },
-      { key: 'buyer_name', header: 'Buyer' },
-      { key: 'request_date', header: 'Requested', sortable: true, render: (r: any) => fmtDate(r.request_date) },
-      { key: 'target_date', header: 'Target', sortable: true, render: (r: any) => fmtDate(r.target_date) },
-      { key: 'qty', header: 'Qty', align: 'right' },
-      { key: 'approval_status', header: 'Approval', render: (r: any) => <StatusBadge value={r.approval_status} /> },
-    ]}
-    filters={[
-      { name: 'sample_type', label: 'Sample type', options: TYPES.map((v) => ({ value: v, label: humanize(v) })) },
-      { name: 'approval_status', label: 'Approval', options: APPROVALS.map((v) => ({ value: v, label: humanize(v) })) },
-      { name: 'buyer_id', label: 'Buyer', lookup: 'buyers' },
-      { name: 'style_id', label: 'Style', lookup: 'styles' },
-    ]}
-    fields={[
-      { name: 'sample_no', label: 'Sample no', hint: 'Leave blank to auto-generate' },
-      { name: 'sample_type', label: 'Sample type', required: true, options: TYPES.map((v) => ({ value: v, label: humanize(v) })) },
-      { name: 'style_id', label: 'Style', required: true, lookup: 'styles' },
-      { name: 'buyer_id', label: 'Buyer', lookup: 'buyers' },
-      { name: 'enquiry_id', label: 'Enquiry', lookup: 'enquiries' },
-      { name: 'qty', label: 'Quantity', type: 'number', defaultValue: 1 },
-      { name: 'request_date', label: 'Request date', type: 'date', defaultValue: today() },
-      { name: 'target_date', label: 'Target date', type: 'date' },
-      { name: 'submit_date', label: 'Submitted date', type: 'date' },
-      { name: 'approval_status', label: 'Approval status', options: APPROVALS.map((v) => ({ value: v, label: humanize(v) })), defaultValue: 'PENDING' },
-      { name: 'status_id', label: 'Status', statusDomain: 'SAMPLE' },
-      { name: 'courier_awb', label: 'Courier AWB' },
-      { name: 'buyer_comments', label: 'Buyer comments', type: 'textarea' },
-    ]} />;
-}
-
 export function QuotationsPage() {
   const nav = useNavigate();
   const [activeTab, setActiveTab] = useState<'ALL' | 'FABRIC' | 'YARN' | 'GENERAL' | 'BUYER'>('ALL');

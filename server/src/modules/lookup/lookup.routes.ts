@@ -58,10 +58,10 @@ const LOOKUPS: Record<string, LookupDef> = {
   // every partner (admin / audit screens only — a document field uses a role list above)
   parties:         partyLookup(`1 = 1`),
 
-  // samples a purchase / cost can be booked to (not cancelled or closed)
-  samples: { sql: `SELECT s.id, s.sample_no AS code, CONCAT(s.sample_no, ' · ', COALESCE(st.style_code, ''), ' · ', s.sample_type) AS label, s.style_id, s.buyer_id, s.sample_type, s.status
+  // samples a purchase can be booked to (all, newest first — a purchase already booked to a closed sample still shows it)
+  samples: { sql: `SELECT s.id, s.sample_no AS code, CONCAT(s.sample_no, ' — ', COALESCE(st.style_code, ''), ' · ', s.sample_type) AS label, s.style_id, s.buyer_id, s.sample_type, s.status
                      FROM trx_sample s LEFT JOIN mst_style st ON st.id = s.style_id
-                    WHERE s.company_id=? AND s.is_deleted=0 AND s.status NOT IN ('CANCELLED','COMPLETED') ORDER BY s.id DESC LIMIT 1000`, scoped: true },
+                    WHERE s.company_id=? AND s.is_deleted=0 ORDER BY s.status IN ('CANCELLED','COMPLETED'), s.id DESC LIMIT 1000`, scoped: true },
   'sample-types': { sql: `SELECT id, type_code AS code, type_name AS label, category FROM mst_sample_type WHERE company_id=? AND is_active=1 ORDER BY sort_order, type_name`, scoped: true },
   departments: { sql: `SELECT id, dept_code AS code, dept_name AS label FROM mst_department WHERE company_id=? AND is_active=1 ORDER BY dept_name`, scoped: true },
   colors:      { sql: `SELECT id, color_code AS code, color_name AS label, hex_value FROM mst_color WHERE company_id=? AND is_active=1 ORDER BY color_name`, scoped: true },

@@ -19,7 +19,10 @@ import BomPrintPage from './pages/masters/BomPrint';
 import { DivisionsPage } from './pages/masters/Divisions';
 
 /* Sales */
-import { EnquiriesPage, SamplesPage, QuotationsPage } from './pages/sales';
+import { EnquiriesPage, QuotationsPage } from './pages/sales';
+import { SamplesHomePage } from './pages/samples/SamplesHome';
+import { SampleDetailPage } from './pages/samples/SampleDetail';
+import { SampleTypesPage } from './pages/samples/SampleTypes';
 import QuotationDetailPage from './pages/sales/QuotationDetail';
 import PreCostingsPage from './pages/sales/PreCostings';
 import PreCostingDetailPage from './pages/sales/PreCostingDetail';
@@ -220,6 +223,7 @@ export default function App() {
                   <Route path="departments" element={<DepartmentsPage />} />
                   <Route path="divisions" element={<DivisionsPage />} />
                   <Route path="size-groups" element={<SizeGroupsPage />} />
+                  <Route path="sample-types" element={<SampleTypesPage />} />
                   <Route path="size-groups/:id" element={<SizeGroupDetailPage />} />
                   <Route path="sizes" element={<SizesPage />} />
                   <Route path="styles" element={<StylesPage />} />
@@ -232,7 +236,9 @@ export default function App() {
                 {/* Sales */}
                 <Route path="sales">
                   <Route path="enquiries" element={<EnquiriesPage />} />
-                  <Route path="samples" element={<SamplesPage />} />
+                  <Route path="samples" element={<SamplesHomePage />} />
+                  <Route path="samples/new" element={<SampleDetailPage />} />
+                  <Route path="samples/:id" element={<SampleDetailPage />} />
                   {/* Classic costing sheet merged into Pre-Costing (same trx_costing record) — 14-Oct-2026 */}
                   <Route path="costings" element={<RedirectTo base="/sales/pre-costings" />} />
                   <Route path="costings/:id" element={<RedirectTo base="/sales/pre-costings" />} />
