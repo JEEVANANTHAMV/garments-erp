@@ -7,7 +7,7 @@ import { useAuth } from '../lib/auth';
 import { Badge, Button } from './ui';
 
 /** Documents that move goods on the road and can carry a GST e-way bill. */
-export type EwbSourceType = 'DISPATCH' | 'PROCESS_DC' | 'PURCHASE_RETURN' | 'GATE_OUTWARD' | 'STOCK_DELIVERY';
+export type EwbSourceType = 'DISPATCH' | 'PROCESS_DC' | 'PURCHASE_RETURN' | 'GATE_OUTWARD' | 'STOCK_DELIVERY' | 'COMMERCIAL_INVOICE';
 
 export interface EwbLink {
   id: number; doc_no: string; status: string; ewb_no: string | null; valid_upto: string | null;

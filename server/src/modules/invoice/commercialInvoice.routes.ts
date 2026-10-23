@@ -9,6 +9,7 @@ import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
 import { buildInvoiceLayout, buildInvoiceWorkbook, invoiceTotals, type InvoiceDoc } from './invoiceLayout.js';
 import { amountWords, qtyWords } from './invoiceWords.js';
+import QRCode from 'qrcode';
 import { UQC, CONSTRUCTIONS, INVOICE_NO_RE, composeDescription, constructionOf, genderLabel, uqcOf, gstEndorsement, invoiceChecks, hsnSummary } from './invoiceRules.js';
 
 /**
@@ -473,6 +474,30 @@ commercialInvoiceRouter.get('/commercial-invoices', requirePermission('EXPORT.VI
   res.json({ data: rows.map((r) => ({ ...r, invoice_date: iso(r.invoice_date) })), pagination: { page: q.page, pageSize: q.pageSize, total: n(total?.c), totalPages: Math.max(1, Math.ceil(n(total?.c) / q.pageSize)) } });
 }));
 
+/** "23/10/2026 14:05:00" in IST (the e-way bill print's date format; DATETIMEs are stored in UTC). */
+const istStamp = (d: unknown) => {
+  if (!d) return null;
+  const x = d instanceof Date ? d : new Date(String(d));
+  if (Number.isNaN(x.getTime())) return null;
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' })
+    .formatToParts(x).map((q) => [q.type, q.value]));
+  return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}:${p.second}`;
+};
+
+/**
+ * The generated e-way bill of the invoice (client voice note 23-Oct-2026: "the EWB made from the commercial invoice shows
+ * on it with its QR code"). QR = "EWB no/generator GSTIN/generated date-time", as on the portal's EWB print.
+ */
+async function invoiceEwb(cid: number, id: number) {
+  const e = await queryOne<any>(`SELECT id, doc_no, status, ewb_no, ewb_date, valid_upto, from_gstin, vehicle_no, distance_km FROM trx_eway_bill
+     WHERE company_id = ? AND source_type = 'COMMERCIAL_INVOICE' AND source_id = ? AND status <> 'CANCELLED' ORDER BY id DESC LIMIT 1`, [cid, id]);
+  if (!e) return null;
+  const generated = e.status === 'GENERATED' && !!e.ewb_no;
+  const qr = generated ? await QRCode.toDataURL(`${e.ewb_no}/${e.from_gstin ?? ''}/${istStamp(e.ewb_date) ?? ''}`, { errorCorrectionLevel: 'M', margin: 0, width: 160 }) : null;
+  return { id: Number(e.id), doc_no: e.doc_no, status: e.status, ewb_no: e.ewb_no, ewb_date: istStamp(e.ewb_date), valid_upto: istStamp(e.valid_upto),
+    from_gstin: e.from_gstin, vehicle_no: e.vehicle_no, distance_km: e.distance_km == null ? null : n(e.distance_km), generated, qr };
+}
+
 async function loadInvoice(cid: number, id: number) {
   const h = await queryOne<any>(`SELECT t.*, so.so_no, so.io_no, b.party_name AS buyer_name, cu.code AS currency_code, fu.full_name AS finalized_by_name
       FROM trx_commercial_invoice t LEFT JOIN trx_sales_order so ON so.id = t.so_id LEFT JOIN mst_party b ON b.id = t.buyer_id
@@ -504,6 +529,9 @@ async function loadInvoice(cid: number, id: number) {
     packing_lists: pls, pl_ids: pls.map((p) => Number(p.id)), totals: T, checks,
     hsn_summary: hsnSummary(doc.lines, doc.exchange_rate, doc.goods_gst_rate, doc.charges_gst_rate),
     gst_endorsement: gstEndorsement(h.gst_supply_type, h.lut_arn),
+    eway_bill: await invoiceEwb(cid, id),
+    shipping_bill: await queryOne<any>(`SELECT id, sb_no, sb_date, port_code, sb_pdf_url, sb_pdf_name FROM trx_shipping_bill WHERE company_id = ? AND invoice_id = ? LIMIT 1`, [cid, id])
+      .then((x) => (x ? { ...x, sb_date: iso(x.sb_date) } : null)),
     words: { qty: doc.qty_words || qtyWords(T.goods_qty, doc.qty_unit), amount: doc.amount_words || amountWords(T.total_amount, doc.currency_code) },
   };
 }

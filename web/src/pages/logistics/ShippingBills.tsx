@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Plus, Save, Trash2 } from 'lucide-react';
+import { ArrowLeft, FileText, Plus, Save, Trash2, Upload, X } from 'lucide-react';
 import clsx from 'clsx';
 import { PageHeader, Card, Button, Input, Select, Textarea, Badge, LoadingBlock, ErrorState, SearchInput, useDebounced, ConfirmDialog } from '../../components/ui';
 import { DataTable } from '../../components/DataTable';
@@ -55,7 +55,9 @@ export function ShippingBillsPage() {
 
 const FIELDS = ['invoice_id', 'sb_no', 'sb_date', 'port_code', 'mode', 'port_of_loading', 'port_of_discharge', 'country_dest', 'exchange_rate', 'fob_inr', 'freight_inr', 'insurance_inr',
   'drawback_amount', 'igst_value', 'igst_amount', 'rodtep_amount', 'rosctl_amount', 'leo_no', 'leo_date', 'cha_name', 'cha_ref', 'ad_code', 'packages', 'gross_weight_kg',
-  'bl_awb_no', 'bl_awb_date', 'brc_due_date', 'scheme_code', 'remarks'];
+  'bl_awb_no', 'bl_awb_date', 'brc_due_date', 'scheme_code', 'remarks', 'sb_pdf_url', 'sb_pdf_name', 'sb_pdf_pages'];
+/** Fields read from the customs PDF that go into the form (the rest of what is read is kept for reference). */
+const PDF_FILL = ['sb_no', 'sb_date', 'port_code', 'mode', 'exchange_rate', 'freight_inr', 'insurance_inr', 'fob_inr', 'drawback_amount', 'igst_value', 'igst_amount', 'rodtep_amount', 'rosctl_amount', 'leo_date'];
 
 export function ShippingBillDetailPage() {
   const { id } = useParams();
@@ -71,23 +73,55 @@ export function ShippingBillDetailPage() {
   const [fobTyped, setFobTyped] = useState(false);
   const [busy, setBusy] = useState(false);
   const [del, setDel] = useState(false);
+  const [pdfRead, setPdfRead] = useState<Record<string, unknown> | null>(null);
+  const [pdfNote, setPdfNote] = useState<{ found: number; parse_error: string | null; warnings: string[] } | null>(null);
+  const [pdfBusy, setPdfBusy] = useState(false);
   useEffect(() => {
     if (!detail.data) return;
     const d = detail.data; const x: any = { row_version: d.row_version };
     for (const k of FIELDS) x[k] = d[k] ?? '';
-    setV(x); setSrc(d.source); setFobTyped(true);
+    setV(x); setSrc(d.source); setFobTyped(true); setPdfRead(d.pdf_read_fields ?? null); setPdfNote(null);
   }, [detail.data]);
   const set = (k: string, x: unknown) => setV((o: any) => ({ ...o, [k]: x }));
   const pickInvoice = async (invoiceId: string) => {
     set('invoice_id', invoiceId);
-    if (!invoiceId) { setSrc(null); return; }
+    if (!invoiceId) { setSrc(null); return false; }
     try {
       const s = (await http.get<{ data: any }>(`/shipping-bills/invoice-source/${invoiceId}`)).data;
       setSrc(s);
       setV((o: any) => ({ ...o, invoice_id: invoiceId, exchange_rate: s.exchange_rate ?? '', port_of_loading: s.port_of_loading ?? '', port_of_discharge: s.port_of_discharge ?? '',
         country_dest: s.country_dest ?? '', packages: s.packages ?? '', gross_weight_kg: s.gross_weight_kg ?? '', igst_value: s.igst_value || '', igst_amount: s.igst_amount || '' }));
       setFobTyped(false);
-    } catch (e) { toast(errMsg(e), 'error'); }
+      return true;
+    } catch (e) { toast(errMsg(e), 'error'); return false; }
+  };
+  // client voice note 23-Oct-2026: the customs SB PDF fills the form once (pages 1–2 are read on upload); the user checks
+  // and corrects, and the PDF stays attached for reference. A PDF that cannot be read is attached and filled by hand.
+  const importPdf = async (f: File) => {
+    if (f.size > 15 * 1024 * 1024) { toast('The PDF is larger than 15 MB', 'error'); return; }
+    setPdfBusy(true);
+    try {
+      const data = await new Promise<string>((ok, bad) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.onerror = bad; r.readAsDataURL(f); });
+      const r = (await http.post<{ data: any }>('/shipping-bills/import-pdf', { filename: f.name, data, shipping_bill_id: isNew ? null : Number(id) })).data;
+      if (isNew && r.invoice?.selectable && String(r.invoice.id) !== String(v.invoice_id)) await pickInvoice(String(r.invoice.id));
+      const read = r.fields ?? {};
+      setV((o: any) => {
+        const x = { ...o, sb_pdf_url: r.file.url, sb_pdf_name: r.file.name, sb_pdf_pages: r.file.pages ?? '' };
+        for (const k of PDF_FILL) if (read[k] != null && read[k] !== '') x[k] = read[k];
+        return x;
+      });
+      if (read.fob_inr != null) setFobTyped(true);
+      setPdfRead(r.fields ?? null);
+      setPdfNote({ found: r.found, parse_error: r.parse_error, warnings: r.warnings ?? [] });
+      toast(r.parse_error ? `PDF attached — ${r.parse_error}` : `PDF read: ${r.found} fields filled — check them and save`, r.parse_error ? 'error' : undefined);
+    } catch (e) { toast(errMsg(e), 'error'); } finally { setPdfBusy(false); }
+  };
+  /** "PDF: 50,153" under a field changed after the PDF filled it (so a correction is visible). */
+  const pdfHint = (k: string) => {
+    if (!pdfRead || pdfRead[k] == null || v?.[k] == null || v[k] === '') return undefined;
+    const a = pdfRead[k]; const b = v[k];
+    const same = typeof a === 'number' ? Math.abs(a - Number(b)) < 0.005 : String(a) === String(b);
+    return same ? undefined : `PDF: ${typeof a === 'number' ? fmtDecimal(a, 2) : String(a)}`;
   };
   // FOB ₹ = invoice value × rate − freight − insurance, until typed from the shipping bill
   const fobCalc = useMemo(() => (src ? r2(Number(src.invoice_value_fc) * (Number(v?.exchange_rate) || 0) - (Number(v?.freight_inr) || 0) - (Number(v?.insurance_inr) || 0)) : 0), [src, v?.exchange_rate, v?.freight_inr, v?.insurance_inr]);
@@ -100,6 +134,8 @@ export function ShippingBillDetailPage() {
       const b: any = { ...v };
       for (const k of ['invoice_id', 'exchange_rate', 'fob_inr', 'freight_inr', 'insurance_inr', 'drawback_amount', 'igst_value', 'igst_amount', 'rodtep_amount', 'rosctl_amount', 'packages', 'gross_weight_kg']) b[k] = num(v[k]);
       for (const k of FIELDS) if (b[k] === '') b[k] = null;
+      b.sb_pdf_pages = num(v.sb_pdf_pages);
+      b.pdf_read_fields = v.sb_pdf_url ? pdfRead : null;
       const r = isNew ? await http.post<{ data: any }>('/shipping-bills', b) : await http.put<{ data: any }>(`/shipping-bills/${id}`, b);
       toast(`Shipping bill saved — FOB ${inr(r.data.fob_inr)}${r.data.warnings?.length ? ` · ${r.data.warnings.join(' · ')}` : ''}`, r.data.warnings?.length ? 'error' : undefined);
       void qc.invalidateQueries({ queryKey: ['shipping-bills'] }); void qc.invalidateQueries({ queryKey: ['sb-invoices'] });
@@ -115,7 +151,7 @@ export function ShippingBillDetailPage() {
   const drafts = (invoices.data ?? []).filter((x) => x.doc_status !== 'FINAL' && !x.sb_no).length;
   const incTotal = (Number(v.drawback_amount) || 0) + (Number(v.rodtep_amount) || 0) + (Number(v.rosctl_amount) || 0);
   const num = (k: string, label: string, extra: any = {}) => (
-    <Input label={label} type="number" step="any" value={v[k] ?? ''} id={`sb-${k}`} disabled={!editable} onChange={(e) => set(k, e.target.value)} {...extra} />
+    <Input label={label} type="number" step="any" value={v[k] ?? ''} id={`sb-${k}`} disabled={!editable} onChange={(e) => set(k, e.target.value)} hint={pdfHint(k)} {...extra} />
   );
   // client 23-Oct-2026 (handwritten list): only these fields — the rest of the customs copy is not entered
   return (
@@ -128,20 +164,35 @@ export function ShippingBillDetailPage() {
           {!isNew && can('EXPORT.DELETE') && <Button variant="danger" onClick={() => setDel(true)}><Trash2 size={14} /></Button>}
         </div>} />
       <div className="space-y-4" id="sb-form">
-        <Card title="Shipping bill">
+        <Card title="Shipping bill" actions={<div className="flex items-center gap-2" id="sb-pdf">
+          {v.sb_pdf_url && <a className="flex items-center gap-1 text-[12.5px] text-brand-700 hover:underline" id="sb-pdf-link" href={v.sb_pdf_url} target="_blank" rel="noreferrer">
+            <FileText size={14} />{v.sb_pdf_name || 'Shipping bill PDF'}{v.sb_pdf_pages ? ` · ${v.sb_pdf_pages} pages` : ''}</a>}
+          {v.sb_pdf_url && editable && <button type="button" className="text-slate-400 hover:text-red-600" title="Remove the PDF (saved on Save)" id="sb-pdf-remove"
+            onClick={() => { setV((o: any) => ({ ...o, sb_pdf_url: null, sb_pdf_name: null, sb_pdf_pages: null })); setPdfRead(null); setPdfNote(null); }}><X size={14} /></button>}
+          {editable && <label className={clsx('btn-secondary btn-sm cursor-pointer', pdfBusy && 'opacity-60')} title="ICEGATE shipping bill PDF — the fields are read and filled for you to check">
+            <Upload size={13} />{pdfBusy ? 'Reading…' : v.sb_pdf_url ? 'Replace customs PDF' : 'Upload customs SB PDF'}
+            <input type="file" className="hidden" id="sb-pdf-file" accept=".pdf,application/pdf" disabled={pdfBusy} onChange={(e) => { const f = e.target.files?.[0]; if (f) void importPdf(f); e.target.value = ''; }} /></label>}
+        </div>}>
+          {pdfNote && (
+            <div id="sb-pdf-note" className={clsx('mx-4 mt-3 rounded-md border px-3 py-2 text-[12.5px]', pdfNote.parse_error || pdfNote.warnings.length ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-emerald-200 bg-emerald-50 text-emerald-900')}>
+              {pdfNote.parse_error ? <p>PDF attached for reference — {pdfNote.parse_error}.</p>
+                : <p>{pdfNote.found} fields read from the PDF and filled below — check them against the PDF, correct anything wrong, then Save.</p>}
+              {pdfNote.warnings.map((w) => <p key={w}>• {w}</p>)}
+            </div>
+          )}
           <div className="grid gap-3 p-4 sm:grid-cols-4">
             <Select className="sm:col-span-4" label="Commercial invoice (final)" required id="sb-invoice" disabled={!isNew} placeholder="— Select —" options={invOptions} value={v.invoice_id}
               onChange={(e) => void pickInvoice(e.target.value)} hint={drafts ? `${drafts} draft invoice(s) not listed — finalise them first` : undefined} />
-            <Input label="S.B. No" required type="text" id="sb-sb_no" value={v.sb_no ?? ''} disabled={!editable} onChange={(e) => set('sb_no', e.target.value)} />
-            <Input label="Date" required type="date" id="sb-sb_date" value={v.sb_date ?? ''} disabled={!editable} onChange={(e) => set('sb_date', e.target.value)} />
-            <Input label="Port" id="sb-port_code" value={v.port_code ?? ''} placeholder="INMAA4" disabled={!editable} onChange={(e) => set('port_code', e.target.value.toUpperCase())} />
+            <Input label="S.B. No" required type="text" id="sb-sb_no" value={v.sb_no ?? ''} hint={pdfHint('sb_no')} disabled={!editable} onChange={(e) => set('sb_no', e.target.value)} />
+            <Input label="Date" required type="date" id="sb-sb_date" value={v.sb_date ?? ''} hint={pdfHint('sb_date')} disabled={!editable} onChange={(e) => set('sb_date', e.target.value)} />
+            <Input label="Port" id="sb-port_code" value={v.port_code ?? ''} placeholder="INMAA4" hint={pdfHint('port_code')} disabled={!editable} onChange={(e) => set('port_code', e.target.value.toUpperCase())} />
             <Select label="Mode" id="sb-mode" value={v.mode ?? ''} disabled={!editable} onChange={(e) => set('mode', e.target.value)} options={[{ value: 'AIR', label: 'Air' }, { value: 'SEA', label: 'Sea' }]} />
             <Input label="Inv. No & Date" id="sb-inv-no" value={src ? `${src.invoice_no} · ${fmtDate(src.invoice_date)}` : ''} placeholder="From the invoice" disabled />
             <Input label={`Inv. Value${src ? ` (${src.currency_code})` : ''}`} id="sb-inv-value" value={src ? fmtDecimal(src.invoice_value_fc, 2) : ''} placeholder="From the invoice" disabled />
             {num('exchange_rate', `Customs Exchange Rate${src ? ` (₹ per 1 ${src.currency_code})` : ''}`)}
             {num('freight_inr', 'Freight (₹)')}
             <Input label="FOB Value (₹)" type="number" step="any" id="sb-fob_inr" value={v.fob_inr ?? ''} disabled={!editable}
-              onChange={(e) => { setFobTyped(true); set('fob_inr', e.target.value); }} hint={fobTyped ? `Worked out: ${inr(fobCalc)}` : 'Inv. value × exchange rate − freight'} />
+              onChange={(e) => { setFobTyped(true); set('fob_inr', e.target.value); }} hint={[pdfHint('fob_inr'), fobTyped ? `Worked out: ${inr(fobCalc)}` : 'Inv. value × exchange rate − freight'].filter(Boolean).join(' · ')} />
             {num('drawback_amount', 'Drawback (₹)')}
             {src?.lut ? <Input label="IGST Amount (₹)" id="sb-igst_amount" value="0 — export under LUT" disabled /> : num('igst_amount', 'IGST Amount (₹)')}
             {num('rosctl_amount', 'RoSCTL Amount (₹)')}

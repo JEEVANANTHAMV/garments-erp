@@ -7,10 +7,10 @@ import { computeValues, defaultGstRate, stateName, type EwbItemIn } from './ewbR
  * generating; values the document does not carry (goods value of a job-work DC, HSN of a gate pass) are
  * suggested where we can (approved pre-costing, item masters) and otherwise left for the user.
  */
-export const SOURCE_TYPES = ['DISPATCH', 'PROCESS_DC', 'PURCHASE_RETURN', 'GATE_OUTWARD', 'STOCK_DELIVERY'] as const;
+export const SOURCE_TYPES = ['DISPATCH', 'PROCESS_DC', 'PURCHASE_RETURN', 'GATE_OUTWARD', 'STOCK_DELIVERY', 'COMMERCIAL_INVOICE'] as const;
 export type SourceType = typeof SOURCE_TYPES[number];
 export const SOURCE_LABEL: Record<string, string> = {
-  DISPATCH: 'Dispatch', PROCESS_DC: 'Process / job-work DC', PURCHASE_RETURN: 'Purchase return', GATE_OUTWARD: 'Gate outward', STOCK_DELIVERY: 'Stock delivery', MANUAL: 'Manual',
+  DISPATCH: 'Dispatch', PROCESS_DC: 'Process / job-work DC', PURCHASE_RETURN: 'Purchase return', GATE_OUTWARD: 'Gate outward', STOCK_DELIVERY: 'Stock delivery', COMMERCIAL_INVOICE: 'Commercial invoice (export)', MANUAL: 'Manual',
 };
 
 const n = (v: unknown) => Number(v ?? 0) || 0;
@@ -186,13 +186,45 @@ export async function prefill(cid: number, type: SourceType, id: number) {
       document_number: docNo(s.party_dc_no || s.doc_no), document_date: iso(s.doc_date), transporter_party_id: null, transporter_id: null, transporter_name: null,
       vehicle_no: s.vehicle_no ?? null, source_no: s.doc_no };
     items = withRates(items as any, head.from_state !== head.to_state, billable);
+  } else if (type === 'COMMERCIAL_INVOICE') {
+    // client voice note 23-Oct-2026: the e-way bill for the export lorry to the port is made from the commercial invoice,
+    // and its number + QR print on the invoice. Export = zero-rated: LUT → no tax; IGST-paid → IGST on the ₹ value.
+    const ci = await queryOne<any>(`SELECT ci.*, cu.code currency FROM trx_commercial_invoice ci LEFT JOIN cfg_currency cu ON cu.id = ci.currency_id WHERE ci.id = ? AND ci.company_id = ?`, [id, cid]);
+    if (!ci) throw NotFound('Commercial invoice not found');
+    if (ci.doc_status !== 'FINAL') throw BadRequest(`Invoice ${ci.invoice_no} is a draft — finalise it before making its e-way bill`);
+    const to = await consignee(cid, ci.buyer_id ? Number(ci.buyer_id) : null);
+    const fx = ci.currency && ci.currency !== 'INR' ? n(ci.exchange_rate) : 1;
+    if (!(fx > 0)) throw BadRequest(`Invoice ${ci.invoice_no} has no exchange rate — enter it on the invoice`);
+    const igst = ci.gst_supply_type === 'IGST';
+    const lines = await query<any>(`SELECT * FROM trx_commercial_invoice_line WHERE invoice_id = ? ORDER BY sort_order, id`, [id]);
+    const rates: (number | null)[] = [];
+    let other = 0;
+    for (const l of lines) {
+      const inr = r2(n(l.amount) * fx);
+      const rate = igst ? n(l.gst_rate ?? (l.line_kind === 'CHARGE' ? ci.charges_gst_rate : ci.goods_gst_rate)) : 0;
+      // freight / other charges on the invoice are not goods: they go in "other value" with their tax
+      if (l.line_kind === 'CHARGE') { other += inr + r2(inr * rate / 100); continue; }
+      items.push({ product_name: String(l.garment || l.description || 'Garments').slice(0, 100), description: String(l.description ?? '').slice(0, 100) || null,
+        hsn_code: String(l.hsn_code ?? '').replace(/\D/g, ''), quantity: n(l.qty), unit: String(l.uqc || 'PCS'), taxable_amount: inr } as any);
+      rates.push(rate);
+    }
+    if (!items.length) throw BadRequest(`Invoice ${ci.invoice_no} has no goods lines`);
+    if (fx !== 1) notes.push(`Values in ₹ at the invoice rate ${fx} per 1 ${ci.currency}`);
+    notes.push(`Export: ship-to is the port of loading${ci.port_of_loading ? ` (${ci.port_of_loading})` : ''} — enter the port PIN code and its state`);
+    head = { ...from, ...to, supply_type: 'OUTWARD', sub_supply_type: 'Export', document_type: 'Tax Invoice',
+      document_number: docNo(ci.invoice_no), document_date: iso(ci.invoice_date), transporter_party_id: null, transporter_id: null, transporter_name: null,
+      vehicle_no: null, source_no: ci.invoice_no, other_value: r2(other) };
+    head.to_gstin = 'URP'; head.to_state = 'OTHER COUNTRY'; head.ship_state = ''; head.to_pincode = null; head.to_place = ci.port_of_loading ?? head.to_place;
+    if (ci.consignee_details && !head.to_name) head.to_name = String(ci.consignee_details).split('\n')[0].slice(0, 100);
+    items = withRates(items as any, true, igst, rates);
   } else throw BadRequest('Unknown document type for an e-way bill');
 
   delete head.party_type;
   const inter = head.from_state !== head.to_state;
-  const values = computeValues(items, inter, 0);
+  const other = n(head.other_value);
+  const values = computeValues(items, inter, other);
   return { header: { source_type: type, source_id: id, transaction_type: 1, transport_mode: 'Road', vehicle_type: 'Regular', distance_km: 0,
-    sub_supply_desc: null, ...head, other_value: 0, ...values }, items, notes };
+    sub_supply_desc: null, ...head, other_value: other, ...values }, items, notes };
 }
 
 /** Documents of a type the user can make an e-way bill for (picker on the register), newest first. */
@@ -205,6 +237,7 @@ export async function sourceDocs(cid: number, type: SourceType, q: string) {
     PURCHASE_RETURN: `SELECT r.id, r.return_no no, r.return_date dt, p.party_name party FROM trx_purchase_return r LEFT JOIN mst_party p ON p.id = r.supplier_id WHERE r.company_id = ? AND (r.return_no LIKE ? OR p.party_name LIKE ?) ORDER BY r.id DESC LIMIT 50`,
     GATE_OUTWARD: `SELECT g.id, g.pass_no no, g.pass_date dt, p.party_name party FROM trx_gate_outward g LEFT JOIN mst_party p ON p.id = g.party_id WHERE g.company_id = ? AND (g.pass_no LIKE ? OR p.party_name LIKE ?) ORDER BY g.id DESC LIMIT 50`,
     STOCK_DELIVERY: `SELECT s.id, s.doc_no no, s.doc_date dt, p.party_name party FROM trx_stock_delivery s LEFT JOIN mst_party p ON p.id = s.party_id WHERE s.company_id = ? AND (s.doc_no LIKE ? OR p.party_name LIKE ?) ORDER BY s.id DESC LIMIT 50`,
+    COMMERCIAL_INVOICE: `SELECT ci.id, ci.invoice_no no, ci.invoice_date dt, p.party_name party FROM trx_commercial_invoice ci LEFT JOIN mst_party p ON p.id = ci.buyer_id WHERE ci.company_id = ? AND ci.doc_status = 'FINAL' AND (ci.invoice_no LIKE ? OR p.party_name LIKE ?) ORDER BY ci.id DESC LIMIT 50`,
   };
   return query<any>(sql[type], [cid, like, like]);
 }
@@ -212,5 +245,5 @@ export async function sourceDocs(cid: number, type: SourceType, q: string) {
 /** Write the EWB number back on the source document (where it has a field for it). */
 export const SOURCE_EWB_COLUMN: Partial<Record<SourceType, [string, string]>> = {
   DISPATCH: ['trx_dispatch', 'eway_bill_no'], PURCHASE_RETURN: ['trx_purchase_return', 'eway_bill_no'], PROCESS_DC: ['trx_jobwork_challan', 'eway_bill_no'],
-  GATE_OUTWARD: ['trx_gate_outward', 'eway_bill_no'], STOCK_DELIVERY: ['trx_stock_delivery', 'eway_bill_no'],
+  GATE_OUTWARD: ['trx_gate_outward', 'eway_bill_no'], STOCK_DELIVERY: ['trx_stock_delivery', 'eway_bill_no'], COMMERCIAL_INVOICE: ['trx_commercial_invoice', 'eway_bill_no'],
 };

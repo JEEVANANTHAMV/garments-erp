@@ -33,6 +33,7 @@ export interface InvoiceDoc {
   bank_details: string | null; rex_declaration: string | null; declaration: string | null; footer_note: string | null;
   goods_gst_rate: number | null; charges_gst_rate: number | null;
   gst_supply_type?: string | null; lut_arn?: string | null;
+  eway_bill?: { ewb_no: string | null; ewb_date: string | null; generated: boolean } | null;
   lines: InvoiceDocLine[];
 }
 export interface InvoiceDocLine {
@@ -193,6 +194,10 @@ function build(doc: InvoiceDoc, withWorkingColumns: boolean) {
   // GST export endorsement (CGST rule 46) — a row of its own when the export type is set
   const endorse = gstEndorsement(doc.gst_supply_type, doc.lut_arn);
   if (endorse) { sb.set(r, 0, endorse, undefined, 'cb'); sb.merge(r, 0, r, L); box(r, 0, r, L); r++; }
+  // the e-way bill made from this invoice (the QR prints on the screen / PDF print; the sheet carries the number)
+  if (doc.eway_bill?.generated && doc.eway_bill.ewb_no) {
+    sb.set(r, 0, `E-WAY BILL NO: ${doc.eway_bill.ewb_no}${doc.eway_bill.ewb_date ? `   DT: ${doc.eway_bill.ewb_date}` : ''}`, undefined, 'b'); sb.merge(r, 0, r, L); box(r, 0, r, L); r++;
+  }
 
   // ---------- footer
   let sigTop: number;

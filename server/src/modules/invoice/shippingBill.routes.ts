@@ -6,6 +6,10 @@ import { BadRequest, Conflict, NotFound } from '../../core/errors.js';
 import { requirePermission } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { s } from '../resources/schemas.js';
+import path from 'path';
+import fs from 'fs';
+import crypto from 'crypto';
+import { extractShippingBill } from './sbPdf.js';
 
 /**
  * Shipping bill (ICEGATE "LET EXPORT COPY") from the commercial invoice — client voice note 23-Oct-2026 with the
@@ -79,6 +83,10 @@ const sbSchema = z.object({
   leo_no: s.nullableStr(30), leo_date: optDate, cha_name: s.nullableStr(150), cha_ref: s.nullableStr(60), ad_code: s.nullableStr(20),
   packages: z.coerce.number().int().min(0).nullish(), gross_weight_kg: money, bl_awb_no: s.nullableStr(40), bl_awb_date: optDate,
   brc_due_date: optDate, scheme_code: s.nullableStr(20), remarks: s.nullableStr(500),
+  // the customs PDF attached by /shipping-bills/import-pdf (null removes it; left out keeps it)
+  sb_pdf_url: z.union([z.string().regex(/^\/uploads\/shipping-bills\/[\w.-]+\.pdf$/, 'Not an uploaded shipping bill PDF'), z.null()]).optional(),
+  sb_pdf_name: s.nullableStr(200), sb_pdf_pages: z.coerce.number().int().min(0).nullish(),
+  pdf_read_fields: z.record(z.string(), z.unknown()).nullish(),
   row_version: z.coerce.number().int().nullish(),
 });
 type SbIn = z.infer<typeof sbSchema>;
@@ -129,6 +137,10 @@ async function writeSb(tx: Tx, req: Request, b: SbIn, id: number | null) {
     packages: b.packages ?? src.packages ?? null, gross_weight_kg: b.gross_weight_kg ?? src.gross_weight_kg ?? null, bl_awb_no: b.bl_awb_no ?? null, bl_awb_date: b.bl_awb_date ?? null,
     brc_due_date: b.brc_due_date ?? brcDue(b.sb_date), scheme_code: b.scheme_code ?? null, remarks: b.remarks ?? null,
   };
+  if (b.sb_pdf_url !== undefined) {
+    Object.assign(cols, { sb_pdf_url: b.sb_pdf_url, sb_pdf_name: b.sb_pdf_url ? b.sb_pdf_name ?? null : null, sb_pdf_pages: b.sb_pdf_url ? b.sb_pdf_pages ?? null : null,
+      pdf_read_fields: b.sb_pdf_url && b.pdf_read_fields ? JSON.stringify(b.pdf_read_fields) : null });
+  }
   let sbId = id;
   const keys = Object.keys(cols);
   if (id == null) {
@@ -181,6 +193,59 @@ shippingBillRouter.delete('/shipping-bills/:id', requirePermission('EXPORT.DELET
   res.json({ data: { id, deleted: true } });
 }));
 
+/**
+ * POST /shipping-bills/import-pdf {filename, data (data URI / base64)} — the customs shipping bill PDF (client voice note
+ * 23-Oct-2026: "import it, pick the fields, we correct what is wrong; or attach it for reference"). The file is kept under
+ * uploads/shipping-bills (only its link goes in the database); pages 1–2 are read once, here, and the fields come back to
+ * fill the form for review — nothing is saved until the user saves the shipping bill. A PDF that cannot be read is still
+ * attached (parse_error tells why) and the fields are entered by hand.
+ */
+const SB_PDF_MAX = 15 * 1024 * 1024;
+shippingBillRouter.post('/shipping-bills/import-pdf', requirePermission('EXPORT.CREATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const b = z.object({ filename: z.string().trim().min(1).max(200), data: z.string().min(10), shipping_bill_id: s.id() }).parse(req.body ?? {});
+  const m = /^data:([\w/+.-]+);base64,(.+)$/s.exec(b.data);
+  const buf = Buffer.from(m ? m[2] : b.data, 'base64');
+  if (buf.length > SB_PDF_MAX) throw BadRequest('The PDF is larger than 15 MB');
+  if (buf.subarray(0, 5).toString('latin1') !== '%PDF-') throw BadRequest('This is not a PDF file — upload the shipping bill PDF downloaded from ICEGATE');
+
+  let read: Awaited<ReturnType<typeof extractShippingBill>> | null = null;
+  let parseError: string | null = null;
+  try { read = await extractShippingBill(buf); } catch (e) { parseError = (e as Error).message || 'The PDF could not be read'; }
+
+  const dir = path.resolve(process.cwd(), 'uploads', 'shipping-bills');
+  fs.mkdirSync(dir, { recursive: true });
+  const base = path.basename(b.filename, path.extname(b.filename)).replace(/[^\w-]/g, '_').slice(0, 40) || 'shipping_bill';
+  const file = `${Date.now()}_${base}_${crypto.randomBytes(4).toString('hex')}.pdf`;
+  fs.writeFileSync(path.join(dir, file), buf);
+
+  const f = read?.fields;
+  const warnings: string[] = [];
+  let invoice: any = null;
+  if (f?.invoice_no) {
+    const ci = await queryOne<any>(`SELECT ci.id, ci.invoice_no, ci.invoice_date, ci.doc_status, ci.total_value, cu.code AS currency_code,
+        (SELECT sb.sb_no FROM trx_shipping_bill sb WHERE sb.invoice_id = ci.id AND sb.id <> ? LIMIT 1) AS sb_no
+        FROM trx_commercial_invoice ci LEFT JOIN cfg_currency cu ON cu.id = ci.currency_id
+       WHERE ci.company_id = ? AND REPLACE(UPPER(ci.invoice_no), ' ', '') = REPLACE(UPPER(?), ' ', '') LIMIT 1`, [b.shipping_bill_id ?? 0, cid, f.invoice_no]);
+    if (!ci) warnings.push(`Invoice ${f.invoice_no} on the PDF is not a commercial invoice here — pick the invoice yourself`);
+    else {
+      invoice = { id: Number(ci.id), invoice_no: ci.invoice_no, invoice_date: iso(ci.invoice_date), doc_status: ci.doc_status, sb_no: ci.sb_no,
+        selectable: ci.doc_status === 'FINAL' && !ci.sb_no };
+      if (ci.doc_status !== 'FINAL') warnings.push(`Invoice ${ci.invoice_no} is still a draft — finalise it before saving the shipping bill`);
+      if (ci.sb_no) warnings.push(`Invoice ${ci.invoice_no} is already on shipping bill ${ci.sb_no}`);
+      if (f.currency_code && ci.currency_code && f.currency_code !== ci.currency_code) warnings.push(`Currency on the PDF is ${f.currency_code}, the invoice is in ${ci.currency_code}`);
+      if (f.invoice_value_fc != null && Math.abs(f.invoice_value_fc - n(ci.total_value)) > 0.5) warnings.push(`Invoice value on the PDF ${f.invoice_value_fc} differs from the invoice ${r2(n(ci.total_value))}`);
+      if (f.invoice_date && iso(ci.invoice_date) && f.invoice_date !== iso(ci.invoice_date)) warnings.push(`Invoice date on the PDF ${f.invoice_date} differs from the invoice ${iso(ci.invoice_date)}`);
+    }
+  }
+  if (f?.sb_no) {
+    const dup = await queryOne<any>(`SELECT id FROM trx_shipping_bill WHERE company_id = ? AND sb_no = ? AND id <> ?`, [cid, f.sb_no, b.shipping_bill_id ?? 0]);
+    if (dup) warnings.push(`Shipping bill ${f.sb_no} is already entered`);
+  }
+  res.json({ data: { file: { url: `/uploads/shipping-bills/${file}`, name: b.filename.slice(0, 200), pages: read?.pages ?? null, size: buf.length },
+    fields: f ?? null, found: read?.found ?? 0, parse_error: parseError, invoice, warnings } });
+}));
+
 const SB_SELECT = `
   SELECT sb.*, ci.invoice_no AS ci_invoice_no, ci.doc_status AS invoice_status, so.so_no, so.id AS so_id, b.party_name AS buyer_name,
          (SELECT COALESCE(SUM(x.received_amount),0) FROM trx_export_incentive x WHERE x.shipping_bill_id = sb.id) AS incentives_received
@@ -188,7 +253,7 @@ const SB_SELECT = `
     LEFT JOIN trx_commercial_invoice ci ON ci.id = sb.invoice_id
     LEFT JOIN trx_sales_order so ON so.id = ci.so_id
     LEFT JOIN mst_party b ON b.id = ci.buyer_id`;
-const sbOut = (r: any) => ({ ...r, sb_date: iso(r.sb_date), leo_date: iso(r.leo_date), invoice_date: iso(r.invoice_date), bl_awb_date: iso(r.bl_awb_date), brc_due_date: iso(r.brc_due_date),
+const sbOut = (r: any) => ({ ...r, pdf_read_fields: typeof r.pdf_read_fields === 'string' ? JSON.parse(r.pdf_read_fields) : r.pdf_read_fields ?? null, sb_date: iso(r.sb_date), leo_date: iso(r.leo_date), invoice_date: iso(r.invoice_date), bl_awb_date: iso(r.bl_awb_date), brc_due_date: iso(r.brc_due_date),
   incentives_total: r2(n(r.drawback_amount) + n(r.rodtep_amount) + n(r.rosctl_amount)) });
 
 shippingBillRouter.get('/shipping-bills', requirePermission('EXPORT.VIEW'), ah(async (req, res) => {
