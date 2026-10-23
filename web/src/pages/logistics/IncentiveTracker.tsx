@@ -27,7 +27,7 @@ export const INC_STATUS: Record<string, { label: string; tone: string }> = {
   CREDITED: { label: 'Received', tone: 'green' }, SHORT_CLOSED: { label: 'Short-closed', tone: 'slate' }, REJECTED: { label: 'Rejected', tone: 'red' },
   RECEIVED: { label: 'Received', tone: 'green' },
 };
-const StatusBadge = ({ s }: { s: string }) => <Badge tone={(INC_STATUS[s]?.tone ?? 'slate') as any}>{INC_STATUS[s]?.label ?? s.toLowerCase()}</Badge>;
+const StatusBadge = ({ s }: { s: string }) => <span className="whitespace-nowrap"><Badge tone={(INC_STATUS[s]?.tone ?? 'slate') as any}>{INC_STATUS[s]?.label ?? s.toLowerCase()}</Badge></span>;
 
 /* ================================================================ the tracker (Export + Finance) */
 export function ExportIncentivesPage({ area = 'Finance' }: { area?: 'Finance' | 'Export' }) {
@@ -96,7 +96,7 @@ export function ExportIncentivesPage({ area = 'Finance' }: { area?: 'Finance' | 
               {!track.isLoading && !rows.length && <tr><td colSpan={8} className="td py-10 text-center text-slate-400">{status === 'OPEN' ? 'Nothing pending — every claim is received' : 'No shipping bills with incentives'}</td></tr>}
               {rows.map((r) => (
                 <tr key={r.shipping_bill_id} className="row-hover align-top" data-sb={r.sb_no}>
-                  <td className="td text-[12px]"><Link className="font-mono font-semibold text-brand-700 hover:underline" to={`/export/shipping-bills/${r.shipping_bill_id}`}>{r.sb_no}</Link>
+                  <td className="td whitespace-nowrap text-[12px]"><Link className="font-mono font-semibold text-brand-700 hover:underline" to={`/export/shipping-bills/${r.shipping_bill_id}`}>{r.sb_no}</Link>
                     <p className="text-slate-500">{fmtDate(r.sb_date)}{r.pending_days != null && <span className={clsx('ml-1', r.pending_days > 90 ? 'font-semibold text-red-600' : 'text-slate-400')}>· {r.pending_days} d</span>}</p></td>
                   <td className="td text-[12px]">{r.invoice_no ?? '—'}<p className="text-slate-500">{r.so_no ?? ''} · {r.buyer_name ?? ''}</p></td>
                   {TYPES.map(([t]) => {
@@ -107,7 +107,8 @@ export function ExportIncentivesPage({ area = 'Finance' }: { area?: 'Finance' | 
                         <button type="button" className="w-full rounded px-1 py-0.5 text-right hover:bg-slate-50" data-cell={`${r.sb_no}-${t}`} onClick={() => setOpen(c.ids[0])}
                           title="Open the claim — receipts">
                           <span className="tabular-nums font-semibold">{fmtDecimal(c.received, 2)}</span><span className="tabular-nums text-slate-400"> / {fmtDecimal(c.claim, 2)}</span>
-                          <span className="mt-0.5 flex items-center justify-end gap-1"><StatusBadge s={c.status} />{c.last_date && <span className="text-[10.5px] text-slate-500">{fmtDate(c.last_date)}</span>}</span>
+                          <span className="mt-0.5 block"><StatusBadge s={c.status} /></span>
+                          {c.last_date && <span className="block whitespace-nowrap text-[10.5px] text-slate-500">recd {fmtDate(c.last_date)}</span>}
                         </button>
                       </td>
                     );
