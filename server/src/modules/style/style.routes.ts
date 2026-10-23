@@ -63,14 +63,17 @@ const styleSchema = z.object({
   colorIds: z.array(z.coerce.number().int().positive()).optional(),
 });
 
+/** SKUs of a style: active ones first, in the style's size order (retired ones — size / colour taken off the style — after). */
 const SKU_SELECT = `
   SELECT k.*, c.color_name, c.color_code, c.hex_value,
-         sz.size_code, sz.size_label, sz.sort_order AS size_sort
+         sz.size_code, sz.size_label, sz.sort_order AS size_sort,
+         (SELECT COUNT(*) FROM trx_sales_order_sku sos WHERE sos.sku_id = k.id) AS order_uses
     FROM mst_style_sku k
     JOIN mst_color c ON c.id = k.color_id
     JOIN mst_size sz ON sz.id = k.size_id
+    LEFT JOIN mst_style_size ss ON ss.style_id = k.style_id AND ss.size_id = k.size_id AND ss.is_active = 1
    WHERE k.style_id = ?
-   ORDER BY c.color_name, sz.sort_order, sz.id`;
+   ORDER BY k.is_active DESC, c.color_name, COALESCE(ss.sequence_no, 999), sz.sort_order, sz.id`;
 
 // ---------------------------------------------------------------- LIST
 styleRouter.get('/', requirePermission('STYLE.VIEW'), ah(async (req, res) => {
@@ -102,7 +105,7 @@ styleRouter.get('/', requirePermission('STYLE.VIEW'), ah(async (req, res) => {
     query(
       `SELECT t.*, p.product_name, p.product_type, b.party_name AS buyer_name,
               fb.fabric_name, sg.group_name AS size_group_name, cs.label AS status_label,
-              (SELECT COUNT(*) FROM mst_style_sku k WHERE k.style_id = t.id) AS sku_count
+              (SELECT COUNT(*) FROM mst_style_sku k WHERE k.style_id = t.id AND k.is_active = 1) AS sku_count
          FROM mst_style t
          LEFT JOIN mst_product p    ON p.id  = t.product_id
          LEFT JOIN mst_party b      ON b.id  = t.buyer_id
@@ -149,7 +152,10 @@ styleRouter.get('/:id', requirePermission('STYLE.VIEW'), ah(async (req, res) => 
     query(`SELECT * FROM trx_techpack WHERE style_id = ? ORDER BY version DESC`, [id]),
   ]);
 
-  res.json({ data: { ...style, colors, skus, boms, techpacks, sizes: await styleSizes(null, id) } });
+  // client 23-Oct-2026: the SKU list showed retired SKUs (sizes removed from the style) as if nothing had changed
+  const all = skus as any[];
+  res.json({ data: { ...style, colors, skus: all.filter((k) => Number(k.is_active) === 1), retired_skus: all.filter((k) => Number(k.is_active) !== 1),
+    boms, techpacks, sizes: await styleSizes(null, id) } });
 }));
 
 // -------------------------------------------------------------- CREATE
@@ -225,7 +231,8 @@ styleRouter.put('/:id', requirePermission('STYLE.UPDATE'), ah(async (req, res) =
     if (data.size_group_id !== undefined && (data.size_group_id ?? null) !== oldGroup && data.size_group_id) {
       await assignGroup(tx, req, id, Number(data.size_group_id), true);
     }
-    if (colorIds || (data.size_group_id !== undefined && (data.size_group_id ?? null) !== oldGroup)) {
+    const codeChanged = data.style_code !== undefined && data.style_code !== (before as any).style_code;
+    if (colorIds || codeChanged || (data.size_group_id !== undefined && (data.size_group_id ?? null) !== oldGroup)) {
       const st = await txQueryOne<any>(tx, `SELECT style_code FROM mst_style WHERE id = ?`, [id]);
       const hasSkus = await txQueryOne<any>(tx, `SELECT COUNT(*) n FROM mst_style_sku WHERE style_id = ?`, [id]);
       if (Number(hasSkus?.n) > 0) await syncSkus(tx, id, st.style_code);
@@ -268,8 +275,8 @@ styleRouter.post('/:id/generate-skus', requirePermission('STYLE.UPDATE'), ah(asy
     if (!sizes.length) throw BadRequest('Assign the sizes of this style first (Sizes: add sizes or a size group)');
     return syncSkus(tx, id, style.style_code);
   });
-  const skus = await query(SKU_SELECT, [id]);
-  res.json({ data: { created: r.added, reactivated: r.reactivated, deactivated: r.deactivated, total: skus.length, skus } });
+  const skus = (await query<any>(SKU_SELECT, [id])).filter((k) => Number(k.is_active) === 1);
+  res.json({ data: { created: r.added, reactivated: r.reactivated, deactivated: r.deactivated, renamed: r.renamed, total: skus.length, skus } });
 }));
 
 styleRouter.get('/:id/skus', requirePermission('STYLE.VIEW'), ah(async (req, res) => {
@@ -334,29 +341,45 @@ async function assignGroup(tx: Tx, req: any, styleId: number, groupId: number, r
   return added;
 }
 
-/** SKUs = active colours × active sizes: missing ones added, old ones reactivated, the rest deactivated. */
+/**
+ * SKUs = active colours × active sizes: missing ones added, old ones reactivated, the rest deactivated. The code of an
+ * SKU not yet on any sales order follows the current style / colour / size codes (client 23-Oct-2026: editing the
+ * style and generating again left the first codes); an SKU already ordered keeps its code (it is on buyer documents).
+ */
 export async function syncSkus(tx: Tx, styleId: number, styleCode: string) {
   const colors = await txQuery<any>(tx, `SELECT sc.color_id, c.color_code FROM map_style_color sc JOIN mst_color c ON c.id = sc.color_id WHERE sc.style_id = ?`, [styleId]);
   const sizes = await styleSizes(tx, styleId);
-  const existing = await txQuery<any>(tx, `SELECT id, color_id, size_id, is_active FROM mst_style_sku WHERE style_id = ?`, [styleId]);
+  const existing = await txQuery<any>(tx, `SELECT k.id, k.color_id, k.size_id, k.is_active, k.sku_code,
+      EXISTS (SELECT 1 FROM trx_sales_order_sku sos WHERE sos.sku_id = k.id) AS ordered FROM mst_style_sku k WHERE k.style_id = ?`, [styleId]);
   const want = new Set<string>();
-  let added = 0; let reactivated = 0; let deactivated = 0;
+  let added = 0; let reactivated = 0; let deactivated = 0; let renamed = 0;
+  const codeFor = async (c: any, sz: any, selfId?: number) => {
+    let code = `${styleCode}-${c.color_code}-${sz.size_code}`.toUpperCase().slice(0, 60);
+    const clash = await txQueryOne<any>(tx, `SELECT id FROM mst_style_sku WHERE sku_code = ? AND id <> ?`, [code, selfId ?? 0]);
+    if (clash) code = `${code.slice(0, 50)}-${sz.size_id}`;
+    return code;
+  };
   for (const c of colors) {
     for (const sz of sizes) {
       const key = `${c.color_id}:${sz.size_id}`;
       want.add(key);
       const ex = existing.find((e) => `${e.color_id}:${e.size_id}` === key);
-      if (ex) { if (!ex.is_active) { await txExecute(tx, `UPDATE mst_style_sku SET is_active = 1 WHERE id = ?`, [ex.id]); reactivated++; } continue; }
-      let code = `${styleCode}-${c.color_code}-${sz.size_code}`.toUpperCase().slice(0, 60);
-      if (await txQueryOne(tx, `SELECT id FROM mst_style_sku WHERE sku_code = ?`, [code])) code = `${code.slice(0, 50)}-${sz.size_id}`;
-      await txExecute(tx, `INSERT INTO mst_style_sku (style_id, color_id, size_id, sku_code) VALUES (?,?,?,?)`, [styleId, c.color_id, sz.size_id, code]);
+      if (ex) {
+        if (!ex.is_active) { await txExecute(tx, `UPDATE mst_style_sku SET is_active = 1 WHERE id = ?`, [ex.id]); reactivated++; }
+        if (!Number(ex.ordered)) {
+          const code = await codeFor(c, sz, Number(ex.id));
+          if (code !== ex.sku_code) { await txExecute(tx, `UPDATE mst_style_sku SET sku_code = ? WHERE id = ?`, [code, ex.id]); renamed++; }
+        }
+        continue;
+      }
+      await txExecute(tx, `INSERT INTO mst_style_sku (style_id, color_id, size_id, sku_code) VALUES (?,?,?,?)`, [styleId, c.color_id, sz.size_id, await codeFor(c, sz)]);
       added++;
     }
   }
   for (const e of existing) {
     if (e.is_active && !want.has(`${e.color_id}:${e.size_id}`)) { await txExecute(tx, `UPDATE mst_style_sku SET is_active = 0 WHERE id = ?`, [e.id]); deactivated++; }
   }
-  return { added, reactivated, deactivated };
+  return { added, reactivated, deactivated, renamed };
 }
 
 async function lockStyle(tx: Tx, cid: number, id: number) {

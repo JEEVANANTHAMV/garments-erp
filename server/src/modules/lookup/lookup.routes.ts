@@ -58,6 +58,11 @@ const LOOKUPS: Record<string, LookupDef> = {
   // every partner (admin / audit screens only — a document field uses a role list above)
   parties:         partyLookup(`1 = 1`),
 
+  // samples a purchase / cost can be booked to (not cancelled or closed)
+  samples: { sql: `SELECT s.id, s.sample_no AS code, CONCAT(s.sample_no, ' · ', COALESCE(st.style_code, ''), ' · ', s.sample_type) AS label, s.style_id, s.buyer_id, s.sample_type, s.status
+                     FROM trx_sample s LEFT JOIN mst_style st ON st.id = s.style_id
+                    WHERE s.company_id=? AND s.is_deleted=0 AND s.status NOT IN ('CANCELLED','COMPLETED') ORDER BY s.id DESC LIMIT 1000`, scoped: true },
+  'sample-types': { sql: `SELECT id, type_code AS code, type_name AS label, category FROM mst_sample_type WHERE company_id=? AND is_active=1 ORDER BY sort_order, type_name`, scoped: true },
   departments: { sql: `SELECT id, dept_code AS code, dept_name AS label FROM mst_department WHERE company_id=? AND is_active=1 ORDER BY dept_name`, scoped: true },
   colors:      { sql: `SELECT id, color_code AS code, color_name AS label, hex_value FROM mst_color WHERE company_id=? AND is_active=1 ORDER BY color_name`, scoped: true },
   'size-groups': { sql: `SELECT id, group_code AS code, group_name AS label, category, gender, description, (SELECT COUNT(*) FROM mst_size s WHERE s.size_group_id = mst_size_group.id AND s.is_active=1) AS size_count FROM mst_size_group WHERE company_id=? AND is_active=1 ORDER BY group_name`, scoped: true },
@@ -181,8 +186,9 @@ lookupRouter.get('/style-skus/:styleId', ah(async (req, res) => {
        FROM mst_style_sku k
        JOIN mst_color c ON c.id = k.color_id
        JOIN mst_size sz ON sz.id = k.size_id
+       LEFT JOIN mst_style_size ss ON ss.style_id = k.style_id AND ss.size_id = k.size_id AND ss.is_active = 1
       WHERE k.style_id = ? AND k.is_active = 1
-      ORDER BY c.color_name, sz.sort_order`, [styleId]) });
+      ORDER BY c.color_name, COALESCE(ss.sequence_no, 999), sz.sort_order`, [styleId]) });
 }));
 
 /** Colorways mapped to one style. */

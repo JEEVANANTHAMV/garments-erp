@@ -160,26 +160,7 @@ export const transactionResources: ResourceConfig[] = [
       f('remarks', s.text()),
     ],
   },
-  {
-    path: 'samples', table: 'trx_sample', permission: 'SAMPLE', label: 'Sample',
-    searchable: ['sample_no', 'courier_awb'], sortable: ['sample_no', 'request_date', 'target_date'],
-    defaultSort: 't.request_date', hasIsActive: false,
-    filters: ['style_id', 'buyer_id', 'sample_type', 'approval_status', 'status_id', 'enquiry_id'],
-    autoNumber: { column: 'sample_no', docType: 'SAMPLE' },
-    selectExtra: 'st.style_code, st.style_name, b.party_name AS buyer_name, cs.label AS status_label',
-    joins: `LEFT JOIN mst_style st ON st.id = t.style_id
-            LEFT JOIN mst_party b  ON b.id  = t.buyer_id
-            LEFT JOIN cfg_status cs ON cs.id = t.status_id`,
-    fields: [
-      f('sample_no', s.nullableStr(40)), f('enquiry_id', s.id()), f('style_id', s.idReq()),
-      f('buyer_id', s.id()),
-      f('sample_type', s.enumReq(['PROTO','FIT','SMS','SIZE_SET','PP','TOP','SHIPMENT','PHOTO'])),
-      f('request_date', s.date()), f('target_date', s.date()), f('submit_date', s.date()),
-      f('qty', s.int()), f('status_id', s.id()),
-      f('approval_status', s.enum(['PENDING','APPROVED','REJECTED','APPROVED_WITH_COMMENTS'])),
-      f('buyer_comments', s.text()), f('courier_awb', s.nullableStr(60)),
-    ],
-  },
+  // samples: hand-built module (modules/sample — workflow, cost ledger, allocation to orders), 23-Oct-2026
   {
     path: 'costings', table: 'trx_costing', permission: 'COSTING', label: 'Costing',
     searchable: ['costing_no'], sortable: ['costing_no', 'costing_date'], defaultSort: 't.costing_date',

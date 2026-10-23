@@ -265,7 +265,7 @@ clientReportsARouter.get('/budget-vs-actuals', VIEW, ah(async (req, res) => {
      ORDER BY so.so_date, so.so_no`, params);
   const ids = inList(sos.map((s) => Number(s.so_id)));
 
-  const [budget, actual, inv, cut, ship, xr] = await Promise.all([
+  const [budget, actual, inv, cut, ship, xr, smp] = await Promise.all([
     query<any>(`
       SELECT sol.so_id, SUM(sol.order_qty) AS costed_qty, MAX(pc.currency_id) AS cost_currency_id, MAX(pc.cost_currency) AS cost_currency,
              GROUP_CONCAT(DISTINCT pc.costing_no SEPARATOR ', ') AS costing_nos, MIN(pc.id) AS costing_id,
@@ -312,9 +312,15 @@ clientReportsARouter.get('/budget-vs-actuals', VIEW, ah(async (req, res) => {
       SELECT x.from_currency, x.rate FROM trx_exchange_rate x
         JOIN cfg_currency i ON i.id = x.to_currency AND i.code = 'INR'
        WHERE x.rate_date = (SELECT MAX(y.rate_date) FROM trx_exchange_rate y WHERE y.from_currency = x.from_currency AND y.to_currency = x.to_currency)`),
+    // sample development cost allocated to the order (posted, not reversed) — analytical, the sample ledger is the source
+    query<any>(`
+      SELECT l.so_id, SUM(l.allocated_amount) AS amount, GROUP_CONCAT(DISTINCT s.sample_no ORDER BY s.sample_no SEPARATOR ', ') AS sample_nos
+        FROM trx_sample_alloc_line l JOIN trx_sample_alloc_batch b ON b.id = l.batch_id JOIN trx_sample s ON s.id = b.sample_id
+       WHERE b.company_id = ? AND l.so_id IN (?) AND l.status = 'ACTIVE' AND b.status IN ('POSTED','PARTIALLY_REVERSED')
+       GROUP BY l.so_id`, [cid, ids]),
   ]);
   const m = <T extends { so_id: any }>(rows: T[]) => new Map(rows.map((r) => [Number(r.so_id), r]));
-  const B = m(budget), A = m(actual), I = m(inv), C = m(cut), S = m(ship);
+  const B = m(budget), A = m(actual), I = m(inv), C = m(cut), S = m(ship), SM = m(smp);
   const latestXr = new Map(xr.map((r: any) => [Number(r.from_currency), n(r.rate)]));
 
   type Row = Record<string, any>;
@@ -345,6 +351,8 @@ clientReportsARouter.get('/budget-vs-actuals', VIEW, ah(async (req, res) => {
       pack_trims_budget: bud(b?.pack_trims), pack_trims_actual: act(a?.pack_trims),
       var_oh_budget: bud(b?.var_oh), var_oh_actual: null,
       fixed_oh_budget: bud(b?.fixed_oh), fixed_oh_actual: act(a?.fixed_oh),
+      sample_dev_budget: null, sample_dev_actual: SM.get(Number(s.so_id)) ? r2(n(SM.get(Number(s.so_id))!.amount)) : null,
+      sample_nos: SM.get(Number(s.so_id))?.sample_nos ?? null,
     };
     return r;
   });
@@ -352,11 +360,13 @@ clientReportsARouter.get('/budget-vs-actuals', VIEW, ah(async (req, res) => {
   const finish = (r: Row): Row => {
     const diff = (x: any, y: any) => (x == null || y == null ? null : r2(n(y) - n(x)));
     const sum = (ks: string[]) => (ks.every((k) => r[k] == null) ? null : r2(ks.reduce((t, k) => t + n(r[k]), 0)));
-    const heads = ['y2f', 'cmt', 'sew_trims', 'pack_trims', 'var_oh', 'fixed_oh'];
+    const heads = ['y2f', 'cmt', 'sew_trims', 'pack_trims', 'var_oh', 'fixed_oh', 'sample_dev'];
     r.total_exp_budget = sum(heads.map((h) => `${h}_budget`));
     r.total_exp_actual = sum(heads.map((h) => `${h}_actual`));
     r.net_profit_budget = r.sale_budget != null && r.total_exp_budget != null ? r2(r.sale_budget - r.total_exp_budget) : null;
     r.net_profit_actual = r.sale_actual != null && r.total_exp_actual != null ? r2(r.sale_actual - r.total_exp_actual) : null;
+    // margin before / after the sample development allocation (spec §6.8)
+    r.net_profit_pre_sample_actual = r.net_profit_actual != null ? r2(r.net_profit_actual + n(r.sample_dev_actual)) : null;
     r.sale_diff = diff(r.sale_budget, r.sale_actual);
     for (const h of [...heads, 'total_exp', 'net_profit']) r[`${h}_diff`] = diff(r[`${h}_budget`], r[`${h}_actual`]);
     r.profit_pct_budget = r.net_profit_budget != null && n(r.sale_budget) ? r2((r.net_profit_budget / r.sale_budget) * 100) : null;
@@ -369,7 +379,7 @@ clientReportsARouter.get('/budget-vs-actuals', VIEW, ah(async (req, res) => {
   if (q.group === 'buyer') {
     const g = new Map<string, Row>();
     const sumKeys = ['order_qty', 'cut_qty', 'ship_qty', 'order_to_cut_diff', 'cut_to_ship_diff', 'order_to_ship_diff', 'sale_budget', 'sale_actual',
-      ...['y2f', 'cmt', 'sew_trims', 'pack_trims', 'var_oh', 'fixed_oh'].flatMap((h) => [`${h}_budget`, `${h}_actual`])];
+      ...['y2f', 'cmt', 'sew_trims', 'pack_trims', 'var_oh', 'fixed_oh', 'sample_dev'].flatMap((h) => [`${h}_budget`, `${h}_actual`])];
     for (const r of rows) {
       const k = `${r.buyer_id}|${r.inv_month ?? ''}|${r.currency ?? ''}`;
       const t = g.get(k) ?? { buyer_id: r.buyer_id, buyer_name: r.buyer_name, inv_month: r.inv_month, currency: r.currency, so_no: '', orders: 0, so_id: null };
@@ -386,6 +396,7 @@ clientReportsARouter.get('/budget-vs-actuals', VIEW, ah(async (req, res) => {
     'Actual = production costing sheets of the order\'s production orders (latest approved per production order): Yarn-to-Fab = material less the Trims head; CMT = labour + job work + process; Sew trims = Trims head; Pack trims = packing; Fixed OH = overhead + machine.',
     'Sale value actual and actual exchange rate come from the commercial invoices of the order (value × invoice exchange rate). Blank when not yet invoiced.',
     'Variable OH actual is blank: commission, freight, testing and finance actuals are not posted against orders in the ERP.',
+    'Sample dev actual = sample development cost allocated to the order (Samples › Allocation, posted and not reversed). It is an analytical attribution of the posted sample cost ledger — no GL journal, so the sample expense is counted once. Net profit before sample adds it back.',
   ] } });
 }));
 

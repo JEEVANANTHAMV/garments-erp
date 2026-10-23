@@ -75,6 +75,10 @@ import { jobworkDivisionRouter } from './modules/production/jobworkDivision.js';
 import { lineAllocationPlanRouter } from './modules/production/lineAllocationPlan.routes.js';
 import { jobWorkRouter } from './modules/production/jobWork.routes.js';
 import { machineProcessRouter } from './modules/machineProcess/machineProcess.routes.js';
+import { sampleRouter } from './modules/sample/sample.routes.js';
+import { sampleCostRouter } from './modules/sample/sampleCost.routes.js';
+import { sampleAllocRouter } from './modules/sample/sampleAlloc.routes.js';
+import { sampleReportsRouter } from './modules/sample/sampleReports.routes.js';
 
 export function createApp() {
   const app = express();
@@ -141,6 +145,10 @@ export function createApp() {
   api.use('/', fgReceiptRouter);              // /fg-receipts — the gate into packing (16-Oct-2026)
   api.use('/', cuttingPlanRouter);            // /cutting-plans, /bundles, /fg-receipts
   api.use('/', shipmentRouter);               // /packing-lists, /shipments, /dispatches, /available-packages
+  api.use('/', sampleReportsRouter);          // /samples (register), /samples-dashboard, /sample-reports/* (sample-to-order profitability, 23-Oct-2026)
+  api.use('/', sampleRouter);                 // /sample-types, /samples/:id (request, stages, QC, approvals, revisions, attachments)
+  api.use('/', sampleCostRouter);             // /samples/:id/costs, /samples/:id/cost-sources (sample cost ledger)
+  api.use('/', sampleAllocRouter);            // /samples/:id/allocations, /sample-allocations (sample cost → confirmed orders)
   api.use('/', ewayBillRouter);               // /eway-bills (GST e-way bill: Masters India API or manual)
   api.use('/', productionStagesRouter);       // /fabric-issues, /lay-plans, /cut-piece-qc, /bundles/generate-detailed
   api.use('/', productionFloorRouter);        // /bundles/scan, /sewing, /finishing, /final-qc
