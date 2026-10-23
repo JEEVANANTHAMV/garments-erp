@@ -24,7 +24,8 @@ import { SamplesHomePage } from './pages/samples/SamplesHome';
 import { SampleDetailPage } from './pages/samples/SampleDetail';
 import { SampleTypesPage } from './pages/samples/SampleTypes';
 import { CommercialInvoicesPage, CommercialInvoiceDetailPage } from './pages/logistics/CommercialInvoices';
-import { ShippingBillsPage, ShippingBillDetailPage, ExportIncentivesPage } from './pages/logistics/ShippingBills';
+import { ShippingBillsPage, ShippingBillDetailPage } from './pages/logistics/ShippingBills';
+import { ExportIncentivesPage } from './pages/logistics/IncentiveTracker';
 import QuotationDetailPage from './pages/sales/QuotationDetail';
 import PreCostingsPage from './pages/sales/PreCostings';
 import PreCostingDetailPage from './pages/sales/PreCostingDetail';
@@ -471,6 +472,7 @@ export default function App() {
                   <Route path="shipping-bills" element={<ShippingBillsPage />} />
                   <Route path="shipping-bills/new" element={<ShippingBillDetailPage />} />
                   <Route path="shipping-bills/:id" element={<ShippingBillDetailPage />} />
+                  <Route path="incentives" element={<ExportIncentivesPage area="Export" />} />
                   <Route path="shipments" element={<RedirectTo base="/logistics/shipments" />} />
                   <Route path="shipments/:id" element={<RedirectTo base="/logistics/shipments" />} />
                   <Route path="certificates" element={<CertificatesPage />} />

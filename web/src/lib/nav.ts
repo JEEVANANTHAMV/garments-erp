@@ -195,6 +195,7 @@ export const NAV: NavSection[] = [
       { label: 'E-Way Bills',         to: '/logistics/eway-bills', icon: FileText, perms: ['EWAY.VIEW'] },
       { label: 'Commercial Invoices', to: '/export/invoices', icon: Receipt, perms: ['EXPORT.VIEW'] },
       { label: 'Shipping Bills',      to: '/export/shipping-bills', icon: FileText, perms: ['EXPORT.VIEW'] },
+      { label: 'Incentives Tracker',  to: '/export/incentives', icon: TrendingUp, perms: ['EXPORT.VIEW'] },
       { label: 'Certificates',        to: '/export/certificates', icon: FileCheck2, perms: ['EXPORT.VIEW'] },
     ],
   },
