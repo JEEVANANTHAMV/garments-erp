@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { query, queryOne, execute, transaction, txQueryOne, txExecute, type Tx } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
 import { BadRequest, Conflict, NotFound } from '../../core/errors.js';
-import { requirePermission } from '../../middleware/auth.js';
+import { requireAny, requirePermission } from '../../middleware/auth.js';
+import XLSX from 'xlsx';
 import { audit } from '../../core/audit.js';
 import { s } from '../resources/schemas.js';
 import path from 'path';
@@ -104,6 +105,7 @@ async function syncIncentives(tx: Tx, cid: number, sbId: number, b: SbIn & { lut
     if (amt <= 0 && n(cur.received_amount) <= 0) { await txExecute(tx, `DELETE FROM trx_export_incentive WHERE id = ?`, [cur.id]); continue; }
     if (n(cur.received_amount) > amt + 0.005) warnings.push(`${type.replace('_', ' ')}: ₹${n(cur.received_amount)} already received is more than the new claim ₹${amt}`);
     await txExecute(tx, `UPDATE trx_export_incentive SET claim_amount = ?, invoice_id = ?, claim_date = COALESCE(claim_date, ?) WHERE id = ?`, [amt, invoiceId, b.sb_date, cur.id]);
+    await recalcIncentive(tx, Number(cur.id));
   }
   return warnings;
 }
@@ -280,75 +282,5 @@ shippingBillRouter.get('/shipping-bills/:id', requirePermission('EXPORT.VIEW'), 
   const inc = await query<any>(`SELECT * FROM trx_export_incentive WHERE shipping_bill_id = ? ORDER BY id`, [sb.id]);
   res.json({ data: { ...sbOut(sb), incentives: inc.map((x) => ({ ...x, claim_date: iso(x.claim_date), credit_date: iso(x.credit_date) })),
     source: await invoiceSource(cid, Number(sb.invoice_id)).catch(() => null) } });
-}));
-
-/* ================================================================ Finance: export incentive claims */
-export const exportIncentiveRouter = Router();
-const incSchema = z.object({
-  incentive_type: z.enum(['DUTY_DRAWBACK', 'RODTEP', 'ROSCTL', 'GST_REFUND', 'INTEREST_EQUAL', 'OTHER']).nullish(),
-  shipping_bill_id: s.id(), invoice_id: s.id(), scrip_no: s.nullableStr(60),
-  claim_amount: money, received_amount: money, claim_date: optDate, credit_date: optDate,
-  status: z.enum(['PENDING', 'CLAIMED', 'CREDITED', 'REJECTED']).nullish(), remarks: s.nullableStr(500),
-});
-
-exportIncentiveRouter.get('/export-incentives', requirePermission('FINANCE.VIEW'), ah(async (req, res) => {
-  const cid = req.user!.companyId;
-  const q = z.object({ status: z.string().trim().max(20).optional(), incentive_type: z.string().trim().max(20).optional(), q: z.string().trim().max(60).optional() })
-    .parse(Object.fromEntries(Object.entries(req.query).filter(([, v]) => v !== '')));
-  const w = ['x.company_id = ?']; const p: unknown[] = [cid];
-  if (q.status) { w.push('x.status = ?'); p.push(q.status); }
-  if (q.incentive_type) { w.push('x.incentive_type = ?'); p.push(q.incentive_type); }
-  if (q.q) { w.push('(sb.sb_no LIKE ? OR ci.invoice_no LIKE ? OR x.scrip_no LIKE ?)'); p.push(...Array(3).fill(`%${q.q}%`)); }
-  const rows = await query<any>(`SELECT x.*, sb.sb_no, sb.sb_date, ci.invoice_no, so.so_no, b.party_name AS buyer_name
-      FROM trx_export_incentive x LEFT JOIN trx_shipping_bill sb ON sb.id = x.shipping_bill_id
-      LEFT JOIN trx_commercial_invoice ci ON ci.id = COALESCE(x.invoice_id, sb.invoice_id) LEFT JOIN trx_sales_order so ON so.id = ci.so_id LEFT JOIN mst_party b ON b.id = ci.buyer_id
-     WHERE ${w.join(' AND ')} ORDER BY COALESCE(x.claim_date, sb.sb_date) DESC, x.id DESC LIMIT 1000`, p);
-  const out = rows.map((r) => ({ ...r, claim_date: iso(r.claim_date), credit_date: iso(r.credit_date), sb_date: iso(r.sb_date), outstanding: r2(n(r.claim_amount) - n(r.received_amount)) }));
-  res.json({ data: out, totals: { claimed: r2(out.reduce((t, r) => t + n(r.claim_amount), 0)), received: r2(out.reduce((t, r) => t + n(r.received_amount), 0)) } });
-}));
-
-exportIncentiveRouter.post('/export-incentives', requirePermission('FINANCE.CREATE'), ah(async (req, res) => {
-  const cid = req.user!.companyId;
-  const b = incSchema.parse(req.body ?? {});
-  if (!b.incentive_type) throw BadRequest('Pick the incentive type');
-  if (b.shipping_bill_id && !(await queryOne(`SELECT id FROM trx_shipping_bill WHERE id = ? AND company_id = ?`, [b.shipping_bill_id, cid]))) throw BadRequest('Shipping bill not found');
-  const r = await execute(`INSERT INTO trx_export_incentive (company_id, incentive_type, shipping_bill_id, invoice_id, scrip_no, claim_amount, received_amount, claim_date, credit_date, status, remarks, source)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?, 'MANUAL')`, [cid, b.incentive_type, b.shipping_bill_id ?? null, b.invoice_id ?? null, b.scrip_no ?? null, b.claim_amount ?? 0, b.received_amount ?? 0,
-    b.claim_date ?? null, b.credit_date ?? null, b.status ?? 'PENDING', b.remarks ?? null] as any[]);
-  const id = Number(r.insertId);
-  await audit(req, 'trx_export_incentive', id, 'INSERT', undefined, b);
-  res.status(201).json({ data: { id } });
-}));
-
-/** Finance records what was received / credited. A claim made by a shipping bill keeps the shipping bill's amount. */
-exportIncentiveRouter.put('/export-incentives/:id', requirePermission('FINANCE.UPDATE'), ah(async (req, res) => {
-  const cid = req.user!.companyId;
-  const id = Number(req.params.id);
-  const b = incSchema.parse(req.body ?? {});
-  const cur = await queryOne<any>(`SELECT * FROM trx_export_incentive WHERE id = ? AND company_id = ?`, [id, cid]);
-  if (!cur) throw NotFound('Incentive not found');
-  const fromSb = cur.source === 'SHIPPING_BILL';
-  const claim = fromSb ? n(cur.claim_amount) : n(b.claim_amount ?? cur.claim_amount);
-  const received = n(b.received_amount ?? cur.received_amount);
-  const status = b.status ?? cur.status;
-  if (status === 'CREDITED' && !(b.credit_date ?? cur.credit_date)) throw BadRequest('Enter the credit date', [{ field: 'credit_date', message: 'Required when credited' }]);
-  if (status === 'CREDITED' && received <= 0) throw BadRequest('Enter the amount received', [{ field: 'received_amount', message: 'Required when credited' }]);
-  await query(`UPDATE trx_export_incentive SET incentive_type = ?, scrip_no = ?, claim_amount = ?, received_amount = ?, claim_date = ?, credit_date = ?, status = ?, remarks = ? WHERE id = ?`,
-    [fromSb ? cur.incentive_type : b.incentive_type ?? cur.incentive_type, b.scrip_no ?? cur.scrip_no, claim, received, b.claim_date ?? iso(cur.claim_date), b.credit_date ?? iso(cur.credit_date),
-      status, b.remarks ?? cur.remarks, id]);
-  await audit(req, 'trx_export_incentive', id, 'UPDATE', cur, { ...b, claim_amount: claim });
-  res.json({ data: { id, claim_amount: claim, kept_from_shipping_bill: fromSb && b.claim_amount != null && n(b.claim_amount) !== n(cur.claim_amount) } });
-}));
-
-exportIncentiveRouter.delete('/export-incentives/:id', requirePermission('FINANCE.DELETE'), ah(async (req, res) => {
-  const cid = req.user!.companyId;
-  const id = Number(req.params.id);
-  const cur = await queryOne<any>(`SELECT * FROM trx_export_incentive WHERE id = ? AND company_id = ?`, [id, cid]);
-  if (!cur) throw NotFound('Incentive not found');
-  if (cur.source === 'SHIPPING_BILL') throw BadRequest('This claim belongs to its shipping bill — change the amount there');
-  if (n(cur.received_amount) > 0) throw BadRequest('Money was received against this claim — it cannot be deleted');
-  await query(`DELETE FROM trx_export_incentive WHERE id = ?`, [id]);
-  await audit(req, 'trx_export_incentive', id, 'DELETE', cur);
-  res.json({ data: { id, deleted: true } });
 }));
 
