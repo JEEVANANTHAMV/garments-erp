@@ -19,6 +19,8 @@ const dateQ = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional();
 const KPIS = ['active', 'due_today', 'overdue', 'on_hold', 'pending_internal', 'pending_buyer', 'completed_month', 'unassigned', 'idle',
   'awaiting_resubmission', 'cost_approval', 'alloc_pending', 'alloc_exception', 'purchases_to_import', 'target_changed'] as const;
 
+/** Empty query parameters (a cleared filter) mean "no filter". */
+const noBlank = (q: unknown) => Object.fromEntries(Object.entries((q ?? {}) as Record<string, unknown>).filter(([, v]) => v !== '' && v != null));
 const filterQ = z.object({
   q: z.string().trim().max(60).optional(),
   status: z.string().trim().max(300).optional(),
@@ -142,7 +144,7 @@ sampleReportsRouter.get('/samples', VIEW, ah(async (req, res) => {
   const f = filterQ.extend({
     page: z.coerce.number().int().min(1).default(1), pageSize: z.coerce.number().int().min(1).max(500).default(25),
     sort: z.string().trim().max(40).optional(), dir: z.enum(['asc', 'desc']).default('desc'),
-  }).parse(req.query);
+  }).parse(noBlank(req.query));
   let rows = applyComputed(await loadRegister(cid, f), f);
   if (f.sort && /^[a-z_]+$/.test(f.sort)) {
     const k = f.sort; const d = f.dir === 'asc' ? 1 : -1;
@@ -162,7 +164,7 @@ sampleReportsRouter.get('/samples', VIEW, ah(async (req, res) => {
 
 sampleReportsRouter.get('/samples-dashboard', VIEW, ah(async (req, res) => {
   const cid = req.user!.companyId;
-  const f = filterQ.parse(req.query);
+  const f = filterQ.parse(noBlank(req.query));
   const all = await loadRegister(cid, { ...f, kpi: undefined });
   const rows = applyComputed(all, { ...f, kpi: undefined, include_closed: true });
   const open = rows.filter((r) => r.is_open);
@@ -218,7 +220,7 @@ sampleReportsRouter.get('/samples-dashboard', VIEW, ah(async (req, res) => {
 /** Unallocated sample cost (spec §13): eligible, allocated, pending, remaining, confirmed orders available. */
 sampleReportsRouter.get('/sample-reports/unallocated', VIEW, ah(async (req, res) => {
   const cid = req.user!.companyId;
-  const rows = (await loadRegister(cid, filterQ.parse(req.query))).filter((r) => r.status !== 'CANCELLED' && (r.eligible_cost > 0 || r.allocated_cost > 0));
+  const rows = (await loadRegister(cid, filterQ.parse(noBlank(req.query)))).filter((r) => r.status !== 'CANCELLED' && (r.eligible_cost > 0 || r.allocated_cost > 0));
   const orders = rows.length ? await query<any>(`SELECT t.id AS sample_id, COUNT(DISTINCT so.id) c FROM trx_sample t
       JOIN trx_sales_order so ON so.company_id = t.company_id AND so.buyer_id = t.buyer_id AND so.approval_state IN ('APPROVED','CLOSED') AND so.order_type NOT IN ('SAMPLE','PROJECTION') AND so.is_deleted = 0
       JOIN trx_sales_order_line l ON l.so_id = so.id AND l.style_id = t.style_id
@@ -235,7 +237,7 @@ sampleReportsRouter.get('/sample-reports/unallocated', VIEW, ah(async (req, res)
 /** Sample cost sheet (spec §13): category split + per-piece figures for each sample. */
 sampleReportsRouter.get('/sample-reports/cost-sheet', VIEW, ah(async (req, res) => {
   const cid = req.user!.companyId;
-  const rows = (await loadRegister(cid, filterQ.parse(req.query))).filter((r) => n(r.cumulative_cost) !== 0 || n(r.pending_cost) !== 0);
+  const rows = (await loadRegister(cid, filterQ.parse(noBlank(req.query)))).filter((r) => n(r.cumulative_cost) !== 0 || n(r.pending_cost) !== 0);
   const cats = rows.length ? await query<any>(`SELECT sample_id, category, SUM(amount) v FROM trx_sample_cost WHERE company_id = ? AND sample_id IN (?) AND status IN ${COUNTED}
     GROUP BY sample_id, category`, [cid, rows.map((r) => r.id)]) : [];
   res.json({ data: rows.map((r) => {
@@ -250,7 +252,7 @@ sampleReportsRouter.get('/sample-reports/cost-sheet', VIEW, ah(async (req, res) 
 /** Buyer / style sample history (spec §13): revisions, submissions, approvals, rejections and cost. */
 sampleReportsRouter.get('/sample-reports/history', VIEW, ah(async (req, res) => {
   const cid = req.user!.companyId;
-  const rows = await loadRegister(cid, { ...filterQ.parse(req.query), include_closed: true });
+  const rows = await loadRegister(cid, { ...filterQ.parse(noBlank(req.query)), include_closed: true });
   const ids = rows.map((r) => Number(r.id));
   const [subs, decs] = ids.length ? await Promise.all([
     query<any>(`SELECT sample_id, COUNT(*) c FROM trx_sample_submission WHERE sample_id IN (?) GROUP BY sample_id`, [ids]),

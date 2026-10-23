@@ -356,7 +356,8 @@ sampleAllocRouter.get('/samples/:id/allocations', requirePermission('SAMPLE.VIEW
 sampleAllocRouter.get('/sample-allocations', requirePermission('SAMPLE.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const q = z.object({ status: z.string().trim().max(200).optional(), q: z.string().trim().max(60).optional(), so_id: z.coerce.number().int().optional(),
-    from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).parse(req.query);
+    from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() })
+    .parse(Object.fromEntries(Object.entries(req.query).filter(([, v]) => v !== '')));
   const where = ['b.company_id = ?']; const p: unknown[] = [cid];
   if (q.status) { where.push('b.status IN (?)'); p.push(q.status.split(',').map((x) => x.trim().toUpperCase())); }
   if (q.q) { where.push(`(b.batch_no LIKE ? OR s.sample_no LIKE ? OR st.style_code LIKE ? OR bp.party_name LIKE ? OR EXISTS (SELECT 1 FROM trx_sample_alloc_line x JOIN trx_sales_order xs ON xs.id = x.so_id WHERE x.batch_id = b.id AND xs.so_no LIKE ?))`); p.push(...Array(5).fill(`%${q.q}%`)); }

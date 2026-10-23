@@ -410,7 +410,7 @@ function ProcessModal({ s, p, action, onClose, onDone }: { s: any; p: any; actio
             <Input label="Rework qty" type="number" min={0} value={v.rework_qty} onChange={(e) => set('rework_qty', e.target.value)} />
           </> : null}
           <Input label="Labour minutes" type="number" min={0} id="proc-minutes" value={v.labour_minutes} onChange={(e) => set('labour_minutes', e.target.value)} />
-          <Input label="Rate ₹ / minute" type="number" min={0} step="0.01" value={v.labour_rate} disabled={!can('SAMPLE.COST')} onChange={(e) => set('labour_rate', e.target.value)}
+          <Input label="Rate ₹ / minute" type="number" min={0} step="0.01" id="proc-rate" value={v.labour_rate} disabled={!can('SAMPLE.COST')} onChange={(e) => set('labour_rate', e.target.value)}
             hint={labourAmt > 0 ? `Labour cost ₹ ${labourAmt.toFixed(2)} goes to the cost ledger for approval` : 'Minutes × approved rate = labour cost'} />
         </>}
         {needReason && <Textarea className="sm:col-span-2" label="Reason" required id="proc-reason" value={v.reason} onChange={(e) => set('reason', e.target.value)} />}
@@ -492,7 +492,7 @@ function DecisionModal({ s, stage, busy, onClose, onSave }: { s: any; stage: 'IN
   const needComments = v.decision !== 'APPROVED';
   return (
     <Modal open onClose={onClose} title={stage === 'BUYER' ? 'Buyer response' : 'Internal approval'} subtitle={`${s.sample_no} · revision ${s.revision_no}`} size="md"
-      footer={<><button className="btn-secondary" onClick={onClose}>Cancel</button><Button loading={busy} id="decision-save" disabled={needComments && v.comments.trim().length < 3} onClick={() => onSave(v)}>Record</Button></>}>
+      footer={<><button className="btn-secondary" onClick={onClose}>Cancel</button><Button loading={busy} id="decision-save" disabled={needComments && v.comments.trim().length < 3} onClick={() => onSave({ ...v, stage, comments: v.comments.trim() || null })}>Record</Button></>}>
       <div className="grid gap-3 sm:grid-cols-2" id="decision-form">
         <Select label="Decision" id="decision-pick" value={v.decision} onChange={(e) => setV({ ...v, decision: e.target.value })} options={[
           { value: 'APPROVED', label: stage === 'BUYER' ? 'Approved by buyer' : 'Approved — ready to send' },

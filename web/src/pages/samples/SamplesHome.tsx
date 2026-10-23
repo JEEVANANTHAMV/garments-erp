@@ -78,7 +78,7 @@ function Dashboard({ openRegister }: { openRegister: (f: Record<string, string>)
   const setF = (k: string, v: string) => { const n = new URLSearchParams(sp); if (v) n.set(k, v); else n.delete(k); setSp(n, { replace: true }); };
   const q = useQuery({
     queryKey: ['samples-dashboard', f],
-    queryFn: async () => (await http.get<{ data: any }>('/samples-dashboard', f)).data,
+    queryFn: async () => (await http.get<{ data: any }>('/samples-dashboard', Object.fromEntries(Object.entries(f).filter(([, x]) => x)))).data,
     refetchInterval: 120_000,
   });
   const d = q.data;
