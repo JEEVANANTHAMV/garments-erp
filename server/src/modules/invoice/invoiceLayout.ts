@@ -1,6 +1,7 @@
 import XLSX from 'xlsx';
 import { SheetBuilder, type PlLayout } from '../packing/packingListExcel.js';
 import { amountWords, qtyWords } from './invoiceWords.js';
+import { gstEndorsement, hsnSummary } from './invoiceRules.js';
 
 /**
  * The commercial invoice in the client's shipping format (FK-087.xls, 23-Oct-2026). One cell grid feeds the screen /
@@ -31,12 +32,13 @@ export interface InvoiceDoc {
   qty_words: string | null; amount_words: string | null;
   bank_details: string | null; rex_declaration: string | null; declaration: string | null; footer_note: string | null;
   goods_gst_rate: number | null; charges_gst_rate: number | null;
+  gst_supply_type?: string | null; lut_arn?: string | null;
   lines: InvoiceDocLine[];
 }
 export interface InvoiceDocLine {
   line_kind: 'GOODS' | 'CHARGE'; description: string | null; order_no: string | null; buyer_sku_no: string | null;
   buyer_item_no: string | null; supplier_mat_no: string | null; hsn_code: string | null;
-  qty: number; unit_price: number; amount: number; gst_rate: number | null;
+  qty: number; unit_price: number; amount: number; gst_rate: number | null; uqc?: string | null;
 }
 
 const WIDTHS = [14.6, 6.9, 13.1, 15.6, 14.1, 6.3, 12.3, 6.7, 15.3, 14.6, 13.1];           // A–K, as FK-087
@@ -183,6 +185,9 @@ function build(doc: InvoiceDoc, withWorkingColumns: boolean) {
   box(20, 0, 21, L);
   box(r, 0, r + 1, L);
   r += 2;
+  // GST export endorsement (CGST rule 46) — a row of its own when the export type is set
+  const endorse = gstEndorsement(doc.gst_supply_type, doc.lut_arn);
+  if (endorse) { sb.set(r, 0, endorse, undefined, 'cb'); sb.merge(r, 0, r, L); box(r, 0, r, L); r++; }
 
   // ---------- footer
   let sigTop: number;
@@ -226,7 +231,11 @@ function build(doc: InvoiceDoc, withWorkingColumns: boolean) {
   sb.set(r, 0, 'Declaration', undefined, 'sm');
   const decl = wrap(doc.declaration, 125).slice(0, 4);
   decl.forEach((l, i) => sb.set(r + 1 + i, 0, l, undefined, 'smb'));
-  const end = r + Math.max(decl.length, 2);
+  const end = Math.max(r + Math.max(decl.length, 2), sigTop + 3);
+  // "for <exporter>" … "Authorised Signatory", as every exporter signs
+  const exporterName = lines(doc.exporter_details)[0];
+  if (exporterName) { sb.set(sigTop + 1, 8, `for ${exporterName}`, undefined, 'smb'); sb.merge(sigTop + 1, 8, sigTop + 1, L); }
+  sb.set(end, 8, 'Authorised Signatory', undefined, 'cb'); sb.merge(end, 8, end, L);
   box(sigTop, 8, end, L);
   box(0, 0, end, L);
 
@@ -264,5 +273,14 @@ export function buildInvoiceWorkbook(doc: InvoiceDoc): Buffer {
   (ws as any)['!print'] = { area: `A1:K${sb.maxR + 1}` };
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, doc.invoice_format === 'IGST' ? 'IGST INVOICE' : 'BUYER INVOICE');
+  // HSN-wise summary — for the shipping bill and GSTR-1 (exports)
+  const hs = hsnSummary(doc.lines as any, Number(doc.exchange_rate) || 0, doc.goods_gst_rate, doc.charges_gst_rate);
+  const rows: (string | number)[][] = [[`HSN-WISE SUMMARY — ${doc.invoice_no}`], [],
+    ['HSN', 'DESCRIPTION', 'UQC', 'QTY', `VALUE ${doc.currency_code}`, 'EX. RATE', 'TAXABLE VALUE INR', 'IGST %', 'IGST INR']];
+  for (const h of hs) rows.push([h.hsn_code, h.description, h.uqc, h.qty, h.value_fc, Number(doc.exchange_rate) || 0, h.value_inr, h.gst_rate, h.gst_inr]);
+  rows.push(['TOTAL', '', '', hs.reduce((a, h) => a + h.qty, 0), r2(hs.reduce((a, h) => a + h.value_fc, 0)), '', r2(hs.reduce((a, h) => a + h.value_inr, 0)), '', r2(hs.reduce((a, h) => a + h.gst_inr, 0))]);
+  const hws = XLSX.utils.aoa_to_sheet(rows);
+  hws['!cols'] = [10, 50, 6, 10, 14, 10, 18, 8, 14].map((wch) => ({ wch }));
+  XLSX.utils.book_append_sheet(wb, hws, 'HSN SUMMARY');
   return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
 }

@@ -64,16 +64,29 @@ export function CommercialInvoicesPage() {
 }
 
 /* ================================================================ editor */
-const EMPTY_LINE = { line_kind: 'GOODS', order_no: '', buyer_sku_no: '', buyer_item_no: '', supplier_mat_no: '', description: '', hsn_code: '', qty: '', unit_price: '', gst_rate: '' };
+const EMPTY_LINE = { line_kind: 'GOODS', order_no: '', buyer_sku_no: '', buyer_item_no: '', supplier_mat_no: '', description: '', hsn_code: '', qty: '', unit_price: '', gst_rate: '',
+  composition: '', construction: '', gender_label: '', garment: '', pack_info: '', desc_auto: 1, uqc: 'PCS' };
+const UQC = ['PCS', 'SET', 'PAC', 'DOZ', 'NOS', 'PRS', 'BOX', 'KGS', 'MTR'];
+/** Same rule as the server (invoiceRules.composeDescription): COMPOSITION KNITTED/WOVEN GENDER GARMENT (PACK). */
+const compose = (l: any) => {
+  const pack = String(l.pack_info ?? '').trim();
+  const head = [l.composition, l.construction, l.gender_label, l.garment].map((x) => String(x ?? '').trim()).filter(Boolean).join(' ');
+  const tail = pack ? (pack.startsWith('(') ? pack : `(${pack})`) : '';
+  return `${head}${head && tail ? ' ' : ''}${tail}`.toUpperCase().replace(/\s+/g, ' ').trim();
+};
 const HEAD_KEYS = ['invoice_no', 'invoice_date', 'invoice_format', 'currency_id', 'exchange_rate', 'exporter_details', 'exporter_ref', 'buyer_order_ref', 'other_references',
   'consignee_details', 'buyer_details', 'ship_to_details', 'country_origin_text', 'country_dest_text', 'pre_carriage_by', 'place_of_receipt', 'vessel_flight_no',
   'port_of_loading', 'port_of_discharge', 'final_destination', 'terms_of_delivery', 'terms_of_payment', 'marks_nos', 'packages_text', 'goods_heading', 'item_ref_label',
   'qty_unit', 'rate_basis', 'total_cartons', 'total_pcs', 'total_pcs_unit', 'net_weight_kg', 'gross_weight_kg', 'qty_words', 'amount_words', 'bank_details',
-  'rex_declaration', 'declaration', 'footer_note', 'goods_gst_rate', 'charges_gst_rate', 'remarks'];
+  'rex_declaration', 'declaration', 'footer_note', 'goods_gst_rate', 'charges_gst_rate', 'remarks', 'gst_supply_type', 'lut_arn'];
 const fromServer = (d: any) => {
   const v: any = { so_id: d.so_id, pl_ids: d.pl_ids ?? [], row_version: d.row_version };
   for (const k of HEAD_KEYS) v[k] = d[k] ?? '';
-  v.lines = (d.lines ?? []).map((l: any) => ({ ...EMPTY_LINE, ...Object.fromEntries(Object.entries(l).map(([k, x]) => [k, x ?? ''])) }));
+  v.lines = (d.lines ?? []).map((l: any) => {
+    const x: any = { ...EMPTY_LINE, ...Object.fromEntries(Object.entries(l).map(([k, y]) => [k, y ?? ''])) };
+    if (Number(x.desc_auto) && !compose(x) && x.description) x.desc_auto = 0;   // a description without parts is a typed one
+    return x;
+  });
   return v;
 };
 
@@ -134,7 +147,9 @@ export function CommercialInvoiceDetailPage() {
     for (const k of ['currency_id', 'exchange_rate', 'total_cartons', 'total_pcs', 'net_weight_kg', 'gross_weight_kg', 'goods_gst_rate', 'charges_gst_rate']) b[k] = num(v[k]);
     b.qty_unit = v.qty_unit || 'PCS'; b.invoice_format = v.invoice_format || 'BUYER';
     b.lines = v.lines.map((l: any) => ({ line_kind: l.line_kind || 'GOODS', so_id: num(l.so_id), style_id: num(l.style_id), color_id: num(l.color_id), order_no: nz(l.order_no),
-      buyer_sku_no: nz(l.buyer_sku_no), buyer_item_no: nz(l.buyer_item_no), supplier_mat_no: nz(l.supplier_mat_no), description: nz(l.description), hsn_code: nz(l.hsn_code),
+      buyer_sku_no: nz(l.buyer_sku_no), buyer_item_no: nz(l.buyer_item_no), supplier_mat_no: nz(l.supplier_mat_no), hsn_code: nz(l.hsn_code),
+      description: Number(l.desc_auto) && compose(l) ? compose(l) : nz(l.description), desc_auto: !!Number(l.desc_auto) && !!compose(l),
+      composition: nz(l.composition), construction: nz(l.construction), gender_label: nz(l.gender_label), garment: nz(l.garment), pack_info: nz(l.pack_info), uqc: nz(l.uqc),
       qty: Number(l.qty), unit_price: Number(l.unit_price), gst_rate: num(l.gst_rate) }));
     return b;
   };
@@ -186,10 +201,19 @@ export function CommercialInvoiceDetailPage() {
             <Button variant="secondary" id="ci-print" onClick={() => void print(v.invoice_format)}><Printer size={14} />Print</Button>
             <Button variant="secondary" id="ci-excel" onClick={() => void excel(v.invoice_format)}><Download size={14} />Excel</Button></>}
           {editable && <Button loading={busy} id="ci-save" onClick={() => void save()}><Save size={14} />Save</Button>}
-          {!isNew && !final && can('EXPORT.APPROVE') && <Button variant="secondary" loading={busy} id="ci-finalize" onClick={() => void act('finalize', {}, 'Invoice finalised — read-only')}><Lock size={14} />Finalise</Button>}
+          {!isNew && !final && can('EXPORT.APPROVE') && <Button variant="secondary" loading={busy} id="ci-finalize" disabled={!!detail.data?.checks?.errors?.length} title={detail.data?.checks?.errors?.length ? 'Fix the points listed above first' : undefined} onClick={() => void act('finalize', {}, 'Invoice finalised — read-only')}><Lock size={14} />Finalise</Button>}
           {!isNew && final && can('EXPORT.APPROVE') && <Button variant="secondary" id="ci-reopen" onClick={() => setConfirm('reopen')}><Unlock size={14} />Reopen</Button>}
           {!isNew && !final && can('EXPORT.DELETE') && <Button variant="danger" onClick={() => setConfirm('delete')}><Trash2 size={14} /></Button>}
         </div>} />
+      {!isNew && detail.data?.checks && !final && (
+        <div className={clsx('mb-3 rounded-lg border px-3.5 py-2.5 text-[12.5px]', detail.data.checks.errors.length ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50')} id="ci-checks">
+          <p className={clsx('font-semibold', detail.data.checks.errors.length ? 'text-red-700' : 'text-emerald-800')}>
+            {detail.data.checks.errors.length ? `${detail.data.checks.errors.length} point(s) to fix before the invoice can be finalised` : 'Ready to finalise — the export particulars are complete'}</p>
+          {detail.data.checks.errors.map((m: string) => <p key={m} className="text-red-700">• {m}</p>)}
+          {detail.data.checks.warnings.map((m: string) => <p key={m} className="text-amber-800">⚠ {m}</p>)}
+        </div>
+      )}
+      {!isNew && detail.data?.gst_endorsement && <p className="mb-3 text-[12px] text-slate-600">GST endorsement printed: <b>{detail.data.gst_endorsement}</b></p>}
       {dirtyTotals && <p className="mb-3 rounded border border-amber-200 bg-amber-50 px-3 py-1.5 text-[12px] text-amber-800">Not saved: the lines changed — Save before preview / print / Excel.</p>}
 
       <fieldset disabled={!editable} className="space-y-4" id="ci-form">
@@ -235,6 +259,11 @@ export function CommercialInvoiceDetailPage() {
               <Textarea className="sm:col-span-2" rows={2} label="Buyer's Order No. & Date (one PO per line)" value={v.buyer_order_ref} onChange={(e) => set('buyer_order_ref', e.target.value)} />
               <Select label="Currency" options={(currencies.data ?? []).map((c) => ({ value: c.id, label: String(c.code) }))} value={v.currency_id} onChange={(e) => set('currency_id', e.target.value)} />
               <Input label={`Exchange rate (₹ per 1 ${cur?.code ?? ''})`} type="number" step="any" value={v.exchange_rate} id="ci-xr" onChange={(e) => set('exchange_rate', e.target.value)} />
+              <Select label="GST export type" id="ci-gst-type" value={v.gst_supply_type} placeholder="— Select —" onChange={(e) => set('gst_supply_type', e.target.value)}
+                options={[{ value: 'LUT', label: 'Under LUT — without payment of IGST' }, { value: 'IGST', label: 'On payment of IGST (refund)' }]}
+                hint="Printed as the GST endorsement (CGST rule 46)" />
+              <Input label="LUT ARN" id="ci-lut" value={v.lut_arn} disabled={v.gst_supply_type !== 'LUT'} placeholder="AD3304…" onChange={(e) => set('lut_arn', e.target.value)}
+                hint="LUT acknowledgement for this financial year" />
             </div>
           </Card>
           <Card title="Consignee · buyer · ship to">
@@ -273,17 +302,18 @@ export function CommercialInvoiceDetailPage() {
         <Card title="Lines" subtitle="Goods: one line per order / style / colour (shipped quantity from the packing lists). Charges (IGST layout): hanger cost and the like — their quantity is printed beside the item references so the quantity total stays the goods quantity."
           actions={editable && <div className="flex gap-2">
             <Button size="sm" variant="secondary" onClick={() => set('lines', [...v.lines, { ...EMPTY_LINE }])}><Plus size={13} />Goods line</Button>
-            <Button size="sm" variant="secondary" id="ci-add-charge" onClick={() => set('lines', [...v.lines, { ...EMPTY_LINE, line_kind: 'CHARGE', description: 'HANGER COST', qty: totals.qty || '' }])}><Plus size={13} />Charge</Button>
+            <Button size="sm" variant="secondary" id="ci-add-charge" onClick={() => set('lines', [...v.lines, { ...EMPTY_LINE, line_kind: 'CHARGE', desc_auto: 0, description: 'HANGER COST', hsn_code: '39269069', qty: totals.qty || '' }])}><Plus size={13} />Charge</Button>
           </div>}>
           <div className="overflow-x-auto">
             <table className="w-full" id="ci-lines">
               <thead><tr><th className="th w-16">Kind</th><th className="th">Order no</th><th className="th">SKU / EAN</th><th className="th">{v.item_ref_label || 'Buyer item no'}</th>
-                <th className="th">Supplier mat no</th><th className="th">Description</th><th className="th">HSN</th><th className="th text-right">Qty</th><th className="th text-right">Rate</th>
+                <th className="th">Supplier mat no</th><th className="th">Description of goods</th><th className="th">HSN · UQC</th><th className="th text-right">Qty</th><th className="th text-right">Rate</th>
                 <th className="th text-right">Amount</th>{igst && <th className="th text-right">IGST %</th>}<th className="th" /></tr></thead>
               <tbody>
                 {!v.lines.length && <tr><td colSpan={12} className="td py-6 text-center text-slate-400">No lines — fill from the order or add a line</td></tr>}
                 {v.lines.map((l: any, i: number) => {
-                  const inp = (k: string, w = 'w-28', type = 'text') => <input className={clsx('input h-8 py-0 text-[12px]', w, type === 'number' && 'text-right')} type={type} step="any" value={l[k] ?? ''} data-line={`${i}-${k}`} onChange={(e) => setLine(i, k, e.target.value)} />;
+                  const PH: Record<string, string> = { composition: 'composition e.g. 95% COTTON 5% ELASTANE', garment: 'garment e.g. PYJAMA SETS', pack_info: 'pack e.g. HANGER PACK', hsn_code: '8-digit HSN' };
+                  const inp = (k: string, w = 'w-28', type = 'text') => <input className={clsx('input h-8 py-0 text-[12px]', w, type === 'number' && 'text-right')} type={type} step="any" placeholder={PH[k]} value={l[k] ?? ''} data-line={`${i}-${k}`} onChange={(e) => setLine(i, k, e.target.value)} />;
                   return (
                     <tr key={i} className="align-top">
                       <td className="td text-[11px]"><Badge tone={l.line_kind === 'CHARGE' ? 'violet' : 'slate'}>{l.line_kind === 'CHARGE' ? 'charge' : 'goods'}</Badge></td>
@@ -291,8 +321,28 @@ export function CommercialInvoiceDetailPage() {
                       <td className="td">{l.line_kind === 'CHARGE' ? null : inp('buyer_sku_no', 'w-32')}</td>
                       <td className="td">{l.line_kind === 'CHARGE' ? null : inp('buyer_item_no')}</td>
                       <td className="td">{l.line_kind === 'CHARGE' ? null : inp('supplier_mat_no', 'w-24')}</td>
-                      <td className="td">{inp('description', 'w-72')}</td>
-                      <td className="td">{inp('hsn_code', 'w-24')}</td>
+                      <td className="td">
+                        {l.line_kind === 'CHARGE' ? inp('description', 'w-80') : (
+                          <div className="w-[26rem] space-y-1" data-desc={i}>
+                            <div className="grid grid-cols-[1fr_92px_86px] gap-1">
+                              {inp('composition', 'w-full')}
+                              <select className="input h-8 py-0 text-[12px]" value={l.construction ?? ''} data-line={`${i}-construction`} onChange={(e) => setLine(i, 'construction', e.target.value)}>
+                                <option value="">knit / woven</option>{['KNITTED', 'WOVEN', 'CROCHETED'].map((x) => <option key={x}>{x}</option>)}</select>
+                              <select className="input h-8 py-0 text-[12px]" value={l.gender_label ?? ''} data-line={`${i}-gender_label`} onChange={(e) => setLine(i, 'gender_label', e.target.value)}>
+                                <option value="">gender</option>{['MENS', 'LADIES', 'BOYS', 'GIRLS', 'INFANTS', 'UNISEX', 'KIDS'].map((x) => <option key={x}>{x}</option>)}</select>
+                            </div>
+                            <div className="grid grid-cols-2 gap-1">{inp('garment', 'w-full')}{inp('pack_info', 'w-full')}</div>
+                            <label className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                              <input type="checkbox" checked={!!Number(l.desc_auto)} data-line={`${i}-desc_auto`} onChange={(e) => setLine(i, 'desc_auto', e.target.checked ? 1 : 0)} />
+                              built from the parts (composition · knit/woven · gender · garment · pack)
+                            </label>
+                            {Number(l.desc_auto) ? <p className="rounded bg-slate-50 px-2 py-1 text-[11.5px] font-semibold" data-line={`${i}-composed`}>{compose(l) || <span className="font-normal text-red-600">fill the parts</span>}</p>
+                              : inp('description', 'w-full')}
+                          </div>
+                        )}
+                      </td>
+                      <td className="td"><div className="space-y-1">{inp('hsn_code', 'w-24')}
+                        <select className="input h-8 w-24 py-0 text-[12px]" value={l.uqc ?? ''} data-line={`${i}-uqc`} onChange={(e) => setLine(i, 'uqc', e.target.value)}>{UQC.map((x) => <option key={x}>{x}</option>)}</select></div></td>
                       <td className="td text-right">{inp('qty', 'w-24', 'number')}</td>
                       <td className="td text-right">{inp('unit_price', 'w-20', 'number')}</td>
                       <td className="td text-right tabular-nums font-semibold">{fmtDecimal(totals.amt(l), 2)}</td>
@@ -307,6 +357,19 @@ export function CommercialInvoiceDetailPage() {
             </table>
           </div>
         </Card>
+
+        {!isNew && detail.data?.hsn_summary?.length > 0 && (
+          <Card title="HSN-wise summary" subtitle="For the shipping bill and GSTR-1 (exports) — from the saved invoice; also a sheet in the Excel">
+            <table className="w-full" id="ci-hsn">
+              <thead><tr><th className="th">HSN</th><th className="th">Description</th><th className="th">UQC</th><th className="th text-right">Qty</th><th className="th text-right">Value {cur?.code}</th>
+                <th className="th text-right">Taxable ₹</th><th className="th text-right">IGST %</th><th className="th text-right">IGST ₹</th></tr></thead>
+              <tbody>{detail.data.hsn_summary.map((h: any) => (
+                <tr key={`${h.hsn_code}|${h.uqc}|${h.gst_rate}`}><td className="td font-mono text-[12px]">{h.hsn_code || <span className="text-red-600">missing</span>}</td><td className="td text-[12px]">{h.description}</td>
+                  <td className="td text-[12px]">{h.uqc}</td><td className="td text-right tabular-nums">{fmtNumber(h.qty)}</td><td className="td text-right tabular-nums">{fmtDecimal(h.value_fc, 2)}</td>
+                  <td className="td text-right tabular-nums">{fmtDecimal(h.value_inr, 2)}</td><td className="td text-right">{h.gst_rate}</td><td className="td text-right tabular-nums">{fmtDecimal(h.gst_inr, 2)}</td></tr>))}</tbody>
+            </table>
+          </Card>
+        )}
 
         <div className="grid gap-4 lg:grid-cols-2">
           <Card title="Totals & words">
@@ -345,8 +408,8 @@ export function CommercialInvoiceDetailPage() {
       <ConfirmDialog open={confirm === 'delete'} title="Delete invoice" message={`Delete ${detail.data?.invoice_no ?? ''}? Its packing lists are released.`} busy={busy} onCancel={() => setConfirm(null)}
         onConfirm={async () => { setBusy(true); try { await http.del(`/commercial-invoices/${id}`); toast('Invoice deleted'); void qc.invalidateQueries({ queryKey: ['commercial-invoices'] }); nav('/export/invoices'); } catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(false); } }} />
       <Modal open={confirm === 'reopen'} onClose={() => setConfirm(null)} title="Reopen the invoice" size="sm"
-        footer={<><button className="btn-secondary" onClick={() => setConfirm(null)}>Cancel</button><Button loading={busy} disabled={reason.trim().length < 3} onClick={() => void act('reopen', { reason }, 'Invoice reopened')}>Reopen</Button></>}>
-        <Textarea label="Reason" required value={reason} onChange={(e) => setReason(e.target.value)} />
+        footer={<><button className="btn-secondary" onClick={() => setConfirm(null)}>Cancel</button><Button loading={busy} id="ci-reopen-confirm" disabled={reason.trim().length < 3} onClick={() => void act('reopen', { reason }, 'Invoice reopened')}>Reopen</Button></>}>
+        <Textarea label="Reason" required id="ci-reopen-reason" value={reason} onChange={(e) => setReason(e.target.value)} />
       </Modal>
     </div>
   );

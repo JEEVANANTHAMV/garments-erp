@@ -9,6 +9,7 @@ import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
 import { buildInvoiceLayout, buildInvoiceWorkbook, invoiceTotals, type InvoiceDoc } from './invoiceLayout.js';
 import { amountWords, qtyWords } from './invoiceWords.js';
+import { UQC, CONSTRUCTIONS, INVOICE_NO_RE, composeDescription, constructionOf, genderLabel, uqcOf, gstEndorsement, invoiceChecks, hsnSummary } from './invoiceRules.js';
 
 /**
  * Commercial invoice for shipping in the client's FK-087 format (voice note 23-Oct-2026). The invoice is made from the
@@ -136,16 +137,32 @@ async function prefill(cid: number, soId: number, plIds: number[] | null, format
       qty: Math.max(0, n(l.order_qty) - n(l.cancelled_qty)), unit_price: n(l.unit_price), description: l.description, style_code: l.style_code,
       buyer_sku_no: null, buyer_item_no: null, supplier_mat_no: null }));
   }
-  // buyer references / descriptions remembered from the buyer's earlier invoices of the same style
-  const prev = await query<any>(`SELECT l.style_id, l.description, l.buyer_sku_no, l.buyer_item_no, l.supplier_mat_no, l.hsn_code FROM trx_commercial_invoice_line l
+  // buyer references / description remembered from the buyer's earlier invoices of the same style; else the masters
+  // (composition of the style's fabric, knitted / woven from the fabric type, gender + garment + HSN from the product)
+  const prev = await query<any>(`SELECT l.* FROM trx_commercial_invoice_line l
       JOIN trx_commercial_invoice ci ON ci.id = l.invoice_id WHERE ci.company_id = ? AND ci.buyer_id = ? AND l.line_kind = 'GOODS' ORDER BY ci.invoice_date DESC, l.id DESC LIMIT 500`, [cid, so.buyer_id]);
+  const styleIds = [...new Set(lines.map((l) => Number(l.style_id)).filter(Boolean))];
+  const masters = styleIds.length ? await query<any>(`SELECT st.id, p.product_name, p.gender, p.hsn_code AS product_hsn, f.fabric_type, f.hsn_code AS fabric_hsn, cm.description AS composition, um.code AS uom
+      FROM mst_style st LEFT JOIN mst_product p ON p.id = st.product_id LEFT JOIN mst_fabric f ON f.id = st.fabric_id
+      LEFT JOIN mst_composition cm ON cm.id = f.composition_id LEFT JOIN cfg_uom um ON um.id = p.default_uom WHERE st.id IN (?)`, [styleIds]) : [];
+  const qtyUnit = last?.qty_unit ?? 'PCS';
   lines = lines.map((l, i) => {
     const pv = prev.find((p) => Number(p.style_id) === Number(l.style_id));
+    const ms = masters.find((m) => Number(m.id) === Number(l.style_id));
+    const hsn = pv?.hsn_code ?? (ms?.product_hsn && /^\d{8}$/.test(ms.product_hsn) ? ms.product_hsn : null) ?? null;
+    const parts = pv && (pv.composition || pv.garment)
+      ? { composition: pv.composition, construction: pv.construction, gender_label: pv.gender_label, garment: pv.garment, pack_info: pv.pack_info }
+      : { composition: ms?.composition ? String(ms.composition).toUpperCase() : null, construction: constructionOf(ms?.fabric_type, hsn),
+          gender_label: genderLabel(ms?.gender), garment: ms?.product_name ? String(ms.product_name).toUpperCase() : null, pack_info: null };
+    const composed = composeDescription(parts);
+    // a typed description of an earlier invoice stays typed
+    const typed = pv && Number(pv.desc_auto) === 0 ? pv.description : null;
     return {
       line_kind: 'GOODS', sort_order: i + 1, so_id: l.so_id, style_id: l.style_id, color_id: l.color_id, order_no: l.order_no,
       buyer_sku_no: l.buyer_sku_no ?? pv?.buyer_sku_no ?? null, buyer_item_no: l.buyer_item_no ?? pv?.buyer_item_no ?? null,
       supplier_mat_no: l.supplier_mat_no ?? pv?.supplier_mat_no ?? l.style_code ?? null,
-      description: pv?.description ?? l.description ?? null, hsn_code: pv?.hsn_code ?? null,
+      ...parts, desc_auto: typed ? 0 : composed ? 1 : 0,
+      description: typed ?? (composed || pv?.description || l.description || null), hsn_code: hsn, uqc: pv?.uqc ?? uqcOf(ms?.uom ?? qtyUnit),
       qty: l.qty, unit_price: l.unit_price, amount: r2(l.qty * l.unit_price), gst_rate: null,
     };
   });
@@ -153,7 +170,7 @@ async function prefill(cid: number, soId: number, plIds: number[] | null, format
     // the previous invoice's charge lines (hanger cost …) come back with the goods quantity as their quantity
     const ch = await query<any>(`SELECT * FROM trx_commercial_invoice_line WHERE invoice_id = ? AND line_kind = 'CHARGE' ORDER BY sort_order, id`, [last.id]);
     const gq = lines.reduce((t, l) => t + n(l.qty), 0);
-    ch.forEach((c, k) => lines.push({ line_kind: 'CHARGE', sort_order: lines.length + k + 1, description: c.description, hsn_code: c.hsn_code, qty: gq,
+    ch.forEach((c, k) => lines.push({ line_kind: 'CHARGE', sort_order: lines.length + k + 1, description: c.description, hsn_code: c.hsn_code, qty: gq, desc_auto: 0, uqc: c.uqc ?? 'PCS',
       unit_price: n(c.unit_price), amount: r2(gq * n(c.unit_price)), gst_rate: c.gst_rate, order_no: null, buyer_sku_no: null, buyer_item_no: null, supplier_mat_no: null }));
   }
 
@@ -197,6 +214,8 @@ async function prefill(cid: number, soId: number, plIds: number[] | null, format
     declaration: last?.declaration ?? await setting(cid, 'CI_DECLARATION'),
     footer_note: format === 'IGST' ? last?.footer_note ?? null : null,
     goods_gst_rate: last?.goods_gst_rate ?? (format === 'IGST' ? 5 : null), charges_gst_rate: last?.charges_gst_rate ?? (format === 'IGST' ? 18 : null),
+    gst_supply_type: format === 'IGST' ? 'IGST' : last?.gst_supply_type ?? ((await setting(cid, 'CI_LUT_ARN')) ? 'LUT' : null),
+    lut_arn: last?.lut_arn ?? await setting(cid, 'CI_LUT_ARN'),
     lines,
   };
 }
@@ -206,14 +225,18 @@ const lineSchema = z.object({
   line_kind: z.enum(['GOODS', 'CHARGE']).default('GOODS'),
   so_id: s.id(), style_id: s.id(), color_id: s.id(),
   order_no: s.nullableStr(60), buyer_sku_no: s.nullableStr(60), buyer_item_no: s.nullableStr(60), supplier_mat_no: s.nullableStr(60),
-  description: s.nullableStr(500), hsn_code: s.nullableStr(10),
+  description: s.nullableStr(500), hsn_code: z.union([z.string().trim().regex(/^\d{4,8}$/, 'HSN: 4 to 8 digits'), z.literal(''), z.null()]).transform((v) => v || null).nullish(),
+  composition: s.nullableStr(120), construction: z.union([z.enum(CONSTRUCTIONS), z.literal(''), z.null()]).transform((v) => v || null).nullish(),
+  gender_label: s.nullableStr(20), garment: s.nullableStr(80), pack_info: s.nullableStr(80),
+  desc_auto: z.coerce.boolean().default(false), uqc: z.union([z.enum(UQC), z.literal(''), z.null()]).transform((v) => v || null).nullish(),
   qty: z.coerce.number().positive('Quantity must be more than 0'),
   unit_price: z.coerce.number().min(0, 'Rate cannot be negative'),
   gst_rate: z.coerce.number().min(0).max(40).nullish(),
 });
 const txt = (max: number) => s.nullableStr(max);
 const invSchema = z.object({
-  invoice_no: s.nullableStr(40), invoice_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD'),
+  invoice_no: z.union([z.string().trim().regex(INVOICE_NO_RE, 'Invoice no: at most 16 characters — letters, digits, - and / (GST rule)'), z.literal(''), z.null()]).transform((v) => v || null).nullish(),
+  invoice_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD'),
   so_id: s.idReq(), invoice_format: z.enum(['BUYER', 'IGST']).default('BUYER'),
   currency_id: s.id(), exchange_rate: z.coerce.number().positive('Enter the exchange rate').nullish(),
   pl_ids: z.array(z.coerce.number().int().positive()).max(30).default([]),
@@ -229,6 +252,7 @@ const invSchema = z.object({
   bank_details: s.text(), rex_declaration: s.text(), declaration: s.text(), footer_note: s.text(),
   goods_gst_rate: z.coerce.number().min(0).max(40).nullish(), charges_gst_rate: z.coerce.number().min(0).max(40).nullish(),
   remarks: s.text(),
+  gst_supply_type: z.union([z.enum(['LUT', 'IGST']), z.literal(''), z.null()]).transform((v) => v || null).nullish(), lut_arn: txt(40),
   lines: z.array(lineSchema).min(1, 'Add at least one line').max(300),
   row_version: z.coerce.number().int().nullish(),
 });
@@ -238,7 +262,7 @@ const HEADER_TEXT = ['exporter_details', 'exporter_ref', 'buyer_order_ref', 'oth
   'country_origin_text', 'country_dest_text', 'pre_carriage_by', 'place_of_receipt', 'vessel_flight_no', 'port_of_loading', 'port_of_discharge', 'final_destination',
   'terms_of_delivery', 'terms_of_payment', 'marks_nos', 'packages_text', 'goods_heading', 'item_ref_label', 'qty_unit', 'rate_basis', 'total_cartons', 'total_pcs',
   'total_pcs_unit', 'net_weight_kg', 'gross_weight_kg', 'qty_words', 'amount_words', 'bank_details', 'rex_declaration', 'declaration', 'footer_note',
-  'goods_gst_rate', 'charges_gst_rate', 'remarks'] as const;
+  'goods_gst_rate', 'charges_gst_rate', 'remarks', 'gst_supply_type', 'lut_arn'] as const;
 
 async function validate(tx: Tx, cid: number, b: InvIn, invoiceId: number | null) {
   const so = await txQueryOne<any>(tx, `SELECT so.id, so.buyer_id, so.currency_id, so.exchange_rate, so.approval_state, cu.code AS currency_code FROM trx_sales_order so
@@ -270,7 +294,14 @@ async function validate(tx: Tx, cid: number, b: InvIn, invoiceId: number | null)
 async function writeInvoice(tx: Tx, req: Request, b: InvIn, id: number | null) {
   const cid = req.user!.companyId;
   const v = await validate(tx, cid, b, id);
-  const lines = b.lines.map((l, i) => ({ ...l, sort_order: i + 1, amount: r2(l.qty * l.unit_price) }));
+  if (b.invoice_format === 'IGST' && b.gst_supply_type === 'LUT') throw BadRequest('The IGST layout is for exports on payment of IGST — choose the buyer layout for a LUT export', [{ field: 'gst_supply_type', message: 'Not with the IGST layout' }]);
+  const lines = b.lines.map((l, i) => {
+    const composed = composeDescription(l);
+    // description built from its parts unless typed; a line needs one or the other
+    const description = l.desc_auto && composed ? composed : l.description ?? (composed || null);
+    if (!description) throw BadRequest(`Line ${i + 1}: enter the description (or its parts)`);
+    return { ...l, description, desc_auto: l.desc_auto && !!composed, sort_order: i + 1, amount: r2(l.qty * l.unit_price) };
+  });
   const T = invoiceTotals({ lines: lines as any, exchange_rate: v.xr, goods_gst_rate: b.goods_gst_rate ?? null, charges_gst_rate: b.charges_gst_rate ?? null });
   const head: Record<string, unknown> = {
     invoice_date: b.invoice_date, so_id: b.so_id, buyer_id: v.so.buyer_id, currency_id: v.currencyId, exchange_rate: v.xr, invoice_format: b.invoice_format,
@@ -302,9 +333,10 @@ async function writeInvoice(tx: Tx, req: Request, b: InvIn, id: number | null) {
   }
   for (const l of lines) {
     await txExecute(tx, `INSERT INTO trx_commercial_invoice_line (invoice_id, sort_order, line_kind, so_id, style_id, color_id, order_no, buyer_sku_no, buyer_item_no, supplier_mat_no,
-        description, hsn_code, qty, unit_price, amount, gst_rate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        description, hsn_code, qty, unit_price, amount, gst_rate, composition, construction, gender_label, garment, pack_info, desc_auto, uqc) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [invoiceId, l.sort_order, l.line_kind, l.so_id ?? null, l.style_id ?? null, l.color_id ?? null, l.order_no ?? null, l.buyer_sku_no ?? null, l.buyer_item_no ?? null,
-        l.supplier_mat_no ?? null, l.description ?? null, l.hsn_code ?? null, l.qty, l.unit_price, l.amount, l.gst_rate ?? null]);
+        l.supplier_mat_no ?? null, l.description, l.hsn_code ?? null, l.qty, l.unit_price, l.amount, l.gst_rate ?? null,
+        l.composition ?? null, l.construction ?? null, l.gender_label ?? null, l.garment ?? null, l.pack_info ?? null, l.desc_auto ? 1 : 0, l.uqc ?? null]);
   }
   if (b.pl_ids.length) await txQuery(tx, `UPDATE trx_packing_list SET invoice_id = ? WHERE company_id = ? AND id IN (?)`, [invoiceId, cid, [...new Set(b.pl_ids)]]);
   return invoiceId!;
@@ -335,14 +367,14 @@ commercialInvoiceRouter.put('/commercial-invoices/:id', requirePermission('EXPOR
 commercialInvoiceRouter.post('/commercial-invoices/:id/finalize', requirePermission('EXPORT.APPROVE'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = Number(req.params.id);
+  // the mandatory export particulars (invoiceRules.invoiceChecks) — every error must be cleared first
+  const inv = await loadInvoice(cid, id);
+  if (inv.checks.errors.length) throw BadRequest(`Cannot finalise — ${inv.checks.errors.length} point(s) to fix: ${inv.checks.errors.join('; ')}`, inv.checks.errors.map((m) => ({ field: 'checks', message: m })));
   await transaction(async (tx) => {
     const cur = await txQueryOne<any>(tx, `SELECT * FROM trx_commercial_invoice WHERE id = ? AND company_id = ? FOR UPDATE`, [id, cid]);
     if (!cur) throw NotFound('Invoice not found');
     if (cur.doc_status === 'FINAL') return;
-    const ln = await txQueryOne<any>(tx, `SELECT COUNT(*) c, SUM(unit_price <= 0) z FROM trx_commercial_invoice_line WHERE invoice_id = ? AND line_kind = 'GOODS'`, [id]);
-    if (!Number(ln?.c)) throw BadRequest('The invoice has no goods line');
-    if (Number(ln?.z)) throw BadRequest('A goods line has no rate — enter every rate before finalising');
-    if (!cur.exporter_details || !cur.consignee_details) throw BadRequest('Fill the exporter and consignee boxes before finalising');
+    if (Number(cur.row_version) !== Number(inv.row_version)) throw Conflict('The invoice changed while it was being checked — try again');
     await txExecute(tx, `UPDATE trx_commercial_invoice SET doc_status = 'FINAL', finalized_by = ?, finalized_at = NOW(), row_version = row_version + 1 WHERE id = ?`, [req.user!.id, id]);
   });
   await audit(req, 'trx_commercial_invoice', id, 'UPDATE', { doc_status: 'DRAFT' }, { doc_status: 'FINAL' });
@@ -429,10 +461,16 @@ async function loadInvoice(cid: number, id: number) {
       gst_rate: l.gst_rate == null ? null : n(l.gst_rate) })),
   };
   const T = invoiceTotals(doc);
+  const today = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
+  const checks = invoiceChecks({ ...doc, invoice_no: h.invoice_no, gst_supply_type: h.gst_supply_type, lut_arn: h.lut_arn,
+    packing_lists: pls.map((p) => ({ ...p, total_cartons: p.total_cartons == null ? null : n(p.total_cartons), total_qty: p.total_qty == null ? null : n(p.total_qty),
+      net_weight_kg: p.net_weight_kg == null ? null : n(p.net_weight_kg), gross_weight_kg: p.gross_weight_kg == null ? null : n(p.gross_weight_kg) })) }, today);
   return {
     ...doc, so_no: h.so_no, io_no: h.io_no, buyer_name: h.buyer_name, so_id: h.so_id, buyer_id: h.buyer_id, currency_id: h.currency_id, doc_status: h.doc_status,
     row_version: h.row_version, finalized_at: h.finalized_at, finalized_by_name: h.finalized_by_name, legacy,
-    packing_lists: pls, pl_ids: pls.map((p) => Number(p.id)), totals: T,
+    packing_lists: pls, pl_ids: pls.map((p) => Number(p.id)), totals: T, checks,
+    hsn_summary: hsnSummary(doc.lines, doc.exchange_rate, doc.goods_gst_rate, doc.charges_gst_rate),
+    gst_endorsement: gstEndorsement(h.gst_supply_type, h.lut_arn),
     words: { qty: doc.qty_words || qtyWords(T.goods_qty, doc.qty_unit), amount: doc.amount_words || amountWords(T.total_amount, doc.currency_code) },
   };
 }

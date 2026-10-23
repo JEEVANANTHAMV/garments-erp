@@ -55,6 +55,9 @@ CALL _ci_add_col('trx_commercial_invoice', 'declaration',        'TEXT NULL');
 CALL _ci_add_col('trx_commercial_invoice', 'footer_note',        'TEXT NULL COMMENT ''IGST format: import bond / other note above the declaration''');
 CALL _ci_add_col('trx_commercial_invoice', 'charges_gst_rate',   'DECIMAL(5,2) NULL COMMENT ''IGST format: GST % on charge lines (hangers 18)''');
 CALL _ci_add_col('trx_commercial_invoice', 'goods_gst_rate',     'DECIMAL(5,2) NULL COMMENT ''IGST format: GST % on goods (5)''');
+-- GST on exports (CGST rule 46 endorsement / rule 96 refund): under LUT without IGST, or on payment of IGST
+CALL _ci_add_col('trx_commercial_invoice', 'gst_supply_type',    'VARCHAR(4) NULL COMMENT ''LUT (export under LUT, no IGST) / IGST (export on payment of IGST)''');
+CALL _ci_add_col('trx_commercial_invoice', 'lut_arn',            'VARCHAR(40) NULL COMMENT ''LUT acknowledgement (ARN) — required for LUT exports''');
 CALL _ci_add_col('trx_commercial_invoice', 'remarks',            'TEXT NULL');
 CALL _ci_add_col('trx_commercial_invoice', 'finalized_by',       'BIGINT UNSIGNED NULL');
 CALL _ci_add_col('trx_commercial_invoice', 'finalized_at',       'DATETIME NULL');
@@ -71,6 +74,14 @@ CALL _ci_add_col('trx_commercial_invoice_line', 'order_no',        'VARCHAR(60) 
 CALL _ci_add_col('trx_commercial_invoice_line', 'buyer_sku_no',    'VARCHAR(60) NULL COMMENT ''Buyer SKU / EAN''');
 CALL _ci_add_col('trx_commercial_invoice_line', 'buyer_item_no',   'VARCHAR(60) NULL COMMENT ''Buyer item id (e.g. COOP ID NO)''');
 CALL _ci_add_col('trx_commercial_invoice_line', 'supplier_mat_no', 'VARCHAR(60) NULL COMMENT ''Our material / style no''');
+-- structured description (customs style: COMPOSITION + KNITTED/WOVEN + GENDER + GARMENT (PACK)) and the GST unit
+CALL _ci_add_col('trx_commercial_invoice_line', 'composition',     'VARCHAR(120) NULL COMMENT ''e.g. 95% COTTON 5% ELASTANE''');
+CALL _ci_add_col('trx_commercial_invoice_line', 'construction',    'VARCHAR(12) NULL COMMENT ''KNITTED / WOVEN / CROCHETED''');
+CALL _ci_add_col('trx_commercial_invoice_line', 'gender_label',    'VARCHAR(20) NULL COMMENT ''MENS / LADIES / BOYS / GIRLS / INFANTS / UNISEX''');
+CALL _ci_add_col('trx_commercial_invoice_line', 'garment',         'VARCHAR(80) NULL COMMENT ''e.g. PYJAMA SETS, T-SHIRT''');
+CALL _ci_add_col('trx_commercial_invoice_line', 'pack_info',       'VARCHAR(80) NULL COMMENT ''e.g. HANGER PACK, 2 PCS PACK''');
+CALL _ci_add_col('trx_commercial_invoice_line', 'desc_auto',       'TINYINT(1) NOT NULL DEFAULT 1 COMMENT ''1 = description built from the parts, 0 = typed''');
+CALL _ci_add_col('trx_commercial_invoice_line', 'uqc',             'VARCHAR(8) NULL COMMENT ''GST unit quantity code: PCS / SET / PAC / DOZ / NOS / PRS''');
 CALL _ci_add_col('trx_commercial_invoice_line', 'gst_rate',        'DECIMAL(5,2) NULL COMMENT ''IGST % of the line (blank = invoice default for its kind)''');
 
 SET @x = (SELECT DATA_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_commercial_invoice_line' AND COLUMN_NAME='qty');
@@ -80,6 +91,10 @@ SET @x = (SELECT CHARACTER_MAXIMUM_LENGTH FROM information_schema.COLUMNS WHERE 
 SET @s = IF(@x < 500, 'ALTER TABLE trx_commercial_invoice_line MODIFY description VARCHAR(500) NULL', 'SELECT 1');
 PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 DROP PROCEDURE IF EXISTS _ci_add_col;
+
+-- lines saved before the description parts existed keep their typed description
+UPDATE trx_commercial_invoice_line SET desc_auto = 0
+ WHERE desc_auto = 1 AND composition IS NULL AND construction IS NULL AND gender_label IS NULL AND garment IS NULL AND pack_info IS NULL;
 
 -- ------------------------------------------------------------ document defaults (per company; the latest invoice of the buyer wins)
 INSERT IGNORE INTO cfg_system_setting (company_id, setting_key, setting_value, description)
@@ -91,6 +106,9 @@ SELECT id, 'CI_REX_DECLARATION', NULL, 'Commercial invoice (buyer format): REX d
 INSERT IGNORE INTO cfg_system_setting (company_id, setting_key, setting_value, description)
 SELECT id, 'CI_DECLARATION', CONCAT('“Any Dispute arising out of this transaction/contract will be refered to institutional Arbitration Council of', CHAR(10), '‘Tirupur as per the rules and regulations of Arbitration Council of ‘Tirupur and the award passed will be binding on us"'),
        'Commercial invoice: declaration at the foot' FROM mst_company;
+
+INSERT IGNORE INTO cfg_system_setting (company_id, setting_key, setting_value, description)
+SELECT id, 'CI_LUT_ARN', NULL, 'Commercial invoice: LUT acknowledgement no (ARN) for exports without payment of IGST (current financial year)' FROM mst_company;
 
 -- permissions: the invoice keeps the EXPORT.* rights it had; finalising / reopening needs EXPORT.APPROVE
 INSERT INTO mst_permission (module_id, permission_code, permission_name)
