@@ -22,8 +22,6 @@ const errMsg = (e: unknown, f = 'Something went wrong') => {
 };
 const r2 = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
 const inr = (v: unknown) => `₹ ${fmtDecimal(v, 2)}`;
-/** a field entered from the shipping bill (yellow on the client's PDF) */
-const Y = 'rounded-md bg-amber-50 ring-1 ring-amber-300 p-1.5';
 
 export function ShippingBillsPage() {
   const nav = useNavigate();
@@ -40,14 +38,16 @@ export function ShippingBillsPage() {
       <DataTable rows={list.data?.data ?? []} loading={list.isLoading} error={list.error} onRetry={() => void list.refetch()} rowKey={(r: any) => r.id}
         onRowClick={(r: any) => nav(`/export/shipping-bills/${r.id}`)} pagination={list.data?.pagination} onPage={setPage} emptyTitle="No shipping bills"
         columns={[
-          { key: 'sb_no', header: 'SB no · date', render: (r: any) => <div><p className="font-mono text-[12px] font-semibold text-brand-700">{r.sb_no}</p><p className="text-[11px] text-slate-500">{fmtDate(r.sb_date)}{r.port_code ? ` · ${r.port_code}` : ''}</p></div> },
-          { key: 'invoice_no', header: 'Invoice', render: (r: any) => <div><p className="font-mono text-[12px]">{r.invoice_no ?? r.ci_invoice_no}</p><p className="text-[11px] text-slate-500">{r.currency_code} {fmtDecimal(r.invoice_value_fc, 2)}</p></div> },
-          { key: 'buyer_name', header: 'Buyer / order', render: (r: any) => <div><p>{r.buyer_name}</p><p className="text-[11px] text-slate-500">{r.so_no}</p></div> },
+          { key: 'sb_no', header: 'S.B. No · Date', render: (r: any) => <div><p className="font-mono text-[12px] font-semibold text-brand-700">{r.sb_no}</p><p className="text-[11px] text-slate-500">{fmtDate(r.sb_date)}</p></div> },
+          { key: 'port_code', header: 'Port · Mode', render: (r: any) => <span className="text-[12px]">{r.port_code ?? '—'}{r.mode ? ` · ${r.mode === 'AIR' ? 'Air' : r.mode === 'SEA' ? 'Sea' : r.mode}` : ''}</span> },
+          { key: 'invoice_no', header: 'Inv. No & Date', render: (r: any) => <div><p className="font-mono text-[12px]">{r.invoice_no ?? r.ci_invoice_no}</p><p className="text-[11px] text-slate-500">{fmtDate(r.invoice_date)} · {r.buyer_name ?? ''}</p></div> },
+          { key: 'invoice_value_fc', header: 'Inv. Value', align: 'right', render: (r: any) => `${r.currency_code ?? ''} ${fmtDecimal(r.invoice_value_fc, 2)}` },
+          { key: 'exchange_rate', header: 'Ex. Rate', align: 'right', render: (r: any) => fmtDecimal(r.exchange_rate, 2) },
           { key: 'fob_inr', header: 'FOB ₹', align: 'right', render: (r: any) => fmtDecimal(r.fob_inr, 2) },
-          { key: 'incentives_total', header: 'DBK + RoDTEP + RoSCTL', align: 'right', render: (r: any) => <div><p>{fmtDecimal(r.incentives_total, 2)}</p>{Number(r.incentives_received) > 0 && <p className="text-[11px] text-emerald-700">received {fmtDecimal(r.incentives_received, 2)}</p>}</div> },
-          { key: 'igst_amount', header: 'IGST ₹', align: 'right', render: (r: any) => (Number(r.lut) ? <Badge tone="slate">LUT</Badge> : fmtDecimal(r.igst_amount, 2)) },
-          { key: 'leo_date', header: 'LEO', render: (r: any) => (r.leo_date ? fmtDate(r.leo_date) : '—') },
-          { key: 'brc_due_date', header: 'BRC due', render: (r: any) => fmtDate(r.brc_due_date) },
+          { key: 'drawback_amount', header: 'Drawback', align: 'right', render: (r: any) => fmtDecimal(r.drawback_amount, 2) },
+          { key: 'igst_amount', header: 'IGST', align: 'right', render: (r: any) => (Number(r.lut) ? <Badge tone="slate">LUT</Badge> : fmtDecimal(r.igst_amount, 2)) },
+          { key: 'rosctl_amount', header: 'RoSCTL', align: 'right', render: (r: any) => fmtDecimal(r.rosctl_amount, 2) },
+          { key: 'rodtep_amount', header: 'RoDTEP', align: 'right', render: (r: any) => fmtDecimal(r.rodtep_amount, 2) },
         ]} />
     </div>
   );
@@ -114,67 +114,39 @@ export function ShippingBillDetailPage() {
     .map((x) => ({ value: x.id, label: `${x.invoice_no} · ${fmtDate(x.invoice_date)} · ${x.buyer_name ?? ''} · ${x.currency_code} ${fmtDecimal(x.total_value, 2)}` }));
   const drafts = (invoices.data ?? []).filter((x) => x.doc_status !== 'FINAL' && !x.sb_no).length;
   const incTotal = (Number(v.drawback_amount) || 0) + (Number(v.rodtep_amount) || 0) + (Number(v.rosctl_amount) || 0);
-  const yIn = (k: string, label: string, type = 'number', extra: any = {}) => (
-    <div className={Y}><Input label={label} type={type} step="any" value={v[k] ?? ''} id={`sb-${k}`} disabled={!editable} onChange={(e) => set(k, e.target.value)} {...extra} /></div>
+  const num = (k: string, label: string, extra: any = {}) => (
+    <Input label={label} type="number" step="any" value={v[k] ?? ''} id={`sb-${k}`} disabled={!editable} onChange={(e) => set(k, e.target.value)} {...extra} />
   );
+  // client 23-Oct-2026 (handwritten list): only these fields — the rest of the customs copy is not entered
   return (
     <div>
       <PageHeader breadcrumb={['Export', 'Shipping Bills']} title={isNew ? 'New shipping bill' : <span className="font-mono">SB {d.sb_no}</span>}
-        subtitle={isNew ? 'Pick the final commercial invoice; enter the yellow fields from the shipping bill (LET EXPORT COPY)' : `${d.buyer_name ?? ''} · ${d.so_no ?? ''} · invoice ${d.invoice_no}`}
+        subtitle={isNew ? 'Pick the final commercial invoice — invoice no, date and value come from it' : `${d.buyer_name ?? ''} · ${d.so_no ?? ''} · invoice ${d.invoice_no}`}
         actions={<div className="flex gap-2">
           <Button variant="secondary" onClick={() => nav('/export/shipping-bills')}><ArrowLeft size={15} />Back</Button>
           {editable && <Button loading={busy} id="sb-save" onClick={() => void save()}><Save size={14} />Save</Button>}
           {!isNew && can('EXPORT.DELETE') && <Button variant="danger" onClick={() => setDel(true)}><Trash2 size={14} /></Button>}
         </div>} />
-      <p className="mb-3 flex items-center gap-2 text-[12px] text-slate-600"><span className="inline-block h-3 w-5 rounded bg-amber-100 ring-1 ring-amber-300" /> = entered from the shipping bill; the rest comes from the commercial invoice.</p>
       <div className="space-y-4" id="sb-form">
-        <Card title="Commercial invoice">
+        <Card title="Shipping bill">
           <div className="grid gap-3 p-4 sm:grid-cols-4">
-            <Select className="sm:col-span-2" label="Commercial invoice (final)" required id="sb-invoice" disabled={!isNew} placeholder="— Select —" options={invOptions} value={v.invoice_id}
+            <Select className="sm:col-span-4" label="Commercial invoice (final)" required id="sb-invoice" disabled={!isNew} placeholder="— Select —" options={invOptions} value={v.invoice_id}
               onChange={(e) => void pickInvoice(e.target.value)} hint={drafts ? `${drafts} draft invoice(s) not listed — finalise them first` : undefined} />
-            {src && <>
-              <Input label="Invoice no & date" value={`${src.invoice_no} · ${fmtDate(src.invoice_date)}`} disabled />
-              <Input label={`Invoice value (${src.currency_code})`} value={fmtDecimal(src.invoice_value_fc, 2)} disabled id="sb-inv-value" />
-              <Input label="Order" value={`${src.so_no ?? ''} · ${src.buyer_name ?? ''}`} disabled />
-              <Input label="GST export" value={src.lut ? 'Under LUT (no IGST)' : 'On payment of IGST'} disabled />
-              <Input label={`FOB per invoice (${src.currency_code})`} value={fmtDecimal(src.fob_fc_invoice, 2)} disabled />
-              <Input label="Invoice term" value={src.invoice_term ?? ''} disabled />
-            </>}
-          </div>
-        </Card>
-        <Card title="A · Shipping bill summary">
-          <div className="grid gap-3 p-4 sm:grid-cols-4">
-            {yIn('sb_no', 'SB no', 'text', { required: true })}
-            {yIn('sb_date', 'SB date', 'date', { required: true })}
-            <Input label="Port code" value={v.port_code ?? ''} placeholder="INMAA4" disabled={!editable} onChange={(e) => set('port_code', e.target.value.toUpperCase())} />
-            <Select label="Mode" value={v.mode ?? ''} disabled={!editable} onChange={(e) => set('mode', e.target.value)} options={['SEA', 'AIR', 'ROAD'].map((x) => ({ value: x, label: x }))} />
-            <Input label="Port of loading" value={v.port_of_loading ?? ''} disabled={!editable} onChange={(e) => set('port_of_loading', e.target.value)} />
-            <Input label="Port of discharge" value={v.port_of_discharge ?? ''} disabled={!editable} onChange={(e) => set('port_of_discharge', e.target.value)} />
-            <Input label="Country of final destination" value={v.country_dest ?? ''} disabled={!editable} onChange={(e) => set('country_dest', e.target.value)} />
-            <Input label="Packages" type="number" value={v.packages ?? ''} disabled={!editable} onChange={(e) => set('packages', e.target.value)} />
-            <Input label="Gross weight (kg)" type="number" step="any" value={v.gross_weight_kg ?? ''} disabled={!editable} onChange={(e) => set('gross_weight_kg', e.target.value)} />
-            <Input label="CB / CHA name" value={v.cha_name ?? ''} disabled={!editable} onChange={(e) => set('cha_name', e.target.value)} />
-            <Input label="AD code" value={v.ad_code ?? ''} disabled={!editable} onChange={(e) => set('ad_code', e.target.value)} />
-            <Input label="MAWB / BL no" value={v.bl_awb_no ?? ''} disabled={!editable} onChange={(e) => set('bl_awb_no', e.target.value)} />
-          </div>
-        </Card>
-        <Card title="C · Valuation">
-          <div className="grid gap-3 p-4 sm:grid-cols-4">
-            {yIn('exchange_rate', `Exchange rate (₹ per 1 ${src?.currency_code ?? ''})`, 'number', { hint: 'Customs rate on the shipping bill' })}
-            {yIn('freight_inr', 'Freight (₹)')}
-            <Input label="Insurance (₹)" type="number" step="any" value={v.insurance_inr ?? ''} disabled={!editable} onChange={(e) => set('insurance_inr', e.target.value)} />
-            <div className={Y}><Input label="FOB value (₹)" type="number" step="any" id="sb-fob_inr" value={v.fob_inr ?? ''} disabled={!editable}
-              onChange={(e) => { setFobTyped(true); set('fob_inr', e.target.value); }} hint={fobTyped ? `Worked out: ${inr(fobCalc)}` : 'Invoice value × rate − freight − insurance'} /></div>
-          </div>
-        </Card>
-        <Card title="D · Export promotion (incentives) and IGST" subtitle="Entered once here — Finance tracks the money received; the incentives go into the order's profit">
-          <div className="grid gap-3 p-4 sm:grid-cols-4">
-            {yIn('drawback_amount', 'DBK claim (₹)')}
-            {yIn('rodtep_amount', 'RoDTEP amount (₹)')}
-            {yIn('rosctl_amount', 'RoSCTL amount (₹)')}
-            <div className="self-end text-[12.5px]">Incentives: <b id="sb-inc-total">{inr(incTotal)}</b></div>
-            <Input label="IGST value (₹)" type="number" step="any" value={v.igst_value ?? ''} disabled={!editable || !!src?.lut} onChange={(e) => set('igst_value', e.target.value)} />
-            {src?.lut ? <Input label="IGST amount (₹)" value="0 — export under LUT" disabled /> : yIn('igst_amount', 'IGST amount (₹)', 'number', { hint: 'Refund claimed through the shipping bill' })}
+            <Input label="S.B. No" required type="text" id="sb-sb_no" value={v.sb_no ?? ''} disabled={!editable} onChange={(e) => set('sb_no', e.target.value)} />
+            <Input label="Date" required type="date" id="sb-sb_date" value={v.sb_date ?? ''} disabled={!editable} onChange={(e) => set('sb_date', e.target.value)} />
+            <Input label="Port" id="sb-port_code" value={v.port_code ?? ''} placeholder="INMAA4" disabled={!editable} onChange={(e) => set('port_code', e.target.value.toUpperCase())} />
+            <Select label="Mode" id="sb-mode" value={v.mode ?? ''} disabled={!editable} onChange={(e) => set('mode', e.target.value)} options={[{ value: 'AIR', label: 'Air' }, { value: 'SEA', label: 'Sea' }]} />
+            <Input label="Inv. No & Date" id="sb-inv-no" value={src ? `${src.invoice_no} · ${fmtDate(src.invoice_date)}` : ''} placeholder="From the invoice" disabled />
+            <Input label={`Inv. Value${src ? ` (${src.currency_code})` : ''}`} id="sb-inv-value" value={src ? fmtDecimal(src.invoice_value_fc, 2) : ''} placeholder="From the invoice" disabled />
+            {num('exchange_rate', `Customs Exchange Rate${src ? ` (₹ per 1 ${src.currency_code})` : ''}`)}
+            {num('freight_inr', 'Freight (₹)')}
+            <Input label="FOB Value (₹)" type="number" step="any" id="sb-fob_inr" value={v.fob_inr ?? ''} disabled={!editable}
+              onChange={(e) => { setFobTyped(true); set('fob_inr', e.target.value); }} hint={fobTyped ? `Worked out: ${inr(fobCalc)}` : 'Inv. value × exchange rate − freight'} />
+            {num('drawback_amount', 'Drawback (₹)')}
+            {src?.lut ? <Input label="IGST Amount (₹)" id="sb-igst_amount" value="0 — export under LUT" disabled /> : num('igst_amount', 'IGST Amount (₹)')}
+            {num('rosctl_amount', 'RoSCTL Amount (₹)')}
+            {num('rodtep_amount', 'RoDTEP Amount (₹)')}
+            <div className="self-end text-[12.5px] sm:col-span-3">Incentives (drawback + RoSCTL + RoDTEP): <b id="sb-inc-total">{inr(incTotal)}</b> — go to Finance and the order's profit</div>
           </div>
           {!isNew && d.incentives?.length > 0 && (
             <table className="w-full border-t border-slate-100" id="sb-incentives">
@@ -185,15 +157,6 @@ export function ShippingBillDetailPage() {
                   <td className="td text-[12px]">{x.credit_date ? fmtDate(x.credit_date) : '—'}</td></tr>))}</tbody>
             </table>
           )}
-        </Card>
-        <Card title="J · Process">
-          <div className="grid gap-3 p-4 sm:grid-cols-4">
-            <Input label="LEO no" value={v.leo_no ?? ''} disabled={!editable} onChange={(e) => set('leo_no', e.target.value)} />
-            <Input label="LEO date" type="date" value={v.leo_date ?? ''} disabled={!editable} onChange={(e) => set('leo_date', e.target.value)} />
-            <Input label="BRC realisation date" type="date" value={v.brc_due_date ?? ''} disabled={!editable} onChange={(e) => set('brc_due_date', e.target.value)} hint="Blank = end of the 9th month after the SB" />
-            <Input label="Scheme code" value={v.scheme_code ?? ''} disabled={!editable} onChange={(e) => set('scheme_code', e.target.value)} />
-            <Textarea className="sm:col-span-4" label="Remarks" value={v.remarks ?? ''} disabled={!editable} onChange={(e) => set('remarks', e.target.value)} />
-          </div>
         </Card>
       </div>
       <ConfirmDialog open={del} title="Delete shipping bill" message={`Delete SB ${d?.sb_no ?? ''}? Its incentive claims are removed (not possible once money is received).`} busy={busy} onCancel={() => setDel(false)}

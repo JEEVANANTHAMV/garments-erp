@@ -71,7 +71,7 @@ const sbSchema = z.object({
   invoice_id: s.idReq(),
   sb_no: z.string().trim().min(1, 'Enter the shipping bill no').max(40),
   sb_date: dateStr,
-  port_code: s.nullableStr(20), mode: z.union([z.enum(['SEA', 'AIR', 'ROAD']), z.literal(''), z.null()]).transform((v) => v || null).nullish(),
+  port_code: s.nullableStr(20), mode: z.union([z.enum(['SEA', 'AIR']), z.literal(''), z.null()]).transform((v) => v || null).nullish(),
   port_of_loading: s.nullableStr(80), port_of_discharge: s.nullableStr(80), country_dest: s.nullableStr(60),
   exchange_rate: z.coerce.number().positive('Enter the exchange rate').nullish(),
   fob_inr: money, freight_inr: money, insurance_inr: money,
