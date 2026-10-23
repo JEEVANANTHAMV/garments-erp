@@ -80,7 +80,12 @@ const LOOKUPS: Record<string, LookupDef> = {
   'fabric-bases': { sql: `SELECT id, base_code AS code, base_name AS label, fabric_type, knit_structure, composition_id, finish_type, certification, base_uom, std_rate FROM mst_fabric_base WHERE company_id=? AND is_active=1 AND is_deleted=0 ORDER BY base_name`, scoped: true },
   trims:       { sql: `SELECT id, trim_code AS code, trim_name AS label, base_uom, (SELECT u.code FROM cfg_uom u WHERE u.id = mst_trim.base_uom) AS uom_code, std_rate, trim_type FROM mst_trim WHERE company_id=? AND is_active=1 AND is_deleted=0 ORDER BY trim_name`, scoped: true },
   products:    { sql: `SELECT id, product_code AS code, product_name AS label, product_type, default_uom FROM mst_product WHERE company_id=? AND is_active=1 AND is_deleted=0 ORDER BY product_name`, scoped: true },
-  styles:      { sql: `SELECT id, style_code AS code, style_name AS label, image_url, buyer_id, product_id, size_group_id, fabric_id FROM mst_style WHERE company_id=? AND is_active=1 AND is_deleted=0 ORDER BY style_code`, scoped: true },
+  // composition / product / gender / knit-woven: the sales order line builds its description of goods from them
+  styles:      { sql: `SELECT s.id, s.style_code AS code, s.style_name AS label, s.image_url, s.buyer_id, s.product_id, s.size_group_id, s.fabric_id,
+                       cm.description AS composition, p.product_name, p.gender, p.hsn_code, f.fabric_type
+                  FROM mst_style s LEFT JOIN mst_product p ON p.id = s.product_id LEFT JOIN mst_fabric f ON f.id = s.fabric_id
+                  LEFT JOIN mst_composition cm ON cm.id = f.composition_id
+                 WHERE s.company_id=? AND s.is_active=1 AND s.is_deleted=0 ORDER BY s.style_code`, scoped: true },
 
   // a job = sales order; shown IO-first. Picking it fills IO / style / buyer PO on the screens that ask for them.
   'sales-orders': { sql: `SELECT so.id, so.so_no AS code,

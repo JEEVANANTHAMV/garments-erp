@@ -741,20 +741,7 @@ export const transactionResources: ResourceConfig[] = [
       f('net_weight_kg', s.dec()), f('gross_weight_kg', s.dec()), f('total_cbm', s.dec()),
     ],
   },
-  {
-    path: 'shipping-bills', table: 'trx_shipping_bill', permission: 'EXPORT', label: 'Shipping Bill',
-    searchable: ['sb_no', 'cha_name', 'port_code'], sortable: ['sb_no', 'sb_date'],
-    defaultSort: 't.sb_date', hasIsActive: false, softDelete: false, filters: ['invoice_id', 'status_id'],
-    autoNumber: { column: 'sb_no', docType: 'SHIPPING_BILL' },
-    selectExtra: 'ci.invoice_no', joins: 'LEFT JOIN trx_commercial_invoice ci ON ci.id = t.invoice_id',
-    fields: [
-      f('sb_no', s.nullableStr(40)), f('sb_date', s.date()), f('invoice_id', s.idReq()),
-      f('port_code', s.nullableStr(20)), f('cha_name', s.nullableStr(150)), f('cha_ref', s.nullableStr(60)),
-      f('leo_date', s.date()), f('scheme_code', s.nullableStr(20)),
-      f('drawback_amount', s.dec()), f('rodtep_amount', s.dec()), f('fob_inr', s.dec()),
-      f('status_id', s.id()),
-    ],
-  },
+  // shipping-bills: hand-built (modules/invoice/shippingBill.routes.ts), 23-Oct-2026
   {
     path: 'certificates', table: 'trx_certificate', permission: 'EXPORT', label: 'Certificate',
     searchable: ['cert_no', 'issuing_body'], sortable: ['cert_no', 'issue_date'],
@@ -857,20 +844,8 @@ export const transactionResources: ResourceConfig[] = [
       f('voucher_id', s.id()), f('remarks', s.nullableStr(500)),
     ],
   },
-  {
-    path: 'export-incentives', table: 'trx_export_incentive', permission: 'FINANCE', label: 'Export Incentive',
-    searchable: ['scrip_no'], sortable: ['claim_date', 'credit_date'], defaultSort: 't.id',
-    hasIsActive: false, softDelete: false, hasAuditCols: false,
-    filters: ['incentive_type', 'status', 'shipping_bill_id', 'invoice_id'],
-    fields: [
-      f('incentive_type', s.enumReq(['DUTY_DRAWBACK','RODTEP','ROSCTL','GST_REFUND','INTEREST_EQUAL','OTHER'])),
-      f('shipping_bill_id', s.id()), f('invoice_id', s.id()), f('scrip_no', s.nullableStr(60)),
-      f('claim_amount', s.dec()), f('received_amount', s.dec()),
-      f('claim_date', s.date()), f('credit_date', s.date()),
-      f('status', s.enum(['PENDING','CLAIMED','CREDITED','REJECTED'])),
-      f('remarks', s.nullableStr(500)),
-    ],
-  },
+  // export-incentives: hand-built (modules/invoice/shippingBill.routes.ts), 23-Oct-2026
+
 
   // ------------------------------------------------ Security & Gate Management
   {

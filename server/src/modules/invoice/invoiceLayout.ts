@@ -39,9 +39,11 @@ export interface InvoiceDocLine {
   line_kind: 'GOODS' | 'CHARGE'; description: string | null; order_no: string | null; buyer_sku_no: string | null;
   buyer_item_no: string | null; supplier_mat_no: string | null; hsn_code: string | null;
   qty: number; unit_price: number; amount: number; gst_rate: number | null; uqc?: string | null;
+  style_ref?: string | null; colour?: string | null; size_text?: string | null;
 }
 
-const WIDTHS = [14.6, 6.9, 13.1, 15.6, 14.1, 6.3, 12.3, 6.7, 15.3, 14.6, 13.1];           // A–K, as FK-087
+// A–K: the header boxes of FK-087 over the client's goods table (S.NO … Total, 23-Oct-2026)
+const WIDTHS = [6, 14, 14, 13, 11, 20, 18, 11, 11, 10, 13];
 const WORK_WIDTHS = [9, 10, 13.7, 12.3, 12.3, 10.9, 40];                                   // L–R (IGST working columns)
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const lines = (t: string | null | undefined) => String(t ?? '').split(/\r?\n/).map((l) => l.trimEnd()).filter((l) => l.trim());
@@ -115,45 +117,48 @@ function build(doc: InvoiceDoc, withWorkingColumns: boolean) {
   [...lines(doc.terms_of_delivery), ...lines(doc.terms_of_payment)].slice(0, 5).forEach((l, i) => sb.set(15 + i, 5, l, undefined, 'b'));
   box(14, 5, 19, L);
 
-  // ---------- goods table header (rows 21–22)
-  sb.set(20, 0, 'Marks & Nos./', undefined, 'sm'); sb.set(21, 0, 'Container No.', undefined, 'sm');
-  sb.set(20, 2, 'No. & Kind of Pkgs.', undefined, 'sm'); sb.set(20, 4, 'Description of Goods', undefined, 'sm');
-  sb.set(20, 8, 'Quantity', undefined, 'c'); sb.set(20, 9, 'Rate', undefined, 'c'); sb.set(20, 10, 'Amount', undefined, 'c');
-  sb.set(21, 8, doc.qty_unit || 'PCS', undefined, 'cb'); sb.set(21, 9, doc.rate_basis || `FOB ${doc.currency_code}`, undefined, 'cb');
-  sb.set(21, 10, `TTL ${doc.currency_code}`, undefined, 'cb');
-  lines(doc.packages_text).slice(0, 2).forEach((l, i) => sb.set(21 + i, 2, l, undefined, 'b'));
-
-  // ---------- marks (column A) and goods (C–K), side by side from row 24
+  // ---------- marks / packages / description heading band (rows 21–)
+  sb.set(20, 0, 'Marks & Nos./Container No.', undefined, 'sm'); sb.set(20, 4, 'No. & Kind of Pkgs.', undefined, 'sm');
+  sb.set(20, 6, 'Description of Goods', undefined, 'sm');
   const marks = lines(doc.marks_nos);
-  let r = 24;                                     // the sheet leaves C24 empty; goods start on row 25
-  marks.forEach((m, i) => sb.set(23 + i, 0, m, undefined, 'sm'));
-  for (const h of lines(doc.goods_heading)) sb.set(r++, 2, h, undefined, 'b');
+  const pkgs = lines(doc.packages_text);
+  const heading = lines(doc.goods_heading);
+  marks.forEach((m, i) => sb.set(21 + i, 0, m, undefined, 'sm'));
+  pkgs.forEach((m, i) => sb.set(21 + i, 4, m, undefined, 'b'));
+  heading.forEach((m, i) => sb.set(21 + i, 6, m, undefined, 'b'));
+  const bandEnd = 20 + Math.max(marks.length, pkgs.length, heading.length, 1);
+  box(20, 0, bandEnd, 3); box(20, 4, bandEnd, 5); box(20, 6, bandEnd, L);
+
+  // ---------- goods table, as the client's template (23-Oct-2026):
+  // S.NO | Order No. | Style/Ref No. | Colour | Size | Description of Goods / Composition | HSN | Qty | Price | Total
+  let r = bandEnd + 1;
+  const tableTop = r;
+  const head: [number, string][] = [[0, 'S.NO'], [1, 'Order No.'], [2, 'Style/Ref No.'], [3, 'Colour'], [4, 'Size'], [5, 'Description of Goods / Composition'],
+    [7, 'HSN'], [8, `Qty (${doc.qty_unit || 'PCS'})`], [9, `Price ${doc.rate_basis || doc.currency_code}`], [10, `Total ${doc.currency_code}`]];
+  for (const [c, h] of head) sb.set(r, c, h, undefined, 'th');
+  sb.merge(r, 5, r, 6);
+  r++;
   const goods = doc.lines.filter((l) => l.line_kind === 'GOODS');
   const charges = doc.lines.filter((l) => l.line_kind === 'CHARGE');
-  const refHeader = () => {
-    sb.set(r, 2, 'Order No:', undefined, 'b'); sb.set(r, 3, 'SKU NO', undefined, 'b'); sb.set(r, 4, doc.item_ref_label || 'BUYER ITEM NO', undefined, 'cb');
-    sb.set(r, 6, 'Supplier Mat No', undefined, 'b'); r++;
-  };
-  let lastDesc = lines(doc.goods_heading).join(' ');
-  let header = false;
   const workRows: { r: number; l: InvoiceDocLine }[] = [];
-  for (const l of goods) {
-    // the BUYER sheet repeats the description above a line whose goods differ; the IGST sheet keeps it in column R
-    const desc = (l.description ?? '').trim();
-    if (!igst && desc && desc !== lastDesc) { sb.set(r++, 2, desc, undefined, 'b'); lastDesc = desc; }
-    if (!header) { refHeader(); header = true; }
-    sb.set(r, 2, l.order_no); sb.set(r, 3, l.buyer_sku_no); sb.set(r, 4, l.buyer_item_no, undefined, 'c');
-    sb.set(r, 6, l.supplier_mat_no); sb.merge(r, 6, r, 7);
-    sb.set(r, 8, Number(l.qty), undefined, 'c', 0); sb.set(r, 9, Number(l.unit_price), undefined, 'c', 2); sb.set(r, 10, r2(Number(l.amount)), undefined, 'r', 2);
+  let sno = 0;
+  for (const l of [...goods, ...charges]) {
+    const descRows = wrap(l.description, 38);
+    sb.set(r, 0, ++sno, undefined, 'c', 0);
+    if (l.line_kind === 'GOODS') {
+      sb.set(r, 1, l.order_no); sb.set(r, 2, l.style_ref ?? l.supplier_mat_no); sb.set(r, 3, l.colour); sb.set(r, 4, l.size_text, undefined, 'c');
+    }
+    sb.set(r, 5, descRows[0] ?? ''); sb.merge(r, 5, r, 6);
+    sb.set(r, 7, l.hsn_code, undefined, 'c');
+    sb.set(r, 8, Number(l.qty), undefined, 'r', 0); sb.set(r, 9, Number(l.unit_price), undefined, 'r', 2); sb.set(r, 10, r2(Number(l.amount)), undefined, 'r', 2);
     workRows.push({ r, l }); r++;
+    // a long description goes on below, as the shipping bill prints it
+    for (const extra of descRows.slice(1)) { sb.set(r, 5, extra); sb.merge(r, 5, r, 6); r++; }
   }
-  for (const l of charges) {
-    sb.set(r, 4, `${(l.description || 'CHARGES').toUpperCase().replace(/\s*:?\s*$/, '')}  :`, undefined, 'cb'); sb.merge(r, 4, r, 5);
-    sb.set(r, 6, Number(l.qty), undefined, 'b', 0); sb.set(r, 9, Number(l.unit_price), undefined, 'c', 2); sb.set(r, 10, r2(Number(l.amount)), undefined, 'rb', 2);
-    workRows.push({ r, l }); r++;
-  }
-  // the goods area keeps the sheet's height: totals on row 43 (BUYER) / row 35 (IGST) at the earliest
-  const goodsEnd = Math.max(r + 1, 23 + marks.length + 1, igst ? 34 : 42);
+  sb.set(r, 0, 'TOTAL', undefined, 'rb'); sb.merge(r, 0, r, 7);
+  sb.set(r, 8, T.goods_qty, undefined, 'rb', 0); sb.set(r, 10, T.total_amount, undefined, 'rb', 2);
+  sb.box(tableTop, 0, r, L, 'grid');
+  const goodsEnd = Math.max(r + 2, 34);
 
   // ---------- totals + ship-to
   r = goodsEnd;
@@ -181,8 +186,7 @@ function build(doc: InvoiceDoc, withWorkingColumns: boolean) {
   sb.set(r, 10, T.total_amount, undefined, 'rb', 2); sb.merge(r, 10, r + 1, 10); sb.box(r, 10, r + 1, 10, 'box');
   sb.set(r + 1, 0, '(In Words)', undefined, 'sm');
   sb.set(r + 1, 1, doc.amount_words || amountWords(T.total_amount, doc.currency_code), undefined, 'b'); sb.merge(r + 1, 1, r + 1, 9);
-  box(20, 0, goodsBottom, 1); box(20, 2, goodsBottom, 7); box(20, 8, goodsBottom, 8); box(20, 9, goodsBottom, 9); box(20, 10, goodsBottom, 10);
-  box(20, 0, 21, L);
+  box(goodsEnd, 0, goodsBottom, L);
   box(r, 0, r + 1, L);
   r += 2;
   // GST export endorsement (CGST rule 46) — a row of its own when the export type is set

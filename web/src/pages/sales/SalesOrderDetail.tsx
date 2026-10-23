@@ -10,7 +10,7 @@ import { http, ApiError } from '../../lib/api';
 import { useLookup, toOptions, useStyleColors, useStyleSkus, useStatuses, toPlainOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
 import {
-  PageHeader, Input, Select, Spinner, Badge, StatusBadge, LoadingBlock, ErrorState, Tabs, Modal
+  PageHeader, Input, Select, Spinner, Badge, StatusBadge, LoadingBlock, ErrorState, Tabs, Modal, Button
 } from '../../components/ui';
 import { fmtDate, fmtNumber, fmtDecimal, today, toDateInput } from '../../lib/format';
 
@@ -30,6 +30,9 @@ interface Line {
   /** Garment part: TOP / BOTTOM / COLLAR / CUFF / FOLDING */
   part_name?: string;
   description: string;
+  /** Composition + description of goods for the commercial invoice / shipping bill (client 23-Oct-2026) */
+  composition: string;
+  goods_description: string;
   unit_price: number | '';
   excess_pct?: number | '';
   plan_cut_qty?: number;
@@ -50,8 +53,16 @@ interface Line {
 let keySeq = 0;
 const newLine = (): Line => ({
   _key: `l${++keySeq}`, style_id: '', color_id: '', assort_color: '', part_name: undefined,
-  description: '', unit_price: '', excess_pct: '', plan_cut_qty: 0, ship_date: '', skus: {}, sku_excess: {},
+  description: '', composition: '', goods_description: '', unit_price: '', excess_pct: '', plan_cut_qty: 0, ship_date: '', skus: {}, sku_excess: {},
 });
+
+const GENDER_WORD: Record<string, string> = { MEN: 'MENS', WOMEN: 'LADIES', BOYS: 'BOYS', GIRLS: 'GIRLS', INFANT: 'INFANTS', UNISEX: 'UNISEX' };
+/** The customs-style description the invoice builds when none is typed: COMPOSITION KNITTED/WOVEN GENDER GARMENT. */
+const autoGoodsDescription = (composition: string, style: any) => {
+  const ft = String(style?.fabric_type ?? '').toUpperCase();
+  const knit = ft.startsWith('KNIT') ? 'KNITTED' : ft.startsWith('WOVEN') ? 'WOVEN' : String(style?.hsn_code ?? '').startsWith('61') ? 'KNITTED' : String(style?.hsn_code ?? '').startsWith('62') ? 'WOVEN' : '';
+  return [composition, knit, GENDER_WORD[String(style?.gender ?? '')] ?? '', style?.product_name ?? ''].map((x) => String(x ?? '').trim()).filter(Boolean).join(' ').toUpperCase();
+};
 
 /** Effective line excess %: the line's own, else the order header's. */
 const lineExcessOf = (l: Line, headPct: number) =>
@@ -159,6 +170,7 @@ export default function SalesOrderDetail() {
       assort_color: l.assort_color ?? '',
       part_name: l.part_name ?? undefined,
       description: l.description ?? '', unit_price: Number(l.unit_price),
+      composition: l.composition ?? '', goods_description: l.goods_description ?? '',
       excess_pct: l.excess_pct !== null && l.excess_pct !== undefined ? Number(l.excess_pct) : '',
       plan_cut_qty: Number(l.plan_cut_qty || 0),
       ship_date: toDateInput(l.ship_date),
@@ -269,6 +281,8 @@ export default function SalesOrderDetail() {
               assort_color: l.assort_color.trim() || null,
               part_name: l.part_name || null,
               description: l.description || null,
+              composition: l.composition.trim() || null,
+              goods_description: l.goods_description.trim() || null,
               unit_price: Number(l.unit_price) || 0,
               excess_pct: l.excess_pct === '' || l.excess_pct === undefined ? null : Number(l.excess_pct),
               plan_cut_qty: planCut,
@@ -584,6 +598,8 @@ export default function SalesOrderDetail() {
               onChange={(patch) => setLine(line._key, patch)}
               onRemove={() => setLines((s) => s.filter((l) => l._key !== line._key))}
               canRemove={lines.length > 1}
+              soId={isNew ? null : Number(id)}
+              goodsEditable={can('SALES_ORDER.UPDATE') || can('EXPORT.UPDATE')}
             />
           ))}
 
@@ -1629,12 +1645,13 @@ function RatioSplitAssistant({
 
 /* ------------------------------------------------------ order line card */
 function LineCard({
-  line, index, editable, currencyCode, currencySymbol, exchangeRate, isForeign, headExcessPct, onChange, onRemove, canRemove
+  line, index, editable, currencyCode, currencySymbol, exchangeRate, isForeign, headExcessPct, onChange, onRemove, canRemove, soId, goodsEditable
 }: {
   line: Line; index: number; editable: boolean;
   currencyCode: string; currencySymbol: string; exchangeRate: number; isForeign: boolean;
   headExcessPct: number;
   onChange: (p: Partial<Line>) => void; onRemove: () => void; canRemove: boolean;
+  soId?: number | null; goodsEditable?: boolean;
 }) {
   const toast = useToast();
   const [showRatioTool, setShowRatioTool] = useState(false);
@@ -1724,9 +1741,11 @@ function LineCard({
       <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2 lg:grid-cols-5">
         <Select label="Style" required options={toOptions(styles.data)} placeholder="— Select style —"
           value={line.style_id} disabled={!editable}
-          onChange={(e) => onChange({
-            style_id: e.target.value ? Number(e.target.value) : '', color_id: '', skus: {}, sku_excess: {},
-          })} />
+          onChange={(e) => {
+            const st = (styles.data ?? []).find((s: any) => String(s.id) === e.target.value) as any;
+            onChange({ style_id: e.target.value ? Number(e.target.value) : '', color_id: '', skus: {}, sku_excess: {},
+              composition: st?.composition ? String(st.composition).toUpperCase() : '', goods_description: '' });
+          }} />
         <Select label="Colour" options={colors.data?.map((c) => ({ value: c.id, label: c.label })) ?? []}
           placeholder={line.style_id ? '— All colours —' : 'Select a style first'}
           value={line.color_id} disabled={!editable || !line.style_id}
@@ -1782,6 +1801,10 @@ function LineCard({
         <Input label="Line ship date" type="date" value={line.ship_date} disabled={!editable}
           onChange={(e) => onChange({ ship_date: e.target.value })} />
       </div>
+
+      {/* Description of goods for the commercial invoice / shipping bill (client 23-Oct-2026) */}
+      <GoodsDescription line={line} styleRow={(styles.data ?? []).find((s: any) => String(s.id) === String(line.style_id))}
+        editable={editable} lockedEditable={!editable && !!goodsEditable && !!soId && !!line.id} soId={soId ?? null} onChange={onChange} />
 
       {/* Size grid */}
       <div className="mt-4">
@@ -1957,4 +1980,36 @@ function groupByColor(skus: { id: number; color_name: string; hex_value: string 
     map.get(s.color_name)!.push(s);
   }
   return [...map.entries()];
+}
+
+/** Composition + description of goods of an order line. Blank description = the invoice builds it
+ *  (composition + knitted / woven + gender + garment). On an approved order it is saved on its own. */
+function GoodsDescription({ line, styleRow, editable, lockedEditable, soId, onChange }: {
+  line: Line; styleRow?: any; editable: boolean; lockedEditable: boolean; soId: number | null; onChange: (p: Partial<Line>) => void;
+}) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const auto = autoGoodsDescription(line.composition || String(styleRow?.composition ?? '').toUpperCase(), styleRow);
+  const can = editable || lockedEditable;
+  const set = (p: Partial<Line>) => { onChange(p); setDirty(true); };
+  const saveLocked = async () => {
+    setBusy(true);
+    try {
+      await http.put(`/sales-orders/${soId}/lines/${line.id}/goods`, { composition: line.composition || null, goods_description: line.goods_description || null });
+      toast('Description of goods saved'); setDirty(false);
+    } catch (e) { toast(e instanceof ApiError ? e.message : 'Could not save', 'error'); } finally { setBusy(false); }
+  };
+  return (
+    <div className="mt-3 grid grid-cols-1 gap-x-4 gap-y-2 rounded-lg border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-5" data-goods={line._key}>
+      <Input label="Composition" placeholder={String(styleRow?.composition ?? 'e.g. 95% COTTON 5% ELASTANE').toUpperCase()} value={line.composition} disabled={!can}
+        id={`line-composition-${line._key}`} onChange={(e) => set({ composition: e.target.value.toUpperCase() })} hint="From the style's fabric — edit if needed" />
+      <Input className="sm:col-span-3" label="Description of goods (invoice / shipping bill)" placeholder={auto || 'Built from composition, knit / woven, gender, garment'}
+        value={line.goods_description} disabled={!can} id={`line-goods-${line._key}`} onChange={(e) => set({ goods_description: e.target.value.toUpperCase() })}
+        hint={line.goods_description ? 'Typed — the invoice uses it as is' : `Blank = ${auto || 'built on the invoice'}`} />
+      <div className="flex items-end">
+        {lockedEditable && <Button size="sm" variant="secondary" loading={busy} disabled={!dirty} id={`line-goods-save-${line._key}`} onClick={() => void saveLocked()}>Save description</Button>}
+      </div>
+    </div>
+  );
 }

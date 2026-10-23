@@ -24,6 +24,7 @@ import { SamplesHomePage } from './pages/samples/SamplesHome';
 import { SampleDetailPage } from './pages/samples/SampleDetail';
 import { SampleTypesPage } from './pages/samples/SampleTypes';
 import { CommercialInvoicesPage, CommercialInvoiceDetailPage } from './pages/logistics/CommercialInvoices';
+import { ShippingBillsPage, ShippingBillDetailPage, ExportIncentivesPage } from './pages/logistics/ShippingBills';
 import QuotationDetailPage from './pages/sales/QuotationDetail';
 import PreCostingsPage from './pages/sales/PreCostings';
 import PreCostingDetailPage from './pages/sales/PreCostingDetail';
@@ -145,14 +146,14 @@ import { QcInspectionsPage, DefectsPage } from './pages/quality';
 /* Logistics & Export */
 import {
   PackingsPage, ContainersPage,
-  ShippingBillsPage, CertificatesPage,
+  CertificatesPage,
 } from './pages/logistics';
 import { PackingEngineApp } from './pages/logistics/packing';
 import { EwayBillRegisterPage, EwayBillEditorPage } from './pages/logistics/EwayBills';
 
 /* Finance */
 import {
-  VouchersPage, ReceiptsPage, PaymentsPage, IncentivesPage,
+  VouchersPage, ReceiptsPage, PaymentsPage,
   LedgerAccountsPage, TaxRatesPage,
 } from './pages/finance';
 
@@ -468,6 +469,8 @@ export default function App() {
                   <Route path="packing-lists" element={<RedirectTo base="/logistics/packing-lists" />} />
                   <Route path="packing-lists/:id" element={<RedirectTo base="/logistics/packing-lists" />} />
                   <Route path="shipping-bills" element={<ShippingBillsPage />} />
+                  <Route path="shipping-bills/new" element={<ShippingBillDetailPage />} />
+                  <Route path="shipping-bills/:id" element={<ShippingBillDetailPage />} />
                   <Route path="shipments" element={<RedirectTo base="/logistics/shipments" />} />
                   <Route path="shipments/:id" element={<RedirectTo base="/logistics/shipments" />} />
                   <Route path="certificates" element={<CertificatesPage />} />
@@ -478,7 +481,7 @@ export default function App() {
                   <Route path="vouchers" element={<VouchersPage />} />
                   <Route path="receipts" element={<ReceiptsPage />} />
                   <Route path="payments" element={<PaymentsPage />} />
-                  <Route path="incentives" element={<IncentivesPage />} />
+                  <Route path="incentives" element={<ExportIncentivesPage />} />
                   <Route path="ledger-accounts" element={<LedgerAccountsPage />} />
                   <Route path="tax-rates" element={<TaxRatesPage />} />
                 </Route>

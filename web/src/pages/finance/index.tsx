@@ -108,40 +108,6 @@ export function PaymentsPage() {
     ]} />;
 }
 
-/* -------------------------------------------------- Export incentives */
-export function IncentivesPage() {
-  return <CrudPage
-    path="export-incentives" title="Export Incentives" permission="FINANCE" singular="Incentive"
-    subtitle="RoDTEP, MEIS, drawback claims"
-    defaultSort={{ key: 'claim_date', dir: 'desc' }}
-    columns={[
-      { key: 'incentive_no', header: 'Claim no', sortable: true,
-        render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.incentive_no}</span> },
-      { key: 'incentive_type', header: 'Type', render: (r: any) => <Badge tone="emerald">{r.incentive_type}</Badge> },
-      { key: 'sb_no', header: 'Shipping bill' },
-      { key: 'claim_date', header: 'Claim date', sortable: true, render: (r: any) => fmtDate(r.claim_date) },
-      { key: 'claim_amount', header: 'Claim amount', align: 'right', render: (r: any) => fmtDecimal(r.claim_amount, 2) },
-      { key: 'realized_amount', header: 'Realised', align: 'right', render: (r: any) => fmtDecimal(r.realized_amount, 2) },
-      { key: 'status_label', header: 'Status', render: (r: any) => <StatusBadge value={r.status_label} /> },
-    ]}
-    filters={[
-      { name: 'incentive_type', label: 'Incentive type',
-        options: ['RODTEP','MEIS','DRAWBACK','DBK','ROSCTL'].map((v) => ({ value: v, label: v })) },
-    ]}
-    fields={[
-      { name: 'incentive_no', label: 'Claim no', hint: 'Blank to auto-generate' },
-      { name: 'incentive_type', label: 'Incentive type', required: true,
-        options: ['RODTEP','MEIS','DRAWBACK','DBK','ROSCTL'].map((v) => ({ value: v, label: v })) },
-      { name: 'sb_id', label: 'Shipping bill', lookup: 'shipping-bills' },
-      { name: 'claim_date', label: 'Claim date', type: 'date', defaultValue: today() },
-      { name: 'claim_amount', label: 'Claim amount', type: 'number' },
-      { name: 'realized_amount', label: 'Realised amount', type: 'number' },
-      { name: 'realized_date', label: 'Realised date', type: 'date' },
-      { name: 'status_id', label: 'Status', statusDomain: 'INCENTIVE' },
-      { name: 'remarks', label: 'Remarks', type: 'textarea' },
-    ]} />;
-}
-
 /* ----------------------------------------------- Ledger accounts */
 export function LedgerAccountsPage() {
   return <CrudPage

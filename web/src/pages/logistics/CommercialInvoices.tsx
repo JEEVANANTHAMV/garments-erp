@@ -64,7 +64,7 @@ export function CommercialInvoicesPage() {
 }
 
 /* ================================================================ editor */
-const EMPTY_LINE = { line_kind: 'GOODS', order_no: '', buyer_sku_no: '', buyer_item_no: '', supplier_mat_no: '', description: '', hsn_code: '', qty: '', unit_price: '', gst_rate: '',
+const EMPTY_LINE = { line_kind: 'GOODS', style_ref: '', colour: '', size_text: '', order_no: '', buyer_sku_no: '', buyer_item_no: '', supplier_mat_no: '', description: '', hsn_code: '', qty: '', unit_price: '', gst_rate: '',
   composition: '', construction: '', gender_label: '', garment: '', pack_info: '', desc_auto: 1, uqc: 'PCS' };
 const UQC = ['PCS', 'SET', 'PAC', 'DOZ', 'NOS', 'PRS', 'BOX', 'KGS', 'MTR'];
 /** Same rule as the server (invoiceRules.composeDescription): COMPOSITION KNITTED/WOVEN GENDER GARMENT (PACK). */
@@ -150,6 +150,7 @@ export function CommercialInvoiceDetailPage() {
       buyer_sku_no: nz(l.buyer_sku_no), buyer_item_no: nz(l.buyer_item_no), supplier_mat_no: nz(l.supplier_mat_no), hsn_code: nz(l.hsn_code),
       description: Number(l.desc_auto) && compose(l) ? compose(l) : nz(l.description), desc_auto: !!Number(l.desc_auto) && !!compose(l),
       composition: nz(l.composition), construction: nz(l.construction), gender_label: nz(l.gender_label), garment: nz(l.garment), pack_info: nz(l.pack_info), uqc: nz(l.uqc),
+      style_ref: nz(l.style_ref), colour: nz(l.colour), size_text: nz(l.size_text),
       qty: Number(l.qty), unit_price: Number(l.unit_price), gst_rate: num(l.gst_rate) }));
     return b;
   };
@@ -306,21 +307,21 @@ export function CommercialInvoiceDetailPage() {
           </div>}>
           <div className="overflow-x-auto">
             <table className="w-full" id="ci-lines">
-              <thead><tr><th className="th w-16">Kind</th><th className="th">Order no</th><th className="th">SKU / EAN</th><th className="th">{v.item_ref_label || 'Buyer item no'}</th>
-                <th className="th">Supplier mat no</th><th className="th">Description of goods</th><th className="th">HSN · UQC</th><th className="th text-right">Qty</th><th className="th text-right">Rate</th>
-                <th className="th text-right">Amount</th>{igst && <th className="th text-right">IGST %</th>}<th className="th" /></tr></thead>
+              <thead><tr><th className="th w-16">S.NO</th><th className="th">Order No. (buyer PO)</th><th className="th">Style/Ref No.</th><th className="th">Colour</th><th className="th">Size</th>
+                <th className="th">Description of Goods / Composition</th><th className="th">HSN · UQC</th><th className="th text-right">Qty ({v.qty_unit || 'PCS'})</th><th className="th text-right">Price</th>
+                <th className="th text-right">Total</th>{igst && <th className="th text-right">IGST %</th>}<th className="th" /></tr></thead>
               <tbody>
                 {!v.lines.length && <tr><td colSpan={12} className="td py-6 text-center text-slate-400">No lines — fill from the order or add a line</td></tr>}
                 {v.lines.map((l: any, i: number) => {
-                  const PH: Record<string, string> = { composition: 'composition e.g. 95% COTTON 5% ELASTANE', garment: 'garment e.g. PYJAMA SETS', pack_info: 'pack e.g. HANGER PACK', hsn_code: '8-digit HSN' };
+                  const PH: Record<string, string> = { size_text: 'S-XL', colour: 'colour', style_ref: 'style / ref', order_no: 'buyer PO', composition: 'composition e.g. 95% COTTON 5% ELASTANE', garment: 'garment e.g. PYJAMA SETS', pack_info: 'pack e.g. HANGER PACK', hsn_code: '8-digit HSN' };
                   const inp = (k: string, w = 'w-28', type = 'text') => <input className={clsx('input h-8 py-0 text-[12px]', w, type === 'number' && 'text-right')} type={type} step="any" placeholder={PH[k]} value={l[k] ?? ''} data-line={`${i}-${k}`} onChange={(e) => setLine(i, k, e.target.value)} />;
                   return (
                     <tr key={i} className="align-top">
-                      <td className="td text-[11px]"><Badge tone={l.line_kind === 'CHARGE' ? 'violet' : 'slate'}>{l.line_kind === 'CHARGE' ? 'charge' : 'goods'}</Badge></td>
+                      <td className="td text-[11px]"><p className="font-semibold">{i + 1}</p>{l.line_kind === 'CHARGE' && <Badge tone="violet">charge</Badge>}</td>
                       <td className="td">{l.line_kind === 'CHARGE' ? null : inp('order_no')}</td>
-                      <td className="td">{l.line_kind === 'CHARGE' ? null : inp('buyer_sku_no', 'w-32')}</td>
-                      <td className="td">{l.line_kind === 'CHARGE' ? null : inp('buyer_item_no')}</td>
-                      <td className="td">{l.line_kind === 'CHARGE' ? null : inp('supplier_mat_no', 'w-24')}</td>
+                      <td className="td">{l.line_kind === 'CHARGE' ? null : inp('style_ref', 'w-28')}</td>
+                      <td className="td">{l.line_kind === 'CHARGE' ? null : inp('colour', 'w-28')}</td>
+                      <td className="td">{l.line_kind === 'CHARGE' ? null : inp('size_text', 'w-24')}</td>
                       <td className="td">
                         {l.line_kind === 'CHARGE' ? inp('description', 'w-80') : (
                           <div className="w-[26rem] space-y-1" data-desc={i}>

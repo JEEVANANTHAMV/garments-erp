@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { query, queryOne, transaction, txQuery, txQueryOne, txExecute, type Tx } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
 import { NotFound, BadRequest, Conflict } from '../../core/errors.js';
-import { requirePermission } from '../../middleware/auth.js';
+import { requirePermission, requireAny } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { s } from '../resources/schemas.js';
 import { jobBomRequirement } from '../bom/bom.routes.js';
@@ -44,6 +44,9 @@ const lineSchema = z.object({
   /** Garment part this line covers: TOP / BOTTOM / COLLAR / CUFF / FOLDING */
   part_name: z.enum(['TOP', 'BOTTOM', 'COLLAR', 'CUFF', 'FOLDING', 'OTHER']).nullable().optional(),
   description: s.nullableStr(255),
+  /** Composition + description of goods for the commercial invoice / shipping bill (client 23-Oct-2026). */
+  composition: s.nullableStr(120),
+  goods_description: s.nullableStr(255),
   unit_price: z.coerce.number().min(0),
   excess_pct: s.dec(),
   plan_cut_qty: z.coerce.number().int().min(0).optional(),
@@ -172,11 +175,11 @@ async function writeLines(tx: Tx, soId: number, lines: z.infer<typeof lineSchema
 
     const r = await txExecute(tx,
       `INSERT INTO trx_sales_order_line
-         (so_id, style_id, color_id, assort_color, part_name, description, order_qty, excess_pct, plan_cut_qty, unit_price, amount, ship_date,
+         (so_id, style_id, color_id, assort_color, part_name, description, composition, goods_description, order_qty, excess_pct, plan_cut_qty, unit_price, amount, ship_date,
           is_additional, amendment_id)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [soId, l.style_id, l.color_id ?? null, l.assort_color ?? null, l.part_name ?? null, l.description ?? null, qty, excessPct, planCutQty, l.unit_price, amount,
-       l.ship_date ?? null, opts.amendmentId ? 1 : 0, opts.amendmentId ?? null]);
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [soId, l.style_id, l.color_id ?? null, l.assort_color ?? null, l.part_name ?? null, l.description ?? null, l.composition ?? null, l.goods_description ?? null,
+       qty, excessPct, planCutQty, l.unit_price, amount, l.ship_date ?? null, opts.amendmentId ? 1 : 0, opts.amendmentId ?? null]);
     const w: WrittenLine = { so_line_id: Number(r.insertId), style_id: l.style_id, color_id: l.color_id ?? null, qty, plan_cut: planCutQty, skus: [] };
     written.push(w);
 
@@ -542,6 +545,24 @@ salesOrderRouter.post('/', requirePermission('SALES_ORDER.CREATE'), ah(async (re
 }));
 
 // -------------------------------------------------------------- UPDATE
+/**
+ * PUT /sales-orders/:id/lines/:lineId/goods { composition, goods_description } — the shipping description of a line
+ * (client 23-Oct-2026: the commercial invoice takes "Description of Goods / Composition" from the order). It is not a
+ * commercial term, so it can be set on an approved order too; every change is audited.
+ */
+salesOrderRouter.put('/:id/lines/:lineId/goods', requireAny('SALES_ORDER.UPDATE', 'EXPORT.UPDATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = Number(req.params.id);
+  const lineId = Number(req.params.lineId);
+  const b = z.object({ composition: s.nullableStr(120), goods_description: s.nullableStr(255) }).parse(req.body ?? {});
+  const line = await queryOne<any>(`SELECT l.id, l.composition, l.goods_description FROM trx_sales_order_line l JOIN trx_sales_order so ON so.id = l.so_id
+     WHERE l.id = ? AND l.so_id = ? AND so.company_id = ?`, [lineId, id, cid]);
+  if (!line) throw NotFound('Order line not found');
+  await query(`UPDATE trx_sales_order_line SET composition = ?, goods_description = ? WHERE id = ?`, [b.composition ?? null, b.goods_description ?? null, lineId]);
+  await audit(req, 'trx_sales_order', id, 'UPDATE', { line: lineId, composition: line.composition, goods_description: line.goods_description }, { line: lineId, ...b });
+  res.json({ data: { id: lineId, ...b } });
+}));
+
 salesOrderRouter.put('/:id', requirePermission('SALES_ORDER.UPDATE'), ah(async (req, res) => {
   const id = Number(req.params.id);
   const before = await queryOne<any>(`SELECT * FROM trx_sales_order WHERE id = ? AND company_id = ?`,

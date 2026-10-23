@@ -76,36 +76,6 @@ export function ContainersPage() {
     ]} />;
 }
 
-export function ShippingBillsPage() {
-  return <CrudPage
-    path="shipping-bills" title="Shipping Bills" permission="EXPORT" singular="Shipping Bill"
-    subtitle="Customs shipping bill (ARE-1) for export clearance"
-    defaultSort={{ key: 'sb_date', dir: 'desc' }}
-    columns={[
-      { key: 'sb_no', header: 'SB no', sortable: true,
-        render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.sb_no}</span> },
-      { key: 'sb_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.sb_date) },
-      { key: 'invoice_no', header: 'Invoice' },
-      { key: 'port_of_export', header: 'Port' },
-      { key: 'total_fob_value', header: 'FOB value', align: 'right',
-        render: (r: any) => `${r.currency_code ?? ''} ${fmtDecimal(r.total_fob_value, 2)}` },
-      { key: 'status_label', header: 'Status', render: (r: any) => <StatusBadge value={r.status_label} /> },
-    ]}
-    filters={[{ name: 'status_id', label: 'Status', statusDomain: 'SHIPPING_BILL' }]}
-    fields={[
-      { name: 'sb_no', label: 'SB no', hint: 'Blank to auto-generate' },
-      { name: 'sb_date', label: 'SB date', type: 'date', required: true, defaultValue: today() },
-      { name: 'invoice_id', label: 'Commercial invoice', required: true, lookup: 'export-invoices' },
-      { name: 'port_of_export', label: 'Port of export', defaultValue: 'Chennai' },
-      { name: 'customs_officer', label: 'Customs officer' },
-      { name: 'let_export_date', label: 'Let-export date', type: 'date' },
-      { name: 'total_fob_value', label: 'Total FOB value', type: 'number' },
-      { name: 'currency_id', label: 'Currency', lookup: 'currencies' },
-      { name: 'status_id', label: 'Status', statusDomain: 'SHIPPING_BILL' },
-      { name: 'remarks', label: 'Remarks', type: 'textarea' },
-    ]} />;
-}
-
 /* ------------------------------------------------------- Shipments */
 export function ShipmentsPage() {
   return <CrudPage

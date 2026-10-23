@@ -113,32 +113,55 @@ async function prefill(cid: number, soId: number, plIds: number[] | null, format
 
   // ---------- lines: shipped qty per order / style / colour (packing list items), else the order lines
   let lines: any[] = [];
-  const soLines = await query<any>(`SELECT l.*, st.style_code, st.style_name, c.color_name FROM trx_sales_order_line l
-      LEFT JOIN mst_style st ON st.id = l.style_id LEFT JOIN mst_color c ON c.id = l.color_id WHERE l.so_id IN (?)`,
-    [[...new Set([soId, ...(pls.length ? (await query<any>(`SELECT DISTINCT so_id FROM trx_packing_list_row_item WHERE packing_list_id IN (?) AND so_id IS NOT NULL`, [chosenIds])).map((x) => Number(x.so_id)) : [])])]]);
-  const priceOf = (soLineSo: number, styleId: number, colorId: number | null) => {
-    const cands = soLines.filter((l) => Number(l.so_id) === soLineSo && Number(l.style_id) === styleId);
-    const hit = cands.find((l) => colorId && Number(l.color_id) === colorId) ?? cands[0];
-    return hit ? { unit_price: n(hit.unit_price), description: hit.description, style_code: hit.style_code, style_name: hit.style_name } : null;
+  const soIds = [...new Set([soId, ...(pls.length ? (await query<any>(`SELECT DISTINCT so_id FROM trx_packing_list_row_item WHERE packing_list_id IN (?) AND so_id IS NOT NULL`, [chosenIds])).map((x) => Number(x.so_id)) : [])])];
+  const soLines = await query<any>(`SELECT l.*, st.style_code, st.style_name, c.color_name, so2.buyer_po_no FROM trx_sales_order_line l
+      JOIN trx_sales_order so2 ON so2.id = l.so_id LEFT JOIN mst_style st ON st.id = l.style_id LEFT JOIN mst_color c ON c.id = l.color_id WHERE l.so_id IN (?)`, [soIds]);
+  const soLineOf = (lineSo: number, styleId: number, colorId: number | null) => {
+    const cands = soLines.filter((l) => Number(l.so_id) === lineSo && Number(l.style_id) === styleId);
+    return cands.find((l) => colorId && Number(l.color_id) === colorId) ?? cands[0] ?? null;
+  };
+  // client 23-Oct-2026: "Order No" on the invoice is the buyer's PO number
+  const poOfSo = new Map<number, string | null>(soLines.map((l) => [Number(l.so_id), l.buyer_po_no ?? null]));
+  poOfSo.set(soId, so.buyer_po_no ?? null);
+  // size range shipped, in the style's size order (S-XXL)
+  const sizeSeq = new Map<string, number>();
+  const styleIdsAll = [...new Set(soLines.map((l) => Number(l.style_id)))];
+  if (styleIdsAll.length) {
+    for (const r of await query<any>(`SELECT ss.style_id, sz.size_code, ss.sequence_no FROM mst_style_size ss JOIN mst_size sz ON sz.id = ss.size_id WHERE ss.style_id IN (?)`, [styleIdsAll])) {
+      sizeSeq.set(`${r.style_id}|${String(r.size_code).toUpperCase()}`, Number(r.sequence_no));
+    }
+  }
+  const sizeRange = (styleId: number, sizes: string[]) => {
+    const u = [...new Set(sizes.filter(Boolean))];
+    u.sort((a, b) => (sizeSeq.get(`${styleId}|${a.toUpperCase()}`) ?? 999) - (sizeSeq.get(`${styleId}|${b.toUpperCase()}`) ?? 999) || a.localeCompare(b, undefined, { numeric: true }));
+    return !u.length ? null : u.length === 1 ? u[0] : `${u[0]}-${u[u.length - 1]}`;
   };
   if (pls.length) {
     const items = await query<any>(`SELECT i.so_id, i.order_no, i.style_id, MIN(i.style_no) style_no, i.color_id, MIN(i.colour) colour, SUM(i.total_qty) qty,
-             MIN(b.label) AS block_label, MIN(i.id) first_id
+             MIN(b.label) AS block_label, MIN(i.id) first_id, GROUP_CONCAT(i.size_qty SEPARATOR '\u0001') AS size_json
         FROM trx_packing_list_row_item i JOIN trx_packing_list_row r ON r.id = i.row_id LEFT JOIN trx_packing_list_block b ON b.id = r.block_id
        WHERE i.packing_list_id IN (?)
        GROUP BY i.so_id, i.order_no, i.style_id, i.color_id ORDER BY first_id`, [chosenIds]);
     lines = items.filter((i) => n(i.qty) > 0).map((i) => {
-      const p = priceOf(Number(i.so_id ?? soId), Number(i.style_id), i.color_id ? Number(i.color_id) : null);
-      return { so_id: i.so_id ?? soId, style_id: i.style_id, color_id: i.color_id, order_no: i.order_no ?? so.buyer_po_no, qty: n(i.qty), unit_price: p?.unit_price ?? 0,
-        description: p?.description ?? null, style_code: i.style_no ?? p?.style_code, ...parseBlockRefs(i.block_label) };
+      const sl = soLineOf(Number(i.so_id ?? soId), Number(i.style_id), i.color_id ? Number(i.color_id) : null);
+      const sizes: string[] = [];
+      for (const j of String(i.size_json ?? '').split('\u0001')) {
+        try { const o = JSON.parse(j); if (o && typeof o === 'object') for (const [k, v] of Object.entries(o)) if (Number(v) > 0) sizes.push(String(k)); } catch { /* no sizes */ }
+      }
+      return { so_id: i.so_id ?? soId, style_id: i.style_id, color_id: i.color_id, order_no: poOfSo.get(Number(i.so_id ?? soId)) ?? i.order_no ?? null,
+        qty: n(i.qty), unit_price: n(sl?.unit_price), sl, style_code: i.style_no ?? sl?.style_code, colour: i.colour ?? sl?.color_name ?? null,
+        size_text: sizeRange(Number(i.style_id), sizes), ...parseBlockRefs(i.block_label) };
     });
   } else {
+    const skuSizes = await query<any>(`SELECT ss.so_line_id, sz.size_code FROM trx_sales_order_sku ss JOIN mst_style_sku k ON k.id = ss.sku_id JOIN mst_size sz ON sz.id = k.size_id
+       WHERE ss.so_line_id IN (?) AND ss.qty > 0`, [soLines.length ? soLines.map((l) => l.id) : [0]]).catch(() => []);
     lines = soLines.filter((l) => Number(l.so_id) === soId).map((l) => ({ so_id: soId, style_id: l.style_id, color_id: l.color_id, order_no: so.buyer_po_no,
-      qty: Math.max(0, n(l.order_qty) - n(l.cancelled_qty)), unit_price: n(l.unit_price), description: l.description, style_code: l.style_code,
+      qty: Math.max(0, n(l.order_qty) - n(l.cancelled_qty)), unit_price: n(l.unit_price), sl: l, style_code: l.style_code, colour: l.assort_color || l.color_name || null,
+      size_text: sizeRange(Number(l.style_id), skuSizes.filter((x) => Number(x.so_line_id) === Number(l.id)).map((x) => String(x.size_code))),
       buyer_sku_no: null, buyer_item_no: null, supplier_mat_no: null }));
   }
-  // buyer references / description remembered from the buyer's earlier invoices of the same style; else the masters
-  // (composition of the style's fabric, knitted / woven from the fabric type, gender + garment + HSN from the product)
+  // description of goods: the order line's (client 23-Oct-2026: "the composition we put on the sales order comes
+  // automatically, editable"); else the buyer's earlier invoice of the style; else built from the masters
   const prev = await query<any>(`SELECT l.* FROM trx_commercial_invoice_line l
       JOIN trx_commercial_invoice ci ON ci.id = l.invoice_id WHERE ci.company_id = ? AND ci.buyer_id = ? AND l.line_kind = 'GOODS' ORDER BY ci.invoice_date DESC, l.id DESC LIMIT 500`, [cid, so.buyer_id]);
   const styleIds = [...new Set(lines.map((l) => Number(l.style_id)).filter(Boolean))];
@@ -150,19 +173,23 @@ async function prefill(cid: number, soId: number, plIds: number[] | null, format
     const pv = prev.find((p) => Number(p.style_id) === Number(l.style_id));
     const ms = masters.find((m) => Number(m.id) === Number(l.style_id));
     const hsn = pv?.hsn_code ?? (ms?.product_hsn && /^\d{8}$/.test(ms.product_hsn) ? ms.product_hsn : null) ?? null;
+    const soComposition = l.sl?.composition ? String(l.sl.composition).toUpperCase() : null;
+    const masterParts = { composition: ms?.composition ? String(ms.composition).toUpperCase() : null, construction: constructionOf(ms?.fabric_type, hsn),
+      gender_label: genderLabel(ms?.gender), garment: ms?.product_name ? String(ms.product_name).toUpperCase() : null, pack_info: null };
     const parts = pv && (pv.composition || pv.garment)
       ? { composition: pv.composition, construction: pv.construction, gender_label: pv.gender_label, garment: pv.garment, pack_info: pv.pack_info }
-      : { composition: ms?.composition ? String(ms.composition).toUpperCase() : null, construction: constructionOf(ms?.fabric_type, hsn),
-          gender_label: genderLabel(ms?.gender), garment: ms?.product_name ? String(ms.product_name).toUpperCase() : null, pack_info: null };
+      : masterParts;
+    if (soComposition) parts.composition = soComposition;
     const composed = composeDescription(parts);
-    // a typed description of an earlier invoice stays typed
-    const typed = pv && Number(pv.desc_auto) === 0 ? pv.description : null;
+    const soTyped = l.sl?.goods_description ? String(l.sl.goods_description).toUpperCase() : null;
+    const typed = soTyped ?? (pv && Number(pv.desc_auto) === 0 ? pv.description : null);
     return {
       line_kind: 'GOODS', sort_order: i + 1, so_id: l.so_id, style_id: l.style_id, color_id: l.color_id, order_no: l.order_no,
+      style_ref: pv?.style_ref && Number(pv.style_id) === Number(l.style_id) ? pv.style_ref : l.style_code ?? null, colour: l.colour ?? null, size_text: l.size_text ?? null,
       buyer_sku_no: l.buyer_sku_no ?? pv?.buyer_sku_no ?? null, buyer_item_no: l.buyer_item_no ?? pv?.buyer_item_no ?? null,
       supplier_mat_no: l.supplier_mat_no ?? pv?.supplier_mat_no ?? l.style_code ?? null,
       ...parts, desc_auto: typed ? 0 : composed ? 1 : 0,
-      description: typed ?? (composed || pv?.description || l.description || null), hsn_code: hsn, uqc: pv?.uqc ?? uqcOf(ms?.uom ?? qtyUnit),
+      description: typed ?? (composed || pv?.description || l.sl?.description || null), hsn_code: hsn, uqc: pv?.uqc ?? uqcOf(ms?.uom ?? qtyUnit),
       qty: l.qty, unit_price: l.unit_price, amount: r2(l.qty * l.unit_price), gst_rate: null,
     };
   });
@@ -228,6 +255,7 @@ const lineSchema = z.object({
   description: s.nullableStr(500), hsn_code: z.union([z.string().trim().regex(/^\d{4,8}$/, 'HSN: 4 to 8 digits'), z.literal(''), z.null()]).transform((v) => v || null).nullish(),
   composition: s.nullableStr(120), construction: z.union([z.enum(CONSTRUCTIONS), z.literal(''), z.null()]).transform((v) => v || null).nullish(),
   gender_label: s.nullableStr(20), garment: s.nullableStr(80), pack_info: s.nullableStr(80),
+  style_ref: s.nullableStr(60), colour: s.nullableStr(80), size_text: s.nullableStr(80),
   desc_auto: z.coerce.boolean().default(false), uqc: z.union([z.enum(UQC), z.literal(''), z.null()]).transform((v) => v || null).nullish(),
   qty: z.coerce.number().positive('Quantity must be more than 0'),
   unit_price: z.coerce.number().min(0, 'Rate cannot be negative'),
@@ -333,10 +361,12 @@ async function writeInvoice(tx: Tx, req: Request, b: InvIn, id: number | null) {
   }
   for (const l of lines) {
     await txExecute(tx, `INSERT INTO trx_commercial_invoice_line (invoice_id, sort_order, line_kind, so_id, style_id, color_id, order_no, buyer_sku_no, buyer_item_no, supplier_mat_no,
-        description, hsn_code, qty, unit_price, amount, gst_rate, composition, construction, gender_label, garment, pack_info, desc_auto, uqc) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        description, hsn_code, qty, unit_price, amount, gst_rate, composition, construction, gender_label, garment, pack_info, desc_auto, uqc, style_ref, colour, size_text)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [invoiceId, l.sort_order, l.line_kind, l.so_id ?? null, l.style_id ?? null, l.color_id ?? null, l.order_no ?? null, l.buyer_sku_no ?? null, l.buyer_item_no ?? null,
         l.supplier_mat_no ?? null, l.description, l.hsn_code ?? null, l.qty, l.unit_price, l.amount, l.gst_rate ?? null,
-        l.composition ?? null, l.construction ?? null, l.gender_label ?? null, l.garment ?? null, l.pack_info ?? null, l.desc_auto ? 1 : 0, l.uqc ?? null]);
+        l.composition ?? null, l.construction ?? null, l.gender_label ?? null, l.garment ?? null, l.pack_info ?? null, l.desc_auto ? 1 : 0, l.uqc ?? null,
+        l.style_ref ?? null, l.colour ?? null, l.size_text ?? null]);
   }
   if (b.pl_ids.length) await txQuery(tx, `UPDATE trx_packing_list SET invoice_id = ? WHERE company_id = ? AND id IN (?)`, [invoiceId, cid, [...new Set(b.pl_ids)]]);
   return invoiceId!;
@@ -388,6 +418,8 @@ commercialInvoiceRouter.post('/commercial-invoices/:id/reopen', requirePermissio
   const cur = await queryOne<any>(`SELECT doc_status FROM trx_commercial_invoice WHERE id = ? AND company_id = ?`, [id, cid]);
   if (!cur) throw NotFound('Invoice not found');
   if (cur.doc_status !== 'FINAL') throw BadRequest('The invoice is not final');
+  const sb = await queryOne<any>(`SELECT sb_no FROM trx_shipping_bill WHERE company_id = ? AND invoice_id = ? LIMIT 1`, [cid, id]);
+  if (sb) throw BadRequest(`Shipping bill ${sb.sb_no} is filed on this invoice — the invoice stays final (delete the shipping bill entry first if it was wrong)`);
   await query(`UPDATE trx_commercial_invoice SET doc_status = 'DRAFT', row_version = row_version + 1 WHERE id = ?`, [id]);
   await audit(req, 'trx_commercial_invoice', id, 'UPDATE', { doc_status: 'FINAL' }, { doc_status: 'DRAFT', reason });
   res.json({ data: { id, doc_status: 'DRAFT' } });
