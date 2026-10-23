@@ -318,9 +318,10 @@ clientReportsARouter.get('/budget-vs-actuals', VIEW, ah(async (req, res) => {
         FROM trx_sample_alloc_line l JOIN trx_sample_alloc_batch b ON b.id = l.batch_id JOIN trx_sample s ON s.id = b.sample_id
        WHERE b.company_id = ? AND l.so_id IN (?) AND l.status = 'ACTIVE' AND b.status IN ('POSTED','PARTIALLY_REVERSED')
        GROUP BY l.so_id`, [cid, ids]),
-    // export incentives entered on the order's shipping bills (drawback, RoDTEP, RoSCTL) — income of the order
+    // export incentives entered on the order's shipping bills (drawback, RoDTEP, RoSCTL) — income of the order:
+    // the claim while it is open, what was received once it is closed (short-closed balance is not income)
     query<any>(`
-      SELECT ci.so_id, SUM(x.claim_amount) AS amount, SUM(x.received_amount) AS received
+      SELECT ci.so_id, SUM(IF(x.status IN ('CREDITED','SHORT_CLOSED'), x.received_amount, x.claim_amount)) AS amount, SUM(x.received_amount) AS received
         FROM trx_export_incentive x JOIN trx_commercial_invoice ci ON ci.id = x.invoice_id
        WHERE x.company_id = ? AND ci.so_id IN (?) AND x.incentive_type IN ('DUTY_DRAWBACK','RODTEP','ROSCTL') AND x.status <> 'REJECTED'
        GROUP BY ci.so_id`, [cid, ids]),
