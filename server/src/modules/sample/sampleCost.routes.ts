@@ -41,14 +41,14 @@ const costSchema = z.object({
 /** Amount of an entry: qty × rate when both are given, else the amount typed; INR = amount × exchange rate. */
 async function amounts(tx: Tx, b: z.infer<typeof costSchema>) {
   const fc = b.qty != null && b.rate != null && b.qty > 0 && b.rate > 0 ? r2(b.qty * b.rate) : n(b.amount_fc);
-  if (b.category !== 'ADJUSTMENT' && fc <= 0) throw BadRequest('Enter the amount (or quantity × rate)', { fieldErrors: { amount_fc: 'Required' } });
-  if (b.category === 'ADJUSTMENT' && fc === 0) throw BadRequest('An adjustment needs a non-zero amount', { fieldErrors: { amount_fc: 'Required' } });
+  if (b.category !== 'ADJUSTMENT' && fc <= 0) throw BadRequest('Enter the amount (or quantity × rate)', [{ field: 'amount_fc', message: 'Required' }]);
+  if (b.category === 'ADJUSTMENT' && fc === 0) throw BadRequest('An adjustment needs a non-zero amount', [{ field: 'amount_fc', message: 'Required' }]);
   let xr = 1;
   if (b.currency_id) {
     const cur = await txQueryOne<any>(tx, `SELECT code FROM cfg_currency WHERE id = ?`, [b.currency_id]);
     if (!cur) throw BadRequest('Currency not found');
     if (cur.code !== 'INR') {
-      if (!b.exchange_rate || b.exchange_rate <= 0) throw BadRequest(`Enter the exchange rate (₹ per 1 ${cur.code})`, { fieldErrors: { exchange_rate: 'Required' } });
+      if (!b.exchange_rate || b.exchange_rate <= 0) throw BadRequest(`Enter the exchange rate (₹ per 1 ${cur.code})`, [{ field: 'exchange_rate', message: 'Required' }]);
       xr = b.exchange_rate;
     }
   }
@@ -182,7 +182,7 @@ async function applyAction(tx: Tx, req: Request, sampleId: number, c: any, actio
     case 'reject':
       needPerm(req, 'SAMPLE.COST_APPROVE');
       if (!['SUBMITTED', 'APPROVED'].includes(c.status)) throw BadRequest(`Entry ${c.id} is ${c.status.toLowerCase()} — only a submitted or approved cost can be rejected${c.status === 'POSTED' ? ' (reverse a posted one)' : ''}`);
-      if (!reason) throw BadRequest('Give the reason for rejecting', { fieldErrors: { reason: 'Required' } });
+      if (!reason) throw BadRequest('Give the reason for rejecting', [{ field: 'reason', message: 'Required' }]);
       // the source line is free again (it can be imported again, corrected)
       await txExecute(tx, `UPDATE trx_sample_cost SET status = 'REJECTED', reason = ?, source_key = NULL WHERE id = ?`, [reason, c.id]);
       break;
@@ -190,7 +190,7 @@ async function applyAction(tx: Tx, req: Request, sampleId: number, c: any, actio
       needPerm(req, 'SAMPLE.COST_APPROVE');
       if (c.status !== 'POSTED') throw BadRequest(`Entry ${c.id} is ${c.status.toLowerCase()} — only a posted cost is reversed`);
       if (c.reversal_of_id) throw BadRequest('A reversal entry cannot be reversed');
-      if (!reason) throw BadRequest('Give the reason for reversing', { fieldErrors: { reason: 'Required' } });
+      if (!reason) throw BadRequest('Give the reason for reversing', [{ field: 'reason', message: 'Required' }]);
       await txExecute(tx, `UPDATE trx_sample_cost SET status = 'REVERSED', reason = ?, source_key = NULL WHERE id = ?`, [reason, c.id]);
       const r = await txExecute(tx, `INSERT INTO trx_sample_cost (company_id, sample_id, process_id, revision_no, cost_date, category, description, qty, uom_id, rate, currency_id, exchange_rate,
           amount_fc, amount, basis, source_type, source_id, source_line_id, source_ref, status, reversal_of_id, reason, created_by, submitted_by, submitted_at, approved_by, approved_at, posted_by, posted_at)

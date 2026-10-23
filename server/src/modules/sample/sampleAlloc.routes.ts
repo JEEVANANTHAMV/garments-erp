@@ -27,7 +27,9 @@ const CONFIRMED = `so.approval_state IN ('APPROVED','CLOSED') AND so.order_type 
 /** Unallocated balance of a sample = posted eligible cost − buyer-paid charge − live posted allocations (optionally less a batch). */
 async function balances(db: Tx | null, cid: number, sm: any, excludeBatch?: number) {
   const cats = await eligibleCategories(cid);
-  const q = <T = any>(sql: string, p: unknown[]) => (db ? txQueryOne<T>(db, sql, p) : queryOne<T>(sql, p));
+  // inside a transaction: locking reads, so the check sees what other transactions committed while this one waited for
+  // the sample lock (a plain read would use the snapshot taken before the wait — two submits could both pass)
+  const q = <T = any>(sql: string, p: unknown[]) => (db ? txQueryOne<T>(db, `${sql} FOR SHARE`, p) : queryOne<T>(sql, p));
   const posted = await q<any>(`SELECT COALESCE(SUM(amount),0) v FROM trx_sample_cost WHERE company_id = ? AND sample_id = ? AND status IN ${POSTED} AND category IN (?)`,
     [cid, sm.id, cats.length ? cats : ['-']]);
   const alloc = await q<any>(`SELECT COALESCE(SUM(CASE WHEN ${LIVE_ALLOC} THEN l.allocated_amount ELSE 0 END),0) v,
@@ -161,7 +163,7 @@ async function compute(db: Tx | null, cid: number, sm: any, b: BatchIn, excludeB
   const approved = ['APPROVED', 'COMPLETED'].includes(sm.status);
   if ((overrides.length || !approved) && !b.override_reason) {
     throw BadRequest(overrides.length ? `${overrides.map((l) => l.o.so_no).join(', ')} ${overrides.length > 1 ? 'are' : 'is'} not an order of this sample's buyer and style — give the override reason`
-      : 'The sample is not approved by the buyer yet — give the override reason to allocate now', { fieldErrors: { override_reason: 'Required' } });
+      : 'The sample is not approved by the buyer yet — give the override reason to allocate now', [{ field: 'override_reason', message: 'Required' }]);
   }
   if (!approved) warnings.push('Sample not buyer-approved — allocated on override');
   return {
@@ -286,7 +288,7 @@ sampleAllocRouter.post('/sample-allocations/:bid/:action', requireAny('SAMPLE.AL
       case 'reject':
         needPerm(req, 'SAMPLE.ALLOC_APPROVE');
         if (!['PENDING_APPROVAL', 'APPROVED'].includes(bt.status)) throw BadRequest('Only an allocation awaiting approval / posting can be rejected');
-        if (!body.reason) throw BadRequest('Give the reason for rejecting', { fieldErrors: { reason: 'Required' } });
+        if (!body.reason) throw BadRequest('Give the reason for rejecting', [{ field: 'reason', message: 'Required' }]);
         await txExecute(tx, `UPDATE trx_sample_alloc_batch SET status = 'REJECTED', reject_reason = ?, row_version = row_version + 1 WHERE id = ?`, [body.reason, bid]);
         break;
       case 'cancel':
@@ -297,7 +299,7 @@ sampleAllocRouter.post('/sample-allocations/:bid/:action', requireAny('SAMPLE.AL
       case 'reverse': {
         needPerm(req, 'SAMPLE.ALLOC_APPROVE');
         if (!['POSTED', 'PARTIALLY_REVERSED'].includes(bt.status)) throw BadRequest('Only a posted allocation can be reversed');
-        if (!body.reason || body.reason.length < 3) throw BadRequest('Give the reason for reversing (e.g. order cancelled, reallocate)', { fieldErrors: { reason: 'Required' } });
+        if (!body.reason || body.reason.length < 3) throw BadRequest('Give the reason for reversing (e.g. order cancelled, reallocate)', [{ field: 'reason', message: 'Required' }]);
         const live = await txQuery<any>(tx, `SELECT id FROM trx_sample_alloc_line WHERE batch_id = ? AND status = 'ACTIVE'`, [bid]);
         const pick = body.line_ids?.length ? live.filter((l) => body.line_ids!.includes(Number(l.id))) : live;
         if (!pick.length) throw BadRequest('Nothing to reverse — the chosen lines are already reversed');

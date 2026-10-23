@@ -166,21 +166,21 @@ const sampleSchema = z.object({
 /** Validates the masters of a request (company scope, style ↔ buyer). Returns the buyer to use. */
 async function checkMasters(cid: number, b: any) {
   const st = await queryOne<any>(`SELECT id, buyer_id FROM mst_style WHERE id = ? AND company_id = ? AND is_deleted = 0`, [b.style_id, cid]);
-  if (!st) throw BadRequest('Style not found', { fieldErrors: { style_id: 'Style not found' } });
+  if (!st) throw BadRequest('Style not found', [{ field: 'style_id', message: 'Style not found' }]);
   const buyer = b.buyer_id ?? st.buyer_id ?? null;
-  if (!buyer) throw BadRequest('Select the buyer (the style has none)', { fieldErrors: { buyer_id: 'Buyer is required' } });
-  if (st.buyer_id && Number(st.buyer_id) !== Number(buyer)) throw BadRequest('The style belongs to another buyer', { fieldErrors: { buyer_id: 'Not the buyer of this style' } });
+  if (!buyer) throw BadRequest('Select the buyer (the style has none)', [{ field: 'buyer_id', message: 'Buyer is required' }]);
+  if (st.buyer_id && Number(st.buyer_id) !== Number(buyer)) throw BadRequest('The style belongs to another buyer', [{ field: 'buyer_id', message: 'Not the buyer of this style' }]);
   if (!(await queryOne(`SELECT id FROM mst_party WHERE id = ? AND company_id = ?`, [buyer, cid]))) throw BadRequest('Buyer not found');
   if (b.enquiry_id && !(await queryOne(`SELECT id FROM trx_enquiry WHERE id = ? AND company_id = ?`, [b.enquiry_id, cid]))) throw BadRequest('Enquiry not found');
   for (const k of ['merchandiser_id', 'coordinator_id'] as const) {
-    if (b[k] && !(await queryOne(`SELECT id FROM mst_user WHERE id = ? AND company_id = ?`, [b[k], cid]))) throw BadRequest('User not found', { fieldErrors: { [k]: 'Not a user of this company' } });
+    if (b[k] && !(await queryOne(`SELECT id FROM mst_user WHERE id = ? AND company_id = ?`, [b[k], cid]))) throw BadRequest('User not found', [{ field: k, message: 'Not a user of this company' }]);
   }
   return Number(buyer);
 }
 function checkDates(req: Request, b: any) {
   if (b.target_date < b.request_date) {
-    if (!hasPerm(req, 'SAMPLE.APPROVE')) throw BadRequest('Target date is before the request date', { fieldErrors: { target_date: 'Before the request date' } });
-    if (!b.change_reason) throw BadRequest('Target date is before the request date — give a reason', { fieldErrors: { change_reason: 'Reason required' } });
+    if (!hasPerm(req, 'SAMPLE.APPROVE')) throw BadRequest('Target date is before the request date', [{ field: 'target_date', message: 'Before the request date' }]);
+    if (!b.change_reason) throw BadRequest('Target date is before the request date — give a reason', [{ field: 'change_reason', message: 'Reason required' }]);
   }
 }
 
@@ -192,7 +192,7 @@ sampleRouter.post('/samples', requirePermission('SAMPLE.CREATE'), ah(async (req,
   const buyer = await checkMasters(cid, b);
   const type = await queryOne<any>(`SELECT t.*, w.id AS workflow_id FROM mst_sample_type t LEFT JOIN mst_sample_workflow w ON w.sample_type_id = t.id AND w.is_current = 1
     WHERE t.id = ? AND t.company_id = ? AND t.is_active = 1`, [b.sample_type_id, cid]);
-  if (!type) throw BadRequest('Sample type not found or inactive', { fieldErrors: { sample_type_id: 'Pick a sample type' } });
+  if (!type) throw BadRequest('Sample type not found or inactive', [{ field: 'sample_type_id', message: 'Pick a sample type' }]);
   if (b.recovered_amount && !hasPerm(req, 'SAMPLE.COST')) needPerm(req, 'SAMPLE.COST', 'buyer-paid sample charge');
   const id = await transaction(async (tx) => {
     let no = b.sample_no?.trim().toUpperCase() || null;
@@ -267,7 +267,7 @@ sampleRouter.put('/samples/:id', requirePermission('SAMPLE.UPDATE'), ah(async (r
     if (!Object.keys(changes).length) return { id, unchanged: true };
     // after the workflow starts, a change of plan (target, quantity, instructions, sample charge) is logged with its reason
     const tracked = ['target_date', 'qty', 'instructions', 'recovered_amount', 'request_date'].filter((k) => changes[k]);
-    if (!draft && tracked.length && !b.change_reason) throw BadRequest(`Give the reason for changing ${tracked.join(', ').replace(/_/g, ' ')}`, { fieldErrors: { change_reason: 'Reason required' } });
+    if (!draft && tracked.length && !b.change_reason) throw BadRequest(`Give the reason for changing ${tracked.join(', ').replace(/_/g, ' ')}`, [{ field: 'change_reason', message: 'Reason required' }]);
     const keys = Object.keys(cols);
     await txExecute(tx, `UPDATE trx_sample SET ${keys.map((k) => `${k} = ?`).join(', ')}, updated_by = ?, row_version = row_version + 1 WHERE id = ?`,
       [...keys.map((k) => cols[k] as any), req.user!.id, id]);
@@ -534,7 +534,7 @@ sampleRouter.post('/samples/:id/processes/:pid/:action', requireAny('SAMPLE.PROC
         const dept = b.department_id ?? p.department_id;
         const user = b.assigned_user_id ?? p.assigned_user_id;
         const con = b.assigned_contractor_id ?? p.assigned_contractor_id;
-        if (!user && !con) throw BadRequest('Name the employee or contractor doing this stage', { fieldErrors: { assigned_user_id: 'Owner required' } });
+        if (!user && !con) throw BadRequest('Name the employee or contractor doing this stage', [{ field: 'assigned_user_id', message: 'Owner required' }]);
         await txExecute(tx, `UPDATE trx_sample_process SET status = 'IN_PROGRESS', started_at = NOW(), department_id = ?, assigned_user_id = ?, assigned_contractor_id = ?,
           input_qty = COALESCE(?, input_qty), remarks = COALESCE(?, remarks), last_activity_at = NOW() WHERE id = ?`,
           [dept ?? null, user ?? null, con ?? null, b.input_qty ?? null, b.remarks ?? null, pid]);
@@ -544,7 +544,7 @@ sampleRouter.post('/samples/:id/processes/:pid/:action', requireAny('SAMPLE.PROC
       case 'hold': {
         needPerm(req, 'SAMPLE.PROCESS');
         if (p.status !== 'IN_PROGRESS') throw BadRequest('Only a running stage can be put on hold');
-        if (!b.reason || b.reason.length < 3) throw BadRequest('Give the hold reason', { fieldErrors: { reason: 'Reason required' } });
+        if (!b.reason || b.reason.length < 3) throw BadRequest('Give the hold reason', [{ field: 'reason', message: 'Reason required' }]);
         await txExecute(tx, `UPDATE trx_sample_process SET status = 'ON_HOLD', hold_since = NOW(), hold_reason = ?, last_activity_at = NOW() WHERE id = ?`, [b.reason, pid]);
         await plog(tx, req, p, 'HOLD', from, 'ON_HOLD', { reason: b.reason });
         break;
@@ -560,7 +560,7 @@ sampleRouter.post('/samples/:id/processes/:pid/:action', requireAny('SAMPLE.PROC
       case 'complete': {
         needPerm(req, 'SAMPLE.PROCESS');
         if (p.status !== 'IN_PROGRESS') throw BadRequest(p.status === 'ON_HOLD' ? 'Resume the stage before completing it' : 'Start the stage before completing it');
-        if (Number(p.needs_output) && b.good_qty == null) throw BadRequest('Enter the good quantity of this stage', { fieldErrors: { good_qty: 'Required' } });
+        if (Number(p.needs_output) && b.good_qty == null) throw BadRequest('Enter the good quantity of this stage', [{ field: 'good_qty', message: 'Required' }]);
         const tot = n(b.good_qty) + n(b.reject_qty) + n(b.rework_qty);
         if (Number(p.needs_output) && tot <= 0) throw BadRequest('Enter the output (good / reject / rework) of this stage');
         if (b.input_qty != null && tot > n(b.input_qty) + 0.0001) throw BadRequest('Good + reject + rework is more than the input quantity');
@@ -607,7 +607,7 @@ sampleRouter.post('/samples/:id/processes/:pid/:action', requireAny('SAMPLE.PROC
         if (Number(p.is_mandatory)) needPerm(req, 'SAMPLE.APPROVE', 'skip a mandatory stage'); else needPerm(req, 'SAMPLE.PROCESS');
         if (!running) throw BadRequest('Stages can be skipped while the sample is in progress');
         if (p.status !== 'NOT_STARTED') throw BadRequest('Only a stage that has not started can be skipped');
-        if (!b.reason || b.reason.length < 3) throw BadRequest('Give the reason for skipping', { fieldErrors: { reason: 'Reason required' } });
+        if (!b.reason || b.reason.length < 3) throw BadRequest('Give the reason for skipping', [{ field: 'reason', message: 'Reason required' }]);
         await txExecute(tx, `UPDATE trx_sample_process SET status = 'SKIPPED', skip_reason = ?, last_activity_at = NOW() WHERE id = ?`, [b.reason, pid]);
         await plog(tx, req, p, 'SKIP', from, 'SKIPPED', { reason: b.reason });
         break;
@@ -616,7 +616,7 @@ sampleRouter.post('/samples/:id/processes/:pid/:action', requireAny('SAMPLE.PROC
         needPerm(req, 'SAMPLE.APPROVE', 'reopen a stage');
         if (!['COMPLETED', 'SKIPPED'].includes(p.status)) throw BadRequest('Only a completed or skipped stage can be reopened');
         if (!['SUBMITTED', 'IN_PROGRESS', 'ON_HOLD', 'PENDING_INTERNAL_APPROVAL', 'INTERNALLY_APPROVED'].includes(sm.status)) throw BadRequest(`A ${sm.status.replace(/_/g, ' ').toLowerCase()} sample's stages cannot be reopened — start a revision`);
-        if (!b.reason || b.reason.length < 3) throw BadRequest('Give the reason for reopening', { fieldErrors: { reason: 'Reason required' } });
+        if (!b.reason || b.reason.length < 3) throw BadRequest('Give the reason for reopening', [{ field: 'reason', message: 'Reason required' }]);
         const back = p.status === 'COMPLETED' ? 'IN_PROGRESS' : 'NOT_STARTED';
         await txExecute(tx, `UPDATE trx_sample_process SET status = ?, completed_at = NULL, skip_reason = NULL, last_activity_at = NOW() WHERE id = ?`, [back, pid]);
         await plog(tx, req, p, 'REOPEN', from, back, { reason: b.reason });
@@ -666,7 +666,7 @@ sampleRouter.post('/samples/:id/qc-inspections', requirePermission('SAMPLE.QC'),
     if (b.disposition === 'REWORK') {
       // rework loop (spec §6.4): a new mandatory stage linked to the stage to redo, after the last stage of the revision
       const src = b.rework_of_process_id ? await txQueryOne<any>(tx, `SELECT * FROM trx_sample_process WHERE id = ? AND sample_id = ? AND revision_no = ?`, [b.rework_of_process_id, id, sm.revision_no]) : null;
-      if (!src) throw BadRequest('Pick the stage to rework', { fieldErrors: { rework_of_process_id: 'Required for rework' } });
+      if (!src) throw BadRequest('Pick the stage to rework', [{ field: 'rework_of_process_id', message: 'Required for rework' }]);
       const mx = await txQueryOne<any>(tx, `SELECT COALESCE(MAX(seq_no),0) s, COALESCE(MAX(step_group),0) g FROM trx_sample_process WHERE sample_id = ? AND revision_no = ?`, [id, sm.revision_no]);
       const r = await txExecute(tx, `INSERT INTO trx_sample_process (sample_id, revision_no, workflow_stage_id, seq_no, step_group, stage_code, stage_name, department_id, is_mandatory, sla_days, needs_output,
           assigned_user_id, assigned_contractor_id, rework_of_process_id, remarks, last_activity_at) VALUES (?,?,?,?,?,?,?,?,1,?,1,?,?,?,?,NOW())`,
@@ -704,7 +704,7 @@ sampleRouter.post('/samples/:id/approvals', requirePermission('SAMPLE.APPROVE'),
   const cid = req.user!.companyId;
   const id = Number(req.params.id);
   const b = decisionSchema.parse(req.body ?? {});
-  if (b.decision !== 'APPROVED' && !b.comments?.trim()) throw BadRequest('Write the comments (what is wrong / what has to change)', { fieldErrors: { comments: 'Required' } });
+  if (b.decision !== 'APPROVED' && !b.comments?.trim()) throw BadRequest('Write the comments (what is wrong / what has to change)', [{ field: 'comments', message: 'Required' }]);
   const status = await transaction(async (tx) => {
     const sm = await lockSample(tx, cid, id);
     assertVersion(sm, b.row_version);
