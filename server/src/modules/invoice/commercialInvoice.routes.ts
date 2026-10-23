@@ -148,7 +148,8 @@ async function prefill(cid: number, soId: number, plIds: number[] | null, format
       for (const j of String(i.size_json ?? '').split('\u0001')) {
         try { const o = JSON.parse(j); if (o && typeof o === 'object') for (const [k, v] of Object.entries(o)) if (Number(v) > 0) sizes.push(String(k)); } catch { /* no sizes */ }
       }
-      return { so_id: i.so_id ?? soId, style_id: i.style_id, color_id: i.color_id, order_no: poOfSo.get(Number(i.so_id ?? soId)) ?? i.order_no ?? null,
+      // only the buyer's PO — never our own order no (the packing list falls back to it when the order has no PO)
+      return { so_id: i.so_id ?? soId, style_id: i.style_id, color_id: i.color_id, order_no: poOfSo.get(Number(i.so_id ?? soId)) ?? null,
         qty: n(i.qty), unit_price: n(sl?.unit_price), sl, style_code: i.style_no ?? sl?.style_code, colour: i.colour ?? sl?.color_name ?? null,
         size_text: sizeRange(Number(i.style_id), sizes), ...parseBlockRefs(i.block_label) };
     });

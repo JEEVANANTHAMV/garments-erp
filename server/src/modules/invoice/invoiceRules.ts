@@ -55,7 +55,7 @@ export const IEC_RE = /\b[0-9A-Z]{10}\b/;
 /** GST invoice no: at most 16 characters — letters, digits, hyphen and slash. */
 export const INVOICE_NO_RE = /^[A-Za-z0-9/-]{1,16}$/;
 
-export interface CheckLine { line_kind: string; description?: string | null; hsn_code?: string | null; qty: number; unit_price: number; construction?: string | null; uqc?: string | null; gst_rate?: number | null }
+export interface CheckLine { line_kind: string; order_no?: string | null; description?: string | null; hsn_code?: string | null; qty: number; unit_price: number; construction?: string | null; uqc?: string | null; gst_rate?: number | null }
 export interface CheckInput {
   invoice_no: string; invoice_date: string | null; invoice_format: string; exchange_rate: number; currency_code: string;
   exporter_details: string | null; exporter_ref: string | null; consignee_details: string | null;
@@ -88,6 +88,7 @@ export function invoiceChecks(inv: CheckInput, today: string) {
     const tag = `Line ${i + 1}${l.description ? ` (${String(l.description).slice(0, 40)})` : ''}`;
     const hsn = String(l.hsn_code ?? '').trim();
     if (!String(l.description ?? '').trim()) errors.push(`${tag}: description is empty`);
+    if (l.line_kind === 'GOODS' && !String(l.order_no ?? '').trim()) errors.push(`${tag}: Order No (buyer PO) is empty — enter the buyer PO on the sales order`);
     if (!/^\d{8}$/.test(hsn)) errors.push(`${tag}: 8-digit HSN (ITC-HS) code needed for the shipping bill`);
     if (!(l.qty > 0)) errors.push(`${tag}: quantity is zero`);
     if (l.line_kind === 'GOODS' && !(l.unit_price > 0)) errors.push(`${tag}: rate is zero`);
