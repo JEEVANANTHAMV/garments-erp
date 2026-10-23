@@ -225,7 +225,7 @@ shippingBillRouter.post('/shipping-bills/import-pdf', requirePermission('EXPORT.
   const warnings: string[] = [];
   let invoice: any = null;
   if (f?.invoice_no) {
-    const ci = await queryOne<any>(`SELECT ci.id, ci.invoice_no, ci.invoice_date, ci.doc_status, ci.total_value, cu.code AS currency_code,
+    const ci = await queryOne<any>(`SELECT ci.id, ci.invoice_no, ci.invoice_date, ci.doc_status, ci.total_value, ci.gst_supply_type, cu.code AS currency_code,
         (SELECT sb.sb_no FROM trx_shipping_bill sb WHERE sb.invoice_id = ci.id AND sb.id <> ? LIMIT 1) AS sb_no
         FROM trx_commercial_invoice ci LEFT JOIN cfg_currency cu ON cu.id = ci.currency_id
        WHERE ci.company_id = ? AND REPLACE(UPPER(ci.invoice_no), ' ', '') = REPLACE(UPPER(?), ' ', '') LIMIT 1`, [b.shipping_bill_id ?? 0, cid, f.invoice_no]);
@@ -237,6 +237,7 @@ shippingBillRouter.post('/shipping-bills/import-pdf', requirePermission('EXPORT.
       if (ci.sb_no) warnings.push(`Invoice ${ci.invoice_no} is already on shipping bill ${ci.sb_no}`);
       if (f.currency_code && ci.currency_code && f.currency_code !== ci.currency_code) warnings.push(`Currency on the PDF is ${f.currency_code}, the invoice is in ${ci.currency_code}`);
       if (f.invoice_value_fc != null && Math.abs(f.invoice_value_fc - n(ci.total_value)) > 0.5) warnings.push(`Invoice value on the PDF ${f.invoice_value_fc} differs from the invoice ${r2(n(ci.total_value))}`);
+      if (ci.gst_supply_type === 'LUT' && n(f.igst_amount) > 0) warnings.push(`The PDF shows IGST ₹${f.igst_amount}, but invoice ${ci.invoice_no} is an export under LUT — IGST is kept 0 (check the invoice's GST type)`);
       if (f.invoice_date && iso(ci.invoice_date) && f.invoice_date !== iso(ci.invoice_date)) warnings.push(`Invoice date on the PDF ${f.invoice_date} differs from the invoice ${iso(ci.invoice_date)}`);
     }
   }

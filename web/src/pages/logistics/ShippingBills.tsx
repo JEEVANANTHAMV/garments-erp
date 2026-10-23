@@ -136,6 +136,7 @@ export function ShippingBillDetailPage() {
       const b: any = { ...v };
       for (const k of ['invoice_id', 'exchange_rate', 'fob_inr', 'freight_inr', 'insurance_inr', 'drawback_amount', 'igst_value', 'igst_amount', 'rodtep_amount', 'rosctl_amount', 'packages', 'gross_weight_kg']) b[k] = num(v[k]);
       for (const k of FIELDS) if (b[k] === '') b[k] = null;
+      if (src?.lut) { b.igst_amount = 0; b.igst_value = null; }   // export under LUT: no IGST (the field shows "0 — LUT")
       b.sb_pdf_pages = num(v.sb_pdf_pages);
       b.pdf_read_fields = v.sb_pdf_url ? pdfRead : null;
       const r = isNew ? await http.post<{ data: any }>('/shipping-bills', b) : await http.put<{ data: any }>(`/shipping-bills/${id}`, b);
