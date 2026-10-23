@@ -43,7 +43,7 @@ export interface InvoiceDocLine {
 }
 
 // A–K: the header boxes of FK-087 over the client's goods table (S.NO … Total, 23-Oct-2026)
-const WIDTHS = [6, 14, 14, 13, 11, 20, 18, 11, 11, 10, 13];
+const WIDTHS = [6, 13, 13, 11, 34, 12, 10, 10, 6, 9, 12];
 const WORK_WIDTHS = [9, 10, 13.7, 12.3, 12.3, 10.9, 40];                                   // L–R (IGST working columns)
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const lines = (t: string | null | undefined) => String(t ?? '').split(/\r?\n/).map((l) => l.trimEnd()).filter((l) => l.trim());
@@ -129,34 +129,35 @@ function build(doc: InvoiceDoc, withWorkingColumns: boolean) {
   const bandEnd = 20 + Math.max(marks.length, pkgs.length, heading.length, 1);
   box(20, 0, bandEnd, 3); box(20, 4, bandEnd, 5); box(20, 6, bandEnd, L);
 
-  // ---------- goods table, as the client's template (23-Oct-2026):
-  // S.NO | Order No. | Style/Ref No. | Colour | Size | Description of Goods / Composition | HSN | Qty | Price | Total
+  // ---------- goods table in the shipping bill's item pattern (ICEGATE Part II: S.No | HS CD | Description | Quantity |
+  // UQC | Rate | Value) with Colour + Size (customs and buyer copies show them) and Order No + Style/Ref on every line —
+  // one invoice can carry 2–3 orders of a buyer (client 23-Oct-2026)
   let r = bandEnd + 1;
   const tableTop = r;
-  const head: [number, string][] = [[0, 'S.NO'], [1, 'Order No.'], [2, 'Style/Ref No.'], [3, 'Colour'], [4, 'Size'], [5, 'Description of Goods / Composition'],
-    [7, 'HSN'], [8, `Qty (${doc.qty_unit || 'PCS'})`], [9, `Price ${doc.rate_basis || doc.currency_code}`], [10, `Total ${doc.currency_code}`]];
+  const head: [number, string][] = [[0, 'S.NO'], [1, 'Order No.'], [2, 'Style/Ref No.'], [3, 'HS Code'], [4, 'Description of Goods'], [5, 'Colour'], [6, 'Size'],
+    [7, 'Quantity'], [8, 'UQC'], [9, `Rate (${doc.rate_basis || doc.currency_code})`], [10, `Value (${doc.currency_code})`]];
   for (const [c, h] of head) sb.set(r, c, h, undefined, 'th');
-  sb.merge(r, 5, r, 6);
   r++;
   const goods = doc.lines.filter((l) => l.line_kind === 'GOODS');
   const charges = doc.lines.filter((l) => l.line_kind === 'CHARGE');
   const workRows: { r: number; l: InvoiceDocLine }[] = [];
   let sno = 0;
   for (const l of [...goods, ...charges]) {
-    const descRows = wrap(l.description, 38);
+    const descRows = wrap(l.description, 34);
     sb.set(r, 0, ++sno, undefined, 'c', 0);
     if (l.line_kind === 'GOODS') {
-      sb.set(r, 1, l.order_no); sb.set(r, 2, l.style_ref ?? l.supplier_mat_no); sb.set(r, 3, l.colour); sb.set(r, 4, l.size_text, undefined, 'c');
+      sb.set(r, 1, l.order_no); sb.set(r, 2, l.style_ref ?? l.supplier_mat_no); sb.set(r, 5, l.colour); sb.set(r, 6, l.size_text, undefined, 'c');
     }
-    sb.set(r, 5, descRows[0] ?? ''); sb.merge(r, 5, r, 6);
-    sb.set(r, 7, l.hsn_code, undefined, 'c');
-    sb.set(r, 8, Number(l.qty), undefined, 'r', 0); sb.set(r, 9, Number(l.unit_price), undefined, 'r', 2); sb.set(r, 10, r2(Number(l.amount)), undefined, 'r', 2);
+    sb.set(r, 3, l.hsn_code, undefined, 'c');
+    sb.set(r, 4, descRows[0] ?? '');
+    sb.set(r, 7, Number(l.qty), undefined, 'r', 0); sb.set(r, 8, l.uqc || doc.qty_unit || 'PCS', undefined, 'c');
+    sb.set(r, 9, Number(l.unit_price), undefined, 'r', 2); sb.set(r, 10, r2(Number(l.amount)), undefined, 'r', 2);
     workRows.push({ r, l }); r++;
     // a long description goes on below, as the shipping bill prints it
-    for (const extra of descRows.slice(1)) { sb.set(r, 5, extra); sb.merge(r, 5, r, 6); r++; }
+    for (const extra of descRows.slice(1)) { sb.set(r, 4, extra); r++; }
   }
-  sb.set(r, 0, 'TOTAL', undefined, 'rb'); sb.merge(r, 0, r, 7);
-  sb.set(r, 8, T.goods_qty, undefined, 'rb', 0); sb.set(r, 10, T.total_amount, undefined, 'rb', 2);
+  sb.set(r, 0, 'TOTAL', undefined, 'rb'); sb.merge(r, 0, r, 6);
+  sb.set(r, 7, T.goods_qty, undefined, 'rb', 0); sb.set(r, 10, T.total_amount, undefined, 'rb', 2);
   sb.box(tableTop, 0, r, L, 'grid');
   const goodsEnd = Math.max(r + 2, 34);
 

@@ -85,6 +85,7 @@ const fromServer = (d: any) => {
   v.lines = (d.lines ?? []).map((l: any) => {
     const x: any = { ...EMPTY_LINE, ...Object.fromEntries(Object.entries(l).map(([k, y]) => [k, y ?? ''])) };
     if (Number(x.desc_auto) && !compose(x) && x.description) x.desc_auto = 0;   // a description without parts is a typed one
+    if (Number(x.desc_auto) && !x.description) x.description = compose(x);
     return x;
   });
   return v;
@@ -148,7 +149,7 @@ export function CommercialInvoiceDetailPage() {
     b.qty_unit = v.qty_unit || 'PCS'; b.invoice_format = v.invoice_format || 'BUYER';
     b.lines = v.lines.map((l: any) => ({ line_kind: l.line_kind || 'GOODS', so_id: num(l.so_id), style_id: num(l.style_id), color_id: num(l.color_id), order_no: nz(l.order_no),
       buyer_sku_no: nz(l.buyer_sku_no), buyer_item_no: nz(l.buyer_item_no), supplier_mat_no: nz(l.supplier_mat_no), hsn_code: nz(l.hsn_code),
-      description: Number(l.desc_auto) && compose(l) ? compose(l) : nz(l.description), desc_auto: !!Number(l.desc_auto) && !!compose(l),
+      description: nz(l.description) ?? (compose(l) || null), desc_auto: !!Number(l.desc_auto) && !!compose(l) && (l.description || '') === compose(l),
       composition: nz(l.composition), construction: nz(l.construction), gender_label: nz(l.gender_label), garment: nz(l.garment), pack_info: nz(l.pack_info), uqc: nz(l.uqc),
       style_ref: nz(l.style_ref), colour: nz(l.colour), size_text: nz(l.size_text),
       qty: Number(l.qty), unit_price: Number(l.unit_price), gst_rate: num(l.gst_rate) }));
@@ -307,44 +308,56 @@ export function CommercialInvoiceDetailPage() {
           </div>}>
           <div className="overflow-x-auto">
             <table className="w-full" id="ci-lines">
-              <thead><tr><th className="th w-16">S.NO</th><th className="th">Order No. (buyer PO)</th><th className="th">Style/Ref No.</th><th className="th">Colour</th><th className="th">Size</th>
-                <th className="th">Description of Goods / Composition</th><th className="th">HSN · UQC</th><th className="th text-right">Qty ({v.qty_unit || 'PCS'})</th><th className="th text-right">Price</th>
-                <th className="th text-right">Total</th>{igst && <th className="th text-right">IGST %</th>}<th className="th" /></tr></thead>
+              <thead><tr><th className="th w-12">S.NO</th><th className="th">Order No. (buyer PO)</th><th className="th">Style/Ref No.</th><th className="th">HS Code</th>
+                <th className="th">Description of Goods</th><th className="th">Colour</th><th className="th">Size</th><th className="th text-right">Quantity</th><th className="th">UQC</th>
+                <th className="th text-right">Rate</th><th className="th text-right">Value</th>{igst && <th className="th text-right">IGST %</th>}<th className="th" /></tr></thead>
               <tbody>
-                {!v.lines.length && <tr><td colSpan={12} className="td py-6 text-center text-slate-400">No lines — fill from the order or add a line</td></tr>}
+                {!v.lines.length && <tr><td colSpan={13} className="td py-6 text-center text-slate-400">No lines — fill from the order or add a line</td></tr>}
                 {v.lines.map((l: any, i: number) => {
-                  const PH: Record<string, string> = { size_text: 'S-XL', colour: 'colour', style_ref: 'style / ref', order_no: 'buyer PO', composition: 'composition e.g. 95% COTTON 5% ELASTANE', garment: 'garment e.g. PYJAMA SETS', pack_info: 'pack e.g. HANGER PACK', hsn_code: '8-digit HSN' };
+                  const PH: Record<string, string> = { size_text: 'S-XL', colour: 'colour', style_ref: 'style / ref', order_no: 'buyer PO', composition: 'composition e.g. 95% COTTON 5% ELASTANE', garment: 'garment e.g. PYJAMA SETS', pack_info: 'pack e.g. HANGER PACK', hsn_code: '8-digit HSN', description: 'description of goods' };
                   const inp = (k: string, w = 'w-28', type = 'text') => <input className={clsx('input h-8 py-0 text-[12px]', w, type === 'number' && 'text-right')} type={type} step="any" placeholder={PH[k]} value={l[k] ?? ''} data-line={`${i}-${k}`} onChange={(e) => setLine(i, k, e.target.value)} />;
+                  // a part changed while the description is still the automatic one → the description follows
+                  const setPart = (k: string, x: string) => setV((o: any) => ({ ...o, lines: o.lines.map((y: any, j: number) => {
+                    if (j !== i) return y;
+                    const n = { ...y, [k]: x };
+                    return Number(n.desc_auto) ? { ...n, description: compose(n) } : n;
+                  }) }));
+                  const part = (k: string, w = 'w-full') => <input className={clsx('input h-8 py-0 text-[12px]', w)} placeholder={PH[k]} value={l[k] ?? ''} data-line={`${i}-${k}`} onChange={(e) => setPart(k, e.target.value)} />;
                   return (
                     <tr key={i} className="align-top">
                       <td className="td text-[11px]"><p className="font-semibold">{i + 1}</p>{l.line_kind === 'CHARGE' && <Badge tone="violet">charge</Badge>}</td>
                       <td className="td">{l.line_kind === 'CHARGE' ? null : inp('order_no')}</td>
                       <td className="td">{l.line_kind === 'CHARGE' ? null : inp('style_ref', 'w-28')}</td>
+                      <td className="td">{inp('hsn_code', 'w-24')}</td>
+                      <td className="td">
+                        <div className="w-[24rem] space-y-1" data-desc={i}>
+                          {/* filled from the order (composition …); edit freely — e.g. add " - note" or replace it */}
+                          <input className="input h-8 w-full py-0 text-[12px] font-medium" placeholder={PH.description} value={l.description ?? ''} data-line={`${i}-description`}
+                            onChange={(e) => setV((o: any) => ({ ...o, lines: o.lines.map((y: any, j: number) => (j === i ? { ...y, description: e.target.value, desc_auto: 0 } : y)) }))} />
+                          {l.line_kind !== 'CHARGE' && (
+                            <details className="text-[11px] text-slate-500" data-line={`${i}-parts`}>
+                              <summary className="cursor-pointer select-none">{Number(l.desc_auto) ? 'built from the composition' : 'typed'} · build from composition</summary>
+                              <div className="mt-1 space-y-1">
+                                <div className="grid grid-cols-[1fr_92px_86px] gap-1">
+                                  {part('composition')}
+                                  <select className="input h-8 py-0 text-[12px]" value={l.construction ?? ''} data-line={`${i}-construction`} onChange={(e) => setPart('construction', e.target.value)}>
+                                    <option value="">knit / woven</option>{['KNITTED', 'WOVEN', 'CROCHETED'].map((x) => <option key={x}>{x}</option>)}</select>
+                                  <select className="input h-8 py-0 text-[12px]" value={l.gender_label ?? ''} data-line={`${i}-gender_label`} onChange={(e) => setPart('gender_label', e.target.value)}>
+                                    <option value="">gender</option>{['MENS', 'LADIES', 'BOYS', 'GIRLS', 'INFANTS', 'UNISEX', 'KIDS'].map((x) => <option key={x}>{x}</option>)}</select>
+                                </div>
+                                <div className="grid grid-cols-2 gap-1">{part('garment')}{part('pack_info')}</div>
+                                <button type="button" className="text-brand-700 hover:underline" data-line={`${i}-rebuild`} disabled={!compose(l)}
+                                  onClick={() => setV((o: any) => ({ ...o, lines: o.lines.map((y: any, j: number) => (j === i ? { ...y, description: compose(y), desc_auto: 1 } : y)) }))}>
+                                  Use “{compose(l) || '…'}”</button>
+                              </div>
+                            </details>
+                          )}
+                        </div>
+                      </td>
                       <td className="td">{l.line_kind === 'CHARGE' ? null : inp('colour', 'w-28')}</td>
                       <td className="td">{l.line_kind === 'CHARGE' ? null : inp('size_text', 'w-24')}</td>
-                      <td className="td">
-                        {l.line_kind === 'CHARGE' ? inp('description', 'w-80') : (
-                          <div className="w-[26rem] space-y-1" data-desc={i}>
-                            <div className="grid grid-cols-[1fr_92px_86px] gap-1">
-                              {inp('composition', 'w-full')}
-                              <select className="input h-8 py-0 text-[12px]" value={l.construction ?? ''} data-line={`${i}-construction`} onChange={(e) => setLine(i, 'construction', e.target.value)}>
-                                <option value="">knit / woven</option>{['KNITTED', 'WOVEN', 'CROCHETED'].map((x) => <option key={x}>{x}</option>)}</select>
-                              <select className="input h-8 py-0 text-[12px]" value={l.gender_label ?? ''} data-line={`${i}-gender_label`} onChange={(e) => setLine(i, 'gender_label', e.target.value)}>
-                                <option value="">gender</option>{['MENS', 'LADIES', 'BOYS', 'GIRLS', 'INFANTS', 'UNISEX', 'KIDS'].map((x) => <option key={x}>{x}</option>)}</select>
-                            </div>
-                            <div className="grid grid-cols-2 gap-1">{inp('garment', 'w-full')}{inp('pack_info', 'w-full')}</div>
-                            <label className="flex items-center gap-1.5 text-[11px] text-slate-500">
-                              <input type="checkbox" checked={!!Number(l.desc_auto)} data-line={`${i}-desc_auto`} onChange={(e) => setLine(i, 'desc_auto', e.target.checked ? 1 : 0)} />
-                              built from the parts (composition · knit/woven · gender · garment · pack)
-                            </label>
-                            {Number(l.desc_auto) ? <p className="rounded bg-slate-50 px-2 py-1 text-[11.5px] font-semibold" data-line={`${i}-composed`}>{compose(l) || <span className="font-normal text-red-600">fill the parts</span>}</p>
-                              : inp('description', 'w-full')}
-                          </div>
-                        )}
-                      </td>
-                      <td className="td"><div className="space-y-1">{inp('hsn_code', 'w-24')}
-                        <select className="input h-8 w-24 py-0 text-[12px]" value={l.uqc ?? ''} data-line={`${i}-uqc`} onChange={(e) => setLine(i, 'uqc', e.target.value)}>{UQC.map((x) => <option key={x}>{x}</option>)}</select></div></td>
                       <td className="td text-right">{inp('qty', 'w-24', 'number')}</td>
+                      <td className="td"><select className="input h-8 w-20 py-0 text-[12px]" value={l.uqc ?? ''} data-line={`${i}-uqc`} onChange={(e) => setLine(i, 'uqc', e.target.value)}>{UQC.map((x) => <option key={x}>{x}</option>)}</select></td>
                       <td className="td text-right">{inp('unit_price', 'w-20', 'number')}</td>
                       <td className="td text-right tabular-nums font-semibold">{fmtDecimal(totals.amt(l), 2)}</td>
                       {igst && <td className="td text-right">{inp('gst_rate', 'w-16', 'number')}</td>}
@@ -353,7 +366,7 @@ export function CommercialInvoiceDetailPage() {
                   );
                 })}
               </tbody>
-              <tfoot><tr className="bg-slate-50 font-semibold"><td className="td" colSpan={7}>Total {cur?.code ?? ''}</td><td className="td text-right tabular-nums" id="ci-total-qty">{fmtNumber(totals.qty)}</td><td className="td" />
+              <tfoot><tr className="bg-slate-50 font-semibold"><td className="td" colSpan={7}>Total {cur?.code ?? ''}</td><td className="td text-right tabular-nums" id="ci-total-qty">{fmtNumber(totals.qty)}</td><td className="td" /><td className="td" />
                 <td className="td text-right tabular-nums" id="ci-total-amount">{fmtDecimal(totals.total, 2)}</td>{igst && <td className="td" />}<td className="td" /></tr></tfoot>
             </table>
           </div>
