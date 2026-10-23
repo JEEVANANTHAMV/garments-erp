@@ -68,7 +68,7 @@ async function ordersWithBasis(cid: number, sm: any, soIds: number[] | null, sea
       LEFT JOIN mst_party b ON b.id = so.buyer_id
       LEFT JOIN cfg_currency cu ON cu.id = so.currency_id
      WHERE ${where.join(' AND ')}
-     GROUP BY so.id ORDER BY so.so_date DESC, so.id DESC LIMIT 100`, [sm.style_id, sm.style_id, sm.style_id, ...p]);
+     GROUP BY so.id ORDER BY so.so_date DESC, so.id DESC LIMIT 200`, [sm.style_id, sm.style_id, sm.style_id, ...p]);
   const ids = rows.map((r) => Number(r.so_id));
   const already = ids.length ? await query<any>(`SELECT l.so_id, SUM(l.allocated_amount) v FROM trx_sample_alloc_line l JOIN trx_sample_alloc_batch b ON b.id = l.batch_id
     WHERE b.sample_id = ? AND ${LIVE_ALLOC} AND l.so_id IN (?) GROUP BY l.so_id`, [sm.id, ids]) : [];
