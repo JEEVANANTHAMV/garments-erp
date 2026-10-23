@@ -43,7 +43,7 @@ export interface InvoiceDocLine {
 }
 
 // A–K: the header boxes of FK-087 over the client's goods table (S.NO … Total, 23-Oct-2026)
-const WIDTHS = [6, 13, 13, 11, 34, 12, 10, 10, 6, 9, 12];
+const WIDTHS = [6, 12, 11, 10, 34, 12, 14, 9, 6, 9, 12];
 const WORK_WIDTHS = [9, 10, 13.7, 12.3, 12.3, 10.9, 40];                                   // L–R (IGST working columns)
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const lines = (t: string | null | undefined) => String(t ?? '').split(/\r?\n/).map((l) => l.trimEnd()).filter((l) => l.trim());
