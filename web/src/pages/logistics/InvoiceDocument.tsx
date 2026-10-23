@@ -82,9 +82,9 @@ export function InvoiceDocument({ d, format }: { d: any; format: 'BUYER' | 'IGST
       <style>{CSS}</style>
       <div className="sheet">
         <div className="title">
-          <span className="copy" style={{ visibility: 'hidden' }}>{igst ? 'IGST INVOICE' : 'BUYER COPY'}</span>
+          <span className="copy" style={{ visibility: 'hidden' }}>{igst ? 'IGST INVOICE' : 'BUYER INVOICE'}</span>
           <h1>COMMERCIAL INVOICE</h1>
-          <span className="copy">{igst ? 'IGST INVOICE' : 'BUYER COPY'}</span>
+          <span className="copy">{igst ? 'IGST INVOICE' : 'BUYER INVOICE'}</span>
         </div>
 
         {/* exporter | invoice no & date · exporter's ref · buyer's order · other refs */}
@@ -147,7 +147,7 @@ export function InvoiceDocument({ d, format }: { d: any; format: 'BUYER' | 'IGST
 
         {/* items — the shipping bill item pattern + colour / size, order no + style/ref per line */}
         <table className="items">
-          <colgroup>{[4, 10, 9, 8, 26, 9, 8, 7, 5, 6.5, 7.5].map((w, i) => <col key={i} style={{ width: `${w}%` }} />)}</colgroup>
+          <colgroup>{[4, 10, 9, 8, 24, 9, 10, 7, 5, 6.5, 7.5].map((w, i) => <col key={i} style={{ width: `${w}%` }} />)}</colgroup>
           <thead><tr>
             <th>S.No</th><th>Order No.</th><th>Style / Ref No.</th><th>HS Code</th><th>Description of Goods</th><th>Colour</th><th>Size</th>
             <th>Quantity</th><th>UQC</th><th>Rate<br />({d.rate_basis || cur})</th><th>Value<br />({cur})</th>
