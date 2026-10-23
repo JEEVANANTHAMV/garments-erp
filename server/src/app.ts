@@ -76,6 +76,7 @@ import { lineAllocationPlanRouter } from './modules/production/lineAllocationPla
 import { jobWorkRouter } from './modules/production/jobWork.routes.js';
 import { machineProcessRouter } from './modules/machineProcess/machineProcess.routes.js';
 import { sampleRouter } from './modules/sample/sample.routes.js';
+import { commercialInvoiceRouter } from './modules/invoice/commercialInvoice.routes.js';
 import { sampleCostRouter } from './modules/sample/sampleCost.routes.js';
 import { sampleAllocRouter } from './modules/sample/sampleAlloc.routes.js';
 import { sampleReportsRouter } from './modules/sample/sampleReports.routes.js';
@@ -149,6 +150,7 @@ export function createApp() {
   api.use('/', sampleRouter);                 // /sample-types, /samples/:id (request, stages, QC, approvals, revisions, attachments)
   api.use('/', sampleCostRouter);             // /samples/:id/costs, /samples/:id/cost-sources (sample cost ledger)
   api.use('/', sampleAllocRouter);            // /samples/:id/allocations, /sample-allocations (sample cost → confirmed orders)
+  api.use('/', commercialInvoiceRouter);     // /commercial-invoices (FK-087 shipping invoice: prefill from packing lists, BUYER / IGST print + Excel)
   api.use('/', ewayBillRouter);               // /eway-bills (GST e-way bill: Masters India API or manual)
   api.use('/', productionStagesRouter);       // /fabric-issues, /lay-plans, /cut-piece-qc, /bundles/generate-detailed
   api.use('/', productionFloorRouter);        // /bundles/scan, /sewing, /finishing, /final-qc

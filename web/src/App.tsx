@@ -23,6 +23,7 @@ import { EnquiriesPage, QuotationsPage } from './pages/sales';
 import { SamplesHomePage } from './pages/samples/SamplesHome';
 import { SampleDetailPage } from './pages/samples/SampleDetail';
 import { SampleTypesPage } from './pages/samples/SampleTypes';
+import { CommercialInvoicesPage, CommercialInvoiceDetailPage } from './pages/logistics/CommercialInvoices';
 import QuotationDetailPage from './pages/sales/QuotationDetail';
 import PreCostingsPage from './pages/sales/PreCostings';
 import PreCostingDetailPage from './pages/sales/PreCostingDetail';
@@ -144,7 +145,7 @@ import { QcInspectionsPage, DefectsPage } from './pages/quality';
 /* Logistics & Export */
 import {
   PackingsPage, ContainersPage,
-  ExportInvoicesPage, ShippingBillsPage, CertificatesPage,
+  ShippingBillsPage, CertificatesPage,
 } from './pages/logistics';
 import { PackingEngineApp } from './pages/logistics/packing';
 import { EwayBillRegisterPage, EwayBillEditorPage } from './pages/logistics/EwayBills';
@@ -460,7 +461,9 @@ export default function App() {
                   <Route path="eway-bills/:id" element={<EwayBillEditorPage />} />
                 </Route>
                 <Route path="export">
-                  <Route path="invoices" element={<ExportInvoicesPage />} />
+                  <Route path="invoices" element={<CommercialInvoicesPage />} />
+                  <Route path="invoices/new" element={<CommercialInvoiceDetailPage />} />
+                  <Route path="invoices/:id" element={<CommercialInvoiceDetailPage />} />
                   {/* packing lists / shipments live under /logistics; these were duplicate paths */}
                   <Route path="packing-lists" element={<RedirectTo base="/logistics/packing-lists" />} />
                   <Route path="packing-lists/:id" element={<RedirectTo base="/logistics/packing-lists" />} />

@@ -721,39 +721,7 @@ export const transactionResources: ResourceConfig[] = [
   },
 
   // ------------------------------------------------ Export documentation
-  {
-    path: 'commercial-invoices', table: 'trx_commercial_invoice', permission: 'EXPORT', label: 'Commercial Invoice',
-    searchable: ['invoice_no', 'lc_no'], sortable: ['invoice_no', 'invoice_date'],
-    defaultSort: 't.invoice_date', hasIsActive: false, softDelete: false,
-    filters: ['so_id', 'buyer_id', 'dispatch_id', 'status_id'],
-    autoNumber: { column: 'invoice_no', docType: 'INVOICE' },
-    selectExtra: 'so.so_no, b.party_name AS buyer_name, cur.code AS currency_code',
-    joins: `LEFT JOIN trx_sales_order so ON so.id = t.so_id
-            LEFT JOIN mst_party b ON b.id = t.buyer_id
-            LEFT JOIN cfg_currency cur ON cur.id = t.currency_id`,
-    children: [
-      { key: 'lines', table: 'trx_commercial_invoice_line', fk: 'invoice_id', fields: [
-        f('style_id', s.id()), f('sku_id', s.id()), f('description', s.nullableStr(255)),
-        f('hsn_code', s.nullableStr(10)), f('qty', s.intReq()),
-        f('unit_price', s.decReq()), f('amount', s.decReq()),
-      ]},
-      { key: 'taxes', table: 'trx_invoice_tax', fk: 'invoice_id', fields: [
-        f('hsn_code', s.nullableStr(10)), f('taxable_value', s.dec()),
-        f('igst_pct', s.dec()), f('igst_amount', s.dec()),
-        f('cgst_amount', s.dec()), f('sgst_amount', s.dec()),
-        f('is_export_lut', s.bool()), f('gstr_reference', s.nullableStr(40)),
-      ]},
-    ],
-    fields: [
-      f('invoice_no', s.nullableStr(40)), f('invoice_date', s.date()), f('so_id', s.idReq()),
-      f('dispatch_id', s.id()), f('buyer_id', s.idReq()), f('consignee_id', s.id()),
-      f('currency_id', s.idReq()), f('exchange_rate', s.dec()), f('incoterm', s.enum(INCOTERM)),
-      f('port_of_loading', s.nullableStr(80)), f('port_of_discharge', s.nullableStr(80)),
-      f('final_destination', s.nullableStr(80)), f('country_origin', s.id()), f('country_dest', s.id()),
-      f('fob_value', s.dec()), f('freight_value', s.dec()), f('insurance_value', s.dec()),
-      f('total_value', s.dec()), f('lc_no', s.nullableStr(60)), f('status_id', s.id()),
-    ],
-  },
+  // commercial-invoices: hand-built (modules/invoice — FK-087 format), 23-Oct-2026
   {
     path: 'packing-lists', table: 'trx_packing_list', permission: 'EXPORT', label: 'Packing List',
     beforeDelete: async (_req, id, row) => {

@@ -19,16 +19,19 @@ const lines = (t?: string | null) => String(t ?? '').split(/\r?\n/).map((l) => l
    the SAME cell grid the Excel download is written from, so the
    preview / print matches packinglist.xlsx and the Excel cell for cell.
 ------------------------------------------------------------------ */
-interface LayoutCell { r: number; c: number; v: string | number; s?: 'title' | 'lbl' | 'th' | 'sub' | 'grand' | 'blk'; rs?: number; cs?: number }
+interface LayoutCell { r: number; c: number; v: string | number; s?: 'title' | 'lbl' | 'th' | 'sub' | 'grand' | 'blk' | 'c' | 'cb' | 'r' | 'rb' | 'b' | 'sm' | 'smb'; rs?: number; cs?: number; d?: number }
 export interface PlLayout {
   type: string; n_rows: number; n_cols: number; widths: number[];
   cells: LayoutCell[]; boxes: { r1: number; c1: number; r2: number; c2: number; mode: 'grid' | 'box' }[];
 }
-const fmtCell = (v: string | number) => (typeof v === 'number' ? (Number.isInteger(v) ? String(v) : String(Math.round(v * 100000) / 100000)) : v);
+const fmtCell = (v: string | number, d?: number) => (typeof v === 'number' ? (d != null ? v.toFixed(d) : Number.isInteger(v) ? String(v) : String(Math.round(v * 100000) / 100000)) : v);
 const STYLE: Record<string, string> = {
   title: 'text-center text-[14px] font-bold tracking-wide', lbl: 'font-semibold', th: 'bg-slate-100 text-center font-semibold',
   sub: 'font-semibold', grand: 'bg-slate-200 font-bold', blk: 'font-bold',
+  c: 'text-center', cb: 'text-center font-bold', r: 'text-right tabular-nums', rb: 'text-right tabular-nums font-bold', b: 'font-bold',
+  sm: 'text-[8.5px]', smb: 'text-[8.5px] font-semibold',
 };
+const ALIGNED = new Set(['c', 'cb', 'r', 'rb', 'title', 'th']);
 
 export function PackingListLayout({ layout }: { layout: PlLayout }) {
   const at = new Map<string, LayoutCell>();
@@ -74,9 +77,9 @@ export function PackingListLayout({ layout }: { layout: PlLayout }) {
                 const isNum = typeof cell?.v === 'number';
                 return (
                   <td key={c} rowSpan={rs > 1 ? rs : undefined} colSpan={cs > 1 ? cs : undefined} data-cell={`${r}:${c}`}
-                    className={`px-1 py-0.5 align-middle ${isNum ? 'text-right tabular-nums' : cell?.v === '-' || cell?.v === '"' ? 'text-center' : ''} ${cell?.s ? STYLE[cell.s] : ''}`}
+                    className={`px-1 py-0.5 align-middle ${cell?.s && ALIGNED.has(cell.s) ? '' : isNum ? 'text-right tabular-nums' : cell?.v === '-' || cell?.v === '"' ? 'text-center' : ''} ${cell?.s ? STYLE[cell.s] : ''}`}
                     style={edge(r, c, rs, cs)}>
-                    {cell ? fmtCell(cell.v) : ''}
+                    {cell ? fmtCell(cell.v, cell.d) : ''}
                   </td>
                 );
               })}

@@ -76,44 +76,6 @@ export function ContainersPage() {
     ]} />;
 }
 
-/* ----------------------------------------------- Commercial invoices */
-export function ExportInvoicesPage() {
-  return <CrudPage
-    path="commercial-invoices" title="Commercial Invoices" permission="EXPORT" singular="Invoice"
-    subtitle="Export commercial invoices issued to buyers"
-    defaultSort={{ key: 'invoice_date', dir: 'desc' }}
-    columns={[
-      { key: 'invoice_no', header: 'Invoice no', sortable: true,
-        render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.invoice_no}</span> },
-      { key: 'invoice_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.invoice_date) },
-      { key: 'so_no', header: 'SO',
-        render: (r: any) => <span className="font-mono text-[12px] text-brand-700">{r.so_no}</span> },
-      { key: 'buyer_name', header: 'Buyer' },
-      { key: 'incoterm', header: 'Incoterm' },
-      { key: 'total_qty', header: 'Qty', align: 'right', render: (r: any) => fmtNumber(r.total_qty) },
-      { key: 'total_value', header: 'Value', align: 'right',
-        render: (r: any) => `${r.currency_code ?? ''} ${fmtDecimal(r.total_value, 2)}` },
-      { key: 'status_label', header: 'Status', render: (r: any) => <StatusBadge value={r.status_label} /> },
-    ]}
-    filters={[
-      { name: 'buyer_id', label: 'Buyer', lookup: 'buyers' },
-      { name: 'status_id', label: 'Status', statusDomain: 'EXPORT_INVOICE' },
-    ]}
-    fields={[
-      { name: 'invoice_no', label: 'Invoice no', hint: 'Blank to auto-generate' },
-      { name: 'invoice_date', label: 'Invoice date', type: 'date', required: true, defaultValue: today() },
-      { name: 'so_id', label: 'Job (I/O / sales order)', required: true, lookup: 'sales-orders', fill: { currency_id: 'currency_id' } },
-      { name: 'dispatch_id', label: 'Dispatch', lookup: 'dispatches' },
-      { name: 'currency_id', label: 'Currency', lookup: 'currencies' },
-      { name: 'incoterm', label: 'Incoterm', options: ['FOB','CIF','CFR','EXW','DDP'].map((v) => ({ value: v, label: v })) },
-      { name: 'payment_terms', label: 'Payment terms' },
-      { name: 'bank_id', label: 'Bank account', lookup: 'bank-accounts' },
-      { name: 'status_id', label: 'Status', statusDomain: 'EXPORT_INVOICE' },
-      { name: 'remarks', label: 'Remarks', type: 'textarea' },
-    ]} />;
-}
-
-/* --------------------------------------------------- Shipping bills */
 export function ShippingBillsPage() {
   return <CrudPage
     path="shipping-bills" title="Shipping Bills" permission="EXPORT" singular="Shipping Bill"

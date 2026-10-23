@@ -38,12 +38,13 @@ export interface PlHeaderForExport {
   terms_of_delivery: string | null; terms_of_payment: string | null;
 }
 
-/** Cell style tag (Excel ignores it; the preview uses it). */
-export type CellStyle = 'title' | 'lbl' | 'th' | 'sub' | 'grand' | 'blk';
-type Cell = { v: string | number; f?: string; s?: CellStyle };
+/** Cell style tag (Excel ignores it; the preview uses it). c = centred, r = right, b = bold, sm = small print. */
+export type CellStyle = 'title' | 'lbl' | 'th' | 'sub' | 'grand' | 'blk' | 'c' | 'cb' | 'r' | 'rb' | 'b' | 'sm' | 'smb';
+/** d = decimals shown (preview) / written as the Excel number format */
+type Cell = { v: string | number; f?: string; s?: CellStyle; d?: number };
 export interface PlLayout {
-  type: PlType; n_rows: number; n_cols: number; widths: number[];
-  cells: { r: number; c: number; v: string | number; s?: CellStyle; rs?: number; cs?: number }[];
+  type: string; n_rows: number; n_cols: number; widths: number[];
+  cells: { r: number; c: number; v: string | number; s?: CellStyle; rs?: number; cs?: number; d?: number }[];
   /** grid = every cell bordered (carton table, summary); box = outline only (header boxes) */
   boxes: { r1: number; c1: number; r2: number; c2: number; mode: 'grid' | 'box' }[];
 }
@@ -60,14 +61,14 @@ const sizeVal = (s: string): string | number => (/^\d+$/.test(s) ? Number(s) : s
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
 const r5 = (n: number) => Math.round(n * 100000) / 100000;
 
-class SheetBuilder {
+export class SheetBuilder {
   cells = new Map<string, Cell & { r: number; c: number }>();
   merges: XLSX.Range[] = [];
   boxes: PlLayout['boxes'] = [];
   maxR = 0; maxC = 0;
-  set(r: number, c: number, v: string | number | null | undefined, f?: string, s?: CellStyle) {
+  set(r: number, c: number, v: string | number | null | undefined, f?: string, s?: CellStyle, d?: number) {
     if (v == null || v === '') { if (!f && !s) return; v = f ? 0 : ''; }
-    this.cells.set(ref(r, c), { r, c, v, ...(f ? { f } : {}), ...(s ? { s } : {}) });
+    this.cells.set(ref(r, c), { r, c, v, ...(f ? { f } : {}), ...(s ? { s } : {}), ...(d != null && typeof v === 'number' ? { d } : {}) });
     this.maxR = Math.max(this.maxR, r); this.maxC = Math.max(this.maxC, c);
   }
   merge(r1: number, c1: number, r2: number, c2: number) {
@@ -80,7 +81,7 @@ class SheetBuilder {
     for (const [a, cell] of this.cells) {
       if (cell.v === '' && !cell.f) continue;
       ws[a] = typeof cell.v === 'number'
-        ? { t: 'n', v: cell.v, ...(cell.f ? { f: cell.f } : {}) }
+        ? { t: 'n', v: cell.v, ...(cell.f ? { f: cell.f } : {}), ...(cell.d != null ? { z: cell.d ? `0.${'0'.repeat(cell.d)}` : '0' } : {}) }
         : { t: 's', v: cell.v, ...(cell.f ? { f: cell.f } : {}) };
     }
     ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: this.maxR, c: this.maxC } });
@@ -88,13 +89,13 @@ class SheetBuilder {
     ws['!cols'] = widths.map((w) => ({ wch: w }));
     return ws;
   }
-  toLayout(type: PlType, widths: number[]): PlLayout {
+  toLayout(type: string, widths: number[]): PlLayout {
     const span = new Map<string, { rs: number; cs: number }>();
     for (const m of this.merges) span.set(ref(m.s.r, m.s.c), { rs: m.e.r - m.s.r + 1, cs: m.e.c - m.s.c + 1 });
     const cells: PlLayout['cells'] = [];
     for (const [a, cell] of this.cells) {
       const sp = span.get(a);
-      cells.push({ r: cell.r, c: cell.c, v: cell.v, ...(cell.s ? { s: cell.s } : {}), ...(sp && sp.rs > 1 ? { rs: sp.rs } : {}), ...(sp && sp.cs > 1 ? { cs: sp.cs } : {}) });
+      cells.push({ r: cell.r, c: cell.c, v: cell.v, ...(cell.s ? { s: cell.s } : {}), ...(cell.d != null ? { d: cell.d } : {}), ...(sp && sp.rs > 1 ? { rs: sp.rs } : {}), ...(sp && sp.cs > 1 ? { cs: sp.cs } : {}) });
     }
     // merged ranges without a value still need their span in the preview
     for (const m of this.merges) {
