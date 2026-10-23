@@ -11,7 +11,9 @@ import { useAuth } from '../../lib/auth';
 import { useToast } from '../../hooks/useToast';
 import { useLookup, toOptions } from '../../hooks/useLookup';
 import { fmtDate, fmtNumber, fmtDecimal } from '../../lib/format';
-import { PackingListLayout, type PlLayout } from './PackingListPrint';
+import { PackingListLayout } from './PackingListPrint';
+import { InvoiceDocument } from './InvoiceDocument';
+import { EwayBillButton } from '../../components/EwayBillButton';
 
 /**
  * Commercial invoice for shipping in the client's FK-087 format (voice note 23-Oct-2026: "use this format for the
@@ -105,7 +107,7 @@ export function CommercialInvoiceDetailPage() {
   const [plOptions, setPlOptions] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<null | 'BUYER' | 'IGST'>(null);
-  const [printLayout, setPrintLayout] = useState<PlLayout | null>(null);
+  const [printDoc, setPrintDoc] = useState<{ d: any; format: 'BUYER' | 'IGST' } | null>(null);
   const [confirm, setConfirm] = useState<null | 'delete' | 'reopen'>(null);
   const [reason, setReason] = useState('');
   useEffect(() => { if (detail.data) setV(fromServer(detail.data)); }, [detail.data]);
@@ -180,7 +182,10 @@ export function CommercialInvoiceDetailPage() {
   const print = async (format: string) => {
     try {
       const d = (await http.get<{ data: any }>(`/commercial-invoices/${id}`, { format })).data;
-      setPrintLayout(d.layout); setTimeout(() => window.print(), 150);
+      const prev = document.title;
+      setPrintDoc({ d, format: format === 'IGST' ? 'IGST' : 'BUYER' });
+      // the PDF saved from the print dialog is named after the invoice
+      setTimeout(() => { document.title = `${d.invoice_no} ${format === 'IGST' ? 'IGST' : 'Invoice'}`.replace(/[\\/:*?"<>|]/g, '-'); window.print(); document.title = prev; }, 200);
     } catch (e) { toast(errMsg(e), 'error'); }
   };
 
@@ -204,6 +209,7 @@ export function CommercialInvoiceDetailPage() {
             <Button variant="secondary" id="ci-excel" onClick={() => void excel(v.invoice_format)}><Download size={14} />Excel</Button></>}
           {editable && <Button loading={busy} id="ci-save" onClick={() => void save()}><Save size={14} />Save</Button>}
           {!isNew && !final && can('EXPORT.APPROVE') && <Button variant="secondary" loading={busy} id="ci-finalize" disabled={!!detail.data?.checks?.errors?.length} title={detail.data?.checks?.errors?.length ? 'Fix the points listed above first' : undefined} onClick={() => void act('finalize', {}, 'Invoice finalised — read-only')}><Lock size={14} />Finalise</Button>}
+          {!isNew && final && <EwayBillButton sourceType="COMMERCIAL_INVOICE" sourceId={id} />}
           {!isNew && final && can('EXPORT.APPROVE') && <Button variant="secondary" id="ci-reopen" onClick={() => setConfirm('reopen')}><Unlock size={14} />Reopen</Button>}
           {!isNew && !final && can('EXPORT.DELETE') && <Button variant="danger" onClick={() => setConfirm('delete')}><Trash2 size={14} /></Button>}
         </div>} />
@@ -216,6 +222,14 @@ export function CommercialInvoiceDetailPage() {
         </div>
       )}
       {!isNew && detail.data?.gst_endorsement && <p className="mb-3 text-[12px] text-slate-600">GST endorsement printed: <b>{detail.data.gst_endorsement}</b></p>}
+      {!isNew && (detail.data?.shipping_bill || detail.data?.eway_bill?.generated) && (
+        <p className="mb-3 flex flex-wrap gap-x-4 text-[12px] text-slate-600" id="ci-links">
+          {detail.data.shipping_bill && <span>Shipping bill <a className="font-mono text-brand-700 hover:underline" href={`/export/shipping-bills/${detail.data.shipping_bill.id}`}
+            onClick={(e) => { e.preventDefault(); nav(`/export/shipping-bills/${detail.data.shipping_bill.id}`); }}>{detail.data.shipping_bill.sb_no}</a> · {fmtDate(detail.data.shipping_bill.sb_date)}
+            {detail.data.shipping_bill.sb_pdf_url && <> · <a className="text-brand-700 hover:underline" id="ci-sb-pdf" href={detail.data.shipping_bill.sb_pdf_url} target="_blank" rel="noreferrer">customs PDF</a></>}</span>}
+          {detail.data.eway_bill?.generated && <span>E-way bill <b className="font-mono">{detail.data.eway_bill.ewb_no}</b> · {detail.data.eway_bill.ewb_date} — printed on the invoice with its QR</span>}
+        </p>
+      )}
       {dirtyTotals && <p className="mb-3 rounded border border-amber-200 bg-amber-50 px-3 py-1.5 text-[12px] text-amber-800">Not saved: the lines changed — Save before preview / print / Excel.</p>}
 
       <fieldset disabled={!editable} className="space-y-4" id="ci-form">
@@ -418,7 +432,7 @@ export function CommercialInvoiceDetailPage() {
       </fieldset>
 
       {preview && <PreviewModal id={Number(id)} format={preview} onFormat={setPreview} onClose={() => setPreview(null)} onPrint={(f) => { setPreview(null); void print(f); }} onExcel={(f) => void excel(f)} />}
-      {printLayout && <InvoicePrintPortal layout={printLayout} />}
+      {printDoc && <InvoicePrintPortal d={printDoc.d} format={printDoc.format} />}
       <ConfirmDialog open={confirm === 'delete'} title="Delete invoice" message={`Delete ${detail.data?.invoice_no ?? ''}? Its packing lists are released.`} busy={busy} onCancel={() => setConfirm(null)}
         onConfirm={async () => { setBusy(true); try { await http.del(`/commercial-invoices/${id}`); toast('Invoice deleted'); void qc.invalidateQueries({ queryKey: ['commercial-invoices'] }); nav('/export/invoices'); } catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(false); } }} />
       <Modal open={confirm === 'reopen'} onClose={() => setConfirm(null)} title="Reopen the invoice" size="sm"
@@ -431,28 +445,38 @@ export function CommercialInvoiceDetailPage() {
 
 function PreviewModal({ id, format, onFormat, onClose, onPrint, onExcel }: { id: number; format: 'BUYER' | 'IGST'; onFormat: (f: 'BUYER' | 'IGST') => void; onClose: () => void; onPrint: (f: string) => void; onExcel: (f: string) => void }) {
   const q = useQuery({ queryKey: ['commercial-invoice-layout', id, format], queryFn: async () => (await http.get<{ data: any }>(`/commercial-invoices/${id}`, { format })).data });
+  // the printed document; "Excel sheet" shows the FK-087 cell grid the Excel download carries
+  const [sheet, setSheet] = useState(false);
+  const tab = (on: boolean) => clsx('rounded px-2.5 py-1 text-[12px]', on ? 'bg-brand-600 text-white' : 'bg-slate-100');
   return (
-    <Modal open onClose={onClose} title="Invoice preview" subtitle="As printed / as the Excel — FK-087 layout" size="full"
-      footerStart={<div className="flex gap-1">{(['BUYER', 'IGST'] as const).map((f) => <button key={f} className={clsx('rounded px-2.5 py-1 text-[12px]', f === format ? 'bg-brand-600 text-white' : 'bg-slate-100')} onClick={() => onFormat(f)}>{f === 'BUYER' ? 'Buyer invoice' : 'IGST invoice'}</button>)}</div>}
+    <Modal open onClose={onClose} title="Invoice preview" subtitle={sheet ? 'Excel sheet — FK-087 layout' : 'As printed (A4)'} size="full"
+      footerStart={<div className="flex flex-wrap gap-1">{(['BUYER', 'IGST'] as const).map((f) => <button key={f} className={tab(f === format)} onClick={() => onFormat(f)}>{f === 'BUYER' ? 'Buyer invoice' : 'IGST invoice'}</button>)}
+        <span className="mx-1 border-l border-slate-200" />
+        <button className={tab(!sheet)} id="ci-preview-print-view" onClick={() => setSheet(false)}>Print view</button>
+        <button className={tab(sheet)} id="ci-preview-sheet-view" onClick={() => setSheet(true)}>Excel sheet</button></div>}
       footer={<><Button variant="secondary" onClick={() => onExcel(format)}><Download size={14} />Excel</Button><Button onClick={() => onPrint(format)}><Printer size={14} />Print</Button></>}>
-      {q.isLoading ? <LoadingBlock rows={10} /> : q.data && <div className="mx-auto max-w-[900px]" id="ci-preview-doc"><PackingListLayout layout={q.data.layout} /></div>}
+      {q.isLoading ? <LoadingBlock rows={10} /> : q.data && (
+        <div className="mx-auto max-w-[900px] bg-white p-4 shadow-sm ring-1 ring-slate-200" id="ci-preview-doc">
+          {sheet ? <PackingListLayout layout={q.data.layout} /> : <InvoiceDocument d={q.data} format={format} />}
+        </div>
+      )}
     </Modal>
   );
 }
 
-function InvoicePrintPortal({ layout }: { layout: PlLayout }) {
+function InvoicePrintPortal({ d, format }: { d: any; format: 'BUYER' | 'IGST' }) {
   return createPortal(
     <div id="ci-print-root">
       <style>{`
         #ci-print-root { display: none; }
         @media print {
-          @page { size: A4 portrait; margin: 8mm; }
+          @page { size: A4 portrait; margin: 9mm 8mm; }
+          html, body { background: #fff !important; }
           body > *:not(#ci-print-root) { display: none !important; }
-          #ci-print-root { display: block !important; }
-          #ci-print-root .pl-doc { font-size: 9px; }
+          #ci-print-root { display: block !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
       `}</style>
-      <PackingListLayout layout={layout} />
+      <InvoiceDocument d={d} format={format} />
     </div>,
     document.body,
   );
