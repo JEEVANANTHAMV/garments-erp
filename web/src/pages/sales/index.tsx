@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Layers, Disc, PackageCheck, FileSpreadsheet } from 'lucide-react';
 import { CrudPage } from '../../components/CrudPage';
 import { StatusBadge, Badge } from '../../components/ui';
-import { fmtDate, fmtNumber, fmtDecimal, humanize, today } from '../../lib/format';
+import { fmtDate, fmtNumber, fmtDecimal, today } from '../../lib/format';
 
 export function EnquiriesPage() {
   return <CrudPage

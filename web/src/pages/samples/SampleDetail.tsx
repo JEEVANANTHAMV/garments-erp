@@ -528,7 +528,7 @@ function RevisionModal({ s, busy, onClose, onSave }: { s: any; busy: boolean; on
   const wf = types.data?.find((w) => Number(w.id) === Number(s.workflow_id));
   const [picked, setPicked] = useState<number[] | null>(null);
   const stages = wf?.stages ?? [];
-  const sel = picked ?? stages.map((x: any) => Number(x.id));
+  const sel: number[] = picked ?? stages.map((x: any) => Number(x.id));
   const lastDecision = s.decisions[0];
   const [v, setV] = useState({ comments: lastDecision?.comments ?? '', revision_type: lastDecision?.stage === 'INTERNAL' ? 'INTERNAL' : 'BUYER', target_date: '' });
   return (

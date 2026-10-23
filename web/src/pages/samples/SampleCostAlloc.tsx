@@ -34,8 +34,8 @@ export function CostingTab({ s, refresh }: { s: any; refresh: () => void }) {
     setBusy(true);
     try {
       const r = await http.post<{ data: any }>(`/samples/${s.id}/costs/${c.id}/${action}`, { reason });
-      const done: Record<string, string> = { submit: 'submitted', approve: 'approved', post: 'posted', reject: 'rejected', reverse: 'reversed (negative entry posted)' };
-      toast(r.data.warning ?? `Cost #${c.id} ${done[action] ?? action}`, r.data.warning ? 'error' : undefined);
+      const verb: Record<string, string> = { submit: 'submitted', approve: 'approved', post: 'posted', reject: 'rejected', reverse: 'reversed (negative entry posted)' };
+      toast(r.data.warning ?? `Cost #${c.id} ${verb[action] ?? action}`, r.data.warning ? 'error' : undefined);
       setReasonFor(null); done();
     } catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(false); }
   };
