@@ -437,6 +437,8 @@ commercialInvoiceRouter.delete('/commercial-invoices/:id', requirePermission('EX
     const cur = await txQueryOne<any>(tx, `SELECT * FROM trx_commercial_invoice WHERE id = ? AND company_id = ? FOR UPDATE`, [id, cid]);
     if (!cur) throw NotFound('Invoice not found');
     if (cur.doc_status === 'FINAL') throw BadRequest('A final invoice cannot be deleted — reopen it first');
+    const ewb = await txQueryOne<any>(tx, `SELECT doc_no FROM trx_eway_bill WHERE company_id = ? AND source_type = 'COMMERCIAL_INVOICE' AND source_id = ? AND status <> 'CANCELLED' LIMIT 1`, [cid, id]);
+    if (ewb) throw BadRequest(`E-way bill ${ewb.doc_no} is made from this invoice — delete or cancel it first`);
     for (const [t, c] of [['trx_shipping_bill', 'invoice_id'], ['trx_export_incentive', 'invoice_id'], ['trx_shipment', 'invoice_id']] as const) {
       const used = await txQueryOne<any>(tx, `SELECT COUNT(*) c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`, [t, c]);
       if (Number(used?.c) && Number((await txQueryOne<any>(tx, `SELECT COUNT(*) c FROM ${t} WHERE ${c} = ?`, [id]))?.c)) throw BadRequest(`The invoice is used on a ${t.replace('trx_', '').replace(/_/g, ' ')} — remove it there first`);
