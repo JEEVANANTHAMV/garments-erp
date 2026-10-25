@@ -44,12 +44,17 @@ CALL _inr_add_col('trx_export_incentive', 'closed_reason', 'VARCHAR(300) NULL CO
 CALL _inr_add_col('trx_export_incentive', 'closed_at', 'DATETIME NULL');
 DROP PROCEDURE IF EXISTS _inr_add_col;
 
--- what was received before receipts existed becomes one receipt (once)
-INSERT INTO trx_export_incentive_receipt (company_id, incentive_id, receipt_date, amount, mode, reference, remarks)
+-- what was received before receipts existed becomes one receipt (once). From migration 144 on, receipts are events in
+-- trx_export_benefit_event and received_amount is derived from them — so this carry-over (and the status fix) only run
+-- while that table does not exist yet (otherwise every deploy would add a duplicate "carried over" receipt).
+SET @eb = (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'trx_export_benefit_event');
+SET @s = IF(@eb > 0, 'SELECT 1', 'INSERT INTO trx_export_incentive_receipt (company_id, incentive_id, receipt_date, amount, mode, reference, remarks)
 SELECT x.company_id, x.id, COALESCE(x.credit_date, x.claim_date, DATE(x.created_at)), x.received_amount,
-       IF(x.incentive_type IN ('RODTEP', 'ROSCTL'), 'SCRIP', 'BANK'), x.scrip_no, 'Carried over (received before receipts were recorded)'
+       IF(x.incentive_type IN (''RODTEP'', ''ROSCTL''), ''SCRIP'', ''BANK''), x.scrip_no, ''Carried over (received before receipts were recorded)''
   FROM trx_export_incentive x
- WHERE x.received_amount > 0 AND NOT EXISTS (SELECT 1 FROM trx_export_incentive_receipt r WHERE r.incentive_id = x.id);
+ WHERE x.received_amount > 0 AND NOT EXISTS (SELECT 1 FROM trx_export_incentive_receipt r WHERE r.incentive_id = x.id)');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
-UPDATE trx_export_incentive SET status = 'PARTIAL'
- WHERE status IN ('PENDING', 'CLAIMED') AND received_amount > 0 AND received_amount < claim_amount - 0.005;
+SET @s = IF(@eb > 0, 'SELECT 1', 'UPDATE trx_export_incentive SET status = ''PARTIAL''
+ WHERE status IN (''PENDING'', ''CLAIMED'') AND received_amount > 0 AND received_amount < claim_amount - 0.005');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;

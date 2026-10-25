@@ -14,6 +14,7 @@ import { fmtDate, fmtNumber, fmtDecimal } from '../../lib/format';
 import { PackingListLayout } from './PackingListPrint';
 import { InvoiceDocument } from './InvoiceDocument';
 import { EwayBillButton } from '../../components/EwayBillButton';
+import { amountWords, qtyWords } from '../../lib/invoiceWords';
 
 /**
  * Commercial invoice for shipping in the client's FK-087 format (voice note 23-Oct-2026: "use this format for the
@@ -76,16 +77,51 @@ const compose = (l: any) => {
   const tail = pack ? (pack.startsWith('(') ? pack : `(${pack})`) : '';
   return `${head}${head && tail ? ' ' : ''}${tail}`.toUpperCase().replace(/\s+/g, ' ').trim();
 };
+const MODES = ['SEA', 'AIR', 'ROAD'];
+/** Same as the server (commercialInvoice.routes bankBlock / rexFill): the boxes printed from the masters. */
+const bankBlockOf = (a: any) => !a ? '' : [
+  [a.bank_name, a.branch_name].filter(Boolean).join(' , '), ...String(a.branch_address ?? '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean),
+  [a.swift_code ? `SWIFT NO: ${a.swift_code}` : null, a.ifsc_code ? `IFSC NO: ${a.ifsc_code}` : null].filter(Boolean).join('  /  ') || null,
+  `${['EEFC', 'CC', 'OD', 'SAVINGS'].includes(String(a.account_type)) ? a.account_type : 'CURRENT'} A/C NO: ${a.account_no}`,
+  a.ad_code ? `AD CODE: ${a.ad_code}` : null, a.intermediary ? `INTERMEDIARY: ${a.intermediary}` : null, a.beneficiary ? `BENEFICIARY: ${a.beneficiary}` : null,
+].filter((x) => x && String(x).trim()).join('\n');
+const rexFillOf = (tpl: string | null | undefined, exporter: string, rexNo: string | null | undefined) => {
+  if (!tpl || !rexNo) return '';
+  const ls = String(exporter ?? '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+  const addr = ls.slice(1).filter((x) => !/\b(GST|GSTIN|IEC|PAN)\b/i.test(x)).join(' ').replace(/\s+/g, ' ').replace(/[,\s]+$/, '');
+  return tpl.replace(/\{EXPORTER_NAME\}/g, ls[0] ?? '').replace(/\{EXPORTER_ADDRESS\}/g, addr).replace(/\{REX_NO\}/g, rexNo).replace(/\s+,/g, ',').replace(/\s{2,}/g, ' ').trim();
+};
+type SizeQty = { size: string; qty: number }[];
+const sizeText = (sq: SizeQty) => (!sq.length ? '' : sq.length === 1 ? sq[0].size : `${sq[0].size}-${sq[sq.length - 1].size}`);
+/** One line per size of an all-sizes line (client 24-Oct-2026: "all sizes with the total on one line, or each size"). */
+const splitBySize = (l: any) => (Array.isArray(l.size_qty) && l.size_qty.length > 1
+  ? l.size_qty.map((x: any) => ({ ...l, qty: x.qty, size_text: x.size, size_qty: [x] })) : [l]);
+/** Size lines of the same order / style / colour / rate / description back into one all-sizes line. */
+const mergeSizes = (ls: any[]) => {
+  const out: any[] = [];
+  for (const l of ls) {
+    const k = (x: any) => [x.line_kind, x.so_id, x.style_id, x.color_id, x.order_no, x.style_ref, x.colour, x.unit_price, x.description, x.hsn_code, x.uqc, x.gst_rate].map(String).join('|');
+    const into = Array.isArray(l.size_qty) && l.size_qty.length ? out.find((o) => Array.isArray(o.size_qty) && o.size_qty.length && k(o) === k(l)) : null;
+    if (!into) { out.push({ ...l, size_qty: Array.isArray(l.size_qty) ? [...l.size_qty] : l.size_qty }); continue; }
+    for (const x of l.size_qty) { const e = into.size_qty.find((y: any) => y.size === x.size); if (e) e.qty += Number(x.qty); else into.size_qty.push({ ...x }); }
+    into.qty = into.size_qty.reduce((t: number, x: any) => t + Number(x.qty), 0);
+    into.size_text = sizeText(into.size_qty);
+  }
+  return out;
+};
 const HEAD_KEYS = ['invoice_no', 'invoice_date', 'invoice_format', 'currency_id', 'exchange_rate', 'exporter_details', 'exporter_ref', 'buyer_order_ref', 'other_references',
   'consignee_details', 'buyer_details', 'ship_to_details', 'country_origin_text', 'country_dest_text', 'pre_carriage_by', 'place_of_receipt', 'vessel_flight_no',
   'port_of_loading', 'port_of_discharge', 'final_destination', 'terms_of_delivery', 'terms_of_payment', 'marks_nos', 'packages_text', 'goods_heading', 'item_ref_label',
   'qty_unit', 'rate_basis', 'total_cartons', 'total_pcs', 'total_pcs_unit', 'net_weight_kg', 'gross_weight_kg', 'qty_words', 'amount_words', 'bank_details',
-  'rex_declaration', 'declaration', 'footer_note', 'goods_gst_rate', 'charges_gst_rate', 'remarks', 'gst_supply_type', 'lut_arn'];
+  'rex_declaration', 'declaration', 'footer_note', 'goods_gst_rate', 'charges_gst_rate', 'remarks', 'gst_supply_type', 'lut_arn', 'transport_mode', 'port_loading_id', 'bank_account_id'];
 const fromServer = (d: any) => {
   const v: any = { so_id: d.so_id, pl_ids: d.pl_ids ?? [], row_version: d.row_version };
-  for (const k of HEAD_KEYS) v[k] = d[k] ?? '';
-  v.lines = (d.lines ?? []).map((l: any) => {
+  // a saved invoice sends what was typed separately from what prints (blank IEC / bank / REX = from the masters)
+  for (const k of HEAD_KEYS) v[k] = (d.typed && k in d.typed ? d.typed[k] : d[k]) ?? '';
+  v.lines = (d.lines ?? []).map((l: any, i: number) => {
     const x: any = { ...EMPTY_LINE, ...Object.fromEntries(Object.entries(l).map(([k, y]) => [k, y ?? ''])) };
+    x.size_qty = Array.isArray(l.size_qty) && l.size_qty.length ? l.size_qty : null;
+    if (d.typed?.line_gst_rates) x.gst_rate = d.typed.line_gst_rates[i] ?? '';
     if (Number(x.desc_auto) && !compose(x) && x.description) x.desc_auto = 0;   // a description without parts is a typed one
     if (Number(x.desc_auto) && !x.description) x.description = compose(x);
     return x;
@@ -102,6 +138,13 @@ export function CommercialInvoiceDetailPage() {
   const { can } = useAuth();
   const currencies = useLookup('currencies');
   const orders = useLookup('sales-orders');
+  const ports = useLookup('ports');
+  const banks = useLookup('company-bank-accounts');
+  const [masters, setMasters] = useState<any>(null);
+  const [extraPls, setExtraPls] = useState<any[]>([]);
+  const [lineMode, setLineMode] = useState<'COLOUR' | 'SIZE'>('COLOUR');
+  const [addOrder, setAddOrder] = useState(false);
+  const [typeOwn, setTypeOwn] = useState<{ bank: boolean; rex: boolean; qty: boolean; amount: boolean }>({ bank: false, rex: false, qty: false, amount: false });
   const detail = useQuery({ queryKey: ['commercial-invoice', id], queryFn: async () => (await http.get<{ data: any }>(`/commercial-invoices/${id}`)).data, enabled: !isNew });
   const [v, setV] = useState<any | null>(isNew ? { so_id: '', pl_ids: [], invoice_format: 'BUYER', lines: [] } : null);
   const [plOptions, setPlOptions] = useState<any[]>([]);
@@ -110,7 +153,11 @@ export function CommercialInvoiceDetailPage() {
   const [printDoc, setPrintDoc] = useState<{ d: any; format: 'BUYER' | 'IGST' } | null>(null);
   const [confirm, setConfirm] = useState<null | 'delete' | 'reopen'>(null);
   const [reason, setReason] = useState('');
-  useEffect(() => { if (detail.data) setV(fromServer(detail.data)); }, [detail.data]);
+  useEffect(() => {
+    if (!detail.data) return;
+    setV(fromServer(detail.data)); setMasters(detail.data.masters ?? null);
+    setTypeOwn({ bank: !!detail.data.typed?.bank_details, rex: !!detail.data.typed?.rex_declaration, qty: !!detail.data.qty_words, amount: !!detail.data.amount_words });
+  }, [detail.data]);
   // the packing lists of the order (to add / remove lists on a saved invoice)
   useEffect(() => {
     if (!v?.so_id || !can('EXPORT.CREATE')) return;
@@ -121,15 +168,41 @@ export function CommercialInvoiceDetailPage() {
   const final = detail.data?.doc_status === 'FINAL';
   const editable = !final && (isNew ? can('EXPORT.CREATE') : can('EXPORT.UPDATE'));
   const set = (k: string, x: unknown) => setV((o: any) => ({ ...o, [k]: x }));
-  const setLine = (i: number, k: string, x: unknown) => setV((o: any) => ({ ...o, lines: o.lines.map((l: any, j: number) => (j === i ? { ...l, [k]: x } : l)) }));
+  const setLine = (i: number, k: string, x: unknown) => setV((o: any) => ({ ...o, lines: o.lines.map((l: any, j: number) => {
+    if (j !== i) return l;
+    // a typed quantity: a single-size line keeps its size, an all-sizes line loses the size breakdown
+    if (k === 'qty' && Array.isArray(l.size_qty)) return { ...l, qty: x, size_qty: l.size_qty.length === 1 ? [{ ...l.size_qty[0], qty: Number(x) || 0 }] : null };
+    return { ...l, [k]: x };
+  }) }));
   const cur = (currencies.data ?? []).find((c) => String(c.id) === String(v?.currency_id));
   const igst = v?.invoice_format === 'IGST';
+  // IGST applies on an export on payment of IGST — in either layout (client 24-Oct-2026: "IGST % could not be entered, it showed 0")
+  const igstOn = v?.gst_supply_type === 'IGST' || (igst && v?.gst_supply_type !== 'LUT');
   const totals = useMemo(() => {
     const ls = v?.lines ?? [];
     const amt = (l: any) => r2((Number(l.qty) || 0) * (Number(l.unit_price) || 0));
     const goods = ls.filter((l: any) => l.line_kind !== 'CHARGE');
-    return { qty: goods.reduce((t: number, l: any) => t + (Number(l.qty) || 0), 0), goods: r2(goods.reduce((t: number, l: any) => t + amt(l), 0)), total: r2(ls.reduce((t: number, l: any) => t + amt(l), 0)), amt };
-  }, [v?.lines]);
+    const xr = cur?.code === 'INR' ? 1 : Number(v?.exchange_rate) || 0;
+    const rateOf = (l: any) => Number(l.gst_rate !== '' && l.gst_rate != null ? l.gst_rate : l.line_kind === 'CHARGE' ? v?.charges_gst_rate : v?.goods_gst_rate) || 0;
+    const byRate = new Map<number, { taxable: number; igst: number }>();
+    if (igstOn) for (const l of ls) {
+      const inr = r2(amt(l) * xr); const e = byRate.get(rateOf(l)) ?? { taxable: 0, igst: 0 };
+      byRate.set(rateOf(l), { taxable: r2(e.taxable + inr), igst: r2(e.igst + r2(inr * rateOf(l) / 100)) });
+    }
+    return { qty: goods.reduce((t: number, l: any) => t + (Number(l.qty) || 0), 0), goods: r2(goods.reduce((t: number, l: any) => t + amt(l), 0)), total: r2(ls.reduce((t: number, l: any) => t + amt(l), 0)), amt,
+      xr, byRate: [...byRate.entries()].sort(([a], [b]) => a - b), igstTotal: r2([...byRate.values()].reduce((t, x) => t + x.igst, 0)), taxable: r2([...byRate.values()].reduce((t, x) => t + x.taxable, 0)) };
+  }, [v?.lines, v?.exchange_rate, v?.goods_gst_rate, v?.charges_gst_rate, igstOn, cur?.code]);
+  const portRows = (ports.data ?? []) as any[];
+  const portNames = [...new Set(portRows.map((p) => String(p.port_name)))];
+  const portRow = (name: string, mode: string) => portRows.find((p) => p.port_name === name && p.mode === mode) ?? portRows.find((p) => p.port_name === name && !p.mode) ?? null;
+  const pickPort = (name: string, mode: string) => setV((o: any) => {
+    const row = portRow(name, mode) ?? portRows.find((p) => p.port_name === name);
+    return { ...o, port_of_loading: name, transport_mode: mode || row?.mode || o.transport_mode, port_loading_id: row?.id ?? '' };
+  });
+  const bankRow = (banks.data ?? []).find((b) => String(b.id) === String(v?.bank_account_id)) ?? (v?.bank_account_id ? null : (banks.data ?? [])[0]);
+  const autoBank = bankBlockOf(bankRow);
+  const autoRex = rexFillOf(masters?.rex_template, v?.exporter_details ?? '', masters?.rex_no);
+  const autoIec = masters?.exporter_ref ?? '';
 
   const fill = async (format = v.invoice_format) => {
     if (!v.so_id) { toast('Pick the sales order first', 'error'); return; }
@@ -137,8 +210,12 @@ export function CommercialInvoiceDetailPage() {
     try {
       const r = await http.get<{ data: any }>('/commercial-invoices/prefill', { so_id: v.so_id, pl_ids: (v.pl_ids ?? []).join(',') || undefined, format });
       const d = r.data;
-      setPlOptions(d.packing_lists);
-      setV((o: any) => ({ ...fromServer({ ...d, row_version: o.row_version }), invoice_no: o.invoice_no ?? '', invoice_format: format }));
+      setPlOptions(d.packing_lists); setMasters(d.masters ?? null); setExtraPls([]);
+      setTypeOwn({ bank: !!d.bank_details, rex: !!d.rex_declaration, qty: false, amount: false });
+      setV((o: any) => {
+        const x = fromServer({ ...d, row_version: o.row_version });
+        return { ...x, invoice_no: o.invoice_no ?? '', invoice_format: format, lines: lineMode === 'SIZE' ? x.lines.flatMap(splitBySize) : x.lines };
+      });
       toast(`Filled from ${d.so_no}${d.pl_ids.length ? ` and ${d.pl_ids.length} packing list(s)` : ' (no confirmed packing list — order quantities)'}`);
     } catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(false); }
   };
@@ -147,13 +224,19 @@ export function CommercialInvoiceDetailPage() {
     const num = (x: any) => (x === '' || x == null ? null : Number(x));
     const b: any = { so_id: Number(v.so_id), pl_ids: v.pl_ids, row_version: v.row_version };
     for (const k of HEAD_KEYS) b[k] = nz(v[k]);
-    for (const k of ['currency_id', 'exchange_rate', 'total_cartons', 'total_pcs', 'net_weight_kg', 'gross_weight_kg', 'goods_gst_rate', 'charges_gst_rate']) b[k] = num(v[k]);
+    for (const k of ['currency_id', 'exchange_rate', 'total_cartons', 'total_pcs', 'net_weight_kg', 'gross_weight_kg', 'goods_gst_rate', 'charges_gst_rate', 'port_loading_id', 'bank_account_id']) b[k] = num(v[k]);
+    // boxes left to the masters are sent blank
+    if (!typeOwn.bank) b.bank_details = null;
+    if (!typeOwn.rex) b.rex_declaration = null;
+    if (!typeOwn.qty) b.qty_words = null;
+    if (!typeOwn.amount) b.amount_words = null;
+    if (!b.bank_account_id && bankRow) b.bank_account_id = Number(bankRow.id);
     b.qty_unit = v.qty_unit || 'PCS'; b.invoice_format = v.invoice_format || 'BUYER';
     b.lines = v.lines.map((l: any) => ({ line_kind: l.line_kind || 'GOODS', so_id: num(l.so_id), style_id: num(l.style_id), color_id: num(l.color_id), order_no: nz(l.order_no),
       buyer_sku_no: nz(l.buyer_sku_no), buyer_item_no: nz(l.buyer_item_no), supplier_mat_no: nz(l.supplier_mat_no), hsn_code: nz(l.hsn_code),
       description: nz(l.description) ?? (compose(l) || null), desc_auto: !!Number(l.desc_auto) && !!compose(l) && (l.description || '') === compose(l),
       composition: nz(l.composition), construction: nz(l.construction), gender_label: nz(l.gender_label), garment: nz(l.garment), pack_info: nz(l.pack_info), uqc: nz(l.uqc),
-      style_ref: nz(l.style_ref), colour: nz(l.colour), size_text: nz(l.size_text),
+      style_ref: nz(l.style_ref), colour: nz(l.colour), size_text: nz(l.size_text), size_qty: Array.isArray(l.size_qty) && l.size_qty.length ? l.size_qty : null,
       qty: Number(l.qty), unit_price: Number(l.unit_price), gst_rate: num(l.gst_rate) }));
     return b;
   };

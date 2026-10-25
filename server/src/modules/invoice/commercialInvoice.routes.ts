@@ -122,7 +122,7 @@ export function rexFill(template: string | null, exporterDetails: string | null,
 async function masterTexts(cid: number, exporterDetails: string | null, bankAccountId: number | null) {
   const [co, acct, tpl] = await Promise.all([companyIds(cid), bankAccountOf(cid, bankAccountId), setting(cid, 'CI_REX_TEMPLATE')]);
   return { exporter_ref: iecRef(co?.iec_code), bank_details: bankBlock(acct), bank_account_id: acct ? Number(acct.id) : null,
-    rex_declaration: rexFill(tpl, exporterDetails, co?.rex_no ?? null), iec_code: co?.iec_code ?? null, rex_no: co?.rex_no ?? null };
+    rex_declaration: rexFill(tpl, exporterDetails, co?.rex_no ?? null), iec_code: co?.iec_code ?? null, rex_no: co?.rex_no ?? null, rex_template: tpl };
 }
 
 /** Port of the master for a name (+ mode), else the name's first row. */
@@ -667,7 +667,8 @@ async function loadInvoice(cid: number, id: number) {
     // what the editor shows: the master values, which boxes print from them, the raw typed values
     masters: mt, auto, igst_on: h.gst_supply_type === 'IGST' || (h.invoice_format === 'IGST' && h.gst_supply_type !== 'LUT'),
     typed: { exporter_ref: h.exporter_ref, bank_details: h.bank_details, rex_declaration: h.rex_declaration,
-      goods_gst_rate: h.goods_gst_rate == null ? null : n(h.goods_gst_rate), charges_gst_rate: h.charges_gst_rate == null ? null : n(h.charges_gst_rate) },
+      goods_gst_rate: h.goods_gst_rate == null ? null : n(h.goods_gst_rate), charges_gst_rate: h.charges_gst_rate == null ? null : n(h.charges_gst_rate),
+      line_gst_rates: lines.map((l) => (l.gst_rate == null ? null : n(l.gst_rate))) },
     bank_account: h.bank_account_id || mt.bank_account_id ? await queryOne<any>(`SELECT id, account_label, bank_name, account_no FROM mst_company_bank_account WHERE id = ?`, [h.bank_account_id ?? mt.bank_account_id]) : null,
     shipping_bill: await queryOne<any>(`SELECT id, sb_no, sb_date, port_code, sb_pdf_url, sb_pdf_name FROM trx_shipping_bill WHERE company_id = ? AND invoice_id = ? LIMIT 1`, [cid, id])
       .then((x) => (x ? { ...x, sb_date: iso(x.sb_date) } : null)),
