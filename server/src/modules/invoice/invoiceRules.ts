@@ -62,6 +62,7 @@ export interface CheckInput {
   gst_supply_type: string | null; lut_arn: string | null; goods_gst_rate: number | null; charges_gst_rate: number | null;
   port_of_loading: string | null; port_of_discharge: string | null; country_dest_text: string | null;
   total_cartons: number | null; total_pcs: number | null; net_weight_kg: number | null; gross_weight_kg: number | null;
+  transport_mode?: string | null; bank_details?: string | null; rex_declaration?: string | null;
   lines: CheckLine[];
   packing_lists: { pl_no: string; total_cartons: number | null; total_qty: number | null; net_weight_kg: number | null; gross_weight_kg: number | null }[];
 }
@@ -84,6 +85,17 @@ export function invoiceChecks(inv: CheckInput, today: string) {
   if (inv.gst_supply_type === 'IGST' && !(Number(inv.goods_gst_rate) > 0) && !inv.lines.some((l) => l.line_kind === 'GOODS' && Number(l.gst_rate) > 0)) errors.push('Export on payment of IGST: enter the IGST % on goods');
   const goods = inv.lines.filter((l) => l.line_kind === 'GOODS');
   if (!goods.length) errors.push('No goods line');
+  if (!inv.transport_mode) warnings.push('Mode of shipment (sea / air / road) not chosen');
+  if (inv.invoice_format !== 'IGST' && !inv.bank_details?.trim()) warnings.push('Our bank details are empty — add the bank account under Masters → Our Bank Accounts');
+  if (inv.invoice_format !== 'IGST' && !inv.rex_declaration?.trim()) warnings.push('REX declaration is empty — set the REX no on the company master (needed on buyer copies to GSP countries)');
+  // apparel GST (from 22-Sep-2025): 5 % up to ₹2,500 a piece, 18 % above
+  if (inv.gst_supply_type === 'IGST' && inv.exchange_rate > 0) {
+    goods.forEach((l, i) => {
+      const rate = Number(l.gst_rate ?? inv.goods_gst_rate ?? 0);
+      const perPc = Number(l.unit_price) * inv.exchange_rate;
+      if ((!l.uqc || l.uqc === 'PCS') && rate > 0 && rate < 18 && perPc > 2500) warnings.push(`Line ${i + 1}: ₹${Math.round(perPc)} a piece is above ₹2,500 — apparel IGST is 18 % (not ${rate} %)`);
+    });
+  }
   inv.lines.forEach((l, i) => {
     const tag = `Line ${i + 1}${l.description ? ` (${String(l.description).slice(0, 40)})` : ''}`;
     const hsn = String(l.hsn_code ?? '').trim();

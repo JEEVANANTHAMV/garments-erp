@@ -26,6 +26,15 @@ const n = (v: unknown) => Number(v ?? 0) || 0;
 const r2 = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
 const iso = (d: unknown) => (d ? (d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10)) : null);
 const dmy = (d: unknown) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso(d) ?? '')); return m ? `${m[3]}.${m[2]}.${m[1]}` : ''; };
+/**
+ * IGST % that apply: on an export on payment of IGST (or the IGST layout) the invoice's goods / charges % and each line's
+ * own %; under LUT nothing (client 24-Oct-2026: "IGST % could not be entered, it showed 0").
+ */
+export function igstRates<L extends { gst_rate?: number | null }>(x: { gst_supply_type?: string | null; invoice_format?: string | null; goods_gst_rate?: number | null; charges_gst_rate?: number | null; lines: L[] }) {
+  const on = x.gst_supply_type === 'IGST' || (x.invoice_format === 'IGST' && x.gst_supply_type !== 'LUT');
+  return { goods_gst_rate: on ? x.goods_gst_rate ?? null : 0, charges_gst_rate: on ? x.charges_gst_rate ?? null : 0,
+    lines: on ? x.lines : x.lines.map((l) => ({ ...l, gst_rate: 0 })) };
+}
 /** a packing list that can go on an invoice */
 const LIVE_PL = ['CONFIRMED', 'CLOSED'];
 
@@ -73,6 +82,58 @@ async function lastInvoice(cid: number, buyerId: number | null, exceptId?: numbe
   return (buyerId ? await queryOne<any>(`${pick} AND buyer_id = ? ORDER BY invoice_date DESC, id DESC LIMIT 1`, [cid, exceptId ?? 0, buyerId]) : null)
     ?? queryOne<any>(`${pick} ORDER BY invoice_date DESC, id DESC LIMIT 1`, [cid, exceptId ?? 0]);
 }
+
+/* ---------------------------------------------------------------- one-time masters (client 24-Oct-2026)
+ * "IEC, bank details and the REX declaration should come by themselves — not typed on every invoice." They come from
+ * the company master (IEC, REX no), our bank accounts (default first) and the REX wording (setting CI_REX_TEMPLATE).
+ * On a draft a blank box means "from the master"; finalising writes the printed text onto the invoice so a final
+ * invoice never changes when a master is edited later. */
+async function companyIds(cid: number) {
+  return queryOne<any>(`SELECT iec_code, rex_no FROM mst_company WHERE id = ?`, [cid]);
+}
+export const iecRef = (iec: string | null | undefined) => (iec && String(iec).trim() ? `IEC NO : ${String(iec).trim()}` : null);
+
+async function bankAccountOf(cid: number, id: number | null | undefined) {
+  return queryOne<any>(`SELECT * FROM mst_company_bank_account WHERE company_id = ? AND ${id ? 'id = ?' : 'is_active = 1 ORDER BY is_default DESC, id LIMIT 1'}`, id ? [cid, id] : [cid]);
+}
+/** OUR BANK DETAILS block, as FK-087 prints it. */
+export function bankBlock(a: any) {
+  if (!a) return null;
+  const ac = String(a.account_type ?? 'CURRENT').toUpperCase();
+  return [
+    [a.bank_name, a.branch_name].filter(Boolean).join(' , '),
+    ...String(a.branch_address ?? '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean),
+    [a.swift_code ? `SWIFT NO: ${a.swift_code}` : null, a.ifsc_code ? `IFSC NO: ${a.ifsc_code}` : null].filter(Boolean).join('  /  ') || null,
+    `${ac === 'EEFC' ? 'EEFC' : ac === 'CC' ? 'CC' : ac === 'OD' ? 'OD' : ac === 'SAVINGS' ? 'SAVINGS' : 'CURRENT'} A/C NO: ${a.account_no}`,
+    a.ad_code ? `AD CODE: ${a.ad_code}` : null,
+    a.intermediary ? `INTERMEDIARY: ${a.intermediary}` : null,
+    a.beneficiary ? `BENEFICIARY: ${a.beneficiary}` : null,
+  ].filter((x) => x && String(x).trim()).join('\n');
+}
+/** REX declaration from the wording + the exporter box (name = first line, address = the lines before GST NO) + REX no. */
+export function rexFill(template: string | null, exporterDetails: string | null, rexNo: string | null) {
+  if (!template || !rexNo) return null;
+  const ls = String(exporterDetails ?? '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+  const name = ls[0] ?? '';
+  const addr = ls.slice(1).filter((x) => !/\b(GST|GSTIN|IEC|PAN)\b/i.test(x)).join(' ').replace(/\s+/g, ' ').replace(/[,\s]+$/, '');
+  return template.replace(/\{EXPORTER_NAME\}/g, name).replace(/\{EXPORTER_ADDRESS\}/g, addr).replace(/\{REX_NO\}/g, rexNo).replace(/\s+,/g, ',').replace(/\s{2,}/g, ' ').trim();
+}
+/** What a blank IEC / bank / REX box of a draft prints (null = nothing in the masters either). */
+async function masterTexts(cid: number, exporterDetails: string | null, bankAccountId: number | null) {
+  const [co, acct, tpl] = await Promise.all([companyIds(cid), bankAccountOf(cid, bankAccountId), setting(cid, 'CI_REX_TEMPLATE')]);
+  return { exporter_ref: iecRef(co?.iec_code), bank_details: bankBlock(acct), bank_account_id: acct ? Number(acct.id) : null,
+    rex_declaration: rexFill(tpl, exporterDetails, co?.rex_no ?? null), iec_code: co?.iec_code ?? null, rex_no: co?.rex_no ?? null };
+}
+
+/** Port of the master for a name (+ mode), else the name's first row. */
+async function portOf(cid: number, name: string | null | undefined, mode: string | null | undefined) {
+  if (!name) return null;
+  return queryOne<any>(`SELECT * FROM mst_port WHERE company_id = ? AND is_active = 1 AND UPPER(port_name) = UPPER(?) ORDER BY (mode <=> ?) DESC, mode IS NULL DESC, id LIMIT 1`, [cid, String(name).trim(), mode ?? null]);
+}
+
+/** Size-wise quantity [{size, qty}] in the style's size order; the line's size text is the range (S-XXL) or the one size. */
+export type SizeQty = { size: string; qty: number }[];
+export const sizeRangeText = (sq: SizeQty) => (!sq.length ? null : sq.length === 1 ? sq[0].size : `${sq[0].size}-${sq[sq.length - 1].size}`);
 
 const prefillQ = z.object({
   so_id: z.coerce.number().int().positive(),
@@ -137,6 +198,9 @@ async function prefill(cid: number, soId: number, plIds: number[] | null, format
     u.sort((a, b) => (sizeSeq.get(`${styleId}|${a.toUpperCase()}`) ?? 999) - (sizeSeq.get(`${styleId}|${b.toUpperCase()}`) ?? 999) || a.localeCompare(b, undefined, { numeric: true }));
     return !u.length ? null : u.length === 1 ? u[0] : `${u[0]}-${u[u.length - 1]}`;
   };
+  const sizeOrder = (styleId: number, m: Map<string, number>): SizeQty => [...m.entries()].filter(([, q]) => q > 0)
+    .sort(([a], [b]) => (sizeSeq.get(`${styleId}|${a.toUpperCase()}`) ?? 999) - (sizeSeq.get(`${styleId}|${b.toUpperCase()}`) ?? 999) || a.localeCompare(b, undefined, { numeric: true }))
+    .map(([size, qty]) => ({ size, qty }));
   if (pls.length) {
     const items = await query<any>(`SELECT i.so_id, i.order_no, i.style_id, MIN(i.style_no) style_no, i.color_id, MIN(i.colour) colour, SUM(i.total_qty) qty,
              MIN(b.label) AS block_label, MIN(i.id) first_id, GROUP_CONCAT(i.size_qty SEPARATOR '\u0001') AS size_json
@@ -145,21 +209,23 @@ async function prefill(cid: number, soId: number, plIds: number[] | null, format
        GROUP BY i.so_id, i.order_no, i.style_id, i.color_id ORDER BY first_id`, [chosenIds]);
     lines = items.filter((i) => n(i.qty) > 0).map((i) => {
       const sl = soLineOf(Number(i.so_id ?? soId), Number(i.style_id), i.color_id ? Number(i.color_id) : null);
-      const sizes: string[] = [];
+      const bySize = new Map<string, number>();
       for (const j of String(i.size_json ?? '').split('\u0001')) {
-        try { const o = JSON.parse(j); if (o && typeof o === 'object') for (const [k, v] of Object.entries(o)) if (Number(v) > 0) sizes.push(String(k)); } catch { /* no sizes */ }
+        try { const o = JSON.parse(j); if (o && typeof o === 'object') for (const [k, v] of Object.entries(o)) if (Number(v) > 0) bySize.set(String(k), (bySize.get(String(k)) ?? 0) + Number(v)); } catch { /* no sizes */ }
       }
+      const sizes = [...bySize.keys()];
       // only the buyer's PO — never our own order no (the packing list falls back to it when the order has no PO)
       return { so_id: i.so_id ?? soId, style_id: i.style_id, color_id: i.color_id, order_no: poOfSo.get(Number(i.so_id ?? soId)) ?? null,
         qty: n(i.qty), unit_price: n(sl?.unit_price), sl, style_code: i.style_no ?? sl?.style_code, colour: i.colour ?? sl?.color_name ?? null,
-        size_text: sizeRange(Number(i.style_id), sizes), ...parseBlockRefs(i.block_label) };
+        size_text: sizeRange(Number(i.style_id), sizes), size_qty: sizeOrder(Number(i.style_id), bySize), ...parseBlockRefs(i.block_label) };
     });
   } else {
-    const skuSizes = await query<any>(`SELECT ss.so_line_id, sz.size_code FROM trx_sales_order_sku ss JOIN mst_style_sku k ON k.id = ss.sku_id JOIN mst_size sz ON sz.id = k.size_id
+    const skuSizes = await query<any>(`SELECT ss.so_line_id, sz.size_code, ss.qty FROM trx_sales_order_sku ss JOIN mst_style_sku k ON k.id = ss.sku_id JOIN mst_size sz ON sz.id = k.size_id
        WHERE ss.so_line_id IN (?) AND ss.qty > 0`, [soLines.length ? soLines.map((l) => l.id) : [0]]).catch(() => []);
     lines = soLines.filter((l) => Number(l.so_id) === soId).map((l) => ({ so_id: soId, style_id: l.style_id, color_id: l.color_id, order_no: so.buyer_po_no,
       qty: Math.max(0, n(l.order_qty) - n(l.cancelled_qty)), unit_price: n(l.unit_price), sl: l, style_code: l.style_code, colour: l.assort_color || l.color_name || null,
       size_text: sizeRange(Number(l.style_id), skuSizes.filter((x) => Number(x.so_line_id) === Number(l.id)).map((x) => String(x.size_code))),
+      size_qty: sizeOrder(Number(l.style_id), skuSizes.filter((x) => Number(x.so_line_id) === Number(l.id)).reduce((m, x) => m.set(String(x.size_code), (m.get(String(x.size_code)) ?? 0) + n(x.qty)), new Map<string, number>())),
       buyer_sku_no: null, buyer_item_no: null, supplier_mat_no: null }));
   }
   // description of goods: the order line's (client 23-Oct-2026: "the composition we put on the sales order comes
@@ -192,7 +258,7 @@ async function prefill(cid: number, soId: number, plIds: number[] | null, format
       supplier_mat_no: l.supplier_mat_no ?? pv?.supplier_mat_no ?? l.style_code ?? null,
       ...parts, desc_auto: typed ? 0 : composed ? 1 : 0,
       description: typed ?? (composed || pv?.description || l.sl?.description || null), hsn_code: hsn, uqc: pv?.uqc ?? uqcOf(ms?.uom ?? qtyUnit),
-      qty: l.qty, unit_price: l.unit_price, amount: r2(l.qty * l.unit_price), gst_rate: null,
+      qty: l.qty, unit_price: l.unit_price, amount: r2(l.qty * l.unit_price), gst_rate: null, size_qty: l.size_qty?.length ? l.size_qty : null,
     };
   });
   if (format === 'IGST' && last) {
@@ -204,6 +270,10 @@ async function prefill(cid: number, soId: number, plIds: number[] | null, format
   }
 
   const exporter = firstOf('exporter_details') ?? last?.exporter_details ?? await companyExporter(cid);
+  const mt = await masterTexts(cid, exporter, last?.bank_account_id ? Number(last.bank_account_id) : null);
+  const mode = last?.transport_mode ?? 'SEA';
+  const pol = firstOf('port_of_loading') ?? so.port_of_loading ?? last?.port_of_loading ?? null;
+  const port = await portOf(cid, pol, mode);
   const buyerShort = (await queryOne<any>(`SELECT COALESCE(NULLIF(short_name,''), party_name) n FROM mst_party WHERE id = ?`, [so.buyer_id]))?.n ?? '';
   const marks = last?.marks_nos
     ? String(last.marks_nos).replace(/\b\d{1,4}\s*TO\s*\d{1,5}\b/i, `01 TO ${cartons || ''}`).replace(/\b\d+\s*PACKAGES\b/i, `${cartons || ''} PACKAGES`)
@@ -214,8 +284,10 @@ async function prefill(cid: number, soId: number, plIds: number[] | null, format
     packing_lists: all.map((p) => ({ ...p, pl_date: iso(p.pl_date), buyer_order_date: iso(p.buyer_order_date), selectable: LIVE_PL.includes(p.status) && !p.invoice_id })),
     pl_ids: chosenIds,
     exporter_details: exporter,
-    exporter_ref: last?.exporter_ref ?? await (async () => { const iec = (await queryOne<any>(`SELECT iec_code FROM mst_company WHERE id = ?`, [cid]))?.iec_code; return iec ? `IEC NO : ${iec}` : null; })(),
-    buyer_order_ref: poLines.join('\n') || null,
+    // IEC from the company master (blank = master); the buyer PO is on every line (client 24-Oct-2026: no "Buyer's Order No. & Date" box)
+    exporter_ref: mt.exporter_ref ? null : last?.exporter_ref ?? null,
+    buyer_order_ref: null,
+    transport_mode: port?.mode ?? mode, port_loading_id: port ? Number(port.id) : null,
     other_references: firstOf('other_references') ?? last?.other_references ?? 'STYLE NO:  AS PER BELOW',
     consignee_details: firstOf('consignee_details') ?? await partyBlock(Number(pl0?.consignee_id ?? so.buyer_id)),
     buyer_details: last?.buyer_details ?? null,
@@ -225,10 +297,10 @@ async function prefill(cid: number, soId: number, plIds: number[] | null, format
     pre_carriage_by: firstOf('pre_carriage_by') ?? last?.pre_carriage_by ?? null,
     place_of_receipt: firstOf('place_of_receipt') ?? last?.place_of_receipt ?? null,
     vessel_flight_no: firstOf('vessel_flight_no') ?? last?.vessel_flight_no ?? null,
-    port_of_loading: firstOf('port_of_loading') ?? so.port_of_loading ?? null,
+    port_of_loading: port?.port_name ?? pol,
     port_of_discharge: firstOf('port_of_discharge') ?? so.destination_port ?? null,
     final_destination: firstOf('final_destination') ?? (so.dest_country ? String(so.dest_country).toUpperCase() : null),
-    terms_of_delivery: firstOf('terms_of_delivery') ?? last?.terms_of_delivery ?? (so.incoterm ? `${so.incoterm} BY SEA FROM ${String(so.port_of_loading ?? '').toUpperCase()}.` : null),
+    terms_of_delivery: firstOf('terms_of_delivery') ?? last?.terms_of_delivery ?? (so.incoterm ? `${so.incoterm} BY ${port?.mode ?? mode} FROM ${String(port?.port_name ?? pol ?? '').toUpperCase()}.` : null),
     terms_of_payment: firstOf('terms_of_payment') ?? last?.terms_of_payment ?? null,
     marks_nos: marks || null,
     packages_text: cartons ? `${cartons}  CTNS\n${cartons}  PACKAGES` : null,
@@ -238,11 +310,13 @@ async function prefill(cid: number, soId: number, plIds: number[] | null, format
     total_cartons: cartons || null, total_pcs: pcs || null, total_pcs_unit: last?.total_pcs_unit ?? 'PCS',
     net_weight_kg: pls.length ? r2(pls.reduce((t, p) => t + n(p.net_weight_kg), 0)) : null,
     gross_weight_kg: pls.length ? r2(pls.reduce((t, p) => t + n(p.gross_weight_kg), 0)) : null,
-    bank_details: last?.bank_details ?? await setting(cid, 'CI_BANK_DETAILS'),
-    rex_declaration: last?.rex_declaration ?? await setting(cid, 'CI_REX_DECLARATION'),
+    bank_account_id: mt.bank_account_id,
+    bank_details: mt.bank_details ? null : last?.bank_details ?? await setting(cid, 'CI_BANK_DETAILS'),
+    rex_declaration: mt.rex_declaration ? null : last?.rex_declaration ?? await setting(cid, 'CI_REX_DECLARATION'),
+    masters: mt,
     declaration: last?.declaration ?? await setting(cid, 'CI_DECLARATION'),
     footer_note: format === 'IGST' ? last?.footer_note ?? null : null,
-    goods_gst_rate: last?.goods_gst_rate ?? (format === 'IGST' ? 5 : null), charges_gst_rate: last?.charges_gst_rate ?? (format === 'IGST' ? 18 : null),
+    goods_gst_rate: last?.goods_gst_rate ?? 5, charges_gst_rate: last?.charges_gst_rate ?? 18,
     gst_supply_type: format === 'IGST' ? 'IGST' : last?.gst_supply_type ?? ((await setting(cid, 'CI_LUT_ARN')) ? 'LUT' : null),
     lut_arn: last?.lut_arn ?? await setting(cid, 'CI_LUT_ARN'),
     lines,
@@ -262,6 +336,8 @@ const lineSchema = z.object({
   qty: z.coerce.number().positive('Quantity must be more than 0'),
   unit_price: z.coerce.number().min(0, 'Rate cannot be negative'),
   gst_rate: z.coerce.number().min(0).max(40).nullish(),
+  // size-wise quantity of the line (client 24-Oct-2026: all sizes on one line with the total, or a line per size)
+  size_qty: z.array(z.object({ size: z.string().trim().min(1).max(20), qty: z.coerce.number().min(0) })).max(40).nullish(),
 });
 const txt = (max: number) => s.nullableStr(max);
 const invSchema = z.object({
@@ -283,6 +359,8 @@ const invSchema = z.object({
   goods_gst_rate: z.coerce.number().min(0).max(40).nullish(), charges_gst_rate: z.coerce.number().min(0).max(40).nullish(),
   remarks: s.text(),
   gst_supply_type: z.union([z.enum(['LUT', 'IGST']), z.literal(''), z.null()]).transform((v) => v || null).nullish(), lut_arn: txt(40),
+  transport_mode: z.union([z.enum(['SEA', 'AIR', 'ROAD']), z.literal(''), z.null()]).transform((v) => v || null).nullish(),
+  port_loading_id: s.id(), bank_account_id: s.id(),
   lines: z.array(lineSchema).min(1, 'Add at least one line').max(300),
   row_version: z.coerce.number().int().nullish(),
 });
@@ -292,7 +370,7 @@ const HEADER_TEXT = ['exporter_details', 'exporter_ref', 'buyer_order_ref', 'oth
   'country_origin_text', 'country_dest_text', 'pre_carriage_by', 'place_of_receipt', 'vessel_flight_no', 'port_of_loading', 'port_of_discharge', 'final_destination',
   'terms_of_delivery', 'terms_of_payment', 'marks_nos', 'packages_text', 'goods_heading', 'item_ref_label', 'qty_unit', 'rate_basis', 'total_cartons', 'total_pcs',
   'total_pcs_unit', 'net_weight_kg', 'gross_weight_kg', 'qty_words', 'amount_words', 'bank_details', 'rex_declaration', 'declaration', 'footer_note',
-  'goods_gst_rate', 'charges_gst_rate', 'remarks', 'gst_supply_type', 'lut_arn'] as const;
+  'goods_gst_rate', 'charges_gst_rate', 'remarks', 'gst_supply_type', 'lut_arn', 'transport_mode', 'port_loading_id', 'bank_account_id'] as const;
 
 async function validate(tx: Tx, cid: number, b: InvIn, invoiceId: number | null) {
   const so = await txQueryOne<any>(tx, `SELECT so.id, so.buyer_id, so.currency_id, so.exchange_rate, so.approval_state, cu.code AS currency_code FROM trx_sales_order so
@@ -307,6 +385,17 @@ async function validate(tx: Tx, cid: number, b: InvIn, invoiceId: number | null)
   if (b.invoice_format === 'IGST' && b.goods_gst_rate == null) throw BadRequest('IGST format: enter the GST % on goods', [{ field: 'goods_gst_rate', message: 'Required' }]);
   if (b.invoice_format === 'IGST' && b.lines.some((l) => l.line_kind === 'CHARGE') && b.charges_gst_rate == null) throw BadRequest('IGST format: enter the GST % on charges', [{ field: 'charges_gst_rate', message: 'Required' }]);
   if (!b.lines.some((l) => l.line_kind === 'GOODS')) throw BadRequest('Add at least one goods line');
+  if (b.gst_supply_type === 'IGST' && b.goods_gst_rate == null && !b.lines.some((l) => l.line_kind === 'GOODS' && l.gst_rate != null)) {
+    throw BadRequest('Export on payment of IGST: enter the IGST % on goods', [{ field: 'goods_gst_rate', message: 'Required' }]);
+  }
+  let port: any = null;
+  if (b.port_loading_id) {
+    port = await txQueryOne<any>(tx, `SELECT id, port_name, mode, port_code FROM mst_port WHERE id = ? AND company_id = ?`, [b.port_loading_id, cid]);
+    if (!port) throw BadRequest('Port of loading not found in the port master', [{ field: 'port_loading_id', message: 'Pick a port' }]);
+  }
+  if (b.bank_account_id && !(await txQueryOne(tx, `SELECT id FROM mst_company_bank_account WHERE id = ? AND company_id = ?`, [b.bank_account_id, cid]))) {
+    throw BadRequest('Bank account not found', [{ field: 'bank_account_id', message: 'Pick our bank account' }]);
+  }
   // packing lists: of this order (or carrying its items), confirmed, not on another invoice
   const ids = [...new Set(b.pl_ids)];
   if (ids.length) {
@@ -318,7 +407,7 @@ async function validate(tx: Tx, cid: number, b: InvIn, invoiceId: number | null)
       if (p.invoice_id && Number(p.invoice_id) !== invoiceId) throw Conflict(`${p.pl_no} is already on invoice ${p.invoice_no}`);
     }
   }
-  return { so, currencyId, currencyCode: cur.code as string, xr };
+  return { so, currencyId, currencyCode: cur.code as string, xr, port };
 }
 
 async function writeInvoice(tx: Tx, req: Request, b: InvIn, id: number | null) {
@@ -330,9 +419,12 @@ async function writeInvoice(tx: Tx, req: Request, b: InvIn, id: number | null) {
     // description built from its parts unless typed; a line needs one or the other
     const description = l.desc_auto && composed ? composed : l.description ?? (composed || null);
     if (!description) throw BadRequest(`Line ${i + 1}: enter the description (or its parts)`);
-    return { ...l, description, desc_auto: l.desc_auto && !!composed, sort_order: i + 1, amount: r2(l.qty * l.unit_price) };
+    // size-wise quantities are kept only while they add up to the line quantity (a hand-typed quantity drops them)
+    const sq = (l.size_qty ?? []).filter((x) => x.qty > 0);
+    const sizeQty = sq.length && Math.abs(sq.reduce((t, x) => t + x.qty, 0) - l.qty) < 0.0005 ? sq : null;
+    return { ...l, description, desc_auto: l.desc_auto && !!composed, sort_order: i + 1, amount: r2(l.qty * l.unit_price), size_qty: sizeQty };
   });
-  const T = invoiceTotals({ lines: lines as any, exchange_rate: v.xr, goods_gst_rate: b.goods_gst_rate ?? null, charges_gst_rate: b.charges_gst_rate ?? null });
+  const T = invoiceTotals({ exchange_rate: v.xr, ...igstRates({ ...b, lines: lines as any[] }) });
   const head: Record<string, unknown> = {
     invoice_date: b.invoice_date, so_id: b.so_id, buyer_id: v.so.buyer_id, currency_id: v.currencyId, exchange_rate: v.xr, invoice_format: b.invoice_format,
     fob_value: T.goods_amount, total_value: T.total_amount, port_of_loading: b.port_of_loading ?? null, port_of_discharge: b.port_of_discharge ?? null,
@@ -340,6 +432,8 @@ async function writeInvoice(tx: Tx, req: Request, b: InvIn, id: number | null) {
   };
   for (const k of HEADER_TEXT) head[k] = (b as any)[k] ?? null;
   head.qty_unit = b.qty_unit;
+  // the port of the master: its name on the invoice, its mode unless chosen
+  if (v.port) { head.port_of_loading = v.port.port_name; head.transport_mode = b.transport_mode ?? v.port.mode ?? null; }
   let invoiceId = id;
   if (id == null) {
     let no = b.invoice_no?.trim() || null;
@@ -363,12 +457,12 @@ async function writeInvoice(tx: Tx, req: Request, b: InvIn, id: number | null) {
   }
   for (const l of lines) {
     await txExecute(tx, `INSERT INTO trx_commercial_invoice_line (invoice_id, sort_order, line_kind, so_id, style_id, color_id, order_no, buyer_sku_no, buyer_item_no, supplier_mat_no,
-        description, hsn_code, qty, unit_price, amount, gst_rate, composition, construction, gender_label, garment, pack_info, desc_auto, uqc, style_ref, colour, size_text)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        description, hsn_code, qty, unit_price, amount, gst_rate, composition, construction, gender_label, garment, pack_info, desc_auto, uqc, style_ref, colour, size_text, size_qty)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [invoiceId, l.sort_order, l.line_kind, l.so_id ?? null, l.style_id ?? null, l.color_id ?? null, l.order_no ?? null, l.buyer_sku_no ?? null, l.buyer_item_no ?? null,
         l.supplier_mat_no ?? null, l.description, l.hsn_code ?? null, l.qty, l.unit_price, l.amount, l.gst_rate ?? null,
         l.composition ?? null, l.construction ?? null, l.gender_label ?? null, l.garment ?? null, l.pack_info ?? null, l.desc_auto ? 1 : 0, l.uqc ?? null,
-        l.style_ref ?? null, l.colour ?? null, l.size_text ?? null]);
+        l.style_ref ?? null, l.colour ?? null, l.size_text ?? null, l.size_qty ? JSON.stringify(l.size_qty) : null]);
   }
   if (b.pl_ids.length) await txQuery(tx, `UPDATE trx_packing_list SET invoice_id = ? WHERE company_id = ? AND id IN (?)`, [invoiceId, cid, [...new Set(b.pl_ids)]]);
   return invoiceId!;
@@ -407,7 +501,11 @@ commercialInvoiceRouter.post('/commercial-invoices/:id/finalize', requirePermiss
     if (!cur) throw NotFound('Invoice not found');
     if (cur.doc_status === 'FINAL') return;
     if (Number(cur.row_version) !== Number(inv.row_version)) throw Conflict('The invoice changed while it was being checked — try again');
-    await txExecute(tx, `UPDATE trx_commercial_invoice SET doc_status = 'FINAL', finalized_by = ?, finalized_at = NOW(), row_version = row_version + 1 WHERE id = ?`, [req.user!.id, id]);
+    // the printed IEC / bank / REX text goes on the invoice: a final invoice does not change when a master is edited later
+    await txExecute(tx, `UPDATE trx_commercial_invoice SET doc_status = 'FINAL', finalized_by = ?, finalized_at = NOW(), row_version = row_version + 1,
+        exporter_ref = COALESCE(exporter_ref, ?), bank_details = COALESCE(bank_details, ?), rex_declaration = COALESCE(rex_declaration, ?),
+        bank_account_id = COALESCE(bank_account_id, ?) WHERE id = ?`,
+      [req.user!.id, inv.exporter_ref ?? null, inv.bank_details ?? null, inv.rex_declaration ?? null, inv.masters.bank_account_id, id]);
   });
   await audit(req, 'trx_commercial_invoice', id, 'UPDATE', { doc_status: 'DRAFT' }, { doc_status: 'FINAL' });
   res.json({ data: { id, doc_status: 'FINAL' } });
@@ -425,7 +523,11 @@ commercialInvoiceRouter.post('/commercial-invoices/:id/reopen', requirePermissio
   const ewb = await queryOne<any>(`SELECT doc_no, ewb_no, status FROM trx_eway_bill WHERE company_id = ? AND source_type = 'COMMERCIAL_INVOICE' AND source_id = ? AND status <> 'CANCELLED' LIMIT 1`, [cid, id]);
   if (ewb) throw BadRequest(ewb.ewb_no ? `E-way bill ${ewb.ewb_no} is made on this invoice — cancel it first (within 24 hours), then reopen the invoice`
     : `Draft e-way bill ${ewb.doc_no} is made from this invoice — delete it first, then reopen the invoice`);
-  await query(`UPDATE trx_commercial_invoice SET doc_status = 'DRAFT', row_version = row_version + 1 WHERE id = ?`, [id]);
+  // texts written at finalising that still equal the masters go back to "from the master"
+  const inv = await loadInvoice(cid, id);
+  await query(`UPDATE trx_commercial_invoice SET doc_status = 'DRAFT', row_version = row_version + 1,
+      exporter_ref = IF(exporter_ref <=> ?, NULL, exporter_ref), bank_details = IF(bank_details <=> ?, NULL, bank_details), rex_declaration = IF(rex_declaration <=> ?, NULL, rex_declaration)
+    WHERE id = ?`, [inv.masters.exporter_ref, inv.masters.bank_details, inv.masters.rex_declaration, id]);
   await audit(req, 'trx_commercial_invoice', id, 'UPDATE', { doc_status: 'FINAL' }, { doc_status: 'DRAFT', reason });
   res.json({ data: { id, doc_status: 'DRAFT' } });
 }));
@@ -450,6 +552,26 @@ commercialInvoiceRouter.delete('/commercial-invoices/:id', requirePermission('EX
   });
   await audit(req, 'trx_commercial_invoice', id, 'DELETE');
   res.json({ data: { id, deleted: true } });
+}));
+
+/**
+ * GET /commercial-invoices/party-addresses?party_id= — the partner's addresses as invoice blocks (client 24-Oct-2026:
+ * consignee, buyer other than consignee and the delivery address are picked, not typed).
+ */
+commercialInvoiceRouter.get('/commercial-invoices/party-addresses', requirePermission('EXPORT.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const { party_id } = z.object({ party_id: z.coerce.number().int().positive() }).parse(req.query);
+  const p = await queryOne<any>(`SELECT p.id, p.party_name, p.legal_name, co.name AS country FROM mst_party p LEFT JOIN cfg_country co ON co.id = p.country_id
+     WHERE p.id = ? AND p.company_id = ? AND p.is_deleted = 0`, [party_id, cid]);
+  if (!p) throw NotFound('Partner not found');
+  const addrs = await query<any>(`SELECT a.*, co.name AS country FROM mst_party_address a LEFT JOIN cfg_country co ON co.id = a.country_id
+     WHERE a.party_id = ? AND a.is_active = 1 ORDER BY a.is_default DESC, a.id`, [party_id]);
+  const name = String(p.legal_name || p.party_name);
+  const block = (a: any) => [a?.address_name && a.address_name !== name ? `${name}\n${a.address_name}` : name, a?.address_line1, a?.address_line2, a?.address_line3,
+    [a?.city, a?.pincode].filter(Boolean).join(' '), a?.state && a?.country && !/INDIA/i.test(a.country) ? null : a?.state,
+    (a?.country ?? p.country) ? String(a?.country ?? p.country).toUpperCase() : null]
+    .filter((x) => x && String(x).trim()).join('\n');
+  res.json({ data: (addrs.length ? addrs : [null]).map((a) => ({ id: a ? Number(a.id) : null, label: a ? `${a.address_type ?? 'Address'}${a.address_name ? ` — ${a.address_name}` : ''}${a.city ? `, ${a.city}` : ''}${a.is_default ? ' (default)' : ''}` : 'Name only', text: block(a) })) });
 }));
 
 /* ================================================================ read */
@@ -515,17 +637,24 @@ async function loadInvoice(cid: number, id: number) {
     query<any>(`SELECT id, pl_no, status, total_cartons, total_qty, net_weight_kg, gross_weight_kg, buyer_order_no FROM trx_packing_list WHERE company_id = ? AND invoice_id = ? ORDER BY id`, [cid, id]),
   ]);
   const legacy = !h.exporter_details && !h.consignee_details;   // made before the FK-087 format (old form)
+  // blank IEC / bank / REX boxes print from the masters (a final invoice carries its own text, written when finalised)
+  const mt = await masterTexts(cid, h.exporter_details, h.bank_account_id ? Number(h.bank_account_id) : null);
+  const auto = { exporter_ref: !h.exporter_ref, bank_details: !h.bank_details, rex_declaration: !h.rex_declaration };
+  const rates = igstRates({ gst_supply_type: h.gst_supply_type, invoice_format: h.invoice_format,
+    goods_gst_rate: h.goods_gst_rate == null ? null : n(h.goods_gst_rate), charges_gst_rate: h.charges_gst_rate == null ? null : n(h.charges_gst_rate),
+    lines: lines.map((l) => ({ ...l, gst_rate: l.gst_rate == null ? null : n(l.gst_rate) })) });
   const doc: InvoiceDoc = {
-    ...h, invoice_date: iso(h.invoice_date), invoice_format: h.invoice_format === 'IGST' ? 'IGST' : 'BUYER', currency_code: h.currency_code ?? '',
+    ...h, invoice_date: iso(h.invoice_date),
+    exporter_ref: h.exporter_ref || mt.exporter_ref, bank_details: h.bank_details || mt.bank_details, rex_declaration: h.rex_declaration || mt.rex_declaration, invoice_format: h.invoice_format === 'IGST' ? 'IGST' : 'BUYER', currency_code: h.currency_code ?? '',
     exchange_rate: n(h.exchange_rate), total_cartons: h.total_cartons, total_pcs: h.total_pcs, net_weight_kg: h.net_weight_kg == null ? null : n(h.net_weight_kg),
-    gross_weight_kg: h.gross_weight_kg == null ? null : n(h.gross_weight_kg), goods_gst_rate: h.goods_gst_rate == null ? null : n(h.goods_gst_rate),
-    charges_gst_rate: h.charges_gst_rate == null ? null : n(h.charges_gst_rate), qty_unit: h.qty_unit || 'PCS',
-    lines: lines.map((l) => ({ ...l, line_kind: l.line_kind === 'CHARGE' ? 'CHARGE' : 'GOODS', qty: n(l.qty), unit_price: n(l.unit_price), amount: n(l.amount),
-      gst_rate: l.gst_rate == null ? null : n(l.gst_rate) })),
+    gross_weight_kg: h.gross_weight_kg == null ? null : n(h.gross_weight_kg), goods_gst_rate: rates.goods_gst_rate,
+    charges_gst_rate: rates.charges_gst_rate, qty_unit: h.qty_unit || 'PCS',
+    lines: rates.lines.map((l) => ({ ...l, line_kind: l.line_kind === 'CHARGE' ? 'CHARGE' : 'GOODS', qty: n(l.qty), unit_price: n(l.unit_price), amount: n(l.amount),
+      size_qty: typeof l.size_qty === 'string' ? JSON.parse(l.size_qty) : l.size_qty ?? null })),
   };
   const T = invoiceTotals(doc);
   const today = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
-  const checks = invoiceChecks({ ...doc, invoice_no: h.invoice_no, gst_supply_type: h.gst_supply_type, lut_arn: h.lut_arn,
+  const checks = invoiceChecks({ ...doc, invoice_no: h.invoice_no, gst_supply_type: h.gst_supply_type, lut_arn: h.lut_arn, transport_mode: h.transport_mode,
     packing_lists: pls.map((p) => ({ ...p, total_cartons: p.total_cartons == null ? null : n(p.total_cartons), total_qty: p.total_qty == null ? null : n(p.total_qty),
       net_weight_kg: p.net_weight_kg == null ? null : n(p.net_weight_kg), gross_weight_kg: p.gross_weight_kg == null ? null : n(p.gross_weight_kg) })) }, today);
   return {
@@ -535,6 +664,11 @@ async function loadInvoice(cid: number, id: number) {
     hsn_summary: hsnSummary(doc.lines, doc.exchange_rate, doc.goods_gst_rate, doc.charges_gst_rate),
     gst_endorsement: gstEndorsement(h.gst_supply_type, h.lut_arn),
     eway_bill: await invoiceEwb(cid, id),
+    // what the editor shows: the master values, which boxes print from them, the raw typed values
+    masters: mt, auto, igst_on: h.gst_supply_type === 'IGST' || (h.invoice_format === 'IGST' && h.gst_supply_type !== 'LUT'),
+    typed: { exporter_ref: h.exporter_ref, bank_details: h.bank_details, rex_declaration: h.rex_declaration,
+      goods_gst_rate: h.goods_gst_rate == null ? null : n(h.goods_gst_rate), charges_gst_rate: h.charges_gst_rate == null ? null : n(h.charges_gst_rate) },
+    bank_account: h.bank_account_id || mt.bank_account_id ? await queryOne<any>(`SELECT id, account_label, bank_name, account_no FROM mst_company_bank_account WHERE id = ?`, [h.bank_account_id ?? mt.bank_account_id]) : null,
     shipping_bill: await queryOne<any>(`SELECT id, sb_no, sb_date, port_code, sb_pdf_url, sb_pdf_name FROM trx_shipping_bill WHERE company_id = ? AND invoice_id = ? LIMIT 1`, [cid, id])
       .then((x) => (x ? { ...x, sb_date: iso(x.sb_date) } : null)),
     words: { qty: doc.qty_words || qtyWords(T.goods_qty, doc.qty_unit), amount: doc.amount_words || amountWords(T.total_amount, doc.currency_code) },
@@ -543,15 +677,17 @@ async function loadInvoice(cid: number, id: number) {
 
 commercialInvoiceRouter.get('/commercial-invoices/:id', requirePermission('EXPORT.VIEW'), ah(async (req, res) => {
   const inv = await loadInvoice(req.user!.companyId, Number(req.params.id));
-  res.json({ data: { ...inv, layout: buildInvoiceLayout({ ...inv, invoice_format: (req.query.format === 'IGST' || req.query.format === 'BUYER') ? req.query.format : inv.invoice_format }) } });
+  const copy = req.query.copy === 'CUSTOMS' ? 'CUSTOMS' : 'BUYER';
+  res.json({ data: { ...inv, copy, layout: buildInvoiceLayout({ ...inv, copy, invoice_format: (req.query.format === 'IGST' || req.query.format === 'BUYER') ? req.query.format : inv.invoice_format }) } });
 }));
 
 /** GET /commercial-invoices/:id/export.xlsx?format= — the invoice in the FK-087 sheet layout. */
 commercialInvoiceRouter.get('/commercial-invoices/:id/export.xlsx', requirePermission('EXPORT.VIEW'), ah(async (req, res) => {
   const inv = await loadInvoice(req.user!.companyId, Number(req.params.id));
   const format = req.query.format === 'IGST' || req.query.format === 'BUYER' ? req.query.format : inv.invoice_format;
-  const buf = buildInvoiceWorkbook({ ...inv, invoice_format: format });
+  const copy = req.query.copy === 'CUSTOMS' ? 'CUSTOMS' : 'BUYER';
+  const buf = buildInvoiceWorkbook({ ...inv, invoice_format: format, copy });
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', `attachment; filename="${String(inv.invoice_no).replace(/[^A-Za-z0-9_.-]+/g, '_')}_${format}.xlsx"`);
+  res.setHeader('Content-Disposition', `attachment; filename="${String(inv.invoice_no).replace(/[^A-Za-z0-9_.-]+/g, '_')}_${format}${copy === 'CUSTOMS' ? '_CUSTOMS' : ''}.xlsx"`);
   res.send(buf);
 }));

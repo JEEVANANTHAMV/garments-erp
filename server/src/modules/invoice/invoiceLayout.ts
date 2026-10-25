@@ -32,7 +32,9 @@ export interface InvoiceDoc {
   qty_words: string | null; amount_words: string | null;
   bank_details: string | null; rex_declaration: string | null; declaration: string | null; footer_note: string | null;
   goods_gst_rate: number | null; charges_gst_rate: number | null;
-  gst_supply_type?: string | null; lut_arn?: string | null;
+  gst_supply_type?: string | null; lut_arn?: string | null; transport_mode?: string | null;
+  /** BUYER copy prints the REX declaration; the CUSTOMS (port) copy leaves it out (client 24-Oct-2026) */
+  copy?: 'BUYER' | 'CUSTOMS';
   eway_bill?: { ewb_no: string | null; ewb_date: string | null; generated: boolean } | null;
   lines: InvoiceDocLine[];
 }
@@ -90,15 +92,21 @@ function build(doc: InvoiceDoc, withWorkingColumns: boolean) {
   lines(doc.exporter_details).slice(0, 5).forEach((l, i) => sb.set(2 + i, 0, l, undefined, i === 0 || /GST/i.test(l) ? 'b' : undefined));
   sb.set(2, 5, `${doc.invoice_no}${doc.invoice_date ? ` DT: ${dmy(doc.invoice_date)}` : ''}`, undefined, 'b');
   lines(doc.exporter_ref).slice(0, 3).forEach((l, i) => { sb.set(2 + i, 9, l, undefined, 'b'); if (i === 0) sb.merge(2, 9, 2, L); });
-  sb.set(3, 5, "Buyer's Order No. & Date.", undefined, 'sm');
-  sb.set(4, 5, lines(doc.buyer_order_ref).join('  /  '), undefined, 'b'); sb.merge(4, 5, 4, L);
-  sb.set(5, 5, 'Other Reference(s)', undefined, 'sm');
-  lines(doc.other_references).slice(0, 1).forEach((l) => { sb.set(6, 5, l, undefined, 'b'); sb.merge(6, 5, 6, 9); });
+  // no "Buyer's Order No. & Date" box (client 24-Oct-2026): the buyer PO is printed on every line
+  sb.set(3, 5, 'Other Reference(s)', undefined, 'sm');
+  lines(doc.other_references).slice(0, 1).forEach((l) => { sb.set(4, 5, l, undefined, 'b'); sb.merge(4, 5, 4, L); });
+  sb.set(5, 5, 'Mode of Shipment', undefined, 'sm');
+  if (doc.transport_mode) { sb.set(6, 5, `BY ${doc.transport_mode}`, undefined, 'b'); sb.merge(6, 5, 6, 9); }
   box(1, 0, 6, 4); box(1, 5, 2, 8); box(1, 9, 3, L); box(3, 5, 4, L); box(5, 5, 6, L);
 
-  sb.set(7, 0, 'Consignee', undefined, 'sm'); sb.set(7, 5, 'Buyer', undefined, 'sm');
+  // consignee always; the right box carries the buyer (if other than consignee), else the delivery address — only filled ones print
+  const buyerLines = lines(doc.buyer_details);
+  const shipUp = !buyerLines.length && lines(doc.ship_to_details).length > 0;
+  sb.set(7, 0, 'Consignee', undefined, 'sm');
+  if (buyerLines.length) sb.set(7, 5, 'Buyer (if other than Consignee)', undefined, 'sm');
+  else if (shipUp) sb.set(7, 5, 'Delivery Address (Ship To)', undefined, 'sm');
   lines(doc.consignee_details).slice(0, 6).forEach((l, i) => sb.set(8 + i, 0, l, undefined, i === 0 ? 'b' : undefined));
-  lines(doc.buyer_details).slice(0, 4).forEach((l, i) => sb.set(8 + i, 5, l, undefined, i === 0 ? 'b' : undefined));
+  (buyerLines.length ? buyerLines : shipUp ? lines(doc.ship_to_details) : []).slice(0, 4).forEach((l, i) => sb.set(8 + i, 5, l, undefined, i === 0 ? 'b' : undefined));
   box(7, 0, 13, 4); box(7, 5, 11, L);
   sb.set(12, 5, 'Country of Origin of Goods', undefined, 'sm'); sb.set(12, 9, 'Country of Final Destination', undefined, 'sm');
   sb.set(13, 5, doc.country_origin_text, undefined, 'cb'); sb.merge(13, 5, 13, 8);
@@ -172,7 +180,7 @@ function build(doc: InvoiceDoc, withWorkingColumns: boolean) {
     sb.set(r + i, 0, lbl, undefined, 'b'); sb.merge(r + i, 0, r + i, 1);
     sb.set(r + i, 2, v == null ? null : Number(v), undefined, 'rb', i >= 2 ? 3 : 0); sb.set(r + i, 3, u, undefined, 'b');
   });
-  const ship = lines(doc.ship_to_details);
+  const ship = shipUp ? [] : lines(doc.ship_to_details);
   if (ship.length) {
     sb.set(r, 4, 'SHIP TO (DELIVERY ADDRESS)', undefined, 'smb');
     ship.slice(0, 3).forEach((l, i) => sb.set(r + 1 + i, 4, l, undefined, 'b'));
@@ -194,6 +202,15 @@ function build(doc: InvoiceDoc, withWorkingColumns: boolean) {
   // GST export endorsement (CGST rule 46) — a row of its own when the export type is set
   const endorse = gstEndorsement(doc.gst_supply_type, doc.lut_arn);
   if (endorse) { sb.set(r, 0, endorse, undefined, 'cb'); sb.merge(r, 0, r, L); box(r, 0, r, L); r++; }
+  // buyer layout of an export on payment of IGST: the IGST paid per rate (the IGST layout has its own working below)
+  if (!igst && doc.gst_supply_type === 'IGST') {
+    const xr = Number(doc.exchange_rate) || 0;
+    for (const h of hsnSummary(doc.lines as any, xr, doc.goods_gst_rate, doc.charges_gst_rate).reduce((m, x) => m.set(x.gst_rate, { v: r2((m.get(x.gst_rate)?.v ?? 0) + x.value_inr), g: r2((m.get(x.gst_rate)?.g ?? 0) + x.gst_inr) }), new Map<number, { v: number; g: number }>())) {
+      sb.set(r, 0, `TAXABLE VALUE (INR @ ${xr}) :`, undefined, 'b'); sb.merge(r, 0, r, 3); sb.set(r, 4, h[1].v, undefined, 'rb', 2);
+      sb.set(r, 5, `IGST PAID @ ${h[0]}% (INR) :`, undefined, 'b'); sb.merge(r, 5, r, 8); sb.set(r, 9, h[1].g, undefined, 'rb', 2); sb.merge(r, 9, r, L);
+      box(r, 0, r, L); r++;
+    }
+  }
   // the e-way bill made from this invoice (the QR prints on the screen / PDF print; the sheet carries the number)
   if (doc.eway_bill?.generated && doc.eway_bill.ewb_no) {
     sb.set(r, 0, `E-WAY BILL NO: ${doc.eway_bill.ewb_no}${doc.eway_bill.ewb_date ? `   DT: ${doc.eway_bill.ewb_date}` : ''}`, undefined, 'b'); sb.merge(r, 0, r, L); box(r, 0, r, L); r++;
@@ -202,9 +219,9 @@ function build(doc: InvoiceDoc, withWorkingColumns: boolean) {
   // ---------- footer
   let sigTop: number;
   if (!igst) {
-    sb.set(r, 0, 'OUR BANK DETAILS:-', undefined, 'b'); sb.set(r, 7, 'REX DECLARATION', undefined, 'b');
+    sb.set(r, 0, 'OUR BANK DETAILS:-', undefined, 'b'); if (doc.copy !== 'CUSTOMS') sb.set(r, 7, 'REX DECLARATION', undefined, 'b');
     const bank = lines(doc.bank_details).slice(0, 7);
-    const rex = wrap(doc.rex_declaration, 90).slice(0, 8);
+    const rex = doc.copy === 'CUSTOMS' ? [] : wrap(doc.rex_declaration, 90).slice(0, 8);
     // the signature box starts on the last bank line, under the REX text (sheet: REX E51–E55, Signature & Date I56)
     const n = Math.max(bank.length, rex.length + 1, 2);
     bank.forEach((l, i) => sb.set(r + 1 + i, 0, l, undefined, i === 0 || /A\/C|BENEFICIARY/i.test(l) ? 'b' : undefined));
