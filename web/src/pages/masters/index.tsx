@@ -319,6 +319,65 @@ export function DepartmentsPage() {
     ]} />;
 }
 
+/* -------------------------------------------------------- Ports */
+/** Ports of loading (client 24-Oct-2026): port + mode → ICEGATE code; the invoice / shipping bill pick port, then mode. */
+export function PortsPage() {
+  return <CrudPage
+    path="ports" title="Ports" permission="EXPORT" singular="Port"
+    subtitle="Ports of loading picked on the commercial invoice and shipping bill — one row per port and mode (sea / air / road) with its ICEGATE code"
+    defaultSort={{ key: 'port_name', dir: 'asc' }}
+    columns={[
+      { key: 'port_name', header: 'Port', sortable: true, render: (r: any) => <span className="font-medium">{r.port_name}</span> },
+      { key: 'mode', header: 'Mode', sortable: true, render: (r: any) => r.mode ? <Badge tone={r.mode === 'AIR' ? 'violet' : r.mode === 'ROAD' ? 'amber' : 'blue'}>{r.mode}</Badge> : <span className="text-slate-400">any</span> },
+      { key: 'port_code', header: 'Port code', sortable: true, render: (r: any) => <span className="font-mono text-[12px] text-brand-700">{r.port_code ?? '—'}</span> },
+      { key: 'country_name', header: 'Country', render: (r: any) => r.country_name ?? 'India' },
+      { key: 'is_active', header: 'Status', render: (r: any) => r.is_active ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Inactive</Badge> },
+    ]}
+    filters={[{ name: 'mode', label: 'Mode', options: [{ value: 'SEA', label: 'Sea' }, { value: 'AIR', label: 'Air' }, { value: 'ROAD', label: 'Road' }] }]}
+    fields={[
+      { name: 'port_name', label: 'Port name', required: true, placeholder: 'CHENNAI' },
+      { name: 'mode', label: 'Mode', type: 'select', options: [{ value: 'SEA', label: 'Sea' }, { value: 'AIR', label: 'Air' }, { value: 'ROAD', label: 'Road' }] },
+      { name: 'port_code', label: 'Port code (ICEGATE)', placeholder: 'INMAA1', hint: 'e.g. INMAA1 Chennai sea, INMAA4 Chennai air' },
+      { name: 'country_id', label: 'Country', type: 'select', lookup: 'countries', hint: 'Blank = India' },
+      { name: 'remarks', label: 'Remarks', span: 2 },
+      activeField,
+    ]} />;
+}
+
+/* -------------------------------------------------------- Our bank accounts */
+/** Our bank accounts (client 24-Oct-2026): the invoice's OUR BANK DETAILS block; export benefit receipts are booked to them. */
+export function CompanyBankAccountsPage() {
+  return <CrudPage
+    path="company-bank-accounts" title="Our Bank Accounts" permission="FINANCE" singular="Bank account"
+    subtitle="Printed on the commercial invoice (default account first) and used for export benefit receipts"
+    defaultSort={{ key: 'account_label', dir: 'asc' }}
+    columns={[
+      { key: 'account_label', header: 'Account', sortable: true, render: (r: any) => <span className="font-medium">{r.account_label}{r.is_default ? <Badge tone="green" className="ml-1.5">default</Badge> : null}</span> },
+      { key: 'bank_name', header: 'Bank / branch', sortable: true, render: (r: any) => <div><p>{r.bank_name}</p><p className="text-[11px] text-slate-500">{r.branch_name}</p></div> },
+      { key: 'account_no', header: 'A/c no', render: (r: any) => <span className="font-mono text-[12px]">{r.account_type} {r.account_no}</span> },
+      { key: 'ifsc_code', header: 'IFSC / SWIFT', render: (r: any) => <span className="font-mono text-[12px]">{[r.ifsc_code, r.swift_code].filter(Boolean).join(' · ') || '—'}</span> },
+      { key: 'is_active', header: 'Status', render: (r: any) => r.is_active ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Inactive</Badge> },
+    ]}
+    fields={[
+      { name: 'account_label', label: 'Short name', required: true, placeholder: 'CANARA CA 2133' },
+      { name: 'bank_name', label: 'Bank', required: true, placeholder: 'CANARA BANK' },
+      { name: 'branch_name', label: 'Branch', placeholder: 'MID CORPORATE BRANCH(2344)' },
+      { name: 'account_type', label: 'Account type', type: 'select', required: true, defaultValue: 'CURRENT',
+        options: ['CURRENT', 'EEFC', 'CC', 'OD', 'SAVINGS'].map((x) => ({ value: x, label: x })) },
+      { name: 'branch_address', label: 'Branch address (printed under the bank, one line per line)', type: 'textarea', span: 2 },
+      { name: 'account_no', label: 'Account no', required: true },
+      { name: 'ifsc_code', label: 'IFSC' },
+      { name: 'swift_code', label: 'SWIFT' },
+      { name: 'ad_code', label: 'AD code' },
+      { name: 'beneficiary', label: 'Beneficiary', placeholder: 'FASHION KNITS' },
+      { name: 'currency_id', label: 'Currency', type: 'select', lookup: 'currencies' },
+      { name: 'intermediary', label: 'Intermediary bank (optional)', span: 2 },
+      { name: 'is_default', label: 'Default account (printed on new invoices)', type: 'checkbox' },
+      { name: 'remarks', label: 'Remarks', span: 2 },
+      activeField,
+    ]} />;
+}
+
 /* -------------------------------------------------------- Warehouses */
 export function WarehousesPage() {
   const TYPES = ['RAW_MATERIAL','WIP','FINISHED_GOODS','TRIMS','REJECTION','BONDED'];

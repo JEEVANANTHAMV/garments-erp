@@ -6,6 +6,7 @@ import {
   BarChart3, Shield, Settings, Warehouse, GitBranch, CalendarClock, FileCheck2,
   History, Wallet, TrendingUp, Container, Coins, SlidersHorizontal, Search,
   Activity, RefreshCw, ShieldAlert, Workflow, ListChecks, HandCoins, ClipboardList, Gauge,
+  Settings2,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -68,6 +69,7 @@ export const NAV: NavSection[] = [
       { label: 'Goods Receipt (All)',  to: '/procurement/grns', icon: PackageCheck, perms: ['GRN.VIEW'] },
       { label: 'Bills Inward',         to: '/procurement/supplier-bills', icon: Receipt, perms: ['PURCHASE.VIEW'] },
       { label: 'GRN Bill Status',      to: '/procurement/grn-bill-status', icon: Receipt, perms: ['GRN.VIEW', 'PURCHASE.VIEW'] },
+      { label: 'Document Inward',      to: '/stores/document-inward', icon: FileCheck2, perms: ['FINANCE.VIEW', 'PURCHASE.VIEW', 'GRN.VIEW'] },
       { label: 'Bill Tracker',         to: '/stores/bill-tracker', icon: FileCheck2, perms: ['FINANCE.VIEW', 'PURCHASE.VIEW', 'GRN.VIEW'] },
       { label: 'Special Requests',     to: '/stores/special-requests', icon: ShieldAlert, perms: ['PURCHASE.VIEW'] },
       { label: 'Purchase Returns',     to: '/procurement/returns', icon: Truck, perms: ['PURCHASE.VIEW'] },
@@ -195,7 +197,8 @@ export const NAV: NavSection[] = [
       { label: 'E-Way Bills',         to: '/logistics/eway-bills', icon: FileText, perms: ['EWAY.VIEW'] },
       { label: 'Commercial Invoices', to: '/export/invoices', icon: Receipt, perms: ['EXPORT.VIEW'] },
       { label: 'Shipping Bills',      to: '/export/shipping-bills', icon: FileText, perms: ['EXPORT.VIEW'] },
-      { label: 'Incentives Tracker',  to: '/export/incentives', icon: TrendingUp, perms: ['EXPORT.VIEW'] },
+      { label: 'Export Benefits',     to: '/export/incentives', icon: TrendingUp, perms: ['EXPORT.VIEW'] },
+      { label: 'Benefit Scheme Master', to: '/export/benefit-schemes', icon: Settings2, perms: ['EXPORT_BENEFIT.ADMIN'] },
       { label: 'Certificates',        to: '/export/certificates', icon: FileCheck2, perms: ['EXPORT.VIEW'] },
     ],
   },
@@ -217,7 +220,7 @@ export const NAV: NavSection[] = [
       { label: 'Vouchers',          to: '/finance/vouchers', icon: Landmark, perms: ['FINANCE.VIEW'] },
       { label: 'Receipts',          to: '/finance/receipts', icon: Wallet, perms: ['FINANCE.VIEW'] },
       { label: 'Payments',          to: '/finance/payments', icon: Coins, perms: ['FINANCE.VIEW'] },
-      { label: 'Export Incentives', to: '/finance/incentives', icon: TrendingUp, perms: ['FINANCE.VIEW'] },
+      { label: 'Export Benefits',   to: '/finance/incentives', icon: TrendingUp, perms: ['FINANCE.VIEW'] },
     ],
   },
   {
@@ -257,6 +260,8 @@ export const NAV: NavSection[] = [
       { label: 'Warehouses',         to: '/masters/warehouses', icon: Warehouse, perms: ['WAREHOUSE.VIEW'] },
       { label: 'Bins & Racks',       to: '/masters/warehouse-bins', icon: Boxes, perms: ['WAREHOUSE.VIEW'] },
       { label: 'Departments',        to: '/masters/departments', icon: Building2, perms: ['UNIT.VIEW'] },
+      { label: 'Ports',              to: '/masters/ports', icon: Ship, perms: ['EXPORT.VIEW'] },
+      { label: 'Our Bank Accounts',  to: '/masters/company-bank-accounts', icon: Landmark, perms: ['FINANCE.VIEW'] },
       { label: 'Branches & Units',   to: '/masters/branches', icon: Building2, perms: ['BRANCH.VIEW', 'UNIT.VIEW'] },
       { label: 'Divisions',          to: '/masters/divisions', icon: Building2, perms: ['UNIT.VIEW'] },
       { label: 'Production Lines',   to: '/production/sewing-lines', icon: SlidersHorizontal, perms: ['PRODUCTION.VIEW'] },

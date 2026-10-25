@@ -59,8 +59,13 @@ const CSS = `
 @media print { .cinv { font-size: 9.5px; } .cinv .addr .first { font-size: 10.5px; } }
 `;
 
-export function InvoiceDocument({ d, format }: { d: any; format: 'BUYER' | 'IGST' }) {
+export function InvoiceDocument({ d, format, copy = 'BUYER' }: { d: any; format: 'BUYER' | 'IGST'; copy?: 'BUYER' | 'CUSTOMS' }) {
   const igst = format === 'IGST';
+  // client 24-Oct-2026: only the filled address boxes print; the buyer copy carries the REX declaration, the customs copy does not
+  const addresses = ([['Consignee', d.consignee_details], ['Buyer (if other than Consignee)', d.buyer_details], ['Delivery Address (Ship To)', d.ship_to_details]] as const)
+    .filter(([, t], i) => i === 0 || lines(t).length > 0) as unknown as [string, unknown][];
+  const showRex = copy !== 'CUSTOMS' && lines(d.rex_declaration).length > 0;
+  const igstPaid = !igst && d.gst_supply_type === 'IGST';
   const cur = d.currency_code || '';
   const T = d.totals ?? {};
   const goods = (d.lines ?? []).filter((l: any) => l.line_kind !== 'CHARGE');
@@ -84,10 +89,10 @@ export function InvoiceDocument({ d, format }: { d: any; format: 'BUYER' | 'IGST
         <div className="title">
           <span className="copy" style={{ visibility: 'hidden' }}>{igst ? 'IGST INVOICE' : 'BUYER INVOICE'}</span>
           <h1>COMMERCIAL INVOICE</h1>
-          <span className="copy">{igst ? 'IGST INVOICE' : 'BUYER INVOICE'}</span>
+          <span className="copy">{igst ? 'IGST INVOICE' : copy === 'CUSTOMS' ? 'CUSTOMS COPY' : 'BUYER INVOICE'}</span>
         </div>
 
-        {/* exporter | invoice no & date · exporter's ref · buyer's order · other refs */}
+        {/* exporter | invoice no & date · exporter's ref (IEC) · other refs · mode (no buyer's order box — the PO is on every line) */}
         <div className="row" style={{ gridTemplateColumns: '1fr 1fr' }}>
           <Box cap="Exporter"><Addr t={d.exporter_details} /></Box>
           <div className="cell stack" style={{ padding: 0 }}>
@@ -95,21 +100,18 @@ export function InvoiceDocument({ d, format }: { d: any; format: 'BUYER' | 'IGST
               <Box cap="Invoice No. & Date"><span className="v">{d.invoice_no}{d.invoice_date ? `  DT: ${dmy(d.invoice_date)}` : ''}</span></Box>
               <Box cap="Exporter's Ref."><span className="v">{lines(d.exporter_ref).join('\n')}</span></Box>
             </div>
-            <Box cap="Buyer's Order No. & Date"><span className="v">{lines(d.buyer_order_ref).join('  /  ')}</span></Box>
             <Box cap="Other Reference(s)"><span className="v">{lines(d.other_references).join('\n')}</span></Box>
+            <Box cap="Mode of Shipment"><span className="v">{d.transport_mode ? `BY ${d.transport_mode}` : ''}</span></Box>
           </div>
         </div>
 
-        {/* consignee | buyer + countries */}
+        {/* consignee (+ buyer, + delivery address when filled) | countries */}
+        <div className="row" style={{ gridTemplateColumns: addresses.map(() => '1fr').join(' ') }} id="ci-doc-addresses">
+          {addresses.map(([cap, t]) => <Box key={cap} cap={cap}><Addr t={t} /></Box>)}
+        </div>
         <div className="row" style={{ gridTemplateColumns: '1fr 1fr' }}>
-          <Box cap="Consignee"><Addr t={d.consignee_details} /></Box>
-          <div className="cell stack" style={{ padding: 0 }}>
-            <Box cap="Buyer (if other than consignee)"><Addr t={d.buyer_details} /></Box>
-            <div className="row" style={{ gridTemplateColumns: '1fr 1fr', borderBottom: 0, borderTop: '1px solid #111' }}>
-              <Box cap="Country of Origin of Goods" className="c"><span className="v">{d.country_origin_text}</span></Box>
-              <Box cap="Country of Final Destination" className="c"><span className="v">{d.country_dest_text}</span></Box>
-            </div>
-          </div>
+          <Box cap="Country of Origin of Goods" className="c"><span className="v">{d.country_origin_text}</span></Box>
+          <Box cap="Country of Final Destination" className="c"><span className="v">{d.country_dest_text}</span></Box>
         </div>
 
         {/* shipment | terms (+ e-way bill) */}
@@ -176,15 +178,14 @@ export function InvoiceDocument({ d, format }: { d: any; format: 'BUYER' | 'IGST
           </tr></tfoot>
         </table>
 
-        {/* packing summary | ship to | amount */}
-        <div className="row" style={{ gridTemplateColumns: '1fr 1.2fr 0.9fr', borderTop: '1px solid #111' }}>
+        {/* packing summary | amount */}
+        <div className="row" style={{ gridTemplateColumns: '1.2fr 1fr', borderTop: '1px solid #111' }}>
           <div className="cell kv">
             <span>Total Cartons</span><span>{d.total_cartons != null ? `${num(d.total_cartons, 0)} CTNS` : '—'}</span>
             <span>Total Pcs</span><span>{d.total_pcs != null ? `${num(d.total_pcs, 0)} ${d.total_pcs_unit || unit}` : '—'}</span>
             <span>Net Weight</span><span>{d.net_weight_kg != null ? `${num(d.net_weight_kg, 3)} KGS` : '—'}</span>
             <span>Gross Weight</span><span>{d.gross_weight_kg != null ? `${num(d.gross_weight_kg, 3)} KGS` : '—'}</span>
           </div>
-          <Box cap="Ship To (Delivery Address)"><Addr t={d.ship_to_details} /></Box>
           <div className="cell kv" style={{ alignContent: 'start' }}>
             <span>Goods ({cur})</span><span>{num(T.goods_amount, 2)}</span>
             {charges.length > 0 && <><span>Charges ({cur})</span><span>{num(T.charges_amount, 2)}</span></>}
@@ -194,6 +195,17 @@ export function InvoiceDocument({ d, format }: { d: any; format: 'BUYER' | 'IGST
         <div className="words"><span className="cap">Total Quantity (in words)</span><span className="v">{d.words?.qty}</span></div>
         <div className="words"><span className="cap">Amount Chargeable (in words)</span><span className="v">{d.words?.amount}</span></div>
         {d.gst_endorsement && <div className="endorse">{d.gst_endorsement}</div>}
+        {igstPaid && (
+          <div className="words" id="ci-doc-igst">
+            <span className="cap">IGST paid (export on payment of IGST)</span>
+            <table className="mini">
+              <thead><tr><th>HSN</th><th className="r">Taxable value ₹ (@ {num(d.exchange_rate, 4, true)})</th><th className="r">IGST %</th><th className="r">IGST ₹</th></tr></thead>
+              <tbody>{(d.hsn_summary ?? []).map((h: any) => (
+                <tr key={`${h.hsn_code}-${h.gst_rate}`}><td>{h.hsn_code}</td><td className="r">{num(h.value_inr, 2, true)}</td><td className="r">{num(h.gst_rate, 0)}</td><td className="r">{num(h.gst_inr, 2, true)}</td></tr>))}</tbody>
+              <tfoot><tr><td className="b">TOTAL</td><td className="r b">{num(T.goods_inr + T.charges_inr, 2, true)}</td><td /><td className="r b">{num(T.goods_gst + T.charges_gst, 2, true)}</td></tr></tfoot>
+            </table>
+          </div>
+        )}
 
         {igst ? (
           <div className="row" style={{ gridTemplateColumns: '1fr 1fr' }}>
@@ -221,10 +233,10 @@ export function InvoiceDocument({ d, format }: { d: any; format: 'BUYER' | 'IGST
               </table>
             </div>
           </div>
-        ) : (lines(d.bank_details).length > 0 || lines(d.rex_declaration).length > 0) && (
-          <div className="row" style={{ gridTemplateColumns: '1fr 1.4fr' }}>
+        ) : (lines(d.bank_details).length > 0 || showRex) && (
+          <div className="row" style={{ gridTemplateColumns: showRex ? '1fr 1.4fr' : '1fr' }} id="ci-doc-bank">
             <Box cap="Our Bank Details"><Addr t={d.bank_details} /></Box>
-            <Box cap="REX Declaration"><span className="addr" style={{ fontSize: 9.5 }}>{lines(d.rex_declaration).join('\n')}</span></Box>
+            {showRex && <Box cap="REX Declaration"><span className="addr" style={{ fontSize: 9.5 }} id="ci-doc-rex">{lines(d.rex_declaration).join('\n')}</span></Box>}
           </div>
         )}
 

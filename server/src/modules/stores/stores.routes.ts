@@ -3,16 +3,20 @@ import { BadRequest } from '../../core/errors.js';
 import { openingAuditRouter } from './openingAudit.routes.js';
 import { deliveryRouter } from './delivery.routes.js';
 import { billSpecialRouter } from './billSpecial.routes.js';
+import { billTrackerRouter } from './billTracker.routes.js';
+import { documentInwardRouter } from './documentInward.routes.js';
 import { scrapRouter } from './scrap.routes.js';
 
 /**
  * Stores transactions (client tracker 14-Oct-2026), mounted at /api/stores:
- *   stock-items · opening-stock · stock-audit · deliveries (stock / general) · bill-tracker · special-requests · scrap-rejections · reports/*
+ *   stock-items · opening-stock · stock-audit · deliveries (stock / general) · bill-tracker · document-inward · bill-docs · special-requests · scrap-rejections · reports/*
  * Client rule "No delete / edit option to be provided": nothing here is ever deleted; drafts are cancelled with a reason.
  */
 export const storesRouter = Router();
 storesRouter.use(openingAuditRouter);
 storesRouter.use(deliveryRouter);
+storesRouter.use(billTrackerRouter);
+storesRouter.use(documentInwardRouter);
 storesRouter.use(billSpecialRouter);
 storesRouter.use(scrapRouter);
 storesRouter.delete('/{*rest}', (_req, _res, next) =>

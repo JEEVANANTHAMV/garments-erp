@@ -98,6 +98,10 @@ export function createApp() {
   if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });
   }
+  // export benefit evidence is served only through GET /api/export-benefits/documents/:id/file (login + company check)
+  app.use('/uploads/export-benefits', (_req, res) => { res.status(404).end(); });
+  // Bill tracker documents are private: only GET /api/stores/bill-docs/attachments/:id/download (authenticated, company-scoped).
+  app.use('/uploads/bill-docs', (_req, res) => { res.status(404).end(); });
   app.use('/uploads', express.static(uploadsDir));
 
   // ---------------------------------------------------------- health

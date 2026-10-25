@@ -605,6 +605,7 @@ export function CompanyPage() {
               { k: 'gstin', label: 'GSTIN' },
               { k: 'pan', label: 'PAN' },
               { k: 'iec_code', label: 'IEC code' },
+              { k: 'rex_no', label: 'REX no (EU GSP)' },
               { k: 'rcmc_no', label: 'RCMC no' },
               { k: 'cin', label: 'CIN' },
               { k: 'email', label: 'Email' },

@@ -150,7 +150,7 @@ export function CommercialInvoiceDetailPage() {
   const [plOptions, setPlOptions] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<null | 'BUYER' | 'IGST'>(null);
-  const [printDoc, setPrintDoc] = useState<{ d: any; format: 'BUYER' | 'IGST' } | null>(null);
+  const [printDoc, setPrintDoc] = useState<{ d: any; format: 'BUYER' | 'IGST'; copy: 'BUYER' | 'CUSTOMS' } | null>(null);
   const [confirm, setConfirm] = useState<null | 'delete' | 'reopen'>(null);
   const [reason, setReason] = useState('');
   useEffect(() => {
@@ -256,19 +256,19 @@ export function CommercialInvoiceDetailPage() {
     try { await http.post(`/commercial-invoices/${id}/${path}`, b); toast(msg); setConfirm(null); setReason(''); await detail.refetch(); void qc.invalidateQueries({ queryKey: ['commercial-invoices'] }); }
     catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(false); }
   };
-  const excel = async (format: string) => {
+  const excel = async (format: string, copy: 'BUYER' | 'CUSTOMS' = 'BUYER') => {
     try {
-      const r = await api.get(`/commercial-invoices/${id}/export.xlsx`, { params: { format }, responseType: 'blob' });
-      const a = document.createElement('a'); a.href = URL.createObjectURL(r.data); a.download = `${detail.data?.invoice_no ?? 'invoice'}_${format}.xlsx`; a.click(); URL.revokeObjectURL(a.href);
+      const r = await api.get(`/commercial-invoices/${id}/export.xlsx`, { params: { format, copy }, responseType: 'blob' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(r.data); a.download = `${detail.data?.invoice_no ?? 'invoice'}_${format}${copy === 'CUSTOMS' ? '_CUSTOMS' : ''}.xlsx`; a.click(); URL.revokeObjectURL(a.href);
     } catch (e) { toast(errMsg(e, 'Could not download the Excel'), 'error'); }
   };
-  const print = async (format: string) => {
+  const print = async (format: string, copy: 'BUYER' | 'CUSTOMS' = 'BUYER') => {
     try {
-      const d = (await http.get<{ data: any }>(`/commercial-invoices/${id}`, { format })).data;
+      const d = (await http.get<{ data: any }>(`/commercial-invoices/${id}`, { format, copy })).data;
       const prev = document.title;
-      setPrintDoc({ d, format: format === 'IGST' ? 'IGST' : 'BUYER' });
+      setPrintDoc({ d, format: format === 'IGST' ? 'IGST' : 'BUYER', copy });
       // the PDF saved from the print dialog is named after the invoice
-      setTimeout(() => { document.title = `${d.invoice_no} ${format === 'IGST' ? 'IGST' : 'Invoice'}`.replace(/[\\/:*?"<>|]/g, '-'); window.print(); document.title = prev; }, 200);
+      setTimeout(() => { document.title = `${d.invoice_no} ${format === 'IGST' ? 'IGST' : copy === 'CUSTOMS' ? 'Customs copy' : 'Invoice'}`.replace(/[\\/:*?"<>|]/g, '-'); window.print(); document.title = prev; }, 200);
     } catch (e) { toast(errMsg(e), 'error'); }
   };
 
@@ -315,7 +315,7 @@ export function CommercialInvoiceDetailPage() {
       )}
       {dirtyTotals && <p className="mb-3 rounded border border-amber-200 bg-amber-50 px-3 py-1.5 text-[12px] text-amber-800">Not saved: the lines changed — Save before preview / print / Excel.</p>}
 
-      <fieldset disabled={!editable} className="space-y-4" id="ci-form">
+      <fieldset disabled={!editable} className="min-w-0 space-y-4" id="ci-form">
         <Card title="Order, packing lists & format">
           <div className="grid gap-3 p-4 sm:grid-cols-4">
             <Select label="Sales order" required id="ci-so" disabled={!isNew} placeholder="— Select —" options={toOptions(orders.data)} value={v.so_id}
@@ -328,7 +328,7 @@ export function CommercialInvoiceDetailPage() {
               <p className="label">Packing lists on this invoice <span className="font-normal text-slate-400">(confirmed lists of the order; one invoice can carry several POs)</span></p>
               <div className="flex flex-wrap gap-2" id="ci-pls">
                 {!plOptions.length && <span className="text-[12px] text-slate-400">{v.so_id ? 'No packing list for this order — the order quantities are used' : 'Pick the order'}</span>}
-                {plOptions.map((p) => {
+                {[...plOptions, ...extraPls.filter((x) => !plOptions.some((p) => Number(p.id) === Number(x.id)))].map((p) => {
                   const on = v.pl_ids.includes(Number(p.id));
                   const mine = !isNew && Number(p.invoice_id) === Number(id);
                   const ok = p.selectable || mine;
@@ -343,7 +343,9 @@ export function CommercialInvoiceDetailPage() {
                 })}
               </div>
             </div>
-            <div className="flex items-end sm:col-span-4">
+            <div className="flex flex-wrap items-end gap-2 sm:col-span-4">
+              <Select label="Lines" id="ci-line-mode" className="w-72" value={lineMode} onChange={(e) => setLineMode(e.target.value as 'COLOUR' | 'SIZE')}
+                options={[{ value: 'COLOUR', label: 'One line per colour — all sizes, total pieces' }, { value: 'SIZE', label: 'One line per size' }]} />
               <Button variant="secondary" loading={busy} id="ci-fill" disabled={!v.so_id} onClick={() => void fill()}><RefreshCw size={14} />{isNew ? 'Fill from order & packing lists' : 'Fill again (replaces the boxes and lines)'}</Button>
             </div>
           </div>
@@ -353,9 +355,15 @@ export function CommercialInvoiceDetailPage() {
           <Card title="Exporter · invoice · buyer's order">
             <div className="grid gap-3 p-4 sm:grid-cols-2">
               <Textarea className="sm:col-span-2" rows={5} label="Exporter (name, address, GST no — one per line)" required value={v.exporter_details} id="ci-exporter" onChange={(e) => set('exporter_details', e.target.value)} />
-              <Input label="Exporter's Ref." value={v.exporter_ref} placeholder="IEC NO : …" onChange={(e) => set('exporter_ref', e.target.value)} />
+              {/* IEC: one time on the company master (client 24-Oct-2026: "not typed, not even once per invoice") */}
+              <div id="ci-iec">
+                <p className="label">Exporter's Ref. (IEC)</p>
+                {v.exporter_ref
+                  ? <p className="text-[13px] font-semibold">{v.exporter_ref} <button type="button" className="ml-1 text-[11px] font-normal text-brand-700 hover:underline" onClick={() => set('exporter_ref', '')}>use the company master</button></p>
+                  : autoIec ? <p className="text-[13px] font-semibold">{autoIec} <span className="text-[11px] font-normal text-slate-500">from the company master</span></p>
+                    : <p className="text-[12px] text-red-600">No IEC on the company master — set it once under Admin → Companies</p>}
+              </div>
               <Input label="Other Reference(s)" value={v.other_references} onChange={(e) => set('other_references', e.target.value)} />
-              <Textarea className="sm:col-span-2" rows={2} label="Buyer's Order No. & Date (one PO per line)" value={v.buyer_order_ref} onChange={(e) => set('buyer_order_ref', e.target.value)} />
               <Select label="Currency" options={(currencies.data ?? []).map((c) => ({ value: c.id, label: String(c.code) }))} value={v.currency_id} onChange={(e) => set('currency_id', e.target.value)} />
               <Input label={`Exchange rate (₹ per 1 ${cur?.code ?? ''})`} type="number" step="any" value={v.exchange_rate} id="ci-xr" onChange={(e) => set('exchange_rate', e.target.value)} />
               <Select label="GST export type" id="ci-gst-type" value={v.gst_supply_type} placeholder="— Select —" onChange={(e) => set('gst_supply_type', e.target.value)}
@@ -365,11 +373,14 @@ export function CommercialInvoiceDetailPage() {
                 hint="LUT acknowledgement for this financial year" />
             </div>
           </Card>
-          <Card title="Consignee · buyer · ship to">
-            <div className="grid gap-3 p-4 sm:grid-cols-2">
-              <Textarea rows={6} label="Consignee" required value={v.consignee_details} id="ci-consignee" onChange={(e) => set('consignee_details', e.target.value)} />
-              <Textarea rows={6} label="Buyer (if other than consignee)" value={v.buyer_details} onChange={(e) => set('buyer_details', e.target.value)} />
-              <Textarea className="sm:col-span-2" rows={3} label="Ship to (delivery address)" value={v.ship_to_details} onChange={(e) => set('ship_to_details', e.target.value)} />
+          <Card title="Consignee · buyer · delivery address" subtitle="Only the filled boxes are printed — the consignee alone, or all three">
+            <div className="grid gap-3 p-4 sm:grid-cols-3">
+              {([['consignee_details', 'Consignee', true], ['buyer_details', 'Buyer (if other than consignee)', false], ['ship_to_details', 'Delivery address (if other than consignee)', false]] as const).map(([k, lbl, req]) => (
+                <div key={k} className="space-y-1">
+                  <Textarea rows={6} label={lbl} required={req} value={v[k]} id={k === 'consignee_details' ? 'ci-consignee' : `ci-${k}`} onChange={(e) => set(k, e.target.value)} />
+                  {editable && <AddressPicker id={`ci-pick-${k}`} onPick={(t) => set(k, t)} />}
+                </div>
+              ))}
               <Input label="Country of origin of goods" value={v.country_origin_text} onChange={(e) => set('country_origin_text', e.target.value)} />
               <Input label="Country of final destination" value={v.country_dest_text} onChange={(e) => set('country_dest_text', e.target.value)} />
             </div>
@@ -379,7 +390,11 @@ export function CommercialInvoiceDetailPage() {
               <Input label="Pre-carriage by" value={v.pre_carriage_by} onChange={(e) => set('pre_carriage_by', e.target.value)} />
               <Input label="Place of receipt by pre-carrier" value={v.place_of_receipt} onChange={(e) => set('place_of_receipt', e.target.value)} />
               <Input label="Vessel / flight no." value={v.vessel_flight_no} onChange={(e) => set('vessel_flight_no', e.target.value)} />
-              <Input label="Port of loading" value={v.port_of_loading} onChange={(e) => set('port_of_loading', e.target.value)} />
+              <Select label="Port of loading" id="ci-port" value={v.port_of_loading} placeholder="— Port —" onChange={(e) => pickPort(e.target.value, v.transport_mode)}
+                options={[...portNames.map((x) => ({ value: x, label: x })), ...(v.port_of_loading && !portNames.includes(v.port_of_loading) ? [{ value: v.port_of_loading, label: `${v.port_of_loading} (typed — not in the port master)` }] : [])]}
+                hint={(() => { const r = portRow(v.port_of_loading, v.transport_mode); return r?.port_code ? `Port code ${r.port_code}` : 'Add ports under Masters → Ports'; })()} />
+              <Select label="Mode" id="ci-mode" value={v.transport_mode} placeholder="— Mode —" onChange={(e) => pickPort(v.port_of_loading, e.target.value)}
+                options={MODES.map((m) => ({ value: m, label: m === 'SEA' ? 'Sea' : m === 'AIR' ? 'Air' : 'Road' }))} />
               <Input label="Port of discharge" value={v.port_of_discharge} onChange={(e) => set('port_of_discharge', e.target.value)} />
               <Input label="Final destination" value={v.final_destination} onChange={(e) => set('final_destination', e.target.value)} />
               <Input className="sm:col-span-3" label="Terms of delivery" value={v.terms_of_delivery} onChange={(e) => set('terms_of_delivery', e.target.value)} />
@@ -400,6 +415,9 @@ export function CommercialInvoiceDetailPage() {
 
         <Card title="Lines" subtitle="Goods: one line per order / style / colour (shipped quantity from the packing lists). Charges (IGST layout): hanger cost and the like — their quantity is printed beside the item references so the quantity total stays the goods quantity."
           actions={editable && <div className="flex gap-2">
+            <Button size="sm" variant="secondary" id="ci-add-order" disabled={!v.so_id} onClick={() => setAddOrder(true)}><Plus size={13} />From an order</Button>
+            <Button size="sm" variant="secondary" id="ci-merge-sizes" title="Size lines of the same order / style / colour / rate back into one line with all sizes"
+              onClick={() => set('lines', mergeSizes(v.lines))}>Merge size lines</Button>
             <Button size="sm" variant="secondary" onClick={() => set('lines', [...v.lines, { ...EMPTY_LINE }])}><Plus size={13} />Goods line</Button>
             <Button size="sm" variant="secondary" id="ci-add-charge" onClick={() => set('lines', [...v.lines, { ...EMPTY_LINE, line_kind: 'CHARGE', desc_auto: 0, description: 'HANGER COST', hsn_code: '39269069', qty: totals.qty || '' }])}><Plus size={13} />Charge</Button>
           </div>}>
@@ -407,7 +425,7 @@ export function CommercialInvoiceDetailPage() {
             <table className="w-full" id="ci-lines">
               <thead><tr><th className="th w-12">S.NO</th><th className="th">Order No. (buyer PO)</th><th className="th">Style/Ref No.</th><th className="th">HS Code</th>
                 <th className="th">Description of Goods</th><th className="th">Colour</th><th className="th">Size</th><th className="th text-right">Quantity</th><th className="th">UQC</th>
-                <th className="th text-right">Rate</th><th className="th text-right">Value</th>{igst && <th className="th text-right">IGST %</th>}<th className="th" /></tr></thead>
+                <th className="th text-right">Rate</th><th className="th text-right">Value</th>{igstOn && <th className="th text-right">IGST %</th>}<th className="th" /></tr></thead>
               <tbody>
                 {!v.lines.length && <tr><td colSpan={13} className="td py-6 text-center text-slate-400">No lines — fill from the order or add a line</td></tr>}
                 {v.lines.map((l: any, i: number) => {
@@ -452,19 +470,27 @@ export function CommercialInvoiceDetailPage() {
                         </div>
                       </td>
                       <td className="td">{l.line_kind === 'CHARGE' ? null : inp('colour', 'w-28')}</td>
-                      <td className="td">{l.line_kind === 'CHARGE' ? null : inp('size_text', 'w-24')}</td>
+                      <td className="td">{l.line_kind === 'CHARGE' ? null : <>
+                        {inp('size_text', 'w-24')}
+                        {Array.isArray(l.size_qty) && l.size_qty.length > 0 && (
+                          <div className="mt-0.5 w-24 text-[10.5px] leading-tight text-slate-500" data-line={`${i}-sizes`}>
+                            {l.size_qty.map((x: any) => `${x.size}:${x.qty}`).join(' ')}
+                            {l.size_qty.length > 1 && editable && <button type="button" className="block text-brand-700 hover:underline" data-line={`${i}-split`}
+                              onClick={() => setV((o: any) => ({ ...o, lines: o.lines.flatMap((y: any, j: number) => (j === i ? splitBySize(y) : [y])) }))}>split by size</button>}
+                          </div>)}
+                      </>}</td>
                       <td className="td text-right">{inp('qty', 'w-24', 'number')}</td>
                       <td className="td"><select className="input h-8 w-20 py-0 text-[12px]" value={l.uqc ?? ''} data-line={`${i}-uqc`} onChange={(e) => setLine(i, 'uqc', e.target.value)}>{UQC.map((x) => <option key={x}>{x}</option>)}</select></td>
                       <td className="td text-right">{inp('unit_price', 'w-20', 'number')}</td>
                       <td className="td text-right tabular-nums font-semibold">{fmtDecimal(totals.amt(l), 2)}</td>
-                      {igst && <td className="td text-right">{inp('gst_rate', 'w-16', 'number')}</td>}
+                      {igstOn && <td className="td text-right">{inp('gst_rate', 'w-16', 'number')}</td>}
                       <td className="td">{editable && <button type="button" className="text-red-500" onClick={() => set('lines', v.lines.filter((_: any, j: number) => j !== i))}>×</button>}</td>
                     </tr>
                   );
                 })}
               </tbody>
               <tfoot><tr className="bg-slate-50 font-semibold"><td className="td" colSpan={7}>Total {cur?.code ?? ''}</td><td className="td text-right tabular-nums" id="ci-total-qty">{fmtNumber(totals.qty)}</td><td className="td" /><td className="td" />
-                <td className="td text-right tabular-nums" id="ci-total-amount">{fmtDecimal(totals.total, 2)}</td>{igst && <td className="td" />}<td className="td" /></tr></tfoot>
+                <td className="td text-right tabular-nums" id="ci-total-amount">{fmtDecimal(totals.total, 2)}</td>{igstOn && <td className="td" />}<td className="td" /></tr></tfoot>
             </table>
           </div>
         </Card>
@@ -491,31 +517,64 @@ export function CommercialInvoiceDetailPage() {
               <Input label="Net weight (kg)" type="number" step="any" value={v.net_weight_kg} onChange={(e) => set('net_weight_kg', e.target.value)} />
               <Input label="Gross weight (kg)" type="number" step="any" value={v.gross_weight_kg} onChange={(e) => set('gross_weight_kg', e.target.value)} />
               <div />
-              <Input className="sm:col-span-3" label="Quantity in words" value={v.qty_words} placeholder={detail.data?.words?.qty ?? 'Worked out from the quantity'} onChange={(e) => set('qty_words', e.target.value)} hint="Blank = worked out" />
-              <Input className="sm:col-span-3" label="Amount in words" value={v.amount_words} placeholder={detail.data?.words?.amount ?? 'Worked out from the total'} onChange={(e) => set('amount_words', e.target.value)} hint="Blank = worked out" />
+              {/* words follow the lines and the currency as they are typed (client 24-Oct-2026) */}
+              {([['qty', 'qty_words', 'Quantity in words', qtyWords(totals.qty, v.qty_unit || 'PCS')], ['amount', 'amount_words', 'Amount in words', amountWords(totals.total, String(cur?.code ?? ''))]] as const).map(([t, k, lbl, auto]) => (
+                <div key={k} className="sm:col-span-3" id={`ci-${k}`}>
+                  <p className="label flex items-center gap-2">{lbl}
+                    {editable && <button type="button" className="text-[11px] font-normal text-brand-700 hover:underline" onClick={() => { setTypeOwn((o) => ({ ...o, [t]: !o[t] })); if (!typeOwn[t]) set(k, v[k] || auto); }}>
+                      {typeOwn[t] ? 'use the automatic words' : 'type instead'}</button>}</p>
+                  {typeOwn[t] ? <Input value={v[k]} onChange={(e) => set(k, e.target.value)} /> : <p className="rounded border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[12.5px] font-semibold" data-auto={k}>{auto}</p>}
+                </div>
+              ))}
             </div>
           </Card>
-          <Card title={igst ? 'IGST layout — GST and note' : 'Bank details & REX declaration'}>
+          <Card title="IGST" subtitle={igstOn ? 'Export on payment of IGST — the IGST is worked out from the INR value' : 'Under LUT no IGST is charged — choose "On payment of IGST" above to enter the IGST %'}>
+            <div className="grid gap-3 p-4 sm:grid-cols-2" id="ci-igst">
+              <Input label="IGST % on goods" type="number" step="any" id="ci-goods-gst" disabled={!igstOn} value={v.goods_gst_rate} onChange={(e) => set('goods_gst_rate', e.target.value)}
+                hint="Apparel: 5 % up to ₹2,500 a piece, 18 % above — a line can have its own %" />
+              <Input label="IGST % on charges" type="number" step="any" disabled={!igstOn} value={v.charges_gst_rate} onChange={(e) => set('charges_gst_rate', e.target.value)} />
+              {igstOn && (
+                <div className="sm:col-span-2" id="ci-igst-summary">
+                  <table className="w-full text-[12px]"><thead><tr><th className="th">IGST %</th><th className="th text-right">Taxable value ₹ (@ {fmtDecimal(totals.xr, 4)})</th><th className="th text-right">IGST ₹</th></tr></thead>
+                    <tbody>{totals.byRate.map(([rate, x]) => <tr key={rate}><td className="td">{rate}%</td><td className="td text-right tabular-nums">{fmtDecimal(x.taxable, 2)}</td><td className="td text-right tabular-nums font-semibold" data-igst-rate={rate}>{fmtDecimal(x.igst, 2)}</td></tr>)}</tbody>
+                    <tfoot><tr className="bg-slate-50 font-semibold"><td className="td">Total</td><td className="td text-right tabular-nums">{fmtDecimal(totals.taxable, 2)}</td><td className="td text-right tabular-nums" id="ci-igst-total">{fmtDecimal(totals.igstTotal, 2)}</td></tr></tfoot></table>
+                  {!(totals.xr > 0) && <p className="mt-1 text-[11.5px] text-red-600">Enter the exchange rate to work out the IGST</p>}
+                </div>)}
+              {igst && <Textarea className="sm:col-span-2" rows={2} label="Note (import bond …)" value={v.footer_note} onChange={(e) => set('footer_note', e.target.value)} />}
+            </div>
+          </Card>
+          <Card title="Our bank details & REX declaration" subtitle="From the masters — printed on the buyer copy; the customs copy leaves the REX declaration out">
             <div className="grid gap-3 p-4 sm:grid-cols-2">
-              {!igst && <>
-                <Textarea rows={6} label="Our bank details (one per line)" value={v.bank_details} onChange={(e) => set('bank_details', e.target.value)} />
-                <Textarea rows={6} label="REX declaration" value={v.rex_declaration} onChange={(e) => set('rex_declaration', e.target.value)} />
-              </>}
-              {igst && <>
-                <Input label="GST % on goods" type="number" step="any" id="ci-goods-gst" value={v.goods_gst_rate} onChange={(e) => set('goods_gst_rate', e.target.value)} />
-                <Input label="GST % on charges" type="number" step="any" value={v.charges_gst_rate} onChange={(e) => set('charges_gst_rate', e.target.value)} />
-                <Textarea className="sm:col-span-2" rows={2} label="Note (import bond …)" value={v.footer_note} onChange={(e) => set('footer_note', e.target.value)} />
-                {T && <div className="text-[12px] sm:col-span-2" id="ci-igst-summary">FOB {cur?.code} {fmtDecimal(T.goods_amount, 2)} → ₹ {fmtDecimal(T.goods_inr, 2)} · GST {v.goods_gst_rate}% ₹ {fmtDecimal(T.goods_gst, 2)}
-                  {T.charges_amount ? ` · charges ₹ ${fmtDecimal(T.charges_inr, 2)} · GST ${v.charges_gst_rate}% ₹ ${fmtDecimal(T.charges_gst, 2)}` : ''}</div>}
-              </>}
+              <div className="space-y-1.5" id="ci-bank">
+                <Select label="Our bank account" id="ci-bank-account" value={v.bank_account_id || (bankRow?.id ?? '')} placeholder="— Bank account —" onChange={(e) => set('bank_account_id', e.target.value)}
+                  options={(banks.data ?? []).map((b) => ({ value: b.id, label: String(b.label) }))} hint={(banks.data ?? []).length ? undefined : 'Add our bank account under Masters → Our Bank Accounts'} />
+                {typeOwn.bank ? <Textarea rows={6} value={v.bank_details} onChange={(e) => set('bank_details', e.target.value)} />
+                  : <pre className="whitespace-pre-wrap rounded border border-slate-200 bg-slate-50 px-2.5 py-1.5 font-sans text-[12px]" data-auto="bank">{autoBank || '—'}</pre>}
+                {editable && <button type="button" className="text-[11px] text-brand-700 hover:underline" onClick={() => { setTypeOwn((o) => ({ ...o, bank: !o.bank })); if (!typeOwn.bank) set('bank_details', v.bank_details || autoBank); }}>
+                  {typeOwn.bank ? 'use the bank master' : 'type instead'}</button>}
+              </div>
+              <div className="space-y-1.5" id="ci-rex">
+                <p className="label">REX declaration</p>
+                {typeOwn.rex ? <Textarea rows={7} value={v.rex_declaration} onChange={(e) => set('rex_declaration', e.target.value)} />
+                  : <p className="rounded border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11.5px]" data-auto="rex">{autoRex || <span className="text-red-600">No REX no on the company master — set it once under Admin → Companies</span>}</p>}
+                {editable && <button type="button" className="text-[11px] text-brand-700 hover:underline" onClick={() => { setTypeOwn((o) => ({ ...o, rex: !o.rex })); if (!typeOwn.rex) set('rex_declaration', v.rex_declaration || autoRex); }}>
+                  {typeOwn.rex ? 'use the standard REX wording' : 'type instead'}</button>}
+              </div>
               <Textarea className="sm:col-span-2" rows={3} label="Declaration" value={v.declaration} onChange={(e) => set('declaration', e.target.value)} />
             </div>
           </Card>
         </div>
       </fieldset>
 
-      {preview && <PreviewModal id={Number(id)} format={preview} onFormat={setPreview} onClose={() => setPreview(null)} onPrint={(f) => { setPreview(null); void print(f); }} onExcel={(f) => void excel(f)} />}
-      {printDoc && <InvoicePrintPortal d={printDoc.d} format={printDoc.format} />}
+      {preview && <PreviewModal id={Number(id)} format={preview} onFormat={setPreview} onClose={() => setPreview(null)} onPrint={(f, c) => { setPreview(null); void print(f, c); }} onExcel={(f, c) => void excel(f, c)} />}
+      {printDoc && <InvoicePrintPortal d={printDoc.d} format={printDoc.format} copy={printDoc.copy} />}
+      {addOrder && <AddFromOrder buyerId={orders.data?.find((o) => String(o.id) === String(v.so_id))?.buyer_id as number | undefined} currentSo={Number(v.so_id)} invoiceId={isNew ? null : Number(id)}
+        takenPls={v.pl_ids} onClose={() => setAddOrder(false)}
+        onAdd={(lines, pls) => {
+          setV((o: any) => ({ ...o, lines: [...o.lines, ...lines], pl_ids: [...new Set([...o.pl_ids, ...pls.map((p) => Number(p.id))])] }));
+          setExtraPls((x) => [...x, ...pls.map((p) => ({ ...p, selectable: true }))]);
+          setAddOrder(false); toast(`${lines.length} line(s) added`);
+        }} />}
       <ConfirmDialog open={confirm === 'delete'} title="Delete invoice" message={`Delete ${detail.data?.invoice_no ?? ''}? Its packing lists are released.`} busy={busy} onCancel={() => setConfirm(null)}
         onConfirm={async () => { setBusy(true); try { await http.del(`/commercial-invoices/${id}`); toast('Invoice deleted'); void qc.invalidateQueries({ queryKey: ['commercial-invoices'] }); nav('/export/invoices'); } catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(false); } }} />
       <Modal open={confirm === 'reopen'} onClose={() => setConfirm(null)} title="Reopen the invoice" size="sm"
@@ -526,8 +585,11 @@ export function CommercialInvoiceDetailPage() {
   );
 }
 
-function PreviewModal({ id, format, onFormat, onClose, onPrint, onExcel }: { id: number; format: 'BUYER' | 'IGST'; onFormat: (f: 'BUYER' | 'IGST') => void; onClose: () => void; onPrint: (f: string) => void; onExcel: (f: string) => void }) {
-  const q = useQuery({ queryKey: ['commercial-invoice-layout', id, format], queryFn: async () => (await http.get<{ data: any }>(`/commercial-invoices/${id}`, { format })).data });
+function PreviewModal({ id, format, onFormat, onClose, onPrint, onExcel }: { id: number; format: 'BUYER' | 'IGST'; onFormat: (f: 'BUYER' | 'IGST') => void; onClose: () => void;
+  onPrint: (f: string, c: 'BUYER' | 'CUSTOMS') => void; onExcel: (f: string, c: 'BUYER' | 'CUSTOMS') => void }) {
+  // buyer copy: bank + REX declaration; customs (port) copy: without the REX declaration (client 24-Oct-2026)
+  const [copy, setCopy] = useState<'BUYER' | 'CUSTOMS'>('BUYER');
+  const q = useQuery({ queryKey: ['commercial-invoice-layout', id, format, copy], queryFn: async () => (await http.get<{ data: any }>(`/commercial-invoices/${id}`, { format, copy })).data });
   // the printed document; "Excel sheet" shows the FK-087 cell grid the Excel download carries
   const [sheet, setSheet] = useState(false);
   const tab = (on: boolean) => clsx('rounded px-2.5 py-1 text-[12px]', on ? 'bg-brand-600 text-white' : 'bg-slate-100');
@@ -535,19 +597,24 @@ function PreviewModal({ id, format, onFormat, onClose, onPrint, onExcel }: { id:
     <Modal open onClose={onClose} title="Invoice preview" subtitle={sheet ? 'Excel sheet — FK-087 layout' : 'As printed (A4)'} size="full"
       footerStart={<div className="flex flex-wrap gap-1">{(['BUYER', 'IGST'] as const).map((f) => <button key={f} className={tab(f === format)} onClick={() => onFormat(f)}>{f === 'BUYER' ? 'Buyer invoice' : 'IGST invoice'}</button>)}
         <span className="mx-1 border-l border-slate-200" />
+        {format === 'BUYER' && <>
+          <button className={tab(copy === 'BUYER')} id="ci-copy-buyer" onClick={() => setCopy('BUYER')}>Buyer copy</button>
+          <button className={tab(copy === 'CUSTOMS')} id="ci-copy-customs" onClick={() => setCopy('CUSTOMS')}>Customs copy</button>
+          <span className="mx-1 border-l border-slate-200" />
+        </>}
         <button className={tab(!sheet)} id="ci-preview-print-view" onClick={() => setSheet(false)}>Print view</button>
         <button className={tab(sheet)} id="ci-preview-sheet-view" onClick={() => setSheet(true)}>Excel sheet</button></div>}
-      footer={<><Button variant="secondary" onClick={() => onExcel(format)}><Download size={14} />Excel</Button><Button onClick={() => onPrint(format)}><Printer size={14} />Print</Button></>}>
+      footer={<><Button variant="secondary" onClick={() => onExcel(format, copy)}><Download size={14} />Excel</Button><Button id="ci-preview-print" onClick={() => onPrint(format, copy)}><Printer size={14} />Print</Button></>}>
       {q.isLoading ? <LoadingBlock rows={10} /> : q.data && (
         <div className="mx-auto max-w-[900px] bg-white p-4 shadow-sm ring-1 ring-slate-200" id="ci-preview-doc">
-          {sheet ? <PackingListLayout layout={q.data.layout} /> : <InvoiceDocument d={q.data} format={format} />}
+          {sheet ? <PackingListLayout layout={q.data.layout} /> : <InvoiceDocument d={q.data} format={format} copy={copy} />}
         </div>
       )}
     </Modal>
   );
 }
 
-function InvoicePrintPortal({ d, format }: { d: any; format: 'BUYER' | 'IGST' }) {
+function InvoicePrintPortal({ d, format, copy }: { d: any; format: 'BUYER' | 'IGST'; copy: 'BUYER' | 'CUSTOMS' }) {
   return createPortal(
     <div id="ci-print-root">
       <style>{`
@@ -559,9 +626,89 @@ function InvoicePrintPortal({ d, format }: { d: any; format: 'BUYER' | 'IGST' })
           #ci-print-root { display: block !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
       `}</style>
-      <InvoiceDocument d={d} format={format} />
+      <InvoiceDocument d={d} format={format} copy={copy} />
     </div>,
     document.body,
   );
 }
 
+
+/** Partner + address → the address block (consignee / buyer / delivery address are picked, not typed). */
+function AddressPicker({ id, onPick }: { id: string; onPick: (text: string) => void }) {
+  const parties = useLookup('parties');
+  const [party, setParty] = useState('');
+  const addrs = useQuery({ queryKey: ['ci-party-addresses', party], enabled: !!party,
+    queryFn: async () => (await http.get<{ data: { id: number | null; label: string; text: string }[] }>('/commercial-invoices/party-addresses', { party_id: party })).data });
+  return (
+    <div className="flex gap-1" id={id}>
+      <select className="input h-8 min-w-0 flex-1 py-0 text-[12px]" value={party} onChange={(e) => setParty(e.target.value)} data-pick="party">
+        <option value="">Pick from a partner…</option>{(parties.data ?? []).map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</select>
+      {party && <select className="input h-8 min-w-0 flex-1 py-0 text-[12px]" value="" data-pick="address"
+        onChange={(e) => { const a = (addrs.data ?? [])[Number(e.target.value)]; if (a) onPick(a.text); }}>
+        <option value="">{addrs.isLoading ? 'Loading…' : 'Address…'}</option>{(addrs.data ?? []).map((a, i) => <option key={i} value={i}>{a.label}</option>)}</select>}
+    </div>
+  );
+}
+
+/**
+ * Lines from an order of the buyer (client 24-Oct-2026: "give the order no — the colours and sizes come from it; we choose
+ * all sizes on one line with the total pieces, or a line per size"). The order's confirmed packing lists give the shipped
+ * quantity; without one the order quantity is used.
+ */
+function AddFromOrder({ buyerId, currentSo, invoiceId, takenPls, onClose, onAdd }: { buyerId?: number; currentSo: number; invoiceId: number | null; takenPls: number[];
+  onClose: () => void; onAdd: (lines: any[], pls: any[]) => void }) {
+  const orders = useLookup('sales-orders');
+  const [so, setSo] = useState('');
+  const [plIds, setPlIds] = useState<number[] | null>(null);
+  const [pick, setPick] = useState<Record<number, boolean>>({});
+  const [mode, setMode] = useState<'COLOUR' | 'SIZE'>('COLOUR');
+  const pre = useQuery({ queryKey: ['ci-add-order', so, plIds?.join(',')], enabled: !!so,
+    queryFn: async () => (await http.get<{ data: any }>('/commercial-invoices/prefill', { so_id: so, pl_ids: plIds?.join(',') || undefined })).data });
+  const opts = (orders.data ?? []).filter((o) => !buyerId || Number(o.buyer_id) === Number(buyerId));
+  const lines = ((pre.data?.lines ?? []) as any[]).filter((l) => l.line_kind !== 'CHARGE');
+  const chosen = lines.filter((_, i) => pick[i] ?? true);
+  const pls = ((pre.data?.packing_lists ?? []) as any[]).filter((p) => (pre.data?.pl_ids ?? []).includes(Number(p.id)));
+  const conflict = pls.filter((p) => takenPls.includes(Number(p.id)));
+  return (
+    <Modal open onClose={onClose} title="Add lines from an order" subtitle="Colours and sizes come from the order — choose all sizes on one line or a line per size" size="xl"
+      footer={<><button className="btn-secondary" onClick={onClose}>Cancel</button>
+        <Button id="ci-add-order-ok" disabled={!chosen.length || !!conflict.length} onClick={() => onAdd(
+          (mode === 'SIZE' ? chosen.flatMap(splitBySize) : chosen).map((l) => ({ ...EMPTY_LINE, ...Object.fromEntries(Object.entries(l).map(([k, y]) => [k, y ?? ''])), size_qty: Array.isArray(l.size_qty) && l.size_qty.length ? l.size_qty : null })),
+          pls.filter((p) => !takenPls.includes(Number(p.id))))}>Add {mode === 'SIZE' ? chosen.reduce((t, l) => t + Math.max(1, (l.size_qty ?? []).length), 0) : chosen.length} line(s)</Button></>}>
+      <div className="space-y-3" id="ci-add-order-modal">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Select label="Order (same buyer)" id="ci-add-order-so" value={so} placeholder="— Order —" onChange={(e) => { setSo(e.target.value); setPlIds(null); setPick({}); }}
+            options={opts.map((o) => ({ value: o.id, label: `${o.label}${Number(o.id) === currentSo ? ' (this invoice\'s order)' : ''}` }))} />
+          <Select label="Lines" id="ci-add-order-mode" value={mode} onChange={(e) => setMode(e.target.value as 'COLOUR' | 'SIZE')}
+            options={[{ value: 'COLOUR', label: 'One line per colour — all sizes, total pieces' }, { value: 'SIZE', label: 'One line per size' }]} />
+        </div>
+        {so && pre.isLoading && <LoadingBlock rows={4} />}
+        {pre.error && <p className="text-[12px] text-red-600">{errMsg(pre.error)}</p>}
+        {pre.data && <>
+          <div className="flex flex-wrap gap-2 text-[12px]">
+            <span className="text-slate-500">Packing lists:</span>
+            {!(pre.data.packing_lists ?? []).length && <span className="text-slate-400">none — order quantities</span>}
+            {(pre.data.packing_lists ?? []).map((p: any) => {
+              const mine = invoiceId != null && Number(p.invoice_id) === invoiceId;
+              const ok = p.selectable || mine;
+              const on = (plIds ?? pre.data.pl_ids).includes(Number(p.id));
+              return <label key={p.id} className={clsx('flex items-center gap-1 rounded border px-2 py-0.5', on ? 'border-brand-400 bg-brand-50' : 'border-slate-200', !ok && 'opacity-50')}>
+                <input type="checkbox" disabled={!ok} checked={on} onChange={(e) => { const cur = plIds ?? pre.data.pl_ids; setPlIds(e.target.checked ? [...cur, Number(p.id)] : cur.filter((x: number) => x !== Number(p.id))); }} />
+                {p.pl_no} · {fmtNumber(p.total_qty)} pcs{p.linked_invoice_no && !mine ? ` · on ${p.linked_invoice_no}` : ''}</label>;
+            })}
+          </div>
+          {conflict.length > 0 && <p className="text-[12px] text-amber-700">{conflict.map((p) => p.pl_no).join(', ')} already on this invoice — untick it, or add the lines from the main fill.</p>}
+          <table className="w-full text-[12px]">
+            <thead><tr><th className="th w-8" /><th className="th">Order No.</th><th className="th">Style / Ref</th><th className="th">Colour</th><th className="th">Sizes</th><th className="th text-right">Qty</th><th className="th text-right">Rate</th></tr></thead>
+            <tbody>{lines.map((l, i) => (
+              <tr key={i} data-add-line={i}><td className="td"><input type="checkbox" checked={pick[i] ?? true} onChange={(e) => setPick((x) => ({ ...x, [i]: e.target.checked }))} /></td>
+                <td className="td">{l.order_no || <span className="text-amber-700">no buyer PO</span>}</td><td className="td">{l.style_ref}</td><td className="td">{l.colour}</td>
+                <td className="td">{(l.size_qty ?? []).map((x: any) => `${x.size}:${x.qty}`).join('  ') || l.size_text}</td>
+                <td className="td text-right tabular-nums">{fmtNumber(l.qty)}</td><td className="td text-right tabular-nums">{fmtDecimal(l.unit_price, 2)}</td></tr>))}
+              {!lines.length && <tr><td className="td py-4 text-center text-slate-400" colSpan={7}>Nothing to invoice on this order</td></tr>}</tbody>
+          </table>
+        </>}
+      </div>
+    </Modal>
+  );
+}

@@ -113,6 +113,7 @@ SELECT id, 'EXPORT_BENEFIT_TOLERANCE', '1', 'Export benefits: ₹ tolerance for 
 SET @x = (SELECT DATA_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_export_incentive' AND COLUMN_NAME='incentive_type');
 SET @s = IF(@x = 'enum', 'ALTER TABLE trx_export_incentive MODIFY incentive_type VARCHAR(40) NOT NULL', 'SELECT 1');
 PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+UPDATE trx_export_incentive SET status = 'PENDING' WHERE status IS NULL;   -- the old ENUM allowed NULL; the VARCHAR is NOT NULL
 SET @x = (SELECT DATA_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_export_incentive' AND COLUMN_NAME='status');
 SET @s = IF(@x = 'enum', 'ALTER TABLE trx_export_incentive MODIFY status VARCHAR(20) NOT NULL DEFAULT ''PENDING'' COMMENT ''Legacy summary: PENDING / CLAIMED / PARTIAL / CREDITED / SHORT_CLOSED / REJECTED / NOT_APPLICABLE''', 'SELECT 1');
 PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;

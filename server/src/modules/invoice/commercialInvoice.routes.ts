@@ -306,7 +306,8 @@ async function prefill(cid: number, soId: number, plIds: number[] | null, format
     packages_text: cartons ? `${cartons}  CTNS\n${cartons}  PACKAGES` : null,
     goods_heading: last?.goods_heading ?? null,
     item_ref_label: last?.item_ref_label ?? (/COOP/i.test(buyerShort) ? 'COOP ID NO' : 'BUYER ITEM NO'),
-    qty_unit: last?.qty_unit ?? 'PCS', rate_basis: last?.rate_basis ?? `FOB ${so.currency_code}`,
+    // the rate caption of the buyer's last invoice only when it is in this order's currency
+    qty_unit: last?.qty_unit ?? 'PCS', rate_basis: last?.rate_basis && String(last.rate_basis).includes(String(so.currency_code)) ? last.rate_basis : `${so.incoterm || 'FOB'} ${so.currency_code}`,
     total_cartons: cartons || null, total_pcs: pcs || null, total_pcs_unit: last?.total_pcs_unit ?? 'PCS',
     net_weight_kg: pls.length ? r2(pls.reduce((t, p) => t + n(p.net_weight_kg), 0)) : null,
     gross_weight_kg: pls.length ? r2(pls.reduce((t, p) => t + n(p.gross_weight_kg), 0)) : null,
@@ -392,6 +393,11 @@ async function validate(tx: Tx, cid: number, b: InvIn, invoiceId: number | null)
   if (b.port_loading_id) {
     port = await txQueryOne<any>(tx, `SELECT id, port_name, mode, port_code FROM mst_port WHERE id = ? AND company_id = ?`, [b.port_loading_id, cid]);
     if (!port) throw BadRequest('Port of loading not found in the port master', [{ field: 'port_loading_id', message: 'Pick a port' }]);
+    // a mode other than the port row's: the same port's row for that mode (its code), else the port with the chosen mode
+    if (b.transport_mode && port.mode && port.mode !== b.transport_mode) {
+      port = (await txQueryOne<any>(tx, `SELECT id, port_name, mode, port_code FROM mst_port WHERE company_id = ? AND port_name = ? AND (mode = ? OR mode IS NULL) AND is_active = 1
+          ORDER BY mode IS NULL LIMIT 1`, [cid, port.port_name, b.transport_mode])) ?? { ...port, id: null, port_code: null };
+    }
   }
   if (b.bank_account_id && !(await txQueryOne(tx, `SELECT id FROM mst_company_bank_account WHERE id = ? AND company_id = ?`, [b.bank_account_id, cid]))) {
     throw BadRequest('Bank account not found', [{ field: 'bank_account_id', message: 'Pick our bank account' }]);
@@ -433,7 +439,7 @@ async function writeInvoice(tx: Tx, req: Request, b: InvIn, id: number | null) {
   for (const k of HEADER_TEXT) head[k] = (b as any)[k] ?? null;
   head.qty_unit = b.qty_unit;
   // the port of the master: its name on the invoice, its mode unless chosen
-  if (v.port) { head.port_of_loading = v.port.port_name; head.transport_mode = b.transport_mode ?? v.port.mode ?? null; }
+  if (v.port) { head.port_of_loading = v.port.port_name; head.port_loading_id = v.port.id; head.transport_mode = b.transport_mode ?? v.port.mode ?? null; }
   let invoiceId = id;
   if (id == null) {
     let no = b.invoice_no?.trim() || null;

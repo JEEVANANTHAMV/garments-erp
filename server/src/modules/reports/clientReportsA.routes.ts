@@ -10,6 +10,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { query } from '../../config/db.js';
+import { ensureFresh } from '../invoice/exportBenefitEngine.js';
 import { ah } from '../../core/asyncHandler.js';
 import { requirePermission } from '../../middleware/auth.js';
 
@@ -265,6 +266,7 @@ clientReportsARouter.get('/budget-vs-actuals', VIEW, ah(async (req, res) => {
      ORDER BY so.so_date, so.so_no`, params);
   const ids = inList(sos.map((s) => Number(s.so_id)));
 
+  await ensureFresh(cid);   // export benefit balances of claims made before migration 144
   const [budget, actual, inv, cut, ship, xr, smp, incv] = await Promise.all([
     query<any>(`
       SELECT sol.so_id, SUM(sol.order_qty) AS costed_qty, MAX(pc.currency_id) AS cost_currency_id, MAX(pc.cost_currency) AS cost_currency,
@@ -318,16 +320,30 @@ clientReportsARouter.get('/budget-vs-actuals', VIEW, ah(async (req, res) => {
         FROM trx_sample_alloc_line l JOIN trx_sample_alloc_batch b ON b.id = l.batch_id JOIN trx_sample s ON s.id = b.sample_id
        WHERE b.company_id = ? AND l.so_id IN (?) AND l.status = 'ACTIVE' AND b.status IN ('POSTED','PARTIALLY_REVERSED')
        GROUP BY l.so_id`, [cid, ids]),
-    // export incentives entered on the order's shipping bills (drawback, RoDTEP, RoSCTL) — income of the order:
-    // the claim while it is open, what was received once it is closed (short-closed balance is not income)
+    // export benefits of the order's invoices — each scheme's order-profit policy decides what counts (no double count):
+    // EXCLUDE (e.g. IGST refund — a tax refund, not income) · ACCRUE_BASIS (basis while open, settled value once closed) ·
+    // REALISED_ONLY (cash + sale proceeds + adjusted + scrip utilised; held scrip and sold scrip face value never added) ·
+    // APPROVED_ONLY (approved amount while open, settled value once closed). Not-applicable and rejected claims count 0.
     query<any>(`
-      SELECT ci.so_id, SUM(IF(x.status IN ('CREDITED','SHORT_CLOSED'), x.received_amount, x.claim_amount)) AS amount, SUM(x.received_amount) AS received
-        FROM trx_export_incentive x JOIN trx_commercial_invoice ci ON ci.id = x.invoice_id
-       WHERE x.company_id = ? AND ci.so_id IN (?) AND x.incentive_type IN ('DUTY_DRAWBACK','RODTEP','ROSCTL') AND x.status <> 'REJECTED'
-       GROUP BY ci.so_id`, [cid, ids]),
+      SELECT ci.so_id, x.basis_amount, x.approved_amount, x.cash_received, x.sale_proceeds, x.adjusted_amount, x.scrip_issued, x.scrip_utilised, x.scrip_available, x.pending_amount,
+             x.benefit_status, x.claim_stage, s.profitability_policy
+        FROM trx_export_incentive x JOIN mst_export_benefit_scheme s ON s.id = x.scheme_id JOIN trx_commercial_invoice ci ON ci.id = x.invoice_id
+       WHERE x.company_id = ? AND ci.so_id IN (?) AND x.applicability = 'APPLICABLE' AND x.claim_stage <> 'REJECTED' AND s.profitability_policy <> 'EXCLUDE'`, [cid, ids]),
   ]);
   const m = <T extends { so_id: any }>(rows: T[]) => new Map(rows.map((r) => [Number(r.so_id), r]));
-  const B = m(budget), A = m(actual), I = m(inv), C = m(cut), S = m(ship), SM = m(smp), INC = m(incv);
+  const incAgg = new Map<number, { so_id: number; amount: number; cash: number; scrip_held: number }>();
+  for (const x of incv) {
+    const settled = n(x.cash_received) + n(x.adjusted_amount) + n(x.scrip_issued);
+    const open = n(x.pending_amount) > 0 && x.claim_stage !== 'SHORT_CLOSED';
+    const amt = x.profitability_policy === 'REALISED_ONLY' ? n(x.cash_received) + n(x.sale_proceeds) + n(x.adjusted_amount) + n(x.scrip_utilised)
+      : x.profitability_policy === 'APPROVED_ONLY' ? (open ? (x.approved_amount != null ? Math.max(n(x.approved_amount), settled) : 0) : settled)
+        : open ? Math.max(n(x.basis_amount), settled) : settled;
+    const k = Number(x.so_id);
+    const cur = incAgg.get(k) ?? { so_id: k, amount: 0, cash: 0, scrip_held: 0 };
+    cur.amount += amt; cur.cash += n(x.cash_received) + n(x.sale_proceeds); cur.scrip_held += n(x.scrip_available);
+    incAgg.set(k, cur);
+  }
+  const B = m(budget), A = m(actual), I = m(inv), C = m(cut), S = m(ship), SM = m(smp), INC = m([...incAgg.values()]);
   const latestXr = new Map(xr.map((r: any) => [Number(r.from_currency), n(r.rate)]));
 
   type Row = Record<string, any>;
@@ -361,6 +377,8 @@ clientReportsARouter.get('/budget-vs-actuals', VIEW, ah(async (req, res) => {
       sample_dev_budget: null, sample_dev_actual: SM.get(Number(s.so_id)) ? r2(n(SM.get(Number(s.so_id))!.amount)) : null,
       sample_nos: SM.get(Number(s.so_id))?.sample_nos ?? null,
       export_incentive_actual: INC.get(Number(s.so_id)) ? r2(n(INC.get(Number(s.so_id))!.amount)) : null,
+      export_incentive_cash: INC.get(Number(s.so_id)) ? r2(n(INC.get(Number(s.so_id))!.cash)) : null,
+      export_incentive_scrip_held: INC.get(Number(s.so_id)) ? r2(n(INC.get(Number(s.so_id))!.scrip_held)) : null,
     };
     return r;
   });
@@ -404,7 +422,7 @@ clientReportsARouter.get('/budget-vs-actuals', VIEW, ah(async (req, res) => {
     'Actual = production costing sheets of the order\'s production orders (latest approved per production order): Yarn-to-Fab = material less the Trims head; CMT = labour + job work + process; Sew trims = Trims head; Pack trims = packing; Fixed OH = overhead + machine.',
     'Sale value actual and actual exchange rate come from the commercial invoices of the order (value × invoice exchange rate). Blank when not yet invoiced.',
     'Variable OH actual is blank: commission, freight, testing and finance actuals are not posted against orders in the ERP.',
-    'Export incentive actual = drawback + RoDTEP + RoSCTL entered on the order\'s shipping bills (claims, not rejected); added to the actual net profit.',
+    'Export incentive actual = export benefits of the order\'s invoices per each scheme\'s order-profit policy (scheme master); IGST refund excluded; scrip face value is not cash (cash and held scrip shown apart); added to the actual net profit.',
     'Sample dev actual = sample development cost allocated to the order (Samples › Allocation, posted and not reversed). It is an analytical attribution of the posted sample cost ledger — no GL journal, so the sample expense is counted once. Net profit before sample adds it back.',
   ] } });
 }));

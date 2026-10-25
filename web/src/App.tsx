@@ -10,7 +10,7 @@ import Dashboard from './pages/Dashboard';
 import {
   PartiesPage, PartyDetailPage, ProductsPage, YarnsPage, YarnDetailPage, YarnCountsPage, FabricsPage, FabricDetailPage,
   GsmPage, DiasPage, TrimsPage,
-  ColorsPage, DepartmentsPage, WarehousesPage, WarehouseBinsPage, BranchesPage, UnitsPage, SizesPage, BatchesPage,
+  ColorsPage, DepartmentsPage, PortsPage, CompanyBankAccountsPage, WarehousesPage, WarehouseBinsPage, BranchesPage, UnitsPage, SizesPage, BatchesPage,
 } from './pages/masters';
 import { SizeGroupsPage, SizeGroupDetailPage } from './pages/masters/SizeGroups';
 import { StylesPage, StyleDetailPage } from './pages/masters/Styles';
@@ -26,6 +26,7 @@ import { SampleTypesPage } from './pages/samples/SampleTypes';
 import { CommercialInvoicesPage, CommercialInvoiceDetailPage } from './pages/logistics/CommercialInvoices';
 import { ShippingBillsPage, ShippingBillDetailPage } from './pages/logistics/ShippingBills';
 import { ExportIncentivesPage } from './pages/logistics/IncentiveTracker';
+import { BenefitSchemesPage } from './pages/logistics/BenefitSchemes';
 import QuotationDetailPage from './pages/sales/QuotationDetail';
 import PreCostingsPage from './pages/sales/PreCostings';
 import PreCostingDetailPage from './pages/sales/PreCostingDetail';
@@ -99,6 +100,8 @@ import OpeningStockPage from './pages/stores/OpeningStockPage';
 import StockAuditPage from './pages/stores/StockAuditPage';
 import StockDeliveryPage from './pages/stores/StockDeliveryPage';
 import BillTrackerPage from './pages/stores/BillTrackerPage';
+import BillDetailPage from './pages/stores/BillDetailPage';
+import DocumentInwardPage from './pages/stores/DocumentInwardPage';
 import SpecialRequestPage from './pages/stores/SpecialRequestPage';
 import ScrapRejectionPage from './pages/stores/ScrapRejectionPage';
 import YarnSubstitutionPage from './pages/production/YarnSubstitutionPage';
@@ -224,6 +227,8 @@ export default function App() {
                   <Route path="branches" element={<BranchesPage />} />
                   <Route path="units" element={<UnitsPage />} />
                   <Route path="departments" element={<DepartmentsPage />} />
+                  <Route path="ports" element={<PortsPage />} />
+                  <Route path="company-bank-accounts" element={<CompanyBankAccountsPage />} />
                   <Route path="divisions" element={<DivisionsPage />} />
                   <Route path="size-groups" element={<SizeGroupsPage />} />
                   <Route path="sample-types" element={<SampleTypesPage />} />
@@ -268,6 +273,8 @@ export default function App() {
                   <Route path="stock-delivery" element={<StockDeliveryPage key="stock" kind="STOCK" />} />
                   <Route path="general-delivery" element={<StockDeliveryPage key="general" kind="GENERAL" />} />
                   <Route path="bill-tracker" element={<BillTrackerPage />} />
+                  <Route path="bill-tracker/:id" element={<BillDetailPage />} />
+                  <Route path="document-inward" element={<DocumentInwardPage />} />
                   <Route path="special-requests" element={<SpecialRequestPage />} />
                   <Route path="scrap-rejection" element={<ScrapRejectionPage />} />
                 </Route>
@@ -473,6 +480,7 @@ export default function App() {
                   <Route path="shipping-bills/new" element={<ShippingBillDetailPage />} />
                   <Route path="shipping-bills/:id" element={<ShippingBillDetailPage />} />
                   <Route path="incentives" element={<ExportIncentivesPage area="Export" />} />
+                  <Route path="benefit-schemes" element={<BenefitSchemesPage />} />
                   <Route path="shipments" element={<RedirectTo base="/logistics/shipments" />} />
                   <Route path="shipments/:id" element={<RedirectTo base="/logistics/shipments" />} />
                   <Route path="certificates" element={<CertificatesPage />} />

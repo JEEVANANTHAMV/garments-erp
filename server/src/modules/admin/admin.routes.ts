@@ -717,6 +717,7 @@ const companySchema = z.object({
   trade_name: s.nullableStr(200),
   gstin: s.nullableStr(15), pan: s.nullableStr(10),
   iec_code: s.nullableStr(20), cin: s.nullableStr(30),
+  rex_no: s.nullableStr(40),   // REX no — printed in the invoice REX declaration (client 24-Oct-2026)
   base_currency: s.id(), country_id: s.id(),
   address_line1: s.nullableStr(200), address_line2: s.nullableStr(200),
   city: s.nullableStr(80), state: s.nullableStr(80), state_gst_code: s.nullableStr(2),

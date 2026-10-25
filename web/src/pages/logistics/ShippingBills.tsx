@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { IncentiveClaimModal, INC_STATUS } from './IncentiveTracker';
+import { ClaimDrawer, DynamicFields, StatusPill, cleanValues, useBenefitMeta, type Meta } from './benefitShared';
+import { useLookup } from '../../hooks/useLookup';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, FileText, Plus, Save, Trash2, Upload, X } from 'lucide-react';
@@ -54,7 +55,7 @@ export function ShippingBillsPage() {
   );
 }
 
-const FIELDS = ['invoice_id', 'sb_no', 'sb_date', 'port_code', 'mode', 'port_of_loading', 'port_of_discharge', 'country_dest', 'exchange_rate', 'fob_inr', 'freight_inr', 'insurance_inr',
+const FIELDS = ['invoice_id', 'sb_no', 'sb_date', 'port_code', 'port_id', 'mode', 'port_of_loading', 'port_of_discharge', 'country_dest', 'exchange_rate', 'fob_inr', 'freight_inr', 'insurance_inr',
   'drawback_amount', 'igst_value', 'igst_amount', 'rodtep_amount', 'rosctl_amount', 'leo_no', 'leo_date', 'cha_name', 'cha_ref', 'ad_code', 'packages', 'gross_weight_kg',
   'bl_awb_no', 'bl_awb_date', 'brc_due_date', 'scheme_code', 'remarks', 'sb_pdf_url', 'sb_pdf_name', 'sb_pdf_pages'];
 /** Fields read from the customs PDF that go into the form (the rest of what is read is kept for reference). */
@@ -78,11 +79,16 @@ export function ShippingBillDetailPage() {
   const [pdfNote, setPdfNote] = useState<{ found: number; parse_error: string | null; warnings: string[] } | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [claim, setClaim] = useState<number | null>(null);
+  // benefit grid (spec v2 §6): scheme rows beyond the four customs columns, and claim custom fields — keyed by scheme id
+  const [extra, setExtra] = useState<Record<number, { declared_amount: string; cf: Record<string, unknown> }>>({});
+  const meta = useBenefitMeta();
+  const ports = useLookup('ports');
   useEffect(() => {
     if (!detail.data) return;
     const d = detail.data; const x: any = { row_version: d.row_version };
     for (const k of FIELDS) x[k] = d[k] ?? '';
     setV(x); setSrc(d.source); setFobTyped(true); setPdfRead(d.pdf_read_fields ?? null); setPdfNote(null);
+    setExtra(Object.fromEntries((d.incentives ?? []).filter((c: any) => c.scheme_id).map((c: any) => [c.scheme_id, { declared_amount: c.declared_amount == null ? '' : String(c.declared_amount), cf: c.custom_field_values ?? {} }])));
   }, [detail.data]);
   const set = (k: string, x: unknown) => setV((o: any) => ({ ...o, [k]: x }));
   const pickInvoice = async (invoiceId: string) => {
@@ -139,6 +145,12 @@ export function ShippingBillDetailPage() {
       if (src?.lut) { b.igst_amount = 0; b.igst_value = null; }   // export under LUT: no IGST (the field shows "0 — LUT")
       b.sb_pdf_pages = num(v.sb_pdf_pages);
       b.pdf_read_fields = v.sb_pdf_url ? pdfRead : null;
+      b.port_id = num(v.port_id);
+      // benefit rows: the four customs schemes keep their amount in the columns above; the others (and claim custom fields) go as rows
+      b.benefits = Object.entries(extra).map(([sid, r]) => {
+        const sc = meta.data?.schemes.find((x) => x.id === Number(sid));
+        return { scheme_id: Number(sid), declared_amount: sc?.sb_field ? num(v[sc.sb_field]) : num(r.declared_amount), custom_field_values: cleanValues(r.cf) };
+      });
       const r = isNew ? await http.post<{ data: any }>('/shipping-bills', b) : await http.put<{ data: any }>(`/shipping-bills/${id}`, b);
       toast(`Shipping bill saved — FOB ${inr(r.data.fob_inr)}${r.data.warnings?.length ? ` · ${r.data.warnings.join(' · ')}` : ''}`, r.data.warnings?.length ? 'error' : undefined);
       void qc.invalidateQueries({ queryKey: ['shipping-bills'] }); void qc.invalidateQueries({ queryKey: ['sb-invoices'] });
@@ -152,7 +164,6 @@ export function ShippingBillDetailPage() {
   const invOptions = (invoices.data ?? []).filter((x) => x.selectable || String(x.id) === String(v.invoice_id))
     .map((x) => ({ value: x.id, label: `${x.invoice_no} · ${fmtDate(x.invoice_date)} · ${x.buyer_name ?? ''} · ${x.currency_code} ${fmtDecimal(x.total_value, 2)}` }));
   const drafts = (invoices.data ?? []).filter((x) => x.doc_status !== 'FINAL' && !x.sb_no).length;
-  const incTotal = (Number(v.drawback_amount) || 0) + (Number(v.rodtep_amount) || 0) + (Number(v.rosctl_amount) || 0);
   const num = (k: string, label: string, extra: any = {}) => (
     <Input label={label} type="number" step="any" value={v[k] ?? ''} id={`sb-${k}`} disabled={!editable} onChange={(e) => set(k, e.target.value)} hint={pdfHint(k)} {...extra} />
   );
@@ -188,37 +199,82 @@ export function ShippingBillDetailPage() {
               onChange={(e) => void pickInvoice(e.target.value)} hint={drafts ? `${drafts} draft invoice(s) not listed — finalise them first` : undefined} />
             <Input label="S.B. No" required type="text" id="sb-sb_no" value={v.sb_no ?? ''} hint={pdfHint('sb_no')} disabled={!editable} onChange={(e) => set('sb_no', e.target.value)} />
             <Input label="Date" required type="date" id="sb-sb_date" value={v.sb_date ?? ''} hint={pdfHint('sb_date')} disabled={!editable} onChange={(e) => set('sb_date', e.target.value)} />
-            <Input label="Port" id="sb-port_code" value={v.port_code ?? ''} placeholder="INMAA4" hint={pdfHint('port_code')} disabled={!editable} onChange={(e) => set('port_code', e.target.value.toUpperCase())} />
-            <Select label="Mode" id="sb-mode" value={v.mode ?? ''} disabled={!editable} onChange={(e) => set('mode', e.target.value)} options={[{ value: 'AIR', label: 'Air' }, { value: 'SEA', label: 'Sea' }]} />
+            <Select label="Port of loading" id="sb-port_id" value={v.port_id ?? ''} disabled={!editable} placeholder="— Select port —"
+              options={(ports.data ?? []).map((p) => ({ value: p.id, label: p.label }))} hint={pdfHint('port_code') ?? (v.port_code ? `Code ${v.port_code}` : 'Port master: add more under Masters')}
+              onChange={(e) => { const p = (ports.data ?? []).find((x) => String(x.id) === e.target.value); setV((o: any) => ({ ...o, port_id: e.target.value, port_code: (p?.port_code as string) ?? o.port_code, mode: (p?.mode as string) ?? o.mode, port_of_loading: (p?.port_name as string) ?? o.port_of_loading })); }} />
+            <Input label="Port code" id="sb-port_code" value={v.port_code ?? ''} placeholder="INMAA4" disabled={!editable}
+              onChange={(e) => { const code = e.target.value.toUpperCase(); const p = (ports.data ?? []).find((x) => x.port_code === code); setV((o: any) => ({ ...o, port_code: code, port_id: p ? String(p.id) : o.port_id })); }} />
+            <Select label="Mode" id="sb-mode" value={v.mode ?? ''} disabled={!editable} onChange={(e) => set('mode', e.target.value)} options={[{ value: 'SEA', label: 'Sea' }, { value: 'AIR', label: 'Air' }, { value: 'ROAD', label: 'Road' }]} />
             <Input label="Inv. No & Date" id="sb-inv-no" value={src ? `${src.invoice_no} · ${fmtDate(src.invoice_date)}` : ''} placeholder="From the invoice" disabled />
             <Input label={`Inv. Value${src ? ` (${src.currency_code})` : ''}`} id="sb-inv-value" value={src ? fmtDecimal(src.invoice_value_fc, 2) : ''} placeholder="From the invoice" disabled />
             {num('exchange_rate', `Customs Exchange Rate${src ? ` (₹ per 1 ${src.currency_code})` : ''}`)}
             {num('freight_inr', 'Freight (₹)')}
             <Input label="FOB Value (₹)" type="number" step="any" id="sb-fob_inr" value={v.fob_inr ?? ''} disabled={!editable}
               onChange={(e) => { setFobTyped(true); set('fob_inr', e.target.value); }} hint={[pdfHint('fob_inr'), fobTyped ? `Worked out: ${inr(fobCalc)}` : 'Inv. value × exchange rate − freight'].filter(Boolean).join(' · ')} />
-            {num('drawback_amount', 'Drawback (₹)')}
-            {src?.lut ? <Input label="IGST Amount (₹)" id="sb-igst_amount" value="0 — export under LUT" disabled /> : num('igst_amount', 'IGST Amount (₹)')}
-            {num('rosctl_amount', 'RoSCTL Amount (₹)')}
-            {num('rodtep_amount', 'RoDTEP Amount (₹)')}
-            <div className="self-end text-[12.5px] sm:col-span-3">Incentives (drawback + RoSCTL + RoDTEP): <b id="sb-inc-total">{inr(incTotal)}</b> — go to Finance and the order's profit</div>
+
           </div>
-          {!isNew && d.incentives?.length > 0 && (
-            <table className="w-full border-t border-slate-100" id="sb-incentives">
-              <thead><tr><th className="th">Claim (Finance)</th><th className="th text-right">Claim ₹</th><th className="th text-right">Received ₹</th><th className="th text-right">Pending ₹</th><th className="th">Status</th><th className="th">Received on</th></tr></thead>
-              <tbody>{d.incentives.map((x: any) => (
-                <tr key={x.id} className="row-hover cursor-pointer" data-sb-inc={x.incentive_type} onClick={() => setClaim(x.id)} title="Open the claim — receipts">
-                  <td className="td text-[12px] font-semibold">{x.label}</td><td className="td text-right tabular-nums">{fmtDecimal(x.claim_amount, 2)}</td>
-                  <td className="td text-right tabular-nums">{fmtDecimal(x.received_amount, 2)}</td>
-                  <td className={clsx('td text-right tabular-nums', x.outstanding > 0 && 'font-semibold text-amber-700')}>{fmtDecimal(x.outstanding, 2)}</td>
-                  <td className="td"><Badge tone={(INC_STATUS[x.status]?.tone ?? 'slate') as any}>{INC_STATUS[x.status]?.label ?? x.status}</Badge></td>
-                  <td className="td text-[12px]">{x.receipts?.length ? x.receipts.map((r: any) => `${fmtDate(r.receipt_date)} ₹${fmtDecimal(r.amount, 2)}`).join(' · ') : '—'}</td></tr>))}</tbody>
-            </table>
-          )}
+          {meta.data && <BenefitGrid meta={meta.data} v={v} setV={setV} extra={extra} setExtra={setExtra} claims={isNew ? [] : d.incentives ?? []} lut={!!src?.lut}
+            editable={editable} pdfHint={pdfHint} onOpen={setClaim} />}
         </Card>
       </div>
-      {claim && <IncentiveClaimModal id={claim} canEdit={can('FINANCE.UPDATE')} onClose={() => { setClaim(null); void detail.refetch(); }} />}
+      {claim && <ClaimDrawer id={claim} onClose={() => { setClaim(null); void detail.refetch(); }} />}
       <ConfirmDialog open={del} title="Delete shipping bill" message={`Delete SB ${d?.sb_no ?? ''}? Its incentive claims are removed (not possible once money is received).`} busy={busy} onCancel={() => setDel(false)}
         onConfirm={async () => { setBusy(true); try { await http.del(`/shipping-bills/${id}`); toast('Shipping bill deleted'); void qc.invalidateQueries({ queryKey: ['shipping-bills'] }); nav('/export/shipping-bills'); } catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(false); setDel(false); } }} />
+    </div>
+  );
+}
+
+/**
+ * Benefit grid of the shipping bill: the schemes marked "suggest on shipping bill" (DBK / IGST / RoSCTL / RoDTEP) as rows —
+ * their amounts are the customs fields the PDF fills — plus "Add benefit" for any other active scheme of the master.
+ * Each row becomes its own claim; receipts / scrips are recorded on it later, each on its own date.
+ */
+function BenefitGrid({ meta, v, setV, extra, setExtra, claims, lut, editable, pdfHint, onOpen }: {
+  meta: Meta; v: any; setV: (f: (o: any) => any) => void; extra: Record<number, { declared_amount: string; cf: Record<string, unknown> }>;
+  setExtra: (f: (o: any) => any) => void; claims: any[]; lut: boolean; editable: boolean; pdfHint: (k: string) => string | undefined; onOpen: (id: number) => void;
+}) {
+  const sbDate = v.sb_date || new Date().toISOString().slice(0, 10);
+  const effective = (s: Meta['schemes'][number]) => !!s.is_active && (!s.effective_from || s.effective_from <= sbDate) && (!s.effective_to || s.effective_to >= sbDate);
+  const shown = meta.schemes.filter((s) => (s.sb_field && s.is_suggested && effective(s)) || claims.some((c) => c.scheme_id === s.id) || extra[s.id] || (s.sb_field && Number(v[s.sb_field]) > 0));
+  const addable = meta.schemes.filter((s) => effective(s) && !shown.includes(s));
+  const [add, setAdd] = useState('');
+  const total = shown.reduce((t, s) => t + (Number(s.sb_field ? v[s.sb_field] : extra[s.id]?.declared_amount) || 0), 0);
+  const row = (id: number) => extra[id] ?? { declared_amount: '', cf: {} };
+  return (
+    <div className="border-t border-slate-100" id="sb-benefits">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-3">
+        <p className="text-[12.5px] font-semibold text-slate-700">Export benefits <span className="font-normal text-slate-500">— each is tracked on its own (received on its own date); cash and scrip kept apart</span></p>
+        {editable && addable.length > 0 && <div className="flex items-center gap-2"><Select className="w-56" id="sb-add-benefit" value={add} placeholder="Add benefit…" options={addable.map((s) => ({ value: s.id, label: s.display_name }))} onChange={(e) => setAdd(e.target.value)} />
+          <Button size="sm" variant="secondary" id="sb-add-benefit-btn" disabled={!add} onClick={() => { setExtra((o: any) => ({ ...o, [Number(add)]: { declared_amount: '', cf: {} } })); setAdd(''); }}><Plus size={13} />Add</Button></div>}
+      </div>
+      <table className="mt-2 w-full">
+        <thead><tr><th className="th">Benefit</th><th className="th w-44">Declared ₹</th><th className="th">Scheme fields</th><th className="th text-right">Cash ₹</th><th className="th text-right">Scrip issued ₹</th><th className="th text-right">Pending ₹</th><th className="th">Status</th></tr></thead>
+        <tbody>
+          {shown.map((s) => {
+            const c = claims.find((x) => x.scheme_id === s.id);
+            const claimFields = s.custom_fields.filter((f) => f.applies_to === 'CLAIM');
+            const igstLut = s.sb_field === 'igst_amount' && lut;
+            return (
+              <tr key={s.id} data-sb-inc={s.code} className="align-top">
+                <td className="td text-[12.5px] font-semibold">{s.display_name}<p className="text-[10.5px] font-normal text-slate-400">{s.tracking_mode === 'CASH' ? 'cash' : s.tracking_mode === 'SCRIP' ? 'scrip' : s.tracking_mode.toLowerCase()}{!s.is_active && ' · inactive'}</p></td>
+                <td className="td">{igstLut ? <Input id="sb-igst_amount" value="0 — export under LUT" disabled />
+                  : s.sb_field ? <Input type="number" step="any" min={0} id={`sb-${s.sb_field}`} value={v[s.sb_field] ?? ''} disabled={!editable} hint={pdfHint(s.sb_field)} onChange={(e) => setV((o: any) => ({ ...o, [s.sb_field!]: e.target.value }))} />
+                    : <Input type="number" step="any" min={0} id={`sb-benefit-${s.code}`} value={row(s.id).declared_amount} disabled={!editable} placeholder="not known yet"
+                      onChange={(e) => setExtra((o: any) => ({ ...o, [s.id]: { ...row(s.id), declared_amount: e.target.value } }))} />}</td>
+                <td className="td">{claimFields.length ? <div className="grid gap-2 sm:grid-cols-2"><DynamicFields fields={claimFields} values={row(s.id).cf} disabled={!editable} idPrefix={`sb-cf-${s.code}`}
+                  onChange={(cf) => setExtra((o: any) => ({ ...o, [s.id]: { ...row(s.id), cf } }))} /></div> : <span className="text-[12px] text-slate-300">—</span>}</td>
+                <td className="td text-right tabular-nums">{c ? fmtDecimal(c.received_amount, 2) : '—'}</td>
+                <td className="td text-right tabular-nums text-indigo-700">{c && s.tracking_mode !== 'CASH' ? fmtDecimal(c.scrip_issued, 2) : '—'}</td>
+                <td className={clsx('td text-right tabular-nums', c?.outstanding > 0 && 'font-semibold text-amber-700')}>{c ? fmtDecimal(c.outstanding, 2) : '—'}</td>
+                <td className="td">{c ? <button className="text-left" title="Open — record receipts / scrip on their dates" data-open-claim={c.id} onClick={() => onOpen(c.id)}><StatusPill status={c.status} label={c.status_label} tone={c.status_tone} />
+                  {c.receipts?.length > 0 && <span className="block text-[10.5px] text-slate-500">{c.receipts.map((r: any) => `${fmtDate(r.receipt_date)} ₹${fmtDecimal(r.amount, 2)}`).join(' · ')}</span>}</button>
+                  : <span className="text-[11px] text-slate-400">{extra[s.id] || Number(s.sb_field ? v[s.sb_field] : 0) > 0 ? 'made on save' : 'no claim (0)'}</span>}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot><tr className="border-t border-slate-200"><td className="td text-[12px] font-semibold">Total declared</td><td className="td text-[12.5px] font-semibold tabular-nums" id="sb-inc-total">{inr(total)}</td><td colSpan={5} className="td text-[11.5px] text-slate-500">Order profit uses each scheme’s policy (IGST refund is not income)</td></tr></tfoot>
+      </table>
     </div>
   );
 }
