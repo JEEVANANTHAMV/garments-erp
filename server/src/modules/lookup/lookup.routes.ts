@@ -64,6 +64,13 @@ const LOOKUPS: Record<string, LookupDef> = {
                     WHERE s.company_id=? AND s.is_deleted=0 ORDER BY s.status IN ('CANCELLED','COMPLETED'), s.id DESC LIMIT 1000`, scoped: true },
   'sample-types': { sql: `SELECT id, type_code AS code, type_name AS label, category FROM mst_sample_type WHERE company_id=? AND is_active=1 ORDER BY sort_order, type_name`, scoped: true },
   departments: { sql: `SELECT id, dept_code AS code, dept_name AS label FROM mst_department WHERE company_id=? AND is_active=1 ORDER BY dept_name`, scoped: true },
+  // ports of loading (client 24-Oct-2026): one row per port + mode; the invoice / shipping bill pick port, then mode
+  ports: { sql: `SELECT id, port_code AS code, CONCAT(port_name, IF(mode IS NULL, '', CONCAT(' · ', mode)), IF(port_code IS NULL, '', CONCAT(' (', port_code, ')'))) AS label,
+                        port_name, mode, port_code FROM mst_port WHERE company_id=? AND is_active=1 ORDER BY port_name, FIELD(mode, 'SEA', 'AIR', 'ROAD'), id`, scoped: true },
+  // our bank accounts (invoice bank details, export benefit receipts) — default first
+  'company-bank-accounts': { sql: `SELECT id, account_no AS code, CONCAT(account_label, ' — ', bank_name, ' ', RIGHT(account_no, 4)) AS label, account_label, bank_name, branch_name, branch_address,
+                        account_type, account_no, ifsc_code, swift_code, ad_code, beneficiary, intermediary, is_default
+                   FROM mst_company_bank_account WHERE company_id=? AND is_active=1 ORDER BY is_default DESC, account_label`, scoped: true },
   colors:      { sql: `SELECT id, color_code AS code, color_name AS label, hex_value FROM mst_color WHERE company_id=? AND is_active=1 ORDER BY color_name`, scoped: true },
   'size-groups': { sql: `SELECT id, group_code AS code, group_name AS label, category, gender, description, (SELECT COUNT(*) FROM mst_size s WHERE s.size_group_id = mst_size_group.id AND s.is_active=1) AS size_count FROM mst_size_group WHERE company_id=? AND is_active=1 ORDER BY group_name`, scoped: true },
   sizes:         { sql: `SELECT sz.id, sz.size_code AS code, sz.size_label AS label, sz.sort_order, sz.size_code, sz.size_label, sz.body_measurement, g.group_name, sz.size_group_id FROM mst_size sz JOIN mst_size_group g ON g.id=sz.size_group_id WHERE g.company_id=? AND sz.is_active=1 ORDER BY g.group_name, sz.sort_order, sz.id`, scoped: true },

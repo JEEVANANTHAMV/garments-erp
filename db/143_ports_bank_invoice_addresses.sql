@@ -105,13 +105,14 @@ SELECT id, 'CI_REX_TEMPLATE',
   'Commercial invoice (buyer copy): REX declaration — {EXPORTER_NAME} {EXPORTER_ADDRESS} {REX_NO} are filled in' FROM mst_company;
 
 -- the client's export company (FK-087 BUYER INVOICE: bank, REX no) on the company that makes the FASHION KNITS invoices
+-- (TEX01 is the client's working company; its name / IEC are edited on the company master — never overwritten here)
 UPDATE mst_company c SET c.rex_no = 'INREX3291005848TC025'
- WHERE COALESCE(c.rex_no, '') = '' AND c.iec_code = '3291005848';
+ WHERE COALESCE(c.rex_no, '') = '' AND (c.iec_code = '3291005848' OR c.company_code = 'TEX01');
 INSERT INTO mst_company_bank_account (company_id, account_label, bank_name, branch_name, branch_address, account_type, account_no, ifsc_code, swift_code, beneficiary, is_default)
 SELECT c.id, 'CANARA CA 2133', 'CANARA BANK', 'MID CORPORATE BRANCH(2344)', '70 / 74, J G NAGAR, 2nd STREET,\n60 FEET ROAD, Tiruppur, Tamil Nadu 641602 INDIA',
        'CURRENT', '1510201012133', 'CNRB0002344', 'CNRBINBBBFD', 'FASHION KNITS', 1
   FROM mst_company c
- WHERE c.iec_code = '3291005848'
+ WHERE (c.iec_code = '3291005848' OR c.company_code = 'TEX01')
    AND NOT EXISTS (SELECT 1 FROM mst_company_bank_account b WHERE b.company_id = c.id);
 
 -- permissions: the bank / port masters use the EXPORT and FINANCE rights already held (no new codes)

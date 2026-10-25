@@ -2,6 +2,7 @@ import type { ResourceConfig } from '../../core/crud.js';
 import { z } from 'zod';
 import { s, f } from './schemas.js';
 import { BadRequest } from '../../core/errors.js';
+import { queryOne, txExecute } from '../../config/db.js';
 
 /**
  * Declarative registry of master-data resources.
@@ -553,6 +554,40 @@ export const masterResources: ResourceConfig[] = [
       f('cert_code', s.strReq(30)), f('cert_name', s.strReq(120)),
       f('issuing_body', s.nullableStr(120)), f('is_active', s.bool()),
     ],
+  },
+  {
+    // Ports of loading (client 24-Oct-2026: "ports we use in a dropdown; add more later"): port + mode → ICEGATE code
+    path: 'ports', table: 'mst_port', permission: 'EXPORT', label: 'Port',
+    searchable: ['port_name', 'port_code'], sortable: ['port_name', 'mode', 'port_code'], defaultSort: 't.port_name, t.mode',
+    softDelete: false, hasAuditCols: false, filters: ['mode'],
+    selectExtra: 'co.name AS country_name', joins: 'LEFT JOIN cfg_country co ON co.id = t.country_id',
+    fields: [
+      f('port_name', s.strReq(80)), f('mode', z.union([z.enum(['SEA', 'AIR', 'ROAD']), z.literal(''), z.null()]).transform((v) => v || null).nullish()),
+      f('port_code', z.union([z.string().trim().toUpperCase().regex(/^[A-Z]{2}[A-Z0-9]{3,8}$/, 'Port code: e.g. INMAA1'), z.literal(''), z.null()]).transform((v) => v || null).nullish()),
+      f('country_id', s.id()), f('remarks', s.nullableStr(255)), f('is_active', s.bool()),
+    ],
+    beforeWrite: (_req, data) => { if (typeof data.port_name === 'string') data.port_name = data.port_name.trim().toUpperCase(); },
+  },
+  {
+    // Our bank accounts (client 24-Oct-2026: "bank details on the invoice come from the master") — one default
+    path: 'company-bank-accounts', table: 'mst_company_bank_account', permission: 'FINANCE', label: 'Bank account',
+    searchable: ['account_label', 'bank_name', 'account_no'], sortable: ['account_label', 'bank_name'], defaultSort: 't.is_default DESC, t.account_label',
+    softDelete: false,
+    fields: [
+      f('account_label', s.strReq(80)), f('bank_name', s.strReq(150)), f('branch_name', s.nullableStr(150)), f('branch_address', s.nullableStr(300)),
+      f('account_type', s.enumReq(['CURRENT', 'EEFC', 'CC', 'OD', 'SAVINGS'])), f('account_no', s.strReq(40)),
+      f('ifsc_code', z.union([z.string().trim().toUpperCase().regex(IFSC_RE, 'IFSC: 4 letters, 0, then 6 letters / digits'), z.literal(''), z.null()]).transform((v) => v || null).nullish()),
+      f('swift_code', z.union([z.string().trim().toUpperCase().regex(/^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/, 'SWIFT: 8 or 11 characters'), z.literal(''), z.null()]).transform((v) => v || null).nullish()),
+      f('ad_code', s.nullableStr(20)), f('beneficiary', s.nullableStr(150)), f('intermediary', s.nullableStr(300)),
+      f('currency_id', s.id()), f('is_default', s.bool()), f('remarks', s.nullableStr(255)), f('is_active', s.bool()),
+    ],
+    // one default account per company
+    afterCreateTx: async (req, row, tx) => { if (Number(row.is_default)) await txExecute(tx, `UPDATE mst_company_bank_account SET is_default = 0 WHERE company_id = ? AND id <> ?`, [req.user!.companyId, row.id]); },
+    afterUpdateTx: async (req, row, tx) => { if (Number(row.is_default)) await txExecute(tx, `UPDATE mst_company_bank_account SET is_default = 0 WHERE company_id = ? AND id <> ?`, [req.user!.companyId, row.id]); },
+    beforeDelete: async (req, id) => {
+      const used = await queryOne<any>(`SELECT invoice_no FROM trx_commercial_invoice WHERE company_id = ? AND bank_account_id = ? LIMIT 1`, [req.user!.companyId, id]);
+      if (used) throw BadRequest(`The account is printed on invoice ${used.invoice_no} — deactivate it instead`);
+    },
   },
 
   // ------------------------------------------------ Finance masters
