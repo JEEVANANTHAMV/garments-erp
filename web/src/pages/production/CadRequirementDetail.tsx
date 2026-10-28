@@ -812,6 +812,24 @@ export default function CadRequirementDetailPage() {
     return Math.round((kg * 1000) / (gsm * widthM));
   };
 
+  /**
+   * Cut pieces (order + rejection / excess %) behind a F.PRGM row. Rows saved before 28-Oct-2026 have no
+   * cut_qty_pcs, so it is worked out from the markers of the same fabric / table dia / colour.
+   */
+  const fpCutPcs = (fp: FabricProgramRow) => {
+    if (Number(fp.cut_qty_pcs) > 0) return Number(fp.cut_qty_pcs);
+    let pcs = 0;
+    markers.forEach((m) => {
+      const tableDia = `${Math.round(m.table_width_in || ((m.dia_in || 0) + (m.width_allowance_in || 2)))}"`;
+      if ((m.fabric_type || 'Main Fabric') !== fp.fabric_type || (fp.dia_val && tableDia !== fp.dia_val)) return;
+      const rej = m.rejection_pct != null ? Number(m.rejection_pct) : Number(header.rejection_pct) || 0;
+      (m.colorways || []).filter((cw) => (cw.color_name || 'Solid') === fp.color_name).forEach((cw) => {
+        (cw.quantities || []).forEach((q) => { pcs += Math.ceil((Number(q) || 0) * (1 + rej / 100.0) - 1e-9); });
+      });
+    });
+    return pcs;
+  };
+
   // Grand KPI Metrics
   const summaryKpis = useMemo(() => {
     // Order qty in garments, from the main fabric only (the first marker's fabric): per colour × size
@@ -2745,9 +2763,9 @@ export default function CadRequirementDetailPage() {
                       <td className="py-2.5 px-3 font-bold text-slate-800">{fp.color_name}</td>
                       <td className="py-2.5 px-2 text-right">
                         <div>{fmtNumber(fp.order_qty_pcs)} Pcs</div>
-                        {Number(fp.cut_qty_pcs) > Number(fp.order_qty_pcs) && (
+                        {fpCutPcs(fp) > Number(fp.order_qty_pcs) && (
                           <div className="text-[10px] text-slate-500" title="Net qty is for the cut pieces (order qty + rejection / excess %)">
-                            cut {fmtNumber(fp.cut_qty_pcs)} incl. excess
+                            cut {fmtNumber(fpCutPcs(fp))} incl. excess
                           </div>
                         )}
                       </td>
