@@ -143,6 +143,15 @@ cadRouter.get('/cad-requirements', requirePermission('PRODUCTION.VIEW'), ah(asyn
   sql += ` ORDER BY cr.id DESC`;
 
   const rows = await query<any>(sql, params);
+  // Total fabric = the sheet's grand total material (fabric + collar yarn + foldings + tapes) as saved —
+  // the marker sum leaves out the buffer, samples and parts (client 28-Oct-2026: list showed 526.71, sheet 612)
+  for (const r of rows) {
+    let dj: any = r.data_json;
+    try { while (typeof dj === 'string') dj = JSON.parse(dj); } catch { dj = null; }
+    const grand = Number(dj?.summary_metrics?.grandTotalMaterial ?? dj?.total_fabric_kg);
+    if (grand > 0) r.total_fabric_kg = grand;
+    delete r.data_json;
+  }
   res.json({ data: rows });
 }));
 
@@ -552,8 +561,8 @@ const saveCadRequirementHandler = ah(async (req, res) => {
         body.consumption_source || 'PIECE_AREA',
         body.cad_type || 'KNIT_SJ',
         body.uom || 'KG',
-        Number(body.rejection_pct ?? 3.0),
-        Number(body.fabric_allowance_pct ?? 10.0),
+        Number(body.rejection_pct ?? 0),
+        Number(body.fabric_allowance_pct ?? 0),
         body.special_notes || null,
         body.signoff_json ? JSON.stringify(body.signoff_json) : null,
         Number(body.marker_efficiency) || 85.0,
@@ -585,8 +594,8 @@ const saveCadRequirementHandler = ah(async (req, res) => {
         body.consumption_source || 'PIECE_AREA',
         body.cad_type || 'KNIT_SJ',
         body.uom || 'KG',
-        Number(body.rejection_pct ?? 3.0),
-        Number(body.fabric_allowance_pct ?? 10.0),
+        Number(body.rejection_pct ?? 0),
+        Number(body.fabric_allowance_pct ?? 0),
         body.special_notes || null,
         body.signoff_json ? JSON.stringify(body.signoff_json) : null,
         Number(body.marker_efficiency) || 85.0,
@@ -632,8 +641,8 @@ const saveCadRequirementHandler = ah(async (req, res) => {
           m.parts_in_lay || null,
           Number(m.lay_allowance_cm ?? 10.0),
           Number(m.width_allowance_in ?? (m.fabric_dia_type === 'TUBE' ? 1.0 : 2.0)),
-          Number(m.rejection_pct ?? body.rejection_pct ?? 3.0),
-          Number(m.fabric_allowance_pct ?? body.fabric_allowance_pct ?? (body.uom === 'MTR' ? 0.0 : 10.0)),
+          Number(m.rejection_pct ?? body.rejection_pct ?? 0),
+          Number(m.fabric_allowance_pct ?? body.fabric_allowance_pct ?? 0),
           Number(m.lay_length_cm) || 0,
           Number(m.table_width_in) || 0,
           Number(m.fabric_wt_per_lay_g) || 0,

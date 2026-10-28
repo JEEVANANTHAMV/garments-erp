@@ -12,6 +12,8 @@ export default function CadRequirementsPage() {
   const nav = useNavigate();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  // One row per CAD — the latest version; older (superseded) versions only on request (client 28-Oct-2026)
+  const [showOldVersions, setShowOldVersions] = useState(false);
 
   const { data: reqs = [], isLoading, refetch } = useQuery({
     queryKey: ['cad-requirements'],
@@ -21,8 +23,22 @@ export default function CadRequirementsPage() {
     },
   });
 
+  // latest version per CAD no (highest id) and how many older versions it has
+  const { latest, olderCount } = useMemo(() => {
+    const byNo: Record<string, any> = {};
+    const count: Record<string, number> = {};
+    reqs.forEach((r) => {
+      const k = r.req_no || `#${r.id}`;
+      count[k] = (count[k] || 0) + 1;
+      if (!byNo[k] || Number(r.id) > Number(byNo[k].id)) byNo[k] = r;
+    });
+    const olderCount: Record<string, number> = {};
+    Object.keys(count).forEach((k) => { olderCount[k] = count[k] - 1; });
+    return { latest: reqs.filter((r) => byNo[r.req_no || `#${r.id}`] === r), olderCount };
+  }, [reqs]);
+
   const filtered = useMemo(() => {
-    return reqs.filter((r) => {
+    return (showOldVersions ? reqs : latest).filter((r) => {
       const matchesSearch =
         !search ||
         r.req_no?.toLowerCase().includes(search.toLowerCase()) ||
@@ -36,16 +52,18 @@ export default function CadRequirementsPage() {
 
       return matchesSearch && matchesStatus;
     });
-  }, [reqs, search, statusFilter]);
+  }, [reqs, latest, showOldVersions, search, statusFilter]);
 
+  // KPIs count each CAD once (its latest version) — superseded versions must not add up
   const kpis = useMemo(() => {
+    const reqs = latest;
     const totalReqs = reqs.length;
     const totalPcs = reqs.reduce((s, r) => s + (Number(r.order_qty) || 0), 0);
     const approved = reqs.filter((r) => r.status === 'APPROVED').length;
     const totalFabricKg = reqs.reduce((s, r) => s + (r.uom === 'MTR' || r.cad_type === 'WOVEN' ? 0 : (Number(r.total_fabric_kg) || 0)), 0);
     const totalFabricMtr = reqs.reduce((s, r) => s + (r.uom === 'MTR' || r.cad_type === 'WOVEN' ? (Number(r.total_fabric_mtrs) || Number(r.total_fabric_kg) || 0) : (Number(r.total_fabric_mtrs) || 0)), 0);
     return { totalReqs, totalPcs, approved, totalFabricKg, totalFabricMtr };
-  }, [reqs]);
+  }, [latest]);
 
   return (
     <div className="space-y-5">
@@ -137,7 +155,20 @@ export default function CadRequirementsPage() {
             <option value="DRAFT">Draft</option>
             <option value="CALCULATED">Calculated</option>
             <option value="APPROVED">Approved</option>
+            {showOldVersions && <option value="SUPERSEDED">Superseded</option>}
           </select>
+
+          <label className="flex items-center gap-1.5 text-xs text-slate-600 whitespace-nowrap cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showOldVersions}
+              onChange={(e) => {
+                setShowOldVersions(e.target.checked);
+                if (!e.target.checked && statusFilter === 'SUPERSEDED') setStatusFilter('ALL');
+              }}
+            />
+            Show old versions
+          </label>
 
           <button
             onClick={() => refetch()}
@@ -195,6 +226,11 @@ export default function CadRequirementsPage() {
                         {r.cad_version && (
                           <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-indigo-50 border border-indigo-200 text-indigo-800">
                             {r.cad_version}
+                          </span>
+                        )}
+                        {!showOldVersions && olderCount[r.req_no || `#${r.id}`] > 0 && (
+                          <span className="text-[10px] font-normal text-slate-400" title="Tick 'Show old versions' to see them">
+                            +{olderCount[r.req_no || `#${r.id}`]} older
                           </span>
                         )}
                       </div>

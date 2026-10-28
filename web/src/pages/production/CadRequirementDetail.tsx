@@ -70,6 +70,7 @@ interface FabricProgramRow {
   dia_type?: 'OPEN' | 'TUBE';
   color_name: string;
   order_qty_pcs: number;
+  cut_qty_pcs?: number;   // F.PRGM: pieces incl. rejection / excess % — the net qty is for these
   net_qty: number;
   buffer_qty: number;
   sample_qty?: number;
@@ -278,8 +279,8 @@ export default function CadRequirementDetailPage() {
     cad_type: 'KNIT_SJ' as 'KNIT_SJ' | 'KNIT_FLEECE' | 'WOVEN' | 'MULTI_PART',
     uom: 'KG' as 'KG' | 'MTR',
     cad_version: 'V01',
-    rejection_pct: 3.0,
-    fabric_allowance_pct: 10.0,
+    rejection_pct: 0,     // new CAD: header Rejection / Fabric Loss start at 0 — markers carry their own % (client 28-Oct-2026)
+    fabric_allowance_pct: 0,
     marker_efficiency: 85,
     special_notes: '',
     status: 'DRAFT',
@@ -620,8 +621,8 @@ export default function CadRequirementDetailPage() {
         const layAllowance = Number(m.lay_allowance_cm ?? 10.0);
         const widthAllowance = Number(m.width_allowance_in ?? (diaType === 'TUBE' ? 1.0 : 2.0));
         const markerIsWoven = (m.uom === 'MTR') || isWoven;
-        const markerRejectionPct = m.rejection_pct != null ? Number(m.rejection_pct) : Number(header.rejection_pct ?? 3.0);
-        const markerFabAllowancePct = m.fabric_allowance_pct != null ? Number(m.fabric_allowance_pct) : Number(header.fabric_allowance_pct ?? 10.0);
+        const markerRejectionPct = m.rejection_pct != null ? Number(m.rejection_pct) : Number(header.rejection_pct ?? 0);
+        const markerFabAllowancePct = m.fabric_allowance_pct != null ? Number(m.fabric_allowance_pct) : Number(header.fabric_allowance_pct ?? 0);
 
         // Lay length in cm: (Length mm / 10) + allowance
         const layLenCm = Math.round(((lengthMm / 10.0) + layAllowance) * 10) / 10;
@@ -757,6 +758,7 @@ export default function CadRequirementDetailPage() {
             dia_spec: fab.dia_spec,
             color_name: cName,
             order_qty_pcs: d.order_pcs,
+            cut_qty_pcs: d.cut_pcs,
             net_qty: net,
             buffer_qty: buffer,
             sample_qty: sample,
@@ -826,6 +828,19 @@ export default function CadRequirementDetailPage() {
       });
     }));
     const totalOrderPcs = Object.values(cellPcs).reduce((a, b) => a + b, 0) || header.order_qty;
+    // Order qty with excess (cut pieces incl. rejection %), same main-fabric rule
+    const cellCut: Record<string, number> = {};
+    markers.filter((m) => (m.fabric_type || '').trim().toUpperCase() === mainFabric).forEach((m) => {
+      const rej = m.rejection_pct != null ? Number(m.rejection_pct) : Number(header.rejection_pct) || 0;
+      (m.colorways || []).forEach((cw) => {
+        const c = (cw.color_name || 'Solid').trim().toUpperCase();
+        (cw.quantities || []).forEach((q, i) => {
+          const k = `${c}|${String(m.sizes?.[i] ?? i).trim().toUpperCase()}`;
+          cellCut[k] = Math.max(cellCut[k] || 0, Math.ceil((Number(q) || 0) * (1 + rej / 100.0) - 1e-9));
+        });
+      });
+    });
+    const totalCutPcs = Object.values(cellCut).reduce((a, b) => a + b, 0) || totalOrderPcs;
 
     // Separate Knitted Fabric (KG) and Woven / Foam Interlinings (MTR)
     const grandFabricKg = fabricProgram.length > 0
@@ -838,10 +853,14 @@ export default function CadRequirementDetailPage() {
 
     const totalFoamKhadaMtrs = foamKhadaItems.reduce((sum, fk) => sum + (Number(fk.total_mtrs) || 0), 0);
 
-    // Fabric loss % entered on this document is taken OFF the knitted fabric to give the actual piece weight
-    const lossPct = header.fabric_allowance_pct != null && !isNaN(Number(header.fabric_allowance_pct))
-      ? Number(header.fabric_allowance_pct)
-      : (markers.length > 0 && markers[0].fabric_allowance_pct != null ? Number(markers[0].fabric_allowance_pct) : 0);
+    // Fabric loss % is taken OFF the knitted fabric to give the actual piece weight. It is the markers' own
+    // Fabric Loss % (e.g. 12%), weighted by each marker's fabric — the header box is only a "set all markers"
+    // helper and stays 0 when the markers carry their own % (client 28-Oct-2026)
+    const lossBase = markers.reduce((s, m) => s + (Number(m.total_req_qty) || 0), 0);
+    const markerLoss = lossBase > 0
+      ? markers.reduce((s, m) => s + (Number(m.total_req_qty) || 0) * (Number(m.fabric_allowance_pct ?? header.fabric_allowance_pct) || 0), 0) / lossBase
+      : (markers.length > 0 && markers[0].fabric_allowance_pct != null ? Number(markers[0].fabric_allowance_pct) : Number(header.fabric_allowance_pct) || 0);
+    const lossPct = Math.round(markerLoss * 100) / 100;
     // For Knitted garments: piece weight is strictly based on Knitted Fabric (KG). MTR (Foam / Khada) is strictly excluded!
     const avgGarmentCons = totalOrderPcs > 0 ? ((isWoven ? grandFabricMtr : grandFabricKg) / totalOrderPcs) : 0;
     const actGarmentCons = avgGarmentCons * (1 - lossPct / 100.0);
@@ -875,6 +894,7 @@ export default function CadRequirementDetailPage() {
 
     return {
       totalOrderPcs,
+      totalCutPcs,
       grandFabric: Math.round((isWoven ? grandFabricMtr : grandFabricKg) * 100) / 100,
       grandFabricKg: Math.round(grandFabricKg * 100) / 100,
       grandFabricMtr: Math.round((grandFabricMtr + totalFoamKhadaMtrs) * 100) / 100,
@@ -894,7 +914,7 @@ export default function CadRequirementDetailPage() {
       grandTotalMaterial,
       uom: isWoven ? 'MTR' : 'KG',
     };
-  }, [markers, fabricProgram, header.order_qty, header.fabric_allowance_pct, isWoven, flatKnitSpec, specialParts, foamKhadaItems]);
+  }, [markers, fabricProgram, header.order_qty, header.rejection_pct, header.fabric_allowance_pct, isWoven, flatKnitSpec, specialParts, foamKhadaItems]);
 
   // Marker Operations
   const addMarker = () => {
@@ -1024,8 +1044,8 @@ export default function CadRequirementDetailPage() {
     const layAllowance = Number(m.lay_allowance_cm ?? 10.0);
     const widthAllowance = Number(m.width_allowance_in ?? (diaType === 'TUBE' ? 1.0 : 2.0));
     const markerIsWoven = (m.uom === 'MTR') || isWoven;
-    const markerRejectionPct = m.rejection_pct != null ? Number(m.rejection_pct) : Number(header.rejection_pct ?? 3.0);
-    const markerFabAllowancePct = m.fabric_allowance_pct != null ? Number(m.fabric_allowance_pct) : Number(header.fabric_allowance_pct ?? 10.0);
+    const markerRejectionPct = m.rejection_pct != null ? Number(m.rejection_pct) : Number(header.rejection_pct ?? 0);
+    const markerFabAllowancePct = m.fabric_allowance_pct != null ? Number(m.fabric_allowance_pct) : Number(header.fabric_allowance_pct ?? 0);
 
     const layLenCm = Math.round(((lengthMm / 10.0) + layAllowance) * 10) / 10;
     // dia_in = actual fabric dia (e.g. 58"). Table width = actual dia + allowance (e.g. 58 + 2 = 60").
@@ -1142,8 +1162,8 @@ export default function CadRequirementDetailPage() {
         const buyerName = String(getV('B3')).trim();
         const reqDate = String(getV('B4')).trim() || today();
 
-        let rejPct = 3.0;
-        let fabPct = 10.0;
+        let rejPct = 0;
+        let fabPct = 0;
         let specialNotes = '';
         let parsedCollarRows: CollarDimensionRow[] = [];
         let parsedFlatKnitWeight = 184;
@@ -1433,6 +1453,179 @@ export default function CadRequirementDetailPage() {
     }
   };
 
+  const cadStyleCode = existingData?.style_code
+    || (styles.data?.find((st: any) => String(st.id) === String(header.style_id))?.code as string) || '';
+  const cadStyleName = existingData?.style_name
+    || (styles.data?.find((st: any) => String(st.id) === String(header.style_id))?.label as string) || '';
+
+  // Cutting lay sheet tables — rendered on the CUT tab and again in the landscape print copy
+  const cutSheetTables = (
+    <>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-xs border-collapse">
+          <thead>
+            <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+              <th className="py-2.5 px-3">Fabric Type</th>
+              <th className="py-2.5 px-2">GSM</th>
+              <th className="py-2.5 px-2">Diameter</th>
+              <th className="py-2.5 px-3">Colour / Shade</th>
+              <th className="py-2.5 px-2 text-right">Cutting Lay Qty (Pcs)</th>
+              <th className="py-2.5 px-3 text-right text-emerald-700">Net Cutting Fabric ({header.uom})</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 text-slate-700">
+            {cuttingLay.map((cl, idx) => {
+              const matchingFp = fabricProgram.find((fp) => sameFabricRow(fp, cl));
+              const fpGrand = Number(matchingFp?.grand_total_qty || 0);
+              const sampleQty = Number(matchingFp?.sample_qty || 0);
+              const lossPct = cutLossPct;
+              const cq = matchingFp ? cutQtyFor(matchingFp) : { net_qty: Number(cl.net_qty) || 0, sample_qty: Number(cl.sample_qty) || 0 };
+              const bulkNetCut = cq.net_qty;
+              const sampleNetCut = cq.sample_qty;
+
+              return (
+                <React.Fragment key={idx}>
+                  <tr className="hover:bg-slate-50/70">
+                    <td className="py-2.5 px-3 font-semibold text-slate-900 flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">BULK</span>
+                      <span>{cl.fabric_type}</span>
+                    </td>
+                    <td className="py-2.5 px-2">{cl.gsm || '—'}</td>
+                    <td className="py-2.5 px-2 font-mono text-slate-600">{cl.dia_spec}</td>
+                    <td className="py-2.5 px-3 font-bold text-slate-800">{cl.color_name}</td>
+                    <td className="py-2.5 px-2 text-right font-medium">{fmtNumber(cl.order_qty_pcs)} Pcs</td>
+                    <td className="py-2.5 px-3 text-right">
+                      <div className="font-bold text-emerald-700 text-sm">
+                        {fmtDecimal(bulkNetCut)} {cl.uom}
+                      </div>
+                      <div className="text-[10px] text-slate-500 font-normal">
+                        ({fmtDecimal(fpGrand - sampleQty, 2)} {cl.uom} − {lossPct}% process loss)
+                      </div>
+                    </td>
+                  </tr>
+
+                  {sampleQty > 0 && (
+                    <tr className="bg-purple-50/40 hover:bg-purple-50/70 border-b border-purple-100">
+                      <td className="py-2.5 px-3 font-semibold text-purple-950 flex items-center gap-1.5 pl-6">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-200 text-purple-900">SAMPLE</span>
+                        <span>{cl.fabric_type}</span>
+                      </td>
+                      <td className="py-2.5 px-2 text-purple-800">{cl.gsm || '—'}</td>
+                      <td className="py-2.5 px-2 font-mono text-purple-700">{cl.dia_spec}</td>
+                      <td className="py-2.5 px-3 font-bold text-purple-900">{cl.color_name} (Sample)</td>
+                      <td className="py-2.5 px-2 text-right text-purple-700 font-medium italic">Fitting / Development</td>
+                      <td className="py-2.5 px-3 text-right">
+                        <div className="font-bold text-purple-900 text-sm">{fmtDecimal(sampleNetCut)} {cl.uom}</div>
+                        <div className="text-[10px] text-purple-600 font-normal">({fmtDecimal(sampleQty, 2)} kg − {lossPct}% process loss)</div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            {(() => {
+              const cqs = cuttingLay.map((cl) => { const mFp = fabricProgram.find((fp) => sameFabricRow(fp, cl)); return mFp ? cutQtyFor(mFp) : { net_qty: Number(cl.net_qty) || 0, sample_qty: Number(cl.sample_qty) || 0 }; });
+              const totalBulkCut = Math.round(cqs.reduce((s, x) => s + x.net_qty, 0) * 100) / 100;
+              const totalSampleCut = Math.round(cqs.reduce((s, x) => s + x.sample_qty, 0) * 100) / 100;
+
+              return (
+                <tr className="bg-emerald-50/60 font-bold text-emerald-900 border-t border-emerald-200">
+                  <td colSpan={4} className="py-3 px-3">
+                    TOTAL CUTTING DEPARTMENT REQUIREMENT
+                    {totalSampleCut > 0 && (
+                      <span className="text-xs font-normal text-emerald-700 ml-2">
+                        (Bulk: {fmtDecimal(totalBulkCut)} {summaryKpis.uom} + Sample: {fmtDecimal(totalSampleCut)} {summaryKpis.uom})
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-3 px-2 text-right">
+                    {fmtNumber(cuttingLay.reduce((s, x) => s + Number(x.order_qty_pcs || 0), 0))} Pcs
+                  </td>
+                  <td className="py-3 px-3 text-right text-base text-emerald-900">
+                    {fmtDecimal(totalBulkCut + totalSampleCut)} {summaryKpis.uom}
+                  </td>
+                </tr>
+              );
+            })()}
+          </tfoot>
+        </table>
+      </div>
+
+      {/* Foldings / specialized parts are issued to cutting too (zip folding, BNT, tapes & cords) */}
+      {specialParts.length > 0 && (
+        <div className="space-y-2 pt-3 border-t border-slate-200">
+          <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+            <Scissors size={14} className="text-amber-700" />
+            <span>Foldings, Specialized Parts, Tapes & Cords — Cutting Issue</span>
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-amber-50/70 text-amber-950 font-bold border-b border-amber-200">
+                  <th className="py-2.5 px-3">Part Name</th>
+                  <th className="py-2.5 px-3">Fabric / Material Spec</th>
+                  <th className="py-2.5 px-2">Dia / Form</th>
+                  <th className="py-2.5 px-2">Colour</th>
+                  <th className="py-2.5 px-2 text-right">Cons / Pc</th>
+                  <th className="py-2.5 px-2 text-right">Total Qty</th>
+                  <th className="py-2.5 px-3 text-right text-amber-900">Total KG</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-700">
+                {specialParts.map((sp, idx) => {
+                  const kg = specialPartKg(sp);
+                  return (
+                    <tr key={idx} className="hover:bg-slate-50/70">
+                      <td className="py-2.5 px-3 font-semibold text-slate-900">{sp.part_name}</td>
+                      <td className="py-2.5 px-3">{sp.fabric_type} {sp.gsm ? `(${sp.gsm} GSM)` : ''}</td>
+                      <td className="py-2.5 px-2 font-mono text-slate-600">{sp.dia_spec || '—'}</td>
+                      <td className="py-2.5 px-2 font-semibold text-slate-800">{sp.color}</td>
+                      <td className="py-2.5 px-2 text-right font-mono">{fmtDecimal(sp.consumption_per_pc, 3)} {sp.uom}</td>
+                      <td className="py-2.5 px-2 text-right font-mono font-bold">{fmtDecimal(sp.total_qty, 1)} {sp.uom}</td>
+                      <td className="py-2.5 px-3 text-right font-mono font-bold text-amber-900">
+                        {kg != null ? `${fmtDecimal(kg, 2)} KG` : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="bg-amber-50/60 font-bold text-amber-950 border-t border-amber-200">
+                  <td colSpan={6} className="py-3 px-3">TOTAL FOLDINGS & SPECIALIZED PARTS</td>
+                  <td className="py-3 px-3 text-right font-mono">
+                    {fmtDecimal(summaryKpis.foldingFabricKg + summaryKpis.tapesKg, 2)} KG
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+      {/* Grand total of everything issued to cutting — main fabric + foldings / tapes (+ collar yarn) = the F.PRGM grand total (client 28-Oct-2026) */}
+      {(() => {
+        const cutFabric = Math.round(cuttingLay.reduce((s, cl) => {
+          const mFp = fabricProgram.find((fp) => sameFabricRow(fp, cl));
+          const cq = mFp ? cutQtyFor(mFp) : { net_qty: Number(cl.net_qty) || 0, sample_qty: Number(cl.sample_qty) || 0 };
+          return s + cq.net_qty + cq.sample_qty;
+        }, 0) * 100) / 100;
+        const parts = isWoven ? 0 : summaryKpis.partsKg;
+        return (
+          <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-3 rounded-lg bg-indigo-600 text-white font-bold">
+            <span className="uppercase tracking-wider text-xs">Grand Total</span>
+            <span className="text-[11px] font-normal text-indigo-100">
+              Main fabric {fmtDecimal(cutFabric)} {summaryKpis.uom}
+              {parts > 0 && <> + Foldings / parts {fmtDecimal(parts)} KG</>}
+              {summaryKpis.collarYarnKg > 0 && <> (incl. collar yarn {fmtDecimal(summaryKpis.collarYarnKg)} KG)</>}
+            </span>
+            <span className="text-base font-mono">{fmtDecimal(cutFabric + parts)} {summaryKpis.uom}</span>
+          </div>
+        );
+      })()}
+    </>
+  );
+
   if (!isNew && loadingExisting) {
     return <div className="py-20 text-center text-slate-400">Loading CAD Requirement #{id}...</div>;
   }
@@ -1587,20 +1780,26 @@ export default function CadRequirementDetailPage() {
         <div className="p-3 bg-white rounded-xl border border-slate-200/80 shadow-sm">
           <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Order Qty (Garments)</div>
           <div className="text-lg font-bold text-indigo-600 mt-0.5">{fmtNumber(summaryKpis.totalOrderPcs)} Pcs</div>
-          <div className="text-[10px] text-slate-400">Main fabric colours · rib / collar not added · Rej +{header.rejection_pct}%</div>
+          <div className="text-[10px] text-slate-400">Main fabric colours · rib / collar not added · with excess {fmtNumber(summaryKpis.totalCutPcs)} Pcs</div>
         </div>
 
         <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-200 shadow-sm">
           <div className="text-[11px] font-semibold text-indigo-700 uppercase tracking-wider">Total Fabric Need</div>
+          {/* the F.PRGM grand total material — fabric + collar yarn + foldings + tapes (client 28-Oct-2026) */}
           <div className="text-xl font-bold text-indigo-900 mt-0.5">
-            {fmtDecimal(isWoven ? summaryKpis.grandFabricMtr : summaryKpis.grandFabricKg)} {summaryKpis.uom}
+            {fmtDecimal(isWoven ? summaryKpis.grandFabricMtr : summaryKpis.grandTotalMaterial)} {summaryKpis.uom}
           </div>
+          {!isWoven && summaryKpis.partsKg > 0 && (
+            <div className="text-[10px] text-indigo-700 mt-0.5">
+              Fabric {fmtDecimal(summaryKpis.grandFabricKg)} + Parts {fmtDecimal(summaryKpis.partsKg)} KG
+            </div>
+          )}
           {summaryKpis.grandFabricMtr > 0 && !isWoven && (
             <div className="text-[10px] text-purple-700 font-bold mt-0.5">
               + {fmtDecimal(summaryKpis.grandFabricMtr)} MTR Foam / Khada
             </div>
           )}
-          <div className="text-[10px] text-indigo-600">F.PRGM consolidated</div>
+          <div className="text-[10px] text-indigo-600">F.PRGM grand total</div>
         </div>
 
         <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-200 shadow-sm">
@@ -1620,7 +1819,7 @@ export default function CadRequirementDetailPage() {
           <div className="text-lg font-bold text-amber-900 mt-0.5">
             {fmtDecimal(summaryKpis.actualPieceWt * (isWoven ? 1 : 1000), 2)} {isWoven ? 'Mtrs' : 'Gms'}
           </div>
-          <div className="text-[10px] text-amber-600">Average − fabric loss {summaryKpis.lossPct}% (collar / tapes not reduced)</div>
+          <div className="text-[10px] text-amber-600">Average − marker fabric loss {summaryKpis.lossPct}% (collar / tapes not reduced)</div>
         </div>
       </div>
 
@@ -1674,7 +1873,7 @@ export default function CadRequirementDetailPage() {
             label="Rejection / Cut %"
             type="number"
             step="0.5"
-            value={header.rejection_pct ?? 3}
+            value={header.rejection_pct ?? 0}
             onChange={(e) => {
               const val = parseFloat(e.target.value) || 0;
               setHeader((p) => ({ ...p, rejection_pct: val }));
@@ -1688,7 +1887,7 @@ export default function CadRequirementDetailPage() {
             label="Fabric Loss %"
             type="number"
             step="0.5"
-            value={header.fabric_allowance_pct ?? 10}
+            value={header.fabric_allowance_pct ?? 0}
             onChange={(e) => {
               const val = parseFloat(e.target.value) || 0;
               setHeader((p) => ({ ...p, fabric_allowance_pct: val }));
@@ -1997,7 +2196,7 @@ export default function CadRequirementDetailPage() {
                   <input
                     type="number"
                     step="0.5"
-                    value={activeMarker.rejection_pct ?? header.rejection_pct ?? 3.0}
+                    value={activeMarker.rejection_pct ?? header.rejection_pct ?? 0}
                     onChange={(e) => updateActiveMarker({ rejection_pct: parseFloat(e.target.value) || 0 })}
                     className="w-full font-bold text-amber-900 border border-amber-300 bg-white rounded px-2 py-1"
                   />
@@ -2014,7 +2213,7 @@ export default function CadRequirementDetailPage() {
                   <input
                     type="number"
                     step="0.5"
-                    value={activeMarker.fabric_allowance_pct ?? header.fabric_allowance_pct ?? 10.0}
+                    value={activeMarker.fabric_allowance_pct ?? header.fabric_allowance_pct ?? 0}
                     onChange={(e) => updateActiveMarker({ fabric_allowance_pct: parseFloat(e.target.value) || 0 })}
                     className="w-full font-bold text-indigo-900 border border-indigo-300 bg-white rounded px-2 py-1"
                   />
@@ -2296,6 +2495,7 @@ export default function CadRequirementDetailPage() {
                 </h3>
                 <p className="text-[11px] text-slate-500">
                   Formula: <strong>Cut Pieces = CEILING(Order Qty × (1 + {activeMarker.rejection_pct ?? header.rejection_pct}%), 1)</strong> per size
+                  {' '}· Req = {isWoven ? 'req length' : 'avg weight'} / pc × <strong>cut pieces</strong> (top row: order pcs only)
                 </p>
               </div>
               <button
@@ -2360,7 +2560,7 @@ export default function CadRequirementDetailPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
                   {activeMarker.colorways.map((cw, cwIdx) => {
-                    const effRej = activeMarker.rejection_pct != null ? Number(activeMarker.rejection_pct) : Number(header.rejection_pct ?? 3.0);
+                    const effRej = activeMarker.rejection_pct != null ? Number(activeMarker.rejection_pct) : Number(header.rejection_pct ?? 0);
                     const rawQtys = activeMarker.sizes.map((_, sIdx) => Number(cw.quantities?.[sIdx]) || 0);
                     const cutQtys = rawQtys.map((q) =>
                       Math.ceil(q * (1 + (effRej / 100.0)) - 1e-9)
@@ -2368,12 +2568,13 @@ export default function CadRequirementDetailPage() {
                     const totOrder = rawQtys.reduce((a, b) => a + b, 0);
                     const totCut = cutQtys.reduce((a, b) => a + b, 0);
 
-                    let reqVal = 0;
-                    if (!isWoven) {
-                      reqVal = Math.round(((activeMarker.avg_wt_per_pc_g * totCut) / 1000.0) * 100) / 100;
-                    } else {
-                      reqVal = Math.round(((activeMarker.req_length_per_pc_cm * totCut) / 100.0) * 100) / 100;
-                    }
+                    // Req qty is for the CUT pieces (order + rejection / excess %); the order-qty weight is shown
+                    // on the first row so both are visible (client 28-Oct-2026)
+                    const qtyFor = (pcs: number) => isWoven
+                      ? Math.round(((activeMarker.req_length_per_pc_cm * pcs) / 100.0) * 100) / 100
+                      : Math.round(((activeMarker.avg_wt_per_pc_g * pcs) / 1000.0) * 100) / 100;
+                    const reqVal = qtyFor(totCut);
+                    const orderReqVal = qtyFor(totOrder);
 
                     return (
                       <React.Fragment key={cwIdx}>
@@ -2434,8 +2635,8 @@ export default function CadRequirementDetailPage() {
                           <td className="py-1 px-2 text-right font-bold text-slate-900">
                             {fmtNumber(totOrder)}
                           </td>
-                          <td className="py-1 px-2 text-right font-bold text-indigo-700">
-                            {fmtDecimal(reqVal)} {isWoven ? 'MTR' : (activeMarker.uom || 'KG')}
+                          <td className="py-1 px-2 text-right font-medium text-slate-500" title={`Fabric for the ${fmtNumber(totOrder)} order pcs (without excess)`}>
+                            {fmtDecimal(orderReqVal)} {isWoven ? 'MTR' : (activeMarker.uom || 'KG')}
                           </td>
                           <td className="py-1 px-2 text-center">
                             <button
@@ -2461,8 +2662,9 @@ export default function CadRequirementDetailPage() {
                           <td className="py-1 px-2 text-right font-bold font-mono">
                             {fmtNumber(totCut)}
                           </td>
-                          <td className="py-1 px-2 text-right text-[10px] text-amber-700 font-medium">
-                            +{effRej}% buffer
+                          <td className="py-1 px-2 text-right" title={`Fabric for the ${fmtNumber(totCut)} cut pcs — this is the qty taken to the fabric program`}>
+                            <div className="font-bold text-indigo-700 text-xs">{fmtDecimal(reqVal)} {isWoven ? 'MTR' : (activeMarker.uom || 'KG')}</div>
+                            <div className="text-[10px] text-amber-700 font-medium">incl. +{effRej}% excess</div>
                           </td>
                           <td></td>
                         </tr>
@@ -2521,7 +2723,7 @@ export default function CadRequirementDetailPage() {
                     <th className="py-2.5 px-3">Colour / Shade</th>
                     <th className="py-2.5 px-2 text-right">Order Qty</th>
                     <th className="py-2.5 px-2 text-right">Net Req ({header.uom})</th>
-                    <th className="py-2.5 px-2 text-right">Buffer ({header.uom})</th>
+                    <th className="py-2.5 px-2 text-right" title="Fixed 2% of the net qty (rounded up to whole KG), min 1 — a quantity, not a %">Buffer 2% ({header.uom})</th>
                     <th className="py-2.5 px-2 text-right text-purple-700 font-bold">Sample ({header.uom})</th>
                     <th className="py-2.5 px-3 text-right text-indigo-700">Grand Total ({header.uom})</th>
                     {!isWoven && <th className="py-2.5 px-3 text-right text-sky-700" title="KG × 1000 ÷ (GSM × width m); tube = 2 layers">Meterage (MTR)</th>}
@@ -2541,9 +2743,16 @@ export default function CadRequirementDetailPage() {
                         </Badge>
                       </td>
                       <td className="py-2.5 px-3 font-bold text-slate-800">{fp.color_name}</td>
-                      <td className="py-2.5 px-2 text-right">{fmtNumber(fp.order_qty_pcs)} Pcs</td>
+                      <td className="py-2.5 px-2 text-right">
+                        <div>{fmtNumber(fp.order_qty_pcs)} Pcs</div>
+                        {Number(fp.cut_qty_pcs) > Number(fp.order_qty_pcs) && (
+                          <div className="text-[10px] text-slate-500" title="Net qty is for the cut pieces (order qty + rejection / excess %)">
+                            cut {fmtNumber(fp.cut_qty_pcs)} incl. excess
+                          </div>
+                        )}
+                      </td>
                       <td className="py-2.5 px-2 text-right font-medium">{fmtDecimal(fp.net_qty)}</td>
-                      <td className="py-2.5 px-2 text-right text-amber-700 font-medium">+{fmtDecimal(fp.buffer_qty)}</td>
+                      <td className="py-2.5 px-2 text-right text-amber-700 font-medium" title={`2% of ${fmtNumber(Math.ceil(Number(fp.net_qty) || 0))} ${fp.uom}, rounded`}>+{fmtDecimal(fp.buffer_qty)}</td>
                       <td className="py-2.5 px-2 text-right text-purple-700 font-medium">
                         <div className="flex items-center justify-end gap-1">
                           <span className="text-[10px] text-purple-500 font-bold">+</span>
@@ -2893,155 +3102,45 @@ export default function CadRequirementDetailPage() {
               </p>
             </div>
             <button
-              onClick={() => window.print()}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 shadow-sm"
+              onClick={printPortal}
+              disabled={!cuttingLay.length && !specialParts.length}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 shadow-sm disabled:opacity-50"
             >
               <Printer size={14} />
               <span>Print Cutting Sheet</span>
             </button>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
-                  <th className="py-2.5 px-3">Fabric Type</th>
-                  <th className="py-2.5 px-2">GSM</th>
-                  <th className="py-2.5 px-2">Diameter</th>
-                  <th className="py-2.5 px-3">Colour / Shade</th>
-                  <th className="py-2.5 px-2 text-right">Cutting Lay Qty (Pcs)</th>
-                  <th className="py-2.5 px-3 text-right text-emerald-700">Net Cutting Fabric ({header.uom})</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-700">
-                {cuttingLay.map((cl, idx) => {
-                  const matchingFp = fabricProgram.find((fp) => sameFabricRow(fp, cl));
-                  const fpGrand = Number(matchingFp?.grand_total_qty || 0);
-                  const sampleQty = Number(matchingFp?.sample_qty || 0);
-                  const lossPct = cutLossPct;
-                  const cq = matchingFp ? cutQtyFor(matchingFp) : { net_qty: Number(cl.net_qty) || 0, sample_qty: Number(cl.sample_qty) || 0 };
-                  const bulkNetCut = cq.net_qty;
-                  const sampleNetCut = cq.sample_qty;
+          {cutSheetTables}
 
-                  return (
-                    <React.Fragment key={idx}>
-                      <tr className="hover:bg-slate-50/70">
-                        <td className="py-2.5 px-3 font-semibold text-slate-900 flex items-center gap-1.5">
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">BULK</span>
-                          <span>{cl.fabric_type}</span>
-                        </td>
-                        <td className="py-2.5 px-2">{cl.gsm || '—'}</td>
-                        <td className="py-2.5 px-2 font-mono text-slate-600">{cl.dia_spec}</td>
-                        <td className="py-2.5 px-3 font-bold text-slate-800">{cl.color_name}</td>
-                        <td className="py-2.5 px-2 text-right font-medium">{fmtNumber(cl.order_qty_pcs)} Pcs</td>
-                        <td className="py-2.5 px-3 text-right">
-                          <div className="font-bold text-emerald-700 text-sm">
-                            {fmtDecimal(bulkNetCut)} {cl.uom}
-                          </div>
-                          <div className="text-[10px] text-slate-500 font-normal">
-                            ({fmtDecimal(fpGrand - sampleQty, 2)} {cl.uom} − {lossPct}% process loss)
-                          </div>
-                        </td>
-                      </tr>
-
-                      {sampleQty > 0 && (
-                        <tr className="bg-purple-50/40 hover:bg-purple-50/70 border-b border-purple-100">
-                          <td className="py-2.5 px-3 font-semibold text-purple-950 flex items-center gap-1.5 pl-6">
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-200 text-purple-900">SAMPLE</span>
-                            <span>{cl.fabric_type}</span>
-                          </td>
-                          <td className="py-2.5 px-2 text-purple-800">{cl.gsm || '—'}</td>
-                          <td className="py-2.5 px-2 font-mono text-purple-700">{cl.dia_spec}</td>
-                          <td className="py-2.5 px-3 font-bold text-purple-900">{cl.color_name} (Sample)</td>
-                          <td className="py-2.5 px-2 text-right text-purple-700 font-medium italic">Fitting / Development</td>
-                          <td className="py-2.5 px-3 text-right">
-                            <div className="font-bold text-purple-900 text-sm">{fmtDecimal(sampleNetCut)} {cl.uom}</div>
-                            <div className="text-[10px] text-purple-600 font-normal">({fmtDecimal(sampleQty, 2)} kg − {lossPct}% process loss)</div>
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-              </tbody>
-              <tfoot>
-                {(() => {
-                  const cqs = cuttingLay.map((cl) => { const mFp = fabricProgram.find((fp) => sameFabricRow(fp, cl)); return mFp ? cutQtyFor(mFp) : { net_qty: Number(cl.net_qty) || 0, sample_qty: Number(cl.sample_qty) || 0 }; });
-                  const totalBulkCut = Math.round(cqs.reduce((s, x) => s + x.net_qty, 0) * 100) / 100;
-                  const totalSampleCut = Math.round(cqs.reduce((s, x) => s + x.sample_qty, 0) * 100) / 100;
-
-                  return (
-                    <tr className="bg-emerald-50/60 font-bold text-emerald-900 border-t border-emerald-200">
-                      <td colSpan={4} className="py-3 px-3">
-                        TOTAL CUTTING DEPARTMENT REQUIREMENT
-                        {totalSampleCut > 0 && (
-                          <span className="text-xs font-normal text-emerald-700 ml-2">
-                            (Bulk: {fmtDecimal(totalBulkCut)} {summaryKpis.uom} + Sample: {fmtDecimal(totalSampleCut)} {summaryKpis.uom})
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3 px-2 text-right">
-                        {fmtNumber(cuttingLay.reduce((s, x) => s + Number(x.order_qty_pcs || 0), 0))} Pcs
-                      </td>
-                      <td className="py-3 px-3 text-right text-base text-emerald-900">
-                        {fmtDecimal(totalBulkCut + totalSampleCut)} {summaryKpis.uom}
-                      </td>
-                    </tr>
-                  );
-                })()}
-              </tfoot>
-            </table>
-          </div>
-
-          {/* Foldings / specialized parts are issued to cutting too (zip folding, BNT, tapes & cords) */}
-          {specialParts.length > 0 && (
-            <div className="space-y-2 pt-3 border-t border-slate-200">
-              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                <Scissors size={14} className="text-amber-700" />
-                <span>Foldings, Specialized Parts, Tapes & Cords — Cutting Issue</span>
-              </h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-amber-50/70 text-amber-950 font-bold border-b border-amber-200">
-                      <th className="py-2.5 px-3">Part Name</th>
-                      <th className="py-2.5 px-3">Fabric / Material Spec</th>
-                      <th className="py-2.5 px-2">Dia / Form</th>
-                      <th className="py-2.5 px-2">Colour</th>
-                      <th className="py-2.5 px-2 text-right">Cons / Pc</th>
-                      <th className="py-2.5 px-2 text-right">Total Qty</th>
-                      <th className="py-2.5 px-3 text-right text-amber-900">Total KG</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-700">
-                    {specialParts.map((sp, idx) => {
-                      const kg = specialPartKg(sp);
-                      return (
-                        <tr key={idx} className="hover:bg-slate-50/70">
-                          <td className="py-2.5 px-3 font-semibold text-slate-900">{sp.part_name}</td>
-                          <td className="py-2.5 px-3">{sp.fabric_type} {sp.gsm ? `(${sp.gsm} GSM)` : ''}</td>
-                          <td className="py-2.5 px-2 font-mono text-slate-600">{sp.dia_spec || '—'}</td>
-                          <td className="py-2.5 px-2 font-semibold text-slate-800">{sp.color}</td>
-                          <td className="py-2.5 px-2 text-right font-mono">{fmtDecimal(sp.consumption_per_pc, 3)} {sp.uom}</td>
-                          <td className="py-2.5 px-2 text-right font-mono font-bold">{fmtDecimal(sp.total_qty, 1)} {sp.uom}</td>
-                          <td className="py-2.5 px-3 text-right font-mono font-bold text-amber-900">
-                            {kg != null ? `${fmtDecimal(kg, 2)} KG` : '—'}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr className="bg-amber-50/60 font-bold text-amber-950 border-t border-amber-200">
-                      <td colSpan={6} className="py-3 px-3">TOTAL FOLDINGS & SPECIALIZED PARTS</td>
-                      <td className="py-3 px-3 text-right font-mono">
-                        {fmtDecimal(summaryKpis.foldingFabricKg + summaryKpis.tapesKg, 2)} KG
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
+          {/* Print-only copy (A4 landscape): IO, style, fabric, order qty with excess, then the requirement with grand total */}
+          <style>{RP_PRINT_CSS}</style>
+          {createPortal(
+            <div className="rp-print-root">
+              <div className="border-b-2 border-black pb-2 mb-3">
+                <div className="flex items-baseline justify-between">
+                  <h1 className="text-lg font-bold">CUTTING LAY SHEET</h1>
+                  <span className="text-[11px]">Printed {new Date().toLocaleString('en-GB')}</span>
+                </div>
+                <div className="mt-1.5 grid grid-cols-4 gap-x-6 gap-y-1 text-[12px]">
+                  <div><span className="text-slate-500">IO No:</span> <strong>{header.internal_ir_no || '—'}</strong></div>
+                  <div><span className="text-slate-500">Style No:</span> <strong>{cadStyleCode || '—'}</strong>{cadStyleName ? ` — ${cadStyleName}` : ''}</div>
+                  <div><span className="text-slate-500">CAD No:</span> <strong>{header.req_no || 'Unsaved'} {header.cad_version}</strong></div>
+                  <div><span className="text-slate-500">Date:</span> <strong>{header.req_date ? fmtDate(header.req_date) : '—'}</strong></div>
+                  <div><span className="text-slate-500">Order Qty:</span> <strong>{fmtNumber(summaryKpis.totalOrderPcs)} Pcs</strong></div>
+                  <div><span className="text-slate-500">Order Qty with Excess:</span> <strong>{fmtNumber(summaryKpis.totalCutPcs)} Pcs</strong></div>
+                  <div className="col-span-2"><span className="text-slate-500">Buyer:</span> <strong>{existingData?.buyer_name || curJob?.buyer_name || '—'}</strong></div>
+                  <div className="col-span-4"><span className="text-slate-500">Fabric Type:</span> <strong>{[...new Set(cuttingLay.map((cl) => `${cl.fabric_type}${cl.gsm ? ` ${cl.gsm} GSM` : ''}`))].join(', ') || '—'}</strong></div>
+                </div>
               </div>
-            </div>
+              <div className="space-y-3">{cutSheetTables}</div>
+              <div className="grid grid-cols-4 gap-6 mt-10 text-center text-[11px]">
+                {['Prepared By (CAD)', 'Cutting In-charge', 'Production Head', 'Received By'].map((t) => (
+                  <div key={t} className="border-t border-black pt-1">{t}</div>
+                ))}
+              </div>
+            </div>,
+            document.body,
           )}
         </div>
       )}
@@ -4401,6 +4500,21 @@ function RatioPattiMarkerSheet({ m, idx, calc, print }: {
   );
 }
 
+/** Prints only the .rp-print-root portal (A4 landscape, see RP_PRINT_CSS) instead of the whole app shell. */
+function printPortal() {
+  document.body.classList.add('rp-printing');
+  const done = () => {
+    document.body.classList.remove('rp-printing');
+    window.removeEventListener('afterprint', done);
+  };
+  window.addEventListener('afterprint', done);
+  // Give React a frame to flush the portal before the print dialog snapshots.
+  requestAnimationFrame(() => {
+    window.print();
+    setTimeout(done, 500);
+  });
+}
+
 const RP_PRINT_CSS = `
 .rp-print-root { display: none; }
 @media print {
@@ -4433,19 +4547,7 @@ function RatioPattiTab({ markers, header, forceWoven, refData }: {
     {} as Record<string, { net: number; rej: number; allow: number; gross: number }>,
   );
 
-  const doPrint = () => {
-    document.body.classList.add('rp-printing');
-    const done = () => {
-      document.body.classList.remove('rp-printing');
-      window.removeEventListener('afterprint', done);
-    };
-    window.addEventListener('afterprint', done);
-    // Give React a frame to flush the portal before the print dialog snapshots.
-    requestAnimationFrame(() => {
-      window.print();
-      setTimeout(done, 500);
-    });
-  };
+  const doPrint = printPortal;
 
   const headerBlock = (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-1 text-[12px]">
