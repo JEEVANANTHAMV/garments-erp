@@ -26,9 +26,10 @@ CREATE TABLE IF NOT EXISTS trx_export_incentive_receipt (
   CONSTRAINT fk_incr__company FOREIGN KEY (company_id) REFERENCES mst_company (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Receipts against an export incentive claim (one per credit)';
 
--- status: + PARTIAL (part received) and SHORT_CLOSED (balance will not come)
+-- status: + PARTIAL (part received) and SHORT_CLOSED (balance will not come). Only while it is still an ENUM —
+-- migration 144 makes it VARCHAR(20) (with NOT_APPLICABLE etc.); turning that back into this ENUM truncates rows.
 SET @x = (SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_export_incentive' AND COLUMN_NAME='status');
-SET @s = IF(@x NOT LIKE '%SHORT_CLOSED%',
+SET @s = IF(@x LIKE 'enum(%' AND @x NOT LIKE '%SHORT_CLOSED%',
   'ALTER TABLE trx_export_incentive MODIFY status ENUM(''PENDING'',''CLAIMED'',''PARTIAL'',''CREDITED'',''SHORT_CLOSED'',''REJECTED'') DEFAULT ''PENDING''', 'SELECT 1');
 PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
 
