@@ -1558,8 +1558,9 @@ export default function CadRequirementDetailPage() {
                       </span>
                     )}
                   </td>
-                  <td className="py-3 px-2 text-right">
-                    {fmtNumber(cuttingLay.reduce((s, x) => s + Number(x.order_qty_pcs || 0), 0))} Pcs
+                  {/* garments with excess (main fabric) — body + rib rows of the same garment must not add up (3,990 for 1,995) */}
+                  <td className="py-3 px-2 text-right" title="Garments incl. excess (main fabric); rib / collar rows are the same garments">
+                    {fmtNumber(summaryKpis.totalCutPcs)} Pcs
                   </td>
                   <td className="py-3 px-3 text-right text-base text-emerald-900">
                     {fmtDecimal(totalBulkCut + totalSampleCut)} {summaryKpis.uom}
@@ -4542,6 +4543,7 @@ const RP_PRINT_CSS = `
   .rp-print-root { font-size: 11px; color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .rp-print-root .rp-marker { break-inside: avoid; page-break-inside: avoid; }
   .rp-print-root table { width: 100%; }
+  .rp-print-root tfoot { display: table-row-group; } /* total row once, at the end — not repeated on every page */
   @page { size: A4 landscape; margin: 10mm; }
 }
 `;
