@@ -1011,6 +1011,17 @@ export default function CadRequirementDetailPage() {
     staleTime: 60_000,
   });
 
+  // SET order (one SO line per part, e.g. TOP + BOTTOM): the CAD is cut per set and the piece weight is per set
+  // (client 28-Oct-2026). Display only — the header order qty and the BOM stay in pieces.
+  const setInfo = jobBreakdown.data?.is_set
+    ? {
+        parts: ((jobBreakdown.data.parts ?? []) as { part_name: string | null }[]).map((p) => p.part_name).filter(Boolean).join(' + '),
+        pcsPerSet: Number(jobBreakdown.data.pcs_per_set) || 2,
+        orderPcs: Number(jobBreakdown.data.total_order_qty) || 0,
+      }
+    : null;
+  const unitLabel = setInfo ? 'Sets' : 'Pcs';
+
   const syncOrderBreakdownToMarker = () => {
     const b = jobBreakdown.data;
     if (!b?.sizes?.length) {
@@ -1027,7 +1038,9 @@ export default function CadRequirementDetailPage() {
     if (b.total_order_qty > 0) {
       setHeader((p) => ({ ...p, order_qty: b.total_order_qty }));
     }
-    toast(`Loaded ${sizes.length} sizes and pure order quantities from Sales Order`, 'success');
+    toast(b.is_set
+      ? `Loaded ${sizes.length} sizes — set order: quantities per set (${b.total_set_qty} sets = ${b.total_order_qty} pcs)`
+      : `Loaded ${sizes.length} sizes and pure order quantities from Sales Order`, 'success');
   };
 
   /** Fill the active marker from its marker report (width, length, ratio, garments per marker) + the CAD efficiency. */
@@ -1487,7 +1500,7 @@ export default function CadRequirementDetailPage() {
               <th className="py-2.5 px-2">GSM</th>
               <th className="py-2.5 px-2">Diameter</th>
               <th className="py-2.5 px-3">Colour / Shade</th>
-              <th className="py-2.5 px-2 text-right">Cutting Lay Qty (Pcs)</th>
+              <th className="py-2.5 px-2 text-right">Cutting Lay Qty ({unitLabel})</th>
               <th className="py-2.5 px-3 text-right text-emerald-700">Net Cutting Fabric ({header.uom})</th>
             </tr>
           </thead>
@@ -1511,7 +1524,7 @@ export default function CadRequirementDetailPage() {
                     <td className="py-2.5 px-2">{cl.gsm || '—'}</td>
                     <td className="py-2.5 px-2 font-mono text-slate-600">{cl.dia_spec}</td>
                     <td className="py-2.5 px-3 font-bold text-slate-800">{cl.color_name}</td>
-                    <td className="py-2.5 px-2 text-right font-medium">{fmtNumber(cl.order_qty_pcs)} Pcs</td>
+                    <td className="py-2.5 px-2 text-right font-medium">{fmtNumber(cl.order_qty_pcs)} {unitLabel}</td>
                     <td className="py-2.5 px-3 text-right">
                       <div className="font-bold text-emerald-700 text-sm">
                         {fmtDecimal(bulkNetCut)} {cl.uom}
@@ -1560,7 +1573,7 @@ export default function CadRequirementDetailPage() {
                   </td>
                   {/* garments with excess (main fabric) — body + rib rows of the same garment must not add up (3,990 for 1,995) */}
                   <td className="py-3 px-2 text-right" title="Garments incl. excess (main fabric); rib / collar rows are the same garments">
-                    {fmtNumber(summaryKpis.totalCutPcs)} Pcs
+                    {fmtNumber(summaryKpis.totalCutPcs)} {unitLabel}
                   </td>
                   <td className="py-3 px-3 text-right text-base text-emerald-900">
                     {fmtDecimal(totalBulkCut + totalSampleCut)} {summaryKpis.uom}
@@ -1797,9 +1810,14 @@ export default function CadRequirementDetailPage() {
         </div>
 
         <div className="p-3 bg-white rounded-xl border border-slate-200/80 shadow-sm">
-          <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Order Qty (Garments)</div>
-          <div className="text-lg font-bold text-indigo-600 mt-0.5">{fmtNumber(summaryKpis.totalOrderPcs)} Pcs</div>
-          <div className="text-[10px] text-slate-400">Main fabric colours · rib / collar not added · with excess {fmtNumber(summaryKpis.totalCutPcs)} Pcs</div>
+          <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Order Qty ({setInfo ? 'Sets' : 'Garments'})</div>
+          <div className="text-lg font-bold text-indigo-600 mt-0.5">{fmtNumber(summaryKpis.totalOrderPcs)} {unitLabel}</div>
+          {setInfo && (
+            <div className="text-[10px] text-indigo-700 font-semibold">
+              = {fmtNumber(setInfo.orderPcs)} Pcs ({setInfo.parts}) on the order
+            </div>
+          )}
+          <div className="text-[10px] text-slate-400">Main fabric colours · rib / collar not added · with excess {fmtNumber(summaryKpis.totalCutPcs)} {unitLabel}</div>
         </div>
 
         <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-200 shadow-sm">
@@ -1822,7 +1840,7 @@ export default function CadRequirementDetailPage() {
         </div>
 
         <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-200 shadow-sm">
-          <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">Average Piece Weight</div>
+          <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">Average Piece Weight{setInfo ? ' / Set' : ''}</div>
           <div className="text-lg font-bold text-emerald-900 mt-0.5">
             {fmtDecimal(summaryKpis.avgConsInclParts * (isWoven ? 1 : 1000), 2)} {isWoven ? 'Mtrs' : 'Gms'}
           </div>
@@ -1834,7 +1852,7 @@ export default function CadRequirementDetailPage() {
         </div>
 
         <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200 shadow-sm">
-          <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Actual Piece Weight</div>
+          <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Actual Piece Weight{setInfo ? ' / Set' : ''}</div>
           <div className="text-lg font-bold text-amber-900 mt-0.5">
             {fmtDecimal(summaryKpis.actualPieceWt * (isWoven ? 1 : 1000), 2)} {isWoven ? 'Mtrs' : 'Gms'}
           </div>
@@ -2763,7 +2781,7 @@ export default function CadRequirementDetailPage() {
                       </td>
                       <td className="py-2.5 px-3 font-bold text-slate-800">{fp.color_name}</td>
                       <td className="py-2.5 px-2 text-right">
-                        <div>{fmtNumber(fp.order_qty_pcs)} Pcs</div>
+                        <div>{fmtNumber(fp.order_qty_pcs)} {unitLabel}</div>
                         {fpCutPcs(fp) > Number(fp.order_qty_pcs) && (
                           <div className="text-[10px] text-slate-500" title="Net qty is for the cut pieces (order qty + rejection / excess %)">
                             cut {fmtNumber(fpCutPcs(fp))} incl. excess
@@ -2814,7 +2832,7 @@ export default function CadRequirementDetailPage() {
                   <tr className="bg-indigo-50/60 font-bold text-indigo-900 border-t border-indigo-200">
                     {/* Avg cons / pc moved to the consolidated summary below (includes Part B items) */}
                     <td colSpan={5} className="py-3 px-3">TOTAL CONSOLIDATED FABRIC INDENT</td>
-                    <td className="py-3 px-2 text-right">{fmtNumber(summaryKpis.totalOrderPcs)} Pcs</td>
+                    <td className="py-3 px-2 text-right">{fmtNumber(summaryKpis.totalOrderPcs)} {unitLabel}</td>
                     <td className="py-3 px-2 text-right">
                       {fmtDecimal(fabricProgram.reduce((s, x) => s + Number(x.net_qty || 0), 0))}
                     </td>
@@ -3063,7 +3081,7 @@ export default function CadRequirementDetailPage() {
               <div className="flex flex-wrap items-center gap-2.5 font-mono">
                 {/* 1. Actual Piece Weight (before Average Piece Weight) */}
                 <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-300 text-amber-950 px-2.5 py-1 rounded-lg shadow-2xs">
-                  <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-amber-800">Actual Piece Weight:</span>
+                  <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-amber-800">Actual Piece Weight{setInfo ? ' / Set' : ''}:</span>
                   <span className="font-extrabold text-sm text-amber-950">
                     {fmtDecimal(summaryKpis.actualPieceWt * (isWoven ? 1 : 1000), 2)} {isWoven ? 'Mtrs' : 'Gms'}
                   </span>
@@ -3072,14 +3090,14 @@ export default function CadRequirementDetailPage() {
 
                 {/* 2. Average Piece Weight (Gross) */}
                 <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-300 text-emerald-950 px-2.5 py-1 rounded-lg shadow-2xs">
-                  <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-emerald-800">Average Piece Weight:</span>
+                  <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-emerald-800">Average Piece Weight{setInfo ? ' / Set' : ''}:</span>
                   <span className="font-extrabold text-sm text-emerald-950">
                     {fmtDecimal(summaryKpis.avgConsInclParts * (isWoven ? 1 : 1000), 2)} {isWoven ? 'Mtrs' : 'Gms'}
                   </span>
                 </div>
 
                 <span className="text-slate-400 font-sans text-[11px]">
-                  ({fmtDecimal(summaryKpis.grandTotalMaterial, 2)} {summaryKpis.uom} ÷ {fmtNumber(summaryKpis.totalOrderPcs)} pcs)
+                  ({fmtDecimal(summaryKpis.grandTotalMaterial, 2)} {summaryKpis.uom} ÷ {fmtNumber(summaryKpis.totalOrderPcs)} {setInfo ? `sets of ${setInfo.parts}` : 'pcs'})
                 </span>
               </div>
             </div>
@@ -3146,8 +3164,8 @@ export default function CadRequirementDetailPage() {
                   <div><span className="text-slate-500">Style No:</span> <strong>{cadStyleCode || '—'}</strong>{cadStyleName ? ` — ${cadStyleName}` : ''}</div>
                   <div><span className="text-slate-500">CAD No:</span> <strong>{header.req_no || 'Unsaved'} {header.cad_version}</strong></div>
                   <div><span className="text-slate-500">Date:</span> <strong>{header.req_date ? fmtDate(header.req_date) : '—'}</strong></div>
-                  <div><span className="text-slate-500">Order Qty:</span> <strong>{fmtNumber(summaryKpis.totalOrderPcs)} Pcs</strong></div>
-                  <div><span className="text-slate-500">Order Qty with Excess:</span> <strong>{fmtNumber(summaryKpis.totalCutPcs)} Pcs</strong></div>
+                  <div><span className="text-slate-500">Order Qty:</span> <strong>{fmtNumber(summaryKpis.totalOrderPcs)} {unitLabel}</strong>{setInfo ? ` (${fmtNumber(setInfo.orderPcs)} Pcs ${setInfo.parts})` : ''}</div>
+                  <div><span className="text-slate-500">Order Qty with Excess:</span> <strong>{fmtNumber(summaryKpis.totalCutPcs)} {unitLabel}</strong></div>
                   <div className="col-span-2"><span className="text-slate-500">Buyer:</span> <strong>{existingData?.buyer_name || curJob?.buyer_name || '—'}</strong></div>
                   <div className="col-span-4"><span className="text-slate-500">Fabric Type:</span> <strong>{[...new Set(cuttingLay.map((cl) => `${cl.fabric_type}${cl.gsm ? ` ${cl.gsm} GSM` : ''}`))].join(', ') || '—'}</strong></div>
                 </div>

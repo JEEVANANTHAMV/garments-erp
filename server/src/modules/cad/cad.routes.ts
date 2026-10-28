@@ -38,6 +38,9 @@ cadRouter.get('/cad-requirements/job-colours', requirePermission('PRODUCTION.VIE
 /**
  * GET /cad-requirements/job-breakdown?io_no=&style_id= — loads sizes and pure order quantities (without excess)
  * from sales order breakdown so CAD can inherit exact SO quantities.
+ * SET orders (one SO line per part, e.g. TOP + BOTTOM of the same colour / size) are cut per set: a colour × size
+ * cell is the set qty (largest part), not TOP + BOTTOM added up (client 28-Oct-2026, CP-IO-2026-005: 3,900 pcs =
+ * 1,950 sets). total_order_qty stays in pieces — the CAD header / BOM per-piece consumption use pieces.
  */
 cadRouter.get('/cad-requirements/job-breakdown', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId;
@@ -63,20 +66,29 @@ cadRouter.get('/cad-requirements/job-breakdown', requirePermission('PRODUCTION.V
       ORDER BY sz.sort_order, sz.id`, q.style_id ? [soId, q.style_id] : [soId]);
 
   const skuRows = await query<any>(
-    `SELECT c.color_name, sz.size_code, SUM(COALESCE(sos.qty, 0)) AS qty, SUM(COALESCE(sos.plan_cut_qty, 0)) AS plan_cut_qty
+    `SELECT c.color_name, sz.size_code, COALESCE(NULLIF(TRIM(sol.part_name), ''), '') AS part_name,
+            SUM(COALESCE(sos.qty, 0)) AS qty, SUM(COALESCE(sos.plan_cut_qty, 0)) AS plan_cut_qty
        FROM trx_sales_order_line sol
        JOIN trx_sales_order_sku sos ON sos.so_line_id = sol.id
        JOIN mst_style_sku sk ON sk.id = sos.sku_id
        JOIN mst_color c ON c.id = COALESCE(sk.color_id, sol.color_id)
        JOIN mst_size sz ON sz.id = sk.size_id
       WHERE sol.so_id = ? ${q.style_id ? 'AND sol.style_id = ?' : ''}
-      GROUP BY c.color_name, sz.size_code`, q.style_id ? [soId, q.style_id] : [soId]);
+      GROUP BY c.color_name, sz.size_code, COALESCE(NULLIF(TRIM(sol.part_name), ''), '')`, q.style_id ? [soId, q.style_id] : [soId]);
+
+  // parts of the order (TOP / BOTTOM …); two or more named parts = a SET order
+  const partQty: Record<string, number> = {};
+  for (const r of skuRows) partQty[r.part_name] = (partQty[r.part_name] || 0) + (Number(r.qty) || 0);
+  const parts = Object.entries(partQty).map(([part_name, qty]) => ({ part_name: part_name || null, qty }));
+  const namedParts = parts.filter((p) => p.part_name);
+  const isSet = namedParts.length >= 2;
 
   const sizes = sizeRows.map(s => s.size_code || s.size_label);
   const colorways = colorRows.map(c => {
     const quantities = sizes.map(sz => {
-      const match = skuRows.find(r => r.color_name === c.color_name && r.size_code === sz);
-      return Number(match?.qty) || 0;
+      const cell = skuRows.filter(r => r.color_name === c.color_name && r.size_code === sz).map(r => Number(r.qty) || 0);
+      // per set: the largest part (TOP and BOTTOM normally match); a plain order has one part — its qty
+      return isSet ? Math.max(0, ...cell) : cell.reduce((a, b) => a + b, 0);
     });
     return {
       color_name: c.color_name,
@@ -84,14 +96,19 @@ cadRouter.get('/cad-requirements/job-breakdown', requirePermission('PRODUCTION.V
     };
   });
 
-  const totalOrderQty = colorways.reduce((sum, cw) => sum + cw.quantities.reduce((a, b) => a + b, 0), 0);
+  const totalCellQty = colorways.reduce((sum, cw) => sum + cw.quantities.reduce((a, b) => a + b, 0), 0);
+  const totalPcs = parts.reduce((sum, p) => sum + p.qty, 0);
 
   res.json({
     data: {
       colors: colorRows,
       sizes,
       colorways,
-      total_order_qty: totalOrderQty,
+      total_order_qty: totalPcs,
+      is_set: isSet,
+      parts,
+      pcs_per_set: isSet ? namedParts.length : 1,
+      total_set_qty: isSet ? totalCellQty : null,
     },
     meta: { so_id: soId }
   });
