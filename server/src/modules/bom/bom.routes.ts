@@ -8,6 +8,7 @@ import { requirePermission, requireAny } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
+import { cadBomPreview, applyCadToBom, bomCadYarn, latestCadOfStyle, type SourcingMode } from './cadBomSync.js';
 import { orderCells, cellsFor, cellsPlanCut, cellsOrderQty, lineRequirement, type OrderCell } from '../../core/bomRequirement.js';
 
 export const bomRouter = Router();
@@ -817,13 +818,19 @@ bomRouter.get('/latest-cad/:styleId', requirePermission('BOM.VIEW'), ah(async (r
   if (!cadFabricId) cadFabricId = defaultFabric?.id || null;
   if (!cadYarnId) cadYarnId = defaultYarn?.id || null;
 
-  const fCons = totalFabric > 0 ? Number((totalFabric / orderQty).toFixed(5)) : 0.82;
-  const yCons = totalYarn > 0 ? Number((totalYarn / orderQty).toFixed(5)) : Number((fCons * 1.05).toFixed(5));
+  // the BOM lines the CAD gives: one per fabric, consumption = CAD kg ÷ the job's plan-cut pcs (client 29-Oct-2026)
+  const cadPick = await latestCadOfStyle(cid, styleId);
+  const preview = cadPick ? await cadBomPreview({}, cid, Number(cadPick.id), cadYarnId && cadYarnId !== defaultYarn?.id ? cadYarnId : null) : null;
+  const fCons = preview && preview.plan_cut_pcs > 0 ? Number((preview.fabric_kg / preview.plan_cut_pcs).toFixed(5))
+    : totalFabric > 0 ? Number((totalFabric / orderQty).toFixed(5)) : 0.82;
+  const yCons = preview && preview.plan_cut_pcs > 0 ? Number((preview.yarn_kg / preview.plan_cut_pcs).toFixed(5))
+    : totalYarn > 0 ? Number((totalYarn / orderQty).toFixed(5)) : Number((fCons * 1.05).toFixed(5));
 
   res.json({
     success: true,
     data: {
       ...cadReq,
+      bom_preview: preview,
       has_approved_cad: true,
       marker_name: cadReq.req_no || 'CAD-MKR',
       efficiency_pct: Number(cadReq.marker_efficiency) || 85,
@@ -842,139 +849,23 @@ bomRouter.get('/latest-cad/:styleId', requirePermission('BOM.VIEW'), ah(async (r
 bomRouter.post('/:id/sync-cad', requirePermission('BOM.UPDATE'), ah(async (req, res) => {
   const id = Number(req.params.id);
   const cid = req.user!.companyId;
-  const sourcingMode = (req.body?.sourcing_mode || 'YARN_PURCHASE') as 'YARN_PURCHASE' | 'FABRIC_PURCHASE' | 'BOTH';
-
-  const bom = await queryOne<any>(`
-    SELECT b.* FROM trx_bom b WHERE b.id = ? AND b.company_id = ?
-  `, [id, cid]);
+  const sourcingMode = (['YARN_PURCHASE', 'FABRIC_PURCHASE', 'BOTH'].includes(req.body?.sourcing_mode) ? req.body.sourcing_mode : 'YARN_PURCHASE') as SourcingMode;
+  const bom = await queryOne<any>(`SELECT b.* FROM trx_bom b WHERE b.id = ? AND b.company_id = ?`, [id, cid]);
   if (!bom) throw NotFound('BOM not found');
-
-  // Look for CAD requirement: try cmr first, then cr directly
-  let cadReq = await queryOne<any>(`
-    SELECT cmr.*, cr.req_no, cr.order_qty, cr.marker_efficiency, cr.data_json
-      FROM trx_cad_material_requirement cmr
-      JOIN trx_cad_requirement cr ON cr.id = cmr.cad_req_id
-     WHERE cmr.company_id = ? AND cmr.style_id = ?
-     ORDER BY cmr.id DESC LIMIT 1
-  `, [cid, bom.style_id]);
-
-  if (!cadReq) {
-    cadReq = await queryOne<any>(`
-      SELECT NULL AS cmr_id,
-             (SELECT COALESCE(SUM(total_req_qty), 0) FROM trx_cad_marker WHERE cad_req_id = cr.id) AS marker_total_fabric,
-             cr.id AS cad_req_id, cr.req_no, cr.order_qty, cr.marker_efficiency, cr.data_json
-        FROM trx_cad_requirement cr
-       WHERE cr.company_id = ? AND cr.style_id = ?
-       ORDER BY cr.id DESC LIMIT 1
-    `, [cid, bom.style_id]);
-  }
-
-  if (!cadReq) {
-    throw BadRequest('No CAD Requirement found for this Style. Please create CAD requirement first.');
-  }
-
-  const orderQty = Number(cadReq.order_qty) || 1000;
-  let parsedJson: any = null;
-  try {
-    parsedJson = typeof cadReq.data_json === 'string' ? JSON.parse(cadReq.data_json) : cadReq.data_json;
-  } catch {}
-
-  const totalFabricKg = Number(cadReq.total_fabric_kg) ||
-                        Number(cadReq.marker_total_fabric) ||
-                        Number(parsedJson?.total_fabric_kg) ||
-                        Number(parsedJson?.summary_metrics?.grandTotalMaterial) || 0;
-  const totalYarnKg = Number(cadReq.total_yarn_kg) ||
-                      Number(parsedJson?.total_yarn_kg) ||
-                      (totalFabricKg > 0 ? Number((totalFabricKg * 1.05).toFixed(2)) : 0);
-
-  const fabricConsPerGmt = totalFabricKg > 0 ? Number((totalFabricKg / orderQty).toFixed(5)) : 0.82;
-  const yarnConsPerGmt = totalYarnKg > 0 ? Number((totalYarnKg / orderQty).toFixed(5)) : Number((fabricConsPerGmt * 1.05).toFixed(5));
-
-  // Resolve Fabric & Yarn matching master
-  const styleRow = await queryOne<any>(`SELECT fabric_id FROM mst_style WHERE id = ?`, [bom.style_id]);
-  const defaultFabric = await queryOne<any>(`SELECT id, base_uom, yarn_id FROM mst_fabric WHERE company_id = ? AND is_active = 1 LIMIT 1`, [cid]);
-  const defaultYarn = await queryOne<any>(`SELECT id, base_uom FROM mst_yarn WHERE company_id = ? AND is_active = 1 LIMIT 1`, [cid]);
-  const kgUom = await queryOne<any>(`SELECT id FROM cfg_uom WHERE (code = 'KG' OR code = 'KGS') LIMIT 1`);
-  const uomId = kgUom?.id || defaultFabric?.base_uom || defaultYarn?.base_uom || 1;
-
-  let targetFabricId: number | null = null;
-  let targetYarnId: number | null = null;
-  const marker0 = parsedJson?.markers?.[0];
-  if (marker0?.fabric_id) {
-    targetFabricId = Number(marker0.fabric_id);
-  } else if (marker0?.fabric_type) {
-    const match = await queryOne<any>(
-      `SELECT id, yarn_id FROM mst_fabric WHERE (fabric_name = ? OR fabric_code = ?) AND company_id = ? AND is_active = 1 LIMIT 1`,
-      [marker0.fabric_type, marker0.fabric_type, cid]
-    );
-    if (match) {
-      targetFabricId = Number(match.id);
-      if (match.yarn_id) targetYarnId = Number(match.yarn_id);
-    }
-  }
-
-  if (!targetFabricId && styleRow?.fabric_id) targetFabricId = Number(styleRow.fabric_id);
-  if (targetFabricId && !targetYarnId) {
-    const fab = await queryOne<any>(`SELECT yarn_id FROM mst_fabric WHERE id = ?`, [targetFabricId]);
-    if (fab?.yarn_id) targetYarnId = Number(fab.yarn_id);
-  }
-  if (!targetFabricId) targetFabricId = defaultFabric?.id || 1;
-  if (!targetYarnId) targetYarnId = defaultYarn?.id || 1;
-  const tableDia = await cadTableDia(Number(cadReq.cad_req_id), marker0);
-
-  await transaction(async (tx) => {
-    // 1. Fabric Line: If YARN_PURCHASE, source is PRODUCTION (Knitted in-house). If FABRIC_PURCHASE or BOTH, source is PURCHASE.
-    const fabricSourceType = sourcingMode === 'YARN_PURCHASE' ? 'PRODUCTION' : 'PURCHASE';
-    const existingFabric = await txQueryOne<any>(tx, `
-      SELECT id FROM trx_bom_line WHERE bom_id = ? AND material_type = 'FABRIC' LIMIT 1
-    `, [id]);
-
-    if (existingFabric) {
-      await txExecute(tx, `
-        UPDATE trx_bom_line
-           SET fabric_id = ?, consumption = ?, source_type = ?, wastage_pct = 5.0, dia = COALESCE(?, dia),
-               remarks = CONCAT('CAD Auto-Synced: ', ?)
-         WHERE id = ?
-      `, [targetFabricId, fabricConsPerGmt, fabricSourceType, tableDia, cadReq.req_no || 'CAD V01', existingFabric.id]);
-    } else {
-      await txExecute(tx, `
-        INSERT INTO trx_bom_line (bom_id, material_type, fabric_id, source_type, consumption, uom_id, wastage_pct, dia, remarks)
-        VALUES (?, 'FABRIC', ?, ?, ?, ?, 5.0, ?, ?)
-      `, [id, targetFabricId, fabricSourceType, fabricConsPerGmt, uomId, tableDia, `CAD Auto-Synced (${cadReq.req_no || 'CAD'})`]);
-    }
-
-    // 2. Yarn Line: Only if YARN_PURCHASE or BOTH. If FABRIC_PURCHASE, remove auto-synced yarn to avoid unused yarn line.
-    const existingYarn = await txQueryOne<any>(tx, `
-      SELECT id, remarks FROM trx_bom_line WHERE bom_id = ? AND material_type = 'YARN' LIMIT 1
-    `, [id]);
-
-    if (sourcingMode === 'FABRIC_PURCHASE') {
-      if (existingYarn && (existingYarn.remarks || '').includes('CAD Auto-Synced')) {
-        await txExecute(tx, `DELETE FROM trx_bom_line WHERE id = ?`, [existingYarn.id]);
-      }
-    } else {
-      // Sourcing is YARN_PURCHASE or BOTH -> Yarn source_type = PURCHASE
-      if (existingYarn) {
-        await txExecute(tx, `
-          UPDATE trx_bom_line
-             SET yarn_id = ?, consumption = ?, source_type = 'PURCHASE', wastage_pct = 3.0,
-                 remarks = CONCAT('CAD Auto-Synced: ', ?)
-           WHERE id = ?
-        `, [targetYarnId, yarnConsPerGmt, cadReq.req_no || 'CAD V01', existingYarn.id]);
-      } else {
-        await txExecute(tx, `
-          INSERT INTO trx_bom_line (bom_id, material_type, yarn_id, source_type, consumption, uom_id, wastage_pct, remarks)
-          VALUES (?, 'YARN', ?, 'PURCHASE', ?, ?, 3.0, ?)
-        `, [id, targetYarnId, yarnConsPerGmt, uomId, `CAD Auto-Synced (${cadReq.req_no || 'CAD'})`]);
-      }
-    }
-  });
-
+  const cad = await latestCadOfStyle(cid, bom.style_id);
+  if (!cad) throw BadRequest('No CAD Requirement found for this Style. Please create CAD requirement first.');
+  // one line per CAD fabric (+ yarn): the job requirement then equals the CAD's kg exactly — nothing is half-synced
+  const preview = await cadBomPreview({}, cid, Number(cad.id), await bomCadYarn({}, id));
+  if (preview.problems.length) throw BadRequest(`${cad.req_no} ${cad.cad_version} cannot be synced yet: ${preview.problems.join('; ')}`);
+  const written = await transaction((tx) => applyCadToBom(tx, id, preview, sourcingMode));
+  await audit(req, 'trx_bom', id, 'UPDATE', undefined, { cad_sync: `${cad.req_no} ${cad.cad_version}`, sourcing_mode: sourcingMode, plan_cut_pcs: preview.plan_cut_pcs,
+    fabric_kg: preview.fabric_kg, yarn_kg: sourcingMode === 'FABRIC_PURCHASE' ? 0 : preview.yarn_kg, lines: written });
   const updatedLines = await withMaterialRates(cid, await query<any>(LINE_SELECT, [id]));
   res.json({
     success: true,
-    message: `Successfully synced CAD auto-consumption [${sourcingMode}] from ${cadReq.req_no || 'CAD'} (Fabric: ${fabricConsPerGmt} KG, Yarn: ${sourcingMode !== 'FABRIC_PURCHASE' ? `${yarnConsPerGmt} KG` : 'None'})`,
-    data: { ...bom, lines: updatedLines },
+    message: `Synced ${cad.req_no} ${cad.cad_version} [${sourcingMode}]: fabric ${preview.fabric_kg} KG in ${preview.lines.filter((l) => l.material_type === 'FABRIC').length} line(s)`
+      + `${sourcingMode !== 'FABRIC_PURCHASE' ? `, yarn ${preview.yarn_kg} KG` : ''} for ${preview.plan_cut_pcs} plan-cut pcs (no extra wastage — the CAD already has its buffers)`,
+    data: { ...bom, lines: updatedLines, cad_preview: preview },
   });
 }));
 

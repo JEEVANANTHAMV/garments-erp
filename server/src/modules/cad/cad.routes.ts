@@ -10,6 +10,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { z } from 'zod';
+import { cadBomPreview, applyCadToBom, bomCadYarn } from '../bom/cadBomSync.js';
 import { readMarkerReport } from '../../core/markerReport.js';
 import { resolveSoId } from '../stock/jobStock.routes.js';
 import { isKgUom, partKg, partQtyPerKg, readPartFactor, factorUnitLabel, withPartWeight } from '../../core/partWeight.js';
@@ -1292,46 +1293,27 @@ cadRouter.post('/cad-requirements/:id/approve', requirePermission('PRODUCTION.AP
       userId,
     ]);
 
-    // Auto-sync into active BOM for this style
-    const activeBom = await txQueryOne<any>(tx, `
-      SELECT id FROM trx_bom WHERE company_id = ? AND style_id = ? AND is_active = 1
-      ORDER BY version DESC, id DESC LIMIT 1
-    `, [companyId, cr.style_id]);
-
-    if (activeBom) {
-      const orderQty = Number(cr.order_qty) || 1000;
-      const fCons = finalFabricQty > 0 ? Number((finalFabricQty / orderQty).toFixed(5)) : (isWoven ? 0.65 : 0.82);
-      const yCons = isWoven ? 0 : Number((fCons * 1.05).toFixed(5));
-
-      const defFabric = await txQueryOne<any>(tx, `SELECT id, base_uom FROM mst_fabric WHERE company_id = ? AND is_active = 1 LIMIT 1`, [companyId]);
-      const defYarn = await txQueryOne<any>(tx, `SELECT id, base_uom FROM mst_yarn WHERE company_id = ? AND is_active = 1 LIMIT 1`, [companyId]);
-
-      const targetUomCode = isWoven ? 'MTR' : 'KG';
-      const uomRow = await txQueryOne<any>(tx, `SELECT id FROM cfg_uom WHERE (code = ? OR code = 'MTRS' OR code = 'KGS') LIMIT 1`, [targetUomCode]);
-      const uId = uomRow?.id || defFabric?.base_uom || 1;
-
-      const fabricSourceType = isWoven ? 'PURCHASE' : 'PRODUCTION';
-      const existFab = await txQueryOne<any>(tx, `SELECT id, source_type FROM trx_bom_line WHERE bom_id = ? AND material_type = 'FABRIC' LIMIT 1`, [activeBom.id]);
-      if (existFab) {
-        await txExecute(tx, `UPDATE trx_bom_line SET consumption = ?, uom_id = ?, source_type = COALESCE(source_type, ?), remarks = CONCAT('CAD Auto-Synced (${targetUomCode}): ', ?) WHERE id = ?`, [fCons, uId, fabricSourceType, cr.req_no || 'CAD', existFab.id]);
-      } else if (defFabric) {
-        await txExecute(tx, `INSERT INTO trx_bom_line (bom_id, material_type, fabric_id, source_type, consumption, uom_id, wastage_pct, remarks) VALUES (?, 'FABRIC', ?, ?, ?, ?, 5.0, ?)`, [activeBom.id, defFabric.id, fabricSourceType, fCons, uId, `CAD Auto-Synced (${cr.req_no || 'CAD'})`]);
-      }
-
-      if (!isWoven) {
-        const existYrn = await txQueryOne<any>(tx, `SELECT id, source_type FROM trx_bom_line WHERE bom_id = ? AND material_type = 'YARN' LIMIT 1`, [activeBom.id]);
-        if (existYrn) {
-          await txExecute(tx, `UPDATE trx_bom_line SET consumption = ?, source_type = 'PURCHASE', remarks = CONCAT('CAD Auto-Synced: ', ?) WHERE id = ?`, [yCons, cr.req_no || 'CAD', existYrn.id]);
-        } else if (defYarn) {
-          await txExecute(tx, `INSERT INTO trx_bom_line (bom_id, material_type, yarn_id, source_type, consumption, uom_id, wastage_pct, remarks) VALUES (?, 'YARN', ?, 'PURCHASE', ?, ?, 3.0, ?)`, [activeBom.id, defYarn.id, yCons, uId, `CAD Auto-Synced (${cr.req_no || 'CAD'})`]);
-        }
-      }
-    }
   });
+
+  // Sync into the style's active BOM — one line per CAD fabric + yarn, so the job requirement equals the CAD's kg
+  // (client 29-Oct-2026). A fabric missing from the master stops the sync, not the approval: the BOM screen says why.
+  let bomSync: { bom_no: string; lines: number; problems: string[] } | null = null;
+  const activeBom = await queryOne<any>(`SELECT id, bom_no FROM trx_bom WHERE company_id = ? AND style_id = ? AND is_active = 1 ORDER BY version DESC, id DESC LIMIT 1`, [companyId, cr.style_id]);
+  if (activeBom) {
+    const preview = await cadBomPreview({}, companyId, id, await bomCadYarn({}, Number(activeBom.id)));
+    if (preview.problems.length) bomSync = { bom_no: activeBom.bom_no, lines: 0, problems: preview.problems };
+    else {
+      const fab = await queryOne<any>(`SELECT source_type FROM trx_bom_line WHERE bom_id = ? AND material_type = 'FABRIC' ORDER BY id LIMIT 1`, [activeBom.id]);
+      const hasYarn = await queryOne<any>(`SELECT 1 x FROM trx_bom_line WHERE bom_id = ? AND material_type = 'YARN' LIMIT 1`, [activeBom.id]);
+      const mode = isWoven || (fab && fab.source_type !== 'PRODUCTION' && !hasYarn) ? 'FABRIC_PURCHASE' : fab && fab.source_type !== 'PRODUCTION' ? 'BOTH' : 'YARN_PURCHASE';
+      const n = await transaction((tx) => applyCadToBom(tx, Number(activeBom.id), preview, mode));
+      bomSync = { bom_no: activeBom.bom_no, lines: n, problems: [] };
+    }
+  }
 
   await audit(req, 'trx_cad_requirement', id, 'UPDATE', null, { status: 'APPROVED', cad_version: cr.cad_version });
 
-  res.json({ data: { status: 'APPROVED', cad_req_id: id, purchase_requirement: purchaseRequirement } });
+  res.json({ data: { status: 'APPROVED', cad_req_id: id, purchase_requirement: purchaseRequirement, bom_sync: bomSync } });
 }));
 
 /**

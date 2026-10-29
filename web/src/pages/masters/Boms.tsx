@@ -11,7 +11,7 @@ import { DataTable } from '../../components/DataTable';
 import {
   PageHeader, SearchInput, Input, Select, Spinner, Badge, StatusBadge, LoadingBlock, ErrorState, useDebounced, Modal, Button
 } from '../../components/ui';
-import { fmtDate, fmtDecimal, today, toDateInput, humanize } from '../../lib/format';
+import { fmtDate, fmtDecimal, fmtNumber, today, toDateInput, humanize } from '../../lib/format';
 import { BomOrderStrip, BomRequirementTable, TYPE_TONE, useOrderInfo } from './BomRequirement';
 import { cellsFor, cellsPlanCut, lineRequirement } from '../../lib/bomRequirement';
 
@@ -781,25 +781,24 @@ export function BomDetailPage() {
         void qc.invalidateQueries({ queryKey: ['boms', 'item', id] });
         void refetchCad();
       } else {
-        // In-memory sync for new BOM
-        const cad = latestCad;
-        const fabricCons = Number(cad.fabric_consumption_per_pc) || 0.25;
-        const yarnCons = Number(cad.yarn_req_per_pc) || Number((fabricCons * 1.05).toFixed(4));
+        // In-memory sync for new BOM — the same lines the server writes (one per CAD fabric + yarn, CAD kg ÷ plan-cut pcs)
+        const pv = latestCad?.bom_preview;
+        if (!pv?.lines?.length) { toast('The CAD has no fabric to bring over', 'warning'); return; }
+        if (pv.problems?.length) { toast(pv.problems.join('; '), 'error'); return; }
         const kgUom = (uoms.data ?? []).find((u: any) => u.code === 'KG')?.id || 5;
-
-        // Keep non-fabric/yarn lines (Trims)
-        const otherLines = lines.filter((l) => l.material_type !== 'FABRIC' && l.material_type !== 'YARN');
-
-        const newLines: BomLine[] = [];
-        if (cadSourcingPlan === 'YARN_PURCHASE' || cadSourcingPlan === 'BOTH') {
-          // 1. Fabric Line (In-House Knitting if YARN_PURCHASE)
-          newLines.push({
+        const mtrUom = (uoms.data ?? []).find((u: any) => ['MTR', 'MTRS'].includes(String(u.code)))?.id || kgUom;
+        // Keep non-fabric/yarn lines (Trims) and fabric / yarn lines added by hand
+        const otherLines = lines.filter((l) => !['FABRIC', 'YARN'].includes(l.material_type) || !String(l.remarks || '').startsWith('CAD'));
+        const newLines: BomLine[] = pv.lines
+          .filter((l: any) => l.material_type === 'FABRIC' || cadSourcingPlan !== 'FABRIC_PURCHASE')
+          .map((l: any) => ({
             _key: `b${++seq}`,
-            material_type: 'FABRIC',
-            source_type: cadSourcingPlan === 'YARN_PURCHASE' ? 'PRODUCTION' : 'PURCHASE',
-            fabric_id: cad.fabric_id || (fabrics.data?.[0]?.id ?? ''),
-            dia: cad.fabric_dia ? String(cad.fabric_dia) : '',   // CAD table dia (58" + 2" = 60")
-            yarn_id: '',
+            material_type: l.material_type,
+            source_type: l.material_type === 'YARN' ? 'PURCHASE' : cadSourcingPlan === 'YARN_PURCHASE' ? 'PRODUCTION' : 'PURCHASE',
+            fabric_id: l.fabric_id ?? '',
+            yarn_id: l.yarn_id ?? '',
+            dia: l.dia ?? '',
+            gsm: l.gsm ?? '',
             trim_id: '',
             item_description: '',
             specification: '',
@@ -807,56 +806,12 @@ export function BomDetailPage() {
             size_id: '',
             consumption_basis: 'PER_PIECE',
             applicability: 'ALL',
-            consumption: fabricCons,
+            consumption: l.consumption,
             additional_qty: 0,
-            uom_id: kgUom,
-            wastage_pct: 5.0,
-            remarks: `CAD Auto-Consumption (Marker: ${cad.marker_name || 'Approved'})`,
-          });
-          // 2. Yarn Line (PURCHASE)
-          newLines.push({
-            _key: `b${++seq}`,
-            material_type: 'YARN',
-            source_type: 'PURCHASE',
-            yarn_id: cad.yarn_id || (yarns.data?.[0]?.id ?? ''),
-            fabric_id: '',
-            trim_id: '',
-            item_description: '',
-            specification: '',
-            color_id: '',
-            size_id: '',
-            consumption_basis: 'PER_PIECE',
-            applicability: 'ALL',
-            consumption: yarnCons,
-            additional_qty: 0,
-            uom_id: kgUom,
-            wastage_pct: 3.0,
-            remarks: `CAD Derived Yarn (Yield: 95%)`,
-          });
-        } else if (cadSourcingPlan === 'FABRIC_PURCHASE') {
-          // Direct Fabric Purchase: Only Fabric line
-          newLines.push({
-            _key: `b${++seq}`,
-            material_type: 'FABRIC',
-            source_type: 'PURCHASE',
-            fabric_id: cad.fabric_id || (fabrics.data?.[0]?.id ?? ''),
-            dia: cad.fabric_dia ? String(cad.fabric_dia) : '',   // CAD table dia (58" + 2" = 60")
-            yarn_id: '',
-            trim_id: '',
-            item_description: '',
-            specification: '',
-            color_id: '',
-            size_id: '',
-            consumption_basis: 'PER_PIECE',
-            applicability: 'ALL',
-            consumption: fabricCons,
-            additional_qty: 0,
-            uom_id: kgUom,
-            wastage_pct: 5.0,
-            remarks: `CAD Auto-Consumption Direct Fabric Purchase (Marker: ${cad.marker_name || 'Approved'})`,
-          });
-        }
-
+            uom_id: l.uom === 'MTR' ? mtrUom : kgUom,
+            wastage_pct: 0,
+            remarks: l.remarks,
+          }));
         setLines([...newLines, ...otherLines]);
         toast(`CAD Auto-Consumption applied [${cadSourcingPlan}]!`, 'success');
       }
@@ -1762,6 +1717,43 @@ export function BomDetailPage() {
               </div>
             </label>
           </div>
+          {/* What the sync writes: one line per CAD fabric (+ yarn), CAD kg ÷ the job's plan-cut pcs, no extra wastage */}
+          {latestCad?.bom_preview && (() => {
+            const pv = latestCad.bom_preview;
+            const shown = pv.lines.filter((l: any) => l.material_type === 'FABRIC' || cadSourcingPlan !== 'FABRIC_PURCHASE');
+            return (
+              <div className="mt-4 rounded-lg border border-slate-200 p-3 text-xs" data-cad-preview>
+                <div className="mb-2 font-semibold text-slate-800">
+                  From {pv.req_no} {pv.cad_version} — for {fmtNumber(pv.plan_cut_pcs)} pcs ({pv.pcs_source})
+                </div>
+                <table className="w-full">
+                  <thead><tr className="text-left text-slate-500"><th className="py-1">Line</th><th className="py-1 text-right">CAD total</th><th className="py-1 text-right">Per pc</th></tr></thead>
+                  <tbody>
+                    {shown.map((l: any, i: number) => (
+                      <tr key={i} className="border-t border-slate-100">
+                        <td className="py-1">{l.material_type === 'YARN' ? 'Yarn' : 'Fabric'} · {l.name}{l.gsm ? ` · ${l.gsm} GSM` : ''}{l.dia ? ` · ${l.dia}"` : ''}</td>
+                        <td className="py-1 text-right tabular-nums">{fmtDecimal(l.total_kg, 2)} {l.uom}</td>
+                        <td className="py-1 text-right tabular-nums">{fmtDecimal(l.consumption, 5)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-slate-300 font-semibold">
+                      <td className="py-1">Total fabric{cadSourcingPlan !== 'FABRIC_PURCHASE' ? ' / yarn' : ''}</td>
+                      <td className="py-1 text-right tabular-nums" data-cad-preview-total>
+                        {fmtDecimal(pv.fabric_kg, 2)} KG{pv.fabric_mtr ? ` + ${fmtDecimal(pv.fabric_mtr, 2)} MTR` : ''}{cadSourcingPlan !== 'FABRIC_PURCHASE' ? ` / ${fmtDecimal(pv.yarn_kg, 2)} KG` : ''}
+                      </td>
+                      <td />
+                    </tr>
+                  </tfoot>
+                </table>
+                <p className="mt-2 text-slate-500">No wastage is added — the CAD total already has the cut excess, buffer and samples. Lines you added by hand are kept.</p>
+                {pv.problems.length > 0 && (
+                  <ul className="mt-2 list-disc pl-4 text-red-600" data-cad-problems>{pv.problems.map((x: string) => <li key={x}>{x}</li>)}</ul>
+                )}
+              </div>
+            );
+          })()}
         </Modal>
       )}
 

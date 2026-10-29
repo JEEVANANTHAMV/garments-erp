@@ -1442,8 +1442,10 @@ export default function CadRequirementDetailPage() {
   // Approve CAD Requirement
   const handleApprove = async () => {
     try {
+      type BomSync = { bom_no: string; lines: number; problems: string[] };
+      let bomSync = null as BomSync | null;
       if (!isNew && id) {
-        await http.post(`/cad-requirements/${id}/approve`, {
+        const res = await http.post<{ data: { bom_sync?: BomSync | null } }>(`/cad-requirements/${id}/approve`, {
           total_fabric_kg: isWoven ? 0 : summaryKpis.grandTotalMaterial,
           total_fabric_mtrs: isWoven ? summaryKpis.grandFabric : 0,
           total_yarn_kg: isWoven ? 0 : Math.round(summaryKpis.grandTotalMaterial * 1.05 * 10) / 10,
@@ -1453,9 +1455,13 @@ export default function CadRequirementDetailPage() {
           flat_knit_spec: flatKnitSpec,
           summary_metrics: summaryKpis,
         });
+        bomSync = res.data?.bom_sync ?? null;
       }
       setHeader((p) => ({ ...p, status: 'APPROVED' }));
-      toast('Approved! Auto-synced to Style BOM and Procurement.', 'success');
+      // say what happened to the style's BOM: synced per fabric, not synced (why), or no BOM yet
+      if (bomSync?.problems?.length) toast(`Approved. BOM ${bomSync.bom_no} NOT synced: ${bomSync.problems.join('; ')}`, 'warning');
+      else if (bomSync) toast(`Approved. BOM ${bomSync.bom_no} synced from the CAD (${bomSync.lines} fabric / yarn lines).`, 'success');
+      else toast('Approved. No BOM for this style yet — create it and use "Sync CAD" to bring the fabric and yarn over.', 'success');
       setActiveTab('OUTPUT');
     } catch (e: any) {
       toast(e.message || 'Approval failed', 'error');
