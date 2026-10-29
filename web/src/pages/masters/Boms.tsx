@@ -789,7 +789,9 @@ export function BomDetailPage() {
         const kgUom = (uoms.data ?? []).find((u: any) => u.code === 'KG')?.id || 5;
         const mtrUom = (uoms.data ?? []).find((u: any) => ['MTR', 'MTRS'].includes(String(u.code)))?.id || kgUom;
         // Keep non-fabric/yarn lines (Trims) and fabric / yarn lines added by hand
-        const otherLines = lines.filter((l) => !['FABRIC', 'YARN'].includes(l.material_type) || !String(l.remarks || '').startsWith('CAD'));
+        // (blank starter rows with no material are dropped)
+        const otherLines = lines.filter((l) => (!['FABRIC', 'YARN'].includes(l.material_type) || !String(l.remarks || '').startsWith('CAD'))
+          && (l.fabric_id || l.yarn_id || l.trim_id || l.item_description || yarnBaseOf(l)));
         const newLines: BomLine[] = pv.lines
           .filter((l: any) => l.material_type === 'FABRIC' || cadSourcingPlan !== 'FABRIC_PURCHASE')
           .map((l: any) => ({
