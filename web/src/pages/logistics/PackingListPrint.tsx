@@ -94,6 +94,8 @@ export function PackingListLayout({ layout }: { layout: PlLayout }) {
 export function PackingListDocument({ pl }: { pl: any }) {
   if (pl?.layout?.cells) return <PackingListLayout layout={pl.layout} />;
   const type: 'ASSORTED' | 'SOLID' | 'MIXED' = pl.pl_type || 'ASSORTED';
+  // set cartons: quantities are SETS (client 29-Oct-2026)
+  const U = pl.qty_unit === 'SETS' ? 'SETS' : 'PCS';
   const blocks: any[] = pl.blocks || [];
   const nSizes = Math.max(1, ...blocks.map((b) => (b.effective_size_headers || []).length));
   const T = pl.totals || {};
@@ -184,16 +186,16 @@ export function PackingListDocument({ pl }: { pl: any }) {
           <tr className="bg-slate-100">
             <th className={cell} colSpan={3} rowSpan={2}>CTN NO</th>
             {left.map((t) => <th key={t} className={cell} rowSpan={2}>{t}</th>)}
-            <th className={cell} colSpan={nSizes}>{type === 'SOLID' ? 'QUANTITY / SIZE (PCS)' : 'SIZE (PCS)'}</th>
+            <th className={cell} colSpan={nSizes}>{type === 'SOLID' ? `QUANTITY / SIZE (${U})` : `SIZE (${U})`}</th>
             {type === 'MIXED' ? <>
-              <th className={cell} rowSpan={2}>PCS/ PACK</th>
+              <th className={cell} rowSpan={2}>{U}/ PACK</th>
               <th className={cell} colSpan={2}>PACK/ CTNS</th>
               <th className={cell} rowSpan={2}>TOT Ctns</th>
-              <th className={cell} rowSpan={2}>Total Qty (PCS)</th>
+              <th className={cell} rowSpan={2}>Total Qty ({U})</th>
             </> : <>
-              <th className={cell} rowSpan={2}>PCS/ CTN</th>
+              <th className={cell} rowSpan={2}>{U}/ CTN</th>
               <th className={cell} rowSpan={2}>{type === 'SOLID' ? 'TOT CTNS' : 'TOTAL Ctns'}</th>
-              <th className={cell} rowSpan={2}>{type === 'SOLID' ? 'TOT PCS' : 'Total Qty (PCS)'}</th>
+              <th className={cell} rowSpan={2}>{type === 'SOLID' ? `TOT ${U}` : `Total Qty (${U})`}</th>
             </>}
             <th className={cell} colSpan={2}>WEIGHT/CTN (KG)</th>
             <th className={cell} colSpan={2}>TOTAL WEIGHT (KG)</th>
@@ -284,7 +286,7 @@ export function PackingListDocument({ pl }: { pl: any }) {
         <table className="border-collapse">
           <tbody>
             <tr><td className="pr-3 font-semibold">TOTAL CARTONS</td><td>:</td><td className="px-2 text-right tabular-nums">{fmtNumber(T.total_cartons)}</td><td>CTNS</td></tr>
-            <tr><td className="pr-3 font-semibold">TOTAL PIECES</td><td>:</td><td className="px-2 text-right tabular-nums">{fmtNumber(T.total_qty)}</td><td>PCS</td></tr>
+            <tr><td className="pr-3 font-semibold">{U === 'SETS' ? 'TOTAL SETS' : 'TOTAL PIECES'}</td><td>:</td><td className="px-2 text-right tabular-nums">{fmtNumber(T.total_qty)}</td><td>{U}</td></tr>
             <tr><td className="pr-3 font-semibold">TOTAL NET WEIGHT</td><td>:</td><td className="px-2 text-right tabular-nums">{fmtDecimal(T.total_net_wt, 2)}</td><td>KGS</td></tr>
             <tr><td className="pr-3 font-semibold">TOTAL GROSS WEIGHT</td><td>:</td><td className="px-2 text-right tabular-nums">{fmtDecimal(T.total_gross_wt, 2)}</td><td>KGS</td></tr>
             <tr><td className="pr-3 font-semibold">CARTONS MEASUREMENT</td><td>:</td>

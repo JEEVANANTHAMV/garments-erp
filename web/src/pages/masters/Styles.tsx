@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { StyleSizesPanel, type StyleSizesHandle } from './StyleSizesPanel';
+import { StyleSetPartsPanel } from './StyleSetPartsPanel';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, ArrowLeft, Sparkles, Save, FileText, Check, ChevronDown, X, Search } from 'lucide-react';
@@ -450,6 +451,7 @@ export function StyleDetailPage() {
             </div>
 
             {!isNew && <div className="lg:col-span-3 order-last"><StyleSizesPanel ref={sizesRef} styleId={Number(id)} editable={editable} onSaved={() => void detail.refetch()} /></div>}
+            {!isNew && <div className="lg:col-span-3 order-last"><StyleSetPartsPanel styleId={Number(id)} editable={editable} /></div>}
 
             {/* Right 1 Col: Garment Photo & Sketch Upload */}
             <div className="card p-4">

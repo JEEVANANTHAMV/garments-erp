@@ -8,6 +8,7 @@ import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
 import { lockBundle, applyBundle, addMovement, bundleAvail, packingRequiresQc, TERMINAL } from './bundleLedger.js';
+import { setComps, setDefOfRow } from '../packing/setDefs.js';
 
 /**
  * FG receipt — the gate into packing (client call 16-Oct-2026):
@@ -104,8 +105,9 @@ export async function openBagsByPart(tx: Tx, cid: number, ioNo: string, styleId:
   for (const x of rows) {
     if (x.packing_unit === 'SET') {
       const d = sets.find((y) => Number(y.packing_id) === Number(x.packing_id) && Number(y.top_color_id) === Number(x.color_id));
-      add(pk(d?.top_part ?? 'TOP', x.color_id, x.size_id), n(x.q));
-      if (d) add(pk(d.bottom_part, d.bottom_color_id, x.size_id), n(x.q));
+      // a bagged set holds every part: pieces = sets × pieces per set
+      if (d) for (const p of setComps(setDefOfRow(d))) add(pk(p.part, p.color_id, x.size_id), n(x.q) * p.qty);
+      else add(pk('TOP', x.color_id, x.size_id), n(x.q));
     } else add(pk(x.part_name, x.color_id, x.size_id), n(x.q));
   }
   return out;

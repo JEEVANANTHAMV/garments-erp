@@ -178,8 +178,19 @@ async function prefill(cid: number, soId: number, plIds: number[] | null, format
   const soIds = [...new Set([soId, ...(pls.length ? (await query<any>(`SELECT DISTINCT so_id FROM trx_packing_list_row_item WHERE packing_list_id IN (?) AND so_id IS NOT NULL`, [chosenIds])).map((x) => Number(x.so_id)) : [])])];
   const soLines = await query<any>(`SELECT l.*, st.style_code, st.style_name, c.color_name, so2.buyer_po_no FROM trx_sales_order_line l
       JOIN trx_sales_order so2 ON so2.id = l.so_id LEFT JOIN mst_style st ON st.id = l.style_id LEFT JOIN mst_color c ON c.id = l.color_id WHERE l.so_id IN (?)`, [soIds]);
+  // set entries (client 29-Oct-2026): the buyer is billed per SET at the set rate; a set is known by its first
+  // part's colour (packing list set lines carry that colour, their qty is sets)
+  const setLeads = soLines.filter((l) => l.set_group && !soLines.some((x) => x.set_group === l.set_group && Number(x.so_id) === Number(l.so_id) && Number(x.id) < Number(l.id)));
+  const setColours = setLeads.length ? await query<any>(
+    `SELECT DISTINCT sk.so_line_id, k.color_id FROM trx_sales_order_sku sk JOIN mst_style_sku k ON k.id = sk.sku_id WHERE sk.so_line_id IN (?) AND sk.qty > 0`,
+    [setLeads.map((l) => l.id)]) : [];
   const soLineOf = (lineSo: number, styleId: number, colorId: number | null) => {
     const cands = soLines.filter((l) => Number(l.so_id) === lineSo && Number(l.style_id) === styleId);
+    const leads = setLeads.filter((l) => Number(l.so_id) === lineSo && Number(l.style_id) === styleId);
+    if (leads.length) {
+      const lead = leads.find((l) => setColours.some((x) => Number(x.so_line_id) === Number(l.id) && Number(x.color_id) === colorId)) ?? leads[0];
+      return { ...lead, unit_price: Number(lead.set_rate) || 0 };
+    }
     return cands.find((l) => colorId && Number(l.color_id) === colorId) ?? cands[0] ?? null;
   };
   // client 23-Oct-2026: "Order No" on the invoice is the buyer's PO number
@@ -222,11 +233,16 @@ async function prefill(cid: number, soId: number, plIds: number[] | null, format
   } else {
     const skuSizes = await query<any>(`SELECT ss.so_line_id, sz.size_code, ss.qty FROM trx_sales_order_sku ss JOIN mst_style_sku k ON k.id = ss.sku_id JOIN mst_size sz ON sz.id = k.size_id
        WHERE ss.so_line_id IN (?) AND ss.qty > 0`, [soLines.length ? soLines.map((l) => l.id) : [0]]).catch(() => []);
-    lines = soLines.filter((l) => Number(l.so_id) === soId).map((l) => ({ so_id: soId, style_id: l.style_id, color_id: l.color_id, order_no: so.buyer_po_no,
-      qty: Math.max(0, n(l.order_qty) - n(l.cancelled_qty)), unit_price: n(l.unit_price), sl: l, style_code: l.style_code, colour: l.assort_color || l.color_name || null,
-      size_text: sizeRange(Number(l.style_id), skuSizes.filter((x) => Number(x.so_line_id) === Number(l.id)).map((x) => String(x.size_code))),
-      size_qty: sizeOrder(Number(l.style_id), skuSizes.filter((x) => Number(x.so_line_id) === Number(l.id)).reduce((m, x) => m.set(String(x.size_code), (m.get(String(x.size_code)) ?? 0) + n(x.qty)), new Map<string, number>())),
-      buyer_sku_no: null, buyer_item_no: null, supplier_mat_no: null }));
+    // a set entry is one invoice line: sets (its first part's pieces ÷ pieces per set) at the set rate
+    const own = soLines.filter((l) => Number(l.so_id) === soId && (!l.set_group || setLeads.some((x) => Number(x.id) === Number(l.id))));
+    lines = own.map((l) => {
+      const per = l.set_group ? Math.max(1, n(l.qty_per_set)) : 1;
+      return { so_id: soId, style_id: l.style_id, color_id: l.color_id, order_no: so.buyer_po_no,
+        qty: Math.round(Math.max(0, n(l.order_qty) - n(l.cancelled_qty)) / per), unit_price: l.set_group ? n(l.set_rate) : n(l.unit_price), sl: l, style_code: l.style_code, colour: l.assort_color || l.color_name || null,
+        size_text: sizeRange(Number(l.style_id), skuSizes.filter((x) => Number(x.so_line_id) === Number(l.id)).map((x) => String(x.size_code))),
+        size_qty: sizeOrder(Number(l.style_id), skuSizes.filter((x) => Number(x.so_line_id) === Number(l.id)).reduce((m, x) => m.set(String(x.size_code), (m.get(String(x.size_code)) ?? 0) + Math.round(n(x.qty) / per)), new Map<string, number>())),
+        buyer_sku_no: null, buyer_item_no: null, supplier_mat_no: null };
+    });
   }
   // description of goods: the order line's (client 23-Oct-2026: "the composition we put on the sales order comes
   // automatically, editable"); else the buyer's earlier invoice of the style; else built from the masters
@@ -236,7 +252,9 @@ async function prefill(cid: number, soId: number, plIds: number[] | null, format
   const masters = styleIds.length ? await query<any>(`SELECT st.id, p.product_name, p.gender, p.hsn_code AS product_hsn, f.fabric_type, f.hsn_code AS fabric_hsn, cm.description AS composition, um.code AS uom
       FROM mst_style st LEFT JOIN mst_product p ON p.id = st.product_id LEFT JOIN mst_fabric f ON f.id = st.fabric_id
       LEFT JOIN mst_composition cm ON cm.id = f.composition_id LEFT JOIN cfg_uom um ON um.id = p.default_uom WHERE st.id IN (?)`, [styleIds]) : [];
-  const qtyUnit = last?.qty_unit ?? 'PCS';
+  // an order sold in sets is invoiced in SETS (the buyer's last invoice unit otherwise)
+  const soldInSets = so.qty_unit === 'SET';
+  const qtyUnit = soldInSets ? 'SET' : last?.qty_unit ?? 'PCS';
   lines = lines.map((l, i) => {
     const pv = prev.find((p) => Number(p.style_id) === Number(l.style_id));
     const ms = masters.find((m) => Number(m.id) === Number(l.style_id));
@@ -257,7 +275,7 @@ async function prefill(cid: number, soId: number, plIds: number[] | null, format
       buyer_sku_no: l.buyer_sku_no ?? pv?.buyer_sku_no ?? null, buyer_item_no: l.buyer_item_no ?? pv?.buyer_item_no ?? null,
       supplier_mat_no: l.supplier_mat_no ?? pv?.supplier_mat_no ?? l.style_code ?? null,
       ...parts, desc_auto: typed ? 0 : composed ? 1 : 0,
-      description: typed ?? (composed || pv?.description || l.sl?.description || null), hsn_code: hsn, uqc: pv?.uqc ?? uqcOf(ms?.uom ?? qtyUnit),
+      description: typed ?? (composed || pv?.description || l.sl?.description || null), hsn_code: hsn, uqc: l.sl?.set_group ? 'SET' : pv?.uqc ?? uqcOf(ms?.uom ?? qtyUnit),
       qty: l.qty, unit_price: l.unit_price, amount: r2(l.qty * l.unit_price), gst_rate: null, size_qty: l.size_qty?.length ? l.size_qty : null,
     };
   });
@@ -307,8 +325,8 @@ async function prefill(cid: number, soId: number, plIds: number[] | null, format
     goods_heading: last?.goods_heading ?? null,
     item_ref_label: last?.item_ref_label ?? (/COOP/i.test(buyerShort) ? 'COOP ID NO' : 'BUYER ITEM NO'),
     // the rate caption of the buyer's last invoice only when it is in this order's currency
-    qty_unit: last?.qty_unit ?? 'PCS', rate_basis: last?.rate_basis && String(last.rate_basis).includes(String(so.currency_code)) ? last.rate_basis : `${so.incoterm || 'FOB'} ${so.currency_code}`,
-    total_cartons: cartons || null, total_pcs: pcs || null, total_pcs_unit: last?.total_pcs_unit ?? 'PCS',
+    qty_unit: qtyUnit, rate_basis: last?.rate_basis && String(last.rate_basis).includes(String(so.currency_code)) ? last.rate_basis : `${so.incoterm || 'FOB'} ${so.currency_code}`,
+    total_cartons: cartons || null, total_pcs: pcs || null, total_pcs_unit: soldInSets ? 'SETS' : last?.total_pcs_unit ?? 'PCS',
     net_weight_kg: pls.length ? r2(pls.reduce((t, p) => t + n(p.net_weight_kg), 0)) : null,
     gross_weight_kg: pls.length ? r2(pls.reduce((t, p) => t + n(p.gross_weight_kg), 0)) : null,
     bank_account_id: mt.bank_account_id,

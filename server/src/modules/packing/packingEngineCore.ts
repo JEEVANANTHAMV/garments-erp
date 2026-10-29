@@ -6,6 +6,7 @@ import {
   bundleAvail, availAt, packingRequiresQc, linkBundlesToCarton, linkFgBundlesToCarton, unlinkBundleFromCarton, TERMINAL,
 } from '../production/bundleLedger.js';
 import { fgMode, fgStockParts, pk } from '../production/fgReceipt.routes.js';
+import { setComps, setDefOfRow, setDefOf, type SetComp, type SetDef } from './setDefs.js';
 
 /**
  * Packing engine core (client "Garment Packing Module Developer Document", 14-Oct-2026).
@@ -172,7 +173,32 @@ export async function lockJob(tx: Tx, soId: number) {
 }
 
 export type PackingUnit = 'SINGLE' | 'SET' | 'MASTER_POLYBAG';
-export interface SetDef { top_part: string; top_color_id: number; bottom_part: string; bottom_color_id: number }
+export { setComps, setDefOfRow, setDefOf, type SetComp, type SetDef } from './setDefs.js';
+
+/**
+ * The sets of a job / style as entered on the sales order (set lines, client 29-Oct-2026): per set colour, every part
+ * with its colour (contrast map) and pieces per set. Empty when the order was entered in pieces.
+ */
+export async function soSetDefs(tx: Tx, soId: number, styleId: number): Promise<SetDef[]> {
+  const lines = await txQuery<any>(tx,
+    `SELECT l.id, l.set_group, UPPER(l.part_name) part, l.qty_per_set, l.set_color_map FROM trx_sales_order_line l
+      WHERE l.so_id = ? AND l.style_id = ? AND l.set_group IS NOT NULL ORDER BY l.set_group, l.id`, [soId, styleId]);
+  const out: SetDef[] = [];
+  for (const g of [...new Set(lines.map((l) => l.set_group))]) {
+    const parts = lines.filter((l) => l.set_group === g);
+    const lead = parts[0];
+    const colours = await txQuery<any>(tx,
+      `SELECT DISTINCT k.color_id FROM trx_sales_order_sku sk JOIN mst_style_sku k ON k.id = sk.sku_id WHERE sk.so_line_id = ? AND sk.qty > 0`, [lead.id]);
+    for (const c of colours.map((x) => Number(x.color_id))) {
+      if (out.some((d) => d.top_color_id === c)) continue;
+      out.push(setDefOf(parts.map((p) => {
+        const m = typeof p.set_color_map === 'string' ? JSON.parse(p.set_color_map) : p.set_color_map;
+        return { part: String(p.part), color_id: Number(m?.[String(c)] ?? c), qty: Number(p.qty_per_set) || 1 };
+      })));
+    }
+  }
+  return out;
+}
 /**
  * Job / style being packed. part_name: one garment part (single-piece packing of a TOP / BOTTOM job).
  * unit SET (client call 16-Oct-2026): a set = one TOP + one BOTTOM of the same size, paired at packing; `sets` maps
@@ -181,8 +207,8 @@ export interface SetDef { top_part: string; top_color_id: number; bottom_part: s
 export interface JobKey { cid: number; io_no: string; style_id: number; part_name?: string | null; unit?: PackingUnit; sets?: SetDef[] }
 
 export async function orderSets(tx: Tx, orderId: number): Promise<SetDef[]> {
-  const rows = await txQuery<any>(tx, `SELECT top_part, top_color_id, bottom_part, bottom_color_id FROM trx_packing_set WHERE packing_id = ? ORDER BY id`, [orderId]);
-  return rows.map((r) => ({ top_part: r.top_part, top_color_id: Number(r.top_color_id), bottom_part: r.bottom_part, bottom_color_id: Number(r.bottom_color_id) }));
+  const rows = await txQuery<any>(tx, `SELECT top_part, top_color_id, bottom_part, bottom_color_id, components_json FROM trx_packing_set WHERE packing_id = ? ORDER BY id`, [orderId]);
+  return rows.map(setDefOfRow);
 }
 
 /**
@@ -207,8 +233,8 @@ async function holdsByPart(tx: Tx, j: JobKey, exceptOrder?: number | null) {
       const [c, sz] = k.split(':').map(Number);
       if (o.packing_unit === 'SET') {
         const d = sets.find((x) => x.top_color_id === c);
-        add(pk(d?.top_part ?? 'TOP', c, sz), hold);
-        if (d) add(pk(d.bottom_part, d.bottom_color_id, sz), hold);
+        if (d) for (const p of setComps(d)) add(pk(p.part, p.color_id, sz), hold * p.qty);
+        else add(pk('TOP', c, sz), hold);
       } else add(pk(o.part_name ?? '', c, sz), hold);
     }
   }
@@ -304,7 +330,7 @@ export async function eligibility(tx: Tx, j: JobKey, soId: number, orderId?: num
   }
   const orderQty = new Map<string, { q: number; sku: number }>();
   let reserved: Map<string, number>;
-  const setLabel = new Map<string, string>();
+  const setLabel = new Map<string, SetComp[]>();
   if (fg) {
     awaiting.clear();
     const unit: PackingUnit = j.unit ?? 'SINGLE';
@@ -331,22 +357,24 @@ export async function eligibility(tx: Tx, j: JobKey, soId: number, orderId?: num
     const skuOf = (c: number, sz: number) => soRows.find((r) => Number(r.color_id) === c && Number(r.size_id) === sz)?.sku_id ?? null;
     reserved = new Map();
     if (unit === 'SET') {
+      // complete sets = the smallest whole number of sets every part can make (set spec 5.4.1: MIN(part ÷ pieces per set))
       for (const d of sets) {
+        const comps = setComps(d);
         const sizes = new Set<number>();
         for (const m of [stock, floor, soMap] as Map<string, any>[]) for (const k2 of m.keys()) {
           const [p2, cs] = k2.split('|'); const [c2, sz2] = cs.split(':').map(Number);
-          if ((p2 === d.top_part && c2 === d.top_color_id) || (p2 === d.bottom_part && c2 === d.bottom_color_id)) sizes.add(sz2);
+          if (comps.some((p) => p2 === p.part && c2 === p.color_id)) sizes.add(sz2);
         }
+        const sets_ = (f: (p: SetComp) => number) => Math.min(...comps.map((p) => Math.floor(Math.max(f(p), 0) / p.qty)));
         for (const sz of sizes) {
           const k = key(d.top_color_id, sz);
-          const tOn = of(stock, d.top_part, d.top_color_id, sz, (v) => v.on_hand), bOn = of(stock, d.bottom_part, d.bottom_color_id, sz, (v) => v.on_hand);
-          const tFree = tOn - of(holds, d.top_part, d.top_color_id, sz), bFree = bOn - of(holds, d.bottom_part, d.bottom_color_id, sz);
-          const rdy = Math.min(tOn, bOn);
+          const on = (p: SetComp) => of(stock, p.part, p.color_id, sz, (v) => v.on_hand);
+          const rdy = sets_(on);
           ready.set(k, rdy);
-          reserved.set(k, Math.max(rdy - Math.max(Math.min(tFree, bFree), 0), 0));
-          awaiting.set(k, Math.max(Math.min(tOn + of(floor, d.top_part, d.top_color_id, sz), bOn + of(floor, d.bottom_part, d.bottom_color_id, sz)) - rdy, 0));
-          orderQty.set(k, { q: Math.min(of(soMap, d.top_part, d.top_color_id, sz), of(soMap, d.bottom_part, d.bottom_color_id, sz)), sku: Number(skuOf(d.top_color_id, sz)) });
-          setLabel.set(k, String(d.bottom_color_id));
+          reserved.set(k, Math.max(rdy - sets_((p) => on(p) - of(holds, p.part, p.color_id, sz)), 0));
+          awaiting.set(k, Math.max(sets_((p) => on(p) + of(floor, p.part, p.color_id, sz)) - rdy, 0));
+          orderQty.set(k, { q: sets_((p) => of(soMap, p.part, p.color_id, sz)), sku: Number(skuOf(d.top_color_id, sz)) });
+          setLabel.set(k, comps);
         }
       }
     } else {
@@ -401,13 +429,13 @@ export async function eligibility(tx: Tx, j: JobKey, soId: number, orderId?: num
   }
   if (out.length) {
     const cols = await txQuery<any>(tx, `SELECT id, color_name FROM mst_color WHERE id IN (?)`,
-      [[...new Set([...out.map((r) => r.color_id), ...[...setLabel.values()].map(Number)])]]);
+      [[...new Set([...out.map((r) => r.color_id), ...[...setLabel.values()].flatMap((cs) => cs.map((p) => p.color_id))])]]);
     const sizes = await txQuery<any>(tx, `SELECT id, size_code, sort_order FROM mst_size WHERE id IN (?)`, [[...new Set(out.map((r) => r.size_id))]]);
     for (const r of out) {
       r.color_name = cols.find((x) => Number(x.id) === r.color_id)?.color_name ?? `#${r.color_id}`;
-      // a set line: "<TOP colour> top + <BOTTOM colour> bottom"
-      const bot = setLabel.get(key(r.color_id, r.size_id));
-      if (bot) r.color_name = `${r.color_name} top + ${cols.find((x) => Number(x.id) === Number(bot))?.color_name ?? `#${bot}`} bottom`;
+      // a set line: "<TOP colour> top + <BOTTOM colour> bottom" (+ ×2 when a part has 2 pieces per set)
+      const comps = setLabel.get(key(r.color_id, r.size_id));
+      if (comps) r.color_name = comps.map((p) => `${cols.find((x) => Number(x.id) === p.color_id)?.color_name ?? `#${p.color_id}`} ${p.part.toLowerCase()}${p.qty > 1 ? ` ×${p.qty}` : ''}`).join(' + ');
       const sz = sizes.find((x) => Number(x.id) === r.size_id);
       r.size_code = sz?.size_code ?? `#${r.size_id}`; r.sort_order = n(sz?.sort_order);
     }
@@ -708,8 +736,8 @@ async function postCartonFromFg(tx: Tx, req: Request, order: any, c: any, lines:
     if (order.packing_unit === 'SET') {
       const d = sets.find((x) => x.top_color_id === Number(l.color_id));
       if (!d) throw BadRequest(`Carton ${c.carton_no}: colour #${l.color_id} is not a set of packing order ${order.pack_no}`);
-      comps.push({ part: d.top_part, color_id: d.top_color_id, size_id: l.size_id, qty: l.qty });
-      comps.push({ part: d.bottom_part, color_id: d.bottom_color_id, size_id: l.size_id, qty: l.qty });
+      // one set takes every part: pieces = sets × pieces per set
+      for (const p of setComps(d)) comps.push({ part: p.part, color_id: p.color_id, size_id: l.size_id, qty: l.qty * p.qty });
     } else comps.push({ part: order.part_name ?? null, color_id: l.color_id, size_id: l.size_id, qty: l.qty, bundle_id: l.bundle_id });
   }
   for (const l of comps) {

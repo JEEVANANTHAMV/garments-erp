@@ -48,7 +48,55 @@ interface Line {
   is_additional?: number;
   amendment_no?: string | null;
   cancelled_qty?: number;
+  /**
+   * SET entry (client 29-Oct-2026): skus are SETS per set colour × size, rate is per set; saved as one line per part
+   * of the style's set composition. undefined = not decided yet (a set style defaults to sets), null = pieces.
+   */
+  set?: SetEntry | null;
 }
+interface SetPart { part_name: string; qty_per_set: number }
+interface SetEntry {
+  rate: number | '';
+  parts: SetPart[];
+  /** part → set colour id → that part's colour id (contrast colours); missing = same colour as the set */
+  color_map: Record<string, Record<number, number>>;
+}
+const pcsPerSet = (e: SetEntry) => e.parts.reduce((a, p) => a + p.qty_per_set, 0) || 1;
+const setLabel = (e: SetEntry) => e.parts.map((p) => `${p.qty_per_set > 1 ? `${p.qty_per_set} ` : ''}${p.part_name}`).join(' + ');
+
+/**
+ * The saved part lines of a set entry (same set_group) fold back into the one set line the merchandiser edits:
+ * sets = the first part's pieces ÷ its pieces per set.
+ */
+function foldSetLines(raw: any[], mapped: Line[]): Line[] {
+  const out: Line[] = [];
+  const seen = new Set<string>();
+  raw.forEach((l, i) => {
+    if (!l.set_group) { out.push(mapped[i]); return; }
+    if (seen.has(l.set_group)) return;
+    seen.add(l.set_group);
+    const group = raw.filter((x) => x.set_group === l.set_group);
+    const qps = Number(l.qty_per_set) || 1;
+    const color_map: SetEntry['color_map'] = {};
+    for (const g of group) {
+      const m = typeof g.set_color_map === 'string' ? JSON.parse(g.set_color_map) : g.set_color_map;
+      if (m && Object.keys(m).length) color_map[g.part_name] = Object.fromEntries(Object.entries(m).map(([a, b]) => [Number(a), Number(b)]));
+    }
+    const base = mapped[i];
+    out.push({
+      ...base, part_name: undefined, unit_price: '',
+      skus: Object.fromEntries(Object.entries(base.skus).map(([k, q]) => [Number(k), Math.round(Number(q) / qps)])),
+      cancelled_qty: Math.round(Number(base.cancelled_qty || 0) / qps),
+      set: { rate: Number(l.set_rate ?? 0), parts: group.map((g) => ({ part_name: g.part_name, qty_per_set: Number(g.qty_per_set) || 1 })), color_map },
+    });
+  });
+  return out;
+}
+
+/** A set line counted in pieces of every part (sets × pieces per set), for plan cut / totals. */
+const asPieces = (l: Line): Line[] => (l.set
+  ? l.set.parts.map((p) => ({ ...l, skus: Object.fromEntries(Object.entries(l.skus).map(([k, q]) => [Number(k), (Number(q) || 0) * p.qty_per_set])) }))
+  : [l]);
 
 let keySeq = 0;
 const newLine = (): Line => ({
@@ -165,7 +213,7 @@ export default function SalesOrderDetail() {
       lc_date: toDateInput(d.lc_date), lc_expiry: toDateInput(d.lc_expiry),
       ship_date: toDateInput(d.ship_date), delivery_date: toDateInput(d.delivery_date),
     });
-    setLines((d.lines ?? []).map((l: any) => ({
+    setLines(foldSetLines(d.lines ?? [], (d.lines ?? []).map((l: any) => ({
       _key: `l${++keySeq}`, id: l.id, style_id: l.style_id, color_id: l.color_id ?? '',
       assort_color: l.assort_color ?? '',
       part_name: l.part_name ?? undefined,
@@ -180,13 +228,21 @@ export default function SalesOrderDetail() {
       sku_excess: Object.fromEntries((l.skus ?? [])
         .filter((s: any) => s.excess_pct !== null && s.excess_pct !== undefined)
         .map((s: any) => [s.sku_id, Number(s.excess_pct)])),
-    })));
+      set: null,
+    }))));
   }, [detail.data]);
 
   const totals = useMemo(() => {
-    let qty = 0, amount = 0, planCutQty = 0;
+    let qty = 0, amount = 0, planCutQty = 0, sets = 0;
     const defaultExcess = Number(head.excess_pct) || 0;
     for (const l of lines) {
+      if (l.set) {
+        const s = linePlan(l, defaultExcess).qty;
+        sets += s;
+        amount += s * (Number(l.set.rate) || 0);
+        for (const pl of asPieces(l)) { const r = linePlan(pl, defaultExcess); qty += r.qty; planCutQty += r.planCut; }
+        continue;
+      }
       const { qty: q, planCut: linePlanCut } = linePlan(l, defaultExcess);
       qty += q;
       planCutQty += linePlanCut;
@@ -199,7 +255,7 @@ export default function SalesOrderDetail() {
     const maxShipment = Math.round(qty * (1 + tolPlusPct / 100));
     const minShipment = Math.round(qty * (1 - tolMinusPct / 100));
 
-    return { qty, amount, planCutQty, excessQty, excessPct, tolPlusPct, tolMinusPct, maxShipment, minShipment };
+    return { qty, sets, amount, planCutQty, excessQty, excessPct, tolPlusPct, tolMinusPct, maxShipment, minShipment };
   }, [lines, head.excess_pct, head.tolerance_plus_pct, head.tolerance_minus_pct]);
 
   const selectedCurrency = currencies.data?.find((c) => c.id === Number(head.currency_id));
@@ -274,12 +330,13 @@ export default function SalesOrderDetail() {
         lines: lines
           .filter((l) => l.style_id)
           .map((l) => {
-            const planCut = linePlan(l, defaultExcess).planCut;
+            const planCut = l.set ? undefined : linePlan(l, defaultExcess).planCut;
             return {
               style_id: Number(l.style_id),
               color_id: l.color_id === '' ? null : Number(l.color_id),
               assort_color: l.assort_color.trim() || null,
-              part_name: l.part_name || null,
+              part_name: l.set ? null : l.part_name || null,
+              set: l.set ? { rate: Number(l.set.rate) || 0, color_map: Object.fromEntries(Object.entries(l.set.color_map).map(([p, m]) => [p, Object.fromEntries(Object.entries(m).filter(([a, b]) => Number(a) !== Number(b)))]).filter(([, m]) => Object.keys(m).length)) } : null,
               description: l.description || null,
               composition: l.composition.trim() || null,
               goods_description: l.goods_description.trim() || null,
@@ -660,6 +717,9 @@ export default function SalesOrderDetail() {
                     </span>
                     <span className="text-xs font-semibold text-slate-400">pcs</span>
                   </div>
+                  {totals.sets > 0 && (
+                    <div className="text-[12px] font-semibold text-indigo-700" data-order-sets>= {fmtNumber(totals.sets)} sets</div>
+                  )}
                 </div>
                 <p className="mt-1.5 text-[11px] text-slate-400">Buyer invoice contracted volume</p>
               </div>
@@ -1658,6 +1718,18 @@ function LineCard({
   const styles = useLookup('styles');
   const colors = useStyleColors(line.style_id ? Number(line.style_id) : null);
   const skus = useStyleSkus(line.style_id ? Number(line.style_id) : null);
+  // set composition of the style: 2+ parts = a set style, entered in sets by default (pieces on request)
+  const setParts = useQuery({
+    queryKey: ['style-set-parts', line.style_id],
+    queryFn: async () => (await http.get<{ data: SetPart[] }>(`/styles/${line.style_id}/set-parts`)).data ?? [],
+    enabled: !!line.style_id, staleTime: 60_000,
+  });
+  const isSetStyle = (setParts.data?.length ?? 0) >= 2;
+  useEffect(() => {
+    if (line.set === undefined && setParts.data && editable) onChange({ set: isSetStyle ? { rate: '', parts: setParts.data, color_map: {} } : null });
+  }, [line.set, setParts.data, isSetStyle, editable]); // eslint-disable-line react-hooks/exhaustive-deps
+  const setE = line.set ?? null;
+  const pps = setE ? pcsPerSet(setE) : 1;
 
   // Only show sizes for the colour chosen on this line.
   const visibleSkus = useMemo(() => {
@@ -1675,10 +1747,11 @@ function LineCard({
   const lineQty = Object.entries(line.skus)
     .filter(([id]) => visibleSkus.some((s) => s.id === Number(id)))
     .reduce((a, [, q]) => a + (Number(q) || 0), 0);
-  const lineAmount = lineQty * (Number(line.unit_price) || 0);
+  const lineAmount = setE ? lineQty * (Number(setE.rate) || 0) : lineQty * (Number(line.unit_price) || 0);
 
   const visibleIds = useMemo(() => new Set(visibleSkus.map((s) => s.id)), [visibleSkus]);
   const plan = linePlan(line, headExcessPct, visibleIds);
+  const unitWord = setE ? 'sets' : 'pcs';
   const lineExcessPct = plan.linePct;
   const linePlanCutQty = plan.planCut;
   const lineExcessPcs = Math.max(0, linePlanCutQty - lineQty);
@@ -1743,7 +1816,7 @@ function LineCard({
           value={line.style_id} disabled={!editable}
           onChange={(e) => {
             const st = (styles.data ?? []).find((s: any) => String(s.id) === e.target.value) as any;
-            onChange({ style_id: e.target.value ? Number(e.target.value) : '', color_id: '', skus: {}, sku_excess: {},
+            onChange({ style_id: e.target.value ? Number(e.target.value) : '', color_id: '', skus: {}, sku_excess: {}, set: undefined,
               composition: st?.composition ? String(st.composition).toUpperCase() : '', goods_description: '' });
           }} />
         <Select label="Colour" options={colors.data?.map((c) => ({ value: c.id, label: c.label })) ?? []}
@@ -1753,7 +1826,16 @@ function LineCard({
         <Input label="Assort colour" placeholder="e.g. Navy / Grey Mel" maxLength={80}
           value={line.assort_color} disabled={!editable}
           onChange={(e) => onChange({ assort_color: e.target.value })} />
-        {/* Part Name — TOP / BOTTOM / COLLAR / CUFF / FOLDING */}
+        {/* Part Name — TOP / BOTTOM / COLLAR / CUFF / FOLDING; a set line covers every part of the set */}
+        {setE ? (
+          <div data-set-line>
+            <label className="mb-1 block text-[12px] font-medium text-slate-700">Sold as</label>
+            <div className="rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-[12px] font-semibold text-indigo-800"
+              title="Saved as one line per part: pieces = sets × pieces per set">
+              SET = {setLabel(setE)}
+            </div>
+          </div>
+        ) : (
         <div>
           <label className="mb-1 block text-[12px] font-medium text-slate-700">
             Part
@@ -1782,11 +1864,21 @@ function LineCard({
             <option value="CUFF">CUFF</option>
             <option value="FOLDING">FOLDING</option>
             <option value="OTHER">OTHER</option>
+            {(setParts.data ?? []).filter((p) => !['TOP', 'BOTTOM', 'COLLAR', 'CUFF', 'FOLDING', 'OTHER'].includes(p.part_name)).map((p) => (
+              <option key={p.part_name} value={p.part_name}>{p.part_name}</option>
+            ))}
           </select>
         </div>
+        )}
+        {setE ? (
+          <Input id={`line-set-rate-${line._key}`} label={`Rate per set (${currencyCode})`} type="number" step="0.0001" placeholder="0.00" value={setE.rate}
+            disabled={!editable} hint={`${pps} pcs per set`}
+            onChange={(e) => onChange({ set: { ...setE, rate: e.target.value === '' ? '' : Number(e.target.value) } })} />
+        ) : (
         <Input label={`Unit price (${currencyCode})`} type="number" step="0.0001" placeholder="0.00" value={line.unit_price}
           disabled={!editable}
           onChange={(e) => onChange({ unit_price: e.target.value === '' ? '' : Number(e.target.value) })} />
+        )}
         <Input
           label="Excess % (Cut buffer)"
           type="number"
@@ -1810,7 +1902,17 @@ function LineCard({
       <div className="mt-4">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-3">
-            <p className="text-[12px] font-semibold text-slate-700">Size-wise breakdown</p>
+            <p className="text-[12px] font-semibold text-slate-700">Size-wise breakdown{setE ? ' — in SETS' : ''}</p>
+            {isSetStyle && editable && (
+              <label className="flex cursor-pointer items-center gap-1.5 rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[11.5px] font-semibold text-indigo-800"
+                title="A set style is sold in sets; untick to enter one part (TOP / BOTTOM …) in pieces on this line">
+                <input type="checkbox" id={`line-as-set-${line._key}`} checked={!!setE}
+                  onChange={(e) => onChange(e.target.checked
+                    ? { set: { rate: Number(line.unit_price) ? Number(line.unit_price) * pcsPerSet({ rate: '', parts: setParts.data ?? [], color_map: {} }) : '', parts: setParts.data ?? [], color_map: {} }, part_name: undefined }
+                    : { set: null, unit_price: setE?.rate !== '' && setE ? Number(setE.rate) / pps : line.unit_price })} />
+                Enter as sets ({setLabel({ rate: '', parts: setParts.data ?? [], color_map: {} })})
+              </label>
+            )}
             {editable && line.style_id && visibleSkus.length > 0 && (
               <button
                 type="button"
@@ -1833,14 +1935,15 @@ function LineCard({
           {lineQty > 0 && (
             <div className="flex flex-wrap items-center gap-2.5 text-[11.5px]">
               <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 font-medium text-slate-700 border border-slate-200">
-                Order: <strong className="font-bold text-slate-900">{fmtNumber(lineQty)}</strong> pcs
+                Order: <strong className="font-bold text-slate-900">{fmtNumber(lineQty)}</strong> {unitWord}
+                {setE && <> = <strong className="font-bold text-slate-900">{fmtNumber(lineQty * pps)}</strong> pcs</>}
               </span>
               <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 font-medium text-amber-800 border border-amber-200"
                 title={plan.hasSize ? `Size-wise excess applied (line default +${lineExcessPct}%)` : `Cutting allowance: +${lineExcessPct}%`}>
-                +{plan.hasSize ? effectiveExcessPct : lineExcessPct}% Excess{plan.hasSize ? ' (size-wise)' : ''}: <strong className="font-bold text-amber-900">+{fmtNumber(lineExcessPcs)} pcs</strong>
+                +{plan.hasSize ? effectiveExcessPct : lineExcessPct}% Excess{plan.hasSize ? ' (size-wise)' : ''}: <strong className="font-bold text-amber-900">+{fmtNumber(lineExcessPcs)} {unitWord}</strong>
               </span>
               <span className="inline-flex items-center gap-1 rounded bg-brand-50 px-2 py-0.5 font-semibold text-brand-800 border border-brand-200" title="Total planned cutting quantity with buffer">
-                Planned Cut: <strong className="font-bold text-brand-950">{fmtNumber(linePlanCutQty)}</strong> pcs
+                Planned Cut: <strong className="font-bold text-brand-950">{fmtNumber(linePlanCutQty)}</strong> {unitWord}
               </span>
               <span className="font-semibold text-slate-800 ml-1">
                 {currencyCode} {currencySymbol}{lineAmount.toLocaleString(isForeign ? 'en-US' : 'en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -1968,6 +2071,47 @@ function LineCard({
             </table>
           </div>
         )}
+
+        {/* Set: what each part is per set colour — same colour by default, a contrast colour where the buyer asks */}
+        {setE && line.style_id && (() => {
+          const setColours = [...new Map(visibleSkus.filter((k) => Number(line.skus[k.id]) > 0).map((k) => [k.color_id, k.color_name])).entries()];
+          const lead = setE.parts[0]?.part_name;
+          return (
+            <div className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50/40 p-3" data-set-parts>
+              <p className="mb-2 text-[12px] font-semibold text-indigo-900">
+                Parts of each set — saved as {setE.parts.length} part lines ({setE.parts.map((p) => `${p.part_name} ${fmtNumber(lineQty * p.qty_per_set)} pcs`).join(' · ')})
+              </p>
+              {setColours.length === 0 ? (
+                <p className="text-[11.5px] text-slate-500">Enter the sets per colour and size above; the set colour is the {lead} colour.</p>
+              ) : (
+                <table className="text-[12px]">
+                  <thead>
+                    <tr>
+                      <th className="th">Set colour ({lead})</th>
+                      {setE.parts.slice(1).map((p) => <th key={p.part_name} className="th">{p.part_name} colour</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {setColours.map(([cid, cname]) => (
+                      <tr key={cid}>
+                        <td className="td font-medium">{cname}</td>
+                        {setE.parts.slice(1).map((p) => (
+                          <td key={p.part_name} className="td p-1">
+                            <select className="input py-1 text-[12px]" disabled={!editable} id={`set-colour-${line._key}-${p.part_name}-${cid}`}
+                              value={setE.color_map[p.part_name]?.[cid] ?? cid}
+                              onChange={(e) => onChange({ set: { ...setE, color_map: { ...setE.color_map, [p.part_name]: { ...(setE.color_map[p.part_name] ?? {}), [cid]: Number(e.target.value) } } } })}>
+                              {(colors.data ?? []).map((c) => <option key={c.id} value={c.id}>{c.label}{Number(c.id) === cid ? ' (same)' : ''}</option>)}
+                            </select>
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

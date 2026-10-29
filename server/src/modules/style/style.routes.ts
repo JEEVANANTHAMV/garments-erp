@@ -397,6 +397,58 @@ styleRouter.get('/:id/sizes', requirePermission('STYLE.VIEW'), ah(async (req, re
   res.json({ data: await styleSizes(null, id), log, version_no: st?.version_no || 1 });
 }));
 
+/**
+ * Set composition of a style (client 29-Oct-2026, set spec §4.2): the parts a SET is made of and the pieces of each per
+ * set — TOP 1 + BOTTOM 1, TOP 2 + BOTTOM 1, TOP + BOTTOM + DUPATTA. Two or more parts make the style a set style: its
+ * sales order can then be entered in sets. No parts = an ordinary piece style. The first part names the set colour.
+ */
+export const SET_PART_RE = /^[A-Z][A-Z0-9 _-]{0,19}$/;
+export async function styleSetParts(db: { tx?: Tx } | null, styleId: number) {
+  const sql = `SELECT part_name, qty_per_set, sort_order FROM mst_style_set_part WHERE style_id = ? ORDER BY sort_order, id`;
+  const rows = db?.tx ? await txQuery<any>(db.tx, sql, [styleId]) : await query<any>(sql, [styleId]);
+  return rows.map((r) => ({ part_name: String(r.part_name), qty_per_set: Number(r.qty_per_set) || 1 }));
+}
+
+/** GET /styles/:id/set-parts — the set composition ([] = not a set style) */
+styleRouter.get('/:id/set-parts', requirePermission('STYLE.VIEW'), ah(async (req, res) => {
+  const id = Number(req.params.id);
+  const st = await queryOne<any>(`SELECT id FROM mst_style WHERE id = ? AND company_id = ?`, [id, req.user!.companyId]);
+  if (!st) throw NotFound('Style not found');
+  const orders = await query<any>(
+    `SELECT DISTINCT so.so_no FROM trx_sales_order_line l JOIN trx_sales_order so ON so.id = l.so_id
+      WHERE l.style_id = ? AND l.set_group IS NOT NULL AND so.is_deleted = 0 LIMIT 20`, [id]);
+  res.json({ data: await styleSetParts(null, id), set_orders: orders.map((o) => o.so_no) });
+}));
+
+/** PUT /styles/:id/set-parts { parts: [{ part_name, qty_per_set }] } — replace the composition (0, or 2+ parts) */
+styleRouter.put('/:id/set-parts', requirePermission('STYLE.UPDATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = Number(req.params.id);
+  const b = z.object({
+    parts: z.array(z.object({
+      part_name: z.string().trim().toUpperCase().regex(SET_PART_RE, 'Part name: letters / digits, up to 20 characters (TOP, BOTTOM, DUPATTA …)'),
+      qty_per_set: z.coerce.number().int('Pieces per set must be a whole number').min(1).max(20),
+    })).max(6),
+  }).parse(req.body ?? {});
+  if (b.parts.length === 1) throw BadRequest('A set needs at least two parts (e.g. TOP + BOTTOM) — or remove the part to make it a piece style');
+  if (new Set(b.parts.map((p) => p.part_name)).size !== b.parts.length) throw BadRequest('A part is listed twice');
+  const out = await transaction(async (tx) => {
+    const st = await txQueryOne<any>(tx, `SELECT id FROM mst_style WHERE id = ? AND company_id = ? FOR UPDATE`, [id, cid]);
+    if (!st) throw NotFound('Style not found');
+    const before = await styleSetParts({ tx }, id);
+    await txExecute(tx, `DELETE FROM mst_style_set_part WHERE style_id = ?`, [id]);
+    let seq = 0;
+    for (const p of b.parts) {
+      await txExecute(tx, `INSERT INTO mst_style_set_part (company_id, style_id, part_name, qty_per_set, sort_order, created_by) VALUES (?,?,?,?,?,?)`,
+        [cid, id, p.part_name, p.qty_per_set, ++seq, req.user!.id]);
+    }
+    return { before, after: await styleSetParts({ tx }, id) };
+  });
+  // orders already entered keep the composition they were entered with (stored on their lines)
+  await audit(req, 'mst_style', id, 'UPDATE', { set_parts: out.before }, { set_parts: out.after });
+  res.json({ data: out.after });
+}));
+
 /** PUT /styles/:id/sizes { sizes: [{ size_id, is_default? }] in order, reason? } — the full size list of the style */
 styleRouter.put('/:id/sizes', requirePermission('STYLE.UPDATE'), ah(async (req, res) => {
   const cid = req.user!.companyId;

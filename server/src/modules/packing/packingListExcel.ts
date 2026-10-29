@@ -36,6 +36,8 @@ export interface PlHeaderForExport {
   vessel_flight_no: string | null; port_of_loading: string | null;
   port_of_discharge: string | null; final_destination: string | null;
   terms_of_delivery: string | null; terms_of_payment: string | null;
+  /** SETS when the list's cartons are set cartons (a carton line is a number of sets), else PCS */
+  qty_unit?: 'PCS' | 'SETS' | null;
 }
 
 /** Cell style tag (Excel ignores it; the preview uses it). c = centred, r = right, b = bold, sm = small print. */
@@ -160,23 +162,24 @@ function buildSheet(h: PlHeaderForExport, c: ComputedList, summary: SummaryGroup
 
   // ---------- table header (rows 19, 20)
   const H1 = 19, H2 = 20;
+  const U = h.qty_unit === 'SETS' ? 'SETS' : 'PCS';
   sb.set(H1, 0, 'CTN NO', undefined, 'th'); sb.merge(H1, 0, type === 'SOLID' ? H2 : H1, 2);
   leftTitles.forEach((t, i) => { sb.set(H1, 3 + i, t, undefined, 'th'); if (type === 'SOLID') sb.merge(H1, 3 + i, H2, 3 + i); });
   sb.set(H1, S0, type === 'SOLID' ? 'QUANTITY  / SIZE' : 'SIZE', undefined, 'th'); sb.merge(H1, S0, H1, S0 + nSizes - 1);
   if (type === 'MIXED') {
-    sb.set(H1, K.pack, 'PCS/ PACK', undefined, 'th'); sb.set(H1, K.pcs, 'PACK/ CTNS', undefined, 'th'); sb.merge(H1, K.pcs, H1, K.packs);
+    sb.set(H1, K.pack, `${U}/ PACK`, undefined, 'th'); sb.set(H1, K.pcs, 'PACK/ CTNS', undefined, 'th'); sb.merge(H1, K.pcs, H1, K.packs);
     sb.set(H1, K.ctns, 'TOT Ctns', undefined, 'th'); sb.set(H1, K.qty, 'Total Qty', undefined, 'th');
     sb.set(H1, K.net, 'Net Wt', undefined, 'th'); sb.set(H1, K.gross, 'Gr.Wt', undefined, 'th');
     sb.set(H1, K.tnet, 'Total   Net Wt', undefined, 'th'); sb.set(H1, K.tgross, 'Total  Grs Wt', undefined, 'th');
   } else if (type === 'SOLID') {
-    sb.set(H1, K.pcs, 'PCS/ CTN', undefined, 'th'); sb.set(H1, K.ctns, 'TOT CTNS', undefined, 'th'); sb.set(H1, K.qty, 'TOT PCS', undefined, 'th');
+    sb.set(H1, K.pcs, `${U}/ CTN`, undefined, 'th'); sb.set(H1, K.ctns, 'TOT CTNS', undefined, 'th'); sb.set(H1, K.qty, `TOT ${U}`, undefined, 'th');
     for (const k of [K.pcs, K.ctns, K.qty]) sb.merge(H1, k, H2, k);
     sb.set(H1, K.net, 'WEIGHT/CTN', undefined, 'th'); sb.merge(H1, K.net, H1, K.gross);
     sb.set(H1, K.tnet, 'TOTAL WEIGHT', undefined, 'th'); sb.merge(H1, K.tnet, H1, K.tgross);
     sb.set(H2, K.net, 'NETT', undefined, 'th'); sb.set(H2, K.gross, 'GROSS', undefined, 'th');
     sb.set(H2, K.tnet, 'NETT', undefined, 'th'); sb.set(H2, K.tgross, 'GROSS', undefined, 'th');
   } else {
-    sb.set(H1, K.pcs, 'PCS/ CTN', undefined, 'th'); sb.set(H1, K.ctns, 'TOTAL Ctns', undefined, 'th'); sb.set(H1, K.qty, 'Total Qty', undefined, 'th');
+    sb.set(H1, K.pcs, `${U}/ CTN`, undefined, 'th'); sb.set(H1, K.ctns, 'TOTAL Ctns', undefined, 'th'); sb.set(H1, K.qty, 'Total Qty', undefined, 'th');
     sb.set(H1, K.net, 'Net Wt', undefined, 'th'); sb.set(H1, K.gross, 'Gr.Wt', undefined, 'th');
     sb.set(H1, K.tnet, 'Total   Net Wt', undefined, 'th'); sb.set(H1, K.tgross, 'Total  Grs Wt', undefined, 'th');
   }
@@ -335,7 +338,7 @@ function buildSheet(h: PlHeaderForExport, c: ComputedList, summary: SummaryGroup
   const cbm = Number(r5(T.total_cbm).toFixed(5));
   const totalsFoot = {
     CARTONS: ['TOTAL CARTONS', T.total_cartons, type === 'SOLID' ? 'CARTONS' : 'CTNS', K.ctns] as const,
-    PIECES: ['TOTAL PIECES', T.total_qty, 'PCS', K.qty] as const,
+    PIECES: [U === 'SETS' ? 'TOTAL SETS' : 'TOTAL PIECES', T.total_qty, U, K.qty] as const,
     NET: ['TOTAL NET WEIGHT', r3(T.total_net_wt), 'KGS', K.tnet] as const,
     GROSS: ['TOTAL GROSS WEIGHT', r3(T.total_gross_wt), 'KGS', K.tgross] as const,
   };

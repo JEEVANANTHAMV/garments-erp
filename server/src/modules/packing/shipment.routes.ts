@@ -388,12 +388,16 @@ async function loadPackingList(cid: number, id: number) {
     `SELECT r.revision_no, r.reason, r.total_cartons, r.total_qty, r.gross_weight_kg, r.created_at, u.full_name AS created_by_name
        FROM trx_packing_list_revision r LEFT JOIN mst_user u ON u.id = r.created_by
       WHERE r.packing_list_id = ? AND r.company_id = ? ORDER BY r.revision_no DESC`, [id, cid]);
+  // set cartons hold sets (one set line = N sets): the list then counts SETS (client 29-Oct-2026)
+  const setCtn = srcIds.length ? await queryOne<{ n: number; sets: number }>(
+    `SELECT COUNT(*) n, COALESCE(SUM(p.packing_unit = 'SET'), 0) sets FROM trx_carton c JOIN trx_packing p ON p.id = c.packing_id WHERE c.id IN (?)`, [srcIds]) : null;
+  const qtyUnit: 'PCS' | 'SETS' = setCtn && Number(setCtn.n) > 0 && Number(setCtn.sets) === Number(setCtn.n) ? 'SETS' : 'PCS';
   const iso = (d: any) => (d ? (d instanceof Date ? d.toISOString() : String(d)).slice(0, 10) : null);
   const layout = structure.blocks.length ? buildPackingListLayout({
-    ...row, invoice_no: row.invoice_no ?? row.ci_invoice_no ?? null,
+    ...row, qty_unit: qtyUnit, invoice_no: row.invoice_no ?? row.ci_invoice_no ?? null,
     invoice_date: iso(row.invoice_date), buyer_order_date: iso(row.buyer_order_date),
   }, structure, summary) : null;
-  return { ...row, blocks: structure.blocks, totals: structure.totals, measurements: structure.measurements,
+  return { ...row, qty_unit: qtyUnit, blocks: structure.blocks, totals: structure.totals, measurements: structure.measurements,
            order_summary: summary, over_shipment: overShipment(summary), layout, revisions,
            carton_check: await cartonCheck(cid, structure),
            cartons, summary: cartonSummary,

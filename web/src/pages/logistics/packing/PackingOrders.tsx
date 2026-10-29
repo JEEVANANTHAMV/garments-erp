@@ -78,7 +78,8 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
   const [ratio, setRatio] = useState<Record<number, string>>({});   // size ratio per carton / master polybag
   const colorsLk = useLookup('colors');
   const colorName = (id: number) => (colorsLk.data ?? []).find((c: any) => Number(c.id) === id)?.label ?? `#${id}`;
-  const [preview, setPreview] = useState<{ rule: Rule | null; rows: EligRow[]; strict_qc: boolean; packing_unit?: string; parts?: string[]; part_colors?: Record<string, number[]> } | null>(null);
+  const [preview, setPreview] = useState<{ rule: Rule | null; rows: EligRow[]; strict_qc: boolean; packing_unit?: string; parts?: string[]; part_colors?: Record<string, number[]>;
+    so_sets?: { part: string; color_id: number; qty: number }[][] } | null>(null);
   const [plan, setPlan] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -98,9 +99,12 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
       .catch((e) => setErr(errMsg(e))).finally(() => setLoading(false));
   }, [job, styleId, reload, unit, part, setsParam]);
   const effUnit = (unit || preview?.packing_unit || 'SINGLE') as 'SINGLE' | 'SET' | 'MASTER_POLYBAG';
+  // an order entered in sets brings its own sets (parts, contrast colours, pieces per set) — nothing to pair by hand
+  const orderSets = preview?.so_sets ?? [];
+  const fromOrder = effUnit === 'SET' && orderSets.length > 0;
   // a new set order: pair each TOP colour with a BOTTOM colour (default: the first BOTTOM colour)
   useEffect(() => {
-    if (effUnit !== 'SET' || !preview?.part_colors?.TOP?.length || !preview.part_colors.BOTTOM?.length) return;
+    if (effUnit !== 'SET' || preview?.so_sets?.length || !preview?.part_colors?.TOP?.length || !preview.part_colors.BOTTOM?.length) return;
     setPairs((cur) => (Object.keys(cur).length ? cur : Object.fromEntries(preview.part_colors!.TOP.map((t, i) => [t, String(preview.part_colors!.BOTTOM[i] ?? preview.part_colors!.BOTTOM[0])]))));
   }, [effUnit, preview]);
 
@@ -112,7 +116,7 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
       const r = await http.post<{ data: any }>('/packing/orders', {
         so_id: job!.id, style_id: styleId, target_date: f.target_date || null, warehouse_id: f.warehouse_id ? Number(f.warehouse_id) : null,
         remarks: f.remarks || null, packing_mode: f.packing_mode || null, pack_date: today(),
-        packing_unit: effUnit, part_name: effUnit === 'SET' ? null : part || null, sets: effUnit === 'SET' ? setsParam : undefined,
+        packing_unit: effUnit, part_name: effUnit === 'SET' ? null : part || null, sets: effUnit === 'SET' && !fromOrder ? setsParam : undefined,
         pieces_per_master_bag: effUnit === 'MASTER_POLYBAG' && ppmb ? Number(ppmb) : null,
         lines: preview!.rows.map((x) => ({ color_id: x.color_id, size_id: x.size_id, planned_qty: n(plan[`${x.color_id}:${x.size_id}`]) })).filter((l) => l.planned_qty > 0),
         size_ratio: ratioPayload(ratio).length ? ratioPayload(ratio) : null,
@@ -124,7 +128,7 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
   return (
     <Modal open onClose={onClose} size="xl" icon={<Package size={16} />} title="New packing order"
       subtitle="Pick the job and style; the plan defaults to the PCS in the FG store not held by other orders. Needs a packing rule (step 2) and an FG receipt (step 1)."
-      footerStart={preview && <span>Planned <b>{fmtNumber(total)}</b> pcs{rule ? <> · ≈ {Math.ceil(total / Math.max(n(rule.pieces_per_polybag), 1))} polybags · rule {rule.rule_code} ({rule.scope})</> : null}</span>}
+      footerStart={preview && <span>Planned <b>{fmtNumber(total)}</b> {effUnit === 'SET' ? 'sets' : 'pcs'}{rule ? <> · ≈ {Math.ceil(total / Math.max(n(rule.pieces_per_polybag), 1))} polybags · rule {rule.rule_code} ({rule.scope})</> : null}</span>}
       footer={<>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button id="create-order" loading={busy} disabled={!preview || !rule || !total} onClick={create}>Create draft order</Button>
@@ -150,7 +154,19 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
             placeholder={preview?.rule?.pieces_per_master_bag ? String(preview.rule.pieces_per_master_bag) : 'given by the buyer'} />
         )}
       </FormSection>
-      {effUnit === 'SET' && preview?.part_colors && (
+      {fromOrder && (
+        <section className="mb-3" id="set-from-order">
+          <div className="mb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Sets as entered on the sales order (same size)</div>
+          <table className="w-full max-w-2xl text-[12.5px]">
+            <thead><tr><th className="th">Set colour</th><th className="th">One set =</th></tr></thead>
+            <tbody>{orderSets.map((cs) => (
+              <tr key={cs[0].color_id}><td className="td font-medium">{colorName(cs[0].color_id)}</td>
+                <td className="td">{cs.map((p) => `${p.qty} × ${p.part} ${colorName(p.color_id)}`).join(' + ')}</td></tr>
+            ))}</tbody>
+          </table>
+        </section>
+      )}
+      {effUnit === 'SET' && !fromOrder && preview?.part_colors && (
         <section className="mb-3" id="set-pairs">
           <div className="mb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Sets — pair each TOP colour with its BOTTOM colour (same size)</div>
           {!preview.part_colors.TOP?.length || !preview.part_colors.BOTTOM?.length

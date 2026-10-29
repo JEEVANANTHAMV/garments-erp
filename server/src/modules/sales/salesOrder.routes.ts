@@ -8,6 +8,7 @@ import { audit } from '../../core/audit.js';
 import { s } from '../resources/schemas.js';
 import { jobBomRequirement } from '../bom/bom.routes.js';
 import { cellsFor, cellsPlanCut, lineRequirement, type OrderCell } from '../../core/bomRequirement.js';
+import { styleSetParts, SET_PART_RE } from '../style/style.routes.js';
 
 export const salesOrderRouter = Router();
 
@@ -41,8 +42,8 @@ const lineSchema = z.object({
   color_id: s.id(),
   /** Assort colour entered on the order, carried alongside the colour downstream. */
   assort_color: s.nullableStr(80),
-  /** Garment part this line covers: TOP / BOTTOM / COLLAR / CUFF / FOLDING */
-  part_name: z.enum(['TOP', 'BOTTOM', 'COLLAR', 'CUFF', 'FOLDING', 'OTHER']).nullable().optional(),
+  /** Garment part this line covers: TOP / BOTTOM / COLLAR / CUFF / FOLDING, or a set part of the style (DUPATTA …) */
+  part_name: z.string().trim().toUpperCase().regex(SET_PART_RE, 'Part name: letters / digits, up to 20 characters').nullable().optional(),
   description: s.nullableStr(255),
   /** Composition + description of goods for the commercial invoice / shipping bill (client 23-Oct-2026). */
   composition: s.nullableStr(120),
@@ -55,6 +56,15 @@ const lineSchema = z.object({
   skus: z.array(skuLineSchema).default([]),
   /** Used only when no size breakdown is supplied. */
   order_qty: z.coerce.number().int().min(0).optional(),
+  /**
+   * A SET entry (client 29-Oct-2026): skus are SETS per set colour (the first part's colour) × size, unit_price is
+   * ignored and `rate` is the price per set. Saved as one line per part of the style's set composition
+   * (pieces = sets × pieces per set). color_map: per part, set colour id → that part's colour id (contrast colours).
+   */
+  set: z.object({
+    rate: z.coerce.number().min(0),
+    color_map: z.record(z.string(), z.record(z.string(), z.coerce.number().int().positive())).optional(),
+  }).nullish(),
 });
 
 const soSchema = z.object({
@@ -139,9 +149,13 @@ async function recalcHeader(tx: Tx, soId: number) {
             COALESCE(SUM(cancelled_qty),0) AS cancelled,
             COALESCE(SUM(IF(is_additional = 1, order_qty + cancelled_qty, 0)),0) AS additional
        FROM trx_sales_order_line WHERE so_id = ?`, [soId]);
+  // sold in SETS when every line of the order (amendment additions aside) belongs to a set entry
+  const unit = await txQueryOne<{ n: number; sets: number }>(tx,
+    `SELECT COUNT(*) n, COALESCE(SUM(set_group IS NOT NULL), 0) sets FROM trx_sales_order_line WHERE so_id = ? AND (is_additional = 0 OR set_group IS NOT NULL)`, [soId]);
+  const qtyUnit = Number(unit?.n) > 0 && Number(unit?.sets) === Number(unit?.n) ? 'SET' : 'PCS';
   await txExecute(tx,
-    `UPDATE trx_sales_order SET order_qty = ?, total_amount = ?, plan_cut_qty = ?, cancelled_qty = ?, additional_qty = ? WHERE id = ?`,
-    [agg?.qty ?? 0, agg?.amt ?? 0, agg?.plan_cut ?? (agg?.qty ?? 0), agg?.cancelled ?? 0, agg?.additional ?? 0, soId]);
+    `UPDATE trx_sales_order SET order_qty = ?, total_amount = ?, plan_cut_qty = ?, cancelled_qty = ?, additional_qty = ?, qty_unit = ? WHERE id = ?`,
+    [agg?.qty ?? 0, agg?.amt ?? 0, agg?.plan_cut ?? (agg?.qty ?? 0), agg?.cancelled ?? 0, agg?.additional ?? 0, qtyUnit, soId]);
 }
 
 interface WrittenLine {
@@ -149,14 +163,72 @@ interface WrittenLine {
   skus: { so_sku_id: number; sku_id: number; qty: number; plan_cut: number }[];
 }
 
-async function writeLines(tx: Tx, soId: number, lines: z.infer<typeof lineSchema>[], headerExcessPct = 0,
+type LineIn = z.infer<typeof lineSchema>;
+interface SetFields { set_group: string; set_qty: number; qty_per_set: number; set_rate: number; set_color_map: Record<string, number> | null; amount: number }
+
+/**
+ * A set line → one line per part of the style's set composition (set spec: order in SET, produce in PCS). Each part
+ * line gets sets × pieces-per-set of the part's colour (contrast map, default the set colour) and size; the order
+ * value stays sets × rate (spread over the parts by pieces, the last part takes the rounding).
+ */
+async function expandSetLine(tx: Tx, l: LineIn, group: string): Promise<{ line: LineIn; set: SetFields }[]> {
+  const parts = await styleSetParts({ tx }, l.style_id);
+  if (parts.length < 2) throw BadRequest('This style has no set composition — add its parts (e.g. TOP 1 + BOTTOM 1) on the style master, or enter the order in pieces');
+  const rows = l.skus.filter((x) => x.qty > 0);
+  if (!rows.length) throw BadRequest('Enter the sets per colour and size');
+  const skus = await txQuery<any>(tx, `SELECT id, color_id, size_id FROM mst_style_sku WHERE style_id = ? AND id IN (?)`, [l.style_id, rows.map((r) => r.sku_id)]);
+  const setQty = rows.reduce((a, r) => a + r.qty, 0);
+  const pcsPerSet = parts.reduce((a, p) => a + p.qty_per_set, 0);
+  const rate = Number(l.set!.rate) || 0;
+  const value = Number((setQty * rate).toFixed(4));
+  const out: { line: LineIn; set: SetFields }[] = [];
+  let valueLeft = value;
+  for (const [i, p] of parts.entries()) {
+    const map = l.set!.color_map?.[p.part_name] ?? {};
+    const partSkus: LineIn['skus'] = [];
+    for (const r of rows) {
+      const k = skus.find((x) => Number(x.id) === r.sku_id);
+      if (!k) throw BadRequest(`Size / SKU #${r.sku_id} is not a size of this style`);
+      const colorId = Number(map[String(k.color_id)] ?? k.color_id);
+      const pk = colorId === Number(k.color_id) ? k : await txQueryOne<any>(tx,
+        `SELECT k.id FROM mst_style_sku k WHERE k.style_id = ? AND k.color_id = ? AND k.size_id = ? ORDER BY k.id LIMIT 1`, [l.style_id, colorId, k.size_id]);
+      if (!pk) {
+        const nm = await txQueryOne<any>(tx, `SELECT (SELECT color_name FROM mst_color WHERE id = ?) c, (SELECT size_code FROM mst_size WHERE id = ?) s`, [colorId, k.size_id]);
+        throw BadRequest(`${p.part_name}: the style has no SKU for colour ${nm?.c ?? colorId} size ${nm?.s ?? k.size_id} — add the colour to the style and generate its SKUs`);
+      }
+      const prev = partSkus.find((x) => x.sku_id === Number(pk.id));
+      if (prev) prev.qty += r.qty * p.qty_per_set;
+      else partSkus.push({ sku_id: Number(pk.id), qty: r.qty * p.qty_per_set, excess_pct: r.excess_pct ?? null });
+    }
+    const pcs = setQty * p.qty_per_set;
+    const amount = i === parts.length - 1 ? Number(valueLeft.toFixed(4)) : Number((value * pcs / (setQty * pcsPerSet)).toFixed(4));
+    valueLeft -= amount;
+    const colorMap = Object.keys(map).length ? Object.fromEntries(Object.entries(map).map(([a, b]) => [a, Number(b)])) : null;
+    out.push({
+      line: { ...l, set: null, part_name: p.part_name, skus: partSkus, unit_price: Number((rate / pcsPerSet).toFixed(4)),
+        color_id: l.color_id ? Number(map[String(l.color_id)] ?? l.color_id) : null, plan_cut_qty: undefined },
+      set: { set_group: group, set_qty: setQty, qty_per_set: p.qty_per_set, set_rate: rate, set_color_map: colorMap, amount },
+    });
+  }
+  return out;
+}
+
+async function writeLines(tx: Tx, soId: number, linesIn: LineIn[], headerExcessPct = 0,
   opts: { amendmentId?: number } = {}): Promise<WrittenLine[]> {
   const written: WrittenLine[] = [];
-  for (const l of lines) {
+  // set entries become their part lines (S1, S2 … per order)
+  const used = await txQuery<any>(tx, `SELECT DISTINCT set_group g FROM trx_sales_order_line WHERE so_id = ? AND set_group IS NOT NULL`, [soId]);
+  let gNo = used.reduce((m, r) => Math.max(m, Number(String(r.g).replace(/\D/g, '')) || 0), 0);
+  const lines: { l: LineIn; set: SetFields | null }[] = [];
+  for (const l of linesIn) {
+    if (l.set) for (const x of await expandSetLine(tx, l, `S${++gNo}`)) lines.push({ l: x.line, set: x.set });
+    else lines.push({ l, set: null });
+  }
+  for (const { l, set } of lines) {
     const skuQty = l.skus.reduce((a, x) => a + x.qty, 0);
     const qty = l.skus.length ? skuQty : (l.order_qty ?? 0);
     if (qty <= 0) throw BadRequest('Each order line needs a quantity greater than zero');
-    const amount = Number((qty * l.unit_price).toFixed(4));
+    const amount = set ? set.amount : Number((qty * l.unit_price).toFixed(4));
     const excessPct = Number(l.excess_pct !== undefined && l.excess_pct !== null ? l.excess_pct : headerExcessPct);
 
     // Per-size plan cut: size % → line % → header %. When any size carries its
@@ -176,10 +248,11 @@ async function writeLines(tx: Tx, soId: number, lines: z.infer<typeof lineSchema
     const r = await txExecute(tx,
       `INSERT INTO trx_sales_order_line
          (so_id, style_id, color_id, assort_color, part_name, description, composition, goods_description, order_qty, excess_pct, plan_cut_qty, unit_price, amount, ship_date,
-          is_additional, amendment_id)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          is_additional, amendment_id, set_group, set_qty, qty_per_set, set_rate, set_color_map)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [soId, l.style_id, l.color_id ?? null, l.assort_color ?? null, l.part_name ?? null, l.description ?? null, l.composition ?? null, l.goods_description ?? null,
-       qty, excessPct, planCutQty, l.unit_price, amount, l.ship_date ?? null, opts.amendmentId ? 1 : 0, opts.amendmentId ?? null]);
+       qty, excessPct, planCutQty, l.unit_price, amount, l.ship_date ?? null, opts.amendmentId ? 1 : 0, opts.amendmentId ?? null,
+       set?.set_group ?? null, set?.set_qty ?? null, set?.qty_per_set ?? null, set?.set_rate ?? null, set?.set_color_map ? JSON.stringify(set.set_color_map) : null]);
     const w: WrittenLine = { so_line_id: Number(r.insertId), style_id: l.style_id, color_id: l.color_id ?? null, qty, plan_cut: planCutQty, skus: [] };
     written.push(w);
 
@@ -776,6 +849,47 @@ const amendmentSchema = z.discriminatedUnion('amendment_type', [
   }),
 ]);
 
+/**
+ * A cancel on one part of a set entry cancels the same number of SETS on every part of the set (client 29-Oct-2026:
+ * TOP and BOTTOM must stay in step). The entered qty is pieces of the picked part; it must be whole sets. Each set is
+ * cancelled once even when several parts of it are entered.
+ */
+async function expandSetCancels(tx: Tx, soId: number, lines: { so_line_id: number; sku_id?: number | null; qty: number }[]) {
+  const out: { so_line_id: number; sku_id?: number | null; qty: number }[] = [];
+  const done = new Map<string, number>();
+  for (const c of lines) {
+    const line = await txQueryOne<any>(tx, `SELECT id, style_id, set_group, part_name, qty_per_set FROM trx_sales_order_line WHERE id = ? AND so_id = ?`, [c.so_line_id, soId]);
+    if (!line?.set_group || !c.sku_id) { out.push(c); continue; }
+    const group = await txQuery<any>(tx, `SELECT id, part_name, qty_per_set, set_color_map FROM trx_sales_order_line WHERE so_id = ? AND set_group = ? ORDER BY id`, [soId, line.set_group]);
+    const mapOf = (g: any): Record<string, number> => (typeof g.set_color_map === 'string' ? JSON.parse(g.set_color_map) : g.set_color_map) ?? {};
+    const k = await txQueryOne<any>(tx, `SELECT color_id, size_id FROM mst_style_sku WHERE id = ?`, [c.sku_id]);
+    if (!k) throw BadRequest(`Size #${c.sku_id} is not on this line`);
+    const qps = Number(line.qty_per_set) || 1;
+    if (c.qty % qps) throw BadRequest(`${line.part_name} is ${qps} pieces per set — cancel in whole sets (a multiple of ${qps})`);
+    const sets = c.qty / qps;
+    // the set colour of the picked cell: its own colour on the first part, else the set colour mapped to it
+    const own = mapOf(line);
+    const setColour = Number(group[0].id) === Number(line.id) ? Number(k.color_id)
+      : Number(Object.keys(own).find((sc) => Number(own[sc]) === Number(k.color_id)) ?? k.color_id);
+    const key = `${line.set_group}|${setColour}|${k.size_id}`;
+    if (done.has(key)) {
+      if (done.get(key) !== sets) throw BadRequest(`${line.part_name}: enter the cancelled sets once — the other parts of the set follow`);
+      continue;
+    }
+    done.set(key, sets);
+    for (const g of group) {
+      const colour = Number(mapOf(g)[String(setColour)] ?? setColour);
+      const sk = await txQueryOne<any>(tx,
+        `SELECT ss.sku_id FROM trx_sales_order_sku ss JOIN mst_style_sku k ON k.id = ss.sku_id WHERE ss.so_line_id = ? AND k.color_id = ? AND k.size_id = ?`,
+        [g.id, colour, k.size_id]);
+      if (!sk) throw BadRequest(`${g.part_name}: this colour / size is not on the part line — the set cannot be cancelled evenly`);
+      out.push({ so_line_id: Number(g.id), sku_id: Number(sk.sku_id), qty: sets * (Number(g.qty_per_set) || 1) });
+    }
+    await txExecute(tx, `UPDATE trx_sales_order_line SET set_qty = GREATEST(COALESCE(set_qty, 0) - ?, 0) WHERE so_id = ? AND set_group = ?`, [sets, soId, line.set_group]);
+  }
+  return out;
+}
+
 /** Plan cut of a qty at a size / line excess %. */
 const planCutAt = (qty: number, pct: number) => Math.round(qty * (1 + (pct || 0) / 100));
 
@@ -872,7 +986,7 @@ salesOrderRouter.post('/:id/amendments', requirePermission('SALES_ORDER.UPDATE')
         }
       }
     } else {
-      for (const c of body.lines) {
+      for (const c of await expandSetCancels(tx, id, body.lines)) {
         const line = await txQueryOne<any>(tx,
           `SELECT l.*, st.style_code FROM trx_sales_order_line l JOIN mst_style st ON st.id = l.style_id
             WHERE l.id = ? AND l.so_id = ? FOR UPDATE`, [c.so_line_id, id]);

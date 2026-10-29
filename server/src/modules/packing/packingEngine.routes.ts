@@ -13,6 +13,7 @@ import {
   loadOrder, lockJob, eligibility, jobKeyOf, openBagged, recalcOrder, cartonEvent, assertPackagingTrim, validateCarton,
   cartonLines, assertNotDownstream, lockCarton, orderVariance, postCarton, reverseCarton, jobBundles, setting,
   ratioOf, ratioPerCarton, assertRatio,
+  soSetDefs, setDefOf, setComps,
   type PackingUnit, type SetDef,
 } from './packingEngineCore.js';
 import { packingReportsRouter } from './packingEngineReports.js';
@@ -218,25 +219,40 @@ packingEngineRouter.get('/eligibility', requirePermission('PACKING.VIEW'), ah(as
   const part = req.query.part_name ? String(req.query.part_name).toUpperCase() : null;
   const qp = z.object({
     packing_unit: z.enum(['SINGLE', 'SET', 'MASTER_POLYBAG']).optional(),
-    sets: z.string().max(4000).optional(), // JSON [{top_color_id, bottom_color_id}]
+    sets: z.string().max(8000).optional(), // JSON [{top_color_id, bottom_color_id}] or [{components: [{part, color_id, qty}]}]
   }).parse(req.query);
   const out = await transaction(async (tx) => {
     const rule = await resolveRule(tx, cid, soId, styleId, so.buyer_id);
     const unit = (qp.packing_unit ?? rule?.packing_unit ?? 'SINGLE') as PackingUnit;
-    const sets = unit === 'SET' ? parseSets(qp.sets) : undefined;
+    // a set order entered in sets brings its own sets (parts, contrast colours, pieces per set)
+    const soSets = await soSetDefs(tx, soId, styleId);
+    const asked = unit === 'SET' ? parseSets(qp.sets) : undefined;
+    const sets = unit === 'SET' ? (asked?.length ? asked : soSets) : undefined;
     const parts = await jobParts(tx, cid, soId, so.job_no, styleId);
     const rows = unit === 'SET' && !sets?.length ? []
       : await eligibility(tx, { cid, io_no: so.job_no, style_id: styleId, part_name: unit === 'SET' ? null : part, unit, sets }, soId, null);
-    return { rule, rows, strict_qc: await packingRequiresQc(tx, cid), packing_unit: unit, parts: parts.parts, part_colors: parts.colors };
+    return { rule, rows, strict_qc: await packingRequiresQc(tx, cid), packing_unit: unit, parts: parts.parts, part_colors: parts.colors,
+      so_sets: soSets.map((d) => setComps(d)) };
   });
   res.json({ data: out });
 }));
 
-const setSchema = z.object({ top_color_id: z.coerce.number().int().positive(), bottom_color_id: z.coerce.number().int().positive() });
+/** A set to pack: the 16-Oct TOP colour → BOTTOM colour pair, or every part with its colour and pieces per set. */
+const setSchema = z.union([
+  z.object({ top_color_id: z.coerce.number().int().positive(), bottom_color_id: z.coerce.number().int().positive() }),
+  z.object({ components: z.array(z.object({
+    part: z.string().trim().toUpperCase().min(1).max(20),
+    color_id: z.coerce.number().int().positive(),
+    qty: z.coerce.number().int().min(1).max(20).default(1),
+  })).min(2).max(6) }),
+]);
+const toSetDef = (x: z.infer<typeof setSchema>): SetDef => ('components' in x
+  ? setDefOf(x.components.map((c) => ({ part: c.part, color_id: c.color_id, qty: c.qty })))
+  : { top_part: 'TOP', top_color_id: x.top_color_id, bottom_part: 'BOTTOM', bottom_color_id: x.bottom_color_id });
 function parseSets(raw?: string): SetDef[] {
   if (!raw) return [];
   let v: unknown; try { v = JSON.parse(raw); } catch { throw BadRequest('sets must be JSON'); }
-  return z.array(setSchema).max(100).parse(v).map((x) => ({ top_part: 'TOP', top_color_id: x.top_color_id, bottom_part: 'BOTTOM', bottom_color_id: x.bottom_color_id }));
+  return z.array(setSchema).max(100).parse(v).map(toSetDef);
 }
 
 /** Garment parts of a job / style (sales order lines, cut bundles, FG receipts) with the colours of each part. */
@@ -341,14 +357,19 @@ packingEngineRouter.post('/orders', requirePermission('PACKING.CREATE'), ah(asyn
     let part = b.part_name ? String(b.part_name).toUpperCase() : null;
     const sets: SetDef[] = [];
     if (unit === 'SET') {
-      if (!(await fgMode(tx, cid))) throw BadRequest('Set packing pairs TOP and BOTTOM from the FG store — switch on PACKING_FROM_FG_RECEIPT');
-      if (!parts.colors.TOP?.length || !parts.colors.BOTTOM?.length) throw BadRequest(`Job ${so.job_no} has no TOP and BOTTOM parts for this style — a set needs both`);
-      if (!b.sets?.length) throw BadRequest('Pair each TOP colour with its BOTTOM colour for the sets');
-      for (const x of b.sets) {
-        if (!parts.colors.TOP.includes(x.top_color_id)) throw BadRequest(`Colour #${x.top_color_id} is not a TOP colour of job ${so.job_no}`);
-        if (!parts.colors.BOTTOM.includes(x.bottom_color_id)) throw BadRequest(`Colour #${x.bottom_color_id} is not a BOTTOM colour of job ${so.job_no}`);
-        if (sets.some((y) => y.top_color_id === x.top_color_id)) throw BadRequest('A TOP colour is paired twice');
-        sets.push({ top_part: 'TOP', top_color_id: x.top_color_id, bottom_part: 'BOTTOM', bottom_color_id: x.bottom_color_id });
+      if (!(await fgMode(tx, cid))) throw BadRequest('Set packing pairs the parts from the FG store — switch on PACKING_FROM_FG_RECEIPT');
+      // the sets: as asked, else as entered on the sales order (set lines)
+      const asked = (b.sets ?? []).map(toSetDef);
+      const want = asked.length ? asked : await soSetDefs(tx, b.so_id, b.style_id);
+      if (!want.length) throw BadRequest('Pair each TOP colour with its BOTTOM colour for the sets');
+      for (const d of want) {
+        for (const p of setComps(d)) {
+          if (!parts.colors[p.part]?.length) throw BadRequest(`Job ${so.job_no} has no ${p.part} part for this style — a set needs every part it is made of`);
+          if (!parts.colors[p.part].includes(p.color_id)) throw BadRequest(`Colour #${p.color_id} is not a ${p.part} colour of job ${so.job_no}`);
+        }
+        if (new Set(setComps(d).map((p) => p.part)).size !== setComps(d).length) throw BadRequest('A part is listed twice in a set');
+        if (sets.some((y) => y.top_color_id === d.top_color_id)) throw BadRequest(`A ${d.top_part} colour is paired twice`);
+        sets.push(d);
       }
       part = null;
     } else {
@@ -372,8 +393,8 @@ packingEngineRouter.post('/orders', requirePermission('PACKING.CREATE'), ah(asyn
        mode, unit, ppmb, masterTrim, so.buyer_id, rule.id, rule.revision, JSON.stringify(rule), b.warehouse_id ?? null, b.target_date, b.remarks, req.user!.id,
        b.size_ratio?.length ? JSON.stringify(b.size_ratio) : null]);
     for (const d of sets) {
-      await txExecute(tx, `INSERT INTO trx_packing_set (packing_id, top_part, top_color_id, bottom_part, bottom_color_id) VALUES (?,?,?,?,?)`,
-        [r.insertId, d.top_part, d.top_color_id, d.bottom_part, d.bottom_color_id]);
+      await txExecute(tx, `INSERT INTO trx_packing_set (packing_id, top_part, top_color_id, bottom_part, bottom_color_id, components_json) VALUES (?,?,?,?,?,?)`,
+        [r.insertId, d.top_part, d.top_color_id, d.bottom_part, d.bottom_color_id, d.comps?.length ? JSON.stringify(d.comps) : null]);
     }
     const order = await txQueryOne<any>(tx, `SELECT * FROM trx_packing WHERE id = ?`, [r.insertId]);
     await writeOrderLines(tx, order, b.lines, rule);
