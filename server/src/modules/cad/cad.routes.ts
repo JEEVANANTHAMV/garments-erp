@@ -1407,12 +1407,12 @@ cadRouter.post('/cad-requirements/:id/revision', requirePermission('PRODUCTION.C
     for (const fp of fabricPrograms) {
       await txExecute(tx, `
         INSERT INTO trx_cad_fabric_program (
-          cad_req_id, sheet_type, fabric_type, gsm, dia_spec, color_name,
-          order_qty_pcs, net_qty, buffer_qty, grand_total_qty, uom, remarks, sort_order
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          cad_req_id, sheet_type, fabric_type, gsm, dia_spec, dia_val, color_name,
+          order_qty_pcs, net_qty, buffer_qty, sample_qty, grand_total_qty, uom, remarks, sort_order
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
-        newId, fp.sheet_type, fp.fabric_type, fp.gsm, fp.dia_spec, fp.color_name,
-        fp.order_qty_pcs, fp.net_qty, fp.buffer_qty, fp.grand_total_qty, fp.uom, fp.remarks, fp.sort_order
+        newId, fp.sheet_type, fp.fabric_type, fp.gsm, fp.dia_spec, fp.dia_val ?? null, fp.color_name,
+        fp.order_qty_pcs, fp.net_qty, fp.buffer_qty, fp.sample_qty ?? 0, fp.grand_total_qty, fp.uom, fp.remarks, fp.sort_order
       ]);
     }
 
