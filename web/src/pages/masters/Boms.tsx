@@ -720,10 +720,11 @@ export function BomDetailPage() {
 
   // Query latest approved CAD requirement for this Style
   const { data: latestCad, refetch: refetchCad } = useQuery({
-    queryKey: ['bom-latest-cad', head.style_id],
+    queryKey: ['bom-latest-cad', head.style_id, id],
     queryFn: async () => {
       if (!head.style_id) return null;
-      const res = await http.get<{ data: any }>(`/boms/latest-cad/${head.style_id}`);
+      // bom_id: the preview takes this BOM's yarn for fabrics whose master has no yarn (as the sync does)
+      const res = await http.get<{ data: any }>(`/boms/latest-cad/${head.style_id}`, !isNew && id ? { bom_id: id } : undefined);
       return res.data;
     },
     enabled: Boolean(head.style_id),

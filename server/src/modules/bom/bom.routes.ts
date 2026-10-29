@@ -820,7 +820,10 @@ bomRouter.get('/latest-cad/:styleId', requirePermission('BOM.VIEW'), ah(async (r
 
   // the BOM lines the CAD gives: one per fabric, consumption = CAD kg ÷ the job's plan-cut pcs (client 29-Oct-2026)
   const cadPick = await latestCadOfStyle(cid, styleId);
-  const preview = cadPick ? await cadBomPreview({}, cid, Number(cadPick.id), cadYarnId && cadYarnId !== defaultYarn?.id ? cadYarnId : null) : null;
+  // yarn for fabrics whose master has none: the BOM's own yarn line (as the sync), else the style fabric's yarn — never "the first yarn"
+  const ownBom = Number(req.query.bom_id) ? await queryOne<any>(`SELECT id FROM trx_bom WHERE id = ? AND company_id = ? AND style_id = ?`, [Number(req.query.bom_id), cid, styleId]) : null;
+  const bomYarn = ownBom ? await bomCadYarn({}, Number(ownBom.id)) : null;
+  const preview = cadPick ? await cadBomPreview({}, cid, Number(cadPick.id), bomYarn ?? (cadYarnId && cadYarnId !== defaultYarn?.id ? cadYarnId : null)) : null;
   const fCons = preview && preview.plan_cut_pcs > 0 ? Number((preview.fabric_kg / preview.plan_cut_pcs).toFixed(5))
     : totalFabric > 0 ? Number((totalFabric / orderQty).toFixed(5)) : 0.82;
   const yCons = preview && preview.plan_cut_pcs > 0 ? Number((preview.yarn_kg / preview.plan_cut_pcs).toFixed(5))
