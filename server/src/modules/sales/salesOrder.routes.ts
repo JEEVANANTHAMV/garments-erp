@@ -172,8 +172,16 @@ interface SetFields { set_group: string; set_qty: number; qty_per_set: number; s
  * line gets sets × pieces-per-set of the part's colour (contrast map, default the set colour) and size; the order
  * value stays sets × rate (spread over the parts by pieces, the last part takes the rounding).
  */
-async function expandSetLine(tx: Tx, l: LineIn, group: string): Promise<{ line: LineIn; set: SetFields }[]> {
-  const parts = await styleSetParts({ tx }, l.style_id);
+async function expandSetLine(tx: Tx, soId: number, l: LineIn, group: string): Promise<{ line: LineIn; set: SetFields }[]> {
+  // more sets of a style already ordered in sets (an amendment) keep that entry's composition — the style master may
+  // have changed since; a new entry takes the style master's
+  const prev = await txQuery<any>(tx,
+    `SELECT UPPER(part_name) part_name, COALESCE(qty_per_set, 1) qty_per_set FROM trx_sales_order_line
+      WHERE so_id = ? AND style_id = ? AND set_group = (SELECT MIN(set_group) FROM trx_sales_order_line WHERE so_id = ? AND style_id = ? AND set_group IS NOT NULL)
+      ORDER BY id`, [soId, l.style_id, soId, l.style_id]);
+  const parts = prev.length >= 2
+    ? prev.map((p) => ({ part_name: String(p.part_name), qty_per_set: Number(p.qty_per_set) || 1 }))
+    : await styleSetParts({ tx }, l.style_id);
   if (parts.length < 2) throw BadRequest('This style has no set composition — add its parts (e.g. TOP 1 + BOTTOM 1) on the style master, or enter the order in pieces');
   const rows = l.skus.filter((x) => x.qty > 0);
   if (!rows.length) throw BadRequest('Enter the sets per colour and size');
@@ -222,7 +230,7 @@ async function writeLines(tx: Tx, soId: number, linesIn: LineIn[], headerExcessP
   let gNo = used.reduce((m, r) => Math.max(m, Number(String(r.g).replace(/\D/g, '')) || 0), 0);
   const lines: { l: LineIn; set: SetFields | null }[] = [];
   for (const l of linesIn) {
-    if (l.set) for (const x of await expandSetLine(tx, l, `S${++gNo}`)) lines.push({ l: x.line, set: x.set });
+    if (l.set) for (const x of await expandSetLine(tx, soId, l, `S${++gNo}`)) lines.push({ l: x.line, set: x.set });
     else lines.push({ l, set: null });
   }
   for (const { l, set } of lines) {

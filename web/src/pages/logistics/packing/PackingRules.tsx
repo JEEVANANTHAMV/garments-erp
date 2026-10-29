@@ -14,7 +14,7 @@ import { PackingNav, usePackingMeta, errMsg, n, type Rule } from './packingShare
 export const UNIT_LABEL: Record<string, string> = { SINGLE: 'Single piece', SET: 'Set (TOP + BOTTOM)', MASTER_POLYBAG: 'Master polybag' };
 export const UNIT_OPTIONS = [
   { value: 'SINGLE', label: 'Single piece — one garment per polybag (also TOP / BOTTOM packed separately)' },
-  { value: 'SET', label: 'Set — one TOP + one BOTTOM of the same size in one polybag' },
+  { value: 'SET', label: 'Set — all parts of a set (e.g. TOP + BOTTOM) of the same size in one polybag' },
   { value: 'MASTER_POLYBAG', label: 'Master polybag — N individually bagged pieces in one big bag' },
 ];
 

@@ -1026,6 +1026,7 @@ export default function CadRequirementDetailPage() {
     : null;
   // order qty shown in the CAD's unit: before any marker quantity, a set order shows its sets (the header is pieces)
   const shownOrderQty = !summaryKpis.orderFromMarkers && setInfo ? setInfo.setQty : summaryKpis.totalOrderPcs;
+  const shownCutQty = !summaryKpis.orderFromMarkers && setInfo ? setInfo.setQty : summaryKpis.totalCutPcs;
   const unitLabel = setInfo ? 'Sets' : 'Pcs';
 
   const syncOrderBreakdownToMarker = () => {
@@ -1579,7 +1580,7 @@ export default function CadRequirementDetailPage() {
                   </td>
                   {/* garments with excess (main fabric) — body + rib rows of the same garment must not add up (3,990 for 1,995) */}
                   <td className="py-3 px-2 text-right" title="Garments incl. excess (main fabric); rib / collar rows are the same garments">
-                    {fmtNumber(summaryKpis.totalCutPcs)} {unitLabel}
+                    {fmtNumber(shownCutQty)} {unitLabel}
                   </td>
                   <td className="py-3 px-3 text-right text-base text-emerald-900">
                     {fmtDecimal(totalBulkCut + totalSampleCut)} {summaryKpis.uom}
@@ -1823,7 +1824,7 @@ export default function CadRequirementDetailPage() {
               = {fmtNumber(setInfo.orderPcs)} Pcs ({setInfo.parts}) on the order
             </div>
           )}
-          <div className="text-[10px] text-slate-400">Main fabric colours · rib / collar not added · with excess {fmtNumber(summaryKpis.totalCutPcs)} {unitLabel}</div>
+          <div className="text-[10px] text-slate-400">Main fabric colours · rib / collar not added · with excess {fmtNumber(shownCutQty)} {unitLabel}</div>
         </div>
 
         <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-200 shadow-sm">
@@ -3171,7 +3172,7 @@ export default function CadRequirementDetailPage() {
                   <div><span className="text-slate-500">CAD No:</span> <strong>{header.req_no || 'Unsaved'} {header.cad_version}</strong></div>
                   <div><span className="text-slate-500">Date:</span> <strong>{header.req_date ? fmtDate(header.req_date) : '—'}</strong></div>
                   <div><span className="text-slate-500">Order Qty:</span> <strong>{fmtNumber(shownOrderQty)} {unitLabel}</strong>{setInfo ? ` (${fmtNumber(setInfo.orderPcs)} Pcs ${setInfo.parts})` : ''}</div>
-                  <div><span className="text-slate-500">Order Qty with Excess:</span> <strong>{fmtNumber(summaryKpis.totalCutPcs)} {unitLabel}</strong></div>
+                  <div><span className="text-slate-500">Order Qty with Excess:</span> <strong>{fmtNumber(shownCutQty)} {unitLabel}</strong></div>
                   <div className="col-span-2"><span className="text-slate-500">Buyer:</span> <strong>{existingData?.buyer_name || curJob?.buyer_name || '—'}</strong></div>
                   <div className="col-span-4"><span className="text-slate-500">Fabric Type:</span> <strong>{[...new Set(cuttingLay.map((cl) => `${cl.fabric_type}${cl.gsm ? ` ${cl.gsm} GSM` : ''}`))].join(', ') || '—'}</strong></div>
                 </div>
