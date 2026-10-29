@@ -805,10 +805,10 @@ export function BomDetailPage() {
             trim_id: '',
             item_description: '',
             specification: '',
-            color_id: '',
+            color_id: l.color_id ?? '',
             size_id: '',
             consumption_basis: 'PER_PIECE',
-            applicability: 'ALL',
+            applicability: l.color_id ? 'COLOUR_WISE' : 'ALL',
             consumption: l.consumption,
             additional_qty: 0,
             uom_id: l.uom === 'MTR' ? mtrUom : kgUom,
@@ -1734,7 +1734,7 @@ export function BomDetailPage() {
                   <tbody>
                     {shown.map((l: any, i: number) => (
                       <tr key={i} className="border-t border-slate-100">
-                        <td className="py-1">{l.material_type === 'YARN' ? 'Yarn' : 'Fabric'} · {l.name}{l.gsm ? ` · ${l.gsm} GSM` : ''}{l.dia ? ` · ${l.dia}"` : ''}</td>
+                        <td className="py-1">{l.material_type === 'YARN' ? 'Yarn' : 'Fabric'} · {l.name}{l.gsm ? ` · ${l.gsm} GSM` : ''}{l.dia ? ` · ${l.dia}"` : ''}{l.color_name ? ` · ${l.color_name}` : ''}</td>
                         <td className="py-1 text-right tabular-nums">{fmtDecimal(l.total_kg, 2)} {l.uom}</td>
                         <td className="py-1 text-right tabular-nums">{fmtDecimal(l.consumption, 5)}</td>
                       </tr>

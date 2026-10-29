@@ -85,7 +85,8 @@ const emptyForm = () => ({
   io_no: '',
   buyer_po_no: '',
   style_id: '' as number | '',
-  part_name: 'TOP' as typeof PARTS[number],
+  /** '' = all parts of the job: one fabric knitted for every part (a TOP + BOTTOM set in the same fabric — client 30-Oct-2026) */
+  part_name: '' as '' | typeof PARTS[number],
   fabric_id: '' as number | '',
   fabric_type: '',
   knitting_type: 'SOLID' as typeof KNITTING_TYPES[number],
@@ -224,7 +225,7 @@ export default function KnittingProgramPage() {
       io_no: prog.io_no ?? '',
       buyer_po_no: prog.buyer_po_no ?? '',
       style_id: prog.style_id ?? '',
-      part_name: prog.part_name ?? 'TOP',
+      part_name: prog.part_name ?? '',
       fabric_id: prog.fabric_id ?? '',
       fabric_type: prog.fabric_type ?? '',
       knitting_type: prog.knitting_type ?? 'SOLID',
@@ -256,6 +257,7 @@ export default function KnittingProgramPage() {
         ...form,
         so_id: form.so_id === '' ? null : Number(form.so_id),
         so_line_id: form.so_line_id === '' ? null : Number(form.so_line_id),
+        part_name: form.part_name || null,
         style_id: form.style_id === '' ? null : Number(form.style_id),
         fabric_id: form.fabric_id === '' ? null : Number(form.fabric_id),
         fabric_form: form.fabric_form || null,
@@ -591,7 +593,7 @@ export default function KnittingProgramPage() {
                         <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold ${PART_COLORS[p.part_name] ?? PART_COLORS.OTHER}`}>
                           {p.part_name}
                         </span>
-                      ) : '—'}
+                      ) : <span className="text-[11px] text-slate-500">All parts</span>}
                     </td>
                     <td className="td text-slate-600 text-[11px]">
                       {p.knitting_type?.replace(/_/g, ' ')}
@@ -753,10 +755,13 @@ export default function KnittingProgramPage() {
                 <select className="input w-full" value={form.part_name}
                   onChange={(e) => setF('part_name', e.target.value)}
                   disabled={linkedPart !== null} id="kp-part">
+                  <option value="">All parts (e.g. TOP + BOTTOM in this fabric)</option>
                   {PARTS.map((p) => <option key={p} value={p}>{p}</option>)}
                 </select>
-                {linkedPart && (
+                {linkedPart ? (
                   <p className="mt-1 text-[10px] text-slate-500">Part follows the linked Sales Order line</p>
+                ) : (
+                  <p className="mt-1 text-[10px] text-slate-500" data-kp-part-hint>Set job (TOP + BOTTOM from one fabric): leave the SO line empty and keep All parts — the CAD line's KG already covers both</p>
                 )}
               </div>
               <label className="block"><span className="label">Knitting type</span>
@@ -1167,7 +1172,7 @@ function DetailView({ prog }: { prog: any }) {
             <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] font-semibold ${PART_COLORS[prog.part_name] ?? PART_COLORS.OTHER}`}>
               {prog.part_name}
             </span>
-          ) : '—'
+          ) : 'All parts of the job'
         } />
         <InfoRow label="Knitting Type" value={prog.knitting_type?.replace(/_/g, ' ')} />
         <InfoRow label="Status" value={<StatusPill status={prog.status} />} />
