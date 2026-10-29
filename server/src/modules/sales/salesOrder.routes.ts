@@ -858,7 +858,7 @@ async function expandSetCancels(tx: Tx, soId: number, lines: { so_line_id: numbe
   const out: { so_line_id: number; sku_id?: number | null; qty: number }[] = [];
   const done = new Map<string, number>();
   for (const c of lines) {
-    const line = await txQueryOne<any>(tx, `SELECT id, style_id, set_group, part_name, qty_per_set FROM trx_sales_order_line WHERE id = ? AND so_id = ?`, [c.so_line_id, soId]);
+    const line = await txQueryOne<any>(tx, `SELECT id, style_id, set_group, part_name, qty_per_set, set_color_map FROM trx_sales_order_line WHERE id = ? AND so_id = ?`, [c.so_line_id, soId]);
     if (!line?.set_group || !c.sku_id) { out.push(c); continue; }
     const group = await txQuery<any>(tx, `SELECT id, part_name, qty_per_set, set_color_map FROM trx_sales_order_line WHERE so_id = ? AND set_group = ? ORDER BY id`, [soId, line.set_group]);
     const mapOf = (g: any): Record<string, number> => (typeof g.set_color_map === 'string' ? JSON.parse(g.set_color_map) : g.set_color_map) ?? {};

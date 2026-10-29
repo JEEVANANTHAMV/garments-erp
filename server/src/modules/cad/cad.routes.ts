@@ -100,7 +100,6 @@ cadRouter.get('/cad-requirements/job-breakdown', requirePermission('PRODUCTION.V
     };
   });
 
-  const totalCellQty = colorways.reduce((sum, cw) => sum + cw.quantities.reduce((a, b) => a + b, 0), 0);
   const totalPcs = parts.reduce((sum, p) => sum + p.qty, 0);
 
   res.json({
@@ -112,7 +111,8 @@ cadRouter.get('/cad-requirements/job-breakdown', requirePermission('PRODUCTION.V
       is_set: isSet,
       parts,
       pcs_per_set: isSet ? namedParts.reduce((a, p) => a + p.qty_per_set, 0) : 1,
-      total_set_qty: isSet ? totalCellQty : null,
+      // sets of the order: a part's pieces ÷ its pieces per set (contrast colours put TOP and BOTTOM in different cells)
+      total_set_qty: isSet ? Math.max(...namedParts.map((p) => Math.round(p.qty / p.qty_per_set))) : null,
     },
     meta: { so_id: soId }
   });
