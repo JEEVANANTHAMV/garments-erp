@@ -9,6 +9,7 @@ import { s } from '../resources/schemas.js';
 import { jobBomRequirement } from '../bom/bom.routes.js';
 import { cellsFor, cellsPlanCut, lineRequirement, type OrderCell } from '../../core/bomRequirement.js';
 import { styleSetParts, SET_PART_RE } from '../style/style.routes.js';
+import { fgStockParts, pk } from '../production/fgReceipt.routes.js';
 
 export const salesOrderRouter = Router();
 
@@ -893,6 +894,94 @@ async function expandSetCancels(tx: Tx, soId: number, lines: { so_line_id: numbe
 /** Plan cut of a qty at a size / line excess %. */
 const planCutAt = (qty: number, pct: number) => Math.round(qty * (1 + (pct || 0) / 100));
 
+/**
+ * GET /sales-orders/:id/set-status — order-to-packing reconciliation of the set entries (client 29-Oct-2026, set spec
+ * §11): per set colour × size the ordered sets and how many complete sets each stage can make (cut, QC passed, FG
+ * received, ready = matched in the FG store, packed), each = MIN over the parts of pieces ÷ pieces per set, and the
+ * unmatched pieces of every part (FG on hand that does not make a full set). Invoiced sets from SET invoice lines.
+ */
+salesOrderRouter.get('/:id/set-status', requirePermission('SALES_ORDER.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = Number(req.params.id);
+  const so = await queryOne<any>(`SELECT id, so_no, COALESCE(NULLIF(io_no,''), so_no) job_no, qty_unit FROM trx_sales_order WHERE id = ? AND company_id = ?`, [id, cid]);
+  if (!so) throw NotFound('Sales order not found');
+  const lines = await query<any>(
+    `SELECT l.id, l.style_id, st.style_code, l.set_group, UPPER(l.part_name) part, COALESCE(l.qty_per_set, 1) qps, l.set_color_map, l.set_rate
+       FROM trx_sales_order_line l JOIN mst_style st ON st.id = l.style_id WHERE l.so_id = ? AND l.set_group IS NOT NULL ORDER BY l.set_group, l.id`, [id]);
+  const groups: any[] = [];
+  const totals = { ordered: 0, cut: 0, qc_passed: 0, fg_received: 0, ready: 0, packed: 0, balance: 0 };
+  const byStyle = new Map<number, { stock: Awaited<ReturnType<typeof fgStockParts>>; cut: Map<string, { cut: number; qc: number }> }>();
+  // set entries of the same style, parts and colours (the order's S1 and an amendment's S2) share the same cut / FG
+  // cells, so they are reported together — the stock is counted once
+  const entries = [...new Set(lines.map((l) => l.set_group))].map((g) => {
+    const parts = lines.filter((l) => l.set_group === g).map((l) => ({ ...l, map: (typeof l.set_color_map === 'string' ? JSON.parse(l.set_color_map) : l.set_color_map) ?? {} }));
+    return { g, parts, sig: `${parts[0].style_id}|${parts.map((p) => `${p.part}:${p.qps}:${JSON.stringify(p.map)}`).join(',')}` };
+  });
+  for (const sig of [...new Set(entries.map((x) => x.sig))]) {
+    const same = entries.filter((x) => x.sig === sig);
+    const g = same.map((x) => x.g).join(', ');
+    const parts = same[0].parts;
+    const lead = parts[0];
+    const partLineIds = (part: string) => same.map((x) => x.parts.find((p) => p.part === part)!.id);
+    if (!byStyle.has(lead.style_id)) {
+      const cutRows = await query<any>(
+        `SELECT UPPER(cb.part_name) part, cb.color_id, cb.size_id, SUM(cb.qty) cut, SUM(COALESCE(cb.qc_pass_qty, 0)) qc
+           FROM trx_cutting_bundle cb LEFT JOIN trx_cutting c ON c.id = cb.cutting_id
+          WHERE COALESCE(cb.company_id, c.company_id) = ? AND cb.io_no = ? AND cb.style_id = ? AND cb.status NOT IN ('SPLIT', 'CANCELLED')
+          GROUP BY UPPER(cb.part_name), cb.color_id, cb.size_id`, [cid, so.job_no, lead.style_id]);
+      byStyle.set(lead.style_id, {
+        stock: await fgStockParts(null, cid, so.job_no, lead.style_id),
+        cut: new Map(cutRows.map((r) => [pk(r.part, r.color_id, r.size_id), { cut: Number(r.cut) || 0, qc: Number(r.qc) || 0 }])),
+      });
+    }
+    const { stock, cut } = byStyle.get(lead.style_id)!;
+    const skus = await query<any>(
+      `SELECT sk.so_line_id, sk.qty, k.color_id, k.size_id, c.color_name, sz.size_code, sz.sort_order FROM trx_sales_order_sku sk
+         JOIN mst_style_sku k ON k.id = sk.sku_id JOIN mst_color c ON c.id = k.color_id JOIN mst_size sz ON sz.id = k.size_id
+        WHERE sk.so_line_id IN (?)`, [same.flatMap((x) => x.parts.map((p) => p.id))]);
+    const colourName = new Map(skus.map((x) => [Number(x.color_id), x.color_name]));
+    const rows: any[] = [];
+    // ordered sets per set colour × size over every entry of this kind
+    const leadIds = partLineIds(lead.part).map(Number);
+    const cells = new Map<string, any>();
+    for (const x of skus.filter((k) => leadIds.includes(Number(k.so_line_id)))) {
+      const k = `${x.color_id}:${x.size_id}`;
+      const c = cells.get(k);
+      if (c) c.qty += Number(x.qty) || 0; else cells.set(k, { ...x, qty: Number(x.qty) || 0 });
+    }
+    for (const lk of [...cells.values()].sort((a, b) => String(a.color_name).localeCompare(String(b.color_name)) || a.sort_order - b.sort_order)) {
+      const setColour = Number(lk.color_id);
+      const per = parts.map((p) => {
+        const colour = Number(p.map[String(setColour)] ?? setColour);
+        const k = pk(p.part, colour, lk.size_id);
+        const st = stock.get(k) ?? { received: 0, packed: 0, on_hand: 0 };
+        const ct = cut.get(k) ?? { cut: 0, qc: 0 };
+        const ids = partLineIds(p.part).map(Number);
+        const ord = skus.filter((x) => ids.includes(Number(x.so_line_id)) && Number(x.color_id) === colour && Number(x.size_id) === Number(lk.size_id)).reduce((a, x) => a + (Number(x.qty) || 0), 0);
+        return { part: p.part, color_id: colour, color_name: colourName.get(colour) ?? null, qty_per_set: Number(p.qps),
+          order_pcs: ord, cut_pcs: ct.cut, qc_passed_pcs: ct.qc, fg_received_pcs: st.received, packed_pcs: st.packed, on_hand_pcs: st.on_hand };
+      });
+      const sets = (f: (x: typeof per[number]) => number) => Math.min(...per.map((x) => Math.floor(Math.max(f(x), 0) / x.qty_per_set)));
+      const ready = sets((x) => x.on_hand_pcs);
+      const row = {
+        set_colour_id: setColour, set_colour: lk.color_name, size_id: Number(lk.size_id), size_code: lk.size_code,
+        ordered: Math.round((Number(lk.qty) || 0) / Number(lead.qps)), cut: sets((x) => x.cut_pcs), qc_passed: sets((x) => x.qc_passed_pcs),
+        fg_received: sets((x) => x.fg_received_pcs), ready, packed: sets((x) => x.packed_pcs),
+        parts: per.map((x) => ({ ...x, unmatched_pcs: Math.max(x.on_hand_pcs - ready * x.qty_per_set, 0) })),
+      };
+      (row as any).balance = Math.max(row.ordered - row.packed, 0);
+      for (const k of Object.keys(totals) as (keyof typeof totals)[]) totals[k] += Number((row as any)[k]) || 0;
+      rows.push(row);
+    }
+    groups.push({ set_group: g, style_id: lead.style_id, style_code: lead.style_code, set_rate: Number(lead.set_rate) || 0,
+      parts: parts.map((p) => ({ part: p.part, qty_per_set: Number(p.qps) })), rows });
+  }
+  const inv = groups.length ? await queryOne<{ q: number }>(
+    `SELECT COALESCE(SUM(l.qty), 0) q FROM trx_commercial_invoice_line l JOIN trx_commercial_invoice ci ON ci.id = l.invoice_id
+      WHERE ci.company_id = ? AND l.so_id = ? AND l.line_kind = 'GOODS' AND l.uqc = 'SET' AND COALESCE(ci.doc_status, 'DRAFT') <> 'CANCELLED'`, [cid, id]) : null;
+  res.json({ data: { so_no: so.so_no, job_no: so.job_no, qty_unit: so.qty_unit, groups, totals: { ...totals, invoiced: Number(inv?.q) || 0 } } });
+}));
+
 salesOrderRouter.get('/:id/amendments', requirePermission('SALES_ORDER.VIEW'), ah(async (req, res) => {
   const id = Number(req.params.id);
   const so = await queryOne(`SELECT id FROM trx_sales_order WHERE id = ? AND company_id = ?`, [id, req.user!.companyId]);
@@ -958,6 +1047,13 @@ salesOrderRouter.post('/:id/amendments', requirePermission('SALES_ORDER.UPDATE')
           if (!k) continue;
           const key = cellKey(l.style_id, k.color_id ?? l.color_id ?? null, k.size_id);
           if (!beforeCells.has(key)) beforeCells.set(key, await cellOrderQty(tx, id, l.style_id, k.color_id ?? l.color_id ?? null, k.size_id));
+          // a set entry also adds to its parts' contrast-colour cells
+          for (const m of Object.values(l.set?.color_map ?? {})) {
+            const cc = m[String(k.color_id)];
+            if (!cc) continue;
+            const ck = cellKey(l.style_id, Number(cc), k.size_id);
+            if (!beforeCells.has(ck)) beforeCells.set(ck, await cellOrderQty(tx, id, l.style_id, Number(cc), k.size_id));
+          }
         }
         if (!l.skus.some((x) => x.qty > 0)) {
           const key = cellKey(l.style_id, l.color_id ?? null, null);

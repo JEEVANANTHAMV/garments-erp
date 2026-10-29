@@ -633,6 +633,7 @@ export default function SalesOrderDetail() {
           { key: 'bom', label: 'Bill of Materials' },
           { key: 'requirements', label: 'Material Requirements' },
           { key: 'amendments', label: 'Amendments', count: d?.amendments?.length ?? 0 },
+          ...((d?.lines ?? []).some((l: any) => l.set_group) ? [{ key: 'sets', label: 'Set status' }] : []),
           { key: 'production', label: 'Production', count: d?.production_orders?.length ?? 0 },
           { key: 'invoices', label: 'Invoices', count: d?.invoices?.length ?? 0 },
           ...(can('SAMPLE.VIEW') || can('REPORT.VIEW') ? [{ key: 'sample-cost', label: 'Sample cost' }] : []),
@@ -822,6 +823,8 @@ export default function SalesOrderDetail() {
       {!isNew && tab === 'bom' && (
         <BomTab lines={lines} soId={Number(id)} />
       )}
+
+      {!isNew && tab === 'sets' && <SetStatusTab soId={Number(id)} />}
 
       {!isNew && tab === 'amendments' && (
         <AmendmentsTab soId={Number(id)} amendments={d?.amendments ?? []} canAmend={canAmend}
@@ -2113,6 +2116,70 @@ function LineCard({
           );
         })()}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Set status (client 29-Oct-2026, set spec §11): per set colour × size, the ordered sets and the complete sets each
+ * stage makes — cut, final QC passed, FG received, ready to pack (matched in the FG store), packed — and the pieces of
+ * a part waiting for their partner part (unmatched).
+ */
+function SetStatusTab({ soId }: { soId: number }) {
+  const q = useQuery({
+    queryKey: ['so-set-status', soId],
+    queryFn: async () => (await http.get<{ data: any }>(`/sales-orders/${soId}/set-status`)).data,
+  });
+  if (q.isLoading) return <div className="skeleton h-40" />;
+  if (q.isError || !q.data) return <p className="text-[12.5px] text-red-600">Could not load the set status.</p>;
+  const T = q.data.totals;
+  const STAGES: [string, string][] = [['ordered', 'Ordered'], ['cut', 'Cut'], ['qc_passed', 'Final QC passed'], ['fg_received', 'FG received'], ['ready', 'Ready to pack'], ['packed', 'Packed'], ['balance', 'Balance to pack']];
+  return (
+    <div className="space-y-4" data-set-status>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+        {[...STAGES, ['invoiced', 'Invoiced'] as [string, string]].map(([k, label]) => (
+          <div key={k} className="card px-3 py-2">
+            <div className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-500">{label}</div>
+            <div className="text-lg font-bold tabular-nums text-slate-900" data-total={k}>{fmtNumber(T[k] ?? 0)} <span className="text-[11px] font-medium text-slate-400">sets</span></div>
+          </div>
+        ))}
+      </div>
+      <p className="text-[11.5px] text-slate-500">
+        Each stage counts complete sets: the smallest number of sets every part can make (pieces ÷ pieces per set). Unmatched = pieces of a part in the FG store waiting for their partner part.
+      </p>
+      {q.data.groups.map((g: any) => (
+        <div key={g.set_group} className="card overflow-x-auto p-0">
+          <div className="border-b border-slate-100 px-4 py-2 text-[12.5px] font-semibold text-slate-800">
+            {g.style_code} · Set {g.set_group} = {g.parts.map((p: any) => `${p.qty_per_set > 1 ? `${p.qty_per_set} ` : ''}${p.part}`).join(' + ')}
+          </div>
+          <table className="w-full text-[12.5px]">
+            <thead>
+              <tr>
+                <th className="th">Set colour</th><th className="th">Size</th>
+                {STAGES.map(([k, label]) => <th key={k} className="th text-right">{label}</th>)}
+                <th className="th">Unmatched (pcs)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {g.rows.map((r: any) => (
+                <tr key={`${r.set_colour_id}:${r.size_id}`} data-set-row={`${r.set_colour}|${r.size_code}`}>
+                  <td className="td font-medium">{r.set_colour}</td>
+                  <td className="td">{r.size_code}</td>
+                  {STAGES.map(([k]) => <td key={k} className={`td text-right tabular-nums ${k === 'balance' && r[k] > 0 ? 'font-semibold text-amber-700' : ''}`}>{fmtNumber(r[k])}</td>)}
+                  <td className="td text-[11.5px]">
+                    {r.parts.filter((p: any) => p.unmatched_pcs > 0).map((p: any) => (
+                      <span key={p.part} className="mr-1.5 inline-block rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-amber-800"
+                        title={`${p.part} ${p.color_name ?? ''}: ${p.on_hand_pcs} in FG store`}>{p.part} +{fmtNumber(p.unmatched_pcs)}</span>
+                    ))}
+                    {!r.parts.some((p: any) => p.unmatched_pcs > 0) && <span className="text-slate-400">—</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
+      {!q.data.groups.length && <p className="text-[12.5px] text-slate-500">This order has no set lines.</p>}
     </div>
   );
 }

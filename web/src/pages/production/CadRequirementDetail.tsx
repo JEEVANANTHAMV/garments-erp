@@ -845,7 +845,8 @@ export default function CadRequirementDetailPage() {
         cellPcs[k] = Math.max(cellPcs[k] || 0, Number(q) || 0);
       });
     }));
-    const totalOrderPcs = Object.values(cellPcs).reduce((a, b) => a + b, 0) || header.order_qty;
+    const markerOrderPcs = Object.values(cellPcs).reduce((a, b) => a + b, 0);
+    const totalOrderPcs = markerOrderPcs || header.order_qty;
     // Order qty with excess (cut pieces incl. rejection %), same main-fabric rule
     const cellCut: Record<string, number> = {};
     markers.filter((m) => (m.fabric_type || '').trim().toUpperCase() === mainFabric).forEach((m) => {
@@ -912,6 +913,8 @@ export default function CadRequirementDetailPage() {
 
     return {
       totalOrderPcs,
+      /** false = no marker quantities yet; the order qty is the header's (pieces) */
+      orderFromMarkers: markerOrderPcs > 0,
       totalCutPcs,
       grandFabric: Math.round((isWoven ? grandFabricMtr : grandFabricKg) * 100) / 100,
       grandFabricKg: Math.round(grandFabricKg * 100) / 100,
@@ -1018,8 +1021,11 @@ export default function CadRequirementDetailPage() {
         parts: ((jobBreakdown.data.parts ?? []) as { part_name: string | null }[]).map((p) => p.part_name).filter(Boolean).join(' + '),
         pcsPerSet: Number(jobBreakdown.data.pcs_per_set) || 2,
         orderPcs: Number(jobBreakdown.data.total_order_qty) || 0,
+        setQty: Number(jobBreakdown.data.total_set_qty) || 0,
       }
     : null;
+  // order qty shown in the CAD's unit: before any marker quantity, a set order shows its sets (the header is pieces)
+  const shownOrderQty = !summaryKpis.orderFromMarkers && setInfo ? setInfo.setQty : summaryKpis.totalOrderPcs;
   const unitLabel = setInfo ? 'Sets' : 'Pcs';
 
   const syncOrderBreakdownToMarker = () => {
@@ -1811,7 +1817,7 @@ export default function CadRequirementDetailPage() {
 
         <div className="p-3 bg-white rounded-xl border border-slate-200/80 shadow-sm">
           <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Order Qty ({setInfo ? 'Sets' : 'Garments'})</div>
-          <div className="text-lg font-bold text-indigo-600 mt-0.5">{fmtNumber(summaryKpis.totalOrderPcs)} {unitLabel}</div>
+          <div className="text-lg font-bold text-indigo-600 mt-0.5">{fmtNumber(shownOrderQty)} {unitLabel}</div>
           {setInfo && (
             <div className="text-[10px] text-indigo-700 font-semibold">
               = {fmtNumber(setInfo.orderPcs)} Pcs ({setInfo.parts}) on the order
@@ -3164,7 +3170,7 @@ export default function CadRequirementDetailPage() {
                   <div><span className="text-slate-500">Style No:</span> <strong>{cadStyleCode || '—'}</strong>{cadStyleName ? ` — ${cadStyleName}` : ''}</div>
                   <div><span className="text-slate-500">CAD No:</span> <strong>{header.req_no || 'Unsaved'} {header.cad_version}</strong></div>
                   <div><span className="text-slate-500">Date:</span> <strong>{header.req_date ? fmtDate(header.req_date) : '—'}</strong></div>
-                  <div><span className="text-slate-500">Order Qty:</span> <strong>{fmtNumber(summaryKpis.totalOrderPcs)} {unitLabel}</strong>{setInfo ? ` (${fmtNumber(setInfo.orderPcs)} Pcs ${setInfo.parts})` : ''}</div>
+                  <div><span className="text-slate-500">Order Qty:</span> <strong>{fmtNumber(shownOrderQty)} {unitLabel}</strong>{setInfo ? ` (${fmtNumber(setInfo.orderPcs)} Pcs ${setInfo.parts})` : ''}</div>
                   <div><span className="text-slate-500">Order Qty with Excess:</span> <strong>{fmtNumber(summaryKpis.totalCutPcs)} {unitLabel}</strong></div>
                   <div className="col-span-2"><span className="text-slate-500">Buyer:</span> <strong>{existingData?.buyer_name || curJob?.buyer_name || '—'}</strong></div>
                   <div className="col-span-4"><span className="text-slate-500">Fabric Type:</span> <strong>{[...new Set(cuttingLay.map((cl) => `${cl.fabric_type}${cl.gsm ? ` ${cl.gsm} GSM` : ''}`))].join(', ') || '—'}</strong></div>

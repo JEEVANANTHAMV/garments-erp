@@ -14,6 +14,8 @@ import { fmtDate, fmtNumber, today } from '../../lib/format';
 export interface SoLineLite {
   id: number; style_id: number; style_code: string; style_name?: string; color_id: number | null; color_name?: string | null;
   order_qty: number; cancelled_qty?: number; is_additional?: number; amendment_no?: string | null;
+  /** set entry lines (client 29-Oct-2026): one line per part, linked by set_group */
+  part_name?: string | null; set_group?: string | null; qty_per_set?: number | null; set_rate?: number | string | null; set_color_map?: any;
   skus: { sku_id: number; qty: number; color_id: number; size_id: number; size_code: string; color_name: string; sort_order: number }[];
 }
 
@@ -23,6 +25,23 @@ const err = (e: unknown, fb: string) => (e instanceof ApiError ? e.message : fb)
 
 interface AddRow { key: string; style_id: number | ''; color_id: number | ''; qty: Record<number, number | ''> }
 let rowSeq = 0;
+
+/**
+ * The set entry of a style on the order (its first part's line = the set colour), if the style was ordered in sets:
+ * additional quantity of it is added in SETS at the same rate and contrast colours (client 29-Oct-2026).
+ */
+function setOfStyle(lines: SoLineLite[], styleId: number | '', colorId: number | '') {
+  const leads = lines.filter((l) => l.style_id === styleId && l.set_group && !lines.some((x) => x.set_group === l.set_group && x.id < l.id));
+  if (!leads.length) return null;
+  const lead = leads.find((l) => l.skus.some((k) => k.color_id === colorId)) ?? leads[0];
+  const group = lines.filter((x) => x.set_group === lead.set_group);
+  const color_map: Record<string, Record<string, number>> = {};
+  for (const g of group) {
+    const m = typeof g.set_color_map === 'string' ? JSON.parse(g.set_color_map) : g.set_color_map;
+    if (m && Object.keys(m).length && g.part_name) color_map[g.part_name] = m;
+  }
+  return { rate: Number(lead.set_rate) || 0, color_map, label: group.map((g) => `${Number(g.qty_per_set) > 1 ? `${g.qty_per_set} ` : ''}${g.part_name}`).join(' + ') };
+}
 
 export function AmendOrderModal({ soId, soNo, lines, initialMode = 'ADDITIONAL', onClose, onPosted }: {
   soId: number; soNo: string; lines: SoLineLite[]; initialMode?: 'ADDITIONAL' | 'CANCEL';
@@ -54,10 +73,15 @@ export function AmendOrderModal({ soId, soNo, lines, initialMode = 'ADDITIONAL',
     try {
       let body: any;
       if (mode === 'ADDITIONAL') {
-        const ls = rows.filter((r) => r.style_id).map((r) => ({
-          style_id: Number(r.style_id), color_id: r.color_id === '' ? null : Number(r.color_id),
-          skus: Object.entries(r.qty).filter(([, q]) => Number(q) > 0).map(([sku_id, q]) => ({ sku_id: Number(sku_id), qty: Number(q) })),
-        })).filter((l) => l.skus.length);
+        const ls = rows.filter((r) => r.style_id).map((r) => {
+          const set = setOfStyle(lines, r.style_id, r.color_id);
+          return {
+            // a set entry is sent without a colour (sets span colours) and with its rate / contrast colours
+            style_id: Number(r.style_id), color_id: set || r.color_id === '' ? null : Number(r.color_id),
+            skus: Object.entries(r.qty).filter(([, q]) => Number(q) > 0).map(([sku_id, q]) => ({ sku_id: Number(sku_id), qty: Number(q) })),
+            ...(set ? { set: { rate: set.rate, color_map: set.color_map } } : {}),
+          };
+        }).filter((l) => l.skus.length);
         if (!ls.length) { toast('Enter the additional quantity in the size grid', 'error'); setSaving(false); return; }
         body = { amendment_type: 'ADDITIONAL', amendment_date: date, reason: reason || null, buyer_ref: buyerRef || null, lines: ls };
       } else {
@@ -84,7 +108,8 @@ export function AmendOrderModal({ soId, soNo, lines, initialMode = 'ADDITIONAL',
         ? 'Additional quantity is added as separate lines — the original lines stay as they are'
         : 'Reduce the quantity per colour × size; it cannot go below what is already cut / produced'}
       footerStart={<span id="amend-total" className="text-[12.5px] text-slate-600">
-        {mode === 'ADDITIONAL' ? 'Adding' : 'Cancelling'} <strong className="tabular-nums">{fmtNumber(mode === 'ADDITIONAL' ? addTotal : cancelTotal)}</strong> pcs
+        {mode === 'ADDITIONAL' ? 'Adding' : 'Cancelling'} <strong className="tabular-nums">{fmtNumber(mode === 'ADDITIONAL' ? addTotal : cancelTotal)}</strong>{' '}
+        {mode === 'ADDITIONAL' && rows.some((r) => setOfStyle(lines, r.style_id, r.color_id)) ? 'sets' : 'pcs'}
       </span>}
       footer={<>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
@@ -115,7 +140,7 @@ export function AmendOrderModal({ soId, soNo, lines, initialMode = 'ADDITIONAL',
           </Button>}>
           <div className="space-y-3">
             {rows.map((r) => (
-              <AddRowGrid key={r.key} row={r} styleOpts={styleOpts} canRemove={rows.length > 1}
+              <AddRowGrid key={r.key} row={r} styleOpts={styleOpts} canRemove={rows.length > 1} set={setOfStyle(lines, r.style_id, r.color_id)}
                 onChange={(p) => setRows((s) => s.map((x) => (x.key === r.key ? { ...x, ...p } : x)))}
                 onRemove={() => setRows((s) => s.filter((x) => x.key !== r.key))} />
             ))}
@@ -130,8 +155,8 @@ export function AmendOrderModal({ soId, soNo, lines, initialMode = 'ADDITIONAL',
   );
 }
 
-function AddRowGrid({ row, styleOpts, onChange, onRemove, canRemove }: {
-  row: AddRow; styleOpts: { value: number; label: string }[];
+function AddRowGrid({ row, styleOpts, onChange, onRemove, canRemove, set }: {
+  row: AddRow; styleOpts: { value: number; label: string }[]; set?: ReturnType<typeof setOfStyle>;
   onChange: (p: Partial<AddRow>) => void; onRemove: () => void; canRemove: boolean;
 }) {
   const skus = useStyleSkus(row.style_id ? Number(row.style_id) : null);
@@ -148,7 +173,7 @@ function AddRowGrid({ row, styleOpts, onChange, onRemove, canRemove }: {
       <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-[1fr_1fr_auto] items-end">
         <Select label="Style" required options={styleOpts} placeholder="— Select style —" value={row.style_id}
           onChange={(e) => onChange({ style_id: e.target.value ? Number(e.target.value) : '', color_id: '', qty: {} })} />
-        <Select label="Colour" required options={colors} placeholder="— Select colour —" value={row.color_id}
+        <Select label={set ? 'Set colour' : 'Colour'} required options={colors} placeholder="— Select colour —" value={row.color_id}
           onChange={(e) => onChange({ color_id: e.target.value ? Number(e.target.value) : '', qty: {} })} />
         {canRemove && (
           <button type="button" onClick={onRemove} className="mb-1 rounded-md p-2 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Remove">
@@ -156,6 +181,11 @@ function AddRowGrid({ row, styleOpts, onChange, onRemove, canRemove }: {
           </button>
         )}
       </div>
+      {set && (
+        <p className="mt-2 rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-[12px] text-indigo-800" data-amend-set>
+          Ordered as a set (SET = {set.label}) — enter <strong>sets</strong>; every part is added (pieces = sets × pieces per set) at the set rate and the order's contrast colours.
+        </p>
+      )}
       {row.color_id !== '' && (
         sizes.length ? (
           <div className="mt-3 overflow-x-auto">
@@ -197,6 +227,12 @@ function CancelGrid({ lines, value, onChange }: {
             <span className="font-semibold text-slate-800">{l.style_code}</span>
             {l.color_name && <span className="text-slate-600">{l.color_name}</span>}
             {l.is_additional ? <Badge tone="amber">Additional · {l.amendment_no}</Badge> : null}
+            {l.set_group ? (
+              <span className="rounded border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[11px] font-semibold text-indigo-800" data-cancel-set
+                title="Cancelling here cancels whole sets on every part of the set">
+                {l.part_name} · set {l.set_group}{Number(l.qty_per_set) > 1 ? ` · ${l.qty_per_set} per set` : ''} — the other parts follow
+              </span>
+            ) : l.part_name ? <span className="text-slate-500">{l.part_name}</span> : null}
             <span className="ml-auto text-slate-500">On order <strong className="tabular-nums text-slate-800">{fmtNumber(l.order_qty)}</strong></span>
           </div>
           {l.skus.length ? (
