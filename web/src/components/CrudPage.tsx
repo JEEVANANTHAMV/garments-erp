@@ -339,7 +339,8 @@ function ScanControl({ field, span, value, error, onChange, onScanned }: {
     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void run(e.currentTarget.value); } }}
     onPaste={(e) => { const t = e.clipboardData.getData('text'); if (t.trim()) { e.preventDefault(); onChange(t.trim()); void run(t); } }}
     onFocus={(e) => e.currentTarget.select()}
-    onClick={(e) => { if (!typed) e.currentTarget.select(); }}   // a click on a looked-up DC selects it, so a paste / scan replaces it
+    // a click on a looked-up DC keeps it selected (mouse-up would collapse it), so a paste / scan replaces it
+    onMouseUp={(e) => { if (!typed && e.currentTarget.value) { e.preventDefault(); e.currentTarget.select(); } }}
     onBlur={(e) => { if (typed) void run(e.currentTarget.value); }} />;
 }
 
