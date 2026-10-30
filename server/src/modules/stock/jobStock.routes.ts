@@ -11,6 +11,7 @@ import { refreshFabricRollStatus } from '../production/cuttingEngine.js';
 import { postLedger, UOM_KG } from '../../core/processEngine.js';
 import { yarnStockRows, yarnStockQuery } from '../procurement/fabricYarnProcurement.routes.js';
 import { jobBomRequirement } from '../bom/bom.routes.js';
+import { RAW_COLOUR } from '../../core/rawColour.js';
 
 /**
  * Job-wise stock (client voice notes 01-Oct-2026):
@@ -557,7 +558,8 @@ export async function jobFabricAvailability(cid: number, soId: number, opts: { s
   if (opts.state) { w.push('fr.process_state = ?'); p.push(opts.state); }
   const rows = await query<any>(
     `SELECT fr.id, fr.roll_no, fr.lot_no, fr.fabric_id, fb.fabric_name, fr.process_state,
-            COALESCE(fr.color_name, (SELECT kp.fabric_colour FROM trx_process_receipt pr JOIN trx_knitting_program kp ON kp.id = pr.src_id WHERE pr.grn_id = fr.grn_id AND pr.src_type = 'KNITTING_PROGRAM' LIMIT 1)) color_name,
+            fr.color_name,
+            (SELECT kp.fabric_colour FROM trx_process_receipt pr JOIN trx_knitting_program kp ON kp.id = pr.src_id WHERE pr.grn_id = fr.grn_id AND pr.src_type = 'KNITTING_PROGRAM' LIMIT 1) for_colour,
             fr.gsm, fr.dia, fr.fabric_form,
             fr.weight_kg, COALESCE(fr.issued_kg, 0) issued_kg, fr.meters, fr.calc_meters, fr.actual_meters, w.warehouse_name, g.grn_no, g.grn_date,
             (SELECT COALESCE(SUM(ri.weight_kg), 0) FROM trx_fabric_process_roll_in ri JOIN trx_fabric_process_order dfo ON dfo.id = ri.fpo_id WHERE ri.fabric_roll_id = fr.id AND ri.status = 'DRAFT' AND dfo.status = 'DRAFT') draft_kg,
@@ -568,13 +570,15 @@ export async function jobFabricAvailability(cid: number, soId: number, opts: { s
   const rolls = rows.map((r) => {
     const avail = r3g(Number(r.weight_kg) - Number(r.issued_kg) - Number(r.draft_kg) - Number(r.allocated_kg));
     const mPerKg = Number(r.weight_kg) > 0 ? Number(r.meters || r.calc_meters || 0) / Number(r.weight_kg) : 0;
-    const resolvedColour = r.color_name || (r.process_state === 'GREY' ? 'GREY' : null);
+    // the roll's own colour; knitted / undyed fabric is Kora / Raw — the knitting program's (CAD) colour is only
+    // what it will be dyed to (for_colour), never the fabric colour (client 30-Oct-2026)
+    const resolvedColour = r.color_name || (r.process_state === 'GREY' ? RAW_COLOUR : null);
     return { ...r, colour: resolvedColour, available_kg: avail, available_m: r3g(avail * mPerKg) };
   }).filter((r) => r.available_kg > 0.0005);
   const groups = new Map<string, any>();
   for (const r of rolls) {
-    const k = `${r.fabric_id}|${r.process_state}|${r.color_name || r.colour || ''}|${r.program_no || ''}|${r.gsm ?? ''}|${r.dia ?? ''}`;
-    const g = groups.get(k) ?? { key: k, fabric_id: r.fabric_id, fabric_name: r.fabric_name, process_state: r.process_state, colour: r.colour, color_name: r.color_name, gsm: r.gsm, dia: r.dia,
+    const k = `${r.fabric_id}|${r.process_state}|${r.color_name || r.colour || ''}|${r.for_colour || ''}|${r.program_no || ''}|${r.gsm ?? ''}|${r.dia ?? ''}`;
+    const g = groups.get(k) ?? { key: k, fabric_id: r.fabric_id, fabric_name: r.fabric_name, process_state: r.process_state, colour: r.colour, color_name: r.color_name, for_colour: r.for_colour, gsm: r.gsm, dia: r.dia,
       fabric_form: r.fabric_form, program_no: r.program_no, rolls: 0, available_kg: 0, available_m: 0, roll_ids: [] as number[], programs: new Set<string>() };
     g.rolls += 1; g.available_kg = r3g(g.available_kg + r.available_kg); g.available_m = r3g(g.available_m + r.available_m); g.roll_ids.push(Number(r.id));
     if (r.program_no) g.programs.add(r.program_no);

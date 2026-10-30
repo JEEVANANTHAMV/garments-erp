@@ -425,7 +425,10 @@ const inwardSchema = z.object({
   lot_no: s.nullableStr(60),
   // Yarn the knitter used for this fabric; defaults to fabric + rejected (no loss).
   yarn_consumed_kg: z.coerce.number().min(0).nullable().optional(),
+  /** Rejected = bad fabric the knitter made (a mistake: debited / sent back); loss = yarn lost in knitting (fly, waste). */
   rejected_kg: z.coerce.number().min(0).default(0),
+  /** Process loss KG: when given, yarn consumed = fabric + rejected + loss (instead of typing the yarn consumed). */
+  loss_kg: z.coerce.number().min(0).nullable().optional(),
   remarks: s.text(),
   rolls: z.array(z.object({
     roll_no: s.nullableStr(60),
@@ -542,7 +545,10 @@ knittingDcRouter.post('/knitting-inwards', requirePermission('PROCESS.PRODUCTION
   if (!vendorId) throw BadRequest('The program has no knitting vendor to receive from');
 
   const fabricKg = r3(body.rolls.reduce((n, r) => n + r.weight_kg, 0));
-  const consumed = r3(body.yarn_consumed_kg ?? (fabricKg + body.rejected_kg));
+  if (body.loss_kg != null && body.yarn_consumed_kg != null && Math.abs(body.yarn_consumed_kg - (fabricKg + body.rejected_kg + body.loss_kg)) > 0.0005) {
+    throw BadRequest(`Yarn consumed ${r3(body.yarn_consumed_kg)} KG does not equal fabric ${fabricKg} + rejected ${r3(body.rejected_kg)} + loss ${r3(body.loss_kg)} KG — enter either the loss or the yarn consumed`);
+  }
+  const consumed = r3(body.yarn_consumed_kg ?? (fabricKg + body.rejected_kg + (body.loss_kg ?? 0)));
   if (consumed + 1e-9 < fabricKg + body.rejected_kg) {
     throw BadRequest('Yarn consumed cannot be less than the fabric received plus rejected');
   }

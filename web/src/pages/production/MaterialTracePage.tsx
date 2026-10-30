@@ -133,7 +133,7 @@ function Genealogy({ g }: { g: any }) {
       </div>
       <div className="mt-3 grid gap-3 md:grid-cols-2">
         <div><div className="mb-1 font-semibold text-slate-700">Knitting</div>
-          {g.programs.length ? g.programs.map((p: any) => <div key={p.id}>{p.program_no} · {p.fabric_type ?? '—'}{p.fabric_colour ? ` · ${p.fabric_colour}` : ''} · {kg(p.required_qty_kg)} KG · {p.status}</div>) : <div className="text-slate-400">No knitting programs</div>}
+          {g.programs.length ? g.programs.map((p: any) => <div key={p.id}>{p.program_no} · {p.fabric_type ?? '—'}{p.fabric_colour ? ` · Kora / Raw for ${p.fabric_colour}` : ''} · {kg(p.required_qty_kg)} KG · {p.status}</div>) : <div className="text-slate-400">No knitting programs</div>}
           {g.knitting_dcs.length > 0 && <div className="mt-1 text-slate-600">DCs: {g.knitting_dcs.map((d: any) => `${d.dc_no} (${kg(d.kg)} KG)`).join(', ')}</div>}
           {g.knitting_receipts.length > 0 && <div className="text-slate-600">Receipts: {g.knitting_receipts.join(', ')}</div>}
         </div>

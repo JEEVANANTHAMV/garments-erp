@@ -1,3 +1,4 @@
+import { showRawColour } from '../../lib/rawColour';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { QuotationPicker, GateEntryPicker, type QuoteValue } from '../../components/ProcessPickers';
 import { useDiaRules, useFabricSpec, previewRoll, normForm, pctCls, fmtPct, FORM_LABEL } from '../../lib/fabricCalc';
@@ -100,7 +101,7 @@ export function KnittingReconciliation({ programId, compact = false }: { program
               <tr key={l.program_yarn_id} className="border-t border-slate-100">
                 <td className="td text-slate-500">{l.seq_no}</td>
                 <td className="td font-medium">{l.yarn}</td>
-                <td className="td">{l.colour || '—'}</td>
+                <td className="td">{showRawColour(l.colour)}</td>
                 <td className="td text-right tabular-nums">{fmtDecimal(l.planned_kg, 3)}</td>
                 <td className="td text-right tabular-nums text-orange-700 font-semibold">{fmtDecimal(l.issued_kg, 3)}</td>
                 <td className="td text-right tabular-nums">{fmtDecimal(l.consumed_kg, 3)}</td>
@@ -305,7 +306,7 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
                     return (
                       <tr key={l.program_yarn_id} className="border-t border-slate-100">
                         <td className="td font-medium">{l.yarn}{l.count ? <span className="ml-1 text-slate-400">{l.count}</span> : null}</td>
-                        <td className="td">{l.colour || '—'}</td>
+                        <td className="td">{showRawColour(l.colour)}</td>
                         <td className="td text-right tabular-nums text-slate-500">{fmtDecimal(l.pending, 3)}</td>
                         <td className="td">
                           <select className="input min-w-[340px] py-1 text-[11.5px]" value={l.grn_line_id} onChange={(e) => setLine(ji, li, { grn_line_id: e.target.value })} id={`kdc-lot-${ji}-${li}`}>
@@ -459,7 +460,7 @@ export function KnittingDcPrint({ dcNo, onClose }: { dcNo: string | null; onClos
                         <td>{i + 1}</td>
                         <td>{l.yarn_code} — {l.yarn_name}</td>
                         <td>{l.count_value || l.yarn_count || '—'}</td>
-                        <td>{l.colour || '—'}</td>
+                        <td>{showRawColour(l.colour)}</td>
                         <td>{l.lot_no || '—'}{l.grn_no ? ` (${l.grn_no})` : ''}</td>
                         <td>{l.yarn_po_no || '—'}</td>
                         <td className="n">{l.no_of_cones}</td>
@@ -532,7 +533,7 @@ export function KnittingInwardModal({ programId, open, onClose }: {
     setH({
       dc_nos: openDc ? [openDc.dc_no] : [], receipt_type: 'PARTIAL', gate_inward_id: '', party_dc_no: '', receipt_date: today(), vehicle_no: '',
       warehouse_id: '', fabric_id: p.fabric_id ?? '', lot_no: '', yarn_consumed_kg: '',
-      rejected_kg: '', remarks: '',
+      rejected_kg: '', loss_kg: '', remarks: '',
     });
     setRolls([newRoll(p)]);
     // Only reset when the dialog opens for a program, not on every refetch.
@@ -542,8 +543,11 @@ export function KnittingInwardModal({ programId, open, onClose }: {
   const setRoll = (i: number, patch: any) => setRolls((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const fabricKg = rolls.reduce((n, r) => n + (Number(r.weight_kg) || 0), 0);
   const rejected = Number(h.rejected_kg) || 0;
-  const consumed = h.yarn_consumed_kg === '' || h.yarn_consumed_kg == null
-    ? fabricKg + rejected : Number(h.yarn_consumed_kg);
+  // loss and yarn consumed are one figure two ways: typing the loss makes yarn = fabric + rejected + loss,
+  // typing the yarn consumed (knitter's figure) makes loss = yarn − fabric − rejected
+  const lossTyped = h.loss_kg !== '' && h.loss_kg != null;
+  const consumed = lossTyped ? fabricKg + rejected + (Number(h.loss_kg) || 0)
+    : h.yarn_consumed_kg === '' || h.yarn_consumed_kg == null ? fabricKg + rejected : Number(h.yarn_consumed_kg);
   const loss = Math.max(0, consumed - fabricKg - rejected);
   const picked = (recon?.dcs ?? []).filter((d: any) => (h.dc_nos ?? []).includes(d.dc_no));
   const openKg = picked.length ? picked.reduce((a: number, d: any) => a + Math.max(0, Number(d.issued_kg) - Number(d.consumed_kg) - Number(d.returned_kg ?? 0)), 0)
@@ -562,7 +566,8 @@ export function KnittingInwardModal({ programId, open, onClose }: {
         receipt_date: h.receipt_date, vehicle_no: h.vehicle_no || null,
         warehouse_id: Number(h.warehouse_id), fabric_id: h.fabric_id ? Number(h.fabric_id) : null,
         lot_no: h.lot_no || null,
-        yarn_consumed_kg: h.yarn_consumed_kg === '' ? null : Number(h.yarn_consumed_kg),
+        yarn_consumed_kg: lossTyped || h.yarn_consumed_kg === '' ? null : Number(h.yarn_consumed_kg),
+        loss_kg: lossTyped ? Number(h.loss_kg) || 0 : null,
         rejected_kg: rejected, remarks: h.remarks || null,
         rolls: good.map((x) => ({
           roll_no: x.roll_no || null, weight_kg: Number(x.weight_kg),
@@ -645,7 +650,27 @@ export function KnittingInwardModal({ programId, open, onClose }: {
             <Input label="Lot No" value={h.lot_no ?? ''} placeholder="Auto if blank"
               onChange={(e) => setH({ ...h, lot_no: e.target.value })} id="kin-lot" />
             <Input label="Rejected KG" type="number" step="0.001" value={h.rejected_kg ?? ''}
+              hint="Bad fabric — knitter's mistake (debit / send back)"
               onChange={(e) => setH({ ...h, rejected_kg: e.target.value })} id="kin-rejected" />
+          </FormSection>
+          <FormSection title="Process loss" cols={4}>
+            <Input label="Process loss KG" type="number" step="0.001" value={lossTyped ? h.loss_kg : ''}
+              placeholder={fmtDecimal(loss, 3)}
+              hint="Yarn lost in knitting (fly / waste) — not fabric"
+              onChange={(e) => setH({ ...h, loss_kg: e.target.value, yarn_consumed_kg: '' })} id="kin-loss" />
+            <Input label="Yarn consumed KG (knitter)" type="number" step="0.001" value={lossTyped ? '' : h.yarn_consumed_kg ?? ''}
+              placeholder={fmtDecimal(consumed, 3)}
+              hint="Or type the knitter's yarn figure — the loss is worked out"
+              onChange={(e) => setH({ ...h, yarn_consumed_kg: e.target.value, loss_kg: '' })} id="kin-consumed" />
+            <div className="sm:col-span-2 flex flex-col justify-center gap-1 text-[11.5px] text-slate-600">
+              <span>Loss <b className="text-rose-700" id="kin-loss-calc">{fmtDecimal(loss, 3)} kg</b> ({consumed > 0 ? fmtDecimal((loss / consumed) * 100, 2) : '0.00'}% of the yarn) — worked out as yarn − fabric − rejected.</span>
+              {h.receipt_type === 'FINAL' && openKg - fabricKg - rejected > 0.0005 && (
+                <button type="button" className="self-start text-[11.5px] font-semibold text-rose-700 hover:underline" id="kin-loss-rest"
+                  onClick={() => setH({ ...h, loss_kg: (Math.round((openKg - fabricKg - rejected) * 1000) / 1000).toString(), yarn_consumed_kg: '' })}>
+                  Book all the yarn left with the knitter ({fmtDecimal(openKg - fabricKg - rejected, 3)} kg) as loss
+                </button>
+              )}
+            </div>
           </FormSection>
           <FormSection title="Store & transport" cols={2}>
             <Select label="Receiving Store" required value={h.warehouse_id ?? ''} placeholder="— Select —"
@@ -727,11 +752,8 @@ export function KnittingInwardModal({ programId, open, onClose }: {
             </table>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Input label="Yarn consumed KG (knitter)" type="number" step="0.001" value={h.yarn_consumed_kg ?? ''}
-              placeholder={fmtDecimal(fabricKg + rejected, 3)}
-              onChange={(e) => setH({ ...h, yarn_consumed_kg: e.target.value })} id="kin-consumed" />
-            <div className="sm:col-span-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[12px]">
+          <div>
+            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[12px]">
               <Scale size={15} className="text-slate-400" />
               <span>This inward: fabric <b>{fmtDecimal(fabricKg, 3)}</b> + rejected <b>{fmtDecimal(rejected, 3)}</b> + loss <b className="text-rose-700">{fmtDecimal(loss, 3)}</b>
                 {' '}({consumed > 0 ? fmtDecimal((loss / consumed) * 100, 2) : '0.00'}%) = yarn <b>{fmtDecimal(consumed, 3)}</b> kg.</span>
@@ -873,7 +895,7 @@ export function KnittingYarnReturnModal({ dcNo, onClose, onPrint }: {
                   return (
                     <tr key={l.key} className="border-t border-slate-100">
                       <td className="td font-medium">{l.yarn}</td>
-                      <td className="td">{l.colour || '—'}</td>
+                      <td className="td">{showRawColour(l.colour)}</td>
                       <td className="td font-mono">{l.lot_no || '—'}</td>
                       <td className="td text-right tabular-nums">{fmtDecimal(l.issued_kg, 3)}</td>
                       <td className="td text-right tabular-nums">{fmtDecimal(l.consumed_kg, 3)}</td>
@@ -969,7 +991,7 @@ export function KnittingYarnReturnPrint({ returnNo, onClose }: { returnNo: strin
                   <tr key={l.id}>
                     <td>{i + 1}</td>
                     <td>{l.yarn_code} — {l.yarn_name}</td>
-                    <td>{l.colour || '—'}</td>
+                    <td>{showRawColour(l.colour)}</td>
                     <td>{l.lot_no || '—'}</td>
                     <td className="n">{l.no_of_cones}</td>
                     <td className="n">{fmtDecimal(l.return_kg, 3)}</td>
@@ -1026,6 +1048,16 @@ export function KnittingDcInwardTab({ prog }: { prog: any }) {
       const r = await http.post<{ message: string }>(`/knitting-dcs/${encodeURIComponent(d.dc_no)}/close`, { reason: reason.trim(), write_off: writeOff, program_id: prog.id });
       toast((r as any).message ?? `DC ${d.dc_no} closed`); invalidateKnitting(qc);
     } catch (e: any) { toast(e?.message || 'Close failed', 'error'); }
+  };
+  /** Yarn the knitter keeps after the final receipt (not coming back) → process loss, without re-closing by hand. */
+  const bookLoss = async (d: any) => {
+    const kg = Number(d.yarn_to_return_kg) || Number(d.balance_yarn_kg);
+    const reason = window.prompt(`Book ${fmtDecimal(kg, 3)} kg yarn still with the knitter on DC ${d.dc_no} as knitting process loss? Reason:`, 'Knitting process loss');
+    if (!reason || reason.trim().length < 3) return;
+    try {
+      const r = await http.post<{ message: string }>(`/knitting-dcs/${encodeURIComponent(d.dc_no)}/close`, { reason: reason.trim(), write_off: true, program_id: prog.id });
+      toast((r as any).message ?? `${fmtDecimal(kg, 3)} kg booked as loss`); invalidateKnitting(qc);
+    } catch (e: any) { toast(e?.message || 'Could not book the loss', 'error'); }
   };
   const { data: reqs = [] } = useQuery({
     queryKey: ['knit-yarn-req', prog.id],
@@ -1130,6 +1162,12 @@ export function KnittingDcInwardTab({ prog }: { prog: any }) {
                         onClick={() => setReturnDc(d.dc_no)} id={`btn-yarn-return-${d.dc_no}`}>
                         <Undo2 size={13} /> Yarn return
                       </button>
+                      {Number(d.yarn_to_return_kg) > 0 && (
+                        <button className="ml-1 inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11px] font-medium text-rose-700 hover:bg-rose-50"
+                          title="The knitter will not return this yarn — book it as knitting process loss" onClick={() => bookLoss(d)} id={`btn-book-loss-${d.dc_no}`}>
+                          <Scale size={13} /> Book as loss
+                        </button>
+                      )}
                       {(d.status !== 'CLOSED' || Number(d.yarn_to_return_kg) > 0) && (
                         <button className="ml-1 inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100"
                           title="Close the DC; optionally write off the yarn still with the knitter" onClick={() => closeDc(d)} id={`btn-close-dc-${d.dc_no}`}>

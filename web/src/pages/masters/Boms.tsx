@@ -1381,7 +1381,7 @@ export function BomDetailPage() {
                             setLine(l._key, { dye_type: v, material_color_id: v === 'DYED' ? (l.material_color_id || l.color_id || '') : '' });
                           }}>
                           <option value="">—</option>
-                          <option value="GREY">Cora / Raw</option>
+                          <option value="GREY">Kora / Raw</option>
                           <option value="DYED">Dyed</option>
                         </select>
                       ) : <span className="text-slate-300">—</span>}
@@ -1394,7 +1394,7 @@ export function BomDetailPage() {
                           <option value="">— Colour —</option>
                           {(allColors.data ?? []).map((c: any) => <option key={c.id} value={c.id}>{c.label}</option>)}
                         </select>
-                      ) : <span className="text-slate-300">{fabricOrYarn && l.dye_type === 'GREY' ? 'Cora / Raw — no colour' : '—'}</span>}
+                      ) : <span className="text-slate-300">{fabricOrYarn && l.dye_type === 'GREY' ? 'Kora / Raw — no colour' : '—'}</span>}
                     </td>
                     {/* Applicability */}
                     <td className="td p-1.5">

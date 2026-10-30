@@ -1,3 +1,4 @@
+import { RAW_COLOUR, showRawColour } from '../../lib/rawColour';
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -373,7 +374,7 @@ export default function KnittingProgramPage() {
   const lotLabel = (l: any) => `${l.yarn_code ?? ''} ${l.count_str ?? ''} · lot ${l.lot_no ?? '—'} · ${l.transfer_nos ? `transfer ${l.transfer_nos}` : `PO ${l.po_no ?? '—'}`} · ${l.grn_no} · ${fmtDecimal(l.available_kg, 3)} KG`;
   const pickLot = (key: string, lotKey: string) => {
     const l = jobLots.find((x: any) => `${x.grn_line_id}` === lotKey);
-    setYarn(key, l ? { lot_key: lotKey, yarn_id: Number(l.yarn_id), count_value: l.count_str ?? '', colour: l.color_name || l.shade || '',
+    setYarn(key, l ? { lot_key: lotKey, yarn_id: Number(l.yarn_id), count_value: l.count_str ?? '', colour: showRawColour(l.color_name || l.shade),
       yarn_po_no: l.transfer_nos ? `Transfer ${l.transfer_nos}` : (l.po_no ?? ''), yarn_lot_no: l.lot_no ?? '',
       planned_qty_kg: Math.min(Number(l.available_kg), Number(form.required_qty_kg) || Number(l.available_kg)) }
       : { lot_key: '', yarn_id: '', count_value: '', colour: '', yarn_po_no: '', yarn_lot_no: '' });
@@ -487,7 +488,7 @@ export default function KnittingProgramPage() {
                     <td className="td font-medium">
                       {r.yarn_code ? `${r.yarn_code} — ${r.yarn_name}` : '—'}
                     </td>
-                    <td className="td text-slate-600">{r.colour || '—'}</td>
+                    <td className="td text-slate-600">{showRawColour(r.colour)}</td>
                     <td className="td text-right tabular-nums">{fmtDecimal(r.required_qty_kg, 3)}</td>
                     <td className="td text-right tabular-nums">{fmtDecimal(r.on_hand_kg, 3)}</td>
                     <td className="td text-right tabular-nums text-slate-500">
@@ -785,10 +786,10 @@ export default function KnittingProgramPage() {
                       <select className="input w-[520px] py-1 text-[12px]" value={form.cad_fp_id} onChange={(e) => pickCadLine(e.target.value)} id="kp-cad-line">
                         <option value="">— Fabric line from the CAD (fabric · GSM · Dia · colour · KG) —</option>
                         {(cadFab.rows ?? []).map((r: any) => <option key={r.cad_fp_id} value={r.cad_fp_id}>
-                          {r.fabric_type} · {r.gsm ?? '—'} GSM · {r.dia ?? '—'} {r.fabric_form === 'OPEN_WIDTH' ? 'open' : r.fabric_form === 'TUBULAR' ? 'tube' : ''} · {r.colour ?? '—'} · {fmtDecimal(r.required_kg, 1)} KG{r.programmed_kg > 0 ? ` (programmed ${fmtDecimal(r.programmed_kg, 1)})` : ''}
+                          {r.fabric_type} · {r.gsm ?? '—'} GSM · {r.dia ?? '—'} {r.fabric_form === 'OPEN_WIDTH' ? 'open' : r.fabric_form === 'TUBULAR' ? 'tube' : ''} · {r.colour ? `for ${r.colour}` : '—'} · {fmtDecimal(r.required_kg, 1)} KG{r.programmed_kg > 0 ? ` (programmed ${fmtDecimal(r.programmed_kg, 1)})` : ''}
                         </option>)}
                       </select>
-                      {form.fabric_colour && <span className="rounded bg-white px-2 py-0.5 text-[11px]">Colour {form.fabric_colour}</span>}
+                      {form.fabric_colour && <span className="rounded bg-white px-2 py-0.5 text-[11px]" id="kp-colour-note" title="Knitting gives Kora / Raw fabric; the CAD colour is what it is dyed to later">Knitted {RAW_COLOUR} · for {form.fabric_colour} (dyed later)</span>}
                     </div>)}
               </div>
             )}
@@ -924,7 +925,7 @@ export default function KnittingProgramPage() {
                           </td>
                           <td className="td p-1">
                             <input className="input text-[12px] w-28" value={y.colour}
-                              placeholder="e.g. Navy"
+                              placeholder={RAW_COLOUR}
                               onChange={(e) => setYarn(y._key, { colour: e.target.value })}
                               id={`yarn-colour-${idx}`} />
                           </td>
@@ -1234,7 +1235,7 @@ function DetailView({ prog }: { prog: any }) {
                         {y.yarn_code ? `${y.yarn_code} — ${y.yarn_name}` : (y.yarn_name_manual || '—')}
                       </td>
                       <td className="td text-slate-600">{y.count_value || '—'}</td>
-                      <td className="td">{y.colour || '—'}</td>
+                      <td className="td">{showRawColour(y.colour)}</td>
                       <td className="td">
                         {y.yarn_po_no ? (
                           <span className="font-mono text-brand-700 font-semibold">{y.yarn_po_no}</span>
@@ -1281,7 +1282,7 @@ function DetailView({ prog }: { prog: any }) {
                   <tr key={s.id ?? i} className="border-t border-slate-100">
                     <td className="td font-semibold text-slate-500">{s.seq_no}</td>
                     <td className="td font-medium text-slate-800">{s.yarn_label || '—'}</td>
-                    <td className="td">{s.colour || '—'}</td>
+                    <td className="td">{showRawColour(s.colour)}</td>
                     <td className="td text-right tabular-nums font-bold text-brand-700">{s.courses}</td>
                     <td className="td text-slate-500">{s.notes || '—'}</td>
                   </tr>

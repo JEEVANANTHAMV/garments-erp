@@ -13,6 +13,7 @@ import {
   PageHeader, Spinner, Badge, LoadingBlock, ErrorState, Modal,
 } from '../../components/ui';
 import { fmtDecimal, today, toDateInput } from '../../lib/format';
+import { rollColour, stateLabel } from '../../lib/rawColour';
 
 /* ─────────────────────────────────────────────────────────────── */
 
@@ -107,7 +108,9 @@ interface QLine {
 interface QRoll { fabric_roll_id: number; roll_no: string; qty_kg: number | ''; max_kg?: number; trace?: string }
 const rollTrace = (r: any) => [r.production_no ? `prod ${r.production_no}` : null, r.program_no, r.lot_no ? `lot ${r.lot_no}` : null, r.previous_process ? `after ${r.previous_process}` : null].filter(Boolean).join(' · ');
 /** Group rolls by fabric, process state, distinct colour, program and geometry */
-const rollGroup = (r: any) => `${r.fabric_id}|${r.process_state ?? ''}|${r.color_name || (r.colour && r.colour !== 'GREY' ? r.colour : '') || (r.lot_no ? `lot:${r.lot_no}` : `roll:${r.id}`)}|${r.program_no || ''}|${r.gsm ?? ''}|${r.dia ?? ''}`;
+const rollGroup = (r: any) => `${r.fabric_id}|${r.process_state ?? ''}|${r.color_name || r.for_colour || (r.lot_no ? `lot:${r.lot_no}` : `roll:${r.id}`)}|${r.program_no || ''}|${r.gsm ?? ''}|${r.dia ?? ''}`;
+/** "Kora / Raw (for Orange)" for undyed fabric, else its colour and state (GREY is not shown as a colour — client 30-Oct-2026) */
+const fabricColourState = (g: any) => [rollColour(g), g.process_state && g.process_state !== 'GREY' ? g.process_state : ''].filter(Boolean).join(' · ');
 const sumRolls = (rs: QRoll[] | undefined) => Math.round((rs ?? []).reduce((a, r) => a + (Number(r.qty_kg) || 0), 0) * 1000) / 1000;
 
 /** Hook to fetch available stock (actual received stock from knitting / stock room) per job for process quotations */
@@ -563,7 +566,7 @@ export default function QuotationDetailPage() {
     }));
     const resolvedColor = grp.color_name || (grp.colour && grp.colour !== 'GREY' ? grp.colour : (grp.shade || ''));
     const desc = isFabric
-      ? `${grp.fabric_name ?? 'Fabric'} · ${resolvedColor ? `${resolvedColor} · ` : ''}${grp.process_state || ''}${qRolls.length ? ` · ${qRolls.length} roll(s)` : ''}`
+      ? `${grp.fabric_name ?? 'Fabric'} · ${fabricColourState(grp)}${qRolls.length ? ` · ${qRolls.length} roll(s)` : ''}`
       : `${grp.yarn_name ?? 'Yarn'}${resolvedColor ? ` · ${resolvedColor}` : ''}${grp.lot_nos ? ` · lot ${grp.lot_nos}` : ''}`;
 
     setLine(l._key, {
@@ -665,10 +668,9 @@ export default function QuotationDetailPage() {
       const next: QLine[] = [...byGroup.entries()].map(([grp, rs], i) => {
         const r0 = rs[0];
         const rolls: QRoll[] = rs.map((r) => ({ fabric_roll_id: Number(r.id), roll_no: r.roll_no, qty_kg: Number(actual.pick[String(r.id)]), max_kg: r.available_kg, trace: rollTrace(r) }));
-        const resolvedColor = r0.color_name || (r0.colour && r0.colour !== 'GREY' ? r0.colour : '');
         return { ...newLine(i), job_no: actual.job.job_no, so_id: actual.job.id, style_id: st as any, material_type: 'FABRIC', fabric_id: r0.fabric_id, dia: r0.dia ?? '', gsm: r0.gsm != null ? String(r0.gsm) : '',
           uom_id: kg as any, rolls, qty: sumRolls(rolls), _group: grp,
-          description: `${r0.fabric_name ?? 'Fabric'} · ${resolvedColor ? `${resolvedColor} · ` : ''}${r0.process_state} · ${rs.length} roll(s)${r0.program_no ? ` (${r0.program_no})` : ''}` };
+          description: `${r0.fabric_name ?? 'Fabric'} · ${fabricColourState(r0)} · ${rs.length} roll(s)${r0.program_no ? ` (${r0.program_no})` : ''}` };
       });
       // Added below the lines already entered (other jobs / hand-added lines stay); blank lines are dropped
       setLines((ls) => [...ls.filter(isEnteredLine), ...next].map((l, i) => ({ ...l, sort_order: i })));
@@ -683,7 +685,7 @@ export default function QuotationDetailPage() {
       const base: QLine = { ...newLine(i), job_no: actual.job.job_no, so_id: actual.job.id, style_id: st as any, material_type: actual.kind, qty: Number(actual.pick[g.key]), uom_id: kg as any };
       return actual.kind === 'FABRIC'
         ? { ...base, fabric_id: g.fabric_id, dia: g.dia ?? '', gsm: g.gsm != null ? String(g.gsm) : '',
-            description: `${g.fabric_name ?? 'Fabric'} · ${g.process_state}${g.colour && g.colour !== 'GREY' ? ` ${g.colour}` : ''} · ${g.rolls} roll(s)${g.programs ? ` · ${g.programs}` : ''}` }
+            description: `${g.fabric_name ?? 'Fabric'} · ${fabricColourState(g)} · ${g.rolls} roll(s)${g.programs ? ` · ${g.programs}` : ''}` }
         : { ...base, yarn_id: g.yarn_id, yarn_count: g.count_str ?? '', description: `${g.yarn_name ?? 'Yarn'}${g.shade ? ` · ${g.shade}` : ''} · lot ${g.lot_nos}` };
     });
     setLines((ls) => [...ls.filter(isEnteredLine), ...next].map((l, i) => ({ ...l, sort_order: i })));
@@ -1433,7 +1435,7 @@ export default function QuotationDetailPage() {
                   return (
                     <tr key={k} className={`border-t border-slate-100 ${on ? 'bg-emerald-50/50' : ''}`} data-roll={r.roll_no}>
                       <td className="px-2 py-1"><input type="checkbox" checked={on} onChange={() => setPick(on ? '' : r.available_kg)} /></td>
-                      <td className="px-2 py-1 font-mono font-semibold">{r.roll_no}</td><td className="px-2 py-1">{r.fabric_name}</td><td className="px-2 py-1">{r.process_state}</td><td className="px-2 py-1 font-semibold text-slate-800">{r.color_name || (r.colour && r.colour !== 'GREY' ? r.colour : (r.color_name || r.colour || '—'))}</td>
+                      <td className="px-2 py-1 font-mono font-semibold">{r.roll_no}</td><td className="px-2 py-1">{r.fabric_name}</td><td className="px-2 py-1">{stateLabel(r.process_state)}</td><td className="px-2 py-1 font-semibold text-slate-800">{rollColour(r) || '—'}</td>
                       <td className="px-2 py-1">{r.gsm ?? '—'}</td><td className="px-2 py-1">{r.dia ?? '—'}</td><td className="px-2 py-1 text-slate-600">{rollTrace(r) || r.grn_no}</td><td className="px-2 py-1">QC ok</td>
                       <td className="px-2 py-1 text-right tabular-nums">{fmtDecimal(r.available_kg, 3)}</td><td className="px-2 py-1 text-right tabular-nums">{r.available_m ? fmtDecimal(r.available_m, 2) : '—'}</td>
                       <td className="px-2 py-1 text-right"><input type="number" step="0.001" className="w-24 rounded border border-surface-border px-2 py-0.5 text-right text-xs"
@@ -1691,8 +1693,8 @@ export default function QuotationDetailPage() {
                               {isProcessQuote && availGroups.length > 0 && (
                                 <optgroup label={`Available Stock for ${l.job_no || 'job'} (actual stock KG)`}>
                                   {availGroups.map((g: any) => {
-                                    const col = g.color_name || (g.colour && g.colour !== 'GREY' ? g.colour : (g.shade || ''));
-                                    const desc = [g.fabric_name || g.yarn_name, g.process_state, col].filter(Boolean).join(' · ');
+                                    const desc = g.fabric_id ? [g.fabric_name, fabricColourState(g)].filter(Boolean).join(' · ')
+                                      : [g.yarn_name, g.process_state, g.color_name || g.shade].filter(Boolean).join(' · ');
                                     return (
                                       <option key={g.key} value={`avail:${g.key}`}>
                                         {desc} — {Number(g.available_kg).toLocaleString('en-IN', { maximumFractionDigits: 3 })} KG in stock

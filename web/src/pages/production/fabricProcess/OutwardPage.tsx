@@ -1,3 +1,4 @@
+import { RAW_COLOUR, stateLabel } from '../../../lib/rawColour';
 import { useEffect, useMemo, useState } from 'react';
 import { QuotationPicker, type QuoteValue } from '../../../components/ProcessPickers';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -122,7 +123,7 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
         if (next.some((x) => x.fabric_roll_id === r.id)) continue;
         next.push({ fabric_roll_id: r.id, roll_no: r.roll_no, lot_no: r.lot_no, fabric_name: r.fabric_name, so_id: job?.id ?? r.so_id, io_no: job?.job_no ?? r.io_no,
           buyer_po_no: job?.buyer_po_no ?? r.buyer_po_no, style_code: job?.styles?.[0]?.style_code ?? r.style_code,
-          fabric_color: r.color_name || (r.process_state === 'GREY' ? 'GREY' : ''),
+          fabric_color: r.color_name || (r.process_state === 'GREY' ? RAW_COLOUR : ''),
           color_name: dyeing ? quoteColour(quoteDoc, quote.quotation_line_id, job?.job_no ?? r.io_no) : (r.color_name || ''),
           gsm: r.gsm, dia: r.dia, available_kg: r.balance_kg, weight_kg: kgOf(r), meters: 0 });
       }
@@ -139,7 +140,8 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
       setPlan(p);
       const add: DcRow[] = [];
       for (const l of p.lines) for (const r of l.rolls) add.push({ fabric_roll_id: Number(r.id), roll_no: r.roll_no, lot_no: r.lot_no, fabric_name: r.fabric_name, so_id: r.so_id, io_no: r.io_no,
-        buyer_po_no: r.buyer_po_no, style_code: null, color_name: dyeing ? (l.dye_colour ?? '') : (r.color_name ?? ''), fabric_color: r.colour ?? '', gsm: r.gsm, dia: r.dia,
+        // fabric colour = the roll as it is (Kora / Raw for knitted fabric); the job's colour (for_colour) only suggests the dye colour
+        buyer_po_no: r.buyer_po_no, style_code: null, color_name: dyeing ? (l.dye_colour ?? r.for_colour ?? '') : (r.color_name ?? ''), fabric_color: r.colour ?? '', gsm: r.gsm, dia: r.dia,
         available_kg: Number(r.available_kg), weight_kg: Number(r.send_kg), meters: 0 });
       if (!add.length) { toast(`${p.quotation_no}: nothing left to send (quoted KG already sent, or the job has no fabric in stock)`, 'warning'); return; }
       setRows((rs) => (replace ? add : [...rs, ...add.filter((a) => !rs.some((r) => r.fabric_roll_id === a.fabric_roll_id))]));
@@ -423,8 +425,8 @@ function RollPicker({ mode, jobs, warehouseId, quotationId, taken, onClose, onAd
                   {mode === 'job' && <td className="px-2 py-1"><input type="checkbox" checked={on} onChange={() => setSel((s) => { const x = { ...s }; if (on) delete x[r.id]; else x[r.id] = r.balance_kg; return x; })} /></td>}
                   <td className="px-2 py-1 font-mono font-semibold">{r.roll_no}</td><td className="px-2 py-1">{r.lot_no || '—'}</td><td className="px-2 py-1">{r.fabric_name}</td>
                   <td className="px-2 py-1">{r.so_id ? r.io_no : <span className="text-slate-400">no job</span>}</td>
-                  <td className="px-2 py-1"><span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${r.process_state === 'GREY' ? 'bg-slate-100 text-slate-600' : 'bg-purple-100 text-purple-800'}`}>{r.process_state}</span></td>
-                  <td className="px-2 py-1">{r.color_name || '—'}</td><td className="px-2 py-1">{r.gsm || '—'}</td><td className="px-2 py-1">{r.dia || '—'}</td>
+                  <td className="px-2 py-1"><span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${r.process_state === 'GREY' ? 'bg-slate-100 text-slate-600' : 'bg-purple-100 text-purple-800'}`}>{stateLabel(r.process_state)}</span></td>
+                  <td className="px-2 py-1">{r.color_name || (r.process_state === 'GREY' ? RAW_COLOUR : '—')}</td><td className="px-2 py-1">{r.gsm || '—'}</td><td className="px-2 py-1">{r.dia || '—'}</td>
                   <td className="px-2 py-1 font-mono">{r.grn_no}</td><td className="px-2 py-1">{r.warehouse_name || '—'}</td>
                   <td className="px-2 py-1 text-right tabular-nums">{kg(r.balance_kg)}</td>
                   {mode === 'job' && <td className="px-2 py-1 text-right">{on ? <input type="number" step="0.001" className="input w-24 py-0.5 text-right text-xs" value={sel[r.id]} onChange={(e) => setSel((s) => ({ ...s, [r.id]: r3(Number(e.target.value)) }))} /> : '—'}</td>}

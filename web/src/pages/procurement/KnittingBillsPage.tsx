@@ -123,7 +123,7 @@ function KnittingBillEditor({ onBack, onDone }: { onBack: () => void; onDone: (i
                   return (
                     <tr key={r.receipt_id} className="border-t border-slate-100">
                       <td className="px-2 py-1 font-mono">{r.receipt_no}{r.grn_no && <span className="block text-[10px] text-slate-400">{r.grn_no}</span>}</td><td className="px-2 py-1">{fmtDate(r.receipt_date)}</td>
-                      <td className="px-2 py-1">{r.program_no}</td><td className="px-2 py-1">{r.io_no || '—'}</td><td className="px-2 py-1">{[r.fabric_type, r.fabric_colour].filter(Boolean).join(' · ') || '—'}</td>
+                      <td className="px-2 py-1">{r.program_no}</td><td className="px-2 py-1">{r.io_no || '—'}</td><td className="px-2 py-1">{[r.fabric_type, r.fabric_colour ? `Kora / Raw for ${r.fabric_colour}` : ''].filter(Boolean).join(' · ') || '—'}</td>
                       <td className="px-2 py-1 font-mono">{r.dc_nos || '—'}</td><td className="px-2 py-1">{r.party_dc_no || '—'}</td><td className="px-2 py-1">{r.gate_entry_no ? `${r.gate_entry_no}${r.vehicle_no ? ` · ${r.vehicle_no}` : ''}` : '—'}</td>
                       <td className="px-2 py-1">{r.receipt_type === 'FINAL' ? 'Final' : 'Partial'}</td><td className="px-2 py-1 text-right">{r.rolls || '—'}</td>
                       <td className="px-2 py-1 text-right font-semibold">{fmtDecimal(r.fabric_kg, 3)}</td><td className="px-2 py-1 text-right">{fmtDecimal(r.reject_kg, 3)}</td><td className="px-2 py-1 text-right">{fmtDecimal(r.loss_kg, 3)}</td>

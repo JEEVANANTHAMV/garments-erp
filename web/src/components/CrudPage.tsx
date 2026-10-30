@@ -37,6 +37,11 @@ export interface FormField {
    * (e.g. picking the job fills io_no / style_id / buyer_po_no). Cleared when the select is cleared.
    */
   fill?: Record<string, string>;
+  /**
+   * Scan box: a scanned / typed (Enter) / pasted code is looked up and the returned values fill the form
+   * (e.g. the DC barcode on a gate pass). A warning is shown under the box; the values still fill.
+   */
+  scan?: (code: string) => Promise<{ values: Record<string, unknown>; warning?: string }>;
 }
 
 /** A filter control rendered above the table. */
@@ -261,6 +266,15 @@ export function CrudPage<T extends { id: number }>(cfg: CrudConfig<T>) {
               <FormControl key={f.name} field={f}
                 value={values[f.name]}
                 error={errors[f.name]}
+                onScanned={(vals, warning) => {
+                  setValues((s) => ({ ...s, ...vals }));
+                  setErrors((prev) => {
+                    const next = { ...prev };
+                    for (const k of Object.keys(vals)) delete next[k];
+                    if (warning) next[f.name] = warning; else delete next[f.name];
+                    return next;
+                  });
+                }}
                 onChange={(v, row) => {
                   setValues((s) => ({
                     ...s, [f.name]: v,
@@ -293,6 +307,36 @@ export function CrudPage<T extends { id: number }>(cfg: CrudConfig<T>) {
   );
 }
 
+/** A scan box on the form: Enter, a paste or leaving the box looks the code up once and fills the form. */
+function ScanControl({ field, span, value, error, onChange, onScanned }: {
+  field: FormField; span: string; value: unknown; error?: string; onChange: (v: unknown) => void;
+  onScanned?: (values: Record<string, unknown>, warning?: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState('');
+  const [typed, setTyped] = useState(false);   // leaving the box looks up only what was typed here
+  const run = async (raw: string) => {
+    const code = raw.trim();
+    if (!code || code === done || busy || !field.scan) return;
+    setBusy(true); setTyped(false);
+    try {
+      const r = await field.scan(code);
+      setDone(String(r.values[field.name] ?? code));
+      onScanned?.(r.values, r.warning);
+    } catch (e) {
+      setDone(code);
+      onScanned?.({ [field.name]: code }, e instanceof ApiError ? e.message : 'Not found');
+    } finally { setBusy(false); }
+  };
+  return <Input className={span} label={field.label} error={error} required={field.required}
+    hint={busy ? 'Looking up…' : field.hint} placeholder={field.placeholder} autoComplete="off"
+    value={(value as string) ?? ''}
+    onChange={(e) => { setTyped(true); onChange(e.target.value === '' ? null : e.target.value); }}
+    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void run(e.currentTarget.value); } }}
+    onPaste={(e) => { const t = e.clipboardData.getData('text'); if (t.trim()) { e.preventDefault(); onChange(t.trim()); void run(t); } }}
+    onBlur={(e) => { if (typed) void run(e.currentTarget.value); }} />;
+}
+
 /** Popup width when the screen does not set one: confirmations-sized for ≤3 fields, wider for long forms. */
 function defaultModalSize(fields: FormField[]): 'sm' | 'md' | 'lg' {
   if (fields.length <= 3 && !fields.some((f) => f.type === 'textarea' || f.span === 2)) return 'sm';
@@ -301,8 +345,9 @@ function defaultModalSize(fields: FormField[]): 'sm' | 'md' | 'lg' {
 
 /* ----------------------------------------------------- field renderers */
 
-function FormControl({ field, value, error, onChange }: {
+function FormControl({ field, value, error, onChange, onScanned }: {
   field: FormField; value: unknown; error?: string; onChange: (v: unknown, row?: any) => void;
+  onScanned?: (values: Record<string, unknown>, warning?: string) => void;
 }) {
   const lookup = useLookup(field.lookup ?? null, !!field.lookup);
   const statuses = useStatuses(field.statusDomain ?? '');
@@ -315,6 +360,8 @@ function FormControl({ field, value, error, onChange }: {
   if (field.options && value != null && value !== '' && !field.options.some((o) => String(o.value) === String(value))) {
     options = [...field.options, { value: value as string | number, label: `${value} (current)` }];
   }
+
+  if (field.scan) return <ScanControl field={field} span={span} value={value} error={error} onChange={onChange} onScanned={onScanned} />;
 
   if (field.type === 'checkbox') {
     return (

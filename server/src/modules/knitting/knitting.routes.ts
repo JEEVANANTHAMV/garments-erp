@@ -11,6 +11,7 @@ import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
 import { txResolvePartName } from '../../core/partName.js';
 import { checkStock, reserveYarn, assertEditable } from '../../core/processEngine.js';
+import { normRawColour } from '../../core/rawColour.js';
 
 /* ================================================================
    KNITTING PROGRAM — schemas
@@ -30,7 +31,8 @@ const kpYarnSchema = z.object({
   yarn_id: s.id(),
   yarn_name_manual: s.nullableStr(150),
   count_value: s.nullableStr(30),
-  colour: s.nullableStr(80),
+  /** raw / kora / greige … are saved as "Kora / Raw" (client 30-Oct-2026) */
+  colour: s.nullableStr(80).transform((c) => normRawColour(c)),
   yarn_po_no: s.nullableStr(80),
   yarn_lot_no: s.nullableStr(80),
   planning_ratio_pct: z.coerce.number().min(0).max(100).nullable().optional(),
@@ -44,7 +46,7 @@ const kpStripeSchema = z.object({
   seq_no: z.coerce.number().int().min(1).default(1),
   program_yarn_id: s.id(),
   yarn_label: s.nullableStr(80),
-  colour: s.nullableStr(80),
+  colour: s.nullableStr(80).transform((c) => normRawColour(c)),
   courses: z.coerce.number().int().min(0).default(0),
   notes: s.nullableStr(255),
 });

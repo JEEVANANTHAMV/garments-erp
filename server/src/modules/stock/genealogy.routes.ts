@@ -545,7 +545,7 @@ genealogyRouter.get('/jobs/:soId/genealogy-tree', VIEW, ah(async (req, res) => {
 const REPORTS: Record<string, (cid: number, f: { so_id?: number; vendor_id?: number; from?: string; to?: string; roll_no?: string }) => Promise<any[]>> = {
   /** Job-wise fabric availability: what each job holds now, by fabric / state / colour. */
   'job-fabric-availability': async (cid, f) => query<any>(
-    `SELECT COALESCE(NULLIF(so.io_no, ''), so.so_no) job_no, fb.fabric_name, fr.process_state, COALESCE(fr.color_name, '') colour, fr.gsm, fr.dia, COUNT(*) rolls,
+    `SELECT COALESCE(NULLIF(so.io_no, ''), so.so_no) job_no, fb.fabric_name, fr.process_state, COALESCE(fr.color_name, IF(fr.process_state = 'GREY', 'Kora / Raw', '')) colour, fr.gsm, fr.dia, COUNT(*) rolls,
             ROUND(SUM(fr.weight_kg - COALESCE(fr.issued_kg, 0)), 3) available_kg,
             ROUND(SUM(${OPEN_ALLOC_SQL('fr.id', '0')}), 3) on_quotation_kg
        FROM trx_fabric_roll fr JOIN trx_sales_order so ON so.id = fr.so_id LEFT JOIN mst_fabric fb ON fb.id = fr.fabric_id

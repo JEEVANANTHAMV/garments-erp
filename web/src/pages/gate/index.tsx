@@ -57,6 +57,28 @@ const OUTWARD_STATUSES = [
 ];
 
 
+/** Form values a looked-up DC fills on the gate pass (OUT) or the gate entry (IN). */
+function dcFormValues(mode: 'OUT' | 'IN', d: any): Record<string, unknown> {
+  const ref_ = { ref_type: d.ref_type, ref_id: d.ref_id, ref_no: d.dc_no };
+  return mode === 'OUT'
+    ? { ...ref_, pass_type: d.returnable ? 'RETURNABLE_JOBWORK' : 'NON_RETURNABLE_DISPATCH', party_id: d.party_id, vehicle_no: d.vehicle_no ?? '', purpose: d.purpose,
+        package_count: d.packages || 1, total_qty: d.qty, uom_id: d.uom_id, expected_return_date: d.expected_return_date ? String(d.expected_return_date).slice(0, 10) : '',
+        status: 'GATE_OUT', remarks: [d.dc_label, d.jobs ? `Jobs: ${d.jobs}` : ''].filter(Boolean).join(' · ') }
+    : { ...ref_, entry_type: d.returnable ? 'JOBWORK_RETURN' : 'GENERAL_INWARD', party_id: d.party_id, material_type: d.material_type, package_count: d.packages || 1,
+        remarks: `Coming back against our ${d.dc_label} ${d.dc_no}${d.jobs ? ` (jobs ${d.jobs})` : ''}` };
+}
+
+/** The popup's DC box: scan, type + Enter, or paste a DC no — the DC fills the form (warnings shown under the box). */
+const scanDc = (mode: 'OUT' | 'IN') => async (code: string) => {
+  try {
+    const d = (await http.get<{ data: any }>(`/dc-lookup?code=${encodeURIComponent(code)}`)).data;
+    return { values: dcFormValues(mode, d), warning: d.warnings?.length ? `⚠ ${d.warnings.join(' · ')}` : undefined };
+  } catch (e) {
+    // an unknown number is kept as typed but not linked to any DC
+    return { values: { ref_no: code, ref_type: null, ref_id: null }, warning: e instanceof ApiError ? e.message : 'DC not found' };
+  }
+};
+
 /**
  * Scan the barcode on our DC print (client voice note 01-Oct-2026): the DC loads into the gate pass
  * (outward) or — when the material comes back — into the gate entry (inward).
@@ -67,8 +89,8 @@ function DcScanBar({ mode, onLoad }: { mode: 'OUT' | 'IN'; onLoad: (values: Reco
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
-  const scan = async () => {
-    const c = code.trim(); if (!c) return;
+  const scan = async (typed?: string) => {
+    const c = (typed ?? code).trim(); if (!c) return;
     setBusy(true); setErr(''); setDc(null);
     try {
       const d = (await http.get<{ data: any }>(`/dc-lookup?code=${encodeURIComponent(c)}`)).data;
@@ -76,22 +98,15 @@ function DcScanBar({ mode, onLoad }: { mode: 'OUT' | 'IN'; onLoad: (values: Reco
       if (!d.warnings?.length) use(d);
     } catch (e) { setErr(e instanceof ApiError ? e.message : 'DC not found'); } finally { setBusy(false); setCode(''); ref.current?.focus(); }
   };
-  const use = (d: any) => {
-    const ref_ = { ref_type: d.ref_type, ref_id: d.ref_id, ref_no: d.dc_no };
-    onLoad(mode === 'OUT'
-      ? { ...ref_, pass_type: d.returnable ? 'RETURNABLE_JOBWORK' : 'NON_RETURNABLE_DISPATCH', party_id: d.party_id, vehicle_no: d.vehicle_no ?? '', purpose: d.purpose,
-          package_count: d.packages || 1, total_qty: d.qty, uom_id: d.uom_id, expected_return_date: d.expected_return_date ? String(d.expected_return_date).slice(0, 10) : '',
-          status: 'GATE_OUT', remarks: [d.dc_label, d.jobs ? `Jobs: ${d.jobs}` : ''].filter(Boolean).join(' · ') }
-      : { ...ref_, entry_type: d.returnable ? 'JOBWORK_RETURN' : 'GENERAL_INWARD', party_id: d.party_id, material_type: d.material_type, package_count: d.packages || 1,
-          remarks: `Coming back against our ${d.dc_label} ${d.dc_no}${d.jobs ? ` (jobs ${d.jobs})` : ''}` });
-  };
+  const use = (d: any) => onLoad(dcFormValues(mode, d));
   return (
     <div className="card mb-3 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <ScanLine size={18} className="text-brand-600" />
         <span className="text-[13px] font-semibold text-slate-800">{mode === 'OUT' ? 'Scan DC barcode → gate pass' : 'Scan our DC barcode (job-work return) → gate entry'}</span>
         <input ref={ref} id={`dc-scan-${mode}`} className="input w-72 py-1.5 font-mono text-sm" placeholder="Scan or type DC no and press Enter" value={code} autoFocus
-          onChange={(e) => setCode(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void scan(); } }} />
+          onChange={(e) => setCode(e.target.value)}
+          onPaste={(e) => { const t = e.clipboardData.getData('text').trim(); if (t) { e.preventDefault(); setCode(t); void scan(t); } }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void scan(); } }} />
         <button type="button" className="btn-secondary text-xs" disabled={busy} onClick={() => void scan()}>{busy ? 'Looking up…' : 'Load DC'}</button>
         {err && <span className="text-xs text-red-600">{err}</span>}
       </div>
@@ -222,7 +237,7 @@ export function GateInwardsPage() {
         // Stamped from the system clock when the entry is opened (and by the server on save)
         { name: 'entry_date', label: 'Entry Date', type: 'date', readOnly: true, defaultValue: () => nowStamp().date, hint: 'System date' },
         { name: 'entry_time', label: 'Entry Time', type: 'time', readOnly: true, defaultValue: () => nowStamp().time, hint: 'System time' },
-        { name: 'ref_no', label: 'Against our DC (scanned)', readOnly: true, hint: 'Filled by scanning our DC barcode' },
+        { name: 'ref_no', label: 'Against our DC', scan: scanDc('IN'), placeholder: 'Scan, type or paste our DC no', hint: 'Scan / paste the DC no (or type it and press Enter) — the DC fills the entry' },
         { name: 'entry_type', label: 'Entry Type', required: true, options: ENTRY_TYPES, defaultValue: 'PURCHASE_INWARD' },
         { name: 'party_id', label: 'Supplier / Job worker / Customer', required: true, lookup: 'trade-parties' },
         { name: 'vehicle_no', label: 'Vehicle Number', required: true, placeholder: 'e.g. TN 38 BJ 1234' },
@@ -364,7 +379,7 @@ export function GateOutwardsPage() {
       fields={[
         { name: 'pass_date', label: 'Pass Date', type: 'date', readOnly: true, defaultValue: () => nowStamp().date, hint: 'System date' },
         { name: 'pass_time', label: 'Pass Time', type: 'time', readOnly: true, defaultValue: () => nowStamp().time, hint: 'System time' },
-        { name: 'ref_no', label: 'DC (scanned)', readOnly: true, hint: 'Filled by scanning the DC barcode' },
+        { name: 'ref_no', label: 'DC', scan: scanDc('OUT'), placeholder: 'Scan, type or paste the DC no', hint: 'Scan / paste the DC no (or type it and press Enter) — the DC fills the gate pass' },
         { name: 'pass_type', label: 'Pass Type', required: true, options: PASS_TYPES, defaultValue: 'RETURNABLE_JOBWORK' },
         { name: 'party_id', label: 'Recipient job worker / contractor / supplier', lookup: 'payables' },
         { name: 'to_unit_id', label: 'Or Internal Destination Unit', lookup: 'units' },
