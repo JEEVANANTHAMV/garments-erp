@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Plus, Pencil, Trash2, Filter as FilterIcon } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { useList, useSave, useRemove, useListState } from '../hooks/useResource';
@@ -315,6 +315,7 @@ function ScanControl({ field, span, value, error, onChange, onScanned }: {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState('');
   const [typed, setTyped] = useState(false);   // leaving the box looks up only what was typed here
+  const box = useRef<HTMLInputElement>(null);
   const run = async (raw: string) => {
     const code = raw.trim();
     if (!code || code === done || busy || !field.scan) return;
@@ -326,14 +327,19 @@ function ScanControl({ field, span, value, error, onChange, onScanned }: {
     } catch (e) {
       setDone(code);
       onScanned?.({ [field.name]: code }, e instanceof ApiError ? e.message : 'Not found');
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+      setTimeout(() => box.current?.select(), 0);   // the next scan replaces this DC instead of appending to it
+    }
   };
-  return <Input className={span} label={field.label} error={error} required={field.required}
+  return <Input ref={box} className={span} label={field.label} error={error} required={field.required}
     hint={busy ? 'Looking up…' : field.hint} placeholder={field.placeholder} autoComplete="off"
     value={(value as string) ?? ''}
     onChange={(e) => { setTyped(true); onChange(e.target.value === '' ? null : e.target.value); }}
     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void run(e.currentTarget.value); } }}
     onPaste={(e) => { const t = e.clipboardData.getData('text'); if (t.trim()) { e.preventDefault(); onChange(t.trim()); void run(t); } }}
+    onFocus={(e) => e.currentTarget.select()}
+    onClick={(e) => { if (!typed) e.currentTarget.select(); }}   // a click on a looked-up DC selects it, so a paste / scan replaces it
     onBlur={(e) => { if (typed) void run(e.currentTarget.value); }} />;
 }
 
