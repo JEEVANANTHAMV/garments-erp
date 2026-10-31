@@ -73,7 +73,7 @@ export function PackingListPage() {
             { key: 'total_qty', header: 'Qty (PCS)', align: 'right' as const, render: (r: any) => fmtNumber(r.total_qty) },
             { key: 'gross_weight_kg', header: 'Gross (KG)', align: 'right' as const, render: (r: any) => fmtDecimal(r.gross_weight_kg) },
             { key: 'total_cbm', header: 'CBM', align: 'right' as const, render: (r: any) => fmtDecimal(r.total_cbm, 3) },
-            { key: 'status', header: 'Status', render: (r: any) => <span className="flex items-center gap-1"><Badge color={STATUS_COLOR[r.status] || 'slate'}>{r.status}</Badge>{r.revision_no > 0 && <Badge color="amber">Rev {r.revision_no}</Badge>}
+            { key: 'status', header: 'Status', render: (r: any) => <span className="flex flex-wrap items-center gap-1"><Badge color={STATUS_COLOR[r.status] || 'slate'}>{r.status}</Badge>{r.revision_no > 0 && <Badge color="amber">Rev {r.revision_no}</Badge>}
               {r.list_mode === 'PLAN' && <Badge color="blue">Plan</Badge>}{r.short_action && r.short_action !== 'NONE' && <Badge color="red">{r.short_action === 'TO_FOLLOW' ? `Short ${r.short_qty} to follow` : `Short ${r.short_qty} debit`}</Badge>}</span> },
             { key: 'shipment_no', header: 'Shipment', render: (r: any) => r.shipment_no || '—' },
           ]}

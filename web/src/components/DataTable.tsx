@@ -75,7 +75,7 @@ export function DataTable<T>({
                   className={clsx('row-hover', onRowClick && 'cursor-pointer')}>
                   {columns.map((c, i) => (
                     <td key={c.key}
-                      className={clsx('td', align(c.align), c.align === 'right' && 'numeric-cell', c.className,
+                      className={clsx('td', align(c.align), c.align === 'right' ? 'numeric-cell' : !c.width && 'text-cell', c.className,
                         stickyFirst && i === 0 && 'sticky left-0 bg-white')}>
                       {c.render ? c.render(row) : renderValue((row as Record<string, unknown>)[c.key])}
                     </td>

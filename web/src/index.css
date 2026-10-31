@@ -88,6 +88,8 @@
   .td { @apply px-3 py-2 border-b border-surface-divider text-ink align-middle text-body; }
   .row-hover { @apply hover:bg-surface-hover transition-colors; }
   .numeric-cell { @apply whitespace-nowrap tabular-nums; }
+  /* Wide enough that dates and names wrap at most once instead of one word per line. */
+  .text-cell { @apply min-w-[6.5rem]; }
 
   .skeleton { @apply animate-pulse rounded bg-slate-100; }
 }
@@ -126,7 +128,9 @@
   .dashboard-panel { min-width: 0; }
   .dashboard-panel .th, .dashboard-panel .td { padding: 6px 10px; font-size: 0.75rem; }
   .dashboard-panel table { width: 100%; }
-  .dashboard-panel th, .dashboard-panel td { white-space: nowrap; }
+  /* Names wrap so long fabric / supplier names never push the quantity columns out of view. */
+  .dashboard-panel th, .dashboard-panel td.text-right { white-space: nowrap; }
+  .dashboard-panel td:not(.text-right) { min-width: 4.5rem; overflow-wrap: anywhere; }
   .dashboard-kpi-value { font-size: clamp(1.25rem, 1.7vw, 1.6875rem); font-variant-numeric: tabular-nums; overflow-x: auto; white-space: nowrap; }
   @media (min-width: 768px) { .dashboard-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
   @media (min-width: 1200px) {
