@@ -1493,7 +1493,7 @@ export function FabricDetailPage() {
                 disabled={!editable}
                 className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-bold transition-all ${
                   added
-                    ? 'bg-surface-border text-ink hover:bg-slate-300'
+                    ? 'bg-surface-border text-ink hover:bg-surface-input'
                     : 'bg-white text-ink border border-surface-input hover:border-brand-500 hover:text-brand-700 hover:shadow-sm'
                 }`}
               >

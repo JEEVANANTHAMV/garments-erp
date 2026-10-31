@@ -81,7 +81,7 @@ export const errMsg = (e: unknown, fallback = 'Something went wrong') => {
 };
 
 export function Kpi({ label, value, sub, tone = 'slate', onClick, id }: { label: string; value: ReactNode; sub?: ReactNode; tone?: string; onClick?: () => void; id?: string }) {
-  const bar: Record<string, string> = { slate: 'bg-slate-300', blue: 'bg-sky-500', amber: 'bg-amber-500', red: 'bg-red-500', green: 'bg-emerald-500', violet: 'bg-violet-500', indigo: 'bg-indigo-500' };
+  const bar: Record<string, string> = { slate: 'bg-surface-input', blue: 'bg-sky-500', amber: 'bg-amber-500', red: 'bg-red-500', green: 'bg-emerald-500', violet: 'bg-violet-500', indigo: 'bg-indigo-500' };
   return (
     <button type="button" id={id} onClick={onClick} disabled={!onClick}
       className={clsx('card relative overflow-hidden p-3.5 text-left transition', onClick && 'hover:border-brand-300 hover:shadow-md cursor-pointer')}>

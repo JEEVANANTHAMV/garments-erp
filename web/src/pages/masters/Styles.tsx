@@ -176,7 +176,7 @@ function ColorMultiSelect({
           </div>
 
           {/* Color List */}
-          <div className="max-h-56 overflow-y-auto divide-y divide-slate-50 pr-1">
+          <div className="max-h-56 overflow-y-auto divide-y divide-surface-divider pr-1">
             {filtered.length === 0 ? (
               <p className="py-4 text-center text-xs text-ink-muted">No colours match &quot;{search}&quot;</p>
             ) : (

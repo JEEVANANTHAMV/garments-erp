@@ -116,7 +116,7 @@ export function WipDashboardPage() {
               </div>
               {idx < wipStages.length - 1 && (
                 <div className="flex items-center -mx-1">
-                  <div className="w-8 h-0.5 bg-slate-300" />
+                  <div className="w-8 h-0.5 bg-surface-input" />
                   <svg className="w-3 h-3 text-ink-muted -ml-0.5" viewBox="0 0 12 12" fill="currentColor">
                     <path d="M2 1l8 5-8 5V1z"/>
                   </svg>

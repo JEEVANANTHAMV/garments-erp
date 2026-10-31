@@ -941,7 +941,7 @@ export function SettingsPage() {
                     <button type="button" role="switch" aria-checked={on} disabled={!s.is_editable && s.is_editable !== undefined && s.is_editable !== null && Number(s.is_editable) === 0}
                       onClick={() => setVals((cur) => ({ ...cur, [s.key]: on ? '0' : '1' }))}
                       className={`flex items-center gap-2 rounded-full px-1 py-1 pr-3 text-small font-semibold transition-colors ${on ? 'bg-emerald-100 text-emerald-800' : 'bg-surface-header text-ink-secondary'}`}>
-                      <span className={`h-5 w-9 rounded-full p-0.5 transition-colors ${on ? 'bg-emerald-500' : 'bg-slate-300'}`}>
+                      <span className={`h-5 w-9 rounded-full p-0.5 transition-colors ${on ? 'bg-emerald-500' : 'bg-surface-input'}`}>
                         <span className={`block h-4 w-4 rounded-full bg-white shadow transition-transform ${on ? 'translate-x-4' : ''}`} />
                       </span>
                       {on ? 'ON (1)' : 'OFF (0)'}
