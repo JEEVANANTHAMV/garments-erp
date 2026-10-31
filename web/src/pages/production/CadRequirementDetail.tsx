@@ -1875,7 +1875,7 @@ export default function CadRequirementDetailPage() {
 
       {/* Header Parameters Card */}
       <div className="bg-white p-4 rounded-xl border border-surface-border/80 shadow-sm space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-7 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3">
           <Input
             label="CAD Req No"
             value={header.req_no}
