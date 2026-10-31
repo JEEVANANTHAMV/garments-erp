@@ -1,33 +1,21 @@
+import { colors, brand, statusColors, fontFamily } from './src/theme/designTokens.js';
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
       colors: {
-        brand: {
-          50: '#f0fdf4',
-          100: '#dcfce7',
-          200: '#bbf7d0',
-          300: '#86efac',
-          400: '#4ade80',
-          500: '#22c55e',
-          600: '#16a34a',
-          700: '#15803d',
-          800: '#166534',
-          900: '#14532d',
-          950: '#052e16',
-        },
+        brand,
+        ink: { DEFAULT: colors.text, heading: colors.navy, secondary: colors.secondary },
+        status: statusColors,
         surface: {
-          DEFAULT: '#ffffff',
-          canvas: '#f8fafc',
-          muted: '#f9fafb',
-          hover: '#f1f5f9',
-          border: '#e5e7eb',
-          divider: '#f1f5f9',
+          DEFAULT: colors.surface, canvas: colors.canvas, muted: colors.content,
+          hover: colors.hover, border: colors.border, divider: colors.divider,
+          sidebar: colors.sidebar, header: colors.header, input: colors.input,
         },
       },
       fontFamily: {
-        sans: ['"Segoe UI Variable"', '"Segoe UI"', 'Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Roboto', 'sans-serif'],
+        sans: fontFamily,
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       boxShadow: {

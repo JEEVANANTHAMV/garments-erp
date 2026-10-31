@@ -10,7 +10,7 @@ export function PageHeader({ title, subtitle, actions, breadcrumb }: {
   title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; breadcrumb?: string[];
 }) {
   return (
-    <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+    <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
         {breadcrumb?.length ? (
           <nav className="mb-1.5 flex items-center gap-1.5 text-[11.5px] font-semibold text-slate-600">
@@ -21,7 +21,7 @@ export function PageHeader({ title, subtitle, actions, breadcrumb }: {
             ))}
           </nav>
         ) : null}
-        <h1 className="truncate text-[24px] font-extrabold tracking-tight text-slate-900">{title}</h1>
+        <h1 className="text-[1.5rem] font-semibold tracking-tight text-ink-heading">{title}</h1>
         {subtitle && <p className="mt-1 text-[13px] font-medium text-slate-600 leading-normal">{subtitle}</p>}
       </div>
       {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
@@ -96,15 +96,15 @@ export function Checkbox({ label, checked, onChange, disabled }: {
 
 /* ---------------------------------------------------------------- Badges */
 const TONE: Record<string, string> = {
-  slate: 'bg-slate-100 text-slate-700 border border-slate-200/60',
-  green: 'bg-emerald-50 text-emerald-700 border border-emerald-200/60',
-  emerald: 'bg-emerald-50 text-emerald-700 border border-emerald-200/60',
-  amber: 'bg-amber-50 text-amber-700 border border-amber-200/60',
-  red: 'bg-red-50 text-red-700 border border-red-200/60',
-  blue: 'bg-sky-50 text-sky-700 border border-sky-200/60',
-  indigo: 'bg-indigo-50 text-indigo-700 border border-indigo-200/60',
-  violet: 'bg-violet-50 text-violet-700 border border-violet-200/60',
-  gray: 'bg-slate-100 text-slate-700 border border-slate-200/60',
+  slate: 'bg-status-neutral-background text-status-neutral-text',
+  gray: 'bg-status-neutral-background text-status-neutral-text',
+  green: 'bg-status-success-background text-status-success-text',
+  emerald: 'bg-status-success-background text-status-success-text',
+  amber: 'bg-status-pending-background text-status-pending-label',
+  red: 'bg-status-error-background text-status-error-text',
+  blue: 'bg-status-progress-background text-status-progress-label',
+  indigo: 'bg-status-info-background text-status-info-text',
+  violet: 'bg-status-info-background text-status-info-text',
 };
 
 export function Badge({
@@ -155,12 +155,12 @@ export function Card({
   className?: string;
 }) {
   return (
-    <div className={clsx('rounded-xl border border-surface-border bg-white shadow-card overflow-hidden', className)}>
+    <div className={clsx('card overflow-hidden', className)}>
       {(title || actions) && (
-        <div className="flex items-center justify-between border-b border-surface-border px-5 py-3.5 bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-border px-4 py-3 bg-white">
           <div>
             {typeof title === 'string' ? (
-              <h3 className="text-[14px] font-semibold text-slate-900 tracking-tight">{title}</h3>
+              <h3 className="text-[0.9375rem] font-semibold text-ink-heading">{title}</h3>
             ) : (
               title
             )}
@@ -238,11 +238,11 @@ export function StatusBadge({ value }: { value: unknown }) {
   const v = String(value ?? '').toUpperCase();
   if (!v) return <span className="text-slate-400">—</span>;
   const tone =
-    /APPROVED|PASS|COMPLETED|DELIVERED|CREDITED|DONE|ACTIVE|REALIZED|ISSUED|POSTED|ACCEPTED/.test(v) ? 'green' :
-    /PENDING|DRAFT|IN_REVIEW|ON_TRACK|BOOKED|REQUESTED|CLAIMED|NEW/.test(v) ? 'amber' :
+    /^(APPROVED|PASS|COMPLETED|DELIVERED|CREDITED|DONE|ACTIVE|REALIZED|ISSUED|POSTED|ACCEPTED|RECEIVED|ON_TRACK)$/.test(v) ? 'green' :
+    /PENDING|IN_REVIEW|BOOKED|REQUESTED|CLAIMED|NEW/.test(v) ? 'amber' :
     /REJECTED|FAIL|CANCELLED|DELAYED|LOST|ON_HOLD/.test(v) ? 'red' :
     /IN_PROGRESS|IN_PRODUCTION|SAILED|TRANSIT|PARTIAL|SUBMITTED|QUOTED|NEGOTIATION/.test(v) ? 'blue' :
-    /CLOSED|OBSOLETE|DISCONTINUED|EXPIRED/.test(v) ? 'slate' : 'violet';
+    /CLOSED|OBSOLETE|DISCONTINUED|EXPIRED|DRAFT|NOT_STARTED|INACTIVE/.test(v) ? 'slate' : 'violet';
   return <Badge tone={tone}>{v.replace(/_/g, ' ')}</Badge>;
 }
 

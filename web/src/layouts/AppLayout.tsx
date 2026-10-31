@@ -13,6 +13,9 @@ import { http } from '../lib/api';
 export default function AppLayout() {
   const { user, company, companies, switchCompany, logout, canAny } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [desktopOpen, setDesktopOpen] = useState(true);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [globalSearch, setGlobalSearch] = useState('');
   const [userMenu, setUserMenu] = useState(false);
   const [companyDropdown, setCompanyDropdown] = useState(false);
   const [filter, setFilter] = useState('');
@@ -25,6 +28,14 @@ export default function AppLayout() {
     document.documentElement.setAttribute('data-text-size', textSize);
     localStorage.setItem('erp.textSize', textSize);
   }, [textSize]);
+
+  useEffect(() => {
+    const close = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { setMobileOpen(false); setUserMenu(false); setCompanyDropdown(false); setBellOpen(false); setSearchOpen(false); }
+    };
+    window.addEventListener('keydown', close);
+    return () => window.removeEventListener('keydown', close);
+  }, []);
 
   // The steps the user can reach (the step bar walks these), and the same filtered by the sidebar search.
   // admin menu switches (MENU_* settings) — e.g. Line QC stays off until the client turns it on
@@ -159,18 +170,18 @@ export default function AppLayout() {
     <div key={item.to} className="group relative">
       <Link to={item.to} onClick={() => setMobileOpen(false)} aria-current={item.to === activeTo ? 'page' : undefined}
         className={clsx(
-          'flex items-center gap-2.5 rounded-lg py-[7.5px] pl-2.5 pr-7 text-[12.5px] transition-all',
+          'nav-item flex items-center gap-2.5 rounded-md py-2 pl-2.5 pr-7 transition-colors',
           item.to === activeTo
-            ? 'bg-brand-50 font-bold text-brand-900 shadow-subtle border border-brand-200/80'
-            : 'font-semibold text-slate-800 hover:bg-slate-100 hover:text-slate-950')}>
-        <item.icon size={15} className={clsx('shrink-0 transition-colors', item.to === activeTo ? 'text-brand-600' : 'text-slate-500 group-hover:text-slate-900')} />
-        <span className="truncate" title={item.label}>{item.label}</span>
+            ? 'bg-brand-600 text-white'
+            : 'text-ink hover:bg-brand-100')}>
+        <item.icon size={17} className={clsx('shrink-0 transition-colors', item.to === activeTo ? 'text-white' : 'text-ink-secondary')} />
+        <span className="nav-label" title={item.label}>{item.label}</span>
       </Link>
       {item.to !== '/' && (
         <button type="button" onClick={() => toggleFav(item.to)} data-fav={item.to}
           title={isFav ? 'Remove from favourites' : 'Add to favourites'} aria-label={isFav ? `Unpin ${item.label}` : `Pin ${item.label}`}
           className={clsx('absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 transition-opacity',
-            isFav ? 'text-amber-500' : 'text-slate-400 opacity-0 hover:text-amber-500 focus:opacity-100 group-hover:opacity-100')}>
+            item.to === activeTo ? 'text-white' : isFav ? 'text-amber-600' : 'text-slate-500 opacity-0 hover:text-amber-600 focus:opacity-100 group-hover:opacity-100')}>
           <Star size={12} fill={isFav ? 'currentColor' : 'none'} />
         </button>
       )}
@@ -178,18 +189,13 @@ export default function AppLayout() {
   );
 
   const sidebar = (
-    <div className="flex h-full flex-col bg-white border-r border-surface-border text-slate-800">
-      <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-surface-border px-4">
-        <div className="grid h-8 w-8 place-items-center rounded-lg bg-brand-50 border border-brand-200/80 text-sm font-bold text-brand-700 shadow-subtle">
-          {company ? initials(company.trade_name || company.legal_name) : 'ER'}
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-bold text-slate-900 tracking-tight">
-            {company?.trade_name || company?.legal_name || 'Garment ERP'}
-          </p>
-          <p className="truncate text-[10.5px] font-semibold text-slate-500">Manufacturing SaaS</p>
-        </div>
-        <button className="rounded-md p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800 lg:hidden" onClick={() => setMobileOpen(false)} aria-label="Close menu">
+    <div className="flex h-full flex-col bg-surface-sidebar border-r border-surface-border text-ink">
+      <div className="flex h-[62px] shrink-0 items-center border-b border-surface-border px-4">
+        <Link to="/" onClick={() => setMobileOpen(false)} className="flex-1" aria-label="C-ONE ERP home">
+          <p className="text-[23px] leading-7 tracking-tight text-ink-heading"><strong>C-ONE</strong> <span className="font-normal">ERP</span></p>
+          <p className="text-[10px] text-ink-secondary">Garment Manufacturing</p>
+        </Link>
+        <button className="rounded-md p-1 text-ink-secondary hover:bg-brand-100 lg:hidden" onClick={() => setMobileOpen(false)} aria-label="Close menu">
           <X size={18} />
         </button>
       </div>
@@ -198,22 +204,22 @@ export default function AppLayout() {
         <div className="relative">
           <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
           <input value={filter} onChange={(e) => setFilter(e.target.value)}
-            placeholder="Find a screen…"
+            aria-label="Filter navigation" placeholder="Find a screen…"
             className="w-full rounded-lg border border-surface-border bg-slate-50/80 py-1.5 pl-8 pr-2.5 text-xs font-medium text-slate-900
                        placeholder:text-slate-500 transition focus:bg-white focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-500/15" />
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-2.5 pb-4" id="side-nav">
+      <nav aria-label="Main navigation" className="flex-1 overflow-y-auto px-2.5 pb-4" id="side-nav">
         {!filter && favItems.length > 0 && (
           <div className="mb-2">
-            <p className="flex items-center gap-1.5 px-2 py-1.5 text-[10.5px] font-bold uppercase tracking-wider text-amber-700"><Star size={12} /> Favourites</p>
+            <p className="nav-section flex items-center gap-1.5 px-2 py-1.5 uppercase text-ink-secondary"><Star size={12} /> Favourites</p>
             <div className="space-y-0.5" id="nav-favs">{favItems.map((item) => navLink(item, true))}</div>
           </div>
         )}
         {!filter && recentItems.length > 0 && (
           <div className="mb-2">
-            <p className="flex items-center gap-1.5 px-2 py-1.5 text-[10.5px] font-bold uppercase tracking-wider text-slate-700"><Clock size={12} /> Recent</p>
+            <p className="nav-section flex items-center gap-1.5 px-2 py-1.5 uppercase text-ink-secondary"><Clock size={12} /> Recent</p>
             <div className="space-y-0.5" id="nav-recent">{recentItems.map((item) => navLink(item, false))}</div>
           </div>
         )}
@@ -227,13 +233,13 @@ export default function AppLayout() {
                 // open step: lit header; the step of the page you are on: brand accent bar + brand count
                 <button onClick={() => toggleSec(section.label)} aria-expanded={open} data-section={section.label}
                   data-current={section.label === currentSection || undefined}
-                  className={clsx('relative flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-bold uppercase tracking-wider transition-colors',
+                  className={clsx('nav-section relative flex w-full items-center gap-1.5 rounded-md px-2.5 py-2 text-left uppercase transition-colors',
                     section.label === currentSection
                       ? 'bg-brand-50 text-brand-900'
                       : open ? 'bg-slate-100/90 text-slate-900' : 'text-slate-700 hover:bg-slate-100/70 hover:text-slate-950')}>
                   {section.label === currentSection && <span className="absolute inset-y-1 left-0 w-[3px] rounded-full bg-brand-600" />}
                   {open ? <ChevronDown size={12} className="shrink-0 text-slate-600" /> : <ChevronRight size={12} className="shrink-0 text-slate-600" />}
-                  <span className="flex-1 truncate">{section.label}</span>
+                  <span className="min-w-0 flex-1 whitespace-normal">{section.label}</span>
                   <span className={clsx('rounded-full px-1.5 text-[9.5px] font-bold',
                     section.label === currentSection ? 'bg-brand-200 text-brand-900' : open ? 'bg-slate-200 text-slate-800' : 'bg-slate-200/70 text-slate-700')}>
                     {section.items.length}
@@ -252,29 +258,55 @@ export default function AppLayout() {
   );
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-dvh overflow-hidden">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-[60] focus:bg-white focus:p-3">Skip to content</a>
       {/* Desktop sidebar */}
-      <aside className="hidden w-[248px] shrink-0 lg:block">{sidebar}</aside>
+      <aside className={clsx("app-sidebar hidden w-56 shrink-0", desktopOpen && "lg:block")}>{sidebar}</aside>
 
       {/* Mobile drawer */}
       {mobileOpen && (
         <>
           <div className="fixed inset-0 z-40 bg-slate-900/50 lg:hidden" onClick={() => setMobileOpen(false)} />
-          <aside className="fixed inset-y-0 left-0 z-50 w-[264px] lg:hidden">{sidebar}</aside>
+          <aside className="app-sidebar fixed inset-y-0 left-0 z-50 w-[min(280px,85vw)] lg:hidden">{sidebar}</aside>
         </>
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-surface-border bg-white px-4">
+        <header className="app-header flex h-[62px] shrink-0 items-center gap-2 border-b border-surface-border bg-white px-3 sm:gap-3 sm:px-4">
           <button className="rounded-lg p-1.5 text-slate-500 hover:bg-surface-hover lg:hidden"
             onClick={() => setMobileOpen(true)} aria-label="Open menu">
             <Menu size={19} />
           </button>
 
-          <div className="flex-1" />
+          <button className="hidden rounded-md p-2 text-ink-secondary hover:bg-surface-hover lg:block"
+            onClick={() => setDesktopOpen((v) => !v)} aria-label={desktopOpen ? 'Collapse navigation' : 'Expand navigation'} aria-expanded={desktopOpen}>
+            <Menu size={18} />
+          </button>
+          <div className="relative min-w-0 flex-1 max-w-[535px]" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setSearchOpen(false); }}>
+            <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-secondary" />
+            <input className="input pl-9" aria-label="Search screens" placeholder="Search screens…"
+              value={globalSearch} onFocus={() => setSearchOpen(true)}
+              onChange={(e) => { setGlobalSearch(e.target.value); setSearchOpen(true); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setSearchOpen(false);
+                if (e.key === 'Enter') {
+                  const first = steps.flatMap((s) => s.items).find((i) => i.label.toLowerCase().includes(globalSearch.trim().toLowerCase()));
+                  if (first && globalSearch.trim()) { goto(first.to); setSearchOpen(false); }
+                }
+              }} />
+            {searchOpen && globalSearch.trim() && (
+              <div className="absolute left-0 top-full z-30 mt-1 max-h-80 w-[min(535px,80vw)] overflow-y-auto rounded-lg border border-surface-border bg-white p-1 shadow-popover">
+                {Array.from(new Map(steps.flatMap((s) => s.items).filter((i) => i.label.toLowerCase().includes(globalSearch.trim().toLowerCase())).map((i) => [i.to, i])).values()).slice(0, 12).map((i) => (
+                  <Link key={i.to} to={i.to} onClick={() => { setSearchOpen(false); setGlobalSearch(''); }} className="flex items-center gap-2 rounded px-3 py-2 text-[13px] hover:bg-brand-100"><i.icon size={16} />{i.label}</Link>
+                ))}
+                {!steps.some((s) => s.items.some((i) => i.label.toLowerCase().includes(globalSearch.trim().toLowerCase()))) && <p className="p-3 text-ink-secondary">No matching screens</p>}
+              </div>
+            )}
+          </div>
+          <div className="hidden flex-1 xl:block" />
 
           {/* Accessibility Font Sizer */}
-          <div className="flex items-center rounded-lg border border-surface-border bg-slate-100/80 p-0.5" title="Adjust Text Size">
+          <div className="hidden sm:flex items-center rounded-lg border border-surface-border bg-slate-100/80 p-0.5" title="Adjust Text Size">
             <button
               type="button"
               title="Small font size"
@@ -311,7 +343,7 @@ export default function AppLayout() {
           </div>
 
           <div className="relative">
-          <button className="relative rounded-lg p-2 text-slate-500 hover:bg-surface-hover" aria-label="Notifications" id="btn-bell" onClick={() => setBellOpen((v) => !v)}>
+          <button className="relative rounded-lg p-2 text-slate-500 hover:bg-surface-hover" aria-expanded={bellOpen} aria-label="Notifications" id="btn-bell" onClick={() => setBellOpen((v) => !v)}>
             <Bell size={17} />
             {unread > 0 && (
               <span className="absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full
@@ -323,7 +355,7 @@ export default function AppLayout() {
           {bellOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setBellOpen(false)} />
-              <div className="absolute right-0 top-full z-20 mt-1.5 w-96 animate-fade-in rounded-xl border border-surface-border bg-white p-1.5 shadow-popover" id="bell-panel">
+              <div className="absolute right-0 top-full z-20 mt-1.5 w-[min(384px,90vw)] animate-fade-in rounded-xl border border-surface-border bg-white p-1.5 shadow-popover" id="bell-panel">
                 <p className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Alerts</p>
                 {(alerts ?? []).map((a) => (
                   <button key={a.key} onClick={() => { setBellOpen(false); goto(a.link); }}
@@ -347,6 +379,7 @@ export default function AppLayout() {
             <button
               type="button"
               onClick={() => setCompanyDropdown((v) => !v)}
+              aria-label="Switch company" aria-expanded={companyDropdown}
               className="flex items-center gap-2 rounded-lg border border-surface-border bg-white px-3 py-1.5 text-left text-slate-700 transition-all hover:bg-slate-50 hover:border-slate-300 shadow-subtle"
               title={companies.length > 1 ? 'Click to switch company' : company?.legal_name}
             >
@@ -422,9 +455,9 @@ export default function AppLayout() {
           </div>
 
           <div className="relative">
-            <button onClick={() => setUserMenu((v) => !v)}
+            <button aria-label="User menu" aria-expanded={userMenu} onClick={() => setUserMenu((v) => !v)}
               className="flex items-center gap-2 rounded-lg py-1 pl-1 pr-2 hover:bg-surface-hover transition-colors">
-              <div className="grid h-7 w-7 place-items-center rounded-full bg-brand-50 border border-brand-200/80 text-[11px] font-bold text-brand-700 shadow-subtle">
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-700 text-xs font-semibold text-white">
                 {initials(user?.fullName ?? '?')}
               </div>
               <div className="hidden text-left sm:block">
@@ -493,6 +526,11 @@ export default function AppLayout() {
                     </div>
                   )}
 
+                  <div className="flex items-center justify-between gap-2 border-b border-surface-border px-3 py-2 sm:hidden">
+                    <span className="text-xs text-ink-secondary">Text size</span>
+                    {(['sm', 'md', 'lg'] as const).map((size, i) => <button key={size} aria-label={`${['Small', 'Default', 'Large'][i]} text size`} aria-pressed={textSize === size} onClick={() => setTextSize(size)} className={clsx('rounded px-2 py-1 text-xs', textSize === size ? 'bg-brand-100 text-brand-700' : 'text-ink-secondary')}>{['A−', 'A', 'A+'][i]}</button>)}
+                  </div>
+
                   <button onClick={() => void logout()}
                     className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px]
                                text-red-600 hover:bg-red-50">
@@ -504,8 +542,8 @@ export default function AppLayout() {
           </div>
         </header>
 
-        <main key={location.pathname} className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-[1600px] p-4 sm:p-6">
+        <main id="main-content" tabIndex={-1} key={location.pathname} className="min-w-0 flex-1 overflow-auto">
+          <div className="mx-auto max-w-[1920px] p-3 sm:p-4">
             {stepBar}
             {tabGroup && (
               // Sewing / Checking / Ironing / Packing versions of the same screen, one click apart
