@@ -4,10 +4,13 @@ The complete 16-section developer specification and its embedded 1536 × 1024 re
 
 ## Shared presentation
 
-- Central palette, semantic colors, chart colors and 72 / Segoe UI / Arial font stack live in `web/src/theme/designTokens.js`. No unlicensed font files or external font dependency are added.
+- Central palette, semantic colors, chart colors, type scale and font stack live in `web/src/theme/designTokens.js`.
+- Font (client Audio 2): Inter is self-hosted via `@fontsource-variable/inter` (SIL OFL) so every PC renders the same clear face; 72 / Segoe UI / Arial remain fallbacks only. The Google Fonts link was removed.
+- Font consistency (client Audio 1): screens no longer use `font-mono` (codes and numbers use the theme font with `tabular-nums`; only `<pre>` / `<code>` / raw JSON stay monospace). Hard-coded px sizes map to rem tokens `micro 10 · caption 11 · small 12 · body 13 · body-lg 14 · title 15 · title-lg 16 · page 24`, so the A− / A / A+ control scales every screen. `font-black` / `font-extrabold` became `font-bold`. Dedicated print layouts (JobWorkInvoicePrint, BomPrint, PackingListPrint, InvoiceDocument) are untouched until print formats are finalised. `web/src/theme/typography.test.mjs` guards all three rules.
 - Light 224 px navigation, 62 px header, blue selected menu, consistent scalable menu type, wrapping menu/group labels, retained section order, favourites, recents, permissions and menu visibility rules.
 - Header screen search uses the same permitted navigation items. Desktop navigation can be hidden; smaller screens retain the navigation drawer. Existing notification, user, company and text-size controls remain available.
 - Shared cards, buttons, fields, table cells and status badges use the new tokens. Small pending/warning/progress labels have darker accessible variants of the specified accent colors; backgrounds retain the approved colors.
+- Inputs typed as text but used for quantities (`inputMode` numeric/decimal or right-aligned) get the same minimum width as number fields. DataTable text columns have a 6.5rem minimum so dates and names do not break word-per-line; dashboard name cells wrap so quantity columns stay visible.
 - Numeric entry fields reserve room for digits, decimals, padding and native number controls. Editable table cells expand rather than squeeze values. Numeric display cells do not ellipsize; dashboard tables and unusually long KPI values can scroll horizontally. These sizing rules are screen-only.
 
 ## Live dashboard mapping

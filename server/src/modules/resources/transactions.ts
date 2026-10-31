@@ -445,8 +445,9 @@ export const transactionResources: ResourceConfig[] = [
     filters: ['so_id', 'style_id', 'unit_id', 'status_id', 'approval_state', 'is_jobwork', 'vendor_id'],
     autoNumber: { column: 'po_prod_no', docType: 'PROD_ORDER' },
     selectExtra: `so.so_no, st.style_code, st.style_name, c.color_name, un.unit_name,
-                  v.party_name AS vendor_name, cs.label AS status_label`,
+                  v.party_name AS vendor_name, cs.label AS status_label, buyer.party_name AS buyer_name`,
     joins: `LEFT JOIN trx_sales_order so ON so.id = t.so_id
+            LEFT JOIN mst_party buyer ON buyer.id = so.buyer_id
             LEFT JOIN mst_style st ON st.id = t.style_id
             LEFT JOIN mst_color c  ON c.id  = t.color_id
             LEFT JOIN mst_unit un  ON un.id = t.unit_id
@@ -907,6 +908,27 @@ export const transactionResources: ResourceConfig[] = [
       f('package_count', s.int()), f('total_qty', s.decReq()), f('uom_id', s.idReq()),
       f('status', s.enum(['DRAFT','APPROVED','GATE_OUT','RETURNED_PARTIAL','RETURNED_FULL','CLOSED'])),
       f('security_guard', s.strReq(80)), f('remarks', s.nullableStr(500)),
+    ],
+  },
+  {
+    // People through the gate (db/148): visitors and contractors, counted on the dashboard's gate panel.
+    path: 'gate-visitors', table: 'trx_gate_visitor', permission: 'GATE_INWARD', label: 'Visitor / Contractor Entry',
+    searchable: ['entry_no', 'person_name', 'organisation', 'phone', 'vehicle_no', 'whom_to_meet'],
+    sortable: ['entry_no', 'visit_date', 'created_at'], defaultSort: 't.visit_date DESC, t.id DESC',
+    hasIsActive: false, softDelete: false, hasAuditCols: false,
+    filters: ['visitor_type', 'status', 'party_id'],
+    autoNumber: { column: 'entry_no', docType: 'GATE_VISITOR' },
+    beforeWrite: (_req, data, before) => stampGateNow(data, before, 'visit_date', 'in_time'),
+    selectExtra: 'p.party_name',
+    joins: 'LEFT JOIN mst_party p ON p.id = t.party_id',
+    fields: [
+      f('entry_no', s.nullableStr(40)), f('visit_date', s.date()), f('in_time', s.nullableStr(10)), f('out_time', s.nullableStr(10)),
+      f('visitor_type', s.enum(['VISITOR','CONTRACTOR'])),
+      f('person_name', s.strReq(120)), f('organisation', s.nullableStr(160)), f('party_id', s.id()),
+      f('phone', s.nullableStr(30)), f('person_count', s.int()), f('purpose', s.nullableStr(255)),
+      f('whom_to_meet', s.nullableStr(120)), f('vehicle_no', s.nullableStr(30)), f('id_proof', s.nullableStr(80)),
+      f('status', s.enum(['IN','OUT','CANCELLED'])),
+      f('security_guard', s.nullableStr(80)), f('remarks', s.nullableStr(500)),
     ],
   },
 

@@ -58,7 +58,8 @@ export function useRemove(path: string, label: string) {
 import { useState } from 'react';
 export function useListState(initialSort?: { key: string; dir: 'asc' | 'desc' }) {
   const [page, setPage] = useState(1);
-  const [search, setSearch] = useState('');
+  // ?q= in the URL pre-fills the search box (header search links to lists that have no detail page)
+  const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get('q') ?? '');
   const [sort, setSort] = useState(initialSort ?? { key: 'id', dir: 'desc' as const });
 
   const onSort = (key: string) =>

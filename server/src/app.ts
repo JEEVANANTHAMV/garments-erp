@@ -27,6 +27,7 @@ import { mrpRouter } from './modules/mrp/mrp.routes.js';
 import { cartonRouter } from './modules/packing/packing.routes.js';
 import { packingEngineRouter } from './modules/packing/packingEngine.routes.js';
 import { dashboardRouter } from './modules/dashboard/dashboard.routes.js';
+import { searchRouter } from './modules/search/search.routes.js';
 import { reportsRouter } from './modules/reports/reports.routes.js';
 import { clientReportsARouter } from './modules/reports/clientReportsA.routes.js';
 import { clientReportsBRouter } from './modules/reports/clientReportsB.routes.js';
@@ -125,6 +126,7 @@ export function createApp() {
   api.use('/lookups', lookupRouter);
   api.use('/lookup', lookupRouter);
   api.use('/dashboard', dashboardRouter);
+  api.use('/search', searchRouter);             // header "Search anything" (documents, styles, jobs, fabrics, parties)
   api.use('/reports', reportsRouter);
   api.use('/client-reports', clientReportsARouter); // client's own report set A (orders, budget, production, logistics)
   api.use('/client-reports', clientReportsBRouter);   // client report set B: /client-reports/b/* (purchase, stores, gate, bills, users)
