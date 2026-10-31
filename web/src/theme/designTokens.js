@@ -27,3 +27,8 @@ export const chartColors = {
 };
 // Inter ships with the app (SIL OFL) so every PC renders the same face; 72 / Segoe UI only if it fails to load.
 export const fontFamily = ['"Inter Variable"', '"72"', '"Segoe UI"', 'Arial', 'sans-serif'];
+// Type scale (spec §10) in rem so the A− / A / A+ text-size control scales every screen alike.
+export const fontSize = {
+  micro: '0.625rem', caption: '0.6875rem', small: '0.75rem', body: '0.8125rem',
+  'body-lg': '0.875rem', title: '0.9375rem', 'title-lg': '1rem', page: '1.5rem',
+};

@@ -1,4 +1,4 @@
-import { colors, brand, statusColors, fontFamily } from './src/theme/designTokens.js';
+import { colors, brand, statusColors, fontFamily, fontSize } from './src/theme/designTokens.js';
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
@@ -14,6 +14,7 @@ export default {
           sidebar: colors.sidebar, header: colors.header, input: colors.input,
         },
       },
+      fontSize,
       fontFamily: {
         sans: fontFamily,
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
