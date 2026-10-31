@@ -394,7 +394,7 @@ export default function AppLayout() {
           <div className="hidden flex-1 xl:block" />
 
           {/* Accessibility Font Sizer */}
-          <div className="hidden sm:flex items-center rounded-lg border border-surface-border bg-surface-header/80 p-0.5" title="Adjust Text Size">
+          <div className="hidden xl:flex items-center rounded-lg border border-surface-border bg-surface-header/80 p-0.5" title="Adjust Text Size">
             <button
               type="button"
               title="Small font size"
@@ -669,7 +669,7 @@ export default function AppLayout() {
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between gap-2 border-b border-surface-border px-3 py-2 sm:hidden">
+                  <div className="flex items-center justify-between gap-2 border-b border-surface-border px-3 py-2 xl:hidden">
                     <span className="text-xs text-ink-secondary">Text size</span>
                     {(['sm', 'md', 'lg'] as const).map((size, i) => <button key={size} aria-label={`${['Small', 'Default', 'Large'][i]} text size`} aria-pressed={textSize === size} onClick={() => setTextSize(size)} className={clsx('rounded px-2 py-1 text-xs', textSize === size ? 'bg-brand-100 text-brand-700' : 'text-ink-secondary')}>{['A−', 'A', 'A+'][i]}</button>)}
                   </div>
