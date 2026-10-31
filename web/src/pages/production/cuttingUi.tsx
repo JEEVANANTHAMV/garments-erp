@@ -3,7 +3,8 @@
  * Reconciliation): searchable dropdown, barcode scan input, status chips,
  * quantity-with-UOM display.
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { ScanLine, ChevronDown, X } from 'lucide-react';
 import clsx from 'clsx';
 import { fmtNumber } from '../../lib/format';
@@ -101,11 +102,38 @@ export function SearchSelect({ label, value, options, onChange, placeholder = 'S
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const box = useRef<HTMLDivElement>(null);
+  const btn = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const h = (e: MouseEvent) => { if (box.current && !box.current.contains(e.target as Node)) setOpen(false); };
+    const h = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (box.current && !box.current.contains(t) && !panel.current?.contains(t)) setOpen(false);
+    };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, []);
+  // The list floats above the page (portal, fixed position): a card with overflow hidden or a short screen
+  // can no longer clip it. It opens upward when there is more room above, and never runs off the screen.
+  const [pos, setPos] = useState<{ left: number; width: number; top?: number; bottom?: number; maxH: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      if (!btn.current) return;
+      const r = btn.current.getBoundingClientRect();
+      const below = window.innerHeight - r.bottom - 8, above = r.top - 8;
+      const up = below < 220 && above > below;
+      const width = Math.min(Math.max(r.width, 260), window.innerWidth - 16);
+      setPos({
+        left: Math.max(8, Math.min(r.left, window.innerWidth - width - 8)), width,
+        ...(up ? { bottom: window.innerHeight - r.top + 4 } : { top: r.bottom + 4 }),
+        maxH: Math.max(96, Math.min(256, (up ? above : below) - 48)),
+      });
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => { window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); };
+  }, [open]);
   const selected = options.find((o) => String(o.value) === String(value ?? ''));
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -114,7 +142,7 @@ export function SearchSelect({ label, value, options, onChange, placeholder = 'S
   return (
     <div className={clsx('relative', className)} ref={box}>
       {label && <label className="label">{label}{required && <span className="ml-0.5 text-red-500">*</span>}</label>}
-      <button type="button" disabled={disabled}
+      <button type="button" disabled={disabled} ref={btn} aria-expanded={open}
         className={clsx('input flex items-center justify-between text-left', disabled && 'opacity-60')}
         onClick={() => setOpen((o) => !o)}>
         <span className={clsx('truncate', !selected && 'text-ink-muted')}>{selected?.label ?? placeholder}</span>
@@ -126,11 +154,12 @@ export function SearchSelect({ label, value, options, onChange, placeholder = 'S
           <ChevronDown size={14} className="text-ink-muted" />
         </span>
       </button>
-      {open && (
-        <div className="absolute z-40 mt-1 w-full min-w-[260px] rounded-lg border border-surface-border bg-white shadow-lg">
+      {open && pos && createPortal(
+        <div ref={panel} className="fixed z-[70] rounded-lg border border-surface-border bg-white shadow-lg"
+          style={{ left: pos.left, width: pos.width, top: pos.top, bottom: pos.bottom }}>
           <input autoFocus className="input rounded-b-none border-0 border-b" placeholder="Type to search…"
             value={q} onChange={(e) => setQ(e.target.value)} />
-          <div className="max-h-64 overflow-y-auto py-1">
+          <div className="overflow-y-auto py-1" style={{ maxHeight: pos.maxH }}>
             {filtered.length === 0 && <p className="px-3 py-2 text-xs text-ink-muted">No matches</p>}
             {filtered.map((o) => (
               <button key={o.value} type="button" disabled={o.disabled}
@@ -145,7 +174,8 @@ export function SearchSelect({ label, value, options, onChange, placeholder = 'S
               </button>
             ))}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
