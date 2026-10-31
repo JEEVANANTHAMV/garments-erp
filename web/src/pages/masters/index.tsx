@@ -31,7 +31,7 @@ export function PartiesPage() {
       {[{ key: '', label: 'All' }, ...PARTY_ROLES].map((r) => (
         <button key={r.key || 'all'} type="button" data-role-tab={r.key || 'all'}
           onClick={() => setSp(r.key ? { role: r.key } : {})}
-          className={`rounded-full border px-3 py-1 text-[12.5px] font-medium ${role === r.key ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-surface-border bg-white text-slate-600 hover:bg-slate-50'}`}>
+          className={`rounded-full border px-3 py-1 text-body font-medium ${role === r.key ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-surface-border bg-white text-slate-600 hover:bg-slate-50'}`}>
           {r.label}
         </button>
       ))}
@@ -41,7 +41,7 @@ export function PartiesPage() {
     onRowClick={(r) => nav(`/masters/parties/${r.id}`)}
     columns={[
       { key: 'party_code', header: 'Code', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.party_code}</span> },
+        render: (r: any) => <span className="tabular-nums text-small font-medium text-brand-700">{r.party_code}</span> },
       { key: 'party_name', header: 'Name', sortable: true,
         render: (r: any) => <span className="font-medium text-slate-800">{r.party_name}</span> },
       { key: 'roles', header: 'Roles', render: (r: any) => (
@@ -123,7 +123,7 @@ export function ProductsPage() {
     defaultSort={{ key: 'product_name', dir: 'asc' }}
     columns={[
       { key: 'product_code', header: 'Code', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] text-brand-700">{r.product_code}</span> },
+        render: (r: any) => <span className="tabular-nums text-small text-brand-700">{r.product_code}</span> },
       { key: 'product_name', header: 'Name', sortable: true },
       { key: 'product_type', header: 'Type', render: (r: any) => <Badge tone="blue">{humanize(r.product_type)}</Badge> },
       { key: 'gender', header: 'Gender', render: (r: any) => humanize(r.gender) },
@@ -157,7 +157,7 @@ export function YarnCountsPage() {
     searchPlaceholder="Search count value, system, description…"
     columns={[
       { key: 'count_value', header: 'Count Value', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[13px] font-bold text-brand-700">{r.count_value}</span> },
+        render: (r: any) => <span className="tabular-nums text-body font-bold text-brand-700">{r.count_value}</span> },
       { key: 'count_type', header: 'Count System', sortable: true,
         render: (r: any) => <Badge tone="blue">{r.count_type || 'Ne'}</Badge> },
       { key: 'description', header: 'Description / Use Case' },
@@ -193,7 +193,7 @@ export function GsmPage() {
     searchPlaceholder="Search GSM value…"
     columns={[
       { key: 'gsm_value', header: 'GSM Value', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[13px] font-bold text-brand-700">{r.gsm_value} GSM</span> },
+        render: (r: any) => <span className="tabular-nums text-body font-bold text-brand-700">{r.gsm_value} GSM</span> },
       { key: 'tolerance', header: 'Tolerance (± GSM)', align: 'center',
         render: (r: any) => <span className="tabular-nums text-slate-600">± {r.tolerance || 5}</span> },
       { key: 'is_active', header: 'Status', render: (r: any) => (
@@ -219,7 +219,7 @@ export function DiasPage() {
     searchPlaceholder="Search Tube Dia…"
     columns={[
       { key: 'dia_value', header: 'Tube Diameter', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[13px] font-bold text-brand-700">{r.dia_value}" Dia</span> },
+        render: (r: any) => <span className="tabular-nums text-body font-bold text-brand-700">{r.dia_value}" Dia</span> },
       { key: 'uom', header: 'Unit of Measure', render: () => <Badge tone="blue">INCH</Badge> },
       { key: 'is_active', header: 'Status', render: (r: any) => (
         r.is_active ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Inactive</Badge>
@@ -249,7 +249,7 @@ export function TrimsPage() {
     defaultSort={{ key: 'trim_name', dir: 'asc' }}
     columns={[
       { key: 'trim_code', header: 'Code', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] text-brand-700">{r.trim_code}</span> },
+        render: (r: any) => <span className="tabular-nums text-small text-brand-700">{r.trim_code}</span> },
       { key: 'trim_name', header: 'Name', sortable: true },
       { key: 'trim_type', header: 'Type', render: (r: any) => <Badge tone="violet">{humanize(r.trim_type)}</Badge> },
       { key: 'specification', header: 'Specification' },
@@ -285,10 +285,10 @@ export function ColorsPage() {
         <span className="inline-block h-6 w-6 rounded-md border border-slate-200"
           style={{ background: r.hex_value || '#f1f5f9' }} title={r.hex_value ?? ''} />) },
       { key: 'color_code', header: 'Code', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] text-brand-700">{r.color_code}</span> },
+        render: (r: any) => <span className="tabular-nums text-small text-brand-700">{r.color_code}</span> },
       { key: 'color_name', header: 'Name', sortable: true },
       { key: 'pantone_ref', header: 'Pantone' },
-      { key: 'hex_value', header: 'Hex', render: (r: any) => <span className="tabular-nums text-[12px]">{r.hex_value}</span> },
+      { key: 'hex_value', header: 'Hex', render: (r: any) => <span className="tabular-nums text-small">{r.hex_value}</span> },
     ]}
     fields={[
       { name: 'color_code', label: 'Colour code', required: true },
@@ -308,7 +308,7 @@ export function DepartmentsPage() {
     defaultSort={{ key: 'dept_name', dir: 'asc' }}
     columns={[
       { key: 'dept_name', header: 'Department', sortable: true },
-      { key: 'dept_code', header: 'Code', sortable: true, render: (r: any) => <span className="tabular-nums text-[12px] text-brand-700">{r.dept_code ?? '—'}</span> },
+      { key: 'dept_code', header: 'Code', sortable: true, render: (r: any) => <span className="tabular-nums text-small text-brand-700">{r.dept_code ?? '—'}</span> },
       { key: 'remarks', header: 'Remarks' },
     ]}
     fields={[
@@ -329,7 +329,7 @@ export function PortsPage() {
     columns={[
       { key: 'port_name', header: 'Port', sortable: true, render: (r: any) => <span className="font-medium">{r.port_name}</span> },
       { key: 'mode', header: 'Mode', sortable: true, render: (r: any) => r.mode ? <Badge tone={r.mode === 'AIR' ? 'violet' : r.mode === 'ROAD' ? 'amber' : 'blue'}>{r.mode}</Badge> : <span className="text-slate-400">any</span> },
-      { key: 'port_code', header: 'Port code', sortable: true, render: (r: any) => <span className="tabular-nums text-[12px] text-brand-700">{r.port_code ?? '—'}</span> },
+      { key: 'port_code', header: 'Port code', sortable: true, render: (r: any) => <span className="tabular-nums text-small text-brand-700">{r.port_code ?? '—'}</span> },
       { key: 'country_name', header: 'Country', render: (r: any) => r.country_name ?? 'India' },
       { key: 'is_active', header: 'Status', render: (r: any) => r.is_active ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Inactive</Badge> },
     ]}
@@ -353,9 +353,9 @@ export function CompanyBankAccountsPage() {
     defaultSort={{ key: 'account_label', dir: 'asc' }}
     columns={[
       { key: 'account_label', header: 'Account', sortable: true, render: (r: any) => <span className="font-medium">{r.account_label}{r.is_default ? <Badge tone="green" className="ml-1.5">default</Badge> : null}</span> },
-      { key: 'bank_name', header: 'Bank / branch', sortable: true, render: (r: any) => <div><p>{r.bank_name}</p><p className="text-[11px] text-slate-500">{r.branch_name}</p></div> },
-      { key: 'account_no', header: 'A/c no', render: (r: any) => <span className="tabular-nums text-[12px]">{r.account_type} {r.account_no}</span> },
-      { key: 'ifsc_code', header: 'IFSC / SWIFT', render: (r: any) => <span className="tabular-nums text-[12px]">{[r.ifsc_code, r.swift_code].filter(Boolean).join(' · ') || '—'}</span> },
+      { key: 'bank_name', header: 'Bank / branch', sortable: true, render: (r: any) => <div><p>{r.bank_name}</p><p className="text-caption text-slate-500">{r.branch_name}</p></div> },
+      { key: 'account_no', header: 'A/c no', render: (r: any) => <span className="tabular-nums text-small">{r.account_type} {r.account_no}</span> },
+      { key: 'ifsc_code', header: 'IFSC / SWIFT', render: (r: any) => <span className="tabular-nums text-small">{[r.ifsc_code, r.swift_code].filter(Boolean).join(' · ') || '—'}</span> },
       { key: 'is_active', header: 'Status', render: (r: any) => r.is_active ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Inactive</Badge> },
     ]}
     fields={[
@@ -387,7 +387,7 @@ export function WarehousesPage() {
     defaultSort={{ key: 'warehouse_name', dir: 'asc' }}
     columns={[
       { key: 'warehouse_code', header: 'Code', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] text-brand-700">{r.warehouse_code}</span> },
+        render: (r: any) => <span className="tabular-nums text-small text-brand-700">{r.warehouse_code}</span> },
       { key: 'warehouse_name', header: 'Name', sortable: true },
       { key: 'warehouse_type', header: 'Type', render: (r: any) => <Badge tone="blue">{humanize(r.warehouse_type)}</Badge> },
       { key: 'unit_name', header: 'Unit' },
@@ -413,7 +413,7 @@ export function WarehouseBinsPage() {
       { key: 'rack', header: 'Rack / Zone', sortable: true,
         render: (r: any) => <span className="font-semibold text-slate-800">{r.rack ? `Rack ${r.rack}` : '—'}</span> },
       { key: 'bin_code', header: 'Bin Code', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] font-semibold text-brand-700">{r.bin_code}</span> },
+        render: (r: any) => <span className="tabular-nums text-small font-semibold text-brand-700">{r.bin_code}</span> },
       { key: 'is_active', header: 'Status',
         render: (r: any) => r.is_active ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Inactive</Badge> },
     ]}
@@ -434,7 +434,7 @@ export function BranchesPage() {
     defaultSort={{ key: 'branch_name', dir: 'asc' }}
     columns={[
       { key: 'branch_code', header: 'Code', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] text-brand-700">{r.branch_code}</span> },
+        render: (r: any) => <span className="tabular-nums text-small text-brand-700">{r.branch_code}</span> },
       { key: 'branch_name', header: 'Name', sortable: true },
       { key: 'city', header: 'City' },
       { key: 'state', header: 'State' },
@@ -463,7 +463,7 @@ export function UnitsPage() {
     defaultSort={{ key: 'unit_name', dir: 'asc' }}
     columns={[
       { key: 'unit_code', header: 'Code', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] text-brand-700">{r.unit_code}</span> },
+        render: (r: any) => <span className="tabular-nums text-small text-brand-700">{r.unit_code}</span> },
       { key: 'unit_name', header: 'Name', sortable: true },
       { key: 'unit_type', header: 'Type', render: (r: any) => <Badge tone="violet">{humanize(r.unit_type)}</Badge> },
       { key: 'capacity_per_day', header: 'Capacity/day', align: 'right' },
@@ -494,7 +494,7 @@ export function SizesPage() {
     defaultSort={{ key: 'sort_order', dir: 'asc' }}
     columns={[
       { key: 'size_code', header: 'Code', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] text-brand-700">{r.size_code}</span> },
+        render: (r: any) => <span className="tabular-nums text-small text-brand-700">{r.size_code}</span> },
       { key: 'size_label', header: 'Size Label', sortable: true },
       { key: 'sort_order', header: 'Sort', align: 'right' },
       { key: 'is_active', header: 'Active',
@@ -518,7 +518,7 @@ export function BatchesPage() {
     defaultSort={{ key: 'id', dir: 'desc' }}
     columns={[
       { key: 'batch_no', header: 'Batch no', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] text-brand-700">{r.batch_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-small text-brand-700">{r.batch_no}</span> },
       { key: 'material_type', header: 'Material', render: (r: any) => <Badge tone="blue">{humanize(r.material_type)}</Badge> },
       { key: 'shade_lot', header: 'Shade lot' },
       { key: 'mfg_date', header: 'Mfg date', render: (r: any) => fmtDate(r.mfg_date) },

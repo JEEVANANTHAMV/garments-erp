@@ -51,7 +51,7 @@ const STATUS_LABEL: Record<string, [string, string]> = {
 };
 export function FpStatus({ value }: { value: string }) {
   const [label, cls] = STATUS_LABEL[value] ?? [value, 'bg-slate-100 text-slate-700'];
-  return <span className={`inline-block whitespace-nowrap rounded px-2 py-0.5 text-[11px] font-semibold ${cls}`}>{label}</span>;
+  return <span className={`inline-block whitespace-nowrap rounded px-2 py-0.5 text-caption font-semibold ${cls}`}>{label}</span>;
 }
 
 /** Numbered page title like the reference screens. */
@@ -62,7 +62,7 @@ export function FpTitle({ no, title, sub, actions }: { no: number; title: string
         <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-600 text-lg font-bold text-white">{no}</span>
         <div>
           <h1 className="text-lg font-bold text-slate-900">{title}</h1>
-          {sub && <p className="text-[12px] text-slate-500">{sub}</p>}
+          {sub && <p className="text-small text-slate-500">{sub}</p>}
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">{actions}</div>
@@ -81,7 +81,7 @@ export function ReconCards({ t }: { t: { outward_kg: number; good_kg: number; re
     <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
       {cards.map(([k, v, cls]) => (
         <div key={k} className={`rounded-lg border px-3 py-2 ${cls}`}>
-          <div className="text-[10.5px] font-semibold uppercase tracking-wider opacity-75">{k} (KG)</div>
+          <div className="text-caption font-semibold uppercase tracking-wider opacity-75">{k} (KG)</div>
           <div className="text-lg font-bold tabular-nums">{kg(v)}</div>
         </div>
       ))}

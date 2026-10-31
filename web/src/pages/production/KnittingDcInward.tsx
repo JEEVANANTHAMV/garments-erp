@@ -67,12 +67,12 @@ export function KnittingReconciliation({ programId, compact = false }: { program
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
         {tiles.map(([label, value, tone]) => (
           <div key={label} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
-            <p className={`mt-0.5 text-[13px] font-bold tabular-nums ${tone}`}>{value}</p>
+            <p className="text-micro font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+            <p className={`mt-0.5 text-body font-bold tabular-nums ${tone}`}>{value}</p>
           </div>
         ))}
       </div>
-      <p className="text-[10.5px] text-slate-400">
+      <p className="text-caption text-slate-400">
         Yarn consumed {fmtDecimal(t.consumed_kg, 3)} kg = fabric {fmtDecimal(t.fabric_received_kg, 3)} +
         rejected {fmtDecimal(t.rejected_kg, 3)} + loss {fmtDecimal(t.loss_kg, 3)}.
         Balance = yarn given − yarn consumed − yarn returned. Cone balance marked ≈ is estimated from the KG
@@ -80,7 +80,7 @@ export function KnittingReconciliation({ programId, compact = false }: { program
       </p>
 
       <div className="overflow-x-auto rounded-lg border border-slate-200">
-        <table className="w-full text-[12px]">
+        <table className="w-full text-small">
           <thead className="bg-slate-50">
             <tr>
               <th className="th">#</th>
@@ -118,7 +118,7 @@ export function KnittingReconciliation({ programId, compact = false }: { program
 
       {!compact && data.dcs.length > 0 && (
         <div className="overflow-x-auto rounded-lg border border-slate-200">
-          <table className="w-full text-[12px]">
+          <table className="w-full text-small">
             <thead className="bg-slate-50">
               <tr>
                 <th className="th">Knitting DC</th>
@@ -282,10 +282,10 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
             <Input label="Vehicle No" value={h.vehicle_no ?? ''} onChange={(e) => setH({ ...h, vehicle_no: e.target.value })} id="kdc-vehicle" />
           </FormSection>
 
-          <h3 className="border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Jobs &amp; yarn lots</h3>
+          <h3 className="border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Jobs &amp; yarn lots</h3>
           {jobs.map((j, ji) => (
             <div key={j.program_id} className="overflow-x-auto rounded-lg border border-slate-200">
-              <div className="flex flex-wrap items-center justify-between gap-2 bg-sky-50 px-3 py-2 text-[12px]">
+              <div className="flex flex-wrap items-center justify-between gap-2 bg-sky-50 px-3 py-2 text-small">
                 <span className="font-semibold text-sky-900">Job {j.io_no ?? 'stock'} · Program {j.program_no}{j.style ? ` · Style ${j.style}` : ''}{j.fabric ? ` · ${j.fabric}` : ''}</span>
                 {ji > 0 && <button className="text-slate-500 hover:text-red-600" onClick={() => setJobs((js) => js.filter((_, a) => a !== ji))}><Trash2 size={13} /></button>}
               </div>
@@ -293,7 +293,7 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
                 <QuotationPicker vendorId={h.vendor_id} material="YARN" process="Knitting" ioNo={j.io_no} soId={j.so_id} label={`Knitting quotation for job ${j.io_no ?? j.program_no}`}
                   value={j.quote} onChange={(q) => setQuote(ji, q)} idPrefix={`kdc-q${ji}`} />
               </div>
-              <table className="w-full text-[12px]">
+              <table className="w-full text-small">
                 <thead className="bg-slate-50"><tr>
                   <th className="th">Yarn</th><th className="th">Colour</th><th className="th text-right">To give KG</th>
                   <th className="th">Yarn lot (GRN / PO / supplier) — this job's yarn first</th><th className="th text-right">KG</th><th className="th text-right">Cones</th>
@@ -309,7 +309,7 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
                         <td className="td">{showRawColour(l.colour)}</td>
                         <td className="td text-right tabular-nums text-slate-500">{fmtDecimal(l.pending, 3)}</td>
                         <td className="td">
-                          <select className="input min-w-[340px] py-1 text-[11.5px]" value={l.grn_line_id} onChange={(e) => setLine(ji, li, { grn_line_id: e.target.value })} id={`kdc-lot-${ji}-${li}`}>
+                          <select className="input min-w-[340px] py-1 text-small" value={l.grn_line_id} onChange={(e) => setLine(ji, li, { grn_line_id: e.target.value })} id={`kdc-lot-${ji}-${li}`}>
                             <option value="">{l.options.length ? '— pick lot —' : 'No stock for this job — transfer yarn to the job first'}</option>
                             {l.options.map((o: any) => (
                               <option key={`${o.grn_line_id}-${o.holder_so_id}`} value={o.grn_line_id}>
@@ -338,7 +338,7 @@ export function KnittingDcModal({ programId, open, onClose, onPrint }: {
           </div>
 
           <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
-            <label className="flex items-center gap-2 text-[12px] text-slate-700">
+            <label className="flex items-center gap-2 text-small text-slate-700">
               <input type="checkbox" checked={!!h.allow_override}
                 onChange={(e) => setH({ ...h, allow_override: e.target.checked })} id="kdc-override" />
               Send beyond available stock (needs authorisation)
@@ -599,7 +599,7 @@ export function KnittingInwardModal({ programId, open, onClose }: {
       </>}>
       {!recon ? <LoadingBlock rows={4} /> : (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-100 bg-slate-50 p-3 text-[12px] sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-100 bg-slate-50 p-3 text-small sm:grid-cols-4">
             <Info label="Program" value={recon.program.program_no} />
             <Info label="I/O (Job) No" value={recon.program.io_no ?? '—'} />
             <Info label="Style" value={recon.program.style_code ?? '—'} />
@@ -609,22 +609,22 @@ export function KnittingInwardModal({ programId, open, onClose }: {
           <KnittingReconciliation programId={recon.program.id} compact />
 
           <div className="rounded-lg border border-slate-200 p-3">
-            <p className="mb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Our knitting DCs on this GRN (one GRN may cover several DCs)</p>
+            <p className="mb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Our knitting DCs on this GRN (one GRN may cover several DCs)</p>
             <div className="flex flex-wrap gap-2">
               {recon.dcs.map((d: any) => {
                 const closed = d.status === 'CLOSED';
                 const on = (h.dc_nos ?? []).includes(d.dc_no);
                 return (
-                  <label key={d.dc_no} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[11.5px] ${closed ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400' : on ? 'border-brand-400 bg-brand-50' : 'border-slate-200'}`}>
+                  <label key={d.dc_no} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-small ${closed ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400' : on ? 'border-brand-400 bg-brand-50' : 'border-slate-200'}`}>
                     <input type="checkbox" disabled={closed} checked={on} onChange={() => toggleDc(d.dc_no)} id={`kin-dc-${d.dc_no}`} />
                     <span className="tabular-nums font-semibold">{d.dc_no}</span><span>{fmtDate(d.dc_date)}</span>
                     <span>given {fmtDecimal(d.issued_kg, 3)} · bal <b>{fmtDecimal(d.balance_kg, 3)}</b> kg</span>
-                    <span className={`rounded px-1 text-[10px] font-bold ${closed ? 'bg-slate-200' : d.status === 'PARTIALLY_RECEIVED' ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-sky-800'}`}>{closed ? 'CLOSED' : d.status === 'PARTIALLY_RECEIVED' ? 'PART RECEIVED' : 'OPEN'}</span>
+                    <span className={`rounded px-1 text-micro font-bold ${closed ? 'bg-slate-200' : d.status === 'PARTIALLY_RECEIVED' ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-sky-800'}`}>{closed ? 'CLOSED' : d.status === 'PARTIALLY_RECEIVED' ? 'PART RECEIVED' : 'OPEN'}</span>
                   </label>
                 );
               })}
             </div>
-            <div className="mt-2 flex flex-wrap items-center gap-4 text-[12px]">
+            <div className="mt-2 flex flex-wrap items-center gap-4 text-small">
               <span className="font-semibold text-slate-700">This receipt is:</span>
               <label className="flex items-center gap-1.5"><input type="radio" name="kin-type" checked={h.receipt_type === 'PARTIAL'} onChange={() => setH({ ...h, receipt_type: 'PARTIAL' })} id="kin-partial" /> Partial — more fabric to come on these DCs</label>
               <label className="flex items-center gap-1.5"><input type="radio" name="kin-type" checked={h.receipt_type === 'FINAL'} onChange={() => setH({ ...h, receipt_type: 'FINAL' })} id="kin-final" /> Final — last receipt, close the DC(s)</label>
@@ -662,10 +662,10 @@ export function KnittingInwardModal({ programId, open, onClose }: {
               placeholder={fmtDecimal(consumed, 3)}
               hint="Or type the knitter's yarn figure — the loss is worked out"
               onChange={(e) => setH({ ...h, yarn_consumed_kg: e.target.value, loss_kg: '' })} id="kin-consumed" />
-            <div className="sm:col-span-2 flex flex-col justify-center gap-1 text-[11.5px] text-slate-600">
+            <div className="sm:col-span-2 flex flex-col justify-center gap-1 text-small text-slate-600">
               <span>Loss <b className="text-rose-700" id="kin-loss-calc">{fmtDecimal(loss, 3)} kg</b> ({consumed > 0 ? fmtDecimal((loss / consumed) * 100, 2) : '0.00'}% of the yarn) — worked out as yarn − fabric − rejected.</span>
               {h.receipt_type === 'FINAL' && openKg - fabricKg - rejected > 0.0005 && (
-                <button type="button" className="self-start text-[11.5px] font-semibold text-rose-700 hover:underline" id="kin-loss-rest"
+                <button type="button" className="self-start text-small font-semibold text-rose-700 hover:underline" id="kin-loss-rest"
                   onClick={() => setH({ ...h, loss_kg: (Math.round((openKg - fabricKg - rejected) * 1000) / 1000).toString(), yarn_consumed_kg: '' })}>
                   Book all the yarn left with the knitter ({fmtDecimal(openKg - fabricKg - rejected, 3)} kg) as loss
                 </button>
@@ -682,10 +682,10 @@ export function KnittingInwardModal({ programId, open, onClose }: {
           </FormSection>
           </div>
 
-          <h3 className="border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Rolls</h3>
+          <h3 className="border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Rolls</h3>
 
           <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="w-full text-[12px]">
+            <table className="w-full text-small">
               <thead className="bg-slate-50">
                 <tr>
                   <th className="th">#</th>
@@ -722,8 +722,8 @@ export function KnittingInwardModal({ programId, open, onClose }: {
                     <td className="td"><input className="input w-24 text-right" type="number" step="0.01" placeholder="measured"
                       value={r.actual_meters} onChange={(e) => setRoll(i, { actual_meters: e.target.value })} id={`kin-mtr-${i}`} /></td>
                     <td className={`td text-right tabular-nums ${pctCls(calcs[i].meter_var_pct, spec?.tolerances?.meterTolPct)}`}>{fmtPct(calcs[i].meter_var_pct)}</td>
-                    <td className={`td text-right tabular-nums ${pctCls(calcs[i].gsm_var_pct, spec?.tolerances?.gsmTolPct)}`}>{fmtPct(calcs[i].gsm_var_pct)}{calcs[i].actual_gsm && !Number(r.actual_gsm) ? <span className="ml-1 text-[10px] text-slate-400">({calcs[i].actual_gsm!.toFixed(0)})</span> : null}</td>
-                    <td className="td" id={`kin-qc-${i}`}>{Number(r.weight_kg) > 0 ? (calcs[i].hold ? <span className="rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-bold text-orange-800" title={calcs[i].hold}>HOLD</span> : <span className="text-[10px] font-semibold text-emerald-700">OK</span>) : ''}</td>
+                    <td className={`td text-right tabular-nums ${pctCls(calcs[i].gsm_var_pct, spec?.tolerances?.gsmTolPct)}`}>{fmtPct(calcs[i].gsm_var_pct)}{calcs[i].actual_gsm && !Number(r.actual_gsm) ? <span className="ml-1 text-micro text-slate-400">({calcs[i].actual_gsm!.toFixed(0)})</span> : null}</td>
+                    <td className="td" id={`kin-qc-${i}`}>{Number(r.weight_kg) > 0 ? (calcs[i].hold ? <span className="rounded bg-orange-100 px-1.5 py-0.5 text-micro font-bold text-orange-800" title={calcs[i].hold}>HOLD</span> : <span className="text-micro font-semibold text-emerald-700">OK</span>) : ''}</td>
                     <td className="td">
                       {rolls.length > 1 && (
                         <button className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
@@ -739,7 +739,7 @@ export function KnittingInwardModal({ programId, open, onClose }: {
                 <tr>
                   <td colSpan={2} className="td font-bold">{rolls.filter((r) => Number(r.weight_kg) > 0).length} roll(s)</td>
                   <td className="td text-right font-bold tabular-nums">{fmtDecimal(fabricKg, 3)}</td>
-                  <td colSpan={3} className="td text-[11px] text-slate-500">{form ? FORM_LABEL[form] : ''}{spec?.rule_code ? ` · rule ${spec.rule_code}` : ''}{holds ? <span className="ml-1 font-semibold text-orange-700">· {holds} roll(s) will go on QC hold</span> : null}</td>
+                  <td colSpan={3} className="td text-caption text-slate-500">{form ? FORM_LABEL[form] : ''}{spec?.rule_code ? ` · rule ${spec.rule_code}` : ''}{holds ? <span className="ml-1 font-semibold text-orange-700">· {holds} roll(s) will go on QC hold</span> : null}</td>
                   <td className="td text-right font-bold tabular-nums text-sky-800">{calcTotal ? fmtDecimal(calcTotal, 2) : ''}</td>
                   <td colSpan={5} className="td">
                     <button className="btn-secondary btn-sm" onClick={() => setRolls((rs) => [...rs, newRoll(rs[rs.length - 1])])}
@@ -753,7 +753,7 @@ export function KnittingInwardModal({ programId, open, onClose }: {
           </div>
 
           <div>
-            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[12px]">
+            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-small">
               <Scale size={15} className="text-slate-400" />
               <span>This inward: fabric <b>{fmtDecimal(fabricKg, 3)}</b> + rejected <b>{fmtDecimal(rejected, 3)}</b> + loss <b className="text-rose-700">{fmtDecimal(loss, 3)}</b>
                 {' '}({consumed > 0 ? fmtDecimal((loss / consumed) * 100, 2) : '0.00'}%) = yarn <b>{fmtDecimal(consumed, 3)}</b> kg.</span>
@@ -845,7 +845,7 @@ export function KnittingYarnReturnModal({ dcNo, onClose, onPrint }: {
       </>}>
       {!bal ? <LoadingBlock rows={4} /> : (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-100 bg-slate-50 p-3 text-[12px] sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-100 bg-slate-50 p-3 text-small sm:grid-cols-4">
             <Info label="Knitting DC" value={`${bal.dc_no} · ${fmtDate(bal.dc_date)}`} />
             <Info label="Yarn given" value={`${fmtDecimal(bal.issued_kg, 3)} kg`} />
             <Info label="Consumed / returned" value={`${fmtDecimal(bal.consumed_kg, 3)} / ${fmtDecimal(bal.returned_kg, 3)} kg`} />
@@ -872,10 +872,10 @@ export function KnittingYarnReturnModal({ dcNo, onClose, onPrint }: {
           </FormSection>
           </div>
 
-          <h3 className="border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Yarn lines</h3>
+          <h3 className="border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Yarn lines</h3>
 
           <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="w-full text-[12px]">
+            <table className="w-full text-small">
               <thead className="bg-slate-50">
                 <tr>
                   <th className="th">Yarn</th>
@@ -920,7 +920,7 @@ export function KnittingYarnReturnModal({ dcNo, onClose, onPrint }: {
               </tfoot>
             </table>
           </div>
-          <p className="text-[10.5px] text-slate-400">
+          <p className="text-caption text-slate-400">
             Consumed is the DC's grey-inward yarn spread over its lines by KG given. Returned yarn goes back into
             the same yarn and lot in the receiving store and can be issued again.
           </p>
@@ -1079,7 +1079,7 @@ export function KnittingDcInwardTab({ prog }: { prog: any }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[12px] text-slate-500">
+        <p className="text-small text-slate-500">
           {ready ? 'Give yarn to the knitter on a DC, then receive grey fabric against it.'
             : 'Release the program to give the knitting DC.'}
         </p>
@@ -1097,16 +1097,16 @@ export function KnittingDcInwardTab({ prog }: { prog: any }) {
 
       {reqs.length > 0 && (
         <div>
-          <h5 className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">Yarn requirement — required vs issued, transfer in, approved substitution</h5>
+          <h5 className="mb-1.5 text-caption font-bold uppercase tracking-wider text-slate-500">Yarn requirement — required vs issued, transfer in, approved substitution</h5>
           <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="w-full text-[12px]">
+            <table className="w-full text-small">
               <thead className="bg-slate-50"><tr>{['Yarn', 'Required KG', 'Issued KG', 'Transfer in (job)', 'Substitute (approved)', 'Substitute issued', 'Pending approval', 'Pending KG'].map((x) => <th key={x} className={`th ${x === 'Yarn' ? '' : 'text-right'}`}>{x}</th>)}</tr></thead>
               <tbody>{reqs.map((r: any) => (
                 <tr key={r.program_yarn_id} className="border-t border-slate-100">
-                  <td className="td font-medium">{r.yarn_name}{r.substitute_yarns ? <span className="ml-1 text-[10.5px] text-purple-700">sub: {r.substitute_yarns}</span> : null}</td>
+                  <td className="td font-medium">{r.yarn_name}{r.substitute_yarns ? <span className="ml-1 text-caption text-purple-700">sub: {r.substitute_yarns}</span> : null}</td>
                   <td className="td text-right tabular-nums">{fmtDecimal(r.required_kg, 3)}</td><td className="td text-right tabular-nums">{fmtDecimal(r.issued_kg, 3)}</td>
                   <td className="td text-right tabular-nums">{fmtDecimal(r.transfer_in_kg, 3)}</td>
-                  <td className="td text-right tabular-nums text-purple-700">{fmtDecimal(r.substitute_kg, 3)}{Number(r.substitute_eq_kg) !== Number(r.substitute_kg) ? <span className="block text-[10px] text-slate-400">= {fmtDecimal(r.substitute_eq_kg, 3)} req.</span> : null}</td>
+                  <td className="td text-right tabular-nums text-purple-700">{fmtDecimal(r.substitute_kg, 3)}{Number(r.substitute_eq_kg) !== Number(r.substitute_kg) ? <span className="block text-micro text-slate-400">= {fmtDecimal(r.substitute_eq_kg, 3)} req.</span> : null}</td>
                   <td className="td text-right tabular-nums">{fmtDecimal(r.substitute_issued_kg, 3)}</td>
                   <td className="td text-right tabular-nums text-amber-700">{fmtDecimal(r.pending_approval_kg, 3)}</td>
                   <td className={`td text-right tabular-nums font-semibold ${Number(r.pending_kg) > 0 ? 'text-orange-700' : 'text-emerald-700'}`}>{fmtDecimal(r.pending_kg, 3)}</td>
@@ -1114,15 +1114,15 @@ export function KnittingDcInwardTab({ prog }: { prog: any }) {
               ))}</tbody>
             </table>
           </div>
-          <p className="mt-1 text-[11px] text-slate-500">Short of a yarn? Raise a job transfer (Inventory → Job Stock Transfer) or a yarn substitution (Production → Yarn Substitution) — both need approval; the original requirement is never changed.</p>
+          <p className="mt-1 text-caption text-slate-500">Short of a yarn? Raise a job transfer (Inventory → Job Stock Transfer) or a yarn substitution (Production → Yarn Substitution) — both need approval; the original requirement is never changed.</p>
         </div>
       )}
 
       <div>
-        <h5 className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">Knitting DCs</h5>
-        {dcs.length === 0 ? <p className="py-3 text-center text-[12px] text-slate-400">No knitting DC given yet</p> : (
+        <h5 className="mb-1.5 text-caption font-bold uppercase tracking-wider text-slate-500">Knitting DCs</h5>
+        {dcs.length === 0 ? <p className="py-3 text-center text-small text-slate-400">No knitting DC given yet</p> : (
           <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="w-full text-[12px]">
+            <table className="w-full text-small">
               <thead className="bg-slate-50">
                 <tr>
                   <th className="th">DC No</th><th className="th">Date</th><th className="th">Knitter</th>
@@ -1146,30 +1146,30 @@ export function KnittingDcInwardTab({ prog }: { prog: any }) {
                     <td className="td text-right tabular-nums text-sky-700">{fmtDecimal(d.yarn_returned_kg ?? 0, 3)}</td>
                     <td className="td text-right tabular-nums">{fmtDecimal(d.balance_yarn_kg, 3)}</td>
                     <td className="td whitespace-nowrap">
-                      <span className={`rounded px-1.5 py-0.5 text-[10.5px] font-bold ${d.status === 'CLOSED' ? 'bg-slate-200 text-slate-700' : d.status === 'PARTIALLY_RECEIVED' ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-sky-800'}`}>
+                      <span className={`rounded px-1.5 py-0.5 text-caption font-bold ${d.status === 'CLOSED' ? 'bg-slate-200 text-slate-700' : d.status === 'PARTIALLY_RECEIVED' ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-sky-800'}`}>
                         {d.status === 'CLOSED' ? (d.close_type === 'SHORT_CLOSE' ? 'Closed (short)' : 'Fully received') : d.status === 'PARTIALLY_RECEIVED' ? 'Partially received' : 'Open'}</span>
-                      {Number(d.job_count) > 1 && d.dc_status_all && d.dc_status_all !== d.dc_status && <span className="block text-[10px] text-slate-400">DC: {String(d.dc_status_all).toLowerCase().replace('_', ' ')} (other jobs)</span>}
-                      {Number(d.yarn_to_return_kg) > 0 && <span className="ml-1 text-[10.5px] font-semibold text-rose-700">{fmtDecimal(d.yarn_to_return_kg, 3)} kg yarn to return</span>}
+                      {Number(d.job_count) > 1 && d.dc_status_all && d.dc_status_all !== d.dc_status && <span className="block text-micro text-slate-400">DC: {String(d.dc_status_all).toLowerCase().replace('_', ' ')} (other jobs)</span>}
+                      {Number(d.yarn_to_return_kg) > 0 && <span className="ml-1 text-caption font-semibold text-rose-700">{fmtDecimal(d.yarn_to_return_kg, 3)} kg yarn to return</span>}
                     </td>
-                    <td className="td whitespace-nowrap text-[11px]">{d.rate_per_kg != null ? `₹${fmtDecimal(d.rate_per_kg, 2)}` : '—'}{d.quotation_no ? <span className="block text-slate-400">{d.quotation_no}</span> : null}</td>
+                    <td className="td whitespace-nowrap text-caption">{d.rate_per_kg != null ? `₹${fmtDecimal(d.rate_per_kg, 2)}` : '—'}{d.quotation_no ? <span className="block text-slate-400">{d.quotation_no}</span> : null}</td>
                     <td className="td whitespace-nowrap">
                       <button className="rounded p-1 text-slate-400 hover:bg-brand-50 hover:text-brand-600"
                         title="Print DC" onClick={() => setPrintDc(d.dc_no)} id={`btn-print-dc-${d.dc_no}`}>
                         <Printer size={13} />
                       </button>
-                      <button className="ml-1 inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11px] font-medium text-sky-700 hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      <button className="ml-1 inline-flex items-center gap-1 rounded px-1.5 py-1 text-caption font-medium text-sky-700 hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-40"
                         title="Unused yarn returned by the knitter" disabled={!(Number(d.balance_yarn_kg) > 0)}
                         onClick={() => setReturnDc(d.dc_no)} id={`btn-yarn-return-${d.dc_no}`}>
                         <Undo2 size={13} /> Yarn return
                       </button>
                       {Number(d.yarn_to_return_kg) > 0 && (
-                        <button className="ml-1 inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11px] font-medium text-rose-700 hover:bg-rose-50"
+                        <button className="ml-1 inline-flex items-center gap-1 rounded px-1.5 py-1 text-caption font-medium text-rose-700 hover:bg-rose-50"
                           title="The knitter will not return this yarn — book it as knitting process loss" onClick={() => bookLoss(d)} id={`btn-book-loss-${d.dc_no}`}>
                           <Scale size={13} /> Book as loss
                         </button>
                       )}
                       {(d.status !== 'CLOSED' || Number(d.yarn_to_return_kg) > 0) && (
-                        <button className="ml-1 inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100"
+                        <button className="ml-1 inline-flex items-center gap-1 rounded px-1.5 py-1 text-caption font-medium text-slate-600 hover:bg-slate-100"
                           title="Close the DC; optionally write off the yarn still with the knitter" onClick={() => closeDc(d)} id={`btn-close-dc-${d.dc_no}`}>
                           <X size={13} /> Close
                         </button>
@@ -1184,10 +1184,10 @@ export function KnittingDcInwardTab({ prog }: { prog: any }) {
       </div>
 
       <div>
-        <h5 className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">Grey fabric inwards</h5>
-        {inwards.length === 0 ? <p className="py-3 text-center text-[12px] text-slate-400">No grey fabric received yet</p> : (
+        <h5 className="mb-1.5 text-caption font-bold uppercase tracking-wider text-slate-500">Grey fabric inwards</h5>
+        {inwards.length === 0 ? <p className="py-3 text-center text-small text-slate-400">No grey fabric received yet</p> : (
           <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="w-full text-[12px]">
+            <table className="w-full text-small">
               <thead className="bg-slate-50">
                 <tr>
                   <th className="th">Inward No</th><th className="th">Date</th><th className="th">Our DC</th>
@@ -1202,15 +1202,15 @@ export function KnittingDcInwardTab({ prog }: { prog: any }) {
                     <td className="td tabular-nums font-semibold text-brand-700">{r.receipt_no}</td>
                     <td className="td text-slate-500">{fmtDate(r.receipt_date)}</td>
                     <td className="td tabular-nums">{r.dc_nos || r.ref_dc_no || '—'}
-                      <span className={`ml-1 rounded px-1 text-[10px] font-bold ${r.receipt_type === 'FINAL' ? 'bg-emerald-100 text-emerald-800' : r.receipt_type === 'ADJUST' ? 'bg-slate-200 text-slate-600' : 'bg-amber-100 text-amber-800'}`}>{r.receipt_type === 'FINAL' ? 'FINAL' : r.receipt_type === 'ADJUST' ? 'WRITE-OFF' : 'PARTIAL'}</span>
-                      {r.gate_entry_no ? <span className="block text-[10px] text-slate-400">Gate {r.gate_entry_no}</span> : null}</td>
+                      <span className={`ml-1 rounded px-1 text-micro font-bold ${r.receipt_type === 'FINAL' ? 'bg-emerald-100 text-emerald-800' : r.receipt_type === 'ADJUST' ? 'bg-slate-200 text-slate-600' : 'bg-amber-100 text-amber-800'}`}>{r.receipt_type === 'FINAL' ? 'FINAL' : r.receipt_type === 'ADJUST' ? 'WRITE-OFF' : 'PARTIAL'}</span>
+                      {r.gate_entry_no ? <span className="block text-micro text-slate-400">Gate {r.gate_entry_no}</span> : null}</td>
                     <td className="td tabular-nums">{r.party_dc_no ?? '—'}</td>
                     <td className="td">{r.output_lot_no}</td>
                     <td className="td text-right">{r.no_of_rolls}</td>
                     <td className="td text-right tabular-nums font-semibold text-emerald-700">{fmtDecimal(r.output_qty, 3)}</td>
                     <td className="td text-right tabular-nums">{fmtDecimal(r.input_qty, 3)}</td>
                     <td className="td text-right tabular-nums text-rose-700">{fmtDecimal(r.loss_qty, 3)}</td>
-                    <td className="td text-[11px] text-slate-500">
+                    <td className="td text-caption text-slate-500">
                       {(r.rolls ?? []).map((x: any) => `${x.roll_no} (${fmtDecimal(x.weight_kg, 2)})`).join(', ')}
                     </td>
                   </tr>
@@ -1222,10 +1222,10 @@ export function KnittingDcInwardTab({ prog }: { prog: any }) {
       </div>
 
       <div>
-        <h5 className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">Unused yarn returns</h5>
-        {yarnReturns.length === 0 ? <p className="py-3 text-center text-[12px] text-slate-400">No yarn returned by the knitter</p> : (
+        <h5 className="mb-1.5 text-caption font-bold uppercase tracking-wider text-slate-500">Unused yarn returns</h5>
+        {yarnReturns.length === 0 ? <p className="py-3 text-center text-small text-slate-400">No yarn returned by the knitter</p> : (
           <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="w-full text-[12px]">
+            <table className="w-full text-small">
               <thead className="bg-slate-50">
                 <tr>
                   <th className="th">Return No</th><th className="th">Date</th><th className="th">Our DC</th>
@@ -1236,12 +1236,12 @@ export function KnittingDcInwardTab({ prog }: { prog: any }) {
               <tbody>
                 {yarnReturns.map((r: any) => (
                   <tr key={r.id} className={`border-t border-slate-100 align-top ${r.status === 'CANCELLED' ? 'opacity-50 line-through' : ''}`}>
-                    <td className="td tabular-nums font-semibold text-brand-700">{r.return_no}{r.status === 'CANCELLED' && <span className="ml-1 text-[10px] text-red-600 no-underline">cancelled</span>}</td>
+                    <td className="td tabular-nums font-semibold text-brand-700">{r.return_no}{r.status === 'CANCELLED' && <span className="ml-1 text-micro text-red-600 no-underline">cancelled</span>}</td>
                     <td className="td text-slate-500">{fmtDate(r.return_date)}</td>
                     <td className="td tabular-nums">{r.dc_no}</td>
                     <td className="td tabular-nums">{r.party_dc_no ?? '—'}</td>
                     <td className="td">{r.warehouse_name ?? '—'}</td>
-                    <td className="td text-[11px] text-slate-600">
+                    <td className="td text-caption text-slate-600">
                       {(r.lines ?? []).map((l: any) =>
                         `${l.yarn_code ?? ''}${l.lot_no ? ` / ${l.lot_no}` : ''}: ${fmtDecimal(l.return_kg, 3)}`).join(', ')}
                     </td>
@@ -1280,7 +1280,7 @@ export function KnittingDcInwardTab({ prog }: { prog: any }) {
 function Info({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <p className="text-[10.5px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="text-caption font-semibold uppercase tracking-wide text-slate-400">{label}</p>
       <p className="mt-0.5 font-medium text-slate-800">{value}</p>
     </div>
   );

@@ -250,7 +250,7 @@ export default function YarnProcessPage() {
       ) : (
         <>
           <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-            <table className="w-full text-[12px]">
+            <table className="w-full text-small">
               <thead className="bg-slate-50">
                 <tr>
                   <th className="th text-left">Process No</th>
@@ -482,7 +482,7 @@ export default function YarnProcessPage() {
         title={detail ? `${PROC_LABEL[detail.process_type as ProcType]} Process ${detail.process_no}` : 'Process'}
         subtitle="Reservations, DCs, issues, receipts and QC" icon={<Beaker size={16} />}>
         {!detail ? <LoadingBlock /> : (
-          <div className="space-y-4 text-[12px]">
+          <div className="space-y-4 text-small">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Info label="Status" value={<Badge tone={STATUS_TONE[detail.status] ?? 'slate'}>{detail.status.replace(/_/g, ' ')}</Badge>} />
               <Info label="Yarn" value={detail.yarn_code ? `${detail.yarn_code} — ${detail.yarn_name}` : '—'} />
@@ -529,7 +529,7 @@ export default function YarnProcessPage() {
                           QC {r.qc_status}
                         </Badge>
                       </div>
-                      <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-5 text-[11px]">
+                      <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-5 text-caption">
                         <Info label="Input" value={fmtDecimal(r.input_qty, 3)} />
                         <Info label="Output" value={fmtDecimal(r.output_qty, 3)} />
                         <Info label="Loss" value={fmtDecimal(r.loss_qty, 3)} />
@@ -538,7 +538,7 @@ export default function YarnProcessPage() {
                       </div>
                       {(r.cones ?? []).length > 0 && (
                         <div className="mt-2">
-                          <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                          <p className="mb-1 text-micro font-bold uppercase tracking-wide text-slate-400">
                             Cones ({r.cones.length})
                           </p>
                           <SimpleTable head={['Cone', 'Source Lot', 'KG', 'Status']}
@@ -583,26 +583,26 @@ export default function YarnProcessPage() {
 function Info({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
-      <p className="mt-0.5 text-[12px] text-slate-800">{value}</p>
+      <p className="text-micro font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="mt-0.5 text-small text-slate-800">{value}</p>
     </div>
   );
 }
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h4 className="mb-2 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">{title}</h4>
+      <h4 className="mb-2 border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">{title}</h4>
       {children}
     </div>
   );
 }
 function Muted({ children }: { children: React.ReactNode }) {
-  return <p className="py-3 text-center text-[12px] text-slate-400">{children}</p>;
+  return <p className="py-3 text-center text-small text-slate-400">{children}</p>;
 }
 function SimpleTable({ head, rows }: { head: string[]; rows: React.ReactNode[][] }) {
   return (
     <div className="overflow-x-auto rounded border border-slate-200">
-      <table className="w-full text-[11px]">
+      <table className="w-full text-caption">
         <thead className="bg-slate-50">
           <tr>{head.map((h) => <th key={h} className="th text-left">{h}</th>)}</tr>
         </thead>

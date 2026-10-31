@@ -37,9 +37,9 @@ export default function MaterialTracePage() {
             <div className="space-y-3">
               {rt.data.chain.map((c: any, i: number) => (
                 <div key={i} className="card p-4 text-xs" style={{ marginLeft: Math.min(c.depth, 6) * 18 }}>
-                  <div className="flex flex-wrap items-center gap-2 text-[13px]">
+                  <div className="flex flex-wrap items-center gap-2 text-body">
                     <span className="tabular-nums font-bold text-brand-700">{c.roll.roll_no}</span>
-                    <span className={`rounded px-1.5 py-0.5 text-[10.5px] font-bold ${c.roll.process_state === 'GREY' ? 'bg-slate-100 text-slate-700' : 'bg-purple-100 text-purple-800'}`}>{c.roll.process_state}</span>
+                    <span className={`rounded px-1.5 py-0.5 text-caption font-bold ${c.roll.process_state === 'GREY' ? 'bg-slate-100 text-slate-700' : 'bg-purple-100 text-purple-800'}`}>{c.roll.process_state}</span>
                     <span>{c.roll.fabric_name}</span>{c.roll.color_name && <span>· {c.roll.color_name}</span>}<span>· {kg(c.roll.weight_kg)} KG</span>{c.roll.io_no && <span>· job {c.roll.io_no}</span>}
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 md:grid-cols-4">
@@ -112,13 +112,13 @@ export default function MaterialTracePage() {
 function Genealogy({ g }: { g: any }) {
   const r = g.reconciliation;
   const box = (label: string, v: number, sub?: string, tone = 'text-slate-800') => (
-    <div className="rounded-lg border border-slate-200 px-3 py-2"><div className="text-[10.5px] uppercase tracking-wide text-slate-500">{label}</div>
-      <div className={`text-sm font-semibold tabular-nums ${tone}`}>{kg(v)} KG</div>{sub && <div className="text-[10.5px] text-slate-500">{sub}</div>}</div>
+    <div className="rounded-lg border border-slate-200 px-3 py-2"><div className="text-caption uppercase tracking-wide text-slate-500">{label}</div>
+      <div className={`text-sm font-semibold tabular-nums ${tone}`}>{kg(v)} KG</div>{sub && <div className="text-caption text-slate-500">{sub}</div>}</div>
   );
   const pct = (a: number, b: number) => (b > 0 ? `${fmtDecimal((a / b) * 100, 1)}%` : '');
   return (
     <div className="card mb-3 p-4 text-xs" id="job-genealogy">
-      <h3 className="mb-2 text-[13px] font-semibold text-slate-800">Plan vs actual — {g.job?.job_no}{g.bom?.bom_no ? ` · BOM ${g.bom.bom_no}` : ' · no BOM'}{g.plan_source ? ` · planned from ${g.plan_source}` : ''}</h3>
+      <h3 className="mb-2 text-body font-semibold text-slate-800">Plan vs actual — {g.job?.job_no}{g.bom?.bom_no ? ` · BOM ${g.bom.bom_no}` : ' · no BOM'}{g.plan_source ? ` · planned from ${g.plan_source}` : ''}</h3>
       <div className="grid grid-cols-2 gap-2 md:grid-cols-5" id="gen-recon">
         {box('Planned yarn (BOM)', r.planned_yarn_kg)}
         {box('Yarn purchased', r.yarn_purchased_kg, pct(r.yarn_purchased_kg, r.planned_yarn_kg) && `${pct(r.yarn_purchased_kg, r.planned_yarn_kg)} of plan`)}
@@ -160,7 +160,7 @@ function Origin({ o }: { o: any }) {
   if (o.kind !== 'PROCESSED') return <span>Purchased · {o.po_no ? `PO ${o.po_no} · ` : ''}GRN {o.grn_no}{o.supplier ? ` · ${o.supplier}` : ''}</span>;
   return (
     <span>
-      <span className="rounded bg-purple-100 px-1 text-[10.5px] font-bold text-purple-800">{o.process.process_type}</span> by {o.process.vendor || '—'} on {o.process.process_no} (receipt {o.process.receipt_no}{o.process.ref_dc_no ? `, DC ${o.process.ref_dc_no}` : ''})
+      <span className="rounded bg-purple-100 px-1 text-caption font-bold text-purple-800">{o.process.process_type}</span> by {o.process.vendor || '—'} on {o.process.process_no} (receipt {o.process.receipt_no}{o.process.ref_dc_no ? `, DC ${o.process.ref_dc_no}` : ''})
       {(o.from ?? []).map((f: any, i: number) => <span key={i} className="block pl-3 text-slate-600">← lot {f.lot_no} · {kg(f.issued_qty_kg)} KG on {f.dc_no}: <Origin o={f.origin} /></span>)}
     </span>
   );
@@ -169,7 +169,7 @@ function Origin({ o }: { o: any }) {
 function Section({ title, cols, rows }: { title: string; cols: string[]; rows: unknown[][] }) {
   return (
     <div className="card overflow-x-auto">
-      <h3 className="px-4 pt-3 text-[13px] font-semibold text-slate-800">{title}</h3>
+      <h3 className="px-4 pt-3 text-body font-semibold text-slate-800">{title}</h3>
       <table className="mt-2 w-full">
         <thead className="bg-slate-50 text-slate-500"><tr>{cols.map((c) => <th key={c} className="px-2 py-1.5 text-left">{c}</th>)}</tr></thead>
         <tbody>{rows.map((r, i) => <tr key={i} className="border-t border-slate-100">{r.map((c, k) => <td key={k} className="px-2 py-1">{c !== null && typeof c === 'object' ? (c as ReactNode) : String(c ?? '—') || '—'}</td>)}</tr>)}

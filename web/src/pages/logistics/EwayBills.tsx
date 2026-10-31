@@ -30,7 +30,7 @@ function ModeNote({ meta }: { meta?: EwbMeta }) {
   if (!meta) return null;
   if (meta.online) {
     return (
-      <div className={clsx('mb-4 flex items-start gap-2 rounded-lg border px-3.5 py-2.5 text-[12.5px]',
+      <div className={clsx('mb-4 flex items-start gap-2 rounded-lg border px-3.5 py-2.5 text-body',
         meta.configured ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-700')} id="ewb-mode">
         <Info size={15} className="mt-0.5 shrink-0" />
         {meta.configured ? `Online — e-way bills are generated on the GST portal through ${meta.provider_label}.`
@@ -39,7 +39,7 @@ function ModeNote({ meta }: { meta?: EwbMeta }) {
     );
   }
   return (
-    <div className="mb-4 flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3.5 py-2.5 text-[12.5px] text-sky-800" id="ewb-mode">
+    <div className="mb-4 flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3.5 py-2.5 text-body text-sky-800" id="ewb-mode">
       <Info size={15} className="mt-0.5 shrink-0" />{MANUAL_NOTE}
     </div>
   );
@@ -77,7 +77,7 @@ export function EwayBillRegisterPage() {
         actions={can('EWAY.CREATE') && <Button id="ewb-new" onClick={() => setPicking(true)}><Plus size={15} />New e-way bill</Button>} />
       <ModeNote meta={meta.data} />
       {!!al && (al.expiring > 0 || al.just_expired > 0) && (
-        <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[12.5px] text-amber-800" id="ewb-alerts">
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-body text-amber-800" id="ewb-alerts">
           <AlertTriangle size={15} className="mt-0.5 shrink-0" />
           <span>
             {al.expiring > 0 && <><b>{al.expiring}</b> e-way bill{al.expiring > 1 ? 's' : ''} expire{al.expiring > 1 ? '' : 's'} within 12 hours. </>}
@@ -103,7 +103,7 @@ export function EwayBillRegisterPage() {
             action={can('EWAY.CREATE') && !rows.length ? <Button onClick={() => setPicking(true)}><Plus size={15} />New e-way bill</Button> : undefined} />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-[12.5px]" id="ewb-list">
+            <table className="w-full text-body" id="ewb-list">
               <thead><tr>
                 <th className="th">Doc no</th><th className="th">EWB no</th><th className="th">Source</th><th className="th">Document</th>
                 <th className="th">Consignee</th><th className="th">Vehicle</th><th className="th text-right">Value ₹</th><th className="th">Valid upto</th><th className="th">Status</th>
@@ -112,15 +112,15 @@ export function EwayBillRegisterPage() {
                 <tr key={r.id} data-ewb-id={r.id} data-doc-no={r.doc_no} className="cursor-pointer hover:bg-brand-50/40" onClick={() => nav(`/logistics/eway-bills/${r.id}`)}>
                   <td className="td tabular-nums font-medium text-brand-700">{r.doc_no}</td>
                   <td className="td tabular-nums">{r.ewb_no ?? <span className="text-slate-400">—</span>}</td>
-                  <td className="td"><div className="text-[11px] text-slate-500">{r.source_label}</div><div className="tabular-nums">{r.source_no ?? '—'}</div></td>
-                  <td className="td"><div>{r.document_type} {r.document_number}</div><div className="text-[11px] text-slate-500">{fmtDate(r.document_date)}</div></td>
-                  <td className="td"><div className="font-medium">{r.to_name}</div><div className="text-[11px] text-slate-500">{r.to_gstin}{r.to_place ? ` · ${r.to_place}` : ''}</div></td>
+                  <td className="td"><div className="text-caption text-slate-500">{r.source_label}</div><div className="tabular-nums">{r.source_no ?? '—'}</div></td>
+                  <td className="td"><div>{r.document_type} {r.document_number}</div><div className="text-caption text-slate-500">{fmtDate(r.document_date)}</div></td>
+                  <td className="td"><div className="font-medium">{r.to_name}</div><div className="text-caption text-slate-500">{r.to_gstin}{r.to_place ? ` · ${r.to_place}` : ''}</div></td>
                   <td className="td tabular-nums">{r.vehicle_no ?? '—'}</td>
                   <td className="td text-right tabular-nums">{fmtDecimal(r.total_invoice_value)}</td>
                   <td className={clsx('td whitespace-nowrap', r.view_status === 'EXPIRED' ? 'font-semibold text-red-600' : r.expiring_soon ? 'font-semibold text-amber-600' : '')}>
                     {r.valid_upto ? fmtDateTime(r.valid_upto) : '—'}
                   </td>
-                  <td className="td"><EwbStatus value={r.view_status} />{r.last_error && <div className="mt-0.5 max-w-[180px] truncate text-[11px] text-red-600" title={r.last_error}>{r.last_error}</div>}</td>
+                  <td className="td"><EwbStatus value={r.view_status} />{r.last_error && <div className="mt-0.5 max-w-[180px] truncate text-caption text-red-600" title={r.last_error}>{r.last_error}</div>}</td>
                 </tr>
               ))}</tbody>
             </table>
@@ -270,7 +270,7 @@ export function EwayBillEditorPage() {
   };
 
   /* ---------- states before the form ---------- */
-  const back = <Link to="/logistics/eway-bills" className="text-[12.5px] font-medium text-brand-700 hover:underline">← E-way bills</Link>;
+  const back = <Link to="/logistics/eway-bills" className="text-body font-medium text-brand-700 hover:underline">← E-way bills</Link>;
   if (isNew && !(srcType && srcId)) {
     return (
       <div>
@@ -291,7 +291,7 @@ export function EwayBillEditorPage() {
     return (
       <div>
         <PageHeader title="New e-way bill" breadcrumb={['Logistics', 'E-way bills']} actions={back} />
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800" id="ewb-existing">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-body text-amber-800" id="ewb-existing">
           This document already has e-way bill <b className="tabular-nums">{x.ewb_no ?? x.doc_no}</b> ({x.status.toLowerCase()}). Cancel it before making another.
           <div className="mt-2"><Link to={`/logistics/eway-bills/${x.id}`} className="font-semibold text-brand-700 underline" id="ewb-existing-link">Open {x.doc_no}</Link></div>
         </div>
@@ -329,20 +329,20 @@ export function EwayBillEditorPage() {
       <Card className="mb-4">
         <div className="flex flex-wrap items-center gap-x-8 gap-y-3 px-5 py-4">
           <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">E-way bill no</div>
-            <div id="ewb-number" className={clsx('tabular-nums text-[26px] font-extrabold tracking-wider', e?.ewb_no ? 'text-slate-900' : 'text-slate-300')}>{e?.ewb_no ?? 'Not generated'}</div>
+            <div className="text-caption font-semibold uppercase tracking-wider text-slate-500">E-way bill no</div>
+            <div id="ewb-number" className={clsx('tabular-nums text-[26px] font-bold tracking-wider', e?.ewb_no ? 'text-slate-900' : 'text-slate-300')}>{e?.ewb_no ?? 'Not generated'}</div>
           </div>
-          <div><div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Status</div><EwbStatus id="ewb-status" value={status} size="lg" /></div>
-          {e?.ewb_date && <div><div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Generated</div><div className="text-[13px] font-medium">{fmtDateTime(e.ewb_date)}</div></div>}
+          <div><div className="text-caption font-semibold uppercase tracking-wider text-slate-500">Status</div><EwbStatus id="ewb-status" value={status} size="lg" /></div>
+          {e?.ewb_date && <div><div className="text-caption font-semibold uppercase tracking-wider text-slate-500">Generated</div><div className="text-body font-medium">{fmtDateTime(e.ewb_date)}</div></div>}
           {e?.status === 'GENERATED' && <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Valid upto</div>
-            <div id="ewb-valid-upto" className={clsx('text-[13px] font-semibold', status === 'EXPIRED' ? 'text-red-600' : e.can_extend ? 'text-amber-600' : 'text-slate-900')}>
+            <div className="text-caption font-semibold uppercase tracking-wider text-slate-500">Valid upto</div>
+            <div id="ewb-valid-upto" className={clsx('text-body font-semibold', status === 'EXPIRED' ? 'text-red-600' : e.can_extend ? 'text-amber-600' : 'text-slate-900')}>
               {e.valid_upto ? fmtDateTime(e.valid_upto) : 'Part B not entered — add the vehicle to start the validity'}</div>
           </div>}
-          {e?.status === 'CANCELLED' && <div className="text-[12.5px] text-red-700"><b>Cancelled</b> {fmtDateTime(e.cancelled_at)}{e.cancelled_by_name ? ` by ${e.cancelled_by_name}` : ''} — {e.cancel_reason}: {e.cancel_remark}</div>}
+          {e?.status === 'CANCELLED' && <div className="text-body text-red-700"><b>Cancelled</b> {fmtDateTime(e.cancelled_at)}{e.cancelled_by_name ? ` by ${e.cancelled_by_name}` : ''} — {e.cancel_reason}: {e.cancel_remark}</div>}
           <div className="ml-auto text-right">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Total invoice value</div>
-            <div className="text-[20px] font-bold tabular-nums" id="ewb-total" data-value={totals.total}>₹{fmtDecimal(totals.total)}</div>
+            <div className="text-caption font-semibold uppercase tracking-wider text-slate-500">Total invoice value</div>
+            <div className="text-page font-bold tabular-nums" id="ewb-total" data-value={totals.total}>₹{fmtDecimal(totals.total)}</div>
           </div>
         </div>
       </Card>
@@ -350,13 +350,13 @@ export function EwayBillEditorPage() {
       {e?.last_error && <ErrorBox err={{ message: `Last portal error: ${e.last_error}`, problems: [] }} id="ewb-last-error" />}
       <ErrorBox err={err} id="ewb-error" />
       {!!notes.length && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[12.5px] text-amber-800" id="ewb-notes">
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-body text-amber-800" id="ewb-notes">
           <div className="mb-0.5 flex items-center gap-1.5 font-semibold"><Info size={14} />Check before saving</div>
           <ul className="list-disc space-y-0.5 pl-5">{notes.map((x, i) => <li key={i}>{x}</li>)}</ul>
         </div>
       )}
       {draft && totals.total < threshold && (
-        <div className="mb-4 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2 text-[12.5px] text-slate-600" id="ewb-threshold">
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2 text-body text-slate-600" id="ewb-threshold">
           <Info size={14} />Not required below ₹{fmtDecimal(threshold, 0)} (you can still generate).
         </div>
       )}
@@ -404,7 +404,7 @@ export function EwayBillEditorPage() {
           <FormSection title="Items" cols={1} description={`${inter ? 'Inter-state — IGST' : 'Intra-state — CGST + SGST'}; enter one GST rate per line, the server splits it.`}
             actions={!ro && <Button size="sm" variant="secondary" id="ewb-add-item" onClick={() => setItems((xs) => [...xs, emptyItem()])}><FilePlus2 size={13} />Add line</Button>}>
             <div className="overflow-x-auto rounded-lg border border-surface-border">
-              <table className="w-full text-[12.5px]" id="ewb-items">
+              <table className="w-full text-body" id="ewb-items">
                 <thead><tr>
                   <th className="th w-8">#</th><th className="th min-w-[180px]">Product</th><th className="th min-w-[140px]">Description</th><th className="th w-28">HSN</th>
                   <th className="th w-24 text-right">Qty</th><th className="th w-20">Unit</th><th className="th w-32 text-right">Taxable ₹</th>
@@ -429,12 +429,12 @@ export function EwayBillEditorPage() {
                 ))}</tbody>
               </table>
             </div>
-            <div className="flex flex-wrap items-end justify-end gap-x-6 gap-y-2 text-[12.5px]" id="ewb-totals">
+            <div className="flex flex-wrap items-end justify-end gap-x-6 gap-y-2 text-body" id="ewb-totals">
               <Input label="Other charges ₹" className="w-36" inputMode="decimal" value={f.other_value} onChange={(x) => set({ other_value: x.target.value.replace(/[^0-9.-]/g, '') })} />
               {[['Taxable', totals.taxable], ['CGST', totals.cgst], ['SGST', totals.sgst], ['IGST', totals.igst], ...(totals.cess ? [['Cess', totals.cess]] : [])].map(([k, v]) => (
-                <div key={k as string} className="text-right"><div className="text-[11px] uppercase tracking-wider text-slate-500">{k}</div><div className="font-semibold tabular-nums" data-total={k}>{fmtDecimal(v)}</div></div>
+                <div key={k as string} className="text-right"><div className="text-caption uppercase tracking-wider text-slate-500">{k}</div><div className="font-semibold tabular-nums" data-total={k}>{fmtDecimal(v)}</div></div>
               ))}
-              <div className="text-right"><div className="text-[11px] uppercase tracking-wider text-slate-500">Total ₹</div><div className="text-[15px] font-bold tabular-nums">{fmtDecimal(totals.total)}</div></div>
+              <div className="text-right"><div className="text-caption uppercase tracking-wider text-slate-500">Total ₹</div><div className="text-title font-bold tabular-nums">{fmtDecimal(totals.total)}</div></div>
             </div>
           </FormSection>
 
@@ -459,11 +459,11 @@ export function EwayBillEditorPage() {
         <Card title="History" subtitle="Every portal action with what came back">
           {!e.events?.length ? <EmptyState title="Nothing yet" message="Generate, vehicle updates, extensions and cancellation are logged here." /> : (
             <div className="overflow-x-auto">
-              <table className="w-full text-[12.5px]" id="ewb-events">
+              <table className="w-full text-body" id="ewb-events">
                 <thead><tr><th className="th">Action</th><th className="th">Result</th><th className="th">Message</th><th className="th">User</th><th className="th">Time</th></tr></thead>
                 <tbody>{e.events.map((ev: any) => (
                   <tr key={ev.id} data-event={ev.action}>
-                    <td className="td font-medium">{ev.action.replace(/_/g, ' ')}<div className="text-[11px] text-slate-500">{ev.provider}</div></td>
+                    <td className="td font-medium">{ev.action.replace(/_/g, ' ')}<div className="text-caption text-slate-500">{ev.provider}</div></td>
                     <td className="td">{n(ev.ok) ? <span className="font-semibold text-emerald-600">OK</span> : <span className="font-semibold text-red-600">Failed</span>}</td>
                     <td className="td max-w-[520px] break-words">{ev.message ?? '—'}</td>
                     <td className="td">{ev.user_name ?? '—'}</td>

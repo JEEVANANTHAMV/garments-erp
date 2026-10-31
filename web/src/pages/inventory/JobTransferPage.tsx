@@ -53,7 +53,7 @@ function TransferList({ onNew }: { onNew: () => void }) {
           <select className="input w-48 py-1.5 text-xs" value={st} onChange={(e) => setSt(e.target.value)} id="jt-status">
             <option value="">All statuses</option>{Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v[0]}</option>)}
           </select>
-          {pending > 0 && <button className="rounded-full bg-amber-100 px-3 py-1 text-[11.5px] font-semibold text-amber-800" onClick={() => setSt('PENDING_APPROVAL')}>{pending} waiting for approval{canApprove ? ' — review' : ''}</button>}
+          {pending > 0 && <button className="rounded-full bg-amber-100 px-3 py-1 text-small font-semibold text-amber-800" onClick={() => setSt('PENDING_APPROVAL')}>{pending} waiting for approval{canApprove ? ' — review' : ''}</button>}
         </div>
         {list.isLoading ? <LoadingBlock /> : (
           <table className="w-full text-xs">
@@ -64,16 +64,16 @@ function TransferList({ onNew }: { onNew: () => void }) {
                   <td className="px-3 py-2 tabular-nums font-semibold text-brand-700">{r.transfer_no}</td><td className="px-3 py-2">{fmtDate(r.transfer_date)}</td>
                   <td className="px-3 py-2">{MATERIALS.find((m) => m[0] === r.material_type)?.[1]}</td><td className="px-3 py-2 font-semibold">{r.from_job}</td>
                   <td className="px-1 text-slate-400"><ArrowRight size={12} /></td><td className="px-3 py-2 font-semibold">{r.to_job}</td><td className="px-3 py-2">{r.to_style || '—'}</td>
-                  <td className="px-3 py-2 text-right">{r.line_count}</td><td className="px-3 py-2 text-right">{fmtDecimal(r.total_qty, 3)}</td><td className="px-3 py-2">{r.reason}{r.decision_remarks ? <span className="block text-[10.5px] text-slate-500">↳ {r.decision_remarks}</span> : null}</td><td className="px-3 py-2">{r.created_by_name}</td>
-                  <td className="px-3 py-2 whitespace-nowrap"><span className={`rounded px-1.5 py-0.5 text-[10.5px] font-bold ${STATUS[r.status ?? 'POSTED']?.[1] ?? ''}`}>{STATUS[r.status ?? 'POSTED']?.[0] ?? r.status}</span>
-                    {r.priority && r.priority !== 'NORMAL' && <span className="ml-1 rounded bg-rose-100 px-1 text-[10px] font-bold text-rose-700">{r.priority}</span>}</td>
+                  <td className="px-3 py-2 text-right">{r.line_count}</td><td className="px-3 py-2 text-right">{fmtDecimal(r.total_qty, 3)}</td><td className="px-3 py-2">{r.reason}{r.decision_remarks ? <span className="block text-caption text-slate-500">↳ {r.decision_remarks}</span> : null}</td><td className="px-3 py-2">{r.created_by_name}</td>
+                  <td className="px-3 py-2 whitespace-nowrap"><span className={`rounded px-1.5 py-0.5 text-caption font-bold ${STATUS[r.status ?? 'POSTED']?.[1] ?? ''}`}>{STATUS[r.status ?? 'POSTED']?.[0] ?? r.status}</span>
+                    {r.priority && r.priority !== 'NORMAL' && <span className="ml-1 rounded bg-rose-100 px-1 text-micro font-bold text-rose-700">{r.priority}</span>}</td>
                   <td className="px-3 py-2 whitespace-nowrap">
                     {r.status === 'PENDING_APPROVAL' && canApprove && <>
-                      <button className="mr-1 rounded bg-emerald-600 px-2 py-0.5 text-[11px] font-semibold text-white" onClick={() => act(r, 'approve')} id={`jt-approve-${r.id}`}>Approve</button>
-                      <button className="mr-1 rounded border border-amber-400 px-2 py-0.5 text-[11px] text-amber-800" onClick={() => act(r, 'send-back')}>Send back</button>
-                      <button className="mr-1 rounded border border-rose-400 px-2 py-0.5 text-[11px] text-rose-700" onClick={() => act(r, 'reject')} id={`jt-reject-${r.id}`}>Reject</button>
+                      <button className="mr-1 rounded bg-emerald-600 px-2 py-0.5 text-caption font-semibold text-white" onClick={() => act(r, 'approve')} id={`jt-approve-${r.id}`}>Approve</button>
+                      <button className="mr-1 rounded border border-amber-400 px-2 py-0.5 text-caption text-amber-800" onClick={() => act(r, 'send-back')}>Send back</button>
+                      <button className="mr-1 rounded border border-rose-400 px-2 py-0.5 text-caption text-rose-700" onClick={() => act(r, 'reject')} id={`jt-reject-${r.id}`}>Reject</button>
                     </>}
-                    {['PENDING_APPROVAL', 'SEND_BACK'].includes(r.status) && (Number(r.created_by) === Number(user?.id) || canApprove) && <button className="rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600" onClick={() => act(r, 'cancel')}>Cancel</button>}
+                    {['PENDING_APPROVAL', 'SEND_BACK'].includes(r.status) && (Number(r.created_by) === Number(user?.id) || canApprove) && <button className="rounded border border-slate-300 px-2 py-0.5 text-caption text-slate-600" onClick={() => act(r, 'cancel')}>Cancel</button>}
                   </td>
                 </tr>
               ))}
@@ -134,7 +134,7 @@ function TransferEditor({ onBack }: { onBack: () => void }) {
               return (
                 <tr key={r.ref_id} className={`border-t border-slate-100 ${on ? 'bg-emerald-50' : ''}`}>
                   <td className="px-2 py-1"><input type="checkbox" checked={on} onChange={() => setSel((s) => { const c = { ...s }; if (on) delete c[r.ref_id]; else c[r.ref_id] = r.available; return c; })} /></td>
-                  <td className="px-2 py-1 font-semibold">{r.item}{r.state && r.state !== 'GREY' ? <span className="ml-1 rounded bg-purple-100 px-1 text-[10px] text-purple-800">{r.state}</span> : null}</td>
+                  <td className="px-2 py-1 font-semibold">{r.item}{r.state && r.state !== 'GREY' ? <span className="ml-1 rounded bg-purple-100 px-1 text-micro text-purple-800">{r.state}</span> : null}</td>
                   <td className="px-2 py-1">{r.lot_no || '—'}</td><td className="px-2 py-1">{r.colour || '—'}</td><td className="px-2 py-1">{r.source}</td><td className="px-2 py-1">{r.store || '—'}</td>
                   <td className="px-2 py-1 text-right">{fmtDecimal(r.available, 3)} {r.uom}</td>
                   <td className="px-2 py-1 text-right">{on ? <input type="number" step="0.001" className="input w-24 py-0.5 text-right text-xs" value={sel[r.ref_id]} onChange={(e) => setSel((s) => ({ ...s, [r.ref_id]: Number(e.target.value) }))} /> : '—'}</td>
@@ -146,7 +146,7 @@ function TransferEditor({ onBack }: { onBack: () => void }) {
           <tfoot className="bg-slate-100 font-bold"><tr><td colSpan={7} className="px-2 py-2 text-right">Total to transfer</td><td className="px-2 py-2 text-right">{fmtDecimal(total, 3)}</td></tr></tfoot>
         </table>
       </div>
-      <p className="mt-2 text-[11.5px] text-slate-500">Part of a fabric roll becomes a new roll for the target job (same GRN — traceable). Yarn lots keep their GRN / PO; only the job that may use them changes.</p>
+      <p className="mt-2 text-small text-slate-500">Part of a fabric roll becomes a new roll for the target job (same GRN — traceable). Yarn lots keep their GRN / PO; only the job that may use them changes.</p>
       <div className="mt-3 flex justify-end gap-2"><Button variant="secondary" onClick={onBack}>Cancel</Button><Button loading={busy} onClick={save}><CheckCircle2 size={14} className="mr-1" /> Post Transfer</Button></div>
     </>
   );

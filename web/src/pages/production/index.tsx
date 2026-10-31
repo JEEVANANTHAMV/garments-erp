@@ -40,7 +40,7 @@ export function ProductionPlansPage() {
     defaultSort={{ key: 'plan_date', dir: 'desc' }}
     columns={[
       { key: 'plan_no', header: 'Plan no', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.plan_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-small font-medium text-brand-700">{r.plan_no}</span> },
       { key: 'plan_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.plan_date) },
       { key: 'so_no', header: 'Sales order' },
       { key: 'unit_name', header: 'Unit' },
@@ -70,19 +70,19 @@ export function ProductionOrdersPage() {
     defaultSort={{ key: 'prod_date', dir: 'desc' }}
     columns={[
       { key: 'po_prod_no', header: 'Work order', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.po_prod_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-small font-medium text-brand-700">{r.po_prod_no}</span> },
       { key: 'prod_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.prod_date) },
       { key: 'so_no', header: 'Sales order' },
       { key: 'style_code', header: 'Style',
         render: (r: any) => <div><p className="font-medium">{r.style_code}</p>
-          <p className="text-[11px] text-slate-500">{r.color_name}</p></div> },
+          <p className="text-caption text-slate-500">{r.color_name}</p></div> },
       { key: 'unit_name', header: 'Unit' },
       { key: 'order_qty', header: 'Order qty', align: 'right', render: (r: any) => fmtNumber(r.order_qty) },
       { key: 'progress', header: 'Produced', align: 'right', render: (r: any) => {
         const pct = Number(r.order_qty) > 0 ? (Number(r.produced_qty) / Number(r.order_qty)) * 100 : 0;
         return (
           <div className="min-w-[100px]">
-            <div className="mb-1 flex justify-between text-[11px]">
+            <div className="mb-1 flex justify-between text-caption">
               <span className="tabular-nums">{fmtNumber(r.produced_qty)}</span>
               <span className="text-slate-400">{pct.toFixed(0)}%</span>
             </div>
@@ -130,7 +130,7 @@ export function CuttingPage() {
     defaultSort={{ key: 'cut_date', dir: 'desc' }}
     columns={[
       { key: 'cut_no', header: 'Cut no', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.cut_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-small font-medium text-brand-700">{r.cut_no}</span> },
       { key: 'cut_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.cut_date) },
       { key: 'po_prod_no', header: 'Work order' },
       { key: 'fabric_name', header: 'Fabric' },
@@ -167,7 +167,7 @@ export function StitchingPage() {
     defaultSort={{ key: 'stitch_date', dir: 'desc' }}
     columns={[
       { key: 'stitch_no', header: 'Stitch no', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.stitch_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-small font-medium text-brand-700">{r.stitch_no}</span> },
       { key: 'stitch_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.stitch_date) },
       { key: 'po_prod_no', header: 'Work order' },
       { key: 'unit_name', header: 'Unit' },
@@ -199,7 +199,7 @@ export function PrintingPage() {
     defaultSort={{ key: 'print_date', dir: 'desc' }}
     columns={[
       { key: 'print_no', header: 'Print no', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.print_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-small font-medium text-brand-700">{r.print_no}</span> },
       { key: 'print_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.print_date) },
       { key: 'po_prod_no', header: 'Work order' },
       { key: 'print_type', header: 'Type', render: (r: any) => <Badge tone="violet">{humanize(r.print_type)}</Badge> },
@@ -230,7 +230,7 @@ export function EmbroideryPage() {
     defaultSort={{ key: 'emb_date', dir: 'desc' }}
     columns={[
       { key: 'emb_no', header: 'Emb no', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.emb_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-small font-medium text-brand-700">{r.emb_no}</span> },
       { key: 'emb_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.emb_date) },
       { key: 'po_prod_no', header: 'Work order' },
       { key: 'design_ref', header: 'Design' },
@@ -262,7 +262,7 @@ export function WashingPage() {
     defaultSort={{ key: 'wash_date', dir: 'desc' }}
     columns={[
       { key: 'wash_no', header: 'Wash no', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.wash_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-small font-medium text-brand-700">{r.wash_no}</span> },
       { key: 'wash_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.wash_date) },
       { key: 'po_prod_no', header: 'Work order' },
       { key: 'wash_type', header: 'Type', render: (r: any) => <Badge tone="blue">{humanize(r.wash_type)}</Badge> },
@@ -293,7 +293,7 @@ export function FinishingPage() {
     defaultSort={{ key: 'finish_date', dir: 'desc' }}
     columns={[
       { key: 'finish_no', header: 'Finish no', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.finish_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-small font-medium text-brand-700">{r.finish_no}</span> },
       { key: 'finish_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.finish_date) },
       { key: 'po_prod_no', header: 'Work order' },
       { key: 'unit_name', header: 'Unit' },
@@ -324,7 +324,7 @@ export function ProcessTransactionsPage() {
     defaultSort={{ key: 'txn_date', dir: 'desc' }}
     columns={[
       { key: 'txn_no', header: 'Txn no', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.txn_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-small font-medium text-brand-700">{r.txn_no}</span> },
       { key: 'txn_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.txn_date) },
       { key: 'po_prod_no', header: 'Work order' },
       { key: 'stage_name', header: 'Stage', render: (r: any) => <Badge tone="violet">{r.stage_name}</Badge> },

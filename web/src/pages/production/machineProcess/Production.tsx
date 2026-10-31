@@ -217,7 +217,7 @@ export function ProductionForm({ kind, id: id0, jobId, onClose }: { kind: Kind; 
           <Select label="Job" required id="mp-prod-job" className="sm:col-span-2" disabled={ro || !!entry} value={f.job_id} placeholder="— planned / running job —" onChange={(e) => set({ job_id: e.target.value })}
             options={jobOpts.map((j: any) => ({ value: j.id, label: `${j.job_no} · ${j.io_no ?? ''} ${j.style_code ?? ''} · ${qty(j.planned_qty)} ${j.uom ?? ''}` }))} />
         </FormSection>
-          <div className="rounded-lg bg-slate-50 p-2 text-[11px] text-slate-600">
+          <div className="rounded-lg bg-slate-50 p-2 text-caption text-slate-600">
             {job ? <>
               {[job.buyer_name, job.io_no, job.style_code, job.color_name].some(Boolean) && <div><b>{[job.buyer_name, job.io_no, job.style_code, job.color_name].filter(Boolean).join(' · ')}</b></div>}
               <div>{kind === 'EMBROIDERY' ? 'Design' : 'Artwork'} {job.design_code ? `${job.design_code} v${job.design_version}` : '—'}{job.placement ? ` · ${job.placement}` : ''}{job.stitches_per_pc ? ` · ${qty(job.stitches_per_pc, 0)} st/pc` : ''}</div>
@@ -323,7 +323,7 @@ export function ProductionForm({ kind, id: id0, jobId, onClose }: { kind: Kind; 
                 );
               })}</tbody>
             </table>
-            <p className="mt-1 text-[11px] text-slate-500">Actual defaults to what the store issued against this entry (issued − returned), else the standard. Type the actual when it differs; wastage is part of actual.</p></div>
+            <p className="mt-1 text-caption text-slate-500">Actual defaults to what the store issued against this entry (issued − returned), else the standard. Type the actual when it differs; wastage is part of actual.</p></div>
           ) : <p className="text-xs text-slate-400">Fill the job, machine, shift, timings and input qty — the standard consumption and cost are calculated by the server.</p>}
         </Section>
 
@@ -353,7 +353,7 @@ export function ProductionForm({ kind, id: id0, jobId, onClose }: { kind: Kind; 
               <Kv label="Cost / good pc" value={money(c.cost_per_unit)} strong />
               {kind === 'EMBROIDERY' ? <Kv label="Cost / 1,000 stitches" value={money(c.cost_per_1000_stitches)} /> : <Kv label="Cost / KG" value={money(c.cost_per_kg)} />}
               <Kv label="Standard cost / variance" value={`${money(c.std_total_cost)} · ${num(c.std_total_cost) > 0 ? pctTxt(((num(c.total_cost) - num(c.std_total_cost)) / num(c.std_total_cost)) * 100) : '—'}`} />
-              {entry?.costing?.is_final ? <p className="mt-1 text-[11px] text-emerald-700">Frozen at approval — later rate / recipe changes do not alter it.</p> : null}
+              {entry?.costing?.is_final ? <p className="mt-1 text-caption text-emerald-700">Frozen at approval — later rate / recipe changes do not alter it.</p> : null}
             </> : <p className="text-xs text-slate-400">—</p>}
             <div className="mt-2 grid grid-cols-2 gap-2">
               <Input label="Other cost ₹" type="number" disabled={ro} value={f.other_cost} onChange={(e) => set({ other_cost: e.target.value })} />
@@ -362,7 +362,7 @@ export function ProductionForm({ kind, id: id0, jobId, onClose }: { kind: Kind; 
           </Section> : <Section title="Cost"><p className="text-xs text-slate-400">Costing is shown to supervisors and accounts.</p></Section>}
           <Section title="Remarks & history">
             <Textarea label="Remarks" disabled={ro} value={f.remarks} onChange={(e) => set({ remarks: e.target.value })} />
-            {entry && <div className="mt-2 space-y-0.5 text-[11px] text-slate-600">
+            {entry && <div className="mt-2 space-y-0.5 text-caption text-slate-600">
               <div>Created by {entry.created_by_name} · {fmtDateTime(entry.created_at)}</div>
               {(entry.approvals ?? []).map((a: any) => <div key={a.id}><b>{human(a.action)}</b> {a.acted_by_name} · {fmtDateTime(a.acted_at)}{a.remarks ? ` — ${a.remarks}` : ''}</div>)}
               {entry.rework_of_no && <div>Rework run of {entry.rework_of_no}</div>}
@@ -371,7 +371,7 @@ export function ProductionForm({ kind, id: id0, jobId, onClose }: { kind: Kind; 
         </div>
         {entry?.audit?.length > 0 && <Section title="Audit trail">
           <MiniTable rows={entry.audit.slice(0, 20)} cols={[{ h: 'When', r: (a) => fmtDateTime(a.changed_at) }, { h: 'Who', r: (a) => a.changed_by_name ?? '—' }, { h: 'Action', r: (a) => a.action },
-            { h: 'Change', r: (a) => <span className="line-clamp-2 max-w-xl break-all tabular-nums text-[10px] text-slate-500">{typeof a.new_values === 'string' ? a.new_values.slice(0, 220) : JSON.stringify(a.new_values ?? '').slice(0, 220)}</span> }]} />
+            { h: 'Change', r: (a) => <span className="line-clamp-2 max-w-xl break-all tabular-nums text-micro text-slate-500">{typeof a.new_values === 'string' ? a.new_values.slice(0, 220) : JSON.stringify(a.new_values ?? '').slice(0, 220)}</span> }]} />
         </Section>}
       </div>
       {mat && entry && <MaterialDialog kind={kind} type="ISSUE" jobId={entry.job_id} productionId={entry.id} onClose={() => setMat(false)} onDone={() => { setMat(false); void load(entry.id); }} />}

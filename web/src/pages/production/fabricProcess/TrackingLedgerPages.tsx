@@ -33,10 +33,10 @@ export function FabricRollTrackingPage() {
           <div className="card mb-3 grid grid-cols-2 gap-3 p-4 text-xs md:grid-cols-8">
             {[['Roll no', d.roll.roll_no], ['Fabric', d.roll.fabric_name], ['Job', d.roll.io_no || '—'], ['Colour', d.roll.color_name || '—'], ['GSM / dia', `${d.roll.gsm ?? '—'} / ${d.roll.dia ?? '—'}`],
               ['In store', `${kg(d.roll.balance_kg)} KG`], ['Store', d.roll.warehouse_name || '—'], ['Current status', `${d.roll.process_state}${d.roll.balance_kg > 0 ? ' · in stock' : ' · used'}`]].map(([k, v]) => (
-              <div key={k}><div className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-500">{k}</div><div className="font-semibold">{v}</div></div>))}
+              <div key={k}><div className="text-caption font-semibold uppercase tracking-wider text-slate-500">{k}</div><div className="font-semibold">{v}</div></div>))}
           </div>
           <div className="card mb-3 overflow-x-auto">
-            <h3 className="px-4 pt-3 text-[13px] font-semibold text-slate-800">Movement history</h3>
+            <h3 className="px-4 pt-3 text-body font-semibold text-slate-800">Movement history</h3>
             <table className="mt-2 w-full text-xs">
               <thead className="bg-slate-50 text-slate-500"><tr>{['#', 'Date', 'Transaction', 'Doc no', 'Process', 'From', 'To', 'Roll no', 'Job', 'Qty KG', 'Remarks'].map((x) => <th key={x} className={`px-2 py-2 ${x === 'Qty KG' ? 'text-right' : 'text-left'}`}>{x}</th>)}</tr></thead>
               <tbody>{d.timeline.map((e: any, i: number) => (
@@ -48,7 +48,7 @@ export function FabricRollTrackingPage() {
             </table>
           </div>
           <div className="card overflow-x-auto">
-            <h3 className="px-4 pt-3 text-[13px] font-semibold text-slate-800">Process flow — rolls in this lineage</h3>
+            <h3 className="px-4 pt-3 text-body font-semibold text-slate-800">Process flow — rolls in this lineage</h3>
             <table className="mt-2 w-full text-xs">
               <thead className="bg-slate-50 text-slate-500"><tr>{['Roll', 'State', 'Colour', 'Job', 'GRN', 'Store', 'KG', 'In store'].map((x) => <th key={x} className={`px-2 py-2 ${/KG|store$/.test(x) && x !== 'Store' ? 'text-right' : 'text-left'}`}>{x}</th>)}</tr></thead>
               <tbody>{d.lineage.map((r: any) => (
@@ -90,7 +90,7 @@ export function FabricProcessLedgerPage() {
       <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-6">
         {[['Outward', tot('outward_kg'), 'bg-sky-50 border-sky-200'], ['Good (inward)', tot('good_kg'), 'bg-emerald-50 border-emerald-200'], ['Reject', tot('reject_kg'), 'bg-red-50 border-red-200'],
           ['Process loss', tot('loss_kg'), 'bg-amber-50 border-amber-200'], ['Returned', tot('return_kg'), 'bg-purple-50 border-purple-200'], ['Pending at vendor', tot('balance_kg'), 'bg-orange-50 border-orange-200']].map(([k, v, c]) => (
-          <div key={String(k)} className={`rounded-lg border px-3 py-2 ${c}`}><div className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-600">{k} (KG)</div><div className="text-lg font-bold tabular-nums">{kg(v)}</div></div>))}
+          <div key={String(k)} className={`rounded-lg border px-3 py-2 ${c}`}><div className="text-caption font-semibold uppercase tracking-wider text-slate-600">{k} (KG)</div><div className="text-lg font-bold tabular-nums">{kg(v)}</div></div>))}
       </div>
       <div className="card overflow-x-auto">
         <div className="px-4 pt-2"><Tabs tabs={[{ key: 'summary', label: 'Process summary' }, { key: 'jobs', label: 'Job-wise status' }, { key: 'ledger', label: 'Date-wise ledger' }]} active={tab} onChange={setTab} /></div>

@@ -84,21 +84,21 @@ export default function FabricPurchaseOrdersPage() {
         <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-xs">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Fabric POs</p>
           <div className="mt-1 flex items-baseline justify-between">
-            <span className="text-2xl font-black text-slate-900">{kpis.totalOrders}</span>
+            <span className="text-2xl font-bold text-slate-900">{kpis.totalOrders}</span>
             <Badge tone="sky">Active</Badge>
           </div>
         </div>
         <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-xs">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Approved Orders</p>
           <div className="mt-1 flex items-baseline justify-between">
-            <span className="text-2xl font-black text-emerald-600">{kpis.approvedOrders}</span>
+            <span className="text-2xl font-bold text-emerald-600">{kpis.approvedOrders}</span>
             <span className="text-xs text-slate-500">Ready for GRN</span>
           </div>
         </div>
         <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-xs">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total PO Value</p>
           <div className="mt-1 flex items-baseline justify-between">
-            <span className="text-2xl font-black text-slate-900">₹{fmtDecimal(kpis.totalVal, 2)}</span>
+            <span className="text-2xl font-bold text-slate-900">₹{fmtDecimal(kpis.totalVal, 2)}</span>
             <span className="text-xs tabular-nums text-slate-400">INR</span>
           </div>
         </div>
@@ -136,7 +136,7 @@ export default function FabricPurchaseOrdersPage() {
       <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 border-b border-slate-200 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
+            <thead className="bg-slate-50 border-b border-slate-200 text-caption font-semibold text-slate-600 uppercase tracking-wider">
               <tr>
                 <th className="py-3 px-4">PO Number</th>
                 <th className="py-3 px-4">Date</th>

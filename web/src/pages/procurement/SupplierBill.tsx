@@ -735,7 +735,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
               />
 
               <div className="sm:col-span-2">
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                <label className="block text-caption font-semibold text-slate-700 mb-1">
                   Link GRN (Select to Auto-Fetch)
                 </label>
                 <select
@@ -791,7 +791,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
             {/* Selected Multi-GRN Badges */}
             {selectedGrnIds.length > 0 && (
               <div className="mt-3 flex flex-wrap items-center gap-2 pt-2 border-t border-dashed border-indigo-100">
-                <span className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
+                <span className="text-caption font-bold text-slate-600 flex items-center gap-1">
                   <Layers size={13} className="text-indigo-600" /> Linked GRNs ({selectedGrnIds.length}):
                 </span>
                 {selectedGrnIds.map((gid) => {
@@ -804,7 +804,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                       className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-800 border border-indigo-200 shadow-2xs"
                     >
                       <span>📦 {gLabel}</span>
-                      <span className="text-[10px] bg-indigo-200 text-indigo-900 px-1.5 py-0.5 rounded-full tabular-nums">
+                      <span className="text-micro bg-indigo-200 text-indigo-900 px-1.5 py-0.5 rounded-full tabular-nums">
                         {count} lines
                       </span>
                       <button
@@ -824,7 +824,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
             {/* GST Tax Type & Import Configuration Row */}
             <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">GST Tax Nature:</span>
+                <span className="text-caption font-bold text-slate-700 uppercase tracking-wider">GST Tax Nature:</span>
                 <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-50 text-xs">
                   <button
                     type="button"
@@ -874,7 +874,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
               <FormSection title="Import & customs documentation" className="mt-4"
                 description={<>All lines entered in <strong>{selectedCurrency?.code || 'FC'}</strong>, auto-converted to INR for GST & accounts</>}>
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    <label className="block text-caption font-semibold text-slate-700 mb-1">
                       Exchange Rate (₹ per 1 {selectedCurrency?.code || 'FC'}) *
                     </label>
                     <input
@@ -915,7 +915,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
           <div className="space-y-3">
             <div className="flex flex-wrap items-end justify-between gap-2 pb-1.5 border-b border-slate-100">
               <div className="flex items-center gap-2">
-                <h3 className="text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">
+                <h3 className="text-small font-semibold uppercase tracking-wider text-slate-500">
                   Inward Bill Line Items ({lines.length})
                 </h3>
                 <Badge tone={isYarn ? 'indigo' : isFab ? 'purple' : isTrim ? 'amber' : 'slate'}>
@@ -929,7 +929,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                     <Plus size={13} />
                     <span>Add Item Line</span>
                   </Button>
-                ) : <span className="text-[11px] text-slate-500" id="sb-grn-only">Lines come from the linked GRN(s) — a direct bill is only for General</span>}
+                ) : <span className="text-caption text-slate-500" id="sb-grn-only">Lines come from the linked GRN(s) — a direct bill is only for General</span>}
               </div>
             </div>
 
@@ -978,11 +978,11 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
 
                       <td className="py-1.5 px-2">
                         {l.grn_no || l.grn_id ? (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] tabular-nums font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-caption tabular-nums font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
                             {l.grn_no || `GRN #${l.grn_id}`}
                           </span>
                         ) : (
-                          <span className="text-slate-400 text-[11px]">—</span>
+                          <span className="text-slate-400 text-caption">—</span>
                         )}
                       </td>
 
@@ -1141,7 +1141,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* 3-Way Match & Status Card */}
             <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 space-y-3">
-              <h4 className="border-b border-slate-200 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">
+              <h4 className="border-b border-slate-200 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">
                 Matching & Verification
               </h4>
 
@@ -1176,7 +1176,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
 
               <div className="grid grid-cols-2 gap-3 pt-1">
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-600">Match Status</label>
+                  <label className="block text-caption font-semibold text-slate-600">Match Status</label>
                   <select
                     value={header.match_status}
                     onChange={(e) => setHeader((p) => ({ ...p, match_status: e.target.value }))}
@@ -1190,7 +1190,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-600">Bill Status</label>
+                  <label className="block text-caption font-semibold text-slate-600">Bill Status</label>
                   <select
                     value={header.status}
                     onChange={(e) => setHeader((p) => ({ ...p, status: e.target.value }))}
@@ -1206,7 +1206,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600">Remarks / Discrepancy Notes</label>
+                <label className="block text-caption font-semibold text-slate-600">Remarks / Discrepancy Notes</label>
                 <textarea
                   rows={2}
                   value={header.remarks}
@@ -1307,7 +1307,7 @@ export function SupplierBillsPage() {
             header: 'Bill no',
             sortable: true,
             render: (r: any) => (
-              <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.bill_no}</span>
+              <span className="tabular-nums text-small font-medium text-brand-700">{r.bill_no}</span>
             ),
           },
           {
@@ -1327,7 +1327,7 @@ export function SupplierBillsPage() {
             render: (r: any) => {
               if (r.po_no || r.grn_no) {
                 return (
-                  <div className="text-[11px] tabular-nums leading-tight space-y-0.5">
+                  <div className="text-caption tabular-nums leading-tight space-y-0.5">
                     {r.po_no && <div><span className="text-slate-400">PO:</span> {r.po_no}</div>}
                     {r.grn_no && <div><span className="text-slate-400">GRN:</span> {r.grn_no}</div>}
                   </div>
@@ -1335,14 +1335,14 @@ export function SupplierBillsPage() {
               }
               if (r.knitting_order_no) {
                 return (
-                  <div className="text-[11px] tabular-nums text-sky-700">
+                  <div className="text-caption tabular-nums text-sky-700">
                     <span className="text-slate-400">Knit Order:</span> {r.knitting_order_no}
                   </div>
                 );
               }
               if (r.fabric_process_order_no) {
                 return (
-                  <div className="text-[11px] tabular-nums text-pink-700">
+                  <div className="text-caption tabular-nums text-pink-700">
                     <span className="text-slate-400">Proc Order:</span> {r.fabric_process_order_no}
                   </div>
                 );

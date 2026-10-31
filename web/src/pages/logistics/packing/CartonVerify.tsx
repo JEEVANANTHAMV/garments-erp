@@ -60,25 +60,25 @@ export function CartonVerifyPage() {
             <Input id="carton-scan" ref={scanRef} label="Carton barcode / carton no" value={code} autoFocus placeholder="Scan, then Enter"
               onChange={(e) => setCode(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') load(code); }} />
             <div className="flex justify-end"><Button variant="secondary" loading={busy === 'scan'} onClick={() => load(code)}>Show carton</Button></div>
-            {err && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-700" id="verify-error">{err}</div>}
+            {err && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-body text-red-700" id="verify-error">{err}</div>}
             {c && editable && can('PACKING.UPDATE') && <>
-              <div className="border-t border-slate-100 pt-3 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Verify</div>
+              <div className="border-t border-slate-100 pt-3 text-small font-semibold uppercase tracking-wider text-slate-500">Verify</div>
               <div className="grid grid-cols-2 gap-3">
                 <Input id="verify-net" label="Net kg" inputMode="decimal" value={w.net} onChange={(e) => setW({ ...w, net: e.target.value })} />
                 <Input id="verify-gross" label="Gross kg" inputMode="decimal" value={w.gross} onChange={(e) => setW({ ...w, gross: e.target.value })} />
               </div>
-              <label className="flex items-center gap-2 text-[12.5px] text-slate-600"><input type="checkbox" checked={w.labels} onChange={(e) => setW({ ...w, labels: e.target.checked })} />Buyer labels / shipping marks checked</label>
+              <label className="flex items-center gap-2 text-body text-slate-600"><input type="checkbox" checked={w.labels} onChange={(e) => setW({ ...w, labels: e.target.checked })} />Buyer labels / shipping marks checked</label>
               <div className="flex justify-end"><Button id="verify-carton" loading={busy === 'verify'} onClick={() => act('verify', () => http.post(`/packing/cartons/${c.id}/verify`, { net_weight_kg: num(w.net), gross_weight_kg: num(w.gross), labels_ok: w.labels }), `Carton ${c.carton_no} verified`)}><CheckCircle2 size={15} />Verify</Button></div>
             </>}
             {c?.carton_status === 'VERIFIED' && can('PACKING.UPDATE') && <>
-              <div className="border-t border-slate-100 pt-3 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Seal</div>
+              <div className="border-t border-slate-100 pt-3 text-small font-semibold uppercase tracking-wider text-slate-500">Seal</div>
               <Input id="seal-no" label="Seal no" value={w.seal} onChange={(e) => setW({ ...w, seal: e.target.value })} />
               <div className="flex justify-end"><Button id="seal-carton" loading={busy === 'seal'} onClick={() => act('seal', () => http.post(`/packing/cartons/${c.id}/seal`, { seal_no: w.seal || null }), `Carton ${c.carton_no} sealed`)}><Lock size={15} />Seal</Button></div>
             </>}
           </div>
         </Card>
         {!c ? <EmptyState title="Scan a carton" message="The carton barcode is its carton number (Code 128)." /> : (
-          <div id="carton-panel"><Card title={<span className="tabular-nums text-[15px] font-semibold">{c.carton_no}</span>}
+          <div id="carton-panel"><Card title={<span className="tabular-nums text-title font-semibold">{c.carton_no}</span>}
             subtitle={<>{c.carton_seq} of {c.carton_count} · <Link className="text-brand-700 hover:underline" to={`/logistics/packing/orders/${c.packing_id}`}>{c.pack_no}</Link> · {c.io_no} · {c.style_code}{c.buyer_po_no ? ` · PO ${c.buyer_po_no}` : ''} · {c.buyer_name}</>}
             actions={<PkStatus value={c.carton_status} posted={c.is_posted} />}>
             <div className="space-y-4 p-4">
@@ -90,7 +90,7 @@ export function CartonVerifyPage() {
               </div>
               <div>
                 <TableHead title="Contents (size × colour)" />
-                <table className="w-full text-[12.5px]" id="carton-contents"><thead><tr><th className="th">Colour</th><th className="th">Size</th><th className="th text-right">Pieces</th><th className="th text-right">Polybags</th></tr></thead>
+                <table className="w-full text-body" id="carton-contents"><thead><tr><th className="th">Colour</th><th className="th">Size</th><th className="th text-right">Pieces</th><th className="th text-right">Polybags</th></tr></thead>
                   <tbody>{c.lines.map((l: any) => <tr key={l.id}><td className="td">{l.color_name}</td><td className="td">{l.size_code}</td><td className="td text-right">{l.qty}</td><td className="td text-right">{l.polybag_qty}</td></tr>)}</tbody>
                   <tfoot><tr className="font-semibold"><td className="td" colSpan={2}>Total</td><td className="td text-right">{c.lines.reduce((a: number, l: any) => a + n(l.qty), 0)}</td><td className="td text-right">{c.lines.reduce((a: number, l: any) => a + n(l.polybag_qty), 0)}</td></tr></tfoot></table>
               </div>
@@ -107,7 +107,7 @@ export function CartonVerifyPage() {
               </div>
               <div>
                 <TableHead title="History" />
-                <ul className="space-y-1 text-[12px] text-slate-600" id="carton-history">{c.events.map((e: any) => (
+                <ul className="space-y-1 text-small text-slate-600" id="carton-history">{c.events.map((e: any) => (
                   <li key={e.id}><span className="text-slate-400">{fmtDateTime(e.created_at)}</span> · <b>{e.event_type}</b>{e.from_status && e.to_status && e.from_status !== e.to_status ? ` ${e.from_status} → ${e.to_status}` : ''}{e.reason ? ` — ${e.reason}` : ''}</li>
                 ))}</ul>
               </div>

@@ -113,7 +113,7 @@ export function MaterialDialog({ kind, type, jobId, productionId, onClose, onDon
               options={(jobs.data ?? []).filter((j: any) => ['PLANNED', 'RUNNING'].includes(j.status) || type === 'RETURN').map((j: any) => ({ value: j.id, label: `${j.job_no} · ${j.io_no ?? ''} ${j.style_code ?? ''} · ${human(j.status)}` }))} />}
         </FormSection>
         {job && <div className="overflow-x-auto">
-          <h3 className="mb-2 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">{type === 'ISSUE' ? 'Stock lots' : 'Lots held by the job'}</h3>
+          <h3 className="mb-2 border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">{type === 'ISSUE' ? 'Stock lots' : 'Lots held by the job'}</h3>
           <table className="w-full text-xs">
             <thead className="bg-slate-50 text-slate-500"><tr>
               <th className="px-2 py-1 text-left">Material</th><th className="px-2 py-1 text-left">Lot</th><th className="px-2 py-1 text-left">Store</th>
@@ -140,7 +140,7 @@ export function MaterialDialog({ kind, type, jobId, productionId, onClose, onDon
           </table>
           {type === 'ISSUE' && recipeTrims.size > 0 && <label className="mt-2 flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />Show materials outside the job's recipe too ({lots.length - shownLots.length} more lots)</label>}
           {!lots.length && <p className="py-3 text-center text-xs text-slate-400">{type === 'ISSUE' ? 'No trims stock lots (general stock or this job\'s) — receive the material through a Trims GRN first' : 'Nothing issued to this job'}</p>}
-          <p className="mt-2 text-[11px] text-slate-500">"Job standard" is the recipe requirement for the planned qty in stock units. Another job's lot must be transferred to this job first (Job Transfer).</p>
+          <p className="mt-2 text-caption text-slate-500">"Job standard" is the recipe requirement for the planned qty in stock units. Another job's lot must be transferred to this job first (Job Transfer).</p>
         </div>}
         <FormSection cols={1}>
           <Input label="Remarks" value={remarks} onChange={(e) => setRemarks(e.target.value)} />

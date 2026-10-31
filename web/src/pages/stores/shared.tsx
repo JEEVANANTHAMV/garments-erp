@@ -194,12 +194,12 @@ export function StockPicker({ material, warehouseId, onClose, onPick, exclude = 
 /** Small read-only label / value grid for view popups. */
 export function InfoGrid({ items }: { items: [string, ReactNode][] }) {
   return (
-    <dl className="mb-4 grid grid-cols-2 gap-x-4 gap-y-2 text-[12.5px] sm:grid-cols-4">
-      {items.map(([k, v]) => <div key={k}><dt className="text-[11px] uppercase tracking-wider text-slate-400">{k}</dt><dd className="font-medium text-slate-800">{v ?? '—'}</dd></div>)}
+    <dl className="mb-4 grid grid-cols-2 gap-x-4 gap-y-2 text-body sm:grid-cols-4">
+      {items.map(([k, v]) => <div key={k}><dt className="text-caption uppercase tracking-wider text-slate-400">{k}</dt><dd className="font-medium text-slate-800">{v ?? '—'}</dd></div>)}
     </dl>
   );
 }
 
 export const TH = 'whitespace-nowrap px-2 py-2';
 export const TD = 'px-2 py-1';
-export const tableHead = 'text-[11.5px] font-semibold uppercase tracking-wider text-slate-500';
+export const tableHead = 'text-small font-semibold uppercase tracking-wider text-slate-500';

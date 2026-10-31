@@ -84,17 +84,17 @@ export default function YarnPurchaseOrdersPage() {
         <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
           <div className="text-xs font-medium text-slate-500">Total Yarn Orders</div>
           <div className="text-2xl font-bold text-slate-900 mt-1">{fmtNumber(kpis.totalOrders)}</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Grey & Dyed contracts</div>
+          <div className="text-caption text-slate-400 mt-0.5">Grey & Dyed contracts</div>
         </div>
         <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
           <div className="text-xs font-medium text-slate-500">Approved & Active</div>
           <div className="text-2xl font-bold text-emerald-600 mt-1">{fmtNumber(kpis.approvedOrders)}</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Ready for spinning & receipt</div>
+          <div className="text-caption text-slate-400 mt-0.5">Ready for spinning & receipt</div>
         </div>
         <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
           <div className="text-xs font-medium text-slate-500">Total Purchase Value</div>
           <div className="text-2xl font-bold text-amber-700 mt-1">₹{fmtDecimal(kpis.totalVal)}</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Cumulative commitment</div>
+          <div className="text-caption text-slate-400 mt-0.5">Cumulative commitment</div>
         </div>
       </div>
 
@@ -168,16 +168,16 @@ export default function YarnPurchaseOrdersPage() {
                   >
                     <td className="py-3 px-4">
                       <div className="font-semibold text-amber-700">{p.po_no}</div>
-                      <div className="text-[11px] text-slate-400">{fmtDate(p.po_date)}</div>
+                      <div className="text-caption text-slate-400">{fmtDate(p.po_date)}</div>
                     </td>
-                    <td className="py-3 px-3 tabular-nums text-[11px] text-slate-700">
+                    <td className="py-3 px-3 tabular-nums text-caption text-slate-700">
                       {p.internal_ir_no || '—'}
                     </td>
                     <td className="py-3 px-3">
                       <div className="font-medium text-slate-800">{p.supplier_name || 'Spinning Mill'}</div>
                     </td>
                     <td className="py-3 px-3">
-                      <span className="tabular-nums text-[11px] text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
+                      <span className="tabular-nums text-caption text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
                         {p.style_code || 'GEN'}
                       </span>
                     </td>

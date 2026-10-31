@@ -60,9 +60,9 @@ export function ReportsPage() {
             <div key={r.key} className="card group cursor-pointer p-5 transition-shadow hover:shadow-md"
               onClick={() => !isBusy && void handleExport(r.key, r.label)}>
               <div className="mb-3 text-3xl">{r.icon}</div>
-              <h3 className="text-[14px] font-semibold text-slate-800 group-hover:text-brand-700">{r.label}</h3>
-              <p className="mt-1.5 text-[12.5px] leading-relaxed text-slate-500">{r.desc}</p>
-              <div className="mt-3 flex items-center gap-1.5 text-[11.5px] font-medium text-brand-600">
+              <h3 className="text-body-lg font-semibold text-slate-800 group-hover:text-brand-700">{r.label}</h3>
+              <p className="mt-1.5 text-body leading-relaxed text-slate-500">{r.desc}</p>
+              <div className="mt-3 flex items-center gap-1.5 text-small font-medium text-brand-600">
                 {isBusy ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
                 <span>{isBusy ? 'Generating CSV…' : 'Export CSV'}</span>
               </div>
@@ -74,16 +74,16 @@ export function ReportsPage() {
       {/* Client's own report set (Fashion Knits business-process tracker, 14-Oct-2026) — kept separate below the defaults */}
       <div className="mb-3 mt-8 flex items-end justify-between border-b border-slate-200 pb-1.5" id="client-reports">
         <div>
-          <h2 className="text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Client reports</h2>
-          <p className="text-[12px] text-slate-400">In the formats from the business-process sheet — filters, totals, Excel export and drill-down to the entry</p>
+          <h2 className="text-small font-semibold uppercase tracking-wider text-slate-500">Client reports</h2>
+          <p className="text-small text-slate-400">In the formats from the business-process sheet — filters, totals, Excel export and drill-down to the entry</p>
         </div>
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {CLIENT_SETS.map((c) => (
           <Link key={c.to} to={c.to} className="card group p-5 transition-shadow hover:shadow-md">
-            <h3 className="text-[14px] font-semibold text-slate-800 group-hover:text-brand-700">{c.label}</h3>
-            <p className="mt-1.5 text-[12.5px] leading-relaxed text-slate-500">{c.reports.join(' · ')}</p>
-            <div className="mt-3 text-[11.5px] font-medium text-brand-600">Open reports →</div>
+            <h3 className="text-body-lg font-semibold text-slate-800 group-hover:text-brand-700">{c.label}</h3>
+            <p className="mt-1.5 text-body leading-relaxed text-slate-500">{c.reports.join(' · ')}</p>
+            <div className="mt-3 text-small font-medium text-brand-600">Open reports →</div>
           </Link>
         ))}
       </div>
@@ -178,18 +178,18 @@ export function AuditPage() {
               return <Badge tone={tone}>{r.action}</Badge>;
             } },
           { key: 'table_name', header: 'Table',
-            render: (r: any) => <span className="tabular-nums text-[11.5px] text-slate-600">{r.table_name}</span> },
+            render: (r: any) => <span className="tabular-nums text-small text-slate-600">{r.table_name}</span> },
           { key: 'record_id', header: 'Record', align: 'right',
-            render: (r: any) => <span className="tabular-nums text-[12px] text-slate-500">#{r.record_id}</span> },
+            render: (r: any) => <span className="tabular-nums text-small text-slate-500">#{r.record_id}</span> },
           { key: 'changed_by_name', header: 'Changed by',
             render: (r: any) => <span className="font-medium text-slate-700">{r.changed_by_name || `User #${r.changed_by ?? '?'}`}</span> },
           { key: 'changed_at', header: 'Timestamp', sortable: true,
-            render: (r: any) => <span className="tabular-nums text-[12px] text-slate-500">{fmtDateTime(r.changed_at)}</span> },
+            render: (r: any) => <span className="tabular-nums text-small text-slate-500">{fmtDateTime(r.changed_at)}</span> },
           { key: 'details', header: 'Snapshot Preview', className: 'max-w-[280px]',
             render: (r: any) => {
               const text = r.new_values ? previewJson(r.new_values) : (r.old_values ? previewJson(r.old_values) : '—');
               return (
-                <code className="block max-w-[280px] truncate text-[10.5px] text-slate-500">
+                <code className="block max-w-[280px] truncate text-caption text-slate-500">
                   {text}
                 </code>
               );
@@ -212,7 +212,7 @@ export function AuditPage() {
           size="lg"
           footer={<button className="btn-secondary" onClick={() => setInspectRow(null)}>Close</button>}>
           <div className="space-y-4 text-xs">
-            <div className="grid grid-cols-2 gap-3 rounded-lg border border-surface-border bg-slate-50 p-3 text-[12px]">
+            <div className="grid grid-cols-2 gap-3 rounded-lg border border-surface-border bg-slate-50 p-3 text-small">
               <div>
                 <span className="font-semibold text-slate-500">Changed By:</span>{' '}
                 <span className="text-slate-800">{inspectRow.changed_by_name || `User #${inspectRow.changed_by}`}</span>
@@ -236,16 +236,16 @@ export function AuditPage() {
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               {inspectRow.old_values && (
                 <div>
-                  <h4 className="mb-2 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Previous Values (Before)</h4>
-                  <pre className="max-h-80 overflow-auto rounded-lg bg-slate-900 p-3 font-mono text-[11px] leading-relaxed text-slate-200">
+                  <h4 className="mb-2 border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Previous Values (Before)</h4>
+                  <pre className="max-h-80 overflow-auto rounded-lg bg-slate-900 p-3 font-mono text-caption leading-relaxed text-slate-200">
                     {formatJson(inspectRow.old_values)}
                   </pre>
                 </div>
               )}
               {inspectRow.new_values && (
                 <div className={inspectRow.old_values ? '' : 'lg:col-span-2'}>
-                  <h4 className="mb-2 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">New Values (After)</h4>
-                  <pre className="max-h-80 overflow-auto rounded-lg bg-slate-900 p-3 font-mono text-[11px] leading-relaxed text-emerald-300">
+                  <h4 className="mb-2 border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">New Values (After)</h4>
+                  <pre className="max-h-80 overflow-auto rounded-lg bg-slate-900 p-3 font-mono text-caption leading-relaxed text-emerald-300">
                     {formatJson(inspectRow.new_values)}
                   </pre>
                 </div>

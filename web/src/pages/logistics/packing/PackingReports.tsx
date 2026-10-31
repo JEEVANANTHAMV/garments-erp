@@ -59,11 +59,11 @@ export function PackingReportsPage() {
             <Card title={<span className="tabular-nums">{t.carton.carton_no}</span>} subtitle={`${t.carton.pack_no} · ${t.carton.job_no} · ${t.carton.style_code} · PO ${t.carton.buyer_po_no ?? '—'} · ${t.carton.buyer_name ?? ''}`}
               actions={<PkStatus value={t.carton.carton_status} posted={t.carton.is_posted} />}>
               <div className="grid gap-4 p-4 lg:grid-cols-2" id="trace-result">
-                <div><TableHead title="Contents" /><table className="w-full text-[12.5px]"><tbody>{t.contents.map((c: any, i: number) => <tr key={i}><td className="td">{c.color_name}</td><td className="td">{c.size_code}</td><td className="td text-right">{c.qty} pcs</td></tr>)}</tbody></table></div>
-                <div><TableHead title="Bundles" />{!t.bundles.length ? <p className="text-[12px] text-slate-400">Not posted yet — bundles link on posting.</p> :
-                  <table className="w-full text-[12.5px]"><tbody>{t.bundles.map((b: any, i: number) => <tr key={i}><td className="td tabular-nums">{b.bundle_no}</td><td className="td">{b.cut_no}</td><td className="td">{b.color_name}/{b.size_code}</td><td className="td text-right">{b.qty}</td></tr>)}</tbody></table>}</div>
-                <div><TableHead title="History" /><ul className="text-[12px] text-slate-600">{t.events.map((e: any, i: number) => <li key={i}>{fmtDateTime(e.created_at)} · {e.event_type}{e.reason ? ` — ${e.reason}` : ''}</li>)}</ul></div>
-                <div><TableHead title="Shipment" />{t.shipment.length ? t.shipment.map((s: any, i: number) => <div key={i} className="text-[12.5px]">{s.shipment_no} · {s.status}</div>) : <p className="text-[12px] text-slate-400">Not on a shipment.</p>}</div>
+                <div><TableHead title="Contents" /><table className="w-full text-body"><tbody>{t.contents.map((c: any, i: number) => <tr key={i}><td className="td">{c.color_name}</td><td className="td">{c.size_code}</td><td className="td text-right">{c.qty} pcs</td></tr>)}</tbody></table></div>
+                <div><TableHead title="Bundles" />{!t.bundles.length ? <p className="text-small text-slate-400">Not posted yet — bundles link on posting.</p> :
+                  <table className="w-full text-body"><tbody>{t.bundles.map((b: any, i: number) => <tr key={i}><td className="td tabular-nums">{b.bundle_no}</td><td className="td">{b.cut_no}</td><td className="td">{b.color_name}/{b.size_code}</td><td className="td text-right">{b.qty}</td></tr>)}</tbody></table>}</div>
+                <div><TableHead title="History" /><ul className="text-small text-slate-600">{t.events.map((e: any, i: number) => <li key={i}>{fmtDateTime(e.created_at)} · {e.event_type}{e.reason ? ` — ${e.reason}` : ''}</li>)}</ul></div>
+                <div><TableHead title="Shipment" />{t.shipment.length ? t.shipment.map((s: any, i: number) => <div key={i} className="text-body">{s.shipment_no} · {s.status}</div>) : <p className="text-small text-slate-400">Not on a shipment.</p>}</div>
               </div>
             </Card>
           )}
@@ -74,7 +74,7 @@ export function PackingReportsPage() {
             <JobSelect className="w-80" by="so_id" label="Job" placeholder="All jobs" value={soId ?? ''} onPick={(j) => setSoId(j?.id ?? null)} />
           </div>
           {q.isLoading ? <LoadingBlock /> : q.error ? <ErrorState error={q.error} /> : !rows.length ? <EmptyState title="No data" message="Nothing to show for this report yet." /> : (
-            <div className="overflow-x-auto"><table className="w-full text-[12.5px]" id="report-table">
+            <div className="overflow-x-auto"><table className="w-full text-body" id="report-table">
               <thead><tr>{cols.map((c) => <th key={c} className="th">{humanize(c)}</th>)}</tr></thead>
               <tbody>{rows.map((r, i) => <tr key={i} className="row-hover">{cols.map((c) => <td key={c} className={`td ${typeof r[c] === 'number' ? 'text-right tabular-nums' : ''}`}>{cell(c, r[c])}</td>)}</tr>)}</tbody>
             </table></div>

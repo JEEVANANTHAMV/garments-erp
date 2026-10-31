@@ -255,7 +255,7 @@ export function SizeGroupsPage() {
               <div>
                 <div className="font-bold text-slate-900">{r.group_name}</div>
                 {r.description && (
-                  <div className="text-[11px] text-slate-500 font-medium truncate max-w-[280px]">
+                  <div className="text-caption text-slate-500 font-medium truncate max-w-[280px]">
                     {r.description}
                   </div>
                 )}
@@ -266,7 +266,7 @@ export function SizeGroupsPage() {
             key: 'category',
             header: 'Category',
             render: (r: any) => (
-              <span className="inline-flex rounded px-2 py-0.5 text-[11px] font-bold bg-slate-100 text-slate-700">
+              <span className="inline-flex rounded px-2 py-0.5 text-caption font-bold bg-slate-100 text-slate-700">
                 {r.category || 'ADULT'}
               </span>
             ),
@@ -748,7 +748,7 @@ export function SizeGroupDetailPage() {
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
             One-Click Industry Standard Scale Presets
           </h3>
-          <span className="text-[11px] text-slate-500 font-medium">
+          <span className="text-caption text-slate-500 font-medium">
             (Click any preset to instantly auto-populate the ordered size scale)
           </span>
         </div>
@@ -803,19 +803,19 @@ export function SizeGroupDetailPage() {
 
         {/* Live Scale Visualizer Chain */}
         <div className="mb-4 rounded-lg bg-indigo-50/50 border border-indigo-100 p-3">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-indigo-700 mb-2 flex items-center gap-1">
+          <div className="text-caption font-bold uppercase tracking-wider text-indigo-700 mb-2 flex items-center gap-1">
             <CheckCircle2 size={13} /> Live Scale Sequence Preview:
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {sizes.map((s, idx) => (
               <div key={s._key} className="flex items-center gap-1.5">
                 <span className="inline-flex items-center gap-1.5 rounded-md bg-white border border-indigo-200 px-2.5 py-1 text-xs tabular-nums font-bold text-indigo-950 shadow-sm">
-                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-indigo-100 text-[10px] text-indigo-700">
+                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-indigo-100 text-micro text-indigo-700">
                     {idx + 1}
                   </span>
                   <span>{s.size_code || '—'}</span>
                   {s.body_measurement && (
-                    <span className="text-[10px] font-sans font-normal text-slate-400">
+                    <span className="text-micro font-sans font-normal text-slate-400">
                       ({s.body_measurement})
                     </span>
                   )}
@@ -832,7 +832,7 @@ export function SizeGroupDetailPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-surface-border bg-slate-100/60 text-[11px] font-bold uppercase text-slate-600">
+              <tr className="border-b border-surface-border bg-slate-100/60 text-caption font-bold uppercase text-slate-600">
                 <th className="py-2.5 px-3 w-16 text-center">Order #</th>
                 <th className="py-2.5 px-2 min-w-[140px]">Size Code *</th>
                 <th className="py-2.5 px-2 min-w-[200px]">Size Display Label *</th>
@@ -896,7 +896,7 @@ export function SizeGroupDetailPage() {
                       type="button"
                       disabled={!editable}
                       onClick={() => handleUpdateSize(s._key, 'is_active', s.is_active ? 0 : 1)}
-                      className={`inline-flex rounded px-2 py-0.5 text-[10px] font-bold ${
+                      className={`inline-flex rounded px-2 py-0.5 text-micro font-bold ${
                         s.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
                       }`}
                     >
@@ -956,18 +956,18 @@ export function SizeGroupDetailPage() {
         {/* Bottom KPI Metrics */}
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3 pt-3 border-t border-slate-100">
           <div className="rounded-lg bg-blue-50/60 border border-blue-200 p-3 text-center">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-blue-700">Total Scale Sizes</span>
-            <div className="text-xl font-black text-blue-900 mt-0.5">{sizes.length}</div>
+            <span className="text-caption font-bold uppercase tracking-wider text-blue-700">Total Scale Sizes</span>
+            <div className="text-xl font-bold text-blue-900 mt-0.5">{sizes.length}</div>
           </div>
           <div className="rounded-lg bg-emerald-50/60 border border-emerald-200 p-3 text-center">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">Active Sizes</span>
-            <div className="text-xl font-black text-emerald-900 mt-0.5">
+            <span className="text-caption font-bold uppercase tracking-wider text-emerald-700">Active Sizes</span>
+            <div className="text-xl font-bold text-emerald-900 mt-0.5">
               {sizes.filter((s) => s.is_active).length}
             </div>
           </div>
           <div className="rounded-lg bg-amber-50/60 border border-amber-200 p-3 text-center">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700">Inactive Sizes</span>
-            <div className="text-xl font-black text-amber-900 mt-0.5">
+            <span className="text-caption font-bold uppercase tracking-wider text-amber-700">Inactive Sizes</span>
+            <div className="text-xl font-bold text-amber-900 mt-0.5">
               {sizes.filter((s) => !s.is_active).length}
             </div>
           </div>

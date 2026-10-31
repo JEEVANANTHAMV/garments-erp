@@ -1531,7 +1531,7 @@ export default function CadRequirementDetailPage() {
                 <React.Fragment key={idx}>
                   <tr className="hover:bg-slate-50/70">
                     <td className="py-2.5 px-3 font-semibold text-slate-900 flex items-center gap-1.5">
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">BULK</span>
+                      <span className="text-micro font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">BULK</span>
                       <span>{cl.fabric_type}</span>
                     </td>
                     <td className="py-2.5 px-2">{cl.gsm || '—'}</td>
@@ -1542,7 +1542,7 @@ export default function CadRequirementDetailPage() {
                       <div className="font-bold text-emerald-700 text-sm">
                         {fmtDecimal(bulkNetCut)} {cl.uom}
                       </div>
-                      <div className="text-[10px] text-slate-500 font-normal">
+                      <div className="text-micro text-slate-500 font-normal">
                         ({fmtDecimal(fpGrand - sampleQty, 2)} {cl.uom} − {lossPct}% process loss)
                       </div>
                     </td>
@@ -1551,7 +1551,7 @@ export default function CadRequirementDetailPage() {
                   {sampleQty > 0 && (
                     <tr className="bg-purple-50/40 hover:bg-purple-50/70 border-b border-purple-100">
                       <td className="py-2.5 px-3 font-semibold text-purple-950 flex items-center gap-1.5 pl-6">
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-200 text-purple-900">SAMPLE</span>
+                        <span className="text-micro font-bold px-1.5 py-0.5 rounded bg-purple-200 text-purple-900">SAMPLE</span>
                         <span>{cl.fabric_type}</span>
                       </td>
                       <td className="py-2.5 px-2 text-purple-800">{cl.gsm || '—'}</td>
@@ -1560,7 +1560,7 @@ export default function CadRequirementDetailPage() {
                       <td className="py-2.5 px-2 text-right text-purple-700 font-medium italic">Fitting / Development</td>
                       <td className="py-2.5 px-3 text-right">
                         <div className="font-bold text-purple-900 text-sm">{fmtDecimal(sampleNetCut)} {cl.uom}</div>
-                        <div className="text-[10px] text-purple-600 font-normal">({fmtDecimal(sampleQty, 2)} kg − {lossPct}% process loss)</div>
+                        <div className="text-micro text-purple-600 font-normal">({fmtDecimal(sampleQty, 2)} kg − {lossPct}% process loss)</div>
                       </td>
                     </tr>
                   )}
@@ -1659,7 +1659,7 @@ export default function CadRequirementDetailPage() {
         return (
           <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-3 rounded-lg bg-indigo-600 text-white font-bold">
             <span className="uppercase tracking-wider text-xs">Grand Total</span>
-            <span className="text-[11px] font-normal text-indigo-100">
+            <span className="text-caption font-normal text-indigo-100">
               Main fabric {fmtDecimal(cutFabric)} {summaryKpis.uom}
               {parts > 0 && <> + Foldings / parts {fmtDecimal(parts)} KG</>}
               {summaryKpis.collarYarnKg > 0 && <> (incl. collar yarn {fmtDecimal(summaryKpis.collarYarnKg)} KG)</>}
@@ -1817,47 +1817,47 @@ export default function CadRequirementDetailPage() {
       {/* KPI Overview Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <div className="p-3 bg-white rounded-xl border border-slate-200/80 shadow-sm">
-          <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Markers Planned</div>
+          <div className="text-caption font-semibold text-slate-500 uppercase tracking-wider">Markers Planned</div>
           <div className="text-lg font-bold text-slate-900 mt-0.5">{markers.length} Sheets</div>
-          <div className="text-[10px] text-slate-400">Tabs: {markers.map((m) => m.marker_ref).join(', ')}</div>
+          <div className="text-micro text-slate-400">Tabs: {markers.map((m) => m.marker_ref).join(', ')}</div>
         </div>
 
         <div className="p-3 bg-white rounded-xl border border-slate-200/80 shadow-sm">
-          <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Order Qty ({setInfo ? 'Sets' : 'Garments'})</div>
+          <div className="text-caption font-semibold text-slate-500 uppercase tracking-wider">Order Qty ({setInfo ? 'Sets' : 'Garments'})</div>
           <div className="text-lg font-bold text-indigo-600 mt-0.5">{fmtNumber(shownOrderQty)} {unitLabel}</div>
           {setInfo && (
-            <div className="text-[10px] text-indigo-700 font-semibold">
+            <div className="text-micro text-indigo-700 font-semibold">
               = {fmtNumber(setInfo.orderPcs)} Pcs ({setInfo.parts}) on the order
             </div>
           )}
-          <div className="text-[10px] text-slate-400">Main fabric colours · rib / collar not added · with excess {fmtNumber(shownCutQty)} {unitLabel}</div>
+          <div className="text-micro text-slate-400">Main fabric colours · rib / collar not added · with excess {fmtNumber(shownCutQty)} {unitLabel}</div>
         </div>
 
         <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-200 shadow-sm">
-          <div className="text-[11px] font-semibold text-indigo-700 uppercase tracking-wider">Total Fabric Need</div>
+          <div className="text-caption font-semibold text-indigo-700 uppercase tracking-wider">Total Fabric Need</div>
           {/* the F.PRGM grand total material — fabric + collar yarn + foldings + tapes (client 28-Oct-2026) */}
           <div className="text-xl font-bold text-indigo-900 mt-0.5">
             {fmtDecimal(isWoven ? summaryKpis.grandFabricMtr : summaryKpis.grandTotalMaterial)} {summaryKpis.uom}
           </div>
           {!isWoven && summaryKpis.partsKg > 0 && (
-            <div className="text-[10px] text-indigo-700 mt-0.5">
+            <div className="text-micro text-indigo-700 mt-0.5">
               Fabric {fmtDecimal(summaryKpis.grandFabricKg)} + Parts {fmtDecimal(summaryKpis.partsKg)} KG
             </div>
           )}
           {summaryKpis.grandFabricMtr > 0 && !isWoven && (
-            <div className="text-[10px] text-purple-700 font-bold mt-0.5">
+            <div className="text-micro text-purple-700 font-bold mt-0.5">
               + {fmtDecimal(summaryKpis.grandFabricMtr)} MTR Foam / Khada
             </div>
           )}
-          <div className="text-[10px] text-indigo-600">F.PRGM grand total</div>
+          <div className="text-micro text-indigo-600">F.PRGM grand total</div>
         </div>
 
         <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-200 shadow-sm">
-          <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">Average Piece Weight{setInfo ? ' / Set' : ''}</div>
+          <div className="text-caption font-semibold text-emerald-700 uppercase tracking-wider">Average Piece Weight{setInfo ? ' / Set' : ''}</div>
           <div className="text-lg font-bold text-emerald-900 mt-0.5">
             {fmtDecimal(summaryKpis.avgConsInclParts * (isWoven ? 1 : 1000), 2)} {isWoven ? 'Mtrs' : 'Gms'}
           </div>
-          <div className="text-[10px] text-emerald-600">
+          <div className="text-micro text-emerald-600">
             {isWoven
               ? `Fabric only · parts +${fmtDecimal(summaryKpis.partsKgPerPc * 1000, 2)} Gms`
               : `Fabric ${fmtDecimal(summaryKpis.avgGarmentCons * 1000, 2)} + Parts ${fmtDecimal(summaryKpis.partsKgPerPc * 1000, 2)} Gms`}
@@ -1865,11 +1865,11 @@ export default function CadRequirementDetailPage() {
         </div>
 
         <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200 shadow-sm">
-          <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Actual Piece Weight{setInfo ? ' / Set' : ''}</div>
+          <div className="text-caption font-semibold text-amber-700 uppercase tracking-wider">Actual Piece Weight{setInfo ? ' / Set' : ''}</div>
           <div className="text-lg font-bold text-amber-900 mt-0.5">
             {fmtDecimal(summaryKpis.actualPieceWt * (isWoven ? 1 : 1000), 2)} {isWoven ? 'Mtrs' : 'Gms'}
           </div>
-          <div className="text-[10px] text-amber-600">Average − marker fabric loss {summaryKpis.lossPct}% (collar / tapes not reduced)</div>
+          <div className="text-micro text-amber-600">Average − marker fabric loss {summaryKpis.lossPct}% (collar / tapes not reduced)</div>
         </div>
       </div>
 
@@ -2006,7 +2006,7 @@ export default function CadRequirementDetailPage() {
                 >
                   <MarkerThumb url={markerFiles.find((f) => f.marker_ref === m.marker_ref && f.image_url)?.image_url} size={22} alt={`Marker ${m.marker_ref}`} />
                   <span>Sheet {m.marker_ref}</span>
-                  <span className="text-[10px] px-1 py-0.5 rounded bg-slate-100 font-normal">
+                  <span className="text-micro px-1 py-0.5 rounded bg-slate-100 font-normal">
                     {fmtDecimal(m.total_req_qty)} {isWoven ? 'MTR' : (m.uom || 'KG')}
                   </span>
                 </button>
@@ -2059,7 +2059,7 @@ export default function CadRequirementDetailPage() {
 
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2.5 text-xs">
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600">Marker Ref</label>
+                <label className="block text-caption font-semibold text-slate-600">Marker Ref</label>
                 <input
                   type="text"
                   value={activeMarker.marker_ref}
@@ -2070,8 +2070,8 @@ export default function CadRequirementDetailPage() {
 
               <div className="lg:col-span-2">
                 <div className="flex items-center justify-between">
-                  <label className="block text-[11px] font-semibold text-slate-600">Fabric Type / Description</label>
-                  <span className="text-[10px] text-indigo-600 font-semibold">Fabric Master Linked</span>
+                  <label className="block text-caption font-semibold text-slate-600">Fabric Type / Description</label>
+                  <span className="text-micro text-indigo-600 font-semibold">Fabric Master Linked</span>
                 </div>
                 <input
                   type="text"
@@ -2104,7 +2104,7 @@ export default function CadRequirementDetailPage() {
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600">CAD Length (mm)</label>
+                <label className="block text-caption font-semibold text-slate-600">CAD Length (mm)</label>
                 <input
                   type="number"
                   value={activeMarker.length_mm}
@@ -2114,7 +2114,7 @@ export default function CadRequirementDetailPage() {
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600">CAD Width (mm)</label>
+                <label className="block text-caption font-semibold text-slate-600">CAD Width (mm)</label>
                 <input
                   type="number"
                   step="any"
@@ -2138,7 +2138,7 @@ export default function CadRequirementDetailPage() {
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600">Dia Form</label>
+                <label className="block text-caption font-semibold text-slate-600">Dia Form</label>
                 <select
                   value={activeMarker.fabric_dia_type}
                   onChange={(e) => {
@@ -2159,7 +2159,7 @@ export default function CadRequirementDetailPage() {
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-indigo-700">Fabric Dia (Inches)</label>
+                <label className="block text-caption font-semibold text-indigo-700">Fabric Dia (Inches)</label>
                 <input
                   type="number"
                   step="any"
@@ -2186,7 +2186,7 @@ export default function CadRequirementDetailPage() {
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600">Unit / Mode</label>
+                <label className="block text-caption font-semibold text-slate-600">Unit / Mode</label>
                 <select
                   value={activeMarker.uom || 'KG'}
                   onChange={(e) => {
@@ -2205,7 +2205,7 @@ export default function CadRequirementDetailPage() {
 
               {activeMarker.uom !== 'MTR' ? (
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-600">GSM</label>
+                  <label className="block text-caption font-semibold text-slate-600">GSM</label>
                   <input
                     type="number"
                     value={activeMarker.gsm}
@@ -2216,7 +2216,7 @@ export default function CadRequirementDetailPage() {
                 </div>
               ) : (
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-400">GSM (N/A for MTR)</label>
+                  <label className="block text-caption font-semibold text-slate-400">GSM (N/A for MTR)</label>
                   <div className="w-full border border-slate-200 bg-slate-100 text-slate-400 rounded px-2 py-1 mt-0.5 text-xs font-semibold flex items-center h-[30px]">
                     — Not Applicable
                   </div>
@@ -2224,7 +2224,7 @@ export default function CadRequirementDetailPage() {
               )}
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600">Direction</label>
+                <label className="block text-caption font-semibold text-slate-600">Direction</label>
                 <select
                   value={activeMarker.direction}
                   onChange={(e) => updateActiveMarker({ direction: e.target.value })}
@@ -2239,7 +2239,7 @@ export default function CadRequirementDetailPage() {
             {/* Marker-Level Individual Variables (Rejection %, Fabric Loss %, Buffers) */}
             <div className="p-3 bg-amber-50/30 rounded-xl border border-amber-200/80 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-3 text-xs">
               <div>
-                <label className="block text-[11px] font-bold text-amber-800">
+                <label className="block text-caption font-bold text-amber-800">
                   Marker Rejection %
                 </label>
                 <div className="flex items-center gap-1 mt-0.5">
@@ -2252,11 +2252,11 @@ export default function CadRequirementDetailPage() {
                   />
                   <span className="text-amber-800 font-bold">%</span>
                 </div>
-                <span className="text-[10px] text-amber-700">Per-marker CEIL cut buffer</span>
+                <span className="text-micro text-amber-700">Per-marker CEIL cut buffer</span>
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-indigo-800">
+                <label className="block text-caption font-bold text-indigo-800">
                   Marker Fabric Loss %
                 </label>
                 <div className="flex items-center gap-1 mt-0.5">
@@ -2269,11 +2269,11 @@ export default function CadRequirementDetailPage() {
                   />
                   <span className="text-indigo-800 font-bold">%</span>
                 </div>
-                <span className="text-[10px] text-indigo-700">For gross avg consumption</span>
+                <span className="text-micro text-indigo-700">For gross avg consumption</span>
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-700">
+                <label className="block text-caption font-semibold text-slate-700">
                   Lay Add (cm)
                 </label>
                 <div className="flex items-center gap-1 mt-0.5">
@@ -2286,11 +2286,11 @@ export default function CadRequirementDetailPage() {
                   />
                   <span className="text-slate-500 font-medium">cm</span>
                 </div>
-                <span className="text-[10px] text-slate-500">End bits allowance</span>
+                <span className="text-micro text-slate-500">End bits allowance</span>
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-700">
+                <label className="block text-caption font-semibold text-slate-700">
                   Width Add (in)
                 </label>
                 <div className="flex items-center gap-1 mt-0.5">
@@ -2308,11 +2308,11 @@ export default function CadRequirementDetailPage() {
                   />
                   <span className="text-slate-500 font-medium">in</span>
                 </div>
-                <span className="text-[10px] text-slate-500">Selvedge & edge trim</span>
+                <span className="text-micro text-slate-500">Selvedge & edge trim</span>
               </div>
 
               <div className="col-span-2 sm:col-span-4 md:col-span-1">
-                <label className="block text-[11px] font-semibold text-slate-700">Parts Included</label>
+                <label className="block text-caption font-semibold text-slate-700">Parts Included</label>
                 <input
                   type="text"
                   value={activeMarker.parts_in_lay}
@@ -2320,28 +2320,28 @@ export default function CadRequirementDetailPage() {
                   placeholder="BCK, FRT, SLV, N/RIB"
                   className="w-full font-medium border border-slate-300 bg-white rounded px-2 py-1 mt-0.5"
                 />
-                <span className="text-[10px] text-slate-500">Garment components</span>
+                <span className="text-micro text-slate-500">Garment components</span>
               </div>
             </div>
 
             {/* Computed Lay Geometry & Piece Weights (Net Actual vs Gross Average) */}
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3 text-xs">
               <div>
-                <span className="text-slate-500 text-[11px]">Lay Length:</span>
+                <span className="text-slate-500 text-caption">Lay Length:</span>
                 <div className="font-bold text-slate-900 mt-0.5 text-sm">
                   {fmtDecimal(activeMarker.lay_length_cm, 1)} cm
                 </div>
-                <span className="text-[10px] text-slate-400">
+                <span className="text-micro text-slate-400">
                   {((activeMarker.length_mm || 0) / 10).toFixed(1)} + {activeMarker.lay_allowance_cm}cm
                 </span>
               </div>
 
               <div>
-                <span className="text-slate-500 text-[11px]">Table Width / Dia (+{activeMarker.width_allowance_in ?? 2}"):</span>
+                <span className="text-slate-500 text-caption">Table Width / Dia (+{activeMarker.width_allowance_in ?? 2}"):</span>
                 <div className="font-bold text-indigo-700 mt-0.5 text-sm">
                   {fmtDecimal(activeMarker.table_width_in, 1)}" (Table Dia: {Math.round(activeMarker.table_width_in || ((activeMarker.dia_in || 0) + (activeMarker.width_allowance_in ?? 2)))}")
                 </div>
-                <span className="text-[10px] text-slate-400">
+                <span className="text-micro text-slate-400">
                   Actual Dia: {activeMarker.dia_in || (activeMarker.width_mm ? Math.round(activeMarker.width_mm / 25.4) : 0)}" + {activeMarker.width_allowance_in ?? 2}"
                 </span>
               </div>
@@ -2349,39 +2349,39 @@ export default function CadRequirementDetailPage() {
               {!isWoven ? (
                 <>
                   <div>
-                    <span className="text-slate-500 text-[11px]">Fabric Wt / Lay:</span>
+                    <span className="text-slate-500 text-caption">Fabric Wt / Lay:</span>
                     <div className="font-bold text-indigo-700 mt-0.5 text-sm">
                       {fmtDecimal(activeMarker.fabric_wt_per_lay_g, 1)} g
                     </div>
-                    <span className="text-[10px] text-slate-400">
+                    <span className="text-micro text-slate-400">
                       {activeMarker.fabric_dia_type === 'TUBE' ? 'x2 Tubular layers' : 'Single layer'}
                     </span>
                   </div>
 
                   <div>
-                    <span className="text-slate-500 text-[11px]">No of Pcs / Lay:</span>
+                    <span className="text-slate-500 text-caption">No of Pcs / Lay:</span>
                     <div className="font-bold text-slate-900 mt-0.5 text-sm">
                       {activeMarker.no_of_pcs_lay} pcs
                     </div>
-                    <span className="text-[10px] text-slate-400">Ratios {activeMarker.fabric_dia_type === 'TUBE' ? 'x2' : ''}</span>
+                    <span className="text-micro text-slate-400">Ratios {activeMarker.fabric_dia_type === 'TUBE' ? 'x2' : ''}</span>
                   </div>
 
                   {/* Net Actual Piece Weight */}
                   <div className="p-2 bg-amber-50 rounded-lg border border-amber-200">
-                    <span className="text-amber-800 text-[10px] font-bold uppercase tracking-wider">Actual Wt / Pc (Net):</span>
-                    <div className="font-extrabold text-amber-900 mt-0.5 text-sm">
+                    <span className="text-amber-800 text-micro font-bold uppercase tracking-wider">Actual Wt / Pc (Net):</span>
+                    <div className="font-bold text-amber-900 mt-0.5 text-sm">
                       {fmtDecimal(activeMarker.act_wt_per_pc_g || (activeMarker.fabric_wt_per_lay_g / (activeMarker.no_of_pcs_lay || 1)), 2)} g/pc
                     </div>
-                    <span className="text-[9px] text-amber-700">Pure net lay weight</span>
+                    <span className="text-micro text-amber-700">Pure net lay weight</span>
                   </div>
 
                   {/* Gross Average Piece Weight */}
                   <div className="p-2 bg-emerald-50 rounded-lg border border-emerald-200">
-                    <span className="text-emerald-800 text-[10px] font-bold uppercase tracking-wider">Average Wt / Pc (Gross):</span>
-                    <div className="font-extrabold text-emerald-900 mt-0.5 text-sm">
+                    <span className="text-emerald-800 text-micro font-bold uppercase tracking-wider">Average Wt / Pc (Gross):</span>
+                    <div className="font-bold text-emerald-900 mt-0.5 text-sm">
                       {fmtDecimal(activeMarker.avg_wt_per_pc_g, 2)} g/pc
                     </div>
-                    <span className="text-[9px] text-emerald-700">
+                    <span className="text-micro text-emerald-700">
                       +{activeMarker.fabric_allowance_pct ?? header.fabric_allowance_pct}% fabric allowance
                     </span>
                   </div>
@@ -2389,27 +2389,27 @@ export default function CadRequirementDetailPage() {
               ) : (
                 <>
                   <div>
-                    <span className="text-slate-500 text-[11px]">No of Pcs / Lay:</span>
+                    <span className="text-slate-500 text-caption">No of Pcs / Lay:</span>
                     <div className="font-bold text-slate-900 mt-0.5 text-sm">
                       {activeMarker.no_of_pcs_lay} pcs
                     </div>
-                    <span className="text-[10px] text-slate-400">Sum of ratios</span>
+                    <span className="text-micro text-slate-400">Sum of ratios</span>
                   </div>
 
                   <div className="p-2 bg-amber-50 rounded-lg border border-amber-200">
-                    <span className="text-amber-800 text-[10px] font-bold uppercase tracking-wider">Actual Length / Pc (Net):</span>
-                    <div className="font-extrabold text-amber-900 mt-0.5 text-sm">
+                    <span className="text-amber-800 text-micro font-bold uppercase tracking-wider">Actual Length / Pc (Net):</span>
+                    <div className="font-bold text-amber-900 mt-0.5 text-sm">
                       {fmtDecimal(activeMarker.act_length_per_pc_cm || (activeMarker.lay_length_cm / (activeMarker.no_of_pcs_lay || 1)), 2)} cm/pc
                     </div>
-                    <span className="text-[9px] text-amber-700">Pure net lay length</span>
+                    <span className="text-micro text-amber-700">Pure net lay length</span>
                   </div>
 
                   <div className="p-2 bg-emerald-50 rounded-lg border border-emerald-200">
-                    <span className="text-emerald-800 text-[10px] font-bold uppercase tracking-wider">Req Length / Pc (Gross):</span>
-                    <div className="font-extrabold text-emerald-900 mt-0.5 text-sm">
+                    <span className="text-emerald-800 text-micro font-bold uppercase tracking-wider">Req Length / Pc (Gross):</span>
+                    <div className="font-bold text-emerald-900 mt-0.5 text-sm">
                       {fmtDecimal(activeMarker.req_length_per_pc_cm, 2)} cm/pc
                     </div>
-                    <span className="text-[9px] text-emerald-700">
+                    <span className="text-micro text-emerald-700">
                       +{activeMarker.fabric_allowance_pct ?? header.fabric_allowance_pct}% fabric allowance
                     </span>
                   </div>
@@ -2417,11 +2417,11 @@ export default function CadRequirementDetailPage() {
               )}
 
               <div className="p-2 bg-indigo-50 rounded-lg border border-indigo-200">
-                <span className="text-indigo-800 text-[10px] font-bold uppercase tracking-wider">Marker Total Req:</span>
-                <div className="text-base font-extrabold text-indigo-950 mt-0.5">
+                <span className="text-indigo-800 text-micro font-bold uppercase tracking-wider">Marker Total Req:</span>
+                <div className="text-base font-bold text-indigo-950 mt-0.5">
                   {fmtDecimal(activeMarker.total_req_qty)} {isWoven ? 'MTR' : (activeMarker.uom || 'KG')}
                 </div>
-                <span className="text-[9px] text-indigo-700">Fabric required</span>
+                <span className="text-micro text-indigo-700">Fabric required</span>
               </div>
             </div>
           </div>
@@ -2433,7 +2433,7 @@ export default function CadRequirementDetailPage() {
                 <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
                   Sizes & Lay Ratio (Pcs/Lay)
                 </h3>
-                <p className="text-[11px] text-slate-500">
+                <p className="text-caption text-slate-500">
                   Defines garment sizes in the marker and how many pieces cut per table ply
                 </p>
               </div>
@@ -2543,7 +2543,7 @@ export default function CadRequirementDetailPage() {
                 <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
                   Colorways & Order Matrix (with Rejection CEIL)
                 </h3>
-                <p className="text-[11px] text-slate-500">
+                <p className="text-caption text-slate-500">
                   Formula: <strong>Cut Pieces = CEILING(Order Qty × (1 + {activeMarker.rejection_pct ?? header.rejection_pct}%), 1)</strong> per size
                   {' '}· Req = {isWoven ? 'req length' : 'avg weight'} / pc × <strong>cut pieces</strong> (top row: order pcs only)
                 </p>
@@ -2702,7 +2702,7 @@ export default function CadRequirementDetailPage() {
                         </tr>
 
                         {/* Row 2: Computed Cut Pieces with Rejection CEIL */}
-                        <tr className="bg-amber-50/30 text-[11px] text-amber-900">
+                        <tr className="bg-amber-50/30 text-caption text-amber-900">
                           <td className="py-1 px-2 text-center font-semibold text-amber-800 bg-amber-50/60">Cut Pieces (Ceil)</td>
                           {activeMarker.sizes.map((_, sIdx) => (
                             <td key={sIdx} className="py-1 px-2 text-right tabular-nums font-medium">
@@ -2714,7 +2714,7 @@ export default function CadRequirementDetailPage() {
                           </td>
                           <td className="py-1 px-2 text-right" title={`Fabric for the ${fmtNumber(totCut)} cut pcs — this is the qty taken to the fabric program`}>
                             <div className="font-bold text-indigo-700 text-xs">{fmtDecimal(reqVal)} {isWoven ? 'MTR' : (activeMarker.uom || 'KG')}</div>
-                            <div className="text-[10px] text-amber-700 font-medium">incl. +{effRej}% excess</div>
+                            <div className="text-micro text-amber-700 font-medium">incl. +{effRej}% excess</div>
                           </td>
                           <td></td>
                         </tr>
@@ -2757,7 +2757,7 @@ export default function CadRequirementDetailPage() {
                 <span className="w-2 h-2 rounded-full bg-indigo-600 inline-block"></span>
                 <span>Part A: Main Body & Knitted Fabric Indent</span>
               </h3>
-              <span className="text-[11px] text-slate-500 font-medium">
+              <span className="text-caption text-slate-500 font-medium">
                 Calculated from Marker Width & Lay Length
               </span>
             </div>
@@ -2796,7 +2796,7 @@ export default function CadRequirementDetailPage() {
                       <td className="py-2.5 px-2 text-right">
                         <div>{fmtNumber(fp.order_qty_pcs)} {unitLabel}</div>
                         {fpCutPcs(fp) > Number(fp.order_qty_pcs) && (
-                          <div className="text-[10px] text-slate-500" title="Net qty is for the cut pieces (order qty + rejection / excess %)">
+                          <div className="text-micro text-slate-500" title="Net qty is for the cut pieces (order qty + rejection / excess %)">
                             cut {fmtNumber(fpCutPcs(fp))} incl. excess
                           </div>
                         )}
@@ -2805,7 +2805,7 @@ export default function CadRequirementDetailPage() {
                       <td className="py-2.5 px-2 text-right text-amber-700 font-medium" title={`2% of ${fmtNumber(Math.ceil(Number(fp.net_qty) || 0))} ${fp.uom}, rounded`}>+{fmtDecimal(fp.buffer_qty)}</td>
                       <td className="py-2.5 px-2 text-right text-purple-700 font-medium">
                         <div className="flex items-center justify-end gap-1">
-                          <span className="text-[10px] text-purple-500 font-bold">+</span>
+                          <span className="text-micro text-purple-500 font-bold">+</span>
                           <input
                             type="number"
                             step="0.5"
@@ -2876,7 +2876,7 @@ export default function CadRequirementDetailPage() {
                 <span className="w-2 h-2 rounded-full bg-amber-600 inline-block"></span>
                 <span>Part B: Specialized Parts, Tapes & Flat Knit Collar Indent</span>
               </h3>
-              <span className="text-[11px] text-amber-800 font-medium">
+              <span className="text-caption text-amber-800 font-medium">
                 Foldings, Neck Binding Tapes, Drawcords & Collar Yarn
               </span>
             </div>
@@ -2891,7 +2891,7 @@ export default function CadRequirementDetailPage() {
                     <th className="py-2.5 px-2">Colour</th>
                     <th className="py-2.5 px-2 text-right">Pieces / Breakdown</th>
                     <th className="py-2.5 px-2">Unit</th>
-                    <th className="py-2.5 px-3 text-right text-amber-900 font-extrabold">Total Requirement</th>
+                    <th className="py-2.5 px-3 text-right text-amber-900 font-bold">Total Requirement</th>
                     <th className="py-2.5 px-3">Procurement Remarks</th>
                   </tr>
                 </thead>
@@ -2914,7 +2914,7 @@ export default function CadRequirementDetailPage() {
                         ))}
                       </td>
                       <td className="py-2.5 px-2 font-bold text-amber-900">KG</td>
-                      <td className="py-2.5 px-3 text-right tabular-nums font-extrabold text-amber-900 text-sm">
+                      <td className="py-2.5 px-3 text-right tabular-nums font-bold text-amber-900 text-sm">
                         {fmtDecimal(flatKnitSpec.total_yarn_kg, 2)} KG
                       </td>
                       <td className="py-2.5 px-3 text-xs text-slate-600">{flatKnitSpec.remarks}</td>
@@ -2941,7 +2941,7 @@ export default function CadRequirementDetailPage() {
                           specialPartKg(sp) != null ? (
                             <div className="text-amber-900 text-xs">= {fmtDecimal(specialPartKg(sp), 2)} KG <span className="font-normal text-slate-500">@ {partFactorText(sp)}</span></div>
                           ) : (
-                            <div className="text-[10px] font-normal text-red-600">KG factor not set</div>
+                            <div className="text-micro font-normal text-red-600">KG factor not set</div>
                           )
                         )}
                       </td>
@@ -2961,7 +2961,7 @@ export default function CadRequirementDetailPage() {
                   <span className="w-2 h-2 rounded-full bg-purple-600 inline-block"></span>
                   <span>Part C: Foam & Khada Roll Indent (MTR — Non-Piece Weight)</span>
                 </h3>
-                <span className="text-[11px] text-purple-800 font-bold bg-purple-100 border border-purple-200 px-2 py-0.5 rounded">
+                <span className="text-caption text-purple-800 font-bold bg-purple-100 border border-purple-200 px-2 py-0.5 rounded">
                   Excluded from Knitted Piece Weight (Trims Procurement Only)
                 </span>
               </div>
@@ -2976,7 +2976,7 @@ export default function CadRequirementDetailPage() {
                       <th className="py-2.5 px-2">Colour</th>
                       <th className="py-2.5 px-2 text-right">Cons / Pc (Mtr)</th>
                       <th className="py-2.5 px-2">Unit</th>
-                      <th className="py-2.5 px-3 text-right text-purple-900 font-extrabold">Total Requirement</th>
+                      <th className="py-2.5 px-3 text-right text-purple-900 font-bold">Total Requirement</th>
                       <th className="py-2.5 px-3">Procurement Remarks</th>
                     </tr>
                   </thead>
@@ -2994,7 +2994,7 @@ export default function CadRequirementDetailPage() {
                           {fk.consumption_per_pc ? `${fmtDecimal(fk.consumption_per_pc, 3)} / pc` : '—'}
                         </td>
                         <td className="py-2.5 px-2 font-bold text-purple-900">MTR</td>
-                        <td className="py-2.5 px-3 text-right tabular-nums font-extrabold text-purple-900 text-sm">
+                        <td className="py-2.5 px-3 text-right tabular-nums font-bold text-purple-900 text-sm">
                           {fmtDecimal(fk.total_mtrs, 1)} MTR
                         </td>
                         <td className="py-2.5 px-3 text-xs text-slate-600">{fk.remarks || 'Interlining roll indent'}</td>
@@ -3029,45 +3029,45 @@ export default function CadRequirementDetailPage() {
 
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               <div className="p-3 bg-white/90 rounded-lg border border-slate-200/80">
-                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Main & Rib Fabric</span>
-                <div className="text-base font-extrabold text-slate-900 tabular-nums mt-1">
+                <span className="text-micro text-slate-500 font-bold uppercase tracking-wider">Main & Rib Fabric</span>
+                <div className="text-base font-bold text-slate-900 tabular-nums mt-1">
                   {fmtDecimal(summaryKpis.grandFabric, 2)} <span className="text-xs font-normal text-slate-500">{summaryKpis.uom}</span>
                 </div>
-                <div className="text-[10px] text-slate-400 mt-0.5">Body + Rib Knitting</div>
+                <div className="text-micro text-slate-400 mt-0.5">Body + Rib Knitting</div>
               </div>
 
               <div className="p-3 bg-white/90 rounded-lg border border-slate-200/80">
-                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Folding Fabric (S/J)</span>
-                <div className="text-base font-extrabold text-indigo-900 tabular-nums mt-1">
+                <span className="text-micro text-slate-500 font-bold uppercase tracking-wider">Folding Fabric (S/J)</span>
+                <div className="text-base font-bold text-indigo-900 tabular-nums mt-1">
                   {fmtDecimal(summaryKpis.foldingFabricKg, 2)} <span className="text-xs font-normal text-slate-500">KG</span>
                 </div>
-                <div className="text-[10px] text-slate-400 mt-0.5">DIA-ANY TUBE / Plackets</div>
+                <div className="text-micro text-slate-400 mt-0.5">DIA-ANY TUBE / Plackets</div>
               </div>
 
               <div className="p-3 bg-white/90 rounded-lg border border-amber-200/80 bg-amber-50/40">
-                <span className="text-[10px] text-amber-800 font-bold uppercase tracking-wider">Flat Knit Collar Yarn</span>
-                <div className="text-base font-extrabold text-amber-900 tabular-nums mt-1">
+                <span className="text-micro text-amber-800 font-bold uppercase tracking-wider">Flat Knit Collar Yarn</span>
+                <div className="text-base font-bold text-amber-900 tabular-nums mt-1">
                   {fmtDecimal(summaryKpis.collarYarnKg, 2)} <span className="text-xs font-normal text-amber-700">KG</span>
                 </div>
-                <div className="text-[10px] text-amber-700/80 mt-0.5">
+                <div className="text-micro text-amber-700/80 mt-0.5">
                   {(flatKnitSpec.components || []).map((c) => `${fmtNumber(flatKnitSpec.component_totals?.[c.key] || 0)} ${c.label}`).join(' + ')}
                 </div>
               </div>
 
               <div className="p-3 bg-white/90 rounded-lg border border-slate-200/80">
-                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Tapes & Cords</span>
-                <div className="text-base font-extrabold text-indigo-900 tabular-nums mt-1">
+                <span className="text-micro text-slate-500 font-bold uppercase tracking-wider">Tapes & Cords</span>
+                <div className="text-base font-bold text-indigo-900 tabular-nums mt-1">
                   {fmtDecimal(summaryKpis.tapesKg, 2)} <span className="text-xs font-normal text-slate-500">KG</span>
                 </div>
-                <div className="text-[10px] text-slate-400 mt-0.5">{fmtDecimal(summaryKpis.totalTapesMtrs, 1)} MTRS converted</div>
+                <div className="text-micro text-slate-400 mt-0.5">{fmtDecimal(summaryKpis.totalTapesMtrs, 1)} MTRS converted</div>
               </div>
 
               <div className="p-3 bg-indigo-600 text-white rounded-lg shadow-sm">
-                <span className="text-[10px] text-indigo-200 font-bold uppercase tracking-wider">Grand Total Material</span>
-                <div className="text-lg font-extrabold tabular-nums mt-0.5">
+                <span className="text-micro text-indigo-200 font-bold uppercase tracking-wider">Grand Total Material</span>
+                <div className="text-lg font-bold tabular-nums mt-0.5">
                   {fmtDecimal(summaryKpis.grandTotalMaterial, 2)} <span className="text-xs font-normal text-indigo-200">{summaryKpis.uom}</span>
                 </div>
-                <div className="text-[10px] text-indigo-200/90 mt-0.5">{isWoven ? 'Total Woven Fabric (MTR)' : 'Fabric + Collar + Fold + Tapes'}</div>
+                <div className="text-micro text-indigo-200/90 mt-0.5">{isWoven ? 'Total Woven Fabric (MTR)' : 'Fabric + Collar + Fold + Tapes'}</div>
               </div>
             </div>
 
@@ -3080,7 +3080,7 @@ export default function CadRequirementDetailPage() {
               </div>
             )}
             {summaryKpis.partsMissingKgFactor > 0 && (
-              <div className="text-[11px] text-red-600">
+              <div className="text-caption text-red-600">
                 {summaryKpis.partsMissingKgFactor} non-KG part(s) have no weight factor — set it in Trims & Accessories so the KG purchase requirement is complete.
               </div>
             )}
@@ -3094,22 +3094,22 @@ export default function CadRequirementDetailPage() {
               <div className="flex flex-wrap items-center gap-2.5 tabular-nums">
                 {/* 1. Actual Piece Weight (before Average Piece Weight) */}
                 <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-300 text-amber-950 px-2.5 py-1 rounded-lg shadow-2xs">
-                  <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-amber-800">Actual Piece Weight{setInfo ? ' / Set' : ''}:</span>
-                  <span className="font-extrabold text-sm text-amber-950">
+                  <span className="text-micro font-sans font-bold uppercase tracking-wider text-amber-800">Actual Piece Weight{setInfo ? ' / Set' : ''}:</span>
+                  <span className="font-bold text-sm text-amber-950">
                     {fmtDecimal(summaryKpis.actualPieceWt * (isWoven ? 1 : 1000), 2)} {isWoven ? 'Mtrs' : 'Gms'}
                   </span>
-                  <span className="text-[10px] font-sans text-amber-700 font-medium">(-{summaryKpis.lossPct}% loss)</span>
+                  <span className="text-micro font-sans text-amber-700 font-medium">(-{summaryKpis.lossPct}% loss)</span>
                 </div>
 
                 {/* 2. Average Piece Weight (Gross) */}
                 <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-300 text-emerald-950 px-2.5 py-1 rounded-lg shadow-2xs">
-                  <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-emerald-800">Average Piece Weight{setInfo ? ' / Set' : ''}:</span>
-                  <span className="font-extrabold text-sm text-emerald-950">
+                  <span className="text-micro font-sans font-bold uppercase tracking-wider text-emerald-800">Average Piece Weight{setInfo ? ' / Set' : ''}:</span>
+                  <span className="font-bold text-sm text-emerald-950">
                     {fmtDecimal(summaryKpis.avgConsInclParts * (isWoven ? 1 : 1000), 2)} {isWoven ? 'Mtrs' : 'Gms'}
                   </span>
                 </div>
 
-                <span className="text-slate-400 font-sans text-[11px]">
+                <span className="text-slate-400 font-sans text-caption">
                   ({fmtDecimal(summaryKpis.grandTotalMaterial, 2)} {summaryKpis.uom} ÷ {fmtNumber(summaryKpis.totalOrderPcs)} {setInfo ? `sets of ${setInfo.parts}` : 'pcs'})
                 </span>
               </div>
@@ -3119,19 +3119,19 @@ export default function CadRequirementDetailPage() {
           {/* Signoff / Approval Signature Grid */}
           <div className="pt-4 border-t border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Prepared By</span>
+              <span className="text-micro text-slate-500 font-bold uppercase tracking-wider">Prepared By</span>
               <div className="font-semibold text-xs text-slate-800 mt-2">FAB.PGMR (CAD Dept)</div>
             </div>
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Approved By</span>
+              <span className="text-micro text-slate-500 font-bold uppercase tracking-wider">Approved By</span>
               <div className="font-semibold text-xs text-slate-800 mt-2">M.D / Production Head</div>
             </div>
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Approved By</span>
+              <span className="text-micro text-slate-500 font-bold uppercase tracking-wider">Approved By</span>
               <div className="font-semibold text-xs text-slate-800 mt-2">MERCH (Merchandiser)</div>
             </div>
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Received By</span>
+              <span className="text-micro text-slate-500 font-bold uppercase tracking-wider">Received By</span>
               <div className="font-semibold text-xs text-slate-800 mt-2">FABRIC Sourcing / Mill</div>
             </div>
           </div>
@@ -3170,9 +3170,9 @@ export default function CadRequirementDetailPage() {
               <div className="border-b-2 border-black pb-2 mb-3">
                 <div className="flex items-baseline justify-between">
                   <h1 className="text-lg font-bold">CUTTING LAY SHEET</h1>
-                  <span className="text-[11px]">Printed {new Date().toLocaleString('en-GB')}</span>
+                  <span className="text-caption">Printed {new Date().toLocaleString('en-GB')}</span>
                 </div>
-                <div className="mt-1.5 grid grid-cols-4 gap-x-6 gap-y-1 text-[12px]">
+                <div className="mt-1.5 grid grid-cols-4 gap-x-6 gap-y-1 text-small">
                   <div><span className="text-slate-500">IO No:</span> <strong>{header.internal_ir_no || '—'}</strong></div>
                   <div><span className="text-slate-500">Style No:</span> <strong>{cadStyleCode || '—'}</strong>{cadStyleName ? ` — ${cadStyleName}` : ''}</div>
                   <div><span className="text-slate-500">CAD No:</span> <strong>{header.req_no || 'Unsaved'} {header.cad_version}</strong></div>
@@ -3184,7 +3184,7 @@ export default function CadRequirementDetailPage() {
                 </div>
               </div>
               <div className="space-y-3">{cutSheetTables}</div>
-              <div className="grid grid-cols-4 gap-6 mt-10 text-center text-[11px]">
+              <div className="grid grid-cols-4 gap-6 mt-10 text-center text-caption">
                 {['Prepared By (CAD)', 'Cutting In-charge', 'Production Head', 'Received By'].map((t) => (
                   <div key={t} className="border-t border-black pt-1">{t}</div>
                 ))}
@@ -3274,7 +3274,7 @@ export default function CadRequirementDetailPage() {
             {/* Flat Knit Specification Header Controls */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 bg-slate-50/80 p-3 rounded-lg border border-slate-200/60">
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                <label className="block text-micro font-bold text-slate-500 uppercase tracking-wider mb-1">
                   Item Description / Type
                 </label>
                 <input
@@ -3287,7 +3287,7 @@ export default function CadRequirementDetailPage() {
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                <label className="block text-micro font-bold text-slate-500 uppercase tracking-wider mb-1">
                   Colour / Yarn Shade
                 </label>
                 <input
@@ -3300,19 +3300,19 @@ export default function CadRequirementDetailPage() {
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                <label className="block text-micro font-bold text-slate-500 uppercase tracking-wider mb-1">
                   Weight / Set (sum of components)
                 </label>
                 <div className="flex items-center gap-1">
                   <div className="w-full text-xs tabular-nums font-bold text-amber-900 border border-slate-200 rounded px-2 py-1.5 bg-slate-100">
                     {fmtDecimal(flatKnitSpec.weight_per_set_g, 1)}
                   </div>
-                  <span className="text-[11px] text-slate-500 font-medium whitespace-nowrap">Gms</span>
+                  <span className="text-caption text-slate-500 font-medium whitespace-nowrap">Gms</span>
                 </div>
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                <label className="block text-micro font-bold text-slate-500 uppercase tracking-wider mb-1">
                   Industry Presets
                 </label>
                 <div className="flex items-center gap-1.5 pt-0.5">
@@ -3325,7 +3325,7 @@ export default function CadRequirementDetailPage() {
                       );
                       toast(`Applied Mens preset — ${primary.label} 184g / set (Weight / Set ${updated.weight_per_set_g}g)`, 'info');
                     }}
-                    className="px-2 py-1 text-[11px] font-semibold rounded border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 transition"
+                    className="px-2 py-1 text-caption font-semibold rounded border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 transition"
                   >
                     Mens (184g)
                   </button>
@@ -3338,7 +3338,7 @@ export default function CadRequirementDetailPage() {
                       );
                       toast(`Applied Boys preset — ${primary.label} 137g / set (Weight / Set ${updated.weight_per_set_g}g)`, 'info');
                     }}
-                    className="px-2 py-1 text-[11px] font-semibold rounded border border-sky-300 bg-sky-50 hover:bg-sky-100 text-sky-800 transition"
+                    className="px-2 py-1 text-caption font-semibold rounded border border-sky-300 bg-sky-50 hover:bg-sky-100 text-sky-800 transition"
                   >
                     Boys (137g)
                   </button>
@@ -3352,7 +3352,7 @@ export default function CadRequirementDetailPage() {
                 {(flatKnitSpec.components || []).map((c) => (
                   <div key={c.key} className="flex items-end gap-1.5 p-2 rounded-lg border border-amber-200 bg-amber-50/40">
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Component</label>
+                      <label className="block text-micro font-bold text-slate-500 uppercase tracking-wider mb-0.5">Component</label>
                       <select
                         value={c.type}
                         onChange={(e) => updateFlatKnitComponent(c.key, { type: e.target.value as TrimComponentType })}
@@ -3364,7 +3364,7 @@ export default function CadRequirementDetailPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Name</label>
+                      <label className="block text-micro font-bold text-slate-500 uppercase tracking-wider mb-0.5">Name</label>
                       <input
                         type="text"
                         value={c.label}
@@ -3373,7 +3373,7 @@ export default function CadRequirementDetailPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Wt / Pc (g)</label>
+                      <label className="block text-micro font-bold text-slate-500 uppercase tracking-wider mb-0.5">Wt / Pc (g)</label>
                       <input
                         type="number"
                         step="0.1"
@@ -3493,7 +3493,7 @@ export default function CadRequirementDetailPage() {
                   <tr className="bg-amber-50/70 font-bold text-amber-950 border-t-2 border-amber-200">
                     <td className="py-2.5 px-3">
                       TOTALS
-                      <div className="text-[10px] text-slate-500 font-normal">{flatKnitSpec.size_rows.length} Sizes Defined</div>
+                      <div className="text-micro text-slate-500 font-normal">{flatKnitSpec.size_rows.length} Sizes Defined</div>
                     </td>
                     {(flatKnitSpec.components || []).map((c) => (
                       <React.Fragment key={c.key}>
@@ -3503,7 +3503,7 @@ export default function CadRequirementDetailPage() {
                         </td>
                       </React.Fragment>
                     ))}
-                    <td className="py-2.5 px-3 text-right tabular-nums text-sm text-amber-900 font-extrabold">
+                    <td className="py-2.5 px-3 text-right tabular-nums text-sm text-amber-900 font-bold">
                       {fmtDecimal(flatKnitSpec.total_yarn_kg, 2)} KG
                     </td>
                     <td></td>
@@ -3518,7 +3518,7 @@ export default function CadRequirementDetailPage() {
                   .map((c) => `${c.label} ${fmtNumber(flatKnitSpec.component_totals?.[c.key] || 0)} Nos × ${c.weight_g}g`)
                   .join(' + ') || 'No components'} = {flatKnitSpec.total_yarn_kg} KG Flat Knit Yarn
               </span>
-              <span className="text-[11px] text-amber-800">
+              <span className="text-caption text-amber-800">
                 Auto-synced into Fabric Program (F.PRGM) & Yarn Indent
               </span>
             </div>
@@ -3720,7 +3720,7 @@ export default function CadRequirementDetailPage() {
                                   });
                                   setSpecialParts(copy);
                                 }}
-                                className="text-[11px] border border-slate-300 rounded px-0.5 py-1 bg-white"
+                                className="text-caption border border-slate-300 rounded px-0.5 py-1 bg-white"
                               >
                                 <option value="PER_KG">{factorUnitLabel('PER_KG', sp.uom)}</option>
                                 <option value="G_PER">{factorUnitLabel('G_PER', sp.uom)}</option>
@@ -3910,7 +3910,7 @@ export default function CadRequirementDetailPage() {
                               }}
                               className="w-24 text-xs text-right tabular-nums font-bold text-purple-900 border border-purple-300 rounded px-1.5 py-1 bg-purple-50/50"
                             />
-                            <span className="text-[10px] text-purple-700 font-semibold">MTR</span>
+                            <span className="text-micro text-purple-700 font-semibold">MTR</span>
                           </div>
                         </td>
                         <td className="py-2 px-3">
@@ -4126,7 +4126,7 @@ export default function CadRequirementDetailPage() {
               </table>
             </div>
             {summaryKpis.partsMissingKgFactor > 0 && (
-              <div className="text-[11px] text-red-600">
+              <div className="text-caption text-red-600">
                 {summaryKpis.partsMissingKgFactor} item(s) still purchased in their own unit — set the weight factor in Trims & Accessories to buy them in KG.
               </div>
             )}
@@ -4388,8 +4388,8 @@ function RatioPattiMarkerSheet({ m, idx, calc, print }: {
   const u = calc.unit;
   const pu = calc.perPcUnit;
   const dia = m.dia_val || (m.dia_in ? `${m.dia_in}"` : m.table_width_in ? `${fmtDecimal(m.table_width_in, 1)}"` : '—');
-  const th = 'py-2 px-2 border border-slate-300 text-[11px] font-semibold text-slate-700 bg-slate-100';
-  const td = 'py-1.5 px-2 border border-slate-200 text-[11.5px] tabular-nums';
+  const th = 'py-2 px-2 border border-slate-300 text-caption font-semibold text-slate-700 bg-slate-100';
+  const td = 'py-1.5 px-2 border border-slate-200 text-small tabular-nums';
 
   return (
     <div className={`rp-marker bg-white ${print ? 'border border-slate-400 mb-4' : 'rounded-xl border border-slate-200/80 shadow-sm overflow-hidden'}`}>
@@ -4401,7 +4401,7 @@ function RatioPattiMarkerSheet({ m, idx, calc, print }: {
           </span>
           <div>
             <div className="text-sm font-bold text-indigo-900">{m.marker_name || `Marker ${m.marker_ref || idx + 1}`}</div>
-            <div className="text-[11px] text-indigo-700">
+            <div className="text-caption text-indigo-700">
               {m.fabric_type || 'Fabric'} · {m.gsm ? `${m.gsm} GSM` : 'GSM —'} · Dia {dia} {m.fabric_dia_type || ''}
               {m.parts_in_lay ? ` · Parts: ${m.parts_in_lay}` : ''}
             </div>
@@ -4409,11 +4409,11 @@ function RatioPattiMarkerSheet({ m, idx, calc, print }: {
         </div>
         <div className="flex gap-4 text-right">
           <div>
-            <div className="text-[10px] uppercase tracking-wide text-slate-500">Pcs / Ply</div>
+            <div className="text-micro uppercase tracking-wide text-slate-500">Pcs / Ply</div>
             <div className="text-base font-bold text-indigo-800">{fmtNumber(calc.pcsPerLay)}</div>
           </div>
           <div>
-            <div className="text-[10px] uppercase tracking-wide text-slate-500">
+            <div className="text-micro uppercase tracking-wide text-slate-500">
               Plies {calc.pliesSource === 'LAY_PLAN' ? '(lay plan)' : '(required)'}
             </div>
             <div className="text-base font-bold text-indigo-800">{fmtNumber(calc.plies)}</div>
@@ -4422,7 +4422,7 @@ function RatioPattiMarkerSheet({ m, idx, calc, print }: {
       </div>
 
       {/* Marker parameters */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-px bg-slate-200 text-[11px]">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-px bg-slate-200 text-caption">
         {[
           ['Marker Length', m.length_mm ? `${fmtNumber(m.length_mm)} mm` : '—'],
           ['Marker Width', m.width_mm ? `${fmtNumber(m.width_mm)} mm` : '—'],
@@ -4434,7 +4434,7 @@ function RatioPattiMarkerSheet({ m, idx, calc, print }: {
           ['Direction', m.direction || '—'],
         ].map(([k, v]) => (
           <div key={k} className="bg-white px-2.5 py-1.5">
-            <div className="text-[10px] text-slate-500">{k}</div>
+            <div className="text-micro text-slate-500">{k}</div>
             <div className="font-semibold text-slate-800">{v}</div>
           </div>
         ))}
@@ -4453,11 +4453,11 @@ function RatioPattiMarkerSheet({ m, idx, calc, print }: {
               <th className={`${th} text-right`}>Pcs from {fmtNumber(calc.plies)} Plies</th>
               <th className={`${th} text-right`}>
                 Net {calc.woven ? 'Length' : 'Wt'} / Pc ({pu})
-                <div className="font-normal text-[9.5px] text-slate-500">
+                <div className="font-normal text-micro text-slate-500">
                   {calc.weightSource === 'SIZE_WISE' ? `CAD size-wise (v${calc.markerVersion})` : 'Marker average'}
                 </div>
               </th>
-              <th className={`${th} text-right`}>Gross / Pc ({pu})<div className="font-normal text-[9.5px] text-slate-500">+{fmtDecimal(calc.allowancePct, 1)}% allowance</div></th>
+              <th className={`${th} text-right`}>Gross / Pc ({pu})<div className="font-normal text-micro text-slate-500">+{fmtDecimal(calc.allowancePct, 1)}% allowance</div></th>
               <th className={`${th} text-right`}>Net Fabric ({u})</th>
               <th className={`${th} text-right`}>Rejection Wastage ({u})</th>
               <th className={`${th} text-right`}>Allowance Wastage ({u})</th>
@@ -4482,7 +4482,7 @@ function RatioPattiMarkerSheet({ m, idx, calc, print }: {
               </tr>
             )) : (
               <tr>
-                <td colSpan={12} className="py-4 text-center text-slate-400 text-[11px] border border-slate-200">
+                <td colSpan={12} className="py-4 text-center text-slate-400 text-caption border border-slate-200">
                   No size ratios defined — set ratios in the Markers Cockpit tab
                 </td>
               </tr>
@@ -4499,11 +4499,11 @@ function RatioPattiMarkerSheet({ m, idx, calc, print }: {
                 <td className={`${td} text-right`}>{fmtNumber(calc.totals.pcsFromLays)}</td>
                 <td className={`${td} text-right text-slate-500 font-normal`}>
                   {calc.totals.cutQty ? fmtDecimal((calc.totals.netQty + calc.totals.rejectionQty) * (calc.woven ? 100 : 1000) / calc.totals.cutQty, 2) : '—'}
-                  <div className="text-[9px]">wtd. avg</div>
+                  <div className="text-micro">wtd. avg</div>
                 </td>
                 <td className={`${td} text-right text-slate-500 font-normal`}>
                   {calc.totals.cutQty ? fmtDecimal(calc.totals.grossQty * (calc.woven ? 100 : 1000) / calc.totals.cutQty, 2) : '—'}
-                  <div className="text-[9px]">wtd. avg</div>
+                  <div className="text-micro">wtd. avg</div>
                 </td>
                 <td className={`${td} text-right`}>{q3(calc.totals.netQty)}</td>
                 <td className={`${td} text-right text-amber-800`}>{q3(calc.totals.rejectionQty)}</td>
@@ -4516,7 +4516,7 @@ function RatioPattiMarkerSheet({ m, idx, calc, print }: {
       </div>
 
       {/* Wastage summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 px-4 py-3 bg-slate-50 border-t border-slate-200 text-[11px] text-slate-700">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 px-4 py-3 bg-slate-50 border-t border-slate-200 text-caption text-slate-700">
         <div className="space-y-0.5">
           <div className="font-semibold text-slate-800 mb-1">Wastage allowances</div>
           <div>Rejection: <strong>{fmtDecimal(calc.rejectionPct, 2)}%</strong> → {q3(calc.totals.rejectionQty)} {u}</div>
@@ -4542,7 +4542,7 @@ function RatioPattiMarkerSheet({ m, idx, calc, print }: {
       </div>
 
       {calc.warnings.length > 0 && (
-        <div className="px-4 py-2 bg-amber-50 border-t border-amber-200 text-[11px] text-amber-800 space-y-0.5">
+        <div className="px-4 py-2 bg-amber-50 border-t border-amber-200 text-caption text-amber-800 space-y-0.5">
           {calc.warnings.map((w) => <div key={w}>⚠ {w}</div>)}
         </div>
       )}
@@ -4601,7 +4601,7 @@ function RatioPattiTab({ markers, header, forceWoven, refData }: {
   const doPrint = printPortal;
 
   const headerBlock = (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-1 text-[12px]">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-1 text-small">
       <div><span className="text-slate-500">CAD No:</span> <strong>{header.req_no || 'Unsaved'}</strong></div>
       <div><span className="text-slate-500">Date:</span> <strong>{header.req_date ? fmtDate(header.req_date) : '—'}</strong></div>
       <div><span className="text-slate-500">IO No:</span> <strong>{header.internal_ir_no || '—'}</strong></div>
@@ -4612,7 +4612,7 @@ function RatioPattiTab({ markers, header, forceWoven, refData }: {
   );
 
   const grandBlock = Object.entries(grand).map(([unit, g]) => (
-    <div key={unit} className="flex flex-wrap gap-x-6 gap-y-1 text-[12px]">
+    <div key={unit} className="flex flex-wrap gap-x-6 gap-y-1 text-small">
       <span>All markers ({unit}) —</span>
       <span>Net: <strong>{q3(g.net)}</strong></span>
       <span>Rejection: <strong>{q3(g.rej)}</strong></span>
@@ -4622,7 +4622,7 @@ function RatioPattiTab({ markers, header, forceWoven, refData }: {
   ));
 
   const signatures = (
-    <div className="grid grid-cols-3 gap-10 pt-12 text-[12px] text-center">
+    <div className="grid grid-cols-3 gap-10 pt-12 text-small text-center">
       {['Prepared by (CAD)', 'Cutting Supervisor', 'Checked / Approved'].map((s) => (
         <div key={s}><div className="border-t border-slate-500 pt-1">{s}</div></div>
       ))}
@@ -4677,7 +4677,7 @@ function RatioPattiTab({ markers, header, forceWoven, refData }: {
           <div className="border-b-2 border-black pb-2 mb-3">
             <div className="flex items-baseline justify-between">
               <h1 className="text-lg font-bold">RATIO PATTI — CUTTING RATIO SHEET</h1>
-              <span className="text-[11px]">Printed {new Date().toLocaleString('en-GB')}</span>
+              <span className="text-caption">Printed {new Date().toLocaleString('en-GB')}</span>
             </div>
             <div className="mt-1.5">{headerBlock}</div>
           </div>

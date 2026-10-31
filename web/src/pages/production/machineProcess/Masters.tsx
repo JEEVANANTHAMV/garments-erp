@@ -434,7 +434,7 @@ function RecipeEditor({ kind, row, onClose, onSaved }: { kind: Kind; row: any; o
                 );
               })}</tbody>
             </table>
-            <p className="mt-2 text-[11px] text-slate-500">Materials are trims items (types Thread, Backing, Topping … / Dye, Pigment, Binder, Chemical). When the recipe UOM differs from the stock UOM, give how many recipe units are in one stock unit (e.g. 5000 MTR per CONE) — KG→GM etc. come from the UOM master.</p>
+            <p className="mt-2 text-caption text-slate-500">Materials are trims items (types Thread, Backing, Topping … / Dye, Pigment, Binder, Chemical). When the recipe UOM differs from the stock UOM, give how many recipe units are in one stock unit (e.g. 5000 MTR per CONE) — KG→GM etc. come from the UOM master.</p>
           </div>
         </Section>
         {row.id && <Section title="Standard requirement calculator">

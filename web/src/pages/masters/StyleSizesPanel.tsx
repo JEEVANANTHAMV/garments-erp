@@ -81,16 +81,16 @@ export const StyleSizesPanel = forwardRef<StyleSizesHandle, { styleId: number; e
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="text-[13px] font-bold uppercase tracking-wider text-slate-700">Sizes of this style</h3>
+            <h3 className="text-body font-bold uppercase tracking-wider text-slate-700">Sizes of this style</h3>
             {cur.data?.version_no != null && (
-              <span className="tabular-nums text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
+              <span className="tabular-nums text-caption font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
                 Active Version: v{cur.data.version_no}
               </span>
             )}
           </div>
-          <p className="text-[11.5px] text-slate-500">Pick the sizes one by one. Modifying sizes updates SKUs and increments the style version for audit tracking.</p>
+          <p className="text-small text-slate-500">Pick the sizes one by one. Modifying sizes updates SKUs and increments the style version for audit tracking.</p>
         </div>
-        {dirty && <span className="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">Not saved</span>}
+        {dirty && <span className="rounded bg-amber-100 px-2 py-0.5 text-caption font-semibold text-amber-800">Not saved</span>}
       </div>
       <div className="flex flex-wrap gap-2" id="style-size-chips">
         {rows.length === 0 && <span className="text-xs text-slate-400">No sizes yet — add sizes or import a size group.</span>}
@@ -98,7 +98,7 @@ export const StyleSizesPanel = forwardRef<StyleSizesHandle, { styleId: number; e
           <span key={r.size_id} className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${r.is_default ? 'border-brand-400 bg-brand-50' : 'border-slate-300 bg-white'}`} title={r.group_name ? `From ${r.group_name}` : undefined}>
             {editable && <button type="button" className="text-slate-400 hover:text-slate-700" onClick={() => move(i, -1)}>‹</button>}
             <b>{r.size_code}</b>
-            {r.source_type === 'ORDER' && <span className="text-[9px] font-bold text-amber-700">ORDER</span>}
+            {r.source_type === 'ORDER' && <span className="text-micro font-bold text-amber-700">ORDER</span>}
             {editable && <button type="button" className="text-slate-400 hover:text-slate-700" onClick={() => move(i, 1)}>›</button>}
             {editable && <button type="button" title="Default size" className={r.is_default ? 'text-brand-600' : 'text-slate-300 hover:text-brand-600'} onClick={() => change(rows.map((x) => ({ ...x, is_default: x.size_id === r.size_id ? !x.is_default : false })))}>★</button>}
             {editable && <button type="button" className="font-bold text-red-500" id={`style-size-remove-${r.size_code}`} onClick={() => change(rows.filter((x) => x.size_id !== r.size_id))}>×</button>}

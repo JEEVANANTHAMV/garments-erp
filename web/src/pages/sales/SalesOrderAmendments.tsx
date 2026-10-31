@@ -107,7 +107,7 @@ export function AmendOrderModal({ soId, soNo, lines, initialMode = 'ADDITIONAL',
       subtitle={mode === 'ADDITIONAL'
         ? 'Additional quantity is added as separate lines — the original lines stay as they are'
         : 'Reduce the quantity per colour × size; it cannot go below what is already cut / produced'}
-      footerStart={<span id="amend-total" className="text-[12.5px] text-slate-600">
+      footerStart={<span id="amend-total" className="text-body text-slate-600">
         {mode === 'ADDITIONAL' ? 'Adding' : 'Cancelling'} <strong className="tabular-nums">{fmtNumber(mode === 'ADDITIONAL' ? addTotal : cancelTotal)}</strong>{' '}
         {mode === 'ADDITIONAL' && rows.some((r) => setOfStyle(lines, r.style_id, r.color_id)) ? 'sets' : 'pcs'}
       </span>}
@@ -120,7 +120,7 @@ export function AmendOrderModal({ soId, soNo, lines, initialMode = 'ADDITIONAL',
       <div className="mb-4 inline-flex rounded-lg border border-surface-border p-0.5" role="tablist">
         {(['ADDITIONAL', 'CANCEL'] as const).map((m) => (
           <button key={m} id={`amend-mode-${m.toLowerCase()}`} type="button" onClick={() => setMode(m)}
-            className={`rounded-md px-3 py-1.5 text-[12.5px] font-semibold ${mode === m ? (m === 'CANCEL' ? 'bg-red-600 text-white' : 'bg-brand-600 text-white') : 'text-slate-600 hover:bg-slate-50'}`}>
+            className={`rounded-md px-3 py-1.5 text-body font-semibold ${mode === m ? (m === 'CANCEL' ? 'bg-red-600 text-white' : 'bg-brand-600 text-white') : 'text-slate-600 hover:bg-slate-50'}`}>
             {m === 'ADDITIONAL' ? 'Add quantity' : 'Cancel quantity'}
           </button>
         ))}
@@ -182,14 +182,14 @@ function AddRowGrid({ row, styleOpts, onChange, onRemove, canRemove, set }: {
         )}
       </div>
       {set && (
-        <p className="mt-2 rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-[12px] text-indigo-800" data-amend-set>
+        <p className="mt-2 rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-small text-indigo-800" data-amend-set>
           Ordered as a set (SET = {set.label}) — enter <strong>sets</strong>; every part is added (pieces = sets × pieces per set) at the set rate and the order's contrast colours.
         </p>
       )}
       {row.color_id !== '' && (
         sizes.length ? (
           <div className="mt-3 overflow-x-auto">
-            <table className="text-[12.5px]">
+            <table className="text-body">
               <thead><tr>
                 {sizes.map((k) => <th key={k.id} className="px-1.5 pb-1 text-center font-semibold text-slate-600">{k.size_code}</th>)}
                 <th className="px-2 pb-1 text-right font-semibold text-slate-600">Total</th>
@@ -206,7 +206,7 @@ function AddRowGrid({ row, styleOpts, onChange, onRemove, canRemove, set }: {
               </tr></tbody>
             </table>
           </div>
-        ) : <p className="mt-2 text-[12px] text-slate-500">No sizes set up for this colour.</p>
+        ) : <p className="mt-2 text-small text-slate-500">No sizes set up for this colour.</p>
       )}
     </div>
   );
@@ -216,19 +216,19 @@ function CancelGrid({ lines, value, onChange }: {
   lines: SoLineLite[]; value: Record<string, number | ''>; onChange: (v: Record<string, number | ''>) => void;
 }) {
   const live = lines.filter((l) => Number(l.order_qty) > 0);
-  if (!live.length) return <p className="text-[12.5px] text-slate-500">No open quantity left on this order.</p>;
+  if (!live.length) return <p className="text-body text-slate-500">No open quantity left on this order.</p>;
   const set = (k: string, max: number, v: string) =>
     onChange({ ...value, [k]: v === '' ? '' : Math.min(max, Math.max(0, Math.floor(Number(v)))) });
   return (
     <div className="space-y-3">
       {live.map((l) => (
         <div key={l.id} className="rounded-lg border border-surface-border p-3" data-cancel-line={l.id}>
-          <div className="mb-2 flex flex-wrap items-center gap-2 text-[12.5px]">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-body">
             <span className="font-semibold text-slate-800">{l.style_code}</span>
             {l.color_name && <span className="text-slate-600">{l.color_name}</span>}
             {l.is_additional ? <Badge tone="amber">Additional · {l.amendment_no}</Badge> : null}
             {l.set_group ? (
-              <span className="rounded border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[11px] font-semibold text-indigo-800" data-cancel-set
+              <span className="rounded border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-caption font-semibold text-indigo-800" data-cancel-set
                 title="Cancelling here cancels whole sets on every part of the set">
                 {l.part_name} · set {l.set_group}{Number(l.qty_per_set) > 1 ? ` · ${l.qty_per_set} per set` : ''} — the other parts follow
               </span>
@@ -237,7 +237,7 @@ function CancelGrid({ lines, value, onChange }: {
           </div>
           {l.skus.length ? (
             <div className="overflow-x-auto">
-              <table className="text-[12.5px]">
+              <table className="text-body">
                 <thead><tr>
                   <th className="pr-2 text-left font-medium text-slate-500" />
                   {l.skus.map((s) => <th key={s.sku_id} className="px-1.5 text-center font-semibold text-slate-600">{s.size_code}</th>)}
@@ -298,7 +298,7 @@ export function AmendmentRequirementModal({ soId, amendment, onClose }: {
       title={`${add ? 'Materials needed' : 'Materials released'} · ${amendment.amendment_no}`}
       subtitle={add ? 'Materials needed for this additional quantity (BOM × plan-cut pieces of the added cells, + wastage)'
         : 'Materials no longer needed for the cancelled quantity'}
-      footerStart={d ? <span className="text-[12.5px] text-slate-600">{d.lines.length} material line{d.lines.length === 1 ? '' : 's'} · {fmtNumber(d.styles.reduce((a: number, s: any) => a + s.plan_cut, 0))} plan-cut pcs</span> : undefined}
+      footerStart={d ? <span className="text-body text-slate-600">{d.lines.length} material line{d.lines.length === 1 ? '' : 's'} · {fmtNumber(d.styles.reduce((a: number, s: any) => a + s.plan_cut, 0))} plan-cut pcs</span> : undefined}
       footer={<>
         <Button variant="secondary" onClick={onClose}>Close</Button>
         {canAny('BOM.UPDATE', 'BOM.CREATE', 'PRODUCTION.CREATE') && (
@@ -307,17 +307,17 @@ export function AmendmentRequirementModal({ soId, amendment, onClose }: {
           </Button>
         )}
       </>}>
-      {q.isLoading ? <LoadingBlock /> : q.error ? <p className="text-[13px] text-red-600">{err(q.error, 'Could not load')}</p> : (
+      {q.isLoading ? <LoadingBlock /> : q.error ? <p className="text-body text-red-600">{err(q.error, 'Could not load')}</p> : (
         <div id="amend-requirement">
           {d.warnings?.length > 0 && (
-            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">
+            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-body text-amber-900">
               {d.warnings.map((w: string, i: number) => <div key={i}>{w}</div>)}
             </div>
           )}
           {!d.lines.length ? (
             <EmptyState title="No materials to show" message={d.reason ?? 'The BOM has no per-piece lines for these cells'} />
           ) : (
-            <table className="w-full text-[12.5px]">
+            <table className="w-full text-body">
               <thead><tr>
                 <th className="th">Type</th><th className="th">Material</th><th className="th">Colour / size</th>
                 <th className="th text-right">Pcs</th><th className="th text-right">Cons.</th><th className="th text-right">Waste %</th>
@@ -327,12 +327,12 @@ export function AmendmentRequirementModal({ soId, amendment, onClose }: {
                 {d.lines.map((l: any, i: number) => (
                   <tr key={i} className="row-hover">
                     <td className="td"><Badge tone={l.material_type === 'FABRIC' ? 'blue' : l.material_type === 'YARN' ? 'emerald' : 'slate'}>{l.material_type}</Badge></td>
-                    <td className="td font-medium text-slate-800">{l.material_name}<div className="text-[11px] text-slate-400">{l.style_code} · {l.bom_no}</div></td>
+                    <td className="td font-medium text-slate-800">{l.material_name}<div className="text-caption text-slate-400">{l.style_code} · {l.bom_no}</div></td>
                     <td className="td text-slate-600">{[l.purchase_color_name || l.color_name, l.size_code].filter(Boolean).join(' / ') || 'All'}</td>
                     <td className="td text-right tabular-nums">{fmtNumber(l.pieces)}</td>
                     <td className="td text-right tabular-nums">{l.consumption}{l.consumption_basis === 'PER_DOZEN' ? '/dz' : ''}</td>
                     <td className="td text-right tabular-nums">{l.wastage_pct}</td>
-                    <td className="td text-right font-semibold tabular-nums">{l.required_qty} <span className="text-[11px] font-normal text-slate-500">{l.uom_code}</span></td>
+                    <td className="td text-right font-semibold tabular-nums">{l.required_qty} <span className="text-caption font-normal text-slate-500">{l.uom_code}</span></td>
                   </tr>
                 ))}
               </tbody>
@@ -367,13 +367,13 @@ export function AmendmentsTab({ soId, amendments, canAmend, onAmend, onChanged }
   return (
     <div className="card overflow-hidden" id="amendments-tab">
       <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-        <span className="text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Quantity amendments</span>
+        <span className="text-small font-semibold uppercase tracking-wider text-slate-500">Quantity amendments</span>
         {canAmend && <Button size="sm" onClick={onAmend}><FilePlus2 size={13} /> Amend order</Button>}
       </div>
       {!amendments.length ? (
         <EmptyState title="No amendments" message="Additional or cancelled quantity on this running order will be listed here." />
       ) : (
-        <table className="w-full text-[12.5px]">
+        <table className="w-full text-body">
           <thead><tr>
             <th className="th w-8" /><th className="th">No</th><th className="th">Date</th><th className="th">Type</th>
             <th className="th text-right">Qty</th><th className="th">Reason</th><th className="th">By</th><th className="th">Status</th><th className="th text-right" />
@@ -410,7 +410,7 @@ function FragmentRow({ a, open, toggle, onReq, onVoid }: { a: any; open: boolean
         <td className="td">{fmtDate(a.amendment_date)}</td>
         <td className="td"><Badge tone={add ? 'emerald' : 'red'}>{add ? 'Additional' : 'Cancel'}</Badge></td>
         <td className={`td text-right font-semibold tabular-nums ${add ? 'text-emerald-700' : 'text-red-700'}`}>{add ? '+' : '−'}{fmtNumber(a.total_qty)}</td>
-        <td className="td text-slate-600">{a.reason || '—'}{a.buyer_ref ? <div className="text-[11px] text-slate-400">Ref: {a.buyer_ref}</div> : null}</td>
+        <td className="td text-slate-600">{a.reason || '—'}{a.buyer_ref ? <div className="text-caption text-slate-400">Ref: {a.buyer_ref}</div> : null}</td>
         <td className="td text-slate-600">{a.created_by_name || '—'}</td>
         <td className="td">{a.status === 'POSTED' ? <Badge tone="blue">Posted</Badge> : <Badge tone="slate">Cancelled</Badge>}</td>
         <td className="td text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
@@ -420,7 +420,7 @@ function FragmentRow({ a, open, toggle, onReq, onVoid }: { a: any; open: boolean
       </tr>
       {open && (
         <tr><td colSpan={9} className="bg-slate-50/60 px-10 py-2">
-          <table className="text-[12px]">
+          <table className="text-small">
             <thead><tr className="text-slate-500">
               <th className="pr-4 text-left font-medium">Style</th><th className="pr-4 text-left font-medium">Colour</th><th className="pr-4 text-left font-medium">Size</th>
               <th className="pr-4 text-right font-medium">Qty</th><th className="pr-4 text-right font-medium">Before</th><th className="pr-4 text-right font-medium">After</th>
@@ -436,7 +436,7 @@ function FragmentRow({ a, open, toggle, onReq, onVoid }: { a: any; open: boolean
               ))}
             </tbody>
           </table>
-          {a.status === 'CANCELLED' && <p className="mt-1 text-[11.5px] text-slate-500">Cancelled {fmtDate(a.voided_at)}: {a.void_reason}</p>}
+          {a.status === 'CANCELLED' && <p className="mt-1 text-small text-slate-500">Cancelled {fmtDate(a.voided_at)}: {a.void_reason}</p>}
         </td></tr>
       )}
     </>

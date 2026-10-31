@@ -75,14 +75,14 @@ function ColorMultiSelect({
   return (
     <div className="relative sm:col-span-2" ref={ref}>
       <div className="flex items-center justify-between mb-1">
-        <label className="block text-[11.5px] font-bold uppercase tracking-wider text-slate-700">
+        <label className="block text-small font-bold uppercase tracking-wider text-slate-700">
           Colourways (Colors) <span className="text-slate-400 font-normal lowercase">(search &amp; multi-select)</span>
         </label>
         {selectedIds.length > 0 && !disabled && (
           <button
             type="button"
             onClick={clearAll}
-            className="text-[11px] font-medium text-slate-400 hover:text-red-600 transition-colors"
+            className="text-caption font-medium text-slate-400 hover:text-red-600 transition-colors"
           >
             Clear all ({selectedIds.length})
           </button>
@@ -133,7 +133,7 @@ function ColorMultiSelect({
       </div>
 
       {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
-      <p className="mt-1 text-[11px] text-slate-400">
+      <p className="mt-1 text-caption text-slate-400">
         SKUs are generated as colour × size combinations for all selected colours.
       </p>
 
@@ -154,7 +154,7 @@ function ColorMultiSelect({
           </div>
 
           {/* Quick Action Bar */}
-          <div className="flex items-center justify-between px-1.5 py-1 border-b border-surface-border text-[11px] text-slate-500 mb-1">
+          <div className="flex items-center justify-between px-1.5 py-1 border-b border-surface-border text-caption text-slate-500 mb-1">
             <span>{filtered.length} colours found</span>
             <div className="flex gap-2">
               <button
@@ -197,7 +197,7 @@ function ColorMultiSelect({
                       />
                       <span>{c.label}</span>
                       {c.code && (
-                        <span className="text-[10px] text-slate-400 tabular-nums">({c.code})</span>
+                        <span className="text-micro text-slate-400 tabular-nums">({c.code})</span>
                       )}
                     </div>
 
@@ -254,11 +254,11 @@ export function StylesPage() {
               <ImageThumbnail url={r.image_url} alt={r.style_code} title={`${r.style_code} — ${r.style_name}`} size="md" />
             ) },
           { key: 'style_code', header: 'Style code', sortable: true,
-            render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.style_code}</span> },
+            render: (r: any) => <span className="tabular-nums text-small font-medium text-brand-700">{r.style_code}</span> },
           { key: 'style_name', header: 'Name', sortable: true,
             render: (r: any) => <span className="font-medium text-slate-800">{r.style_name}</span> },
           { key: 'version_no', header: 'Version', width: '75px',
-            render: (r: any) => <span className="tabular-nums text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">v{r.version_no || 1}</span> },
+            render: (r: any) => <span className="tabular-nums text-caption font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">v{r.version_no || 1}</span> },
           { key: 'product_name', header: 'Product' },
           { key: 'buyer_name', header: 'Buyer' },
           { key: 'season', header: 'Season' },
@@ -421,7 +421,7 @@ export function StyleDetailPage() {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 mb-4">
             {/* Left 2 Cols: Main Metadata Form */}
             <div className="card p-4 lg:col-span-2">
-              <h3 className="mb-3 text-[13px] font-bold uppercase tracking-wider text-slate-700">Style Specifications</h3>
+              <h3 className="mb-3 text-body font-bold uppercase tracking-wider text-slate-700">Style Specifications</h3>
               <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2">
                 <Input label="Style code" required value={v.style_code ?? ''} disabled={!editable}
                   onChange={(e) => set('style_code', e.target.value)} error={errors.style_code} />
@@ -455,7 +455,7 @@ export function StyleDetailPage() {
 
             {/* Right 1 Col: Garment Photo & Sketch Upload */}
             <div className="card p-4">
-              <h3 className="mb-3 text-[13px] font-bold uppercase tracking-wider text-slate-700">Garment Photo / Sketch</h3>
+              <h3 className="mb-3 text-body font-bold uppercase tracking-wider text-slate-700">Garment Photo / Sketch</h3>
               <ImageUpload
                 label=""
                 hint="PNG, JPG, WEBP or SVG up to 10MB"
@@ -472,8 +472,8 @@ export function StyleDetailPage() {
         <div className="card overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-border px-4 py-3">
             <div>
-              <h3 className="text-[13.5px] font-semibold text-slate-800">Style SKUs</h3>
-              <p className="text-[12px] text-slate-500">{d?.skus?.length ?? 0} active SKUs · colour × size of the style's current colours and sizes
+              <h3 className="text-body-lg font-semibold text-slate-800">Style SKUs</h3>
+              <p className="text-small text-slate-500">{d?.skus?.length ?? 0} active SKUs · colour × size of the style's current colours and sizes
                 {(d?.retired_skus?.length ?? 0) > 0 && (
                   <button type="button" id="sku-show-retired" className="ml-2 text-brand-700 hover:underline" onClick={() => setShowRetired((x) => !x)}>
                     {showRetired ? 'hide' : 'show'} {d.retired_skus.length} retired
@@ -496,7 +496,7 @@ export function StyleDetailPage() {
                 <tbody>
                   {[...d.skus, ...(showRetired ? d.retired_skus ?? [] : [])].map((s: any) => (
                     <tr key={s.id} className={Number(s.is_active) ? 'row-hover' : 'opacity-60'} data-sku={s.sku_code}>
-                      <td className="td tabular-nums text-[12px] text-brand-700">{s.sku_code}</td>
+                      <td className="td tabular-nums text-small text-brand-700">{s.sku_code}</td>
                       <td className="td">
                         <span className="inline-flex items-center gap-1.5">
                           <span className="inline-block h-3.5 w-3.5 rounded border border-slate-200"
@@ -505,9 +505,9 @@ export function StyleDetailPage() {
                         </span>
                       </td>
                       <td className="td">{s.size_label}</td>
-                      <td className="td tabular-nums text-[11.5px] text-slate-500">{s.barcode ?? '—'}</td>
+                      <td className="td tabular-nums text-small text-slate-500">{s.barcode ?? '—'}</td>
                       <td className="td">{Number(s.is_active) ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Retired</Badge>}
-                        {Number(s.order_uses) > 0 && <span className="ml-1 text-[11px] text-slate-500">on {s.order_uses} order line(s)</span>}</td>
+                        {Number(s.order_uses) > 0 && <span className="ml-1 text-caption text-slate-500">on {s.order_uses} order line(s)</span>}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -515,7 +515,7 @@ export function StyleDetailPage() {
             </div>
           ) : (
             <div className="px-6 py-12 text-center">
-              <p className="text-[13px] text-slate-500">
+              <p className="text-body text-slate-500">
                 No SKUs yet. Assign a size group and colourways, then generate.
               </p>
             </div>
@@ -535,15 +535,15 @@ export function StyleDetailPage() {
               <tbody>
                 {d.boms.map((b: any) => (
                   <tr key={b.id} className="row-hover cursor-pointer" onClick={() => nav(`/masters/boms/${b.id}`)}>
-                    <td className="td tabular-nums text-[12px] text-brand-700">{b.bom_no}</td>
+                    <td className="td tabular-nums text-small text-brand-700">{b.bom_no}</td>
                     <td className="td">v{b.version}</td>
                     <td className="td">
                       {b.so_no ? (
-                        <span className="tabular-nums text-[11.5px] font-semibold text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded border border-brand-200">
+                        <span className="tabular-nums text-small font-semibold text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded border border-brand-200">
                           {b.so_no}
                         </span>
                       ) : (
-                        <span className="text-[11px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                        <span className="text-caption text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
                           Master (All Orders)
                         </span>
                       )}
@@ -554,7 +554,7 @@ export function StyleDetailPage() {
                 ))}
               </tbody>
             </table>
-          ) : <p className="p-8 text-center text-[13px] text-slate-400">No BOM defined for this style yet.</p>}
+          ) : <p className="p-8 text-center text-body text-slate-400">No BOM defined for this style yet.</p>}
         </div>
       )}
     </>

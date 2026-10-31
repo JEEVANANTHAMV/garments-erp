@@ -167,7 +167,7 @@ export function JobRateCardPage() {
               <Calculator size={14} className="mr-1 inline" />Load rates from costing
             </Button>
           </div>
-          <p className="px-3 pb-2 text-[11px] text-slate-500">
+          <p className="px-3 pb-2 text-caption text-slate-500">
             "Load rates from costing" takes the rate per piece of each operation from the style's approved pre-costing
             (Cutting and Processes: the row rate · Sewing SMV rows only when the costing used detailed SMV — a merchandiser's
             flat CMT rate is compared in Variance instead). Production enters SMV here: rate = SMV × the job's ₹ / min.
@@ -198,12 +198,12 @@ export function JobRateCardPage() {
           {loaded && (
             <div id="rc-settings" className="mx-3 mb-3 flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs">
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600">₹ per standard minute</label>
+                <label className="block text-caption font-semibold text-slate-600">₹ per standard minute</label>
                 <input id="rc-cpm" type="number" min={0} step="0.01" disabled={locked} className="input h-8 w-28 text-right text-xs" value={cfg.cpm}
                   placeholder="e.g. 1.20" onChange={(ev) => setCfg((c) => ({ ...c, cpm: ev.target.value }))} />
               </div>
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600">Production overhead</label>
+                <label className="block text-caption font-semibold text-slate-600">Production overhead</label>
                 <div className="flex gap-1">
                   <select id="rc-oh-basis" disabled={locked} className="input !h-8 !py-0 w-32 text-xs" value={cfg.ohBasis}
                     onChange={(ev) => setCfg((c) => ({ ...c, ohBasis: ev.target.value as any }))}>
@@ -311,7 +311,7 @@ export function JobRateCardPage() {
                   <td className="px-2 py-1.5 text-right font-semibold">{num(h.total_rate).toFixed(2)}</td>
                   <td className="px-2 py-1.5">
                     {h.reason && <div className="font-medium text-slate-700">{h.reason}</div>}
-                    <div className="text-[11px] text-slate-500">{h.rates.map((r) => `${r.op_name} ${num(r.rate).toFixed(2)}`).join(' · ')}</div>
+                    <div className="text-caption text-slate-500">{h.rates.map((r) => `${r.op_name} ${num(r.rate).toFixed(2)}`).join(' · ')}</div>
                   </td>
                 </tr>
               ))}
@@ -366,9 +366,9 @@ function RateVarianceModal({ ioNo, onClose }: { ioNo: string; onClose: () => voi
               ['Actual − Production', t.var_actual_vs_prod_amount, `carded operations, received PCS: ${money(t.actual_amount_on_card)} vs ${money(t.prod_amount_on_received)}`],
             ].map(([l, v, sub], i) => (
               <div key={i} className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
-                <div className="text-[11px] font-semibold uppercase text-slate-500">{l as string}</div>
+                <div className="text-caption font-semibold uppercase text-slate-500">{l as string}</div>
                 <div className={`text-lg font-bold ${i === 3 ? (num(v) > 0 ? 'text-rose-600' : 'text-emerald-600') : 'text-slate-800'}`}>{i === 3 ? money(v) : `₹${num(v).toFixed(2)}`}</div>
-                <div className="text-[11px] text-slate-500">{sub as string}</div>
+                <div className="text-caption text-slate-500">{sub as string}</div>
               </div>
             ))}
           </div>
@@ -405,9 +405,9 @@ function RateVarianceModal({ ioNo, onClose }: { ioNo: string; onClose: () => voi
               {d.rows.map((r: any, i: number) => (
                 <tr key={i} className={`border-t border-slate-100 ${r.off_card ? 'bg-amber-50/60' : ''}`}>
                   <td className="px-2 py-1.5 text-slate-500">{r.stage_name}</td>
-                  <td className="px-2 py-1.5 font-medium" title={r.dcs.length ? `DCs: ${r.dcs.join(', ')}` : ''}>{r.op_name}{r.inhouse_dcs > 0 && <span className="ml-1 text-[10px] text-slate-400">in-house</span>}</td>
+                  <td className="px-2 py-1.5 font-medium" title={r.dcs.length ? `DCs: ${r.dcs.join(', ')}` : ''}>{r.op_name}{r.inhouse_dcs > 0 && <span className="ml-1 text-micro text-slate-400">in-house</span>}</td>
                   <td className="px-2 py-1.5 text-right">{rate(r.merch_rate)}</td>
-                  <td className="px-2 py-1.5 text-right font-semibold">{rate(r.prod_rate)}{r.draft_rate != null && r.draft_rate !== r.prod_rate && <div className="text-[10px] font-normal text-amber-700" title="Rate of the pending revision — not in force yet">draft {num(r.draft_rate).toFixed(2)}</div>}</td>
+                  <td className="px-2 py-1.5 text-right font-semibold">{rate(r.prod_rate)}{r.draft_rate != null && r.draft_rate !== r.prod_rate && <div className="text-micro font-normal text-amber-700" title="Rate of the pending revision — not in force yet">draft {num(r.draft_rate).toFixed(2)}</div>}</td>
                   <td className="px-2 py-1.5 text-right">{rate(r.actual_rate)}</td>
                   <td className="px-2 py-1.5 text-right font-semibold">{vr(r.var_prod_vs_merch)}</td>
                   <td className="px-2 py-1.5 text-right font-semibold">{vr(r.var_actual_vs_prod)}</td>
@@ -429,7 +429,7 @@ function RateVarianceModal({ ioNo, onClose }: { ioNo: string; onClose: () => voi
               </tr></tfoot>
             )}
           </table>
-          <p className="text-[11px] text-slate-500">Merch = the style's pre-costing (sewing SMV × ₹ / min, cutting and process rows) · Production = this rate card · Actual = rate on the job's issued DCs, weighted by issued PCS; amount on received PCS. Variances count only operations that have both figures. + over, − under.</p>
+          <p className="text-caption text-slate-500">Merch = the style's pre-costing (sewing SMV × ₹ / min, cutting and process rows) · Production = this rate card · Actual = rate on the job's issued DCs, weighted by issued PCS; amount on received PCS. Variances count only operations that have both figures. + over, − under.</p>
         </div>
       )}
     </Modal>
@@ -528,7 +528,7 @@ function CostingRatesModal({ ioNo, onClose, onApplied }: { ioNo: string; onClose
                   {!data.rows.length && <tr><td colSpan={6} className="px-2 py-6 text-center text-slate-400">The costing has no sewing, cutting or process rows.</td></tr>}
                 </tbody>
               </table>
-              <p className="text-[11px] text-slate-500">Rows mapped to the same operation are added together. Operations not in the costing keep their current card rate.</p>
+              <p className="text-caption text-slate-500">Rows mapped to the same operation are added together. Operations not in the costing keep their current card rate.</p>
             </div>
           )}
     </Modal>
@@ -677,7 +677,7 @@ export function ContractorDebitNotesPage() {
             { key: 'reason', header: 'Reason' },
             { key: 'qty', header: 'PCS × rate', align: 'right' as const, render: (r: any) => (num(r.qty) ? `${fmtNumber(r.qty)} × ${num(r.rate).toFixed(2)}` : '—') },
             { key: 'amount', header: 'Amount', align: 'right' as const, render: (r: any) => <b>{money(r.amount)}</b> },
-            { key: 'status', header: 'Status', render: (r: any) => <span><Badge tone={DN_TONE[r.status] ?? 'slate'}>{r.status}</Badge>{r.bill_no ? <span className="ml-1 text-[11px] text-slate-500">on {r.bill_no}</span> : null}</span> },
+            { key: 'status', header: 'Status', render: (r: any) => <span><Badge tone={DN_TONE[r.status] ?? 'slate'}>{r.status}</Badge>{r.bill_no ? <span className="ml-1 text-caption text-slate-500">on {r.bill_no}</span> : null}</span> },
             { key: 'act', header: '', render: (r: any) => (r.status === 'OPEN' ? <Button size="sm" variant="ghost" onClick={() => { setReason(''); setCancelRow(r); }}><Ban size={12} /></Button> : null) },
           ]} />
       </Card>

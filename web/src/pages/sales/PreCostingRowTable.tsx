@@ -114,7 +114,7 @@ export function PreCostingRowTable({
                             }}
                             className={`${cellCls} text-right tabular-nums font-bold text-brand-700 ${c.width ?? 'w-24'}`}
                           />
-                          {c.suffix && <span className="ml-1 font-sans text-[11px] text-slate-500">{c.suffix(row)}</span>}
+                          {c.suffix && <span className="ml-1 font-sans text-caption text-slate-500">{c.suffix(row)}</span>}
                         </>
                       ) : (
                         <input
@@ -129,7 +129,7 @@ export function PreCostingRowTable({
                     </td>
                   );
                 })}
-                <td className="py-2 px-3 text-right font-black text-brand-900">₹{amount(row, i).toFixed(3)}</td>
+                <td className="py-2 px-3 text-right font-bold text-brand-900">₹{amount(row, i).toFixed(3)}</td>
                 <td className="py-1 px-2 text-center">
                   <button
                     type="button"
@@ -146,13 +146,13 @@ export function PreCostingRowTable({
           <tfoot className="bg-slate-50 font-bold border-t border-slate-200">
             <tr>
               <td colSpan={columns.length + 1} className="py-2.5 px-3 text-right font-sans">{totalLabel}</td>
-              <td className="py-2.5 px-3 text-right text-brand-900 font-black">₹{total.toFixed(2)}</td>
+              <td className="py-2.5 px-3 text-right text-brand-900 font-bold">₹{total.toFixed(2)}</td>
               <td />
             </tr>
           </tfoot>
         </table>
       </div>
-      <div className="flex items-center justify-between text-[11px] text-slate-500">
+      <div className="flex items-center justify-between text-caption text-slate-500">
         <span>Press Enter in the last numeric cell to go to the next row (adds a row on the last one).</span>
         <button type="button" className="btn-secondary btn-xs flex items-center gap-1" onClick={addRow}>
           <Plus size={13} /> {addLabel}

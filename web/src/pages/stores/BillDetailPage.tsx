@@ -73,7 +73,7 @@ export default function BillDetailPage() {
         subtitle={<>Invoice <b>{b.bill_no}</b>{b.bill_date ? ` dated ${fmtDate(b.bill_date)}` : ''} · ₹{fmtDecimal(b.amount, 2)}{b.currency_code !== 'INR' ? ` (${b.currency_code} @ ${b.exchange_rate})` : ''} · {labelOf(CATEGORY_OPTIONS, b.bill_category)}</>}
         actions={<Button variant="secondary" id="bt-back" onClick={() => navigate(`/stores/bill-tracker${back}`)}><ArrowLeft size={14} className="mr-1 inline" /> Bills</Button>} />
       <div className="card mb-3 grid gap-3 p-4 lg:grid-cols-[1fr_auto]">
-        <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
+        <div className="flex flex-wrap items-center gap-2 text-body">
           <StageChip stage={b.stage} />
           <span className="text-slate-500">Workflow</span><StatusBadge value={WORKFLOW_LABEL[wf] ?? wf} />
           <span className="text-slate-500">Documents</span><Badge tone={b.completeness_status === 'COMPLETE' ? 'green' : 'amber'}>{b.completeness_status === 'COMPLETE' ? 'Complete' : `Missing: ${b.missing_labels.join(', ')}`}</Badge>
@@ -83,8 +83,8 @@ export default function BillDetailPage() {
           {b.external_voucher_no && <span>Voucher <b>{b.external_voucher_no}</b> · {fmtDate(b.external_voucher_date)}</span>}
           <span className="w-full text-slate-600">Next: <b>{b.next_action}</b></span>
         </div>
-        <div id="bt-holder" className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[12.5px]">
-          <div className="text-[11px] uppercase tracking-wider text-slate-400">Current holder</div>
+        <div id="bt-holder" className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-body">
+          <div className="text-caption uppercase tracking-wider text-slate-400">Current holder</div>
           <div className="font-semibold">{b.holder_name ?? '—'}{b.holder_dept ? ` · ${b.holder_dept}` : ''}{b.holder_location ? ` · ${b.holder_location}` : ''}</div>
           {last && <div className="text-slate-500">{last.movement_type.replace('_', ' ').toLowerCase()} {fmtDateTime(last.moved_at)}{last.purpose ? ` — ${last.purpose}` : ''}</div>}
           {b.holder_expected_back && <div className={b.holder_expected_back < today() ? 'font-semibold text-red-600' : 'text-slate-500'}>Expected back {fmtDate(b.holder_expected_back)}</div>}
@@ -92,7 +92,7 @@ export default function BillDetailPage() {
         </div>
       </div>
       <div className="mb-3 flex flex-wrap gap-2">{actions}</div>
-      {b.rights.own_entry && wf === 'PENDING_APPROVAL' && <div className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-[12.5px] text-amber-800">You entered this bill — another user must approve it (maker-checker).</div>}
+      {b.rights.own_entry && wf === 'PENDING_APPROVAL' && <div className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-body text-amber-800">You entered this bill — another user must approve it (maker-checker).</div>}
       <div className="card px-4 pt-2">
         <Tabs tabs={TABS.map((t) => ({ key: t, label: TAB_LABEL[t], count: t === 'docs' ? b.links.filter((l: any) => !l.removed_at).length + b.attachments.filter((a: any) => !a.is_removed).length
           : t === 'followups' ? b.followups.filter((f: any) => f.status === 'OPEN').length : undefined }))} active={tab} onChange={setTab} />
@@ -150,12 +150,12 @@ function Docs({ b, onLink }: { b: any; onLink: () => void }) {
     .filter(([k]) => Number(cat[k])).map(([, l]) => l) : [];
   return (
     <div className="space-y-4">
-      <div className="text-[12.5px] text-slate-600">{cat?.category_name}: needs {req.length ? <b>{req.join(', ')}</b> : <b>no supporting document</b>}.
+      <div className="text-body text-slate-600">{cat?.category_name}: needs {req.length ? <b>{req.join(', ')}</b> : <b>no supporting document</b>}.
         {b.missing_labels.length ? <span className="ml-1 text-amber-700">Missing: {b.missing_labels.join(', ')}</span> : <span className="ml-1 text-green-700">All present.</span>}</div>
-      {b.suggestions?.length > 0 && <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-[12.5px] text-blue-800">Bills Inward has {b.suggestions.map((s: any) => `${s.bill_no} (₹${fmtDecimal(s.total_amount, 2)})`).join(', ')} for this invoice no — link it.</div>}
-      {b.duplicates?.length > 0 && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-800">Same supplier + invoice no: {b.duplicates.map((x: any) => x.entry_no).join(', ')}</div>}
+      {b.suggestions?.length > 0 && <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-body text-blue-800">Bills Inward has {b.suggestions.map((s: any) => `${s.bill_no} (₹${fmtDecimal(s.total_amount, 2)})`).join(', ')} for this invoice no — link it.</div>}
+      {b.duplicates?.length > 0 && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-body text-red-800">Same supplier + invoice no: {b.duplicates.map((x: any) => x.entry_no).join(', ')}</div>}
       <div>
-        <div className="mb-1 flex items-center justify-between"><div className="text-[13px] font-semibold">Linked documents</div>{live && <Button size="sm" variant="secondary" onClick={onLink}><Plus size={12} className="mr-1 inline" />Link</Button>}</div>
+        <div className="mb-1 flex items-center justify-between"><div className="text-body font-semibold">Linked documents</div>{live && <Button size="sm" variant="secondary" onClick={onLink}><Plus size={12} className="mr-1 inline" />Link</Button>}</div>
         <table className="w-full text-xs">
           <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-1.5 text-left">Type</th><th className="px-2 py-1.5 text-left">No</th><th className="px-2 py-1.5 text-left">Date</th><th className="px-2 py-1.5 text-left">Party</th>
             <th className="px-2 py-1.5 text-right">Doc qty</th><th className="px-2 py-1.5 text-right">Doc value</th><th className="px-2 py-1.5 text-right">Linked qty</th><th className="px-2 py-1.5 text-right">Linked value</th><th className="px-2 py-1.5 text-left">By</th><th /></tr></thead>
@@ -176,7 +176,7 @@ function Docs({ b, onLink }: { b: any; onLink: () => void }) {
         </table>
       </div>
       <div>
-        <div className="mb-1 flex items-center justify-between"><div className="text-[13px] font-semibold">Files (bill and its inward documents)</div>
+        <div className="mb-1 flex items-center justify-between"><div className="text-body font-semibold">Files (bill and its inward documents)</div>
           {b.rights.edit && b.workflow_status !== 'CANCELLED' && <FilePick id="bt-file" busy={act.isPending} onPick={(f) => act.mutate({ url: `/stores/bill-tracker/${b.id}/attachments`, body: f })} />}</div>
         <AttachmentList rows={b.attachments} onRemove={b.rights.edit ? (a) => setRm({ url: `/stores/bill-docs/attachments/${a.id}/remove`, title: `Remove ${a.original_name}` }) : undefined} />
       </div>
@@ -189,11 +189,11 @@ function Matching({ b }: { b: any }) {
   const act = useAction();
   const [ov, setOv] = useState<any | null>(null);
   const canOverride = b.rights.approve && !b.rights.own_entry && ['OPEN', 'PENDING_VERIFICATION', 'PENDING_APPROVAL'].includes(b.workflow_status);
-  if (!b.matching.length) return <div className="py-6 text-center text-[12.5px] text-slate-500">Matching has not been run{b.match_status === 'NOT_RUN' ? ' since the last change' : ''}. Use <b>Run matching</b>.</div>;
+  if (!b.matching.length) return <div className="py-6 text-center text-body text-slate-500">Matching has not been run{b.match_status === 'NOT_RUN' ? ' since the last change' : ''}. Use <b>Run matching</b>.</div>;
   const tone = (s: string) => (s === 'BLOCKING' ? 'red' : s === 'WARNING' ? 'amber' : s === 'PASS' ? 'green' : 'slate');
   return (
     <>
-      <div className="mb-2 text-[12.5px] text-slate-600">Run #{b.match_run} · {fmtDateTime(b.matched_at)} · result <MatchChip v={b.match_status} />{b.match_status === 'NOT_RUN' && ' (out of date — something changed since)'}</div>
+      <div className="mb-2 text-body text-slate-600">Run #{b.match_run} · {fmtDateTime(b.matched_at)} · result <MatchChip v={b.match_status} />{b.match_status === 'NOT_RUN' && ' (out of date — something changed since)'}</div>
       <table className="w-full text-xs">
         <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-1.5 text-left">Check</th><th className="px-2 py-1.5 text-left">Severity</th><th className="px-2 py-1.5 text-right">Expected</th>
           <th className="px-2 py-1.5 text-right">Actual</th><th className="px-2 py-1.5 text-right">Variance</th><th className="px-2 py-1.5 text-right">Tolerance</th><th className="px-2 py-1.5 text-left">Resolution</th></tr></thead>
@@ -209,7 +209,7 @@ function Matching({ b }: { b: any }) {
       </table>
       {ov && <TextModal title="Override a blocking difference" label="Reason (kept in the audit trail)" confirm="Override" busy={act.isPending} onClose={() => setOv(null)}
         onConfirm={(reason) => act.mutate({ url: `/stores/bill-tracker/${b.id}/match-results/${ov.id}/override`, body: { reason } }, { onSuccess: () => setOv(null) })}>
-        <div className="mb-2 text-[12.5px]">{ov.label}: expected {ov.expected_value}, actual {ov.actual_value}</div></TextModal>}
+        <div className="mb-2 text-body">{ov.label}: expected {ov.expected_value}, actual {ov.actual_value}</div></TextModal>}
     </>
   );
 }
@@ -220,9 +220,9 @@ function Movements({ b }: { b: any }) {
   const [fix, setFix] = useState<any | null>(null);
   return (
     <>
-      <div className="mb-2 text-[12px] text-slate-500">Movements are never edited — a wrong hand-off is reversed by a correction entry.</div>
+      <div className="mb-2 text-small text-slate-500">Movements are never edited — a wrong hand-off is reversed by a correction entry.</div>
       <ol className="space-y-2">{b.movements.map((m: any, i: number) => (
-        <li key={m.id} data-move={m.movement_type} className="rounded-lg border border-slate-200 px-3 py-2 text-[12.5px]">
+        <li key={m.id} data-move={m.movement_type} className="rounded-lg border border-slate-200 px-3 py-2 text-body">
           <div className="flex flex-wrap items-center gap-2"><span className="tabular-nums text-slate-400">#{m.seq}</span><Badge tone={m.movement_type === 'CORRECTION' ? 'red' : 'blue'}>{m.movement_type.replace('_', ' ')}</Badge>
             <span>{m.from_holder ?? '—'}{m.from_dept ? ` (${m.from_dept})` : ''} → <b>{m.to_holder ?? '—'}</b>{m.to_dept ? ` (${m.to_dept})` : ''}{m.to_location ? ` · ${m.to_location}` : ''}</span>
             <span className="text-slate-500">{fmtDate(m.business_date)} · recorded {fmtDateTime(m.moved_at)} by {m.recorded_by_name ?? '—'}</span></div>
@@ -243,7 +243,7 @@ function Movements({ b }: { b: any }) {
 }
 
 function Approvals({ b }: { b: any }) {
-  if (!b.approvals.length) return <div className="py-6 text-center text-[12.5px] text-slate-500">No decisions yet</div>;
+  if (!b.approvals.length) return <div className="py-6 text-center text-body text-slate-500">No decisions yet</div>;
   return (
     <table className="w-full text-xs">
       <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-1.5 text-left">When</th><th className="px-2 py-1.5 text-left">Step</th><th className="px-2 py-1.5 text-left">Decision</th>
@@ -280,11 +280,11 @@ function Followups({ b, onNew }: { b: any; onNew: () => void }) {
 }
 
 function Posting({ b }: { b: any }) {
-  if (!b.postings.length) return <div className="py-6 text-center text-[12.5px] text-slate-500">Not sent to accounting. An approved bill is queued automatically; the accounts package is not connected yet (MANUAL adapter) — accounts enters the voucher no after posting.</div>;
+  if (!b.postings.length) return <div className="py-6 text-center text-body text-slate-500">Not sent to accounting. An approved bill is queued automatically; the accounts package is not connected yet (MANUAL adapter) — accounts enters the voucher no after posting.</div>;
   return (
     <div className="space-y-3">{b.postings.map((p: any) => (
-      <div key={p.id} className="rounded-lg border border-slate-200 p-3 text-[12.5px]">
-        <div className="flex flex-wrap items-center gap-3"><StatusBadge value={p.status} /><span className="tabular-nums text-[11.5px]">{p.idempotency_key}</span><span>Adapter {p.adapter}</span>
+      <div key={p.id} className="rounded-lg border border-slate-200 p-3 text-body">
+        <div className="flex flex-wrap items-center gap-3"><StatusBadge value={p.status} /><span className="tabular-nums text-small">{p.idempotency_key}</span><span>Adapter {p.adapter}</span>
           <span>₹{fmtDecimal(p.payload_amount, 2)}</span><span>Attempts {p.attempts}</span>
           {p.external_voucher_no && <span>Voucher <b>{p.external_voucher_no}</b> · {fmtDate(p.external_voucher_date)} · {p.posted_by_name}</span>}
           {p.reversal_voucher_no && <span className="text-red-600">Reversed by voucher {p.reversal_voucher_no}</span>}
@@ -343,7 +343,7 @@ function StepModal({ step, doc, busy, onClose, onSave }: { step: 'handover' | 'r
           <Input label="Submitted on" type="date" required max={today()} value={v.submitted_to_accounts_on} onChange={(e) => setV({ ...v, submitted_to_accounts_on: e.target.value })} />
           <Select label="ERP user (optional)" value={v.to_user_id} placeholder="—" onChange={(e) => pickUser(e.target.value, 'accounts_recipient')} options={toOptions(users.data)} />
           <Input label="Accounts recipient" required id="step-recipient" value={v.accounts_recipient} onChange={(e) => setV({ ...v, accounts_recipient: e.target.value })} />
-          <div className="text-[12px] text-slate-500">The bill then waits for accounts' verification.</div>
+          <div className="text-small text-slate-500">The bill then waits for accounts' verification.</div>
         </>}
         {step === 'move' && <>
           <Select label="To ERP user" value={v.to_user_id} placeholder="—" onChange={(e) => pickUser(e.target.value, 'to_holder')} options={toOptions(users.data)} />

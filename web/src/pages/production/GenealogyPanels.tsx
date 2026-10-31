@@ -34,7 +34,7 @@ export function JobGenealogyTree({ soId, onRoll }: { soId: string; onRoll: (roll
   return (
     <div className="card mb-3 p-4 text-xs" id="genealogy-tree">
       <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-[13px] font-semibold text-slate-800">Job genealogy — click a node to open it</h3>
+        <h3 className="text-body font-semibold text-slate-800">Job genealogy — click a node to open it</h3>
         <div className="flex gap-2"><Button size="sm" variant="secondary" onClick={() => set(true)} id="tree-expand">Expand all</Button><Button size="sm" variant="secondary" onClick={() => set(false)}>Collapse</Button></div>
       </div>
       <TreeNode key={gen} node={q.data} depth={0} onRoll={onRoll} all={all} />
@@ -74,7 +74,7 @@ export function RequirementSnapshot({ soId }: { soId: string }) {
   return (
     <div className="card mb-3 p-4 text-xs" id="requirement-snapshot">
       <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-[13px] font-semibold text-slate-800">Job material requirement {a.length ? `— revision ${a[0].revision_no}` : ''}</h3>
+        <h3 className="text-body font-semibold text-slate-800">Job material requirement {a.length ? `— revision ${a[0].revision_no}` : ''}</h3>
         <Button size="sm" variant="secondary" loading={busy} onClick={take} id="btn-take-snapshot">{a.length ? 'Take a new revision' : 'Take snapshot from BOM'}</Button>
       </div>
       {a.length ? (
@@ -93,10 +93,10 @@ export function JobCostPanel({ soId }: { soId: string }) {
   const d = q.data; if (!d) return null;
   return (
     <div className="card mb-3 grid gap-4 p-4 text-xs md:grid-cols-2" id="job-cost">
-      <div><h3 className="mb-1 text-[13px] font-semibold text-slate-800">Standard cost (BOM)</h3>
+      <div><h3 className="mb-1 text-body font-semibold text-slate-800">Standard cost (BOM)</h3>
         {d.standard.length ? d.standard.map((x: any) => <div key={x.head} className="flex justify-between border-b border-slate-100 py-0.5"><span>{x.head}</span><span className="tabular-nums">{money(x.amount)}</span></div>) : <p className="text-slate-400">No BOM</p>}
         <div className="flex justify-between pt-1 font-semibold"><span>Total</span><span className="tabular-nums">{money(d.standard_total)}</span></div></div>
-      <div><h3 className="mb-1 text-[13px] font-semibold text-slate-800">Actual cost</h3>
+      <div><h3 className="mb-1 text-body font-semibold text-slate-800">Actual cost</h3>
         {d.actual.filter((x: any) => x.amount).map((x: any) => <div key={x.head} className="flex justify-between border-b border-slate-100 py-0.5"><span>{x.head}{x.kg ? ` (${kg(x.kg)} KG)` : ''}</span><span className="tabular-nums">{money(x.amount)}</span></div>)}
         <div className="flex justify-between pt-1 font-semibold"><span>Total</span><span className="tabular-nums" id="job-cost-actual">{money(d.actual_total)}</span></div></div>
     </div>
@@ -109,7 +109,7 @@ export function RollCostPanel({ rollId }: { rollId: number }) {
   const d = q.data; if (!d) return null;
   return (
     <div className="card p-4 text-xs" id="roll-cost">
-      <h3 className="mb-1 text-[13px] font-semibold text-slate-800">Cost carried by {d.roll_no}: <span id="roll-cost-kg">{money(d.cost_per_kg)}</span> / KG · value of the KG left {money(d.value)}</h3>
+      <h3 className="mb-1 text-body font-semibold text-slate-800">Cost carried by {d.roll_no}: <span id="roll-cost-kg">{money(d.cost_per_kg)}</span> / KG · value of the KG left {money(d.value)}</h3>
       <table className="w-full max-w-2xl"><tbody>{d.steps.map((s: any, i: number) => <tr key={i} className="border-t border-slate-100"><td className="px-2 py-0.5 font-semibold">{s.stage}</td><td className="px-2 py-0.5">{s.ref}</td><td className="px-2 py-0.5 text-slate-500">{s.note}</td><td className="px-2 py-0.5 text-right tabular-nums">{money(s.rate)}</td></tr>)}</tbody></table>
     </div>
   );
@@ -130,7 +130,7 @@ export function SplitRollPanel({ roll, onDone }: { roll: { id: number; roll_no: 
   };
   return (
     <div className="card p-4 text-xs" id="split-roll">
-      <h3 className="mb-2 flex items-center gap-1 text-[13px] font-semibold text-slate-800"><Scissors size={14} /> Split {roll.roll_no} ({kg(left)} KG left)</h3>
+      <h3 className="mb-2 flex items-center gap-1 text-body font-semibold text-slate-800"><Scissors size={14} /> Split {roll.roll_no} ({kg(left)} KG left)</h3>
       <div className="flex flex-wrap items-end gap-2">
         {parts.map((p, i) => <Input key={i} label={`Roll ${i + 1} KG`} type="number" className="w-24" value={p} id={`split-part-${i}`} onChange={(e) => setParts(parts.map((x, k) => (k === i ? e.target.value : x)))} />)}
         <Button size="sm" variant="secondary" onClick={() => setParts([...parts, '0'])}>+ part</Button>
@@ -159,7 +159,7 @@ export function MergeRollsPanel({ onDone }: { onDone: (msg: string) => void }) {
   };
   return (
     <div className="card p-4 text-xs" id="merge-rolls">
-      <h3 className="mb-2 flex items-center gap-1 text-[13px] font-semibold text-slate-800"><Combine size={14} /> Merge rolls</h3>
+      <h3 className="mb-2 flex items-center gap-1 text-body font-semibold text-slate-800"><Combine size={14} /> Merge rolls</h3>
       <div className="mb-2 flex flex-wrap items-end gap-2">
         <JobSelect label="Job" className="w-72" value={job?.job_no ?? ''} id="merge-job" onPick={(j) => { setJob(j ? { id: j.id, job_no: j.job_no } : null); setSel([]); }} />
         <Input label="Reason *" className="w-64" value={reason} id="merge-reason" onChange={(e) => setReason(e.target.value)} placeholder="e.g. small ends of one lot" />

@@ -186,13 +186,13 @@ function SampleView({ id }: { id: number }) {
         </div>} />
 
       {s.next_action && s.next_action !== '—' && (
-        <div className="mb-3 rounded-lg border border-sky-200 bg-sky-50 px-3.5 py-2 text-[12.5px] text-sky-800" id="sample-next">
+        <div className="mb-3 rounded-lg border border-sky-200 bg-sky-50 px-3.5 py-2 text-body text-sky-800" id="sample-next">
           Next: <b>{s.next_action}</b>{s.current_stage ? ` · current stage ${s.current_stage.stage_name} (${s.current_stage.dept_name ?? 'no department'} · ${s.current_stage.owner ?? 'no owner'})` : ''}
           {s.purchases_to_import > 0 && <> · <button className="font-semibold underline" onClick={() => setTab('costing')}>{s.purchases_to_import} purchase line(s) booked to this sample are not in its cost yet</button></>}
         </div>
       )}
       {m.allocation_state === 'EXCEPTION' && (
-        <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-[12.5px] text-red-700">
+        <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-body text-red-700">
           Allocated {inr(m.allocated_cost)} is more than the posted cost {inr(m.eligible_cost)} (a cost was reversed) — reverse or adjust the allocation.
         </div>
       )}
@@ -242,7 +242,7 @@ function Overview({ s, refresh }: { s: any; refresh: () => void }) {
       <SampleForm sample={s} onSaved={refresh} />
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="Details">
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 p-4 text-[12.5px]">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 p-4 text-body">
             <dt className="text-slate-500">Created</dt><dd>{fmtDateTime(s.created_at)} · {s.created_by_name ?? '—'}</dd>
             <dt className="text-slate-500">Merchandiser</dt><dd>{s.merchandiser_name ?? '—'}</dd>
             <dt className="text-slate-500">Coordinator</dt><dd>{s.coordinator_name ?? '—'}</dd>
@@ -278,18 +278,18 @@ function Attachments({ s, refresh }: { s: any; refresh: () => void }) {
   return (
     <Card title={<span className="flex items-center gap-2"><Paperclip size={14} />Tech pack, photos &amp; evidence</span>}
       actions={can('SAMPLE.UPDATE') && <div className="flex items-center gap-2">
-        <select className="input h-8 py-0 text-[12px]" value={docType} onChange={(e) => setDocType(e.target.value)}>
+        <select className="input h-8 py-0 text-small" value={docType} onChange={(e) => setDocType(e.target.value)}>
           {['TECH_PACK', 'PHOTO', 'MEASUREMENT', 'BUYER_COMMENTS', 'COURIER', 'OTHER'].map((x) => <option key={x} value={x}>{x.replace(/_/g, ' ').toLowerCase()}</option>)}
         </select>
         <label className={clsx('btn-secondary btn-sm cursor-pointer', busy && 'opacity-60')}>{busy ? 'Uploading…' : 'Upload'}
           <input type="file" className="hidden" accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.svg" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ''; }} /></label>
       </div>}>
       <div className="p-3">
-        {!s.attachments.length && <p className="py-4 text-center text-[12px] text-slate-400">No files yet (PDF / images, up to 10 MB)</p>}
+        {!s.attachments.length && <p className="py-4 text-center text-small text-slate-400">No files yet (PDF / images, up to 10 MB)</p>}
         {s.attachments.map((a: any) => (
-          <div key={a.id} className="flex items-center justify-between border-b border-slate-100 py-1.5 text-[12.5px] last:border-0">
+          <div key={a.id} className="flex items-center justify-between border-b border-slate-100 py-1.5 text-body last:border-0">
             <span><Badge tone="slate">{String(a.doc_type).replace(/_/g, ' ').toLowerCase()}</Badge> <a className="text-brand-700 hover:underline" href={a.file_url} target="_blank" rel="noreferrer">{a.file_name ?? a.file_url}</a></span>
-            <span className="text-[11px] text-slate-400">{a.uploaded_by_name} · {fmtDateTime(a.uploaded_at)}{can('SAMPLE.UPDATE') && <button className="ml-2 text-red-500 hover:text-red-700" onClick={() => void remove(a)}>remove</button>}</span>
+            <span className="text-caption text-slate-400">{a.uploaded_by_name} · {fmtDateTime(a.uploaded_at)}{can('SAMPLE.UPDATE') && <button className="ml-2 text-red-500 hover:text-red-700" onClick={() => void remove(a)}>remove</button>}</span>
           </div>
         ))}
       </div>
@@ -305,7 +305,7 @@ function Workflow({ s, refresh }: { s: any; refresh: () => void }) {
   const revs = useMemo(() => [...new Set<number>(s.processes.map((p: any) => Number(p.revision_no)))].sort((a, b) => b - a), [s.processes]);
   const running = ['SUBMITTED', 'IN_PROGRESS', 'ON_HOLD'].includes(s.status);
   const reopenable = running || ['PENDING_INTERNAL_APPROVAL', 'INTERNALLY_APPROVED'].includes(s.status);
-  if (!s.processes.length) return <div className="card p-8 text-center text-[13px] text-slate-500">{s.status === 'DRAFT' ? 'Submit the request to create its stages.' : 'No stages yet — use "Create stages".'}</div>;
+  if (!s.processes.length) return <div className="card p-8 text-center text-body text-slate-500">{s.status === 'DRAFT' ? 'Submit the request to create its stages.' : 'No stages yet — use "Create stages".'}</div>;
   return (
     <div className="space-y-4" id="sample-stages">
       {revs.map((rev) => {
@@ -313,7 +313,7 @@ function Workflow({ s, refresh }: { s: any; refresh: () => void }) {
         const current = rev === Number(s.revision_no);
         const r = s.revisions.find((x: any) => Number(x.revision_no) === rev);
         return (
-          <Card key={rev} title={<span>{rev === 0 ? 'First build' : `Revision ${rev}`}{!current && <span className="ml-2 text-[11px] font-normal text-slate-400">earlier revision — read only</span>}</span>}
+          <Card key={rev} title={<span>{rev === 0 ? 'First build' : `Revision ${rev}`}{!current && <span className="ml-2 text-caption font-normal text-slate-400">earlier revision — read only</span>}</span>}
             subtitle={r?.comments ?? undefined}>
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -322,20 +322,20 @@ function Workflow({ s, refresh }: { s: any; refresh: () => void }) {
                 <tbody>
                   {rows.map((p: any) => (
                     <tr key={p.id} className={clsx('align-top', current ? 'row-hover' : 'opacity-70')} data-stage={p.stage_code}>
-                      <td className="td text-[11px] text-slate-400">{p.step_group}</td>
-                      <td className="td"><p className="font-medium">{p.stage_name}{!Number(p.is_mandatory) && <span className="ml-1 text-[10.5px] text-slate-400">optional</span>}</p>
-                        {p.rework_of_stage && <p className="text-[11px] text-amber-700">rework of {p.rework_of_stage}</p>}
-                        {p.blocked_by?.length > 0 && <p className="text-[11px] text-slate-400">after {p.blocked_by.join(', ')}</p>}
-                        {p.hold_reason && p.status === 'ON_HOLD' && <p className="text-[11px] text-amber-700">Hold: {p.hold_reason}</p>}
-                        {p.skip_reason && <p className="text-[11px] text-slate-500">Skipped: {p.skip_reason}</p>}</td>
+                      <td className="td text-caption text-slate-400">{p.step_group}</td>
+                      <td className="td"><p className="font-medium">{p.stage_name}{!Number(p.is_mandatory) && <span className="ml-1 text-caption text-slate-400">optional</span>}</p>
+                        {p.rework_of_stage && <p className="text-caption text-amber-700">rework of {p.rework_of_stage}</p>}
+                        {p.blocked_by?.length > 0 && <p className="text-caption text-slate-400">after {p.blocked_by.join(', ')}</p>}
+                        {p.hold_reason && p.status === 'ON_HOLD' && <p className="text-caption text-amber-700">Hold: {p.hold_reason}</p>}
+                        {p.skip_reason && <p className="text-caption text-slate-500">Skipped: {p.skip_reason}</p>}</td>
                       <td className="td"><ProcStatus value={p.status} ready={p.ready} /></td>
-                      <td className="td text-[12px]"><p>{p.dept_name ?? '—'}</p><p className={!p.assigned_user_name && !p.assigned_contractor_name && current && !['COMPLETED', 'SKIPPED', 'CANCELLED'].includes(p.status) ? 'font-semibold text-red-600' : 'text-slate-500'}>
+                      <td className="td text-small"><p>{p.dept_name ?? '—'}</p><p className={!p.assigned_user_name && !p.assigned_contractor_name && current && !['COMPLETED', 'SKIPPED', 'CANCELLED'].includes(p.status) ? 'font-semibold text-red-600' : 'text-slate-500'}>
                         {p.assigned_user_name ?? p.assigned_contractor_name ?? 'no owner'}{p.assigned_contractor_name && p.assigned_user_name ? ` · ${p.assigned_contractor_name}` : ''}</p>
-                        {p.planned_date && <p className="text-[11px] text-slate-400">planned {fmtDate(p.planned_date)}</p>}</td>
-                      <td className="td text-[12px]">{p.started_at ? fmtDateTime(p.started_at) : '—'}<p className="text-slate-500">{p.completed_at ? fmtDateTime(p.completed_at) : ''}</p></td>
-                      <td className="td text-right text-[12px] tabular-nums">{p.age_days != null ? `${p.age_days} d` : '—'}<p className={p.sla_breached ? 'font-semibold text-red-600' : 'text-slate-400'}>{p.sla_days != null ? `SLA ${Number(p.sla_days)} d` : ''}{p.sla_breached ? ' · late' : ''}</p></td>
-                      <td className="td text-right text-[12px] tabular-nums">{p.good_qty != null || p.reject_qty != null ? `${fmtNumber(p.good_qty ?? 0)} · ${fmtNumber(p.reject_qty ?? 0)} · ${fmtNumber(p.rework_qty ?? 0)}` : '—'}</td>
-                      <td className="td text-right text-[12px] tabular-nums">{p.labour_minutes ? fmtNumber(p.labour_minutes) : '—'}</td>
+                        {p.planned_date && <p className="text-caption text-slate-400">planned {fmtDate(p.planned_date)}</p>}</td>
+                      <td className="td text-small">{p.started_at ? fmtDateTime(p.started_at) : '—'}<p className="text-slate-500">{p.completed_at ? fmtDateTime(p.completed_at) : ''}</p></td>
+                      <td className="td text-right text-small tabular-nums">{p.age_days != null ? `${p.age_days} d` : '—'}<p className={p.sla_breached ? 'font-semibold text-red-600' : 'text-slate-400'}>{p.sla_days != null ? `SLA ${Number(p.sla_days)} d` : ''}{p.sla_breached ? ' · late' : ''}</p></td>
+                      <td className="td text-right text-small tabular-nums">{p.good_qty != null || p.reject_qty != null ? `${fmtNumber(p.good_qty ?? 0)} · ${fmtNumber(p.reject_qty ?? 0)} · ${fmtNumber(p.rework_qty ?? 0)}` : '—'}</td>
+                      <td className="td text-right text-small tabular-nums">{p.labour_minutes ? fmtNumber(p.labour_minutes) : '—'}</td>
                       {current && (
                         <td className="td whitespace-nowrap text-right">
                           {can('SAMPLE.PROCESS') && running && p.status === 'NOT_STARTED' && p.ready && <Button size="sm" id={`st-start-${p.stage_code}`} onClick={() => setAct({ p, a: 'start' })}>Start</Button>}
@@ -437,13 +437,13 @@ function QcBuyer({ s, openQc }: { s: any; openQc: () => void }) {
                 const defects = typeof q.defects === 'string' ? JSON.parse(q.defects) : q.defects;
                 return (
                   <tr key={q.id} className="align-top">
-                    <td className="td text-[12px]">{fmtDate(q.inspection_date)}<p className="text-slate-400">rev {q.revision_no}</p></td>
-                    <td className="td text-[12px]">{q.stage_name ?? '—'}</td>
-                    <td className="td text-right text-[12px] tabular-nums">{fmtNumber(q.checked_qty)} · {fmtNumber(q.passed_qty)} · {fmtNumber(q.rejected_qty)} · {fmtNumber(q.rework_qty)}</td>
-                    <td className="td text-[12px]">{String(q.measurement_result).replace(/_/g, ' ').toLowerCase()}</td>
-                    <td className="td text-[12px]">{defects?.length ? defects.map((d: any, i: number) => <p key={i}>{d.defect_name} <span className="text-slate-400">({d.severity.toLowerCase()} × {d.qty})</span></p>) : '—'}</td>
-                    <td className="td"><Badge tone={q.result === 'PASS' ? 'green' : 'red'}>{q.result}</Badge><p className="mt-0.5 text-[11px] text-slate-500">{q.disposition.toLowerCase()}{q.rework_stage_name ? ` → ${q.rework_stage_name}` : ''}</p></td>
-                    <td className="td max-w-[220px] text-[12px] text-slate-600">{q.remarks}<p className="text-[11px] text-slate-400">{q.inspected_by_name}</p></td>
+                    <td className="td text-small">{fmtDate(q.inspection_date)}<p className="text-slate-400">rev {q.revision_no}</p></td>
+                    <td className="td text-small">{q.stage_name ?? '—'}</td>
+                    <td className="td text-right text-small tabular-nums">{fmtNumber(q.checked_qty)} · {fmtNumber(q.passed_qty)} · {fmtNumber(q.rejected_qty)} · {fmtNumber(q.rework_qty)}</td>
+                    <td className="td text-small">{String(q.measurement_result).replace(/_/g, ' ').toLowerCase()}</td>
+                    <td className="td text-small">{defects?.length ? defects.map((d: any, i: number) => <p key={i}>{d.defect_name} <span className="text-slate-400">({d.severity.toLowerCase()} × {d.qty})</span></p>) : '—'}</td>
+                    <td className="td"><Badge tone={q.result === 'PASS' ? 'green' : 'red'}>{q.result}</Badge><p className="mt-0.5 text-caption text-slate-500">{q.disposition.toLowerCase()}{q.rework_stage_name ? ` → ${q.rework_stage_name}` : ''}</p></td>
+                    <td className="td max-w-[220px] text-small text-slate-600">{q.remarks}<p className="text-caption text-slate-400">{q.inspected_by_name}</p></td>
                   </tr>
                 );
               })}
@@ -452,31 +452,31 @@ function QcBuyer({ s, openQc }: { s: any; openQc: () => void }) {
         </div>
       </Card>
       <Card title="Buyer submissions">
-        <div className="p-3 text-[12.5px]" id="submission-list">
+        <div className="p-3 text-body" id="submission-list">
           {!s.submissions.length && <p className="py-4 text-center text-slate-400">Not sent yet</p>}
           {s.submissions.map((x: any) => (
             <div key={x.id} className="border-b border-slate-100 py-1.5 last:border-0">
               <p><b>{fmtDate(x.submission_date)}</b> · rev {x.revision_no} · {fmtNumber(x.qty)} pcs {x.courier_name ? `· ${x.courier_name}` : ''} {x.tracking_no ? `#${x.tracking_no}` : ''}</p>
-              <p className="text-[11px] text-slate-500">{x.sent_to ? `to ${x.sent_to} · ` : ''}{x.remarks ?? ''} {x.recorded_by_name}</p>
+              <p className="text-caption text-slate-500">{x.sent_to ? `to ${x.sent_to} · ` : ''}{x.remarks ?? ''} {x.recorded_by_name}</p>
             </div>
           ))}
         </div>
       </Card>
       <Card title="Decisions">
-        <div className="p-3 text-[12.5px]" id="decision-list">
+        <div className="p-3 text-body" id="decision-list">
           {!s.decisions.length && <p className="py-4 text-center text-slate-400">No decision yet</p>}
           {s.decisions.map((x: any) => (
             <div key={x.id} className="border-b border-slate-100 py-1.5 last:border-0">
               <p><Badge tone={x.decision === 'APPROVED' ? 'green' : x.decision === 'REJECTED' ? 'red' : 'amber'}>{x.stage === 'BUYER' ? 'Buyer' : 'Internal'} · {x.decision.replace(/_/g, ' ').toLowerCase()}</Badge>
                 <span className="ml-2">{fmtDate(x.decision_date)} · rev {x.revision_no}</span></p>
               {x.comments && <p className="mt-0.5 text-slate-600">{x.comments}</p>}
-              <p className="text-[11px] text-slate-400">{x.decided_by_name}</p>
+              <p className="text-caption text-slate-400">{x.decided_by_name}</p>
             </div>
           ))}
         </div>
       </Card>
       <Card title="Revisions" className="lg:col-span-2">
-        <div className="p-3 text-[12.5px]">
+        <div className="p-3 text-body">
           {s.revisions.map((r: any) => (
             <p key={r.id} className="border-b border-slate-100 py-1.5 last:border-0"><b>{r.revision_no === 0 ? 'First build' : `Revision ${r.revision_no}`}</b> · {r.revision_type.toLowerCase()} · <Badge tone="slate">{r.status.toLowerCase()}</Badge>
               <span className="ml-2 text-slate-500">{fmtDateTime(r.requested_at)} {r.requested_by_name}</span>{r.comments && <span className="block text-slate-600">{r.comments}</span>}</p>
@@ -500,7 +500,7 @@ function DecisionModal({ s, stage, busy, onClose, onSave }: { s: any; stage: 'IN
         <Input label="Date" type="date" value={v.decision_date} onChange={(e) => setV({ ...v, decision_date: e.target.value })} />
         <Textarea className="sm:col-span-2" label={stage === 'BUYER' ? 'Buyer comments' : 'Comments'} required={needComments} id="decision-comments" value={v.comments} onChange={(e) => setV({ ...v, comments: e.target.value })} />
       </div>
-      {stage === 'INTERNAL' && s.last_qc_result === 'FAIL' && <p className="mt-2 text-[12px] text-red-600">The latest QC inspection failed — approval needs a passing inspection.</p>}
+      {stage === 'INTERNAL' && s.last_qc_result === 'FAIL' && <p className="mt-2 text-small text-red-600">The latest QC inspection failed — approval needs a passing inspection.</p>}
     </Modal>
   );
 }
@@ -518,7 +518,7 @@ function SubmissionModal({ s, busy, onClose, onSave }: { s: any; busy: boolean; 
         <Input className="sm:col-span-2" label="Sent to (buyer contact / office)" value={v.sent_to} onChange={(e) => setV({ ...v, sent_to: e.target.value })} />
         <Textarea className="sm:col-span-2" label="Remarks" value={v.remarks} onChange={(e) => setV({ ...v, remarks: e.target.value })} />
       </div>
-      <p className="mt-2 text-[11.5px] text-slate-500">Courier cost: enter it in Costing (category Courier) or import the courier bill booked to this sample.</p>
+      <p className="mt-2 text-small text-slate-500">Courier cost: enter it in Costing (category Courier) or import the courier bill booked to this sample.</p>
     </Modal>
   );
 }
@@ -540,13 +540,13 @@ function RevisionModal({ s, busy, onClose, onSave }: { s: any; busy: boolean; on
         <Input label="New target date" type="date" value={v.target_date} onChange={(e) => setV({ ...v, target_date: e.target.value })} hint="Leave blank to keep the target" />
         <Textarea className="sm:col-span-2" label="What has to change" required id="revision-comments" value={v.comments} onChange={(e) => setV({ ...v, comments: e.target.value })} />
       </div>
-      <p className="mb-1 mt-3 text-[12px] font-semibold text-slate-600">Stages to redo (workflow v{wf?.version_no ?? '—'})</p>
+      <p className="mb-1 mt-3 text-small font-semibold text-slate-600">Stages to redo (workflow v{wf?.version_no ?? '—'})</p>
       {types.isLoading ? <LoadingBlock rows={2} /> : (
         <div className="grid gap-1 sm:grid-cols-2">
           {stages.map((x: any) => (
-            <label key={x.id} className="flex items-center gap-2 text-[12.5px]">
+            <label key={x.id} className="flex items-center gap-2 text-body">
               <input type="checkbox" checked={sel.includes(Number(x.id))} onChange={(e) => setPicked(e.target.checked ? [...sel, Number(x.id)] : sel.filter((y) => y !== Number(x.id)))} />
-              {x.stage_name}{!Number(x.is_mandatory) && <span className="text-[11px] text-slate-400">optional</span>}
+              {x.stage_name}{!Number(x.is_mandatory) && <span className="text-caption text-slate-400">optional</span>}
             </label>
           ))}
         </div>
@@ -588,22 +588,22 @@ function QcModal({ s, busy, onClose, onSave }: { s: any; busy: boolean; onClose:
       </div>
       <div className="mt-3 grid gap-4 lg:grid-cols-2">
         <div>
-          <div className="mb-1 flex items-center justify-between"><p className="text-[12px] font-semibold text-slate-600">Defects</p><button className="text-[12px] text-brand-700" onClick={() => setDefects([...defects, { defect_id: '', defect_name: '', severity: 'MINOR', qty: 1 }])}>+ add</button></div>
+          <div className="mb-1 flex items-center justify-between"><p className="text-small font-semibold text-slate-600">Defects</p><button className="text-small text-brand-700" onClick={() => setDefects([...defects, { defect_id: '', defect_name: '', severity: 'MINOR', qty: 1 }])}>+ add</button></div>
           {defects.map((d, i) => (
             <div key={i} className="mb-1 grid grid-cols-[1fr_90px_60px_20px] gap-1">
-              <select className="input h-8 py-0 text-[12px]" value={d.defect_id} onChange={(e) => { const x = (defectsLk.data ?? []).find((y) => String(y.id) === e.target.value) as any; const n = [...defects]; n[i] = { ...d, defect_id: e.target.value, defect_name: x?.label ?? '', severity: x?.defect_type ?? d.severity }; setDefects(n); }}>
+              <select className="input h-8 py-0 text-small" value={d.defect_id} onChange={(e) => { const x = (defectsLk.data ?? []).find((y) => String(y.id) === e.target.value) as any; const n = [...defects]; n[i] = { ...d, defect_id: e.target.value, defect_name: x?.label ?? '', severity: x?.defect_type ?? d.severity }; setDefects(n); }}>
                 <option value="">— defect —</option>{(defectsLk.data ?? []).map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}</select>
-              <select className="input h-8 py-0 text-[12px]" value={d.severity} onChange={(e) => { const n = [...defects]; n[i] = { ...d, severity: e.target.value }; setDefects(n); }}>{['CRITICAL', 'MAJOR', 'MINOR'].map((x) => <option key={x}>{x}</option>)}</select>
-              <input className="input h-8 py-0 text-[12px]" type="number" min={0} value={d.qty} onChange={(e) => { const n = [...defects]; n[i] = { ...d, qty: e.target.value }; setDefects(n); }} />
+              <select className="input h-8 py-0 text-small" value={d.severity} onChange={(e) => { const n = [...defects]; n[i] = { ...d, severity: e.target.value }; setDefects(n); }}>{['CRITICAL', 'MAJOR', 'MINOR'].map((x) => <option key={x}>{x}</option>)}</select>
+              <input className="input h-8 py-0 text-small" type="number" min={0} value={d.qty} onChange={(e) => { const n = [...defects]; n[i] = { ...d, qty: e.target.value }; setDefects(n); }} />
               <button className="text-red-500" onClick={() => setDefects(defects.filter((_, j) => j !== i))}>×</button>
             </div>
           ))}
         </div>
         <div>
-          <div className="mb-1 flex items-center justify-between"><p className="text-[12px] font-semibold text-slate-600">Measurements</p><button className="text-[12px] text-brand-700" onClick={() => setMeas([...meas, { point: '', spec: '', actual: '', tolerance: '', ok: true }])}>+ add</button></div>
+          <div className="mb-1 flex items-center justify-between"><p className="text-small font-semibold text-slate-600">Measurements</p><button className="text-small text-brand-700" onClick={() => setMeas([...meas, { point: '', spec: '', actual: '', tolerance: '', ok: true }])}>+ add</button></div>
           {meas.map((x, i) => (
             <div key={i} className="mb-1 grid grid-cols-[1fr_60px_60px_60px_24px_20px] gap-1">
-              {(['point', 'spec', 'actual', 'tolerance'] as const).map((k) => <input key={k} className="input h-8 py-0 text-[12px]" placeholder={k} value={x[k]} onChange={(e) => { const n = [...meas]; n[i] = { ...x, [k]: e.target.value }; setMeas(n); }} />)}
+              {(['point', 'spec', 'actual', 'tolerance'] as const).map((k) => <input key={k} className="input h-8 py-0 text-small" placeholder={k} value={x[k]} onChange={(e) => { const n = [...meas]; n[i] = { ...x, [k]: e.target.value }; setMeas(n); }} />)}
               <input type="checkbox" title="Within tolerance" checked={x.ok !== false} onChange={(e) => { const n = [...meas]; n[i] = { ...x, ok: e.target.checked }; setMeas(n); }} />
               <button className="text-red-500" onClick={() => setMeas(meas.filter((_, j) => j !== i))}>×</button>
             </div>
@@ -628,11 +628,11 @@ function Timeline({ id }: { id: number }) {
         <tbody>
           {rows.map((r) => (
             <tr key={`${r.kind}-${r.id}`} className="align-top">
-              <td className="td whitespace-nowrap text-[12px]">{fmtDateTime(r.created_at)}</td>
-              <td className="td text-[12px]">{r.user_name ?? '—'}</td>
-              <td className="td text-[12px]">{r.kind === 'stage' ? <><Badge tone="blue">Stage</Badge> {r.stage_name}: {r.action.toLowerCase()}</> : <><Badge tone="slate">{r.entity.toLowerCase()}</Badge> {r.action.replace(/_/g, ' ').toLowerCase()}</>}</td>
-              <td className="td max-w-[420px] text-[12px] text-slate-600">{r.kind === 'stage' ? `${r.from_status ?? ''} → ${r.to_status ?? ''}${r.good_qty != null ? ` · good ${r.good_qty}` : ''}${r.minutes ? ` · ${r.minutes} min` : ''}` : <>{r.old_values && <span className="text-slate-400">{show(r.old_values)} → </span>}{show(r.new_values)}</>}</td>
-              <td className="td max-w-[260px] text-[12px] text-slate-600">{r.reason ?? ''}</td>
+              <td className="td whitespace-nowrap text-small">{fmtDateTime(r.created_at)}</td>
+              <td className="td text-small">{r.user_name ?? '—'}</td>
+              <td className="td text-small">{r.kind === 'stage' ? <><Badge tone="blue">Stage</Badge> {r.stage_name}: {r.action.toLowerCase()}</> : <><Badge tone="slate">{r.entity.toLowerCase()}</Badge> {r.action.replace(/_/g, ' ').toLowerCase()}</>}</td>
+              <td className="td max-w-[420px] text-small text-slate-600">{r.kind === 'stage' ? `${r.from_status ?? ''} → ${r.to_status ?? ''}${r.good_qty != null ? ` · good ${r.good_qty}` : ''}${r.minutes ? ` · ${r.minutes} min` : ''}` : <>{r.old_values && <span className="text-slate-400">{show(r.old_values)} → </span>}{show(r.new_values)}</>}</td>
+              <td className="td max-w-[260px] text-small text-slate-600">{r.reason ?? ''}</td>
             </tr>
           ))}
         </tbody>

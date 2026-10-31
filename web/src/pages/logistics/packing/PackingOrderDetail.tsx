@@ -52,7 +52,7 @@ export function PackingOrderDetailPage() {
         </>} />
       <PackingNav active="/logistics/packing/orders" />
       {o.rule_latest?.newer && open && (
-        <div id="rule-newer" className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">
+        <div id="rule-newer" className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-body text-amber-900">
           <span>
             This order uses rule <b>{rule.rule_code} rev {o.rule_revision}</b> ({o.packing_mode === 'INDIVIDUAL_PIECE' ? 'individual piece' : 'bundle / qty'}).
             {o.rule_latest.is_active
@@ -61,7 +61,7 @@ export function PackingOrderDetailPage() {
           </span>
           {o.can_apply_rule && can('PACKING.UPDATE')
             ? <Button size="sm" id="apply-rule" loading={busy === 'rule'} onClick={() => act('rule', () => http.post(`/packing/orders/${id}/apply-rule`), 'Latest packing rule applied to the order')}>Apply latest rule</Button>
-            : <span className="text-[11.5px]">The order has polybags / cartons — void them, or cancel the order and create a new one.</span>}
+            : <span className="text-small">The order has polybags / cartons — void them, or cancel the order and create a new one.</span>}
         </div>
       )}
 
@@ -75,8 +75,8 @@ export function PackingOrderDetailPage() {
         <Stat label="Polybags act / exp" value={`${o.variance?.polybags.actual ?? 0} / ${o.variance?.polybags.expected ?? 0}`} tone={o.variance?.polybags.variance ? 'amber' : undefined} hint={`${o.variance?.polybags.variance_pct ?? 0}% (tol ${o.variance?.tolerance_pct}%)`} />
         <Stat label="Cartons act / exp" value={`${o.variance?.cartons.actual ?? 0} / ${o.variance?.cartons.expected ?? 0}`} hint={`${n(o.cartons_total)} incl. unposted`} />
       </div>
-      {o.variance_needs_approval && <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-800">Packaging variance is beyond the {o.variance?.tolerance_pct}% tolerance — a supervisor must approve it before more cartons post.</div>}
-      {o.variance_approved_at && <div className="mb-3 text-[12px] text-slate-500">Variance approved {fmtDateTime(o.variance_approved_at)}: {o.variance_note}</div>}
+      {o.variance_needs_approval && <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-body text-amber-800">Packaging variance is beyond the {o.variance?.tolerance_pct}% tolerance — a supervisor must approve it before more cartons post.</div>}
+      {o.variance_approved_at && <div className="mb-3 text-small text-slate-500">Variance approved {fmtDateTime(o.variance_approved_at)}: {o.variance_note}</div>}
 
       <Tabs active={tab} onChange={setTab} tabs={[
         { key: 'plan', label: 'Plan & balance' }, { key: 'cartons', label: 'Cartons', count: (o.cartons ?? []).filter((c) => c.carton_status !== 'VOID').length },
@@ -94,12 +94,12 @@ export function PackingOrderDetailPage() {
                     lines: lines.map((l) => ({ color_id: l.color_id, size_id: l.size_id, planned_qty: n(plan[`${l.color_id}:${l.size_id}`]) })),
                   }).then(() => setPlan(null)), 'Plan saved')}>Save plan</Button></>
               : <Button size="sm" variant="secondary" onClick={() => setPlan(Object.fromEntries(lines.map((l) => [`${l.color_id}:${l.size_id}`, String(l.planned)])))}>Edit plan</Button>)} />
-            <table className="w-full text-[12.5px]" id="order-lines">
+            <table className="w-full text-body" id="order-lines">
               <thead><tr><th className="th">Colour</th><th className="th">Size</th><th className="th text-right">Order</th><th className="th text-right" title="PCS in the FG store (received on FG receipts, not yet packed)">Ready (FG store)</th><th className="th text-right">Held by others</th>
                 <th className="th text-right">Eligible</th><th className="th text-right">Planned</th><th className="th text-right">Bagged</th><th className="th text-right">Unposted</th><th className="th text-right">Packed</th><th className="th text-right">Balance</th><th className="th text-right">Can add</th></tr></thead>
               <tbody>{lines.map((l) => (
                 <tr key={`${l.color_id}:${l.size_id}`}>
-                  <td className="td">{l.color_name}</td><td className="td">{l.size_code}</td><td className="td text-right">{fmtNumber(l.order_qty)}</td><td className="td text-right">{fmtNumber(l.ready)}{l.awaiting_fg ? <div className="text-[11px] text-amber-700" title="Finished (ironed) PCS not yet received on an FG receipt">{l.awaiting_fg} waiting for FG receipt</div> : null}</td>
+                  <td className="td">{l.color_name}</td><td className="td">{l.size_code}</td><td className="td text-right">{fmtNumber(l.order_qty)}</td><td className="td text-right">{fmtNumber(l.ready)}{l.awaiting_fg ? <div className="text-caption text-amber-700" title="Finished (ironed) PCS not yet received on an FG receipt">{l.awaiting_fg} waiting for FG receipt</div> : null}</td>
                   <td className="td text-right">{fmtNumber(l.reserved_other)}</td><td className="td text-right">{fmtNumber(l.eligible)}</td>
                   <td className="td text-right font-medium">{plan ? <input className="input w-20 text-right" value={plan[`${l.color_id}:${l.size_id}`] ?? ''} onChange={(e) => setPlan({ ...plan, [`${l.color_id}:${l.size_id}`]: e.target.value.replace(/\D/g, '') })} /> : fmtNumber(l.planned)}</td>
                   <td className="td text-right">{fmtNumber(l.bagged)}</td><td className="td text-right">{fmtNumber(l.draft)}</td><td className="td text-right text-emerald-700">{fmtNumber(l.posted)}</td>
@@ -115,13 +115,13 @@ export function PackingOrderDetailPage() {
       {tab === 'cartons' && (
         <Card>
           {!(o.cartons ?? []).length ? <EmptyState title="No cartons yet" message={working ? 'Add the first carton.' : 'Approve the order to start packing.'} /> : (
-            <table className="w-full text-[12.5px]" id="order-cartons">
+            <table className="w-full text-body" id="order-cartons">
               <thead><tr><th className="th">#</th><th className="th">Carton no</th><th className="th">Contents</th><th className="th text-right">Pcs</th><th className="th text-right">Polybags (std)</th>
                 <th className="th">Type</th><th className="th text-right">Net / gross kg</th><th className="th">Status</th><th className="th" /></tr></thead>
               <tbody>{o.cartons!.map((c) => (
                 <tr key={c.id} className={c.carton_status === 'VOID' ? 'opacity-50' : ''}>
                   <td className="td">{c.carton_seq}</td><td className="td tabular-nums">{c.carton_no}</td><td className="td">{c.contents}</td>
-                  <td className="td text-right">{c.pieces_total}{n(c.is_partial) ? <span className="ml-1 text-[11px] text-amber-700">partial</span> : null}</td>
+                  <td className="td text-right">{c.pieces_total}{n(c.is_partial) ? <span className="ml-1 text-caption text-amber-700">partial</span> : null}</td>
                   <td className="td text-right">{c.polybag_qty} ({c.std_polybag_qty})</td><td className="td">{c.carton_trim_name}</td>
                   <td className="td text-right">{c.net_weight_kg ?? '—'} / {c.gross_weight_kg ?? '—'}</td>
                   <td className="td"><PkStatus value={c.carton_status} posted={c.is_posted} /></td>
@@ -139,7 +139,7 @@ export function PackingOrderDetailPage() {
       {tab === 'polybags' && <PolybagList orderId={id} />}
       {tab === 'recon' && <Reconciliation orderId={id} />}
       {tab === 'info' && (
-        <Card><div className="grid gap-x-6 gap-y-2 p-4 text-[12.5px] sm:grid-cols-2 lg:grid-cols-3">
+        <Card><div className="grid gap-x-6 gap-y-2 p-4 text-body sm:grid-cols-2 lg:grid-cols-3">
           <div>Rule: <b>{rule.rule_code}</b> {rule.rule_name} (rev {rule.revision}, {rule.scope ?? 'snapshot'})</div>
           <div>Packing unit: <b>{({ SINGLE: 'Single piece', SET: 'Set (TOP + BOTTOM)', MASTER_POLYBAG: 'Master polybag' } as Record<string, string>)[o.packing_unit ?? 'SINGLE']}</b>
             {o.part_name ? ` · part ${o.part_name}` : ''}{o.packing_unit === 'MASTER_POLYBAG' && o.pieces_per_master_bag ? ` · ${o.pieces_per_master_bag} pcs / master bag` : ''}</div>
@@ -174,7 +174,7 @@ function PolybagList({ orderId }: { orderId: number }) {
   return (
     <Card>
       {!q.data?.length ? <EmptyState title="No polybag entries" message="Bag pieces on the Piece / polybag entry screen." /> : (
-        <table className="w-full text-[12.5px]">
+        <table className="w-full text-body">
           <thead><tr><th className="th">Time</th><th className="th">Bundle</th><th className="th">Colour / size</th><th className="th text-right">Pieces</th><th className="th text-right">Bags</th><th className="th text-right">In cartons</th><th className="th">Operator</th><th className="th">Status</th></tr></thead>
           <tbody>{q.data.map((b) => (
             <tr key={b.id}><td className="td">{fmtDateTime(b.created_at)}</td><td className="td tabular-nums">{b.bundle_no}</td><td className="td">{b.color_name} / {b.size_code}</td>
@@ -199,15 +199,15 @@ function Reconciliation({ orderId }: { orderId: number }) {
         <Stat label="Full cartons" value={r.cartons.full} /><Stat label="Partial cartons" value={r.cartons.partial} />
       </div></Card>
       <Card title="Packaging variance" subtitle={`Tolerance ${r.variance.tolerance_pct}%${r.variance_needs_approval ? ' · approval needed' : ''}`}>
-        <table className="w-full text-[12.5px]"><thead><tr><th className="th" /><th className="th text-right">Expected</th><th className="th text-right">Actual</th><th className="th text-right">Variance</th><th className="th text-right">%</th></tr></thead>
+        <table className="w-full text-body"><thead><tr><th className="th" /><th className="th text-right">Expected</th><th className="th text-right">Actual</th><th className="th text-right">Variance</th><th className="th text-right">%</th></tr></thead>
           <tbody>{(['polybags', 'cartons'] as const).map((k) => (
             <tr key={k}><td className="td capitalize">{k}</td><td className="td text-right">{r.variance[k].expected}</td><td className="td text-right">{r.variance[k].actual}</td>
               <td className={`td text-right ${r.variance[k].variance ? 'text-amber-700' : ''}`}>{r.variance[k].variance > 0 ? '+' : ''}{r.variance[k].variance}</td><td className="td text-right">{r.variance[k].variance_pct}%</td></tr>
           ))}</tbody></table>
         <div className="p-3">
           <TableHead title="Packaging consumed (posted)" />
-          {!r.consumption.length ? <p className="text-[12px] text-slate-400">Nothing posted yet.</p> : (
-            <table className="w-full text-[12.5px]"><tbody>{r.consumption.map((c: any) => (
+          {!r.consumption.length ? <p className="text-small text-slate-400">Nothing posted yet.</p> : (
+            <table className="w-full text-body"><tbody>{r.consumption.map((c: any) => (
               <tr key={`${c.material_kind}${c.trim_code}`}><td className="td">{c.material_kind}</td><td className="td">{c.trim_name}</td><td className="td text-right">{fmtNumber(c.qty, 2)}</td><td className="td text-right text-slate-400">{n(c.reversed_qty) ? `${fmtNumber(c.reversed_qty, 2)} reversed` : ''}</td></tr>
             ))}</tbody></table>
           )}
@@ -238,9 +238,9 @@ function RatioCard({ o, onSaved }: { o: Order; onSaved: () => void }) {
     } catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(false); }
   };
   return (
-    <Card className="mb-4"><div className="p-4 text-[12.5px]" id="order-ratio">
+    <Card className="mb-4"><div className="p-4 text-body" id="order-ratio">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <div className="font-semibold uppercase tracking-wider text-slate-500 text-[11.5px]">Size ratio per carton{o.packing_unit === 'MASTER_POLYBAG' ? ' / master polybag' : ''}</div>
+        <div className="font-semibold uppercase tracking-wider text-slate-500 text-small">Size ratio per carton{o.packing_unit === 'MASTER_POLYBAG' ? ' / master polybag' : ''}</div>
         {canEdit && edit === null && <Button size="sm" variant="secondary" id="ratio-edit" onClick={() => setEdit(Object.fromEntries(ra.map((x) => [x.size_id, String(x.ratio)])))}>{ra.length ? 'Change ratio' : 'Set size ratio'}</Button>}
       </div>
       {edit !== null ? (
@@ -255,7 +255,7 @@ function RatioCard({ o, onSaved }: { o: Order; onSaved: () => void }) {
           <span className="ml-3 text-slate-600">full carton ({rule.standard_pieces_per_carton} pcs): {ra.map((x) => `${x.size_code} ${x.per_carton}`).join(' · ')}</span>
           {ra[0]?.per_master_bag ? <span className="ml-3 text-slate-600">master polybag ({o.pieces_per_master_bag} pcs): {ra.map((x) => `${x.size_code} ${x.per_master_bag}`).join(' · ')}</span> : null}
           <span className="ml-3 text-slate-500">→ {o.planned_cartons} carton(s) expected</span>
-          {live > 0 && <span className="ml-3 text-[11.5px] text-slate-400">(fixed — cartons are packed)</span>}
+          {live > 0 && <span className="ml-3 text-small text-slate-400">(fixed — cartons are packed)</span>}
         </div>
       ) : <p className="text-slate-400">No size ratio — cartons are filled by hand. Set one if the buyer gives an assortment (e.g. S 1 : M 2 : L 2 : XL 1).</p>}
     </div></Card>

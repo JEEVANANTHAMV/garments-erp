@@ -666,7 +666,7 @@ export function PackingListDetailPage() {
           <div>
             <Select label="Format (template model)" value={header.pl_type} onChange={(e) => changeFormat(e.target.value as PlType)} id="pl-format"
               options={(['ASSORTED', 'SOLID', 'MIXED'] as const).map((t) => ({ value: t, label: FORMAT_LABEL[t] }))} />
-            {buyerTpl && <p className="mt-1 text-[11px] text-slate-500" data-testid="pl-buyer-default">Buyer default: <b>{buyerTpl.pl_type}</b>{buyerTpl.pl_type !== header.pl_type && ' (another format picked)'}</p>}
+            {buyerTpl && <p className="mt-1 text-caption text-slate-500" data-testid="pl-buyer-default">Buyer default: <b>{buyerTpl.pl_type}</b>{buyerTpl.pl_type !== header.pl_type && ' (another format picked)'}</p>}
           </div>
           <Select label="List type" value={header.list_mode} id="pl-mode" disabled={planFinished}
             onChange={(e) => changeMode(e.target.value as 'DOCUMENT' | 'PLAN')}
@@ -808,7 +808,7 @@ export function PackingListDetailPage() {
             </div>
             <table className="min-w-max border-collapse text-xs">
               <thead>
-                <tr className="bg-slate-50 text-[10px] uppercase text-slate-600">
+                <tr className="bg-slate-50 text-micro uppercase text-slate-600">
                   {['Row', 'Style / colour', 'Qty (PCS)', 'Pcs / polybag', 'Polybags / ctn', 'Pcs / ctn', 'Cartons needed', 'Full + loose', 'Polybags needed'].map((h) =>
                     <th key={h} className="border border-slate-200 px-2 py-1">{h}</th>)}
                 </tr>
@@ -847,7 +847,7 @@ export function PackingListDetailPage() {
               <span>Cartons needed <b>{fmtNumber(reqTotals.cartons)}</b>{packSum?.packaging_stock && <> · in stock <b className={reqTotals.cartons > packSum.packaging_stock.CARTON ? 'text-red-600' : 'text-emerald-700'}>{fmtNumber(packSum.packaging_stock.CARTON)}</b></>}</span>
               <span>Polybags needed <b>{fmtNumber(reqTotals.polybags)}</b>{packSum?.packaging_stock && <> · in stock <b className={reqTotals.polybags > packSum.packaging_stock.POLYBAG ? 'text-red-600' : 'text-emerald-700'}>{fmtNumber(packSum.packaging_stock.POLYBAG)}</b></>}</span>
             </div>
-            {!packSum?.packaging_stock && <p className="text-[11px] text-slate-400">Pick the sales order / job to compare with carton and polybag stock.</p>}
+            {!packSum?.packaging_stock && <p className="text-caption text-slate-400">Pick the sales order / job to compare with carton and polybag stock.</p>}
           </div>
         </Card></div>
       )}
@@ -1012,7 +1012,7 @@ interface CartonInfo { carton_no: string; pack_no: string; status: string; is_pa
 
 function ReqInput({ label, value, onChange, id }: { label: string; value: string; onChange: (v: string) => void; id: string }) {
   return (
-    <label className="flex flex-col gap-0.5 text-[11px] text-slate-500">{label}
+    <label className="flex flex-col gap-0.5 text-caption text-slate-500">{label}
       <input id={id} className="input h-7 w-24 py-0 text-right text-xs" inputMode="numeric" value={value} onChange={(e) => onChange(e.target.value.replace(/[^0-9]/g, ''))} />
     </label>
   );
@@ -1088,7 +1088,7 @@ function BlockEditor(p: {
   const mixed = plType === 'MIXED';
   const cellIn = 'w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs focus:border-brand-400 focus:bg-white focus:outline-none disabled:text-slate-700';
   const numIn = cellIn + ' text-right tabular-nums';
-  const th = 'border border-slate-200 bg-slate-50 px-1 py-1 text-[10px] font-semibold uppercase text-slate-600';
+  const th = 'border border-slate-200 bg-slate-50 px-1 py-1 text-micro font-semibold uppercase text-slate-600';
   const td = 'border border-slate-200 p-0 align-middle';
   const tdN = 'border border-slate-200 px-1 text-right text-xs tabular-nums text-slate-700';
 
@@ -1184,7 +1184,7 @@ function BlockEditor(p: {
                       <div className="flex items-center">
                         {(['length_cm', 'width_cm', 'height_cm'] as const).map((k, i) => (
                           <span key={k} className="flex items-center">
-                            {i > 0 && <span className="text-[10px] text-slate-400">×</span>}
+                            {i > 0 && <span className="text-micro text-slate-400">×</span>}
                             <input className={numIn + ' w-10'} disabled={ro} inputMode="decimal" value={r[k]} onChange={(e) => p.updRow(bi, ri, { [k]: e.target.value.replace(/[^0-9.]/g, '') } as any)} />
                           </span>
                         ))}
@@ -1195,10 +1195,10 @@ function BlockEditor(p: {
                     </td>
                   </>}
                   {!ro && (
-                    <td className="border border-slate-200 px-1 text-[11px] whitespace-nowrap">
+                    <td className="border border-slate-200 px-1 text-caption whitespace-nowrap">
                       {ii === 0 ? (
                         <span className="flex items-center gap-1.5 text-slate-500">
-                          <Badge color={TYPE_COLOR[rc.inferred]} className="!px-1 !py-0 text-[9px]">{rc.inferred[0]}</Badge>
+                          <Badge color={TYPE_COLOR[rc.inferred]} className="!px-1 !py-0 text-micro">{rc.inferred[0]}</Badge>
                           <button type="button" className="hover:text-slate-800" title="Move up" onClick={() => p.moveRow(bi, ri, -1)}>↑</button>
                           <button type="button" className="hover:text-slate-800" title="Move down" onClick={() => p.moveRow(bi, ri, 1)}>↓</button>
                           <button type="button" className="hover:text-brand-700" title="Insert row below" onClick={() => p.addRow(bi, ri)}>＋</button>
@@ -1248,12 +1248,12 @@ function BlockEditor(p: {
 
 /** Source of a carton row: posted cartons (with polybags, partial count) or a warning for typed rows. */
 function PackedCell({ ids, info }: { ids?: number[] | null; info: Record<number, CartonInfo> }) {
-  if (!ids?.length) return <span className="text-[10px] font-medium text-amber-700" data-testid="row-not-packed" title="Typed by hand or from the order — not checked against posted cartons">⚠ not from packed cartons</span>;
+  if (!ids?.length) return <span className="text-micro font-medium text-amber-700" data-testid="row-not-packed" title="Typed by hand or from the order — not checked against posted cartons">⚠ not from packed cartons</span>;
   const cs = ids.map((i) => info[i]).filter(Boolean);
   const bags = [...new Set(cs.map((c) => c.polybag_qty))];
   const partial = cs.filter((c) => c.is_partial).length;
   return (
-    <span className="text-[10px] text-emerald-700" data-testid="row-packed" title={cs.map((c) => `${c.pack_no} ${c.carton_no}: ${c.qty} pcs, ${c.polybag_qty} polybag(s), ${c.status}`).join('\n')}>
+    <span className="text-micro text-emerald-700" data-testid="row-packed" title={cs.map((c) => `${c.pack_no} ${c.carton_no}: ${c.qty} pcs, ${c.polybag_qty} polybag(s), ${c.status}`).join('\n')}>
       ✓ {ids.length} ctn{bags.length === 1 && bags[0] ? ` · ${bags[0]} polybag${bags[0] > 1 ? 's' : ''}/ctn` : ''}{partial ? ` · ${partial} partial` : ''}
     </span>
   );

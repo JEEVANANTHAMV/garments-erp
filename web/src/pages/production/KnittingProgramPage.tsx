@@ -461,7 +461,7 @@ export default function KnittingProgramPage() {
       {stockRows && (
         <div className="card mb-4 p-4">
           <div className="mb-2 flex items-center justify-between">
-            <h3 className="flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-wider text-slate-600">
+            <h3 className="flex items-center gap-1.5 text-small font-bold uppercase tracking-wider text-slate-600">
               <Boxes size={14} className="text-sky-600" /> Yarn Stock Check
             </h3>
             <button className="rounded p-1 text-slate-400 hover:bg-slate-100"
@@ -470,7 +470,7 @@ export default function KnittingProgramPage() {
             </button>
           </div>
           <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="w-full text-[12px]">
+            <table className="w-full text-small">
               <thead className="bg-slate-50">
                 <tr>
                   <th className="th text-left">Yarn</th>
@@ -507,7 +507,7 @@ export default function KnittingProgramPage() {
               </tbody>
             </table>
           </div>
-          <p className="mt-1.5 text-[10px] text-slate-500">
+          <p className="mt-1.5 text-micro text-slate-500">
             Reserving does not move stock — only a yarn issue does.
           </p>
         </div>
@@ -551,8 +551,8 @@ export default function KnittingProgramPage() {
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-400">
               <Layers size={26} />
             </div>
-            <p className="text-[14px] font-semibold text-slate-700">No knitting programs found</p>
-            <p className="text-[12px] text-slate-400">Create your first program to plan yarn usage and stripe patterns</p>
+            <p className="text-body-lg font-semibold text-slate-700">No knitting programs found</p>
+            <p className="text-small text-slate-400">Create your first program to plan yarn usage and stripe patterns</p>
             <button className="btn-primary mt-1" onClick={openCreate}>
               <Plus size={14} /> Create Knitting Program
             </button>
@@ -578,7 +578,7 @@ export default function KnittingProgramPage() {
               <tbody>
                 {programs.map((p: any) => (
                   <tr key={p.id} className="row-hover">
-                    <td className="td tabular-nums text-[12px] font-semibold text-brand-700">
+                    <td className="td tabular-nums text-small font-semibold text-brand-700">
                       {p.program_no}
                     </td>
                     <td className="td text-slate-500">{fmtDate(p.program_date)}</td>
@@ -587,16 +587,16 @@ export default function KnittingProgramPage() {
                       {p.style_code ? (
                         <span className="font-medium text-slate-800">{p.style_code}</span>
                       ) : '—'}
-                      {p.style_name && <span className="block text-[11px] text-slate-400">{p.style_name}</span>}
+                      {p.style_name && <span className="block text-caption text-slate-400">{p.style_name}</span>}
                     </td>
                     <td className="td">
                       {p.part_name ? (
-                        <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold ${PART_COLORS[p.part_name] ?? PART_COLORS.OTHER}`}>
+                        <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-caption font-semibold ${PART_COLORS[p.part_name] ?? PART_COLORS.OTHER}`}>
                           {p.part_name}
                         </span>
-                      ) : <span className="text-[11px] text-slate-500">All parts</span>}
+                      ) : <span className="text-caption text-slate-500">All parts</span>}
                     </td>
-                    <td className="td text-slate-600 text-[11px]">
+                    <td className="td text-slate-600 text-caption">
                       {p.knitting_type?.replace(/_/g, ' ')}
                     </td>
                     <td className="td text-right tabular-nums font-medium">
@@ -760,9 +760,9 @@ export default function KnittingProgramPage() {
                   {PARTS.map((p) => <option key={p} value={p}>{p}</option>)}
                 </select>
                 {linkedPart ? (
-                  <p className="mt-1 text-[10px] text-slate-500">Part follows the linked Sales Order line</p>
+                  <p className="mt-1 text-micro text-slate-500">Part follows the linked Sales Order line</p>
                 ) : (
-                  <p className="mt-1 text-[10px] text-slate-500" data-kp-part-hint>Set job (TOP + BOTTOM from one fabric): leave the SO line empty and keep All parts — the CAD line's KG already covers both</p>
+                  <p className="mt-1 text-micro text-slate-500" data-kp-part-hint>Set job (TOP + BOTTOM from one fabric): leave the SO line empty and keep All parts — the CAD line's KG already covers both</p>
                 )}
               </div>
               <label className="block"><span className="label">Knitting type</span>
@@ -776,20 +776,20 @@ export default function KnittingProgramPage() {
           <div>
             <FormSection title="Fabric specification" cols={4}>
             {form.program_source === 'CAD' && (
-              <div className="sm:col-span-2 lg:col-span-4 rounded-lg border border-emerald-200 bg-emerald-50/60 p-2.5 text-[12px]" id="kp-cad-box">
+              <div className="sm:col-span-2 lg:col-span-4 rounded-lg border border-emerald-200 bg-emerald-50/60 p-2.5 text-small" id="kp-cad-box">
                 {!form.io_no ? <span className="text-slate-600">Select the I/O — its CAD fabric program loads here.</span>
                   : !cadFetched ? <span className="text-slate-500">Loading the CAD…</span>
                   : !cadFab ? <span className="text-amber-800" id="kp-cad-none">No CAD for {form.io_no}{form.style_id ? ' / this style' : ''} — make the CAD first, or switch to <b>Direct</b>.</span>
                   : (
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-emerald-900">CAD {cadFab.req_no}{cadFab.style_code ? ` (${cadFab.style_code})` : ''}</span>
-                      <select className="input w-[520px] py-1 text-[12px]" value={form.cad_fp_id} onChange={(e) => pickCadLine(e.target.value)} id="kp-cad-line">
+                      <select className="input w-[520px] py-1 text-small" value={form.cad_fp_id} onChange={(e) => pickCadLine(e.target.value)} id="kp-cad-line">
                         <option value="">— Fabric line from the CAD (fabric · GSM · Dia · colour · KG) —</option>
                         {(cadFab.rows ?? []).map((r: any) => <option key={r.cad_fp_id} value={r.cad_fp_id}>
                           {r.fabric_type} · {r.gsm ?? '—'} GSM · {r.dia ?? '—'} {r.fabric_form === 'OPEN_WIDTH' ? 'open' : r.fabric_form === 'TUBULAR' ? 'tube' : ''} · {r.colour ? `for ${r.colour}` : '—'} · {fmtDecimal(r.required_kg, 1)} KG{r.programmed_kg > 0 ? ` (programmed ${fmtDecimal(r.programmed_kg, 1)})` : ''}
                         </option>)}
                       </select>
-                      {form.fabric_colour && <span className="rounded bg-white px-2 py-0.5 text-[11px]" id="kp-colour-note" title="Knitting gives Kora / Raw fabric; the CAD colour is what it is dyed to later">Knitted {RAW_COLOUR} · for {form.fabric_colour} (dyed later)</span>}
+                      {form.fabric_colour && <span className="rounded bg-white px-2 py-0.5 text-caption" id="kp-colour-note" title="Knitting gives Kora / Raw fabric; the CAD colour is what it is dyed to later">Knitted {RAW_COLOUR} · for {form.fabric_colour} (dyed later)</span>}
                     </div>)}
               </div>
             )}
@@ -840,7 +840,7 @@ export default function KnittingProgramPage() {
               {(['yarns', ...(isStripeType ? ['stripes'] : [])] as const).map((t) => (
                 <button
                   key={t}
-                  className={`px-4 py-2 text-[12px] font-semibold border-b-2 -mb-px transition-colors ${
+                  className={`px-4 py-2 text-small font-semibold border-b-2 -mb-px transition-colors ${
                     activeTab === t
                       ? 'border-brand-500 text-brand-700'
                       : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -859,16 +859,16 @@ export default function KnittingProgramPage() {
                 {/* Header */}
                 <div className="flex items-center justify-between mb-2 border-b border-slate-100 pb-1.5">
                   <div className="flex items-center gap-3">
-                    <p className="text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">
+                    <p className="text-small font-semibold uppercase tracking-wider text-slate-500">
                       {form.yarns.length} Yarn Line{form.yarns.length !== 1 ? 's' : ''}
                     </p>
                     {totalPlannedKg > 0 && (
-                      <span className="rounded bg-brand-50 border border-brand-200 px-2 py-0.5 text-[11px] font-semibold text-brand-800">
+                      <span className="rounded bg-brand-50 border border-brand-200 px-2 py-0.5 text-caption font-semibold text-brand-800">
                         Total: {fmtDecimal(totalPlannedKg, 2)} KG
                       </span>
                     )}
                     {isStripeType && totalRatio > 0 && (
-                      <span className={`rounded border px-2 py-0.5 text-[11px] font-semibold ${
+                      <span className={`rounded border px-2 py-0.5 text-caption font-semibold ${
                         Math.abs(totalRatio - 100) < 0.01 ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800'
                       }`}>
                         Ratio: {totalRatio.toFixed(1)}% {Math.abs(totalRatio - 100) < 0.01 ? '✓' : '(must = 100%)'}
@@ -881,7 +881,7 @@ export default function KnittingProgramPage() {
                 </div>
 
                 <div className="overflow-x-auto rounded-lg border border-slate-200">
-                  <table className="w-full text-[12px]">
+                  <table className="w-full text-small">
                     <thead className="bg-slate-50">
                       <tr>
                         <th className="th w-8">#</th>
@@ -890,7 +890,7 @@ export default function KnittingProgramPage() {
                         <th className="th">Colour</th>
                         <th className="th">
                           Yarn PO No
-                          <span className="ml-1 text-[10px] font-normal text-brand-600">(Traceability)</span>
+                          <span className="ml-1 text-micro font-normal text-brand-600">(Traceability)</span>
                         </th>
                         <th className="th">Lot No</th>
                         {isStripeType && <th className="th text-right">Ratio %</th>}
@@ -905,7 +905,7 @@ export default function KnittingProgramPage() {
                           <td className="td text-center text-slate-500 font-semibold">{idx + 1}</td>
                           <td className="td p-1">
                             <select
-                              className="input text-[12px] w-full min-w-[330px]"
+                              className="input text-small w-full min-w-[330px]"
                               value={lotKeyOf(y) || (y.yarn_id ? `cur:${y.yarn_id}` : '')}
                               disabled={form.so_id === '' || y.issued_qty_kg > 0}
                               onChange={(e) => pickLot(y._key, e.target.value)}
@@ -918,19 +918,19 @@ export default function KnittingProgramPage() {
                             </select>
                           </td>
                           <td className="td p-1">
-                            <input className="input text-[12px] w-24" value={y.count_value}
+                            <input className="input text-small w-24" value={y.count_value}
                               placeholder="e.g. 30s"
                               onChange={(e) => setYarn(y._key, { count_value: e.target.value })}
                               id={`yarn-count-${idx}`} />
                           </td>
                           <td className="td p-1">
-                            <input className="input text-[12px] w-28" value={y.colour}
+                            <input className="input text-small w-28" value={y.colour}
                               placeholder={RAW_COLOUR}
                               onChange={(e) => setYarn(y._key, { colour: e.target.value })}
                               id={`yarn-colour-${idx}`} />
                           </td>
                           <td className="td p-1">
-                            <input className="input text-[12px] w-32 border-brand-300 focus:border-brand-500 focus:ring-brand-500/20"
+                            <input className="input text-small w-32 border-brand-300 focus:border-brand-500 focus:ring-brand-500/20"
                               value={y.yarn_po_no} readOnly={!!lotKeyOf(y)}
                               placeholder="from the yarn lot"
                               title="Yarn Purchase Order number — for full traceability"
@@ -938,7 +938,7 @@ export default function KnittingProgramPage() {
                               id={`yarn-po-${idx}`} />
                           </td>
                           <td className="td p-1">
-                            <input className="input text-[12px] w-28" value={y.yarn_lot_no} readOnly={!!lotKeyOf(y)}
+                            <input className="input text-small w-28" value={y.yarn_lot_no} readOnly={!!lotKeyOf(y)}
                               placeholder="from the yarn lot"
                               onChange={(e) => setYarn(y._key, { yarn_lot_no: e.target.value })}
                               id={`yarn-lot-${idx}`} />
@@ -946,7 +946,7 @@ export default function KnittingProgramPage() {
                           {isStripeType && (
                             <td className="td p-1">
                               <input type="number" step="0.01" min="0" max="100"
-                                className="input text-[12px] w-20 text-right"
+                                className="input text-small w-20 text-right"
                                 value={y.planning_ratio_pct}
                                 placeholder="0.00"
                                 onChange={(e) => setYarn(y._key, { planning_ratio_pct: e.target.value === '' ? '' : Number(e.target.value) })}
@@ -955,7 +955,7 @@ export default function KnittingProgramPage() {
                           )}
                           <td className="td p-1">
                             <input type="number" step="0.001" min="0"
-                              className="input text-[12px] w-24 text-right"
+                              className="input text-small w-24 text-right"
                               value={y.planned_qty_kg}
                               placeholder="0.000"
                               onChange={(e) => setYarn(y._key, { planned_qty_kg: e.target.value === '' ? '' : Number(e.target.value) })}
@@ -982,7 +982,7 @@ export default function KnittingProgramPage() {
                 </div>
 
                 {isStripeType && Math.abs(totalRatio - 100) > 0.01 && totalRatio > 0 && (
-                  <div className="mt-2 flex items-center gap-2 text-[12px] text-amber-700">
+                  <div className="mt-2 flex items-center gap-2 text-small text-amber-700">
                     <AlertCircle size={13} />
                     Planning ratios should total 100% for stripe programs. Current: {totalRatio.toFixed(1)}%
                   </div>
@@ -994,7 +994,7 @@ export default function KnittingProgramPage() {
             {activeTab === 'stripes' && isStripeType && (
               <div>
                 <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-1.5">
-                  <p className="text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">
+                  <p className="text-small font-semibold uppercase tracking-wider text-slate-500">
                     Course-based stripe sequence (repeats continuously)
                   </p>
                   <button className="btn-secondary btn-sm" onClick={addStripeLine} id="btn-add-stripe">
@@ -1003,12 +1003,12 @@ export default function KnittingProgramPage() {
                 </div>
 
                 {form.stripes.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-slate-200 py-8 text-center text-[12px] text-slate-400">
+                  <div className="rounded-lg border border-dashed border-slate-200 py-8 text-center text-small text-slate-400">
                     Add stripe rows to define the course-based repeat pattern
                   </div>
                 ) : (
                   <div className="overflow-x-auto rounded-lg border border-slate-200">
-                    <table className="w-full text-[12px]">
+                    <table className="w-full text-small">
                       <thead className="bg-slate-50">
                         <tr>
                           <th className="th w-8">Seq</th>
@@ -1026,7 +1026,7 @@ export default function KnittingProgramPage() {
                             <td className="td text-center text-slate-500 font-semibold">{idx + 1}</td>
                             <td className="td p-1">
                               <select
-                                className="input text-[12px] w-full"
+                                className="input text-small w-full"
                                 value={st.program_yarn_id}
                                 onChange={(e) => setStripe(st._key, { program_yarn_id: e.target.value === '' ? '' : Number(e.target.value) })}
                                 id={`stripe-yarn-ref-${idx}`}
@@ -1040,27 +1040,27 @@ export default function KnittingProgramPage() {
                               </select>
                             </td>
                             <td className="td p-1">
-                              <input className="input text-[12px] w-28" value={st.yarn_label}
+                              <input className="input text-small w-28" value={st.yarn_label}
                                 placeholder="e.g. Navy 30s"
                                 onChange={(e) => setStripe(st._key, { yarn_label: e.target.value })}
                                 id={`stripe-label-${idx}`} />
                             </td>
                             <td className="td p-1">
-                              <input className="input text-[12px] w-24" value={st.colour}
+                              <input className="input text-small w-24" value={st.colour}
                                 placeholder="e.g. Navy"
                                 onChange={(e) => setStripe(st._key, { colour: e.target.value })}
                                 id={`stripe-colour-${idx}`} />
                             </td>
                             <td className="td p-1">
                               <input type="number" min="0"
-                                className="input text-[12px] w-20 text-right"
+                                className="input text-small w-20 text-right"
                                 value={st.courses}
                                 placeholder="0"
                                 onChange={(e) => setStripe(st._key, { courses: e.target.value === '' ? '' : Number(e.target.value) })}
                                 id={`stripe-courses-${idx}`} />
                             </td>
                             <td className="td p-1">
-                              <input className="input text-[12px] w-36" value={st.notes}
+                              <input className="input text-small w-36" value={st.notes}
                                 onChange={(e) => setStripe(st._key, { notes: e.target.value })}
                                 id={`stripe-notes-${idx}`} />
                             </td>
@@ -1147,7 +1147,7 @@ function StatusPill({ status }: { status: string }) {
     CANCELLED: 'bg-red-100 text-red-700 border-red-200',
   };
   return (
-    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold ${tones[status] ?? tones.DRAFT}`}>
+    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-caption font-semibold ${tones[status] ?? tones.DRAFT}`}>
       {status.replace(/_/g, ' ')}
     </span>
   );
@@ -1162,7 +1162,7 @@ function DetailView({ prog }: { prog: any }) {
   return (
     <div className="space-y-4">
       {/* Program info grid */}
-      <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4 text-[12px] sm:grid-cols-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4 text-small sm:grid-cols-3 lg:grid-cols-4">
         <InfoRow label="Program No" value={<span className="tabular-nums font-bold text-brand-700">{prog.program_no}</span>} />
         <InfoRow label="Date" value={fmtDate(prog.program_date)} />
         <InfoRow label="I/O No" value={prog.io_no ?? '—'} />
@@ -1170,7 +1170,7 @@ function DetailView({ prog }: { prog: any }) {
         <InfoRow label="Style" value={prog.style_code ? `${prog.style_code} — ${prog.style_name}` : '—'} />
         <InfoRow label="Part" value={
           prog.part_name ? (
-            <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] font-semibold ${PART_COLORS[prog.part_name] ?? PART_COLORS.OTHER}`}>
+            <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-caption font-semibold ${PART_COLORS[prog.part_name] ?? PART_COLORS.OTHER}`}>
               {prog.part_name}
             </span>
           ) : 'All parts of the job'
@@ -1193,7 +1193,7 @@ function DetailView({ prog }: { prog: any }) {
         <div className="flex items-center gap-1 border-b border-slate-200 mb-3">
           {(['yarns', ...(prog.stripes?.length ? ['stripes'] : []), 'issues', 'dc'] as const).map((t) => (
             <button key={t}
-              className={`px-3 py-2 text-[12px] font-semibold border-b-2 -mb-px transition-colors ${
+              className={`px-3 py-2 text-small font-semibold border-b-2 -mb-px transition-colors ${
                 tab === t ? 'border-brand-500 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-700'
               }`}
               onClick={() => setTab(t as any)}
@@ -1209,7 +1209,7 @@ function DetailView({ prog }: { prog: any }) {
 
         {tab === 'yarns' && (
           <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="w-full text-[12px]">
+            <table className="w-full text-small">
               <thead className="bg-slate-50">
                 <tr>
                   <th className="th">#</th>
@@ -1267,7 +1267,7 @@ function DetailView({ prog }: { prog: any }) {
 
         {tab === 'stripes' && (
           <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="w-full text-[12px]">
+            <table className="w-full text-small">
               <thead className="bg-slate-50">
                 <tr>
                   <th className="th">Seq</th>
@@ -1291,7 +1291,7 @@ function DetailView({ prog }: { prog: any }) {
               <tfoot className="bg-slate-50 border-t-2 border-slate-200">
                 <tr>
                   <td colSpan={3} className="td font-bold text-slate-700">Total courses per repeat</td>
-                  <td className="td text-right font-black text-brand-800 tabular-nums">
+                  <td className="td text-right font-bold text-brand-800 tabular-nums">
                     {(prog.stripes ?? []).reduce((s: number, r: any) => s + Number(r.courses || 0), 0)}
                   </td>
                   <td />
@@ -1306,10 +1306,10 @@ function DetailView({ prog }: { prog: any }) {
         {tab === 'issues' && (
           <div>
             {(prog.issues ?? []).length === 0 ? (
-              <p className="text-center text-[12px] text-slate-400 py-8">No yarn issues recorded yet</p>
+              <p className="text-center text-small text-slate-400 py-8">No yarn issues recorded yet</p>
             ) : (
               <div className="overflow-x-auto rounded-lg border border-slate-200">
-                <table className="w-full text-[12px]">
+                <table className="w-full text-small">
                   <thead className="bg-slate-50">
                     <tr>
                       <th className="th">Issue No</th>
@@ -1326,7 +1326,7 @@ function DetailView({ prog }: { prog: any }) {
                         <td className="td tabular-nums text-brand-700 font-semibold">{iss.issue_no}</td>
                         <td className="td text-slate-500">{fmtDate(iss.issue_date)}</td>
                         <td className="td font-medium">{iss.yarn_code ? `${iss.yarn_code} — ${iss.yarn_name}` : '—'}</td>
-                        <td className="td tabular-nums text-[11px] text-brand-600">{iss.yarn_po_no || '—'}</td>
+                        <td className="td tabular-nums text-caption text-brand-600">{iss.yarn_po_no || '—'}</td>
                         <td className="td text-slate-600">{iss.yarn_lot_no || '—'}</td>
                         <td className="td text-right tabular-nums font-semibold text-emerald-700">
                           {fmtDecimal(iss.issued_qty_kg, 2)}
@@ -1347,8 +1347,8 @@ function DetailView({ prog }: { prog: any }) {
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <p className="text-[10.5px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
-      <p className="mt-0.5 text-[12px] text-slate-800">{value}</p>
+      <p className="text-caption font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="mt-0.5 text-small text-slate-800">{value}</p>
     </div>
   );
 }

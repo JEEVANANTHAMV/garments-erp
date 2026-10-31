@@ -11,7 +11,7 @@ export function QcInspectionsPage() {
     defaultSort={{ key: 'qc_date', dir: 'desc' }}
     columns={[
       { key: 'qc_no', header: 'QC no', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.qc_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-small font-medium text-brand-700">{r.qc_no}</span> },
       { key: 'qc_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.qc_date) },
       { key: 'po_prod_no', header: 'Work order' },
       { key: 'inspection_type', header: 'Type', render: (r: any) => <Badge tone="violet">{humanize(r.inspection_type)}</Badge> },
@@ -20,7 +20,7 @@ export function QcInspectionsPage() {
       { key: 'passed_qty', header: 'Passed', align: 'right',
         render: (r: any) => <span className="text-emerald-700">{fmtNumber(r.passed_qty)}</span> },
       { key: 'defects', header: 'Defects (C/M/m)', align: 'center', render: (r: any) => (
-        <span className="tabular-nums text-[11.5px]">
+        <span className="tabular-nums text-small">
           <span className="text-red-600">{r.critical_defects}</span>/
           <span className="text-amber-600">{r.major_defects}</span>/
           <span className="text-slate-500">{r.minor_defects}</span>
@@ -66,7 +66,7 @@ export function DefectsPage() {
     defaultSort={{ key: 'defect_name', dir: 'asc' }}
     columns={[
       { key: 'defect_code', header: 'Code', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] text-brand-700">{r.defect_code}</span> },
+        render: (r: any) => <span className="tabular-nums text-small text-brand-700">{r.defect_code}</span> },
       { key: 'defect_name', header: 'Defect', sortable: true },
       { key: 'defect_type', header: 'Severity', render: (r: any) => (
         <Badge tone={r.defect_type === 'CRITICAL' ? 'red' : r.defect_type === 'MAJOR' ? 'amber' : 'slate'}>

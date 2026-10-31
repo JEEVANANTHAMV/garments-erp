@@ -80,9 +80,9 @@ export function OperationStatusPage() {
         <div className="grid grid-cols-2 gap-3 px-3 pb-3 md:grid-cols-4 xl:grid-cols-6" id="os-cards">
           {byOp.map((o) => (
             <div key={`${o.stage}|${o.op}`} className="rounded-xl border border-slate-200 bg-white p-3">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{o.op}</div>
+              <div className="text-caption font-semibold uppercase tracking-wide text-slate-500">{o.op}</div>
               <div className="mt-1 text-lg font-bold tabular-nums text-slate-900">{fmtNumber(o.pending)} <span className="text-xs font-medium text-slate-500">pending</span></div>
-              <div className="text-[11px] text-slate-500">sent {fmtNumber(o.sent)} · good {fmtNumber(o.good)}{o.lost ? ` · lost ${fmtNumber(o.lost)}` : ''}</div>
+              <div className="text-caption text-slate-500">sent {fmtNumber(o.sent)} · good {fmtNumber(o.good)}{o.lost ? ` · lost ${fmtNumber(o.lost)}` : ''}</div>
             </div>
           ))}
           {!byOp.length && !loading && <p className="col-span-full py-4 text-center text-sm text-slate-400">No DCs for the filters</p>}
@@ -145,11 +145,11 @@ export function WipStockValuePage() {
           <div><span className="label">Job (IO no)</span><SearchInput value={f.io_no} onChange={(v) => setF({ ...f, io_no: v })} placeholder="All open jobs" className="w-48" /></div>
           <div className="ml-auto grid grid-cols-2 gap-3 md:grid-cols-4" id="sv-totals">
             {[['PCS', fmtNumber(tot.pcs)], ['Fabric', money(tot.fab)], ['Cutting + process', money(tot.pro)], ['Total', money(tot.all)]].map(([k, v]) => (
-              <div key={k} className="rounded-xl border border-slate-200 bg-white px-3 py-2"><div className="text-[11px] uppercase text-slate-500">{k}</div><div className="text-base font-bold tabular-nums text-slate-900">{v}</div></div>
+              <div key={k} className="rounded-xl border border-slate-200 bg-white px-3 py-2"><div className="text-caption uppercase text-slate-500">{k}</div><div className="text-base font-bold tabular-nums text-slate-900">{v}</div></div>
             ))}
           </div>
         </div>
-        {res?.meta && <p className="px-3 pb-2 text-[11px] text-slate-500">{res.meta.note}. Cutting rate {res.meta.cutting_rate_per_pc ? `₹${res.meta.cutting_rate_per_pc}/PC` : 'not set (Admin › Settings › COSTING_CUTTING_RATE_PER_PC)'}. In-house DCs count their internal rate; contractor DCs their rate.</p>}
+        {res?.meta && <p className="px-3 pb-2 text-caption text-slate-500">{res.meta.note}. Cutting rate {res.meta.cutting_rate_per_pc ? `₹${res.meta.cutting_rate_per_pc}/PC` : 'not set (Admin › Settings › COSTING_CUTTING_RATE_PER_PC)'}. In-house DCs count their internal rate; contractor DCs their rate.</p>}
         <div className="overflow-x-auto px-3 pb-3">
           {loading ? <p className="py-6 text-center text-sm text-slate-400">Loading…</p> : (
             <table className="w-full text-xs" id="sv-table">

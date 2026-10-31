@@ -105,8 +105,8 @@ export default function Dashboard() {
       <div className="flex min-h-[80px] flex-wrap items-center justify-between gap-3 pb-1">
         <div>
           <p className="mb-1 text-xs text-brand-700">Home</p>
-          <h1 className="text-[1.5rem] font-semibold leading-tight text-ink-heading">{greeting}{user?.fullName ? `, ${user.fullName}` : ''}</h1>
-          <p className="mt-1 text-[0.875rem] text-ink-secondary">Here’s what’s happening in your garment production today.</p>
+          <h1 className="text-page font-semibold leading-tight text-ink-heading">{greeting}{user?.fullName ? `, ${user.fullName}` : ''}</h1>
+          <p className="mt-1 text-body-lg text-ink-secondary">Here’s what’s happening in your garment production today.</p>
         </div>
         <div className="card flex items-center gap-3 px-3 py-2">
           <CalendarDays size={19} className="text-ink-secondary" />
@@ -219,7 +219,7 @@ export default function Dashboard() {
 }
 
 function Panel({ title, to, action, children }: { title: string; to?: string; action?: ReactNode; children: ReactNode }) {
-  return <section className="card dashboard-panel"><div className="flex flex-wrap items-center justify-between gap-2 px-3 py-3"><h2 className="text-[0.9375rem] font-semibold text-ink-heading">{title}</h2>{to ? <Link className="text-xs text-brand-700 hover:underline" to={to}>View All</Link> : action}</div>{children}</section>;
+  return <section className="card dashboard-panel"><div className="flex flex-wrap items-center justify-between gap-2 px-3 py-3"><h2 className="text-title font-semibold text-ink-heading">{title}</h2>{to ? <Link className="text-xs text-brand-700 hover:underline" to={to}>View All</Link> : action}</div>{children}</section>;
 }
 function Table({ headers, numeric = [], children }: { headers: string[]; numeric?: number[]; children: ReactNode }) {
   return <div className="overflow-x-auto px-2 pb-2" role="region" aria-label={`${headers[0]} data table`} tabIndex={0}><table><thead><tr>{headers.map((h, i) => <th key={h} scope="col" className={`th ${numeric.includes(i) ? 'text-right' : ''}`}>{h}</th>)}</tr></thead><tbody>{children}</tbody></table></div>;
@@ -235,7 +235,7 @@ function Count({ query }: { query: UseQueryResult<DashboardList<unknown>> }) {
   return query.isLoading ? <span aria-label="Loading count">…</span> : query.error ? <button className="text-brand-700 underline" onClick={() => void query.refetch()}>Retry</button> : fmtNumber(query.data?.total);
 }
 function Kpi({ icon: Icon, color, label, value, caption, query }: { icon: LucideIcon; color: string; label: string; value: string; caption: string; query?: UseQueryResult<unknown> }) {
-  return <section className="card min-w-0 p-3"><div className="grid grid-cols-[40px_minmax(0,1fr)] items-center gap-x-2.5"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-white" style={{ backgroundColor: color }}><Icon size={21} /></div><h2 className="text-[0.8125rem] text-ink">{label}</h2><div className="col-span-2 mt-2 min-w-0">{query?.isLoading ? <div className="skeleton my-1 h-7 w-20" aria-label={`Loading ${label}`} /> : query?.error ? <button className="py-1 text-xs text-brand-700 underline" onClick={() => void query.refetch()}>Unable to load · Retry</button> : <p tabIndex={0} className="dashboard-kpi-value font-bold leading-tight text-ink-heading">{value}</p>}<p className="mt-1 text-[0.6875rem] text-ink-secondary">{caption}</p></div></div></section>;
+  return <section className="card min-w-0 p-3"><div className="grid grid-cols-[40px_minmax(0,1fr)] items-center gap-x-2.5"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-white" style={{ backgroundColor: color }}><Icon size={21} /></div><h2 className="text-body text-ink">{label}</h2><div className="col-span-2 mt-2 min-w-0">{query?.isLoading ? <div className="skeleton my-1 h-7 w-20" aria-label={`Loading ${label}`} /> : query?.error ? <button className="py-1 text-xs text-brand-700 underline" onClick={() => void query.refetch()}>Unable to load · Retry</button> : <p tabIndex={0} className="dashboard-kpi-value font-bold leading-tight text-ink-heading">{value}</p>}<p className="mt-1 text-caption text-ink-secondary">{caption}</p></div></div></section>;
 }
 function Dot({ color }: { color: string }) { return <span aria-hidden="true" className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />; }
 function Donut({ data, unit, percentages }: { data: { name: string; value: number; color: string }[]; unit: string; percentages?: boolean }) {

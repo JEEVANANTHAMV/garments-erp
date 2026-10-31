@@ -64,7 +64,7 @@ export function FabricIssuePage() {
               <Button size="sm" variant="outline" id={`dc-receive-${r.issue_no}`} onClick={async () => {
                 try { await api.post(`/fabric-issues/${r.id}/receive`, {}); toast(`DC ${r.issue_no} received at cutting`); fetchIssues(); }
                 catch (e) { toast(errMsg(e), 'error'); }
-              }}>Receive</Button>) : r.status === 'RECEIVED' ? <span className="text-[11px] text-slate-500">at cutting</span> : null },
+              }}>Receive</Button>) : r.status === 'RECEIVED' ? <span className="text-caption text-slate-500">at cutting</span> : null },
           ]}
         />
       </Card>
@@ -165,7 +165,7 @@ function NewDcModal({ plans, onClose, onSaved }: { plans: any[]; onClose: () => 
           </div>
         )}
 
-        <h3 className="border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Rolls</h3>
+        <h3 className="border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Rolls</h3>
         {header.cutting_plan_id && (
           <div className="grid grid-cols-1 gap-x-4 gap-y-3 md:grid-cols-2">
             <SearchSelect label={`Pick roll from stock (${stock.length} issuable)`} value=""
@@ -201,7 +201,7 @@ function NewDcModal({ plans, onClose, onSaved }: { plans: any[]; onClose: () => 
                     <td className="p-1.5">
                       <UomInput uom="KG" value={l.issue_kg} min={0}
                         onChange={v => setLines(ls => ls.map((x, j) => j === i ? { ...x, issue_kg: v } : x))} />
-                      {bad && <p className="mt-0.5 text-[10px] text-red-600">Must be &gt; 0 and ≤ available</p>}
+                      {bad && <p className="mt-0.5 text-micro text-red-600">Must be &gt; 0 and ≤ available</p>}
                     </td>
                     <td className="p-2 text-center">
                       <button className="font-bold text-red-500" onClick={() => setLines(ls => ls.filter((_, j) => j !== i))}>×</button>
@@ -270,9 +270,9 @@ function DcDetailModal({ dc, onClose, onChanged }: { dc: any; onClose: () => voi
             <tbody>
               {dc.rolls.map((r: any) => (
                 <tr key={r.id} className="border-b">
-                  <td className="p-2 tabular-nums font-semibold">{r.roll_no}{r.is_legacy ? <span className="ml-1 text-[10px] text-amber-600">(free-text)</span> : null}</td>
+                  <td className="p-2 tabular-nums font-semibold">{r.roll_no}{r.is_legacy ? <span className="ml-1 text-micro text-amber-600">(free-text)</span> : null}</td>
                   <td className="p-2">{r.lot_no} / {r.shade}
-                    <span className={`ml-1 rounded px-1 py-0.5 text-[10px] font-bold ${!r.process_state || r.process_state === 'GREY' ? 'bg-slate-100 text-slate-600' : 'bg-purple-100 text-purple-800'}`}>
+                    <span className={`ml-1 rounded px-1 py-0.5 text-micro font-bold ${!r.process_state || r.process_state === 'GREY' ? 'bg-slate-100 text-slate-600' : 'bg-purple-100 text-purple-800'}`}>
                       {stateLabel(r.process_state || 'GREY')}{r.color_name ? ` · ${r.color_name}` : ''}
                     </span>
                   </td>
@@ -301,7 +301,7 @@ function DcDetailModal({ dc, onClose, onChanged }: { dc: any; onClose: () => voi
         </div>
         {dc.returns?.length > 0 && (
           <div>
-            <h3 className="mb-2 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Returns</h3>
+            <h3 className="mb-2 border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Returns</h3>
             <ul className="space-y-0.5 text-xs text-slate-600">
               {dc.returns.map((r: any) => (
                 <li key={r.id}><span className="tabular-nums">{r.return_no}</span> · {fmtDate(r.return_date)} · <Qty v={r.return_kg} uom="KG" dp={3} /> · {r.reason || '—'} · {r.created_by_name}</li>

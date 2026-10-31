@@ -165,7 +165,7 @@ export default function ProcessRoutePage() {
         />
       ) : (
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-          <table className="w-full text-[12px]">
+          <table className="w-full text-small">
             <thead className="bg-slate-50">
               <tr>
                 <th className="th text-left">Code</th>
@@ -186,7 +186,7 @@ export default function ProcessRoutePage() {
                     <div className="flex flex-wrap gap-1">
                       {String(r.sequence_text || '').split(' → ').filter(Boolean).map((p, i) => (
                         <span key={i}
-                          className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold ${PROCESS_COLORS[p] ?? 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+                          className={`inline-flex items-center rounded border px-1.5 py-0.5 text-micro font-semibold ${PROCESS_COLORS[p] ?? 'bg-slate-100 text-slate-700 border-slate-200'}`}>
                           {p.replace(/_/g, ' ')}
                         </span>
                       ))}
@@ -249,7 +249,7 @@ export default function ProcessRoutePage() {
 
           <div className="mt-5">
             <div className="mb-2.5 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-1.5">
-              <h3 className="mr-auto text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">
+              <h3 className="mr-auto text-small font-semibold uppercase tracking-wider text-slate-500">
                 Process Sequence
               </h3>
               <button className="btn-primary btn-sm"
@@ -260,12 +260,12 @@ export default function ProcessRoutePage() {
             </div>
 
             {form.lines.length === 0 ? (
-              <p className="py-4 text-center text-[12px] text-slate-400">
+              <p className="py-4 text-center text-small text-slate-400">
                 No steps yet — add the processes this route runs through.
               </p>
             ) : (
               <div className="overflow-x-auto rounded-lg border border-slate-200">
-                <table className="w-full text-[12px]">
+                <table className="w-full text-small">
                   <thead className="bg-slate-50">
                     <tr>
                       <th className="th w-12">#</th>
@@ -281,7 +281,7 @@ export default function ProcessRoutePage() {
                       <tr key={l._key} className="border-t border-slate-100">
                         <td className="td text-center font-semibold text-slate-500">{i + 1}</td>
                         <td className="td p-1">
-                          <select className="input text-[12px]" value={l.process_type}
+                          <select className="input text-small" value={l.process_type}
                             onChange={(e) => setStep(l._key, { process_type: e.target.value })}
                             id={`step-type-${i}`}>
                             {PROCESS_TYPES.map((p) => (
@@ -290,14 +290,14 @@ export default function ProcessRoutePage() {
                           </select>
                         </td>
                         <td className="td p-1">
-                          <input className="input text-[12px]" type="number" step="0.001" min="0" max="100"
+                          <input className="input text-small" type="number" step="0.001" min="0" max="100"
                             value={l.default_loss_pct} placeholder="0"
                             onChange={(e) => setStep(l._key, {
                               default_loss_pct: e.target.value === '' ? '' : Number(e.target.value),
                             })} id={`step-loss-${i}`} />
                         </td>
                         <td className="td p-1">
-                          <select className="input text-[12px]" value={l.allowed_unit}
+                          <select className="input text-small" value={l.allowed_unit}
                             onChange={(e) => setStep(l._key, { allowed_unit: e.target.value })}
                             id={`step-unit-${i}`}>
                             {UNITS.map((u) => <option key={u} value={u}>{u.replace(/_/g, ' ')}</option>)}

@@ -469,7 +469,7 @@ export default function TrimPurchaseOrderDetailPage() {
               </h1>
               {!isNew && <Badge variant="info">{head.status}</Badge>}
               {isForeignCurrency && (
-                <span className="bg-amber-100 text-amber-800 text-[11px] font-bold px-2 py-0.5 rounded border border-amber-300">
+                <span className="bg-amber-100 text-amber-800 text-caption font-bold px-2 py-0.5 rounded border border-amber-300">
                   Import PO ({selectedCurrency.code})
                 </span>
               )}
@@ -513,32 +513,32 @@ export default function TrimPurchaseOrderDetailPage() {
       {/* KPI Cards Strip */}
       <div className={`grid grid-cols-2 ${isForeignCurrency ? 'sm:grid-cols-6' : 'sm:grid-cols-5'} gap-3`}>
         <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-          <div className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider">Total Items</div>
+          <div className="text-caption font-semibold text-slate-600 uppercase tracking-wider">Total Items</div>
           <div className="text-lg font-bold text-slate-900 mt-0.5 tabular-nums">{lines.length} Lines</div>
         </div>
         <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-200">
-          <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">Order Qty</div>
+          <div className="text-caption font-semibold text-emerald-700 uppercase tracking-wider">Order Qty</div>
           <div className="text-lg font-bold text-emerald-900 mt-0.5 tabular-nums">{fmtDecimal(totals.totalQty)}</div>
         </div>
         <div className="p-3 bg-sky-50/70 rounded-xl border border-sky-200">
-          <div className="text-[11px] font-semibold text-sky-700 uppercase tracking-wider">Taxable Value</div>
+          <div className="text-caption font-semibold text-sky-700 uppercase tracking-wider">Taxable Value</div>
           <div className="text-lg font-bold text-sky-900 mt-0.5 tabular-nums">{currSymbol}{fmtDecimal(totals.totalAmount, 2)}</div>
         </div>
         <div className="p-3 bg-purple-50/70 rounded-xl border border-purple-200">
-          <div className="text-[11px] font-semibold text-purple-700 uppercase tracking-wider">
+          <div className="text-caption font-semibold text-purple-700 uppercase tracking-wider">
             {head.is_interstate ? 'IGST (Total)' : 'CGST + SGST'}
           </div>
           <div className="text-lg font-bold text-purple-900 mt-0.5 tabular-nums">{currSymbol}{fmtDecimal(totals.taxAmount, 2)}</div>
         </div>
         <div className="p-3 bg-emerald-100/60 rounded-xl border border-emerald-300">
-          <div className="text-[11px] font-semibold text-emerald-900 uppercase tracking-wider">Grand Total</div>
+          <div className="text-caption font-semibold text-emerald-900 uppercase tracking-wider">Grand Total</div>
           <div className="text-lg font-bold text-emerald-950 mt-0.5 tabular-nums">{currSymbol}{fmtDecimal(totals.grandTotal, 2)}</div>
         </div>
         {isForeignCurrency && (
           <div className="p-3 bg-amber-50 rounded-xl border border-amber-300">
-            <div className="text-[11px] font-semibold text-amber-800 uppercase tracking-wider">INR Equivalent</div>
+            <div className="text-caption font-semibold text-amber-800 uppercase tracking-wider">INR Equivalent</div>
             <div className="text-lg font-bold text-amber-950 mt-0.5 tabular-nums">₹{fmtDecimal(inrGrandTotal, 2)}</div>
-            <div className="text-[10px] text-amber-700">@ ₹{head.exchange_rate} / {selectedCurrency.code}</div>
+            <div className="text-micro text-amber-700">@ ₹{head.exchange_rate} / {selectedCurrency.code}</div>
           </div>
         )}
       </div>
@@ -681,7 +681,7 @@ export default function TrimPurchaseOrderDetailPage() {
                     Bill of Materials (BOM) Trims Integration
                   </h4>
                   {bomData?.bom && (
-                    <span className="bg-indigo-100 text-indigo-800 text-[10.5px] font-bold px-2 py-0.5 rounded border border-indigo-300">
+                    <span className="bg-indigo-100 text-indigo-800 text-caption font-bold px-2 py-0.5 rounded border border-indigo-300">
                       BOM: {bomData.bom.bom_no} · v{bomData.bom.version}
                     </span>
                   )}
@@ -730,7 +730,7 @@ export default function TrimPurchaseOrderDetailPage() {
               <Layers size={14} className="text-emerald-600" />
               <span>Trim Order Lines & Job Allocation ({lines.length})</span>
             </h3>
-            <p className="text-[11px] text-slate-500">
+            <p className="text-caption text-slate-500">
               Arranged as: S.No → IO No (Job) → Style → Trim Item → Specifications & Rates
             </p>
           </div>
@@ -978,7 +978,7 @@ export default function TrimPurchaseOrderDetailPage() {
                   {head.is_interstate ? 'IGST:' : 'CGST+SGST:'}
                 </td>
                 <td className="py-3 px-2 text-right tabular-nums text-purple-700">{currSymbol}{fmtDecimal(totals.taxAmount, 2)}</td>
-                <td className="py-3 px-2 text-right tabular-nums text-sm font-black text-slate-900">
+                <td className="py-3 px-2 text-right tabular-nums text-sm font-bold text-slate-900">
                   {currSymbol}{fmtDecimal(totals.grandTotal, 2)}
                 </td>
                 <td></td>
@@ -1007,13 +1007,13 @@ export default function TrimPurchaseOrderDetailPage() {
                 </div>
               </>
             )}
-            <div className="text-sm font-black text-emerald-800 border-t border-slate-200 pt-1">
+            <div className="text-sm font-bold text-emerald-800 border-t border-slate-200 pt-1">
               Net Grand Total ({currCode}): <span>{currSymbol}{fmtDecimal(totals.grandTotal, 2)}</span>
             </div>
             {isForeignCurrency && (
               <div className="text-xs font-bold text-amber-900 pt-0.5">
                 INR Converted: <span>₹{fmtDecimal(totals.grandTotal * (Number(head.exchange_rate) || 1.0), 2)}</span>
-                <span className="text-[10px] font-normal text-slate-500 ml-1">(@ ₹{head.exchange_rate}/{currCode})</span>
+                <span className="text-micro font-normal text-slate-500 ml-1">(@ ₹{head.exchange_rate}/{currCode})</span>
               </div>
             )}
           </div>
@@ -1105,7 +1105,7 @@ export default function TrimPurchaseOrderDetailPage() {
             {/* Printable Document Sheet */}
             <div className="p-8 overflow-y-auto print-container text-slate-900 bg-white font-sans text-xs">
               <div className="border-b-2 border-slate-800 pb-4 mb-4 text-center">
-                <h1 className="text-xl font-black uppercase tracking-wider text-slate-900">GARMENT MANUFACTURING ERP</h1>
+                <h1 className="text-xl font-bold uppercase tracking-wider text-slate-900">GARMENT MANUFACTURING ERP</h1>
                 <p className="text-xs text-slate-500 font-medium">Trims & Accessories Procurement Division</p>
                 <div className="inline-block mt-2 px-4 py-1 rounded bg-emerald-100 text-emerald-900 font-bold text-sm tracking-wide">
                   PURCHASE ORDER VOUCHER ({head.is_interstate ? 'INTER-STATE / IGST' : 'INTRA-STATE / GST'})
@@ -1129,7 +1129,7 @@ export default function TrimPurchaseOrderDetailPage() {
 
               {/* Items Table */}
               <div className="mb-6">
-                <table className="w-full border-collapse border border-slate-300 text-[11px]">
+                <table className="w-full border-collapse border border-slate-300 text-caption">
                   <thead>
                     <tr className="bg-slate-100 text-slate-700">
                       <th className="border border-slate-300 py-1.5 px-2 text-left">#</th>
@@ -1186,14 +1186,14 @@ export default function TrimPurchaseOrderDetailPage() {
                     )}
                     <tr className="bg-slate-100 font-bold">
                       <td colSpan={8} className="border border-slate-300 py-1.5 px-2 text-right text-slate-900">Grand Total:</td>
-                      <td className="border border-slate-300 py-1.5 px-2 text-right font-black text-emerald-800 text-sm">₹{fmtDecimal(totals.grandTotal)}</td>
+                      <td className="border border-slate-300 py-1.5 px-2 text-right font-bold text-emerald-800 text-sm">₹{fmtDecimal(totals.grandTotal)}</td>
                     </tr>
                   </tfoot>
                 </table>
               </div>
 
               {/* Signatures */}
-              <div className="grid grid-cols-4 gap-4 pt-8 mt-6 border-t border-slate-300 text-center text-[10px]">
+              <div className="grid grid-cols-4 gap-4 pt-8 mt-6 border-t border-slate-300 text-center text-micro">
                 <div>
                   <div className="border-b border-slate-400 h-8 mb-1"></div>
                   <span className="font-semibold text-slate-700">Prepared By</span>

@@ -590,12 +590,12 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
                                   <td className="px-2 py-1 font-semibold">{a.size || '—'}</td>
                                   <td className="px-2 py-1 text-right">
                                     {editable
-                                      ? <input type="number" min={1} max={a.available_qty} className="input h-6 w-20 text-right text-[11px]" value={a.allocated_qty} onChange={(e) => setQty(a._i, Number(e.target.value))} />
+                                      ? <input type="number" min={1} max={a.available_qty} className="input h-6 w-20 text-right text-caption" value={a.allocated_qty} onChange={(e) => setQty(a._i, Number(e.target.value))} />
                                       : fmtNumber(a.allocated_qty)}
                                   </td>
                                   <td className="px-2 py-1 text-right text-slate-500">{n(line.sam_per_pcs) ? n(line.sam_per_pcs).toFixed(2) : '—'}</td>
                                   <td className="px-2 py-1">
-                                    <input className="input h-6 w-32 text-[11px]" disabled={!editable} value={a.remarks} onChange={(e) => setRemark(a._i, e.target.value)} />
+                                    <input className="input h-6 w-32 text-caption" disabled={!editable} value={a.remarks} onChange={(e) => setRemark(a._i, e.target.value)} />
                                   </td>
                                   <td className="px-2 py-1 text-center">
                                     {editable && <button className="text-red-500 hover:text-red-700" onClick={() => removeKeys(new Set([a._i]))}><Trash2 size={14} /></button>}
@@ -627,7 +627,7 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
               ['Allocated (PCS)', fmtNumber(totals.allocated)], ['Unallocated (PCS)', fmtNumber(totals.unallocated)],
               ['Allocated %', `${pct(totals.allocated, totals.pending)}%`]].map(([k, v]) => (
               <div key={k as string} className="text-center">
-                <p className="text-[10px] uppercase tracking-wider opacity-80">{k}</p>
+                <p className="text-micro uppercase tracking-wider opacity-80">{k}</p>
                 <p className="text-xl font-bold">{v}</p>
               </div>
             ))}

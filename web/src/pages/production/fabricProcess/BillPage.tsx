@@ -83,7 +83,7 @@ function BillView({ id, onBack }: { id: number; onBack: () => void }) {
         </table>
         <div className="mt-2 border-t border-slate-100 pt-2"><ProcessBillTotalsView b={b} /></div>
       </div>
-      {b.remarks && <pre className="card mt-3 whitespace-pre-wrap p-3 text-[11px] text-slate-600">{b.remarks}</pre>}
+      {b.remarks && <pre className="card mt-3 whitespace-pre-wrap p-3 text-caption text-slate-600">{b.remarks}</pre>}
     </div>
   );
 }

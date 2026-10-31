@@ -97,17 +97,17 @@ export default function YarnGRNsPage() {
         <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
           <div className="text-xs font-medium text-slate-500">Total Yarn Inward Batches</div>
           <div className="text-2xl font-bold text-slate-900 mt-1">{fmtNumber(kpis.totalGrns)}</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Recorded GRN shipments</div>
+          <div className="text-caption text-slate-400 mt-0.5">Recorded GRN shipments</div>
         </div>
         <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
           <div className="text-xs font-medium text-slate-500">Total Weighed Yarn (KG)</div>
           <div className="text-2xl font-bold text-amber-600 mt-1">{fmtDecimal(kpis.totalKg)} KG</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Actual net inward weight</div>
+          <div className="text-caption text-slate-400 mt-0.5">Actual net inward weight</div>
         </div>
         <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
           <div className="text-xs font-medium text-slate-500">Total Bags / Packs Received</div>
           <div className="text-2xl font-bold text-indigo-600 mt-1">{fmtNumber(kpis.totalPacks)} Bags</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Physical pack count</div>
+          <div className="text-caption text-slate-400 mt-0.5">Physical pack count</div>
         </div>
       </div>
 
@@ -189,33 +189,33 @@ export default function YarnGRNsPage() {
                   >
                     <td className="py-3 px-4">
                       <div className="font-semibold text-amber-700">{g.grn_no}</div>
-                      <div className="text-[11px] text-slate-400">{fmtDate(g.grn_date)}</div>
+                      <div className="text-caption text-slate-400">{fmtDate(g.grn_date)}</div>
                     </td>
                     <td className="py-3 px-3">
                       <div className="font-medium text-slate-800">{g.po_no || '—'}</div>
-                      <div className="text-[10px] text-slate-500 tabular-nums">{g.internal_ir_no || '—'}</div>
+                      <div className="text-micro text-slate-500 tabular-nums">{g.internal_ir_no || '—'}</div>
                     </td>
                     <td className="py-3 px-3">
                       {g.gate_entry_no ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-caption font-semibold bg-amber-50 text-amber-700 border border-amber-200">
                           {g.gate_entry_no}
                         </span>
                       ) : (
-                        <span className="text-slate-400 text-[11px]">—</span>
+                        <span className="text-slate-400 text-caption">—</span>
                       )}
                     </td>
                     <td className="py-3 px-3">
                       <div className="font-medium text-slate-800">{g.supplier_name || 'Spinning Mill'}</div>
                       {g.supplier_dc_no && (
-                        <div className="text-[10px] text-slate-400">DC: {g.supplier_dc_no}</div>
+                        <div className="text-micro text-slate-400">DC: {g.supplier_dc_no}</div>
                       )}
                     </td>
                     <td className="py-3 px-3">
-                      <span className="tabular-nums text-[11px] text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
+                      <span className="tabular-nums text-caption text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
                         {g.style_code || 'GEN'}
                       </span>
                     </td>
-                    <td className="py-3 px-3 text-slate-600 text-[11px]">
+                    <td className="py-3 px-3 text-slate-600 text-caption">
                       {g.warehouse_name || 'Yarn Store'}
                     </td>
                     <td className="py-3 px-3 text-right font-bold text-amber-700">

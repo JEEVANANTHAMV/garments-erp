@@ -209,8 +209,8 @@ export function ClientReport({ def }: { def: ReportDef }) {
     <div data-report={def.key}>
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-[17px] font-semibold text-slate-900">{def.title}</h2>
-          {def.subtitle && <p className="text-[12.5px] text-slate-500">{def.subtitle}</p>}
+          <h2 className="text-title-lg font-semibold text-slate-900">{def.title}</h2>
+          {def.subtitle && <p className="text-body text-slate-500">{def.subtitle}</p>}
         </div>
         <div className="flex items-center gap-2">
           <button className="btn-secondary inline-flex items-center gap-1.5" onClick={() => void q.refetch()} title="Refresh">
@@ -243,7 +243,7 @@ export function ClientReport({ def }: { def: ReportDef }) {
 
       {q.isLoading ? <LoadingBlock /> : q.error ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : (
         <div className="card overflow-auto" style={{ maxHeight: '68vh' }}>
-          <table className="min-w-full text-[12.5px]" data-report-table={def.key}>
+          <table className="min-w-full text-body" data-report-table={def.key}>
             <thead className="sticky top-0 z-10 bg-slate-50">
               <tr>
                 {def.columns.map((c) => {
@@ -299,7 +299,7 @@ export function ClientReport({ def }: { def: ReportDef }) {
       )}
 
       {(notedCols.length > 0 || notes.length > 0) && (
-        <div className="mt-2 space-y-0.5 text-[11.5px] text-slate-500">
+        <div className="mt-2 space-y-0.5 text-small text-slate-500">
           {notedCols.map((c, i) => <p key={c.key}><span className="text-amber-600">{SUP[i] ?? '*'}</span> {c.header}: {c.footnote}</p>)}
           {notes.map((n, i) => <p key={`n${i}`}>• {n}</p>)}
         </div>
@@ -319,14 +319,14 @@ export function ReportSection({ title, subtitle, defs, initialKey }: {
   return (
     <>
       <div className="mb-4">
-        <h1 className="text-[22px] font-semibold tracking-tight text-slate-900">{title}</h1>
-        {subtitle && <p className="mt-0.5 text-[13px] text-slate-500">{subtitle}</p>}
+        <h1 className="text-page font-semibold tracking-tight text-slate-900">{title}</h1>
+        {subtitle && <p className="mt-0.5 text-body text-slate-500">{subtitle}</p>}
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[230px_1fr]">
         <nav className="card h-fit p-1.5" data-report-list>
           {defs.map((d) => (
             <button key={d.key} data-report-key={d.key} onClick={() => pick(d.key)}
-              className={clsx('block w-full rounded-md px-3 py-2 text-left text-[12.5px]',
+              className={clsx('block w-full rounded-md px-3 py-2 text-left text-body',
                 d.key === def?.key ? 'bg-brand-50 font-semibold text-brand-700' : 'text-slate-600 hover:bg-slate-50')}>
               {d.title}
             </button>

@@ -9,7 +9,7 @@ export function LineAllocationsPage() {
     defaultSort={{ key: 'allocation_date', dir: 'desc' }}
     columns={[
       { key: 'allocation_no', header: 'Alloc no', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.allocation_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-small font-medium text-brand-700">{r.allocation_no}</span> },
       { key: 'allocation_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.allocation_date) },
       { key: 'po_prod_no', header: 'Work order' },
       { key: 'style_code', header: 'Style' },
@@ -47,7 +47,7 @@ export function SewingOperationsPage() {
     defaultSort={{ key: 'operation_date', dir: 'desc' }}
     columns={[
       { key: 'operation_no', header: 'Op no', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.operation_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-small font-medium text-brand-700">{r.operation_no}</span> },
       { key: 'operation_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.operation_date) },
       { key: 'po_prod_no', header: 'Work order' },
       { key: 'operation_name', header: 'Operation', render: (r: any) => <Badge tone="violet">{r.operation_name}</Badge> },

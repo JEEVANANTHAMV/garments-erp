@@ -75,7 +75,7 @@ export default function BillTrackerPage() {
 function Kpi({ k, v, onClick, tone }: { k: string; v: number; onClick: () => void; tone?: string }) {
   return (
     <button data-kpi={k} onClick={onClick} className="card p-3 text-left transition hover:shadow-md">
-      <div className="text-[11px] uppercase tracking-wider text-slate-500">{KPI_LABEL[k] ?? k}</div>
+      <div className="text-caption uppercase tracking-wider text-slate-500">{KPI_LABEL[k] ?? k}</div>
       <div className={`mt-1 text-2xl font-semibold tabular-nums ${v ? tone ?? 'text-slate-800' : 'text-slate-300'}`}>{v}</div>
     </button>
   );
@@ -94,24 +94,24 @@ function Dashboard({ onKpi, onAge }: { onKpi: (k: string) => void; onAge: (a: st
   return (
     <div className="space-y-4">
       {groups.map(([g, keys, tone]) => (
-        <div key={g}><div className="mb-1.5 text-[12px] font-semibold uppercase tracking-wider text-slate-500">{g}</div>
+        <div key={g}><div className="mb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">{g}</div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">{keys.map((x) => <Kpi key={x} k={x} v={Number(k[x] ?? 0)} tone={tone} onClick={() => onKpi(x)} />)}</div>
         </div>))}
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="card p-4">
-          <div className="mb-2 text-[13px] font-semibold">Open bills by age (days since received)</div>
+          <div className="mb-2 text-body font-semibold">Open bills by age (days since received)</div>
           <table className="w-full text-xs"><tbody>{d.data.ageing.map((a: any) => (
             <tr key={a.bucket} data-age={a.bucket} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => onAge(a.bucket)}>
               <td className="py-1.5">{a.bucket} days</td><td className="py-1.5 text-right tabular-nums">{a.bills}</td><td className="py-1.5 text-right tabular-nums">₹{fmtDecimal(a.amount, 2)}</td></tr>))}</tbody></table>
         </div>
         <div className="card p-4">
-          <div className="mb-2 text-[13px] font-semibold">Open bills: who has them</div>
+          <div className="mb-2 text-body font-semibold">Open bills: who has them</div>
           <table className="w-full text-xs"><thead className="text-slate-500"><tr><th className="text-left">Department / place</th><th className="text-right">Bills</th><th className="text-right">Overdue</th></tr></thead>
             <tbody>{d.data.holders.map((h: any) => <tr key={h.dept} className="border-t border-slate-100"><td className="py-1.5">{h.dept}</td><td className="text-right tabular-nums">{h.bills}</td>
               <td className={`text-right tabular-nums ${Number(h.overdue) ? 'text-red-600' : ''}`}>{h.overdue}</td></tr>)}</tbody></table>
         </div>
         <div className="card p-4">
-          <div className="mb-2 text-[13px] font-semibold">Average time with each department (180 days)</div>
+          <div className="mb-2 text-body font-semibold">Average time with each department (180 days)</div>
           <table className="w-full text-xs"><thead className="text-slate-500"><tr><th className="text-left">Department / place</th><th className="text-right">Hand-offs</th><th className="text-right">Avg days</th></tr></thead>
             <tbody>{d.data.dwell.map((h: any) => <tr key={h.dept} className="border-t border-slate-100"><td className="py-1.5">{h.dept}</td><td className="text-right tabular-nums">{h.moves}</td><td className="text-right tabular-nums">{h.avg_days}</td></tr>)}
               {!d.data.dwell.length && <tr><td colSpan={3} className="py-3 text-center text-slate-400">No hand-offs yet</td></tr>}</tbody></table>
@@ -167,7 +167,7 @@ function BillList() {
       <SimpleTable cols={cols} rows={list.data?.data ?? []} loading={list.isLoading} empty="No bills match the filters"
         onRow={(r) => navigate(`/stores/bill-tracker/${r.id}`, { state: { back: location.search } })} />
       {pg && pg.totalPages > 1 && <Pager page={pg.page} totalPages={pg.totalPages} total={pg.total} pageSize={pg.pageSize} onPage={(p: number) => set('page', String(p))} />}
-      {pg && <div className="mt-2 text-[12px] text-slate-500">{pg.total} bill(s)</div>}
+      {pg && <div className="mt-2 text-small text-slate-500">{pg.total} bill(s)</div>}
     </>
   );
 }
@@ -228,7 +228,7 @@ function PostingQueue() {
   const cols: Col[] = [
     { key: 'entry_no', label: 'Tracking no', render: (r) => <span className="tabular-nums font-semibold text-brand-700">{r.entry_no}</span> },
     { key: 'supplier_name', label: 'Supplier' }, { key: 'bill_no', label: 'Invoice no' }, { key: 'amount', label: 'Amount', kind: 'money' },
-    { key: 'idempotency_key', label: 'Idempotency key', render: (r) => <span className="tabular-nums text-[11px]">{r.idempotency_key}</span> }, { key: 'adapter', label: 'Adapter' },
+    { key: 'idempotency_key', label: 'Idempotency key', render: (r) => <span className="tabular-nums text-caption">{r.idempotency_key}</span> }, { key: 'adapter', label: 'Adapter' },
     { key: 'status', label: 'Status', kind: 'status' }, { key: 'attempts', label: 'Attempts' },
     { key: 'external_voucher_no', label: 'Voucher', render: (r) => (r.external_voucher_no ? `${r.external_voucher_no} · ${fmtDate(r.external_voucher_date)}` : '—') },
     { key: 'last_error_summary', label: 'Last error' }, { key: 'created_at', label: 'Queued', kind: 'date' },
@@ -238,7 +238,7 @@ function PostingQueue() {
       <div className="card mb-3 flex flex-wrap items-end gap-3 p-4">
         <Select label="Status" id="pq-status" className="w-48" value={status} placeholder="All" onChange={(e) => setStatus(e.target.value)}
           options={['QUEUED', 'POSTED', 'FAILED', 'UNKNOWN', 'RECON_REQUIRED', 'CANCELLED', 'REVERSED'].map((s) => ({ value: s, label: s.replace(/_/g, ' ').toLowerCase() }))} />
-        <div className="flex-1 text-[12px] text-slate-500">Adapter: <b>MANUAL</b> — the accounting software is not connected yet. Accounts posts the voucher in their package and enters the voucher no on the bill.</div>
+        <div className="flex-1 text-small text-slate-500">Adapter: <b>MANUAL</b> — the accounting software is not connected yet. Accounts posts the voucher in their package and enters the voucher no on the bill.</div>
         {can('BILL_TRACKER.POST') && <Button variant="secondary" id="pq-run" loading={act.isPending} onClick={() => act.mutate({ url: '/stores/bill-tracker/posting/enqueue-eligible' })}><RefreshCw size={13} className="mr-1 inline" /> Queue approved bills</Button>}
       </div>
       <SimpleTable cols={cols} rows={list.data ?? []} loading={list.isLoading} empty="The posting queue is empty" onRow={(r) => navigate(`/stores/bill-tracker/${r.bill_id}`, { state: { back: '?tab=posting' } })} />
@@ -265,9 +265,9 @@ function Reconciliation() {
       <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
         {Object.entries(RECON_LABEL).filter(([k]) => k !== 'OK').map(([k, l]) => (
           <button key={k} onClick={() => setF(f === k ? '' : k)} className={`card p-3 text-left ${f === k ? 'ring-2 ring-brand-400' : ''}`}>
-            <div className="text-[11px] uppercase tracking-wider text-slate-500">{l}</div>
+            <div className="text-caption uppercase tracking-wider text-slate-500">{l}</div>
             <div className="text-xl font-semibold tabular-nums">{d.data?.summary?.[k]?.bills ?? 0}</div>
-            <div className="text-[11px] tabular-nums text-slate-500">₹{fmtDecimal(d.data?.summary?.[k]?.amount ?? 0, 2)}</div>
+            <div className="text-caption tabular-nums text-slate-500">₹{fmtDecimal(d.data?.summary?.[k]?.amount ?? 0, 2)}</div>
           </button>))}
       </div>
       <SimpleTable cols={cols} rows={rows} loading={d.isLoading} empty="No approved bills yet" onRow={(r) => navigate(`/stores/bill-tracker/${r.id}`, { state: { back: '?tab=recon' } })} />
@@ -287,7 +287,7 @@ function Settings() {
   const flags: [string, string][] = [['req_dc', 'DC'], ['req_receipt', 'GRN'], ['req_po', 'PO'], ['req_bill_entry', 'Bills Inward'], ['req_process', 'Process receipt / rate'], ['req_attachment', 'Scan / file']];
   return (
     <div className="card overflow-x-auto p-4">
-      <div className="mb-3 text-[12.5px] text-slate-600">Documents each bill category needs before it can be verified, matching tolerances (the larger of % and ₹ applies), what happens when a bill links more than a GRN / PO value, and the value above which a finance controller (BILL_TRACKER.APPROVE_HIGH) must approve.</div>
+      <div className="mb-3 text-body text-slate-600">Documents each bill category needs before it can be verified, matching tolerances (the larger of % and ₹ applies), what happens when a bill links more than a GRN / PO value, and the value above which a finance controller (BILL_TRACKER.APPROVE_HIGH) must approve.</div>
       <table className="w-full text-xs">
         <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-1.5 text-left">Category</th>{flags.map(([, l]) => <th key={l} className="px-2 py-1.5">{l}</th>)}
           <th className="px-2 py-1.5">Amount tol %</th><th className="px-2 py-1.5">Amount tol ₹</th><th className="px-2 py-1.5">Qty tol %</th><th className="px-2 py-1.5">Over-billing</th><th className="px-2 py-1.5">Finance controller above ₹</th><th /></tr></thead>
@@ -302,8 +302,8 @@ function Settings() {
               { onSuccess: () => { const r = { ...rows }; delete r[c.id]; setRows(r); } })}><Save size={12} className="mr-1 inline" />Save</Button>}</td>
           </tr>); })}</tbody>
       </table>
-      {!edit && <div className="mt-2 text-[12px] text-slate-500">Changing these needs BILL_TRACKER.CONFIG.</div>}
-      <div className="mt-3"><StatusBadge value="INFO" /> <span className="text-[12px] text-slate-500">Maker-checker (approver ≠ the person who entered the bill) and the posting adapter are company settings (BT_MAKER_CHECKER, BT_POSTING_ADAPTER).</span></div>
+      {!edit && <div className="mt-2 text-small text-slate-500">Changing these needs BILL_TRACKER.CONFIG.</div>}
+      <div className="mt-3"><StatusBadge value="INFO" /> <span className="text-small text-slate-500">Maker-checker (approver ≠ the person who entered the bill) and the posting adapter are company settings (BT_MAKER_CHECKER, BT_POSTING_ADAPTER).</span></div>
     </div>
   );
 }

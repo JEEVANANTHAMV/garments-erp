@@ -12,7 +12,7 @@ export function EnquiriesPage() {
     defaultSort={{ key: 'enquiry_date', dir: 'desc' }}
     columns={[
       { key: 'enquiry_no', header: 'Enquiry no', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.enquiry_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-small font-medium text-brand-700">{r.enquiry_no}</span> },
       { key: 'enquiry_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.enquiry_date) },
       { key: 'buyer_name', header: 'Buyer' },
       { key: 'season', header: 'Season' },
@@ -96,9 +96,9 @@ export function QuotationsPage() {
     columns={[
       { key: 'quotation_no', header: 'Quotation no', sortable: true,
         render: (r: any) => (
-          <span className="tabular-nums text-[12px] font-medium text-brand-700">
+          <span className="tabular-nums text-small font-medium text-brand-700">
             {r.quotation_no}
-            <span className={`ml-1.5 rounded px-1.5 py-0.5 text-[10px] font-bold ${Number(r.version) > 1 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-500'}`}
+            <span className={`ml-1.5 rounded px-1.5 py-0.5 text-micro font-bold ${Number(r.version) > 1 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-500'}`}
               title={Number(r.version) > 1 ? `Edited — ${Number(r.version) - 1} earlier version(s)` : 'First version'}>V{Number(r.version) || 1}</span>
           </span>
         ) },
@@ -119,13 +119,13 @@ export function QuotationsPage() {
               <div className="flex items-center gap-1">
                 <Badge tone={badgeTone}>{label}</Badge>
                 {isProc && (
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300">
+                  <span className="text-micro font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300">
                     Process
                   </span>
                 )}
               </div>
               {isProc && r.process_name && (
-                <span className="text-[11px] text-amber-700 font-semibold">
+                <span className="text-caption text-amber-700 font-semibold">
                   ⚙️ {r.process_name}
                 </span>
               )}

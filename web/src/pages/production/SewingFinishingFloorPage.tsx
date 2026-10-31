@@ -217,7 +217,7 @@ export function SewingFinishingFloorPage() {
                 <div>
                   <p className="mb-1 text-xs font-semibold text-slate-600">Movement history</p>
                   <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-100">
-                    <table className="w-full text-[11px]">
+                    <table className="w-full text-caption">
                       <tbody>
                         {[...bundle.history].reverse().map((h: any) => (
                           <tr key={h.id} className="border-t border-slate-50">
@@ -243,15 +243,15 @@ export function SewingFinishingFloorPage() {
             <DataTable data={register} loading={regLoading} emptyTitle="Nothing yet"
               onRowClick={(r: any) => { const c = r.barcode ?? r.bundle_no; if (c) { setCode(c); scan(c); } }}
               columns={tab === 'FINAL_QC' ? [
-                { key: 'qc_no', header: 'QC no', render: (r: any) => <span className="tabular-nums text-[11px]">{r.qc_no}</span> },
-                { key: 'bundle_no', header: 'Bundle', render: (r: any) => <span className="tabular-nums text-[11px]">{r.bundle_no ?? '—'}</span> },
+                { key: 'qc_no', header: 'QC no', render: (r: any) => <span className="tabular-nums text-caption">{r.qc_no}</span> },
+                { key: 'bundle_no', header: 'Bundle', render: (r: any) => <span className="tabular-nums text-caption">{r.bundle_no ?? '—'}</span> },
                 { key: 'inspected_qty', header: 'Insp', align: 'right' as const },
                 { key: 'passed_qty', header: 'Pass', align: 'right' as const },
                 { key: 'reject_qty', header: 'Rej', align: 'right' as const },
                 { key: 'qc_status', header: '', render: (r: any) => <StatusBadge value={r.qc_status} /> },
               ] : [
-                { key: 'input_no', header: 'Input', render: (r: any) => <span className="tabular-nums text-[11px]">{r.input_no}</span> },
-                { key: 'bundle_no', header: 'Bundle', render: (r: any) => <span className="tabular-nums text-[11px]">{r.bundle_no ?? '—'}</span> },
+                { key: 'input_no', header: 'Input', render: (r: any) => <span className="tabular-nums text-caption">{r.input_no}</span> },
+                { key: 'bundle_no', header: 'Bundle', render: (r: any) => <span className="tabular-nums text-caption">{r.bundle_no ?? '—'}</span> },
                 { key: 'line_name', header: 'Line' },
                 { key: 'input_qty', header: 'In', align: 'right' as const },
                 { key: 'output_qty', header: 'Good', align: 'right' as const },
@@ -259,7 +259,7 @@ export function SewingFinishingFloorPage() {
                 { key: 'status', header: '', render: (r: any) => <StatusBadge value={r.status} /> },
               ]} />
           </div>
-          <p className="border-t border-slate-100 px-4 py-2 text-[11px] text-slate-400">All quantities in PCS. Click a row to load its bundle.</p>
+          <p className="border-t border-slate-100 px-4 py-2 text-caption text-slate-400">All quantities in PCS. Click a row to load its bundle.</p>
         </Card>
       </div>
     </div>
@@ -269,8 +269,8 @@ export function SewingFinishingFloorPage() {
 function Bal({ label, v, hi }: { label: string; v?: number; hi?: boolean }) {
   return (
     <div className={`rounded-lg border px-2.5 py-2 ${hi ? 'border-brand-400 bg-brand-50' : 'border-slate-200 bg-white'}`}>
-      <p className="text-[10px] uppercase tracking-wide text-slate-500">{label}</p>
-      <p className={`text-lg font-bold ${num(v) > 0 ? 'text-slate-900' : 'text-slate-300'}`}>{fmtNumber(v ?? 0)} <span className="text-[10px] font-medium text-slate-400">PCS</span></p>
+      <p className="text-micro uppercase tracking-wide text-slate-500">{label}</p>
+      <p className={`text-lg font-bold ${num(v) > 0 ? 'text-slate-900' : 'text-slate-300'}`}>{fmtNumber(v ?? 0)} <span className="text-micro font-medium text-slate-400">PCS</span></p>
     </div>
   );
 }

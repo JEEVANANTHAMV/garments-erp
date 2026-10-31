@@ -588,10 +588,10 @@ function MarkerVersions() {
           { key: 'width_in', header: 'Width', align: 'right' as const, render: (r: any) => <Qty v={r.width_in} uom="IN" dp={2} /> },
           { key: 'marker_kg_per_ply', header: 'Per ply', align: 'right' as const, render: (r: any) => <Qty v={r.marker_kg_per_ply} uom={r.uom} dp={4} /> },
           { key: 'cad_kg_per_pc', header: 'CAD / PC', align: 'right' as const, render: (r: any) => <Qty v={r.cad_kg_per_pc} uom={`${r.uom}/PC`} dp={4} /> },
-          { key: 'size_consumption', header: 'Size-wise', render: (r: any) => r.size_consumption ? <span className="text-[11px]">{Object.entries(r.size_consumption).map(([k, v]) => `${k}:${v}`).join(' ')}</span> : '—' },
-          { key: 'job', header: 'Job / PO', render: (r: any) => <span className="text-[11px]">{r.io_no || '—'}{r.buyer_po_no ? ` · ${r.buyer_po_no}` : ''}</span> },
+          { key: 'size_consumption', header: 'Size-wise', render: (r: any) => r.size_consumption ? <span className="text-caption">{Object.entries(r.size_consumption).map(([k, v]) => `${k}:${v}`).join(' ')}</span> : '—' },
+          { key: 'job', header: 'Job / PO', render: (r: any) => <span className="text-caption">{r.io_no || '—'}{r.buyer_po_no ? ` · ${r.buyer_po_no}` : ''}</span> },
           { key: 'eff', header: 'Eff %', align: 'right' as const, render: (r: any) => r.efficiency_pct ?? '—' },
-          { key: 'status', header: 'Status', render: (r: any) => <div><StatusChip status={r.status} />{r.approved_by_name && <div className="text-[10px] text-slate-400">{r.approved_by_name}</div>}{r.reject_reason && <div className="text-[10px] text-red-600">{r.reject_reason}</div>}</div> },
+          { key: 'status', header: 'Status', render: (r: any) => <div><StatusChip status={r.status} />{r.approved_by_name && <div className="text-micro text-slate-400">{r.approved_by_name}</div>}{r.reject_reason && <div className="text-micro text-red-600">{r.reject_reason}</div>}</div> },
           { key: 'lock', header: 'Use', render: (r: any) => <span className="text-xs">{r.is_locked ? '🔒 ' : ''}{r.lay_count} lay(s)</span> },
           { key: 'a', header: '', render: (r: any) => (
             <div className="flex flex-wrap justify-end gap-1">

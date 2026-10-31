@@ -7,9 +7,9 @@ import { type Kind, BASE, money, qty, pctTxt, num, usePerm, useGet } from './sha
 function Tile({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-3">
-      <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="text-caption font-medium uppercase tracking-wide text-slate-500">{label}</div>
       <div className="mt-1 text-xl font-bold tabular-nums text-slate-900">{value}</div>
-      {sub && <div className="text-[11px] text-slate-500">{sub}</div>}
+      {sub && <div className="text-caption text-slate-500">{sub}</div>}
     </div>
   );
 }

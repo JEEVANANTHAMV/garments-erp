@@ -57,7 +57,7 @@ export function QuotationVersionsButton({ quotationId, currentLines }: { quotati
               <tbody>
                 {(list.data?.versions ?? []).map((v) => (
                   <tr key={v.version} className={`border-t border-slate-100 ${view === v.version ? 'bg-brand-50' : ''}`}>
-                    <td className="px-2 py-1.5 tabular-nums font-bold">V{v.version}{v.current && <span className="ml-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">current</span>}</td>
+                    <td className="px-2 py-1.5 tabular-nums font-bold">V{v.version}{v.current && <span className="ml-1 rounded bg-emerald-100 px-1.5 py-0.5 text-micro font-semibold text-emerald-800">current</span>}</td>
                     <td className="px-2 py-1.5">{v.current ? `${fmtDate(v.saved_at)}${v.saved_by ? ` · ${v.saved_by}` : ''}` : '—'}</td>
                     <td className="px-2 py-1.5 text-right tabular-nums">{fmtDecimal(v.total_amount, 2)}</td>
                     <td className="px-2 py-1.5">{v.current ? '—' : `${fmtDate(v.replaced_at)}${v.replaced_by ? ` by ${v.replaced_by}` : ''}`}</td>
@@ -68,11 +68,11 @@ export function QuotationVersionsButton({ quotationId, currentLines }: { quotati
                 ))}
               </tbody>
             </table>
-            {count === 1 && <p className="text-[11.5px] text-slate-500">No earlier versions yet — each saved change to this quotation keeps the previous one as V{cur}.</p>}
+            {count === 1 && <p className="text-small text-slate-500">No earlier versions yet — each saved change to this quotation keeps the previous one as V{cur}.</p>}
             {view !== null && (
               snap.isLoading ? <LoadingBlock rows={3} /> : snap.data && (
                 <div>
-                  <h4 className="mb-2 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">
+                  <h4 className="mb-2 border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">
                     V{view} <span className="font-normal normal-case tracking-normal text-slate-400">(replaced {fmtDate(snap.data.replaced_at)}) · total {fmtDecimal(snap.data.header?.total_amount, 2)} · cells changed since are highlighted</span>
                   </h4>
                   <div className="overflow-x-auto">
@@ -102,7 +102,7 @@ export function QuotationVersionsButton({ quotationId, currentLines }: { quotati
                     </table>
                   </div>
                   {currentLines.length !== snap.data.lines.length && (
-                    <p className="mt-1 text-[11px] text-slate-500">V{view} had {snap.data.lines.length} line(s); the current version has {currentLines.length}.</p>
+                    <p className="mt-1 text-caption text-slate-500">V{view} had {snap.data.lines.length} line(s); the current version has {currentLines.length}.</p>
                   )}
                 </div>
               )

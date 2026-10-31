@@ -89,7 +89,7 @@ function RequestEditor({ onClose, onSaved }: { onClose: () => void; onSaved: (d:
         <Input label="Rate" type="number" min="0" step="any" value={b.rate} onChange={(e) => setB({ ...b, rate: e.target.value })} />
       </FormSection>
       {b.so_id && (budget.isFetching ? <LoadingBlock rows={1} /> : bud ? (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-body text-amber-900">
           {bud.not_on_bom ? <>This item is not on job {bud.job_no}'s BOM — the whole quantity is over budget.</>
             : <>Job {bud.job_no}: requirement <b>{qtyFmt(bud.required)}</b> · allowed (with excess) <b>{qtyFmt(bud.allowed)}</b> · already ordered <b>{qtyFmt(bud.ordered)}</b> · balance <b>{qtyFmt(bud.balance)}</b> {bud.uom_code ?? ''}</>}
         </div>) : null)}
@@ -124,7 +124,7 @@ function RequestView({ id, onClose }: { id: number; onClose: () => void }) {
             ['Rate', fmtDecimal(r.rate, 2)], ['Amount', `₹${fmtDecimal(r.amount, 2)}`], ['Requested by', r.requested_by],
             ['Raise job allowance', Number(r.raise_allowance) ? (r.allowance_applied_qty ? `Yes · +${qtyFmt(r.allowance_applied_qty)} applied` : 'Yes, on approval') : 'No'],
             ['Decided', r.decided_at ? `${fmtDate(r.decided_at)} · ${r.decided_by_name ?? ''}` : '—'], ['Decision remarks', r.decision_remarks]]} />
-          <p className="mb-3 rounded-lg bg-slate-50 px-3 py-2 text-[12.5px] text-slate-700"><b>Reason:</b> {r.reason}</p>
+          <p className="mb-3 rounded-lg bg-slate-50 px-3 py-2 text-body text-slate-700"><b>Reason:</b> {r.reason}</p>
           {r.status === 'PENDING' && can('PURCHASE.APPROVE') && <Input label="Approval remarks (optional)" value={remarks} onChange={(e) => setRemarks(e.target.value)} />}
         </>
       )}

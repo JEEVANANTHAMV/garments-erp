@@ -622,7 +622,7 @@ export function GeneralPurchaseDetailPage() {
               className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
             />
             <span className="font-semibold text-slate-700">Inter-State Supply (IGST Applicable)</span>
-            <span className="text-[10px] text-slate-400 font-normal">
+            <span className="text-micro text-slate-400 font-normal">
               {head.is_interstate ? 'Single IGST tax rate' : 'Split CGST + SGST'}
             </span>
           </label>
@@ -1085,7 +1085,7 @@ export function GeneralPurchaseDetailPage() {
                         <Zap size={13} className={line.direct_issue ? "fill-emerald-500 text-emerald-600" : "text-slate-400"} />
                         Direct Issue to Order / Job
                       </div>
-                      <div className="text-[10px] text-slate-500">
+                      <div className="text-micro text-slate-500">
                         {line.direct_issue
                           ? '⚡ Immediately charges Actual Costing; 0 in unissued stock'
                           : 'Remains in inventory until officially issued'}
@@ -1094,7 +1094,7 @@ export function GeneralPurchaseDetailPage() {
                   </label>
 
                   {line.direct_issue === 1 && (
-                    <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                    <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-micro font-bold text-emerald-800">
                       DIRECT ISSUE
                     </span>
                   )}
@@ -1155,7 +1155,7 @@ export function GeneralPurchaseDetailPage() {
             {/* Printable Document Sheet */}
             <div className="p-8 overflow-y-auto print-container text-slate-900 bg-white font-sans text-xs">
               <div className="border-b-2 border-slate-800 pb-4 mb-4 text-center">
-                <h1 className="text-xl font-black uppercase tracking-wider text-slate-900">GARMENT MANUFACTURING ERP</h1>
+                <h1 className="text-xl font-bold uppercase tracking-wider text-slate-900">GARMENT MANUFACTURING ERP</h1>
                 <p className="text-xs text-slate-500 font-medium">General Procurement &amp; Inventory Management</p>
                 <div className="inline-block mt-2 px-4 py-1 rounded bg-brand-100 text-brand-900 font-bold text-sm tracking-wide">
                   {isPoMode ? 'GENERAL PURCHASE ORDER (PO)' : 'GENERAL GOODS RECEIPT NOTE (GRN)'}
@@ -1179,7 +1179,7 @@ export function GeneralPurchaseDetailPage() {
 
               {/* Items Table */}
               <div className="mb-6">
-                <table className="w-full border-collapse border border-slate-300 text-[11px]">
+                <table className="w-full border-collapse border border-slate-300 text-caption">
                   <thead>
                     <tr className="bg-slate-100 text-slate-700">
                       <th className="border border-slate-300 py-1.5 px-2 text-left">#</th>
@@ -1236,12 +1236,12 @@ export function GeneralPurchaseDetailPage() {
                     )}
                     <tr className="bg-slate-100 font-bold">
                       <td colSpan={7} className="border border-slate-300 py-1.5 px-2 text-right text-slate-900">Grand Total ({currCode}):</td>
-                      <td className="border border-slate-300 py-1.5 px-2 text-right font-black text-brand-800 text-sm">{currSymbol}{fmtDecimal(totals.grandTotal, 2)}</td>
+                      <td className="border border-slate-300 py-1.5 px-2 text-right font-bold text-brand-800 text-sm">{currSymbol}{fmtDecimal(totals.grandTotal, 2)}</td>
                     </tr>
                     {isForeignCurrency && (
                       <tr className="bg-amber-50/60 font-bold">
                         <td colSpan={7} className="border border-slate-300 py-1.5 px-2 text-right text-amber-900">Converted INR Equivalent (@ ₹{head.exchange_rate}):</td>
-                        <td className="border border-slate-300 py-1.5 px-2 text-right font-black text-amber-950 text-sm">₹{fmtDecimal(totals.inrGrandTotal, 2)}</td>
+                        <td className="border border-slate-300 py-1.5 px-2 text-right font-bold text-amber-950 text-sm">₹{fmtDecimal(totals.inrGrandTotal, 2)}</td>
                       </tr>
                     )}
                   </tfoot>
@@ -1249,7 +1249,7 @@ export function GeneralPurchaseDetailPage() {
               </div>
 
               {/* Signatures */}
-              <div className="grid grid-cols-4 gap-4 pt-8 mt-6 border-t border-slate-300 text-center text-[10px]">
+              <div className="grid grid-cols-4 gap-4 pt-8 mt-6 border-t border-slate-300 text-center text-micro">
                 <div>
                   <div className="border-b border-slate-400 h-8 mb-1"></div>
                   <span className="font-semibold text-slate-700">Prepared By</span>

@@ -14,7 +14,7 @@ function LinesPage({ path, title }: { path: 'sewing-lines' | 'checking-lines' | 
     defaultSort={{ key: 'line_code', dir: 'asc' }}
     columns={[
       { key: 'line_code', header: 'Line code', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] font-semibold text-brand-700">{r.line_code}</span> },
+        render: (r: any) => <span className="tabular-nums text-small font-semibold text-brand-700">{r.line_code}</span> },
       { key: 'line_name', header: 'Line name', sortable: true },
       { key: 'floor_name', header: 'Floor' },
       { key: 'supervisor_name', header: 'Supervisor' },

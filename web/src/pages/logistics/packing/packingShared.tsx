@@ -93,10 +93,10 @@ export function PackingNav({ active }: { active: string }) {
         <span key={t.to} className="inline-flex items-center gap-1.5">
           {i > 0 && t.step > 0 && <span className="text-slate-300" aria-hidden>→</span>}
           <Link to={t.to} title={t.hint} data-step={t.step || undefined}
-            className={clsx('inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12.5px] font-medium',
+            className={clsx('inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-body font-medium',
               t.step === 0 && 'ml-3',
               active === t.to ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-surface-border bg-white text-slate-600 hover:bg-surface-hover')}>
-            {t.step > 0 && <span className={clsx('inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold',
+            {t.step > 0 && <span className={clsx('inline-flex h-4 w-4 items-center justify-center rounded-full text-micro font-bold',
               active === t.to ? 'bg-brand-600 text-white' : 'bg-slate-200 text-slate-600')}>{t.step}</span>}
             <t.icon size={14} />{t.label}
           </Link>
@@ -122,16 +122,16 @@ export function PkStatus({ value, posted }: { value: string; posted?: number | b
 export function Stat({ label, value, hint, tone }: { label: string; value: ReactNode; hint?: ReactNode; tone?: 'red' | 'green' | 'amber' }) {
   return (
     <div className="rounded-lg border border-surface-border bg-white px-3 py-2">
-      <div className="text-[11px] uppercase tracking-wide text-slate-500">{label}</div>
-      <div className={clsx('text-[18px] font-semibold', tone === 'red' ? 'text-red-600' : tone === 'green' ? 'text-emerald-700' : tone === 'amber' ? 'text-amber-700' : 'text-slate-900')}>{value}</div>
-      {hint && <div className="text-[11px] text-slate-400">{hint}</div>}
+      <div className="text-caption uppercase tracking-wide text-slate-500">{label}</div>
+      <div className={clsx('text-title-lg font-semibold', tone === 'red' ? 'text-red-600' : tone === 'green' ? 'text-emerald-700' : tone === 'amber' ? 'text-amber-700' : 'text-slate-900')}>{value}</div>
+      {hint && <div className="text-caption text-slate-400">{hint}</div>}
     </div>
   );
 }
 
 export const TableHead = ({ title, actions }: { title: string; actions?: ReactNode }) => (
   <div className="mb-2 flex items-center justify-between border-b border-slate-100 pb-1.5">
-    <h3 className="text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">{title}</h3>
+    <h3 className="text-small font-semibold uppercase tracking-wider text-slate-500">{title}</h3>
     {actions && <div className="flex items-center gap-2">{actions}</div>}
   </div>
 );
@@ -267,7 +267,7 @@ export function CartonEditor({ order, carton, onClose, onSaved }: {
         <Button variant="secondary" id="carton-save-draft" loading={busy} onClick={() => save(true)}>Save draft</Button>
         <Button id="carton-save" loading={busy} onClick={() => save(false)}>Save carton</Button>
       </>}>
-      {err && <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-700" id="carton-error">{err}</div>}
+      {err && <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-body text-red-700" id="carton-error">{err}</div>}
       {((plans.data ?? []).length > 0 || plan.id) && (
         <FormSection title="Pack for buyer packing list" cols={3} description="A released packing plan (buyer list, one per country): pick its carton number — the lines fill from the plan; less is a short carton, more is refused.">
           <Select id="carton-plan" label="Packing list (plan)" value={plan.id} onChange={(e) => setPlan({ id: e.target.value, ctn: '' })} placeholder="— Not for a plan —"
@@ -278,7 +278,7 @@ export function CartonEditor({ order, carton, onClose, onSaved }: {
               return { value: c.ctn_no, disabled: !!c.packed && !mine,
                 label: `${c.ctn_no} · ${c.lines.map((l) => `${l.colour ?? ''} ${l.size_label}×${l.qty}`).join(', ')}${c.packed && !mine ? ` — packed (${c.packed})` : ''}` };
             })} />
-          <div className="self-end pb-2 text-[12px] text-slate-600" id="carton-plan-info">
+          <div className="self-end pb-2 text-small text-slate-600" id="carton-plan-info">
             {planCtn ? <>Plan: <b>{planCtn.qty}</b> pcs{total !== planCtn.qty && <span className={total < planCtn.qty ? 'text-amber-700' : 'text-red-700'}> · {total < planCtn.qty ? `${planCtn.qty - total} short` : `${total - planCtn.qty} over`}</span>}</> : planList ? `${planList.cartons.filter((c) => !c.packed).length} carton(s) still to pack` : ''}
           </div>
         </FormSection>
@@ -292,7 +292,7 @@ export function CartonEditor({ order, carton, onClose, onSaved }: {
       </FormSection>
       <section className="mb-4">
         {ratio.length > 0 && (
-          <div className="mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-[12.5px]" id="ratio-bar">
+          <div className="mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-body" id="ratio-bar">
             <span>Size ratio <b>{ratio.map((x) => `${x.size_code} ${x.ratio}`).join(' : ')}</b> → full carton <b>{ratio.map((x) => `${x.size_code} ${x.per_carton}`).join(' · ')}</b></span>
             {ratioColours.length > 1 && <select className="input !h-8 w-40 !py-0 text-xs" id="ratio-colour" value={ratioColour} onChange={(e) => setRatioColour(e.target.value)}>
               {ratioColours.map(([c, name]) => <option key={c} value={c}>{name}</option>)}</select>}
@@ -301,7 +301,7 @@ export function CartonEditor({ order, carton, onClose, onSaved }: {
         )}
         <TableHead title="Colour / size lines" actions={
           <Button size="sm" variant="secondary" id="carton-add-line" onClick={() => setRows((r) => [...r, { key: `l${Date.now()}`, color_id: '', size_id: '', qty: '', polybag_qty: '' }])}>Add line</Button>} />
-        <table className="w-full text-[12.5px]">
+        <table className="w-full text-body">
           <thead><tr><th className="th">Colour / size</th>{ratio.length > 0 && <th className="th text-right" title="Pieces of this size in a full carton by the size ratio">Ratio / ctn</th>}
             <th className="th text-right" title="Planned on the packing order">Planned</th><th className="th text-right" title="In posted cartons">Packed</th>
             <th className="th text-right" title="In other cartons not yet posted">Other cartons</th><th className="th text-right" title="Can still go into this carton (ready, not in other cartons)">Available</th>
@@ -333,29 +333,29 @@ export function CartonEditor({ order, carton, onClose, onSaved }: {
                   {planCtn && <td className="td text-right tabular-nums" data-plan-qty={i}>{plannedOf(r.color_id, r.size_id) ?? <span className="text-red-600">not on plan</span>}</td>}
                   <td className="td w-28"><input className="input text-right" data-qty={i} inputMode="numeric" value={r.qty}
                     onChange={(e) => setRows((x) => x.map((y) => (y.key === r.key ? { ...y, qty: e.target.value.replace(/\D/g, '') } : y)))} />
-                    {rc != null && n(r.qty) > rc && <div className="text-[10.5px] text-red-600">ratio {rc}</div>}</td>
+                    {rc != null && n(r.qty) > rc && <div className="text-caption text-red-600">ratio {rc}</div>}</td>
                   <td className={clsx('td text-right tabular-nums font-medium', after != null && after < 0 ? 'text-red-600' : 'text-slate-700')} data-after={i}>{after == null ? '—' : fmtNumber(after)}</td>
                   <td className="td w-36"><div className="flex items-center gap-1.5"><input className="input text-right" data-bags={i} inputMode="numeric" placeholder={String(std)} value={r.polybag_qty}
                     onChange={(e) => setRows((x) => x.map((y) => (y.key === r.key ? { ...y, polybag_qty: e.target.value.replace(/\D/g, '') } : y)))} /><span className="text-slate-400">({std})</span></div></td>
-                  <td className="td w-10 text-right">{rows.length > 1 && <button className="text-[12px] text-red-600 hover:underline" onClick={() => setRows((x) => x.filter((y) => y.key !== r.key))}>Remove</button>}</td>
+                  <td className="td w-10 text-right">{rows.length > 1 && <button className="text-small text-red-600 hover:underline" onClick={() => setRows((x) => x.filter((y) => y.key !== r.key))}>Remove</button>}</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
-        {warn.length > 0 && <div className="mt-2 text-[12px] text-amber-700">{warn.join(' · ')}</div>}
+        {warn.length > 0 && <div className="mt-2 text-small text-amber-700">{warn.join(' · ')}</div>}
         {(() => {
           // running balance of the whole order (live while typing)
           const planned = lines.reduce((a, l) => a + n(l.planned), 0), posted = lines.reduce((a, l) => a + n(l.posted), 0);
           const others = lines.reduce((a, l) => a + Math.max(n(l.draft) - (own.get(lk(l.color_id, l.size_id)) ?? 0), 0), 0);
           const left = planned - posted - others - total;
           return (
-            <div className="mt-2 grid grid-cols-2 gap-2 rounded-lg bg-surface-muted px-3 py-2 text-[12px] sm:grid-cols-5" id="carton-balance">
-              <span>Order planned <b className="block text-[14px]">{fmtNumber(planned)}</b></span>
-              <span>Packed (posted) <b className="block text-[14px] text-emerald-700">{fmtNumber(posted)}</b></span>
-              <span>Other open cartons <b className="block text-[14px] text-amber-700">{fmtNumber(others)}</b></span>
-              <span>This carton <b className="block text-[14px] text-blue-700">− {fmtNumber(total)}</b></span>
-              <span>Left to pack after this <b className={clsx('block text-[14px]', left < 0 ? 'text-red-600' : 'text-slate-800')} data-left>{fmtNumber(left)}</b></span>
+            <div className="mt-2 grid grid-cols-2 gap-2 rounded-lg bg-surface-muted px-3 py-2 text-small sm:grid-cols-5" id="carton-balance">
+              <span>Order planned <b className="block text-body-lg">{fmtNumber(planned)}</b></span>
+              <span>Packed (posted) <b className="block text-body-lg text-emerald-700">{fmtNumber(posted)}</b></span>
+              <span>Other open cartons <b className="block text-body-lg text-amber-700">{fmtNumber(others)}</b></span>
+              <span>This carton <b className="block text-body-lg text-blue-700">− {fmtNumber(total)}</b></span>
+              <span>Left to pack after this <b className={clsx('block text-body-lg', left < 0 ? 'text-red-600' : 'text-slate-800')} data-left>{fmtNumber(left)}</b></span>
             </div>
           );
         })()}
@@ -405,14 +405,14 @@ export function RatioEditor({ sizes, value, onChange, ppc, ppmb, mixedSizes, dis
     <div id="size-ratio">
       <div className="flex flex-wrap items-end gap-2">
         {sizes.map((z, i) => (
-          <label key={z.size_id} className="flex items-center gap-1 text-[12.5px] text-slate-600">
+          <label key={z.size_id} className="flex items-center gap-1 text-body text-slate-600">
             {i > 0 && <span className="text-slate-300">:</span>}<span className="font-semibold">{z.size_code}</span>
             <input className="input !h-8 w-14 text-center" inputMode="numeric" data-ratio={z.size_id} disabled={disabled} placeholder="–"
               value={value[z.size_id] ?? ''} onChange={(e) => onChange({ ...value, [z.size_id]: e.target.value.replace(/\D/g, '') })} />
           </label>
         ))}
       </div>
-      <div className="mt-1.5 text-[12px]" id="ratio-preview">
+      <div className="mt-1.5 text-small" id="ratio-preview">
         {!sum ? <span className="text-slate-400">No ratio — cartons are filled by hand.</span>
           : problem ? <span className="text-red-600">{problem}</span>
           : <span className="text-emerald-700">Full carton ({ppc} pcs): <b>{used.map((z) => `${z.size_code} ${n(value[z.size_id]) * k}`).join(' · ')}</b>

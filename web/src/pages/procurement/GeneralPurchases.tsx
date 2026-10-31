@@ -178,7 +178,7 @@ export function GeneralPurchasesPage() {
               <button
                 type="button"
                 onClick={() => nav(isPoMode ? `/procurement/general-orders/${r.id}` : `/procurement/general-purchases/${r.id}`)}
-                className="tabular-nums text-[12px] font-bold text-brand-700 hover:underline text-left flex items-center gap-1.5"
+                className="tabular-nums text-small font-bold text-brand-700 hover:underline text-left flex items-center gap-1.5"
               >
                 {r.purchase_no}
                 {r.purchase_type === 'EMERGENCY' && (
@@ -219,7 +219,7 @@ export function GeneralPurchasesPage() {
                 <div className="text-xs">
                   <span className="tabular-nums font-medium text-slate-700">{r.supplier_inv_no}</span>
                   {r.supplier_inv_date && (
-                    <div className="text-[10px] text-slate-400">{fmtDate(r.supplier_inv_date)}</div>
+                    <div className="text-micro text-slate-400">{fmtDate(r.supplier_inv_date)}</div>
                   )}
                 </div>
               ) : (

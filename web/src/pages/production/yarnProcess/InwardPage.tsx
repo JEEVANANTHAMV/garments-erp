@@ -60,7 +60,7 @@ function InwardList({ onOpen, onNew }: { onOpen: (id: number) => void; onNew: ()
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => onOpen(r.id)}>
-                  <td className="px-3 py-2 tabular-nums font-semibold text-brand-700">{r.inward_no}{r.is_reprocess ? <span className="ml-1 rounded bg-purple-100 px-1 text-[10px] text-purple-800">Reprocess</span> : null}</td>
+                  <td className="px-3 py-2 tabular-nums font-semibold text-brand-700">{r.inward_no}{r.is_reprocess ? <span className="ml-1 rounded bg-purple-100 px-1 text-micro text-purple-800">Reprocess</span> : null}</td>
                   <td className="px-3 py-2">{fmtDate(r.inward_date)}</td><td className="px-3 py-2"><YpStatus value={r.status} /></td><td className="px-3 py-2 tabular-nums">{r.ypo_no}</td>
                   <td className="px-3 py-2">{r.process_name || r.process_code}</td><td className="px-3 py-2">{r.vendor_name}</td><td className="px-3 py-2">{r.jobs || '—'}</td>
                   <td className="px-3 py-2 text-right">{r.cone_count}</td><td className="px-3 py-2 text-right text-emerald-700">{kg(r.good_kg)}</td><td className="px-3 py-2 text-right text-red-700">{kg(r.reject_kg)}</td>
@@ -194,7 +194,7 @@ function InwardEditor({ editId, ypoId: ypoParam, onBack, onDone, onPickDc }: { e
         <>
           <div className="card overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-border px-4 py-2.5">
-              <h3 className="text-[13px] font-semibold text-slate-800">{many ? `Twisting — each output cone from ${d.default_ply ?? 'n'} input cones (ply)` : mode === 'ONE_TO_MANY' ? 'Winding — one input lot / cone → many output cones (use ⑂ to add cones)' : 'Input cone → output cone (split with ⑂)'}</h3>
+              <h3 className="text-body font-semibold text-slate-800">{many ? `Twisting — each output cone from ${d.default_ply ?? 'n'} input cones (ply)` : mode === 'ONE_TO_MANY' ? 'Winding — one input lot / cone → many output cones (use ⑂ to add cones)' : 'Input cone → output cone (split with ⑂)'}</h3>
               <div className="flex gap-2">
                 {many ? <Button size="sm" onClick={addTwist}><Plus size={13} className="mr-1" /> Add output cone</Button> : <Button size="sm" variant="secondary" onClick={fillGood}>Fill open KG as good</Button>}
               </div>
@@ -207,7 +207,7 @@ function InwardEditor({ editId, ypoId: ypoParam, onBack, onDone, onPickDc }: { e
                 </tr></thead>
                 <tbody>
                   {groups.map((g) => (
-                    <Fragment key={g.io_no}>{!many && <tr className="bg-sky-50/70"><td colSpan={12} className="px-2 py-1.5 text-[11.5px] font-semibold text-sky-900">Job {g.io_no}</td></tr>}
+                    <Fragment key={g.io_no}>{!many && <tr className="bg-sky-50/70"><td colSpan={12} className="px-2 py-1.5 text-small font-semibold text-sky-900">Job {g.io_no}</td></tr>}
                       {g.rows.map((o, idx) => {
                         const l = lineOf(o.inputs[0]?.ypo_line_id ?? '');
                         const first = many || idx === 0 || g.rows[idx - 1].inputs[0]?.ypo_line_id !== o.inputs[0]?.ypo_line_id;
@@ -253,7 +253,7 @@ function InwardEditor({ editId, ypoId: ypoParam, onBack, onDone, onPickDc }: { e
                   ))}
                   {!outs.length && <tr><td colSpan={12} className="px-3 py-8 text-center text-slate-400">{many ? 'Click “Add output cone” and pick its input cones' : 'Every lot of this DC is already received'}</td></tr>}
                 </tbody>
-                <tfoot className="sticky bottom-0 bg-slate-100 font-bold"><tr><td colSpan={(many ? 7 : 6) + (dyeing ? 1 : 0)} className="px-2 py-2 text-right">This GRN</td><td className="px-2 py-2 text-right text-emerald-800">{kg(tot.good)}</td><td className="px-2 py-2 text-right text-red-700">{kg(tot.rej)}</td><td className="px-2 py-2 text-right text-amber-700">{kg(tot.loss)}</td><td colSpan={2} className="px-2 py-2 text-left text-[11px] font-normal">{tot.good + tot.rej + tot.loss > 0 ? `loss ${lossPct.toFixed(2)}%${tol ? ` (tolerance ${tol}%)` : ''}` : ''}</td></tr></tfoot>
+                <tfoot className="sticky bottom-0 bg-slate-100 font-bold"><tr><td colSpan={(many ? 7 : 6) + (dyeing ? 1 : 0)} className="px-2 py-2 text-right">This GRN</td><td className="px-2 py-2 text-right text-emerald-800">{kg(tot.good)}</td><td className="px-2 py-2 text-right text-red-700">{kg(tot.rej)}</td><td className="px-2 py-2 text-right text-amber-700">{kg(tot.loss)}</td><td colSpan={2} className="px-2 py-2 text-left text-caption font-normal">{tot.good + tot.rej + tot.loss > 0 ? `loss ${lossPct.toFixed(2)}%${tol ? ` (tolerance ${tol}%)` : ''}` : ''}</td></tr></tfoot>
               </table>
             </div>
           </div>
@@ -263,7 +263,7 @@ function InwardEditor({ editId, ypoId: ypoParam, onBack, onDone, onPickDc }: { e
               <Input label="Reason to accept the loss *" className="w-96" value={head.loss_override_reason} onChange={(e) => setHead({ ...head, loss_override_reason: e.target.value })} />
             </div>
           )}
-          <div className="card mt-3 p-4"><h3 className="mb-2 text-[13px] font-semibold text-slate-800">DC {d.ypo_no} reconciliation (posted GRNs)</h3><ReconCards t={d.reconciliation.total} /></div>
+          <div className="card mt-3 p-4"><h3 className="mb-2 text-body font-semibold text-slate-800">DC {d.ypo_no} reconciliation (posted GRNs)</h3><ReconCards t={d.reconciliation.total} /></div>
           <div className="mt-3 flex justify-end gap-2">
             <Button variant="secondary" onClick={onBack}>Cancel</Button>
             <Button variant="secondary" loading={busy} onClick={() => save('DRAFT')}><Save size={14} className="mr-1" /> Save Draft</Button>
@@ -296,7 +296,7 @@ function InwardView({ id, onBack, onEdit }: { id: number; onBack: () => void; on
         actions={<><YpStatus value={g.bill_id ? 'BILLED' : 'POSTED'} /><Button variant="secondary" onClick={print}><Printer size={14} className="mr-1" /> Print GRN</Button><Button variant="secondary" onClick={onBack}><ArrowLeft size={14} className="mr-1" /> Back</Button></>} />
       <div className="card mb-3 grid grid-cols-2 gap-3 p-4 text-xs md:grid-cols-6">
         {[['GRN date', fmtDate(g.inward_date)], ['Challan', g.challan_no || '—'], ['Vehicle', g.vehicle_no || '—'], ['Received by', g.received_by || '—'], ['Store', g.warehouse_name], ['Reject store', g.reject_store || '—']].map(([k, v]) => (
-          <div key={k}><div className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-500">{k}</div><div className="font-semibold">{v}</div></div>))}
+          <div key={k}><div className="text-caption font-semibold uppercase tracking-wider text-slate-500">{k}</div><div className="font-semibold">{v}</div></div>))}
       </div>
       <div className="card overflow-x-auto">
         <table className="w-full text-xs">
@@ -310,7 +310,7 @@ function InwardView({ id, onBack, onEdit }: { id: number; onBack: () => void; on
           <tfoot className="bg-slate-100 font-bold"><tr><td colSpan={isDyeing(g.process_code) ? 9 : 8} className="px-2 py-2 text-right">Total</td><td className="px-2 py-2 text-right">{kg(g.input_kg)}</td><td className="px-2 py-2 text-right">{kg(g.good_kg)}</td><td className="px-2 py-2 text-right">{kg(g.reject_kg)}</td><td className="px-2 py-2 text-right">{kg(g.loss_kg)}</td><td /></tr></tfoot>
         </table>
       </div>
-      <div className="card mt-3 p-4"><h3 className="mb-2 text-[13px] font-semibold text-slate-800">DC {g.ypo_no} reconciliation</h3><ReconCards t={g.reconciliation.total} /></div>
+      <div className="card mt-3 p-4"><h3 className="mb-2 text-body font-semibold text-slate-800">DC {g.ypo_no} reconciliation</h3><ReconCards t={g.reconciliation.total} /></div>
     </div>
   );
 }
@@ -351,7 +351,7 @@ function DraftView({ g, onBack, onEdit }: { g: any; onBack: () => void; onEdit: 
       {g.status === 'QC_PENDING' && <div className="mb-3 rounded-lg border border-orange-200 bg-orange-50 px-4 py-2 text-xs text-orange-900">Waiting for QC — no stock has moved. Record the QC result per output cone, then post.</div>}
       {g.status === 'DRAFT' && <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-700">Draft — no stock has moved.{g.requires_qc ? ' This process requires QC: send it for QC before posting.' : ''}</div>}
       <div className="card overflow-x-auto">
-        <div className="flex items-center gap-2 px-4 pt-3 text-[13px] font-semibold text-slate-800"><ClipboardCheck size={15} /> Output cones{params.length ? ' & QC' : ''}</div>
+        <div className="flex items-center gap-2 px-4 pt-3 text-body font-semibold text-slate-800"><ClipboardCheck size={15} /> Output cones{params.length ? ' & QC' : ''}</div>
         <table className="mt-2 w-full text-xs">
           <thead className="bg-slate-50 text-slate-500"><tr>
             {['Job', 'Input cone(s)', 'Output cone', 'Lot', ...(isDyeing(g.process_code) ? ['Yarn colour', 'Dye colour'] : ['Shade']), 'Good KG', 'Reject KG', 'Loss KG'].map((h) => <th key={h} className={`px-2 py-2 ${/KG/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}
@@ -382,7 +382,7 @@ function DraftView({ g, onBack, onEdit }: { g: any; onBack: () => void; onEdit: 
         </table>
         {qcOpen && (
           <div className="flex flex-wrap items-end justify-end gap-2 border-t border-surface-border p-3">
-            {!params.length && <span className="mr-auto text-[11.5px] text-slate-500">No QC parameters for this process — set them on Yarn Process Types; you can still accept / reject each cone.</span>}
+            {!params.length && <span className="mr-auto text-small text-slate-500">No QC parameters for this process — set them on Yarn Process Types; you can still accept / reject each cone.</span>}
             <Input label="QC remarks" className="w-72" value={qcRemarks} onChange={(e) => setQcRemarks(e.target.value)} />
             <Button loading={busy === 'qc'} onClick={() => act('qc', () => http.post(`/yarn-process/inward/${g.id}/qc`, { remarks: qcRemarks || null,
               results: goodIdx.map((k) => ({ line_index: k, qc_status: stat[k] || undefined, values: Object.fromEntries(params.map((p) => [String(p.id), vals[k]?.[String(p.id)] === undefined || vals[k]?.[String(p.id)] === '' ? null : Number(vals[k][String(p.id)])])) })) }))}>
@@ -390,8 +390,8 @@ function DraftView({ g, onBack, onEdit }: { g: any; onBack: () => void; onEdit: 
           </div>
         )}
       </div>
-      <p className="mt-2 text-[11.5px] text-slate-500">On posting, QC-rejected cones go to the reject store (eligible for reprocess) with the failed parameters as the reason.</p>
-      <div className="card mt-3 p-4"><h3 className="mb-2 text-[13px] font-semibold text-slate-800">DC {g.ypo_no} reconciliation (posted GRNs)</h3><ReconCards t={g.reconciliation.total} /></div>
+      <p className="mt-2 text-small text-slate-500">On posting, QC-rejected cones go to the reject store (eligible for reprocess) with the failed parameters as the reason.</p>
+      <div className="card mt-3 p-4"><h3 className="mb-2 text-body font-semibold text-slate-800">DC {g.ypo_no} reconciliation (posted GRNs)</h3><ReconCards t={g.reconciliation.total} /></div>
     </div>
   );
 }

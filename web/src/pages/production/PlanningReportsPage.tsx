@@ -172,7 +172,7 @@ function Kpis({ items }: { items: [string, unknown][] }) {
     <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-4 lg:grid-cols-7">
       {items.map(([k, v]) => (
         <div key={k} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-          <p className="text-[10px] text-slate-500">{k}</p>
+          <p className="text-micro text-slate-500">{k}</p>
           <p className="text-lg font-bold text-slate-800">{typeof v === 'number' ? fmtNumber(v) : String(v)}</p>
         </div>
       ))}

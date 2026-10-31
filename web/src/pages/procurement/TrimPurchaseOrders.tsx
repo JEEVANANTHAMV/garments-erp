@@ -178,7 +178,7 @@ export default function TrimPurchaseOrdersPage() {
                       {p.style_code ? (
                         <div>
                           <span className="font-semibold text-slate-900">{p.style_code}</span>
-                          <span className="text-[10px] text-slate-400 block">{p.style_name}</span>
+                          <span className="text-micro text-slate-400 block">{p.style_name}</span>
                         </div>
                       ) : (
                         <span className="text-slate-400">-</span>
@@ -198,7 +198,7 @@ export default function TrimPurchaseOrdersPage() {
                     <td className="py-3 px-4 text-center">
                       <button
                         onClick={() => nav(`/procurement/trim/orders/${p.id}`)}
-                        className="btn-secondary text-[11px] py-1 px-2.5 flex items-center gap-1 mx-auto"
+                        className="btn-secondary text-caption py-1 px-2.5 flex items-center gap-1 mx-auto"
                       >
                         <Eye size={13} /> View
                       </button>

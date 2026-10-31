@@ -77,7 +77,7 @@ export function FilePick({ id, onPick, busy, label = 'Attach file' }: { id?: str
 }
 export function AttachmentList({ rows, onRemove }: { rows: any[]; onRemove?: (a: any) => void }) {
   const toast = useToast();
-  if (!rows.length) return <div className="py-3 text-[12px] text-slate-400">No files attached</div>;
+  if (!rows.length) return <div className="py-3 text-small text-slate-400">No files attached</div>;
   return (
     <table className="w-full text-xs">
       <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-1.5 text-left">File</th><th className="px-2 py-1.5 text-left">From</th><th className="px-2 py-1.5 text-right">Size</th>
@@ -88,7 +88,7 @@ export function AttachmentList({ rows, onRemove }: { rows: any[]; onRemove?: (a:
           <td className="px-2 py-1.5">{a.inward_no ?? (a.bill_id ? 'Bill' : '—')}</td>
           <td className="px-2 py-1.5 text-right tabular-nums">{fmtDecimal(Number(a.byte_size) / 1024, 0)} KB</td>
           <td className="px-2 py-1.5">{fmtDate(a.uploaded_at)} · {a.uploaded_by_name ?? ''}</td>
-          <td className="px-2 py-1.5 tabular-nums text-[10.5px] text-slate-500">{String(a.sha256).slice(0, 12)}…</td>
+          <td className="px-2 py-1.5 tabular-nums text-caption text-slate-500">{String(a.sha256).slice(0, 12)}…</td>
           <td className="whitespace-nowrap px-2 py-1.5 text-right">
             {!a.is_removed && <button className="mr-2 text-brand-700 hover:underline" onClick={() => downloadAttachment(a.id, a.original_name).catch((e) => toast(errMsg(e), 'error'))}><Download size={12} className="inline" /> Download</button>}
             {!a.is_removed && onRemove && <button className="text-red-600 hover:underline" onClick={() => onRemove(a)}>Remove</button>}
@@ -161,12 +161,12 @@ export function BillEditor({ doc, onClose, onSaved }: { doc: any | null; onClose
         <Input label="Purchase / process" value={b.purchase_or_process} placeholder="e.g. Yarn purchase / Dyeing" onChange={set('purchase_or_process')} />
       </FormSection>
       {(dup.data?.duplicates.length ?? 0) > 0 && (
-        <div className="mx-1 mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-800">
+        <div className="mx-1 mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-body text-red-800">
           <b>Possible duplicate{dupMsg ? ' — give the reason to save it anyway' : ''}:</b> the same supplier invoice no is already on {dup.data!.duplicates.map((d) => `${d.entry_no} (${d.bill_no}, ₹${fmtDecimal(d.amount, 2)})`).join(', ')}.
           {<Input label="If this really is a different bill, why?" id="bill-dup-reason" className="mt-2" value={b.duplicate_reason} onChange={set('duplicate_reason')} />}
         </div>)}
       {(dup.data?.bill_entries.length ?? 0) > 0 && (
-        <div className="mx-1 mb-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-[12.5px] text-blue-800">
+        <div className="mx-1 mb-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-body text-blue-800">
           Bills Inward already has {dup.data!.bill_entries.map((e) => `${e.bill_no} (₹${fmtDecimal(e.total_amount, 2)})${e.linked_to ? ` — linked to ${e.linked_to}` : ''}`).join(', ')} for this invoice — link it after saving.
         </div>)}
       <FormSection title="Amount" cols={4}>
@@ -179,7 +179,7 @@ export function BillEditor({ doc, onClose, onSaved }: { doc: any | null; onClose
         <Input label="Round off" type="number" step="any" value={b.round_off} onChange={set('round_off')} />
         <Input label="Billed qty" type="number" min="0" step="any" id="bill-qty" value={b.bill_qty} onChange={set('bill_qty')} hint="For quantity matching with the GRN" />
         {b.taxable_value !== '' && Math.abs(calc - (Number(b.amount) || 0)) > 1 &&
-          <div className="col-span-full text-[12px] text-red-600">Taxable + GST + other + round off = {fmtDecimal(calc, 2)}, bill total {fmtDecimal(b.amount, 2)}</div>}
+          <div className="col-span-full text-small text-red-600">Taxable + GST + other + round off = {fmtDecimal(calc, 2)}, bill total {fmtDecimal(b.amount, 2)}</div>}
         <Select label="Currency" value={b.currency_code} onChange={set('currency_code')} options={['INR', 'USD', 'EUR', 'GBP'].map((c) => ({ value: c, label: c }))} />
         {b.currency_code !== 'INR' && <Input label="Exchange rate" type="number" step="any" required value={b.exchange_rate} onChange={set('exchange_rate')} />}
         <Select label="Department / cost centre" value={b.cost_department} placeholder="—" onChange={set('cost_department')} options={deptOptions(b.cost_department)} />

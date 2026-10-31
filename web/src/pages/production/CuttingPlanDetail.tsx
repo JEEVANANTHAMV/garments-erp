@@ -55,7 +55,7 @@ export function CuttingPlansPage() {
             ) },
             { key: 'style_code', header: 'Style', render: (r: any) => (
               <div><p className="font-medium">{r.style_code}</p>
-                <p className="text-[11px] text-slate-500">{r.style_name}</p></div>
+                <p className="text-caption text-slate-500">{r.style_name}</p></div>
             ) },
             { key: 'part_name', header: 'Part', render: (r: any) => {
               const part = (r.part_name || 'TOP').toUpperCase();
@@ -388,7 +388,7 @@ export function CuttingPlanDetailPage() {
                     ];
                     return rows.map(([k, label, f], ri) => (
                       <tr key={`${c.color_name}-${k}`} className={`${ri === rows.length - 1 ? 'border-b-2' : 'border-b'} ${active ? 'bg-indigo-50/60' : ''}`}>
-                        {ri === 0 && <td rowSpan={rows.length} className="p-2 align-top font-semibold text-slate-800">{c.color_name}{!c.color_id && <span className="block text-[10px] font-normal text-amber-700">not in colour master</span>}</td>}
+                        {ri === 0 && <td rowSpan={rows.length} className="p-2 align-top font-semibold text-slate-800">{c.color_name}{!c.color_id && <span className="block text-micro font-normal text-amber-700">not in colour master</span>}</td>}
                         <td className={`p-1.5 text-slate-500 ${k === 'todo' ? 'font-semibold text-indigo-700' : ''}`}>{label}</td>
                         {sizeOrder.map((sz) => <td key={sz} className={`p-1.5 text-right tabular-nums ${k === 'todo' ? 'font-semibold text-indigo-700' : ''}`}>{fmtNumber(f(cell(sz)))}</td>)}
                         <td className={`p-1.5 text-right font-semibold tabular-nums ${k === 'todo' ? 'text-indigo-700' : ''}`}>{fmtNumber((c.sizes || []).reduce((a: number, x: any) => a + f(x), 0))}</td>
@@ -407,7 +407,7 @@ export function CuttingPlanDetailPage() {
             </div>
 
             {(program.markers || []).length > 0 && (
-              <div className="flex flex-wrap gap-2 text-[11px]" id="cp-markers">
+              <div className="flex flex-wrap gap-2 text-caption" id="cp-markers">
                 {program.markers.map((m: any) => (
                   <span key={m.marker_ref} className="rounded border bg-white px-2 py-1">
                     <b>{m.marker_ref}</b> · {m.fabric_type || '—'} · {ratioText(m.sizes, m.ratios)} · {m.ppm} PCS/marker

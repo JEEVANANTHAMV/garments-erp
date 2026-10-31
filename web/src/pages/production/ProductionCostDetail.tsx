@@ -568,7 +568,7 @@ export default function ProductionCostDetailPage() {
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-x-4 gap-y-3 text-xs">
           <div>
-            <label className="text-slate-400 block text-[11px]">Production Order</label>
+            <label className="text-slate-400 block text-caption">Production Order</label>
             {isNew ? (
               <select
                 value={head.prod_order_id}
@@ -590,59 +590,59 @@ export default function ProductionCostDetailPage() {
           </div>
 
           <div>
-            <span className="text-slate-400 block text-[11px]">Costing Date</span>
+            <span className="text-slate-400 block text-caption">Costing Date</span>
             <span className="font-semibold text-slate-900">{fmtDate(head.cost_date)}</span>
           </div>
 
           <div>
-            <span className="text-slate-400 block text-[11px]">Buyer</span>
+            <span className="text-slate-400 block text-caption">Buyer</span>
             <span className="font-semibold text-slate-900">{head.buyer_name || '—'}</span>
           </div>
 
           <div>
-            <span className="text-slate-400 block text-[11px]">Buyer Style No</span>
+            <span className="text-slate-400 block text-caption">Buyer Style No</span>
             <span className="font-semibold text-slate-900 tabular-nums">{head.buyer_style_ref || 'BST-2026'}</span>
           </div>
 
           <div>
-            <span className="text-slate-400 block text-[11px]">Internal Style No</span>
+            <span className="text-slate-400 block text-caption">Internal Style No</span>
             <span className="font-semibold text-slate-900 tabular-nums">
               {head.style_code} {head.style_name ? `• ${head.style_name}` : ''}
             </span>
           </div>
 
           <div>
-            <span className="text-slate-400 block text-[11px]">Internal Order (IO)</span>
+            <span className="text-slate-400 block text-caption">Internal Order (IO)</span>
             <span className="font-bold text-brand-700 tabular-nums">{head.io_no || 'IO-2026-001'}</span>
           </div>
 
           <div>
-            <span className="text-slate-400 block text-[11px]">Sales Order No</span>
+            <span className="text-slate-400 block text-caption">Sales Order No</span>
             <span className="font-medium text-slate-900">{head.so_no || 'SO-00001'}</span>
           </div>
 
           <div>
-            <span className="text-slate-400 block text-[11px]">Order Qty</span>
+            <span className="text-slate-400 block text-caption">Order Qty</span>
             <span className="font-bold text-slate-900">{fmtNumber(head.order_qty)} pcs</span>
           </div>
 
           <div>
-            <span className="text-slate-400 block text-[11px]">Produced Qty</span>
+            <span className="text-slate-400 block text-caption">Produced Qty</span>
             <span className="font-bold text-slate-900">{fmtNumber(head.produced_qty)} pcs</span>
           </div>
 
           <div>
-            <span className="text-slate-400 block text-[11px]">Good Qty</span>
+            <span className="text-slate-400 block text-caption">Good Qty</span>
             <span className="font-bold text-emerald-700">{fmtNumber(head.good_qty)} pcs</span>
           </div>
 
           <div>
-            <span className="text-slate-400 block text-[11px]">Rejection / Rework</span>
+            <span className="text-slate-400 block text-caption">Rejection / Rework</span>
             <span className="font-medium text-rose-600">{head.rejection_qty} rej / {head.rework_qty} rew</span>
           </div>
 
           <div>
-            <span className="text-slate-400 block text-[11px]">Approved Std Costing</span>
+            <span className="text-slate-400 block text-caption">Approved Std Costing</span>
             <span className="font-medium text-indigo-700 tabular-nums">{head.merchandiser_costing_no}</span>
           </div>
         </div>
@@ -677,41 +677,41 @@ export default function ProductionCostDetailPage() {
             <div className="space-y-4">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Produced Qty</span>
+                  <span className="text-caption font-bold text-slate-400 uppercase tracking-wider">Produced Qty</span>
                   <div className="text-2xl font-bold text-slate-900 mt-1">{fmtNumber(head.produced_qty)} pcs</div>
-                  <span className="text-[11px] text-slate-500">From production entries</span>
+                  <span className="text-caption text-slate-500">From production entries</span>
                 </div>
 
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3.5 shadow-xs">
-                  <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">Good Finished Qty</span>
+                  <span className="text-caption font-bold text-emerald-800 uppercase tracking-wider">Good Finished Qty</span>
                   <div className="text-2xl font-bold text-emerald-700 mt-1">{fmtNumber(head.good_qty)} pcs</div>
-                  <span className="text-[11px] text-emerald-600">Accepted FG quantity</span>
+                  <span className="text-caption text-emerald-600">Accepted FG quantity</span>
                 </div>
 
                 <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-3.5 shadow-xs">
-                  <span className="text-[11px] font-bold text-rose-800 uppercase tracking-wider">Rejections</span>
+                  <span className="text-caption font-bold text-rose-800 uppercase tracking-wider">Rejections</span>
                   <div className="text-2xl font-bold text-rose-700 mt-1">{fmtNumber(head.rejection_qty)} pcs</div>
-                  <span className="text-[11px] text-rose-600">QC rejected units</span>
+                  <span className="text-caption text-rose-600">QC rejected units</span>
                 </div>
 
                 <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-3.5 shadow-xs">
-                  <span className="text-[11px] font-bold text-indigo-800 uppercase tracking-wider">Standard Cost / Pc</span>
+                  <span className="text-caption font-bold text-indigo-800 uppercase tracking-wider">Standard Cost / Pc</span>
                   <div className="text-2xl font-bold text-indigo-700 mt-1">{stdOk ? `₹${summary.estimated_cost_per_piece.toFixed(2)}` : '—'}</div>
-                  <span className="text-[11px] text-indigo-600">{stdOk ? 'Merchandiser pre-costing (INR)' : 'No pre-costing / exchange rate'}</span>
+                  <span className="text-caption text-indigo-600">{stdOk ? 'Merchandiser pre-costing (INR)' : 'No pre-costing / exchange rate'}</span>
                 </div>
 
                 <div className="rounded-xl border border-brand-200 bg-brand-50/50 p-3.5 shadow-xs">
-                  <span className="text-[11px] font-bold text-brand-800 uppercase tracking-wider">Actual Cost / Good Pc</span>
+                  <span className="text-caption font-bold text-brand-800 uppercase tracking-wider">Actual Cost / Good Pc</span>
                   <div className="text-2xl font-bold text-brand-700 mt-1">₹{summary.cost_per_good_piece.toFixed(2)}</div>
-                  <span className="text-[11px] text-brand-600">Total Cost ÷ Good Quantity</span>
+                  <span className="text-caption text-brand-600">Total Cost ÷ Good Quantity</span>
                 </div>
 
                 <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Variance / Pc</span>
+                  <span className="text-caption font-bold text-slate-400 uppercase tracking-wider">Variance / Pc</span>
                   <div className={`text-2xl font-bold mt-1 ${summary.variance_amount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                     {summary.variance_amount >= 0 ? `+₹${(summary.variance_amount / (head.produced_qty || 1)).toFixed(2)}` : `-₹${Math.abs(summary.variance_amount / (head.produced_qty || 1)).toFixed(2)}`}
                   </div>
-                  <span className="text-[11px] text-slate-500">
+                  <span className="text-caption text-slate-500">
                     {summary.variance_pct >= 0 ? `+${summary.variance_pct.toFixed(2)}%` : `${summary.variance_pct.toFixed(2)}%`} vs Standard
                   </span>
                 </div>
@@ -722,7 +722,7 @@ export default function ProductionCostDetailPage() {
                 <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
                   <div className="p-3 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-700">Actual cost sources</div>
                   {quality && (!quality.has_job || quality.std_rate_valuations > 0 || quality.unpriced_dcs > 0) && (
-                    <div className="px-3 pt-2 text-[11px] text-amber-800 space-y-0.5">
+                    <div className="px-3 pt-2 text-caption text-amber-800 space-y-0.5">
                       {!quality.has_job && <p>This production order has no IO no (on the order or its sales order) — job transactions cannot be linked.</p>}
                       {quality.std_rate_valuations > 0 && <p>{quality.std_rate_valuations} material line(s) valued at the master standard rate (no GRN rate found).</p>}
                       {quality.unpriced_dcs > 0 && <p>{quality.unpriced_dcs} DC(s) have no rate — their PCS are costed at ₹0.</p>}
@@ -734,7 +734,7 @@ export default function ProductionCostDetailPage() {
                         <tr key={h.key}>
                           <td className="py-1.5 px-3 font-medium w-48">{h.label}</td>
                           <td className="py-1.5 px-3 w-32">
-                            <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${h.source === 'TRANSACTIONS' ? 'bg-emerald-100 text-emerald-800' : h.source === 'RATE_SETTING' ? 'bg-sky-100 text-sky-800' : 'bg-amber-100 text-amber-800'}`}>
+                            <span className={`rounded px-1.5 py-0.5 text-micro font-semibold ${h.source === 'TRANSACTIONS' ? 'bg-emerald-100 text-emerald-800' : h.source === 'RATE_SETTING' ? 'bg-sky-100 text-sky-800' : 'bg-amber-100 text-amber-800'}`}>
                               {h.source === 'TRANSACTIONS' ? 'Transactions' : h.source === 'RATE_SETTING' ? 'Rate setting' : 'No data'}
                             </span>
                           </td>
@@ -751,7 +751,7 @@ export default function ProductionCostDetailPage() {
               <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
                 <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2 text-xs">
                   <span className="font-bold text-slate-700">Profit &amp; Loss Statement — Standard vs Actual</span>
-                  <span className="text-[11px] text-slate-500">
+                  <span className="text-caption text-slate-500">
                     Standard = {standard.costing_no
                       ? <>pre-costing <span className="tabular-nums font-semibold text-indigo-700">{standard.costing_no}</span>{!standard.approved && <span className="text-amber-700 font-semibold"> (not approved)</span>}</>
                       : <span className="text-amber-700 font-semibold">no pre-costing for this style — standard not available</span>}
@@ -770,7 +770,7 @@ export default function ProductionCostDetailPage() {
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs border-collapse">
-                    <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-[11px]">
+                    <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-caption">
                       <tr>
                         <th className="py-2.5 px-3">Cost Head</th>
                         <th className="py-2.5 px-3 text-right">Standard / Pc</th>
@@ -809,7 +809,7 @@ export default function ProductionCostDetailPage() {
                             <td className="py-2 px-3">Selling Price (FOB) / Pc</td>
                             <td className="py-2 px-3 text-right tabular-nums">₹{fobPc.toFixed(2)}</td>
                             <td className="py-2 px-3 text-right tabular-nums">₹{fobPc.toFixed(2)}</td>
-                            <td colSpan={2} className="py-2 px-3 text-right text-[11px] text-slate-500">
+                            <td colSpan={2} className="py-2 px-3 text-right text-caption text-slate-500">
                               Revenue on {fmtNumber(head.good_qty)} good pcs: ₹{fmtNumber(Math.round(revenue))}
                             </td>
                           </tr>
@@ -856,11 +856,11 @@ export default function ProductionCostDetailPage() {
             <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
               <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center text-xs">
                 <span className="font-bold text-slate-700">Fabric Actual Issue Valuation</span>
-                <span className="text-[11px] text-slate-500">Formula: Actual Issue Qty × Stock Valuation Rate</span>
+                <span className="text-caption text-slate-500">Formula: Actual Issue Qty × Stock Valuation Rate</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-[11px]">
+                  <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-caption">
                     <tr>
                       <th className="py-2.5 px-3">Code</th>
                       <th className="py-2.5 px-3">Fabric Name</th>
@@ -896,11 +896,11 @@ export default function ProductionCostDetailPage() {
             <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
               <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center text-xs">
                 <span className="font-bold text-slate-700">Trims & Accessories Consumption</span>
-                <span className="text-[11px] text-slate-500">Net Consumption = Issue Qty − Return Qty</span>
+                <span className="text-caption text-slate-500">Net Consumption = Issue Qty − Return Qty</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-[11px]">
+                  <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-caption">
                     <tr>
                       <th className="py-2.5 px-3">Trim Name</th>
                       <th className="py-2.5 px-3 text-center">UOM</th>
@@ -936,11 +936,11 @@ export default function ProductionCostDetailPage() {
             <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
               <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center text-xs">
                 <span className="font-bold text-slate-700">Outsourced & In-house Process Movements</span>
-                <span className="text-[11px] text-slate-500">Track Input, Output, Loss & Jobwork Rate</span>
+                <span className="text-caption text-slate-500">Track Input, Output, Loss & Jobwork Rate</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-[11px]">
+                  <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-caption">
                     <tr>
                       <th className="py-2.5 px-3">Process</th>
                       <th className="py-2.5 px-3 text-center">Part</th>
@@ -959,7 +959,7 @@ export default function ProductionCostDetailPage() {
                         <tr key={i} className="hover:bg-slate-50">
                           <td className="py-2.5 px-3 font-semibold text-slate-900">{p.process_name}</td>
                           <td className="py-2.5 px-3 text-center">
-                            <span className={`rounded px-2 py-0.5 text-[10px] font-black uppercase ${partBadge}`}>
+                            <span className={`rounded px-2 py-0.5 text-micro font-bold uppercase ${partBadge}`}>
                               {part}
                             </span>
                           </td>
@@ -982,11 +982,11 @@ export default function ProductionCostDetailPage() {
             <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
               <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center text-xs">
                 <span className="font-bold text-slate-700">Cutting Stage Breakdown</span>
-                <span className="text-[11px] text-slate-500">Integrated with CAD, Marker & Lay Spreading</span>
+                <span className="text-caption text-slate-500">Integrated with CAD, Marker & Lay Spreading</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-[11px]">
+                  <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-caption">
                     <tr>
                       <th className="py-2.5 px-3">Cutting Component</th>
                       <th className="py-2.5 px-3 text-right">Actual Cost</th>
@@ -1010,11 +1010,11 @@ export default function ProductionCostDetailPage() {
             <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
               <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center text-xs">
                 <span className="font-bold text-slate-700">Sewing Operation SAM Costing</span>
-                <span className="text-[11px] text-slate-500">Formula: SAM × Rate/Min = Cost/Piece</span>
+                <span className="text-caption text-slate-500">Formula: SAM × Rate/Min = Cost/Piece</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-[11px]">
+                  <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-caption">
                     <tr>
                       <th className="py-2.5 px-3">Operation</th>
                       <th className="py-2.5 px-3 text-center">SAM</th>
@@ -1044,11 +1044,11 @@ export default function ProductionCostDetailPage() {
             <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
               <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center text-xs">
                 <span className="font-bold text-slate-700">Finishing Department Cost Breakdown</span>
-                <span className="text-[11px] text-slate-500">Thread cleaning, ironing, QC checking & folding</span>
+                <span className="text-caption text-slate-500">Thread cleaning, ironing, QC checking & folding</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-[11px]">
+                  <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-caption">
                     <tr>
                       <th className="py-2.5 px-3">Finishing Component</th>
                       <th className="py-2.5 px-3 text-right">Actual Cost</th>
@@ -1072,11 +1072,11 @@ export default function ProductionCostDetailPage() {
             <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
               <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center text-xs">
                 <span className="font-bold text-slate-700">Packing Materials & Labour</span>
-                <span className="text-[11px] text-slate-500">Polybag, master cartons, stickers, strapping</span>
+                <span className="text-caption text-slate-500">Polybag, master cartons, stickers, strapping</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-[11px]">
+                  <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-caption">
                     <tr>
                       <th className="py-2.5 px-3">Item / Description</th>
                       <th className="py-2.5 px-3 text-right">Quantity</th>
@@ -1111,35 +1111,35 @@ export default function ProductionCostDetailPage() {
                 {/* Part-Wise Cost Summary Cards */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl">
-                    <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">TOP Part Labour</span>
-                    <p className="text-lg font-black text-blue-900 mt-0.5">₹{fmtNumber(topLabourCost)}</p>
-                    <span className="text-[10px] text-blue-500 font-medium">Sewing, Assembly & Body</span>
+                    <span className="text-micro font-bold text-blue-600 uppercase tracking-wider">TOP Part Labour</span>
+                    <p className="text-lg font-bold text-blue-900 mt-0.5">₹{fmtNumber(topLabourCost)}</p>
+                    <span className="text-micro text-blue-500 font-medium">Sewing, Assembly & Body</span>
                   </div>
                   <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl">
-                    <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">BOTTOM Part Labour</span>
-                    <p className="text-lg font-black text-emerald-900 mt-0.5">₹{fmtNumber(bottomLabourCost)}</p>
-                    <span className="text-[10px] text-emerald-500 font-medium">Trouser, Pyjama & Bottom</span>
+                    <span className="text-micro font-bold text-emerald-600 uppercase tracking-wider">BOTTOM Part Labour</span>
+                    <p className="text-lg font-bold text-emerald-900 mt-0.5">₹{fmtNumber(bottomLabourCost)}</p>
+                    <span className="text-micro text-emerald-500 font-medium">Trouser, Pyjama & Bottom</span>
                   </div>
                   <div className="p-3 bg-purple-50/70 border border-purple-200 rounded-xl">
-                    <span className="text-[10px] font-bold text-purple-600 uppercase tracking-wider">FOLDING / COLLAR</span>
-                    <p className="text-lg font-black text-purple-900 mt-0.5">₹{fmtNumber(foldingLabourCost)}</p>
-                    <span className="text-[10px] text-purple-500 font-medium">Waistband, Fold & Collar</span>
+                    <span className="text-micro font-bold text-purple-600 uppercase tracking-wider">FOLDING / COLLAR</span>
+                    <p className="text-lg font-bold text-purple-900 mt-0.5">₹{fmtNumber(foldingLabourCost)}</p>
+                    <span className="text-micro text-purple-500 font-medium">Waistband, Fold & Collar</span>
                   </div>
                   <div className="p-3 bg-slate-100 border border-slate-300 rounded-xl">
-                    <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">Total Factory Labour</span>
-                    <p className="text-lg font-black text-slate-900 mt-0.5">₹{fmtNumber(totalLabourCost)}</p>
-                    <span className="text-[10px] text-slate-500 font-medium">All Production Parts</span>
+                    <span className="text-micro font-bold text-slate-600 uppercase tracking-wider">Total Factory Labour</span>
+                    <p className="text-lg font-bold text-slate-900 mt-0.5">₹{fmtNumber(totalLabourCost)}</p>
+                    <span className="text-micro text-slate-500 font-medium">All Production Parts</span>
                   </div>
                 </div>
 
                 <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
                   <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center text-xs">
                     <span className="font-bold text-slate-700">Departmental Labour Hours, Piece Rates & Part Breakdown</span>
-                    <span className="text-[11px] text-slate-500">Direct & Indirect Factory Labour</span>
+                    <span className="text-caption text-slate-500">Direct & Indirect Factory Labour</span>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs border-collapse">
-                      <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-[11px]">
+                      <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-caption">
                         <tr>
                           <th className="py-2.5 px-3">Department</th>
                           <th className="py-2.5 px-3 text-center">Part</th>
@@ -1159,12 +1159,12 @@ export default function ProductionCostDetailPage() {
                             <tr key={i} className="hover:bg-slate-50">
                               <td className="py-2.5 px-3 font-semibold text-slate-900">{l.department_name}</td>
                               <td className="py-2.5 px-3 text-center">
-                                <span className={`rounded px-2 py-0.5 text-[10px] font-black uppercase ${partBadgeColor}`}>
+                                <span className={`rounded px-2 py-0.5 text-micro font-bold uppercase ${partBadgeColor}`}>
                                   {part}
                                 </span>
                               </td>
                               <td className="py-2.5 px-3 text-center tabular-nums">
-                                <span className="rounded px-1.5 py-0.5 text-[10px] font-bold bg-slate-100">{l.labour_type}</span>
+                                <span className="rounded px-1.5 py-0.5 text-micro font-bold bg-slate-100">{l.labour_type}</span>
                               </td>
                               <td className="py-2.5 px-3 text-right tabular-nums text-slate-600">
                                 {l.pieces_completed ? fmtNumber(l.pieces_completed) : '-'}
@@ -1191,11 +1191,11 @@ export default function ProductionCostDetailPage() {
             <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
               <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center text-xs">
                 <span className="font-bold text-slate-700">Factory Administration & Overheads</span>
-                <span className="text-[11px] text-slate-500">Electricity, rent, supervisory salary and compliance</span>
+                <span className="text-caption text-slate-500">Electricity, rent, supervisory salary and compliance</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-[11px]">
+                  <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-caption">
                     <tr>
                       <th className="py-2.5 px-3">Overhead Head</th>
                       <th className="py-2.5 px-3 text-center">Allocation Basis</th>
@@ -1208,7 +1208,7 @@ export default function ProductionCostDetailPage() {
                       <tr key={i} className="hover:bg-slate-50">
                         <td className="py-2.5 px-3 font-semibold text-slate-900">{o.overhead_head}</td>
                         <td className="py-2.5 px-3 text-center tabular-nums">
-                          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px]">{o.allocation_basis}</span>
+                          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-micro">{o.allocation_basis}</span>
                         </td>
                         <td className="py-2.5 px-3 text-right tabular-nums">₹{o.rate.toFixed(2)}</td>
                         <td className="py-2.5 px-3 text-right tabular-nums font-bold text-slate-900">₹{fmtNumber(o.amount)}</td>
@@ -1225,7 +1225,7 @@ export default function ProductionCostDetailPage() {
             <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
               <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-wrap gap-2 justify-between items-center text-xs">
                 <span className="font-bold text-slate-700">Merchandiser vs Production vs Actual</span>
-                <span className="text-[11px] text-slate-500">
+                <span className="text-caption text-slate-500">
                   Merchandiser = pre-costing · Production = job rate card
                   {production?.has_card
                     ? <> (<b id="pc-card-status" className={production.status === 'LOCKED' ? 'text-emerald-700' : 'text-amber-700'}>{production.status === 'LOCKED' ? `Locked rev ${production.revision_no}` : production.status === 'SUBMITTED' ? 'Submitted, not locked' : 'Draft, not locked'}</b>)</>
@@ -1236,7 +1236,7 @@ export default function ProductionCostDetailPage() {
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse" id="pc-variance">
-                  <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-[11px]">
+                  <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold text-caption">
                     <tr>
                       <th className="py-2.5 px-3">Cost Head</th>
                       <th className="py-2.5 px-3 text-right">Merchandiser / Pc</th>
@@ -1261,9 +1261,9 @@ export default function ProductionCostDetailPage() {
                           <td className="py-2.5 px-3 text-right tabular-nums">{money(r.production_pc)}</td>
                           <td className="py-2.5 px-3 text-right tabular-nums font-bold">
                             ₹{Number(r.actual_pc).toFixed(2)}
-                            {r.source === 'NO_DATA' && <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] font-semibold text-amber-800" title={r.note}>no data</span>}
-                            {r.source === 'RATE_CARD' && <span className="ml-1 rounded bg-emerald-100 px-1 text-[10px] font-semibold text-emerald-800" title={r.note}>rate card</span>}
-                            {r.source === 'RATE_SETTING' && <span className="ml-1 rounded bg-sky-100 px-1 text-[10px] font-semibold text-sky-800" title={r.note}>rate setting</span>}
+                            {r.source === 'NO_DATA' && <span className="ml-1 rounded bg-amber-100 px-1 text-micro font-semibold text-amber-800" title={r.note}>no data</span>}
+                            {r.source === 'RATE_CARD' && <span className="ml-1 rounded bg-emerald-100 px-1 text-micro font-semibold text-emerald-800" title={r.note}>rate card</span>}
+                            {r.source === 'RATE_SETTING' && <span className="ml-1 rounded bg-sky-100 px-1 text-micro font-semibold text-sky-800" title={r.note}>rate setting</span>}
                           </td>
                           <td className="py-2.5 px-3 text-right tabular-nums font-bold">{sv(r.var_prod_vs_std)}</td>
                           <td className="py-2.5 px-3 text-right tabular-nums font-bold">{sv(r.var_actual_vs_prod)}</td>
@@ -1281,7 +1281,7 @@ export default function ProductionCostDetailPage() {
                 const tot = (tabsData.variance || []).find((r: any) => r.key === 'total');
                 const src: Record<string, string> = { RATE_CARD_LOCK: 'frozen when the job rate card was locked', LATEST_APPROVED: 'latest approved version (rate card not locked yet)', LATEST_DRAFT: 'latest version — not approved', NONE: '' };
                 return (
-                  <div className="border-t border-slate-100 bg-slate-50/60 px-3 py-2 text-[11px] text-slate-600 space-y-0.5" id="pc-basis">
+                  <div className="border-t border-slate-100 bg-slate-50/60 px-3 py-2 text-caption text-slate-600 space-y-0.5" id="pc-basis">
                     {standard.costing_no && (
                       <div>Merchandiser baseline: <b>{standard.costing_no}{standard.version ? ` v${standard.version}` : ''}</b> — {src[standard.baseline_source ?? 'NONE'] ?? ''}
                         {standard.quote_currency_code && standard.quote_currency_code !== 'INR' && standard.fob_price_fc != null
@@ -1298,7 +1298,7 @@ export default function ProductionCostDetailPage() {
                   </div>
                 );
               })()}
-              <p className="border-t border-slate-100 px-3 py-2 text-[11px] text-slate-500">
+              <p className="border-t border-slate-100 px-3 py-2 text-caption text-slate-500">
                 Production / Pc is the job's rate card for cutting, sewing, process, finishing and packing, plus the production overhead fixed on it (fabric and trims have no production rate).
                 The TOTAL row's Prod − Merch and Actual − Prod compare those conversion heads only. + is over, − is under.
               </p>
@@ -1314,9 +1314,9 @@ export default function ProductionCostDetailPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
                 {stageWip.map((st, i) => (
                   <div key={i} className="p-3 rounded-lg border border-slate-200 bg-slate-50 space-y-1">
-                    <span className="text-[11px] font-bold text-slate-500 uppercase">{st.stage}</span>
+                    <span className="text-caption font-bold text-slate-500 uppercase">{st.stage}</span>
                     <div className="text-lg font-bold text-slate-900">{fmtNumber(st.output)} pcs</div>
-                    <div className="text-[11px] text-slate-500 flex justify-between">
+                    <div className="text-caption text-slate-500 flex justify-between">
                       <span>WIP: {fmtNumber(st.wip)}</span>
                       {st.rejected > 0 && <span className="text-rose-600 font-bold">Rej: {st.rejected}</span>}
                     </div>
@@ -1334,7 +1334,7 @@ export default function ProductionCostDetailPage() {
               <Calculator size={15} className="text-brand-600" />
               Actual Cost Summary
             </h3>
-            <p className="text-[11px] text-slate-400">Live per-piece economics</p>
+            <p className="text-caption text-slate-400">Live per-piece economics</p>
           </div>
 
           <div className="space-y-2 text-xs">
@@ -1362,7 +1362,7 @@ export default function ProductionCostDetailPage() {
               </span>
             </div>
 
-            <div className="pt-2 space-y-1.5 text-[11px] text-slate-600">
+            <div className="pt-2 space-y-1.5 text-caption text-slate-600">
               <div className="flex justify-between">
                 <span>Material Cost</span>
                 <span className="tabular-nums font-semibold">₹{(summary.material_cost / (head.produced_qty || 1)).toFixed(2)}</span>
@@ -1383,13 +1383,13 @@ export default function ProductionCostDetailPage() {
 
             {/* Total Actual Production Cost Card */}
             <div className="mt-3 p-2.5 rounded-lg bg-slate-900 text-white space-y-1">
-              <div className="text-[10px] text-slate-400 uppercase font-semibold">Total Actual Cost</div>
+              <div className="text-micro text-slate-400 uppercase font-semibold">Total Actual Cost</div>
               <div className="text-lg font-bold tabular-nums">₹{fmtNumber(summary.total_actual_cost)}</div>
             </div>
 
             {/* Cost Per Good Finished Piece (Spec §19) */}
             <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-950 space-y-1">
-              <div className="text-[10px] font-bold text-emerald-800 uppercase flex justify-between">
+              <div className="text-micro font-bold text-emerald-800 uppercase flex justify-between">
                 <span>Cost / Good Finished Pc</span>
                 <span>{fmtNumber(head.good_qty)} Pcs</span>
               </div>
@@ -1411,12 +1411,12 @@ export default function ProductionCostDetailPage() {
           <div className="space-y-4">
           {/* Fabric Issues Drilldown */}
           <div>
-            <h4 className="mb-2 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">
+            <h4 className="mb-2 border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">
               1. Fabric Issue → Roll → Lot → GRN → Supplier
             </h4>
             <div className="rounded-lg border border-slate-200 overflow-hidden text-xs">
               <table className="w-full text-left">
-                <thead className="bg-slate-100 text-slate-600 text-[11px]">
+                <thead className="bg-slate-100 text-slate-600 text-caption">
                   <tr>
                     <th className="p-2">Issue No</th>
                     <th className="p-2">Fabric</th>
@@ -1448,12 +1448,12 @@ export default function ProductionCostDetailPage() {
 
           {/* Process Challans Drilldown */}
           <div>
-            <h4 className="mb-2 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">
+            <h4 className="mb-2 border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">
               2. Process Challan → Process GRN → Vendor
             </h4>
             <div className="rounded-lg border border-slate-200 overflow-hidden text-xs">
               <table className="w-full text-left">
-                <thead className="bg-slate-100 text-slate-600 text-[11px]">
+                <thead className="bg-slate-100 text-slate-600 text-caption">
                   <tr>
                     <th className="p-2">Challan No</th>
                     <th className="p-2">Process Stage</th>

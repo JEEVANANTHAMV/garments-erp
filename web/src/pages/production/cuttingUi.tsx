@@ -57,7 +57,7 @@ export function StatusChip({ status }: { status?: string | null }) {
   const s = String(status ?? '').toUpperCase();
   if (!s) return <span className="text-slate-400">—</span>;
   return (
-    <span className={clsx('inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset',
+    <span className={clsx('inline-flex items-center rounded-full px-2 py-0.5 text-caption font-semibold ring-1 ring-inset',
       CHIP[s] ?? 'bg-slate-100 text-slate-700 ring-slate-200')}>
       {LABEL[s] ?? s.replace(/_/g, ' ')}
     </span>
@@ -68,7 +68,7 @@ export function StatusChip({ status }: { status?: string | null }) {
 export function Qty({ v, uom, dp = 0, className }: { v: unknown; uom: string; dp?: number; className?: string }) {
   return (
     <span className={clsx('whitespace-nowrap tabular-nums', className)}>
-      {fmtNumber(v, dp)} <span className="text-[10px] font-medium text-slate-400">{uom}</span>
+      {fmtNumber(v, dp)} <span className="text-micro font-medium text-slate-400">{uom}</span>
     </span>
   );
 }
@@ -84,9 +84,9 @@ export function UomInput({ label, uom, value, onChange, step = 'any', min, disab
       <div className="relative">
         <input type="number" className="input pr-12 text-right tabular-nums" value={value ?? ''} step={step} min={min}
           disabled={disabled} onChange={(e) => onChange(e.target.value)} />
-        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-slate-400">{uom}</span>
+        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-caption font-semibold text-slate-400">{uom}</span>
       </div>
-      {hint && <p className="mt-1 text-[11px] text-slate-400">{hint}</p>}
+      {hint && <p className="mt-1 text-caption text-slate-400">{hint}</p>}
     </div>
   );
 }
@@ -134,14 +134,14 @@ export function SearchSelect({ label, value, options, onChange, placeholder = 'S
             {filtered.length === 0 && <p className="px-3 py-2 text-xs text-slate-400">No matches</p>}
             {filtered.map((o) => (
               <button key={o.value} type="button" disabled={o.disabled}
-                className={clsx('flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-[13px] hover:bg-slate-50',
+                className={clsx('flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-body hover:bg-slate-50',
                   String(o.value) === String(value ?? '') && 'bg-brand-50', o.disabled && 'cursor-not-allowed opacity-50')}
                 onClick={() => { onChange(String(o.value)); setOpen(false); setQ(''); }}>
                 <span className="min-w-0">
                   <span className="block truncate">{o.label}</span>
-                  {o.sub && <span className="block truncate text-[11px] text-slate-400">{o.sub}</span>}
+                  {o.sub && <span className="block truncate text-caption text-slate-400">{o.sub}</span>}
                 </span>
-                {o.right && <span className="shrink-0 text-[11px] font-semibold text-slate-600">{o.right}</span>}
+                {o.right && <span className="shrink-0 text-caption font-semibold text-slate-600">{o.right}</span>}
               </button>
             ))}
           </div>
@@ -190,11 +190,11 @@ export function MetricTile({ label, value, uom, tone = 'slate', sub }: {
   }[tone];
   return (
     <div className={clsx('rounded-lg border px-3 py-2', t)}>
-      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="text-caption font-medium uppercase tracking-wide text-slate-500">{label}</p>
       <p className="mt-0.5 text-lg font-bold tabular-nums text-slate-900">
         {value} {uom && <span className="text-xs font-semibold text-slate-400">{uom}</span>}
       </p>
-      {sub && <p className="text-[11px] text-slate-500">{sub}</p>}
+      {sub && <p className="text-caption text-slate-500">{sub}</p>}
     </div>
   );
 }

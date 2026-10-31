@@ -10,12 +10,12 @@ export function DailyProductionPlansPage() {
     defaultSort={{ key: 'plan_date', dir: 'desc' }}
     columns={[
       { key: 'plan_no', header: 'Plan no', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.plan_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-small font-medium text-brand-700">{r.plan_no}</span> },
       { key: 'plan_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.plan_date) },
       { key: 'po_prod_no', header: 'Work order' },
       { key: 'style_code', header: 'Style',
         render: (r: any) => <div><p className="font-medium">{r.style_code}</p>
-          <p className="text-[11px] text-slate-500">{r.style_name}</p></div> },
+          <p className="text-caption text-slate-500">{r.style_name}</p></div> },
       { key: 'line_name', header: 'Line',
         render: (r: any) => r.line_name ? <Badge tone="indigo">{r.line_name}</Badge> : '—' },
       { key: 'shift_name', header: 'Shift',
@@ -69,7 +69,7 @@ export function DailyOutputsPage() {
     defaultSort={{ key: 'output_date', dir: 'desc' }}
     columns={[
       { key: 'output_no', header: 'Output no', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.output_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-small font-medium text-brand-700">{r.output_no}</span> },
       { key: 'output_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.output_date) },
       { key: 'po_prod_no', header: 'Work order' },
       { key: 'style_code', header: 'Style' },

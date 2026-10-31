@@ -208,7 +208,7 @@ function jobTitle(j: { io_no: string | null; buyer_name?: string | null; buyer_p
   return (
     <>
       <span>{j.io_no ?? 'No job'}</span>
-      {j.order_type && <span className="ml-1 rounded bg-white/70 px-1 text-[10px] font-semibold text-slate-500">{j.order_type}</span>}
+      {j.order_type && <span className="ml-1 rounded bg-white/70 px-1 text-micro font-semibold text-slate-500">{j.order_type}</span>}
       {j.buyer_name && <span className="font-medium text-slate-600"> — {j.buyer_name}</span>}
       {j.buyer_po_no && <span className="font-medium text-slate-600"> (PO {j.buyer_po_no})</span>}
       {!!j.style_codes?.length && <span className="font-medium text-slate-600"> · Style: {j.style_codes.join(', ')}</span>}
@@ -288,12 +288,12 @@ export function ProcessDcPage() {
           <SearchInput value={q} onChange={setQ} placeholder="DC no or bundle no / barcode…" className="w-72" />
           <div className="flex flex-wrap gap-1.5">
             <button onClick={() => setStatusFilter('')}
-              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusFilter === '' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600'}`}>
+              className={`rounded-full px-2.5 py-1 text-caption font-semibold ${statusFilter === '' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600'}`}>
               All {rows.length}
             </button>
             {STATUSES.map((s) => (
               <button key={s} onClick={() => setStatusFilter(s === statusFilter ? '' : s)}
-                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusFilter === s ? 'ring-2 ring-brand-500' : ''}`}>
+                className={`rounded-full px-2.5 py-1 text-caption font-semibold ${statusFilter === s ? 'ring-2 ring-brand-500' : ''}`}>
                 <StatusChip value={s} /> {statusFilter ? '' : counts[s] ?? 0}
               </button>
             ))}
@@ -306,13 +306,13 @@ export function ProcessDcPage() {
           emptyTitle="No DCs yet"
           emptyMessage="Create a DC and add the jobs / bundles going to the contractor."
           columns={[
-            { key: 'challan_no', header: 'DC no', render: (r: any) => <span className="tabular-nums text-[12px] font-semibold text-brand-700">{r.challan_no}</span> },
+            { key: 'challan_no', header: 'DC no', render: (r: any) => <span className="tabular-nums text-small font-semibold text-brand-700">{r.challan_no}</span> },
             { key: 'challan_date', header: 'Date', render: (r: any) => fmtDate(r.challan_date) },
             { key: 'stage_name', header: 'To process', render: (r: any) => r.stage_name ? <Badge tone="violet">{r.stage_name}</Badge> : '—' },
             {
               key: 'vendor_name', header: 'Contractor / unit', render: (r: any) => (
                 <span>{r.vendor_name}{r.is_contractor ? <Badge tone="amber" className="ml-1">In-house</Badge> : null}{r.unit_id ? <Badge tone="blue" className="ml-1">In-house unit</Badge> : null}
-                  {r.operations && <span className="block text-[11px] text-slate-400">{r.operations}</span>}</span>
+                  {r.operations && <span className="block text-caption text-slate-400">{r.operations}</span>}</span>
               ),
             },
             {
@@ -356,7 +356,7 @@ function SummaryTiles({ tiles }: { tiles: { label: string; value: string; icon: 
         <div key={t.label} className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 ${t.tone}`}>
           <span className="opacity-80">{t.icon}</span>
           <div>
-            <p className="text-[11px] font-medium opacity-80">{t.label}</p>
+            <p className="text-caption font-medium opacity-80">{t.label}</p>
             <p className="text-xl font-bold">{t.value}</p>
           </div>
         </div>
@@ -742,7 +742,7 @@ function DcEditor({ id, stages, onClose, onSaved }: {
               <SearchInput value={opQ} onChange={setOpQ} placeholder="Search operation…" className="w-56" />
               {Object.keys(opSel).map((oid) => {
                 const o = ops.find((x) => String(x.id) === String(oid));
-                return o ? <span key={oid} className="inline-flex items-center gap-1 rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-semibold text-brand-800">
+                return o ? <span key={oid} className="inline-flex items-center gap-1 rounded-full bg-brand-100 px-2 py-0.5 text-caption font-semibold text-brand-800">
                   {o.op_name}<button onClick={() => toggleOp(o)} aria-label={`Remove ${o.op_name}`}><X size={11} /></button></span> : null;
               })}
             </div>
@@ -759,7 +759,7 @@ function DcEditor({ id, stages, onClose, onSaved }: {
                 <label key={o.id} className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs ${on ? 'border-brand-300 bg-brand-50' : 'border-slate-200 bg-white'} ${offCard && !on ? 'opacity-50' : ''}`}
                   title={offCard ? 'Not on the job\'s locked rate card — revise the card to add it' : undefined}>
                   <input type="checkbox" checked={on} disabled={offCard && !on} onChange={() => toggleOp(o)} />
-                  <span className="flex-1 font-medium text-slate-700">{o.op_name}{o.in_job_card && <span className={`ml-1 rounded px-1 text-[10px] font-semibold ${cardLocked ? 'bg-emerald-100 text-emerald-700' : 'bg-violet-100 text-violet-700'}`} title={cardLocked ? `Locked production rate (rev ${cardLocked.rev})` : "On this job's rate card"}>{cardLocked ? 'locked' : 'job'}</span>}</span>
+                  <span className="flex-1 font-medium text-slate-700">{o.op_name}{o.in_job_card && <span className={`ml-1 rounded px-1 text-micro font-semibold ${cardLocked ? 'bg-emerald-100 text-emerald-700' : 'bg-violet-100 text-violet-700'}`} title={cardLocked ? `Locked production rate (rev ${cardLocked.rev})` : "On this job's rate card"}>{cardLocked ? 'locked' : 'job'}</span>}</span>
                   {on ? (
                     <input type="number" min={0} step="0.01" value={rateLocked ? String(o.rate) : opSel[o.id]} title={rateLocked ? (cardLocked && o.in_job_card ? 'Locked production rate' : 'Rate master — fixed') : '₹ / PCS'} disabled={rateLocked}
                       onChange={(e) => setOpSel((cur) => ({ ...cur, [o.id]: e.target.value }))}
@@ -776,7 +776,7 @@ function DcEditor({ id, stages, onClose, onSaved }: {
 
       {/* Toolbar */}
       <div className="mt-5 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-1.5">
-        <h3 className="mr-auto text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Jobs & bundles</h3>
+        <h3 className="mr-auto text-small font-semibold uppercase tracking-wider text-slate-500">Jobs & bundles</h3>
         <Button size="sm" variant="secondary" disabled={!head.stage_id} onClick={() => setPicker('import')}>
           <FileSpreadsheet size={13} className="inline mr-1" />Import from Excel
         </Button>
@@ -1228,7 +1228,7 @@ function BundlePicker({ stage, excluded, fromLineId, onClose, onAdd }: { stage: 
         <div className="mb-2 flex flex-wrap gap-1">
           {['', ...sizesShown].map((sz) => (
             <button key={sz || 'all'} onClick={() => setFilters({ ...filters, size: sz })}
-              className={`rounded px-2 py-0.5 text-[11px] font-semibold border ${filters.size === sz ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200'}`}>
+              className={`rounded px-2 py-0.5 text-caption font-semibold border ${filters.size === sz ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200'}`}>
               {sz || 'All sizes'}
             </button>
           ))}
@@ -1303,7 +1303,7 @@ function SizeColorMatrix({ rows }: { rows: { color_name: string; size_code: stri
           </tr>
         </tbody>
       </table>
-      <p className="px-3 py-1 text-[10px] text-slate-400">(n) = number of bundles</p>
+      <p className="px-3 py-1 text-micro text-slate-400">(n) = number of bundles</p>
     </div>
   );
 }
@@ -1420,7 +1420,7 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
         ]} />
       </FormSection>
 
-      <h3 className="mt-5 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Jobs & bundles</h3>
+      <h3 className="mt-5 border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Jobs & bundles</h3>
       <div className="mt-3 space-y-3">
         {jobs.map((j, ji) => {
           const m = jobMeta.get(j.key) ?? { io_no: j.key };
@@ -1490,7 +1490,7 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
 
       {dc.receipts.length > 0 && (
         <div className="mt-5">
-          <h3 className="mb-2.5 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Process inwards against this DC</h3>
+          <h3 className="mb-2.5 border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Process inwards against this DC</h3>
           <table className="w-full text-xs">
             <thead className="bg-slate-50 text-slate-500"><tr>
               <th className="px-2 py-1 text-left">Inward no</th><th className="px-2 py-1 text-left">Date</th>
@@ -1513,7 +1513,7 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
                   <td className="px-2 py-1">
                     {num(r.received_qty) > 0 ? <Badge tone={r.qc_status === 'ACCEPTED' ? 'green' : r.qc_status === 'REJECTED' ? 'red' : 'amber'}>{r.qc_status ?? 'ACCEPTED'}</Badge> : '—'}
                     {num(r.received_qty) > 0 && !r.contractor_bill_id && (
-                      <button className="ml-1 text-[11px] font-semibold text-brand-700 hover:underline" id={`dc-qc-${r.id}`} onClick={() => setQcFor({ ...r, status: r.qc_status === 'ACCEPTED' ? 'REJECTED' : 'ACCEPTED', remarks: '' })}>
+                      <button className="ml-1 text-caption font-semibold text-brand-700 hover:underline" id={`dc-qc-${r.id}`} onClick={() => setQcFor({ ...r, status: r.qc_status === 'ACCEPTED' ? 'REJECTED' : 'ACCEPTED', remarks: '' })}>
                         {r.qc_status === 'ACCEPTED' ? 'QC reject' : 'QC accept'}
                       </button>
                     )}
@@ -1597,7 +1597,7 @@ function ReturnModal({ dc, onClose, onDone }: { dc: any; onClose: () => void; on
         <Input label="Reason" required id="dc-return-reason" value={reason} onChange={(e) => setReason(e.target.value)} />
       </FormSection>
       <div className="mb-2 mt-4 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-1.5">
-        <h3 className="mr-auto text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Bundles with the contractor</h3>
+        <h3 className="mr-auto text-small font-semibold uppercase tracking-wider text-slate-500">Bundles with the contractor</h3>
         <Button size="sm" variant="secondary" onClick={() => setQty(Object.fromEntries(open.map((l) => [l.id, num(l.pending_qty)])))}>All pending</Button>
       </div>
       <table className="w-full text-xs">
@@ -1699,7 +1699,7 @@ function DcAudit({ dcId }: { dcId: number }) {
 }
 
 function Info({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div><p className="text-[11px] uppercase tracking-wide text-slate-400">{label}</p><div className="font-medium text-slate-800">{children}</div></div>;
+  return <div><p className="text-caption uppercase tracking-wide text-slate-400">{label}</p><div className="font-medium text-slate-800">{children}</div></div>;
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -1884,7 +1884,7 @@ function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void
 
       {/* Toolbar */}
       <div className="mt-5 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-1.5">
-        <h3 className="mr-auto text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Jobs & bundles</h3>
+        <h3 className="mr-auto text-small font-semibold uppercase tracking-wider text-slate-500">Jobs & bundles</h3>
         <label className="flex items-center gap-1 text-xs text-slate-600">Process completed ({filtering ? 'shown' : 'all'} bundles)
           <select className="input h-8 w-48 px-1" id="in-op-all" value="__" onChange={(e) => { if (e.target.value !== '__') setAllOps(e.target.value); }}>
             <option value="__">— set for all —</option>
@@ -2132,10 +2132,10 @@ export function ProcessDcReceiptsPage() {
         </div>
         <DataTable data={rows} loading={loading} emptyTitle="No inwards yet"
           columns={[
-            { key: 'receipt_no', header: 'Inward no', render: (r: any) => <span className="tabular-nums text-[12px] font-semibold text-brand-700">{r.receipt_no}</span> },
+            { key: 'receipt_no', header: 'Inward no', render: (r: any) => <span className="tabular-nums text-small font-semibold text-brand-700">{r.receipt_no}</span> },
             { key: 'receipt_date', header: 'Date', render: (r: any) => fmtDate(r.receipt_date) },
             { key: 'challan_no', header: 'Source DC', render: (r: any) => <Link className="tabular-nums text-brand-700 hover:underline" to={`/production/jobwork-challans?dc=${r.challan_id}`}>{r.challan_no}</Link> },
-            { key: 'party_dc_no', header: 'Party DC / Ref', render: (r: any) => <span className="text-xs">{r.party_dc_no ?? '—'}{r.ref_no ? ` · ${r.ref_no}` : ''}{r.inward_group_no ? <span className="block tabular-nums text-[10px] text-slate-400">{r.inward_group_no}</span> : null}</span> },
+            { key: 'party_dc_no', header: 'Party DC / Ref', render: (r: any) => <span className="text-xs">{r.party_dc_no ?? '—'}{r.ref_no ? ` · ${r.ref_no}` : ''}{r.inward_group_no ? <span className="block tabular-nums text-micro text-slate-400">{r.inward_group_no}</span> : null}</span> },
             { key: 'stage_name', header: 'Process', render: (r: any) => r.stage_name ? <Badge tone="violet">{r.stage_name}</Badge> : '—' },
             { key: 'vendor_name', header: 'Contractor / unit' },
             { key: 'io_list', header: 'Jobs', render: (r: any) => <span className="text-xs">{r.io_list ?? '—'}</span> },
@@ -2326,7 +2326,7 @@ function PanelConversionModal({ onClose }: { onClose: () => void }) {
         </div>
       ) : (
         <>
-          <h3 className="mb-2.5 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Panel bundles</h3>
+          <h3 className="mb-2.5 border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Panel bundles</h3>
           <form onSubmit={onScan} className="mb-3 flex gap-2">
             <div className="relative flex-1">
               <ScanLine size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-brand-600" />

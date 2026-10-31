@@ -60,11 +60,11 @@ export function CostingTab({ s, refresh }: { s: any; refresh: () => void }) {
       </div>
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title="By category (approved / posted)" className="lg:col-span-1">
-          <table className="w-full text-[12.5px]" id="cost-by-category">
+          <table className="w-full text-body" id="cost-by-category">
             <tbody>
               {sum.by_category.length === 0 && <tr><td className="td text-center text-slate-400">No cost yet</td></tr>}
               {sum.by_category.map((c: any) => (
-                <tr key={c.category}><td className="td">{catLabel(c.category)}{!c.eligible && <span className="ml-1 text-[10.5px] text-slate-400">not allocatable</span>}</td>
+                <tr key={c.category}><td className="td">{catLabel(c.category)}{!c.eligible && <span className="ml-1 text-caption text-slate-400">not allocatable</span>}</td>
                   <td className="td text-right tabular-nums">{inr(c.amount, '₹ 0')}</td></tr>
               ))}
               <tr className="bg-slate-50 font-semibold"><td className="td">Total</td><td className="td text-right tabular-nums">{inr(sum.cumulative_cost, '₹ 0')}</td></tr>
@@ -75,7 +75,7 @@ export function CostingTab({ s, refresh }: { s: any; refresh: () => void }) {
         </Card>
         <Card title="Daily cost" className="lg:col-span-2">
           <div className="flex h-32 items-end gap-1 p-4">
-            {sum.daily.length === 0 && <p className="w-full text-center text-[12px] text-slate-400">No approved / posted cost yet</p>}
+            {sum.daily.length === 0 && <p className="w-full text-center text-small text-slate-400">No approved / posted cost yet</p>}
             {sum.daily.map((d: any) => {
               const max = Math.max(1, ...sum.daily.map((x: any) => Math.abs(x.amount)));
               return <div key={d.date} title={`${fmtDate(d.date)}: ${inr(d.amount)}`} className={clsx('min-w-[6px] flex-1 rounded-t', d.amount < 0 ? 'bg-red-400' : 'bg-brand-500')} style={{ height: `${Math.max(4, (Math.abs(d.amount) / max) * 100)}%` }} />;
@@ -90,7 +90,7 @@ export function CostingTab({ s, refresh }: { s: any; refresh: () => void }) {
           {can('SAMPLE.COST') && <Button size="sm" id="cost-add" onClick={() => setEditing({})}><Plus size={13} />Add cost</Button>}
         </div>}>
         {sel.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2 text-[12.5px]" id="cost-bulk">
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2 text-body" id="cost-bulk">
             <b>{sel.length} selected</b>
             {can('SAMPLE.COST') && allIn(['DRAFT']) && <Button size="sm" variant="secondary" loading={busy} onClick={() => void bulk('submit')}>Submit</Button>}
             {can('SAMPLE.COST_APPROVE') && allIn(['SUBMITTED']) && <Button size="sm" variant="secondary" loading={busy} onClick={() => void bulk('approve')}>Approve</Button>}
@@ -107,16 +107,16 @@ export function CostingTab({ s, refresh }: { s: any; refresh: () => void }) {
               {rows.map((c) => (
                 <tr key={c.id} className={clsx('row-hover align-top', ['REJECTED', 'REVERSED'].includes(c.status) && 'opacity-60')} data-cost={c.id}>
                   <td className="td">{['DRAFT', 'SUBMITTED', 'APPROVED'].includes(c.status) && <input type="checkbox" checked={sel.includes(c.id)} onChange={(e) => setSel(e.target.checked ? [...sel, c.id] : sel.filter((x) => x !== c.id))} />}</td>
-                  <td className="td whitespace-nowrap text-[12px]">{fmtDate(c.cost_date)}</td>
-                  <td className="td text-[12px]">{catLabel(c.category)}{c.basis !== 'ACTUAL' && <p className="text-[10.5px] text-amber-700">{c.basis.toLowerCase()}</p>}</td>
-                  <td className="td max-w-[320px] text-[12px]"><p>{c.description}</p>
-                    <p className="text-[11px] text-slate-500">{c.source_type === 'GENERAL_PURCHASE' ? `Purchase ${c.source_ref ?? ''}` : c.source_type === 'PROCESS_LABOUR' ? `Stage labour · ${c.stage_name ?? ''}` : c.source_type === 'REVERSAL' ? 'Reversal entry' : c.source_ref ?? ''}
+                  <td className="td whitespace-nowrap text-small">{fmtDate(c.cost_date)}</td>
+                  <td className="td text-small">{catLabel(c.category)}{c.basis !== 'ACTUAL' && <p className="text-caption text-amber-700">{c.basis.toLowerCase()}</p>}</td>
+                  <td className="td max-w-[320px] text-small"><p>{c.description}</p>
+                    <p className="text-caption text-slate-500">{c.source_type === 'GENERAL_PURCHASE' ? `Purchase ${c.source_ref ?? ''}` : c.source_type === 'PROCESS_LABOUR' ? `Stage labour · ${c.stage_name ?? ''}` : c.source_type === 'REVERSAL' ? 'Reversal entry' : c.source_ref ?? ''}
                       {c.stage_name && c.source_type === 'MANUAL' ? ` · ${c.stage_name}` : ''}{c.currency_code && c.currency_code !== 'INR' ? ` · ${c.currency_code} ${fmtNumber(c.amount_fc, 2)} @ ${Number(c.exchange_rate)}` : ''}</p>
-                    {c.reason && <p className="text-[11px] text-red-600">{c.status === 'REVERSED' ? 'Reversed' : c.reversal_of_id ? '' : 'Rejected'}{c.reversal_of_id ? '' : ': '}{c.reversal_of_id ? '' : c.reason}</p>}</td>
-                  <td className="td text-right text-[12px] tabular-nums">{c.qty != null ? `${fmtNumber(c.qty, 2)} ${c.uom_code ?? ''} × ${fmtNumber(c.rate, 2)}` : '—'}</td>
+                    {c.reason && <p className="text-caption text-red-600">{c.status === 'REVERSED' ? 'Reversed' : c.reversal_of_id ? '' : 'Rejected'}{c.reversal_of_id ? '' : ': '}{c.reversal_of_id ? '' : c.reason}</p>}</td>
+                  <td className="td text-right text-small tabular-nums">{c.qty != null ? `${fmtNumber(c.qty, 2)} ${c.uom_code ?? ''} × ${fmtNumber(c.rate, 2)}` : '—'}</td>
                   <td className={clsx('td text-right tabular-nums font-semibold', Number(c.amount) < 0 && 'text-red-600')}>{fmtNumber(c.amount, 2)}</td>
                   <td className="td"><Badge tone={COST_STATUS_TONE[c.status] ?? 'slate'}>{c.status.toLowerCase()}</Badge></td>
-                  <td className="td text-[11px] text-slate-500">{c.created_by_name}{c.posted_by_name ? <p>posted {c.posted_by_name}</p> : c.approved_by_name ? <p>appr. {c.approved_by_name}</p> : null}</td>
+                  <td className="td text-caption text-slate-500">{c.created_by_name}{c.posted_by_name ? <p>posted {c.posted_by_name}</p> : c.approved_by_name ? <p>appr. {c.approved_by_name}</p> : null}</td>
                   <td className="td whitespace-nowrap text-right">
                     {can('SAMPLE.COST') && ['DRAFT', 'SUBMITTED'].includes(c.status) && <Button size="sm" variant="ghost" onClick={() => setEditing(c)}>Edit</Button>}
                     {can('SAMPLE.COST') && c.status === 'DRAFT' && <><Button size="sm" variant="ghost" onClick={() => void act(c, 'submit')}>Submit</Button><Button size="sm" variant="ghost" className="text-red-600" onClick={() => void del(c)}>Delete</Button></>}
@@ -189,7 +189,7 @@ function CostModal({ s, c, onClose, onDone }: { s: any; c: any; onClose: () => v
         <Select label="Currency" placeholder="INR" options={(currencies.data ?? []).map((x) => ({ value: x.id, label: String(x.code) }))} value={v.currency_id} disabled={linked} onChange={(e) => set('currency_id', e.target.value)} />
         {foreign && <Input label={`₹ per 1 ${cur?.code}`} type="number" min={0} step="any" required value={v.exchange_rate} disabled={linked} onChange={(e) => set('exchange_rate', e.target.value)} />}
         <Input label="Source document" value={v.source_ref} placeholder="Bill / DC / AWB no" onChange={(e) => set('source_ref', e.target.value)} className={foreign ? '' : 'sm:col-span-2'} />
-        <p className="self-end text-right text-[13px] font-semibold text-slate-700 sm:col-span-4">= {inr(inrAmt, '₹ 0')}</p>
+        <p className="self-end text-right text-body font-semibold text-slate-700 sm:col-span-4">= {inr(inrAmt, '₹ 0')}</p>
       </div>
     </Modal>
   );
@@ -213,7 +213,7 @@ function ImportModal({ s, onClose, onDone }: { s: any; onClose: () => void; onDo
     <Modal open onClose={onClose} title="Costs from purchases booked to this sample" subtitle="General purchase lines with allocation Sample = this sample. Each line can be taken once." size="xl"
       footer={<><button className="btn-secondary" onClick={onClose}>Close</button><Button loading={busy} id="import-save" disabled={!chosen.length} onClick={() => void save()}>Import {chosen.length || ''}</Button></>}>
       {q.isLoading ? <LoadingBlock rows={3} /> : !rows.length ? (
-        <p className="py-6 text-center text-[13px] text-slate-500">No purchase is booked to {s.sample_no}. In General Purchase, set a line's allocation to <b>Sample</b> and pick this sample.</p>
+        <p className="py-6 text-center text-body text-slate-500">No purchase is booked to {s.sample_no}. In General Purchase, set a line's allocation to <b>Sample</b> and pick this sample.</p>
       ) : (
         <table className="w-full" id="import-list">
           <thead><tr><th className="th w-8" /><th className="th">Purchase</th><th className="th">Item</th><th className="th text-right">Qty × rate</th><th className="th text-right">Amount ₹</th><th className="th">Category</th><th className="th">State</th></tr></thead>
@@ -221,13 +221,13 @@ function ImportModal({ s, onClose, onDone }: { s: any; onClose: () => void; onDo
             {rows.map((r) => (
               <tr key={r.line_id} className={clsx('align-top', !r.importable && 'opacity-60')}>
                 <td className="td">{r.importable && <input type="checkbox" checked={pick[r.line_id] !== undefined} onChange={(e) => { const n = { ...pick }; if (e.target.checked) n[r.line_id] = r.suggested_category; else delete n[r.line_id]; setPick(n); }} />}</td>
-                <td className="td text-[12px]"><p className="tabular-nums">{r.doc_no}</p><p className="text-slate-500">{fmtDate(r.purchase_date)} · {r.supplier_name}</p></td>
-                <td className="td text-[12px]">{r.item_description}<p className="text-slate-500">{String(r.material_type).toLowerCase()}{r.expense_head ? ` · ${r.expense_head}` : ''}</p></td>
-                <td className="td text-right text-[12px] tabular-nums">{fmtNumber(r.qty, 2)} {r.uom_code} × {fmtNumber(r.rate, 2)}</td>
+                <td className="td text-small"><p className="tabular-nums">{r.doc_no}</p><p className="text-slate-500">{fmtDate(r.purchase_date)} · {r.supplier_name}</p></td>
+                <td className="td text-small">{r.item_description}<p className="text-slate-500">{String(r.material_type).toLowerCase()}{r.expense_head ? ` · ${r.expense_head}` : ''}</p></td>
+                <td className="td text-right text-small tabular-nums">{fmtNumber(r.qty, 2)} {r.uom_code} × {fmtNumber(r.rate, 2)}</td>
                 <td className="td text-right tabular-nums">{fmtNumber(r.amount_inr, 2)}</td>
-                <td className="td">{r.importable ? <select className="input h-8 py-0 text-[12px]" value={pick[r.line_id] ?? r.suggested_category} disabled={pick[r.line_id] === undefined}
+                <td className="td">{r.importable ? <select className="input h-8 py-0 text-small" value={pick[r.line_id] ?? r.suggested_category} disabled={pick[r.line_id] === undefined}
                   onChange={(e) => setPick({ ...pick, [r.line_id]: e.target.value })}>{COST_CATEGORIES.map((x) => <option key={x.value} value={x.value}>{x.label}</option>)}</select> : catLabel(r.suggested_category)}</td>
-                <td className="td text-[12px]">{r.cost_id ? <Badge tone="green">in cost ({String(r.cost_status).toLowerCase()})</Badge> : !['APPROVED', 'POSTED'].includes(r.approval_state) ? <Badge tone="amber">purchase {String(r.approval_state ?? 'draft').toLowerCase()}</Badge> : <Badge tone="blue">ready</Badge>}</td>
+                <td className="td text-small">{r.cost_id ? <Badge tone="green">in cost ({String(r.cost_status).toLowerCase()})</Badge> : !['APPROVED', 'POSTED'].includes(r.approval_state) ? <Badge tone="amber">purchase {String(r.approval_state ?? 'draft').toLowerCase()}</Badge> : <Badge tone="blue">ready</Badge>}</td>
               </tr>
             ))}
           </tbody>
@@ -269,13 +269,13 @@ export function AllocationTab({ s, refresh }: { s: any; refresh: () => void }) {
         </div>
       </div>
       {!['APPROVED', 'COMPLETED'].includes(s.status) && canAllocate && bal.available > 0 && (
-        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-800">The buyer has not approved this sample yet — an allocation now needs an override reason.</p>
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-body text-amber-800">The buyer has not approved this sample yet — an allocation now needs an override reason.</p>
       )}
-      <p className="text-[12px] text-slate-500">Accounting mode: <b>analytical</b> — the allocation appears as "Sample dev" in the order's Budget vs Actuals / OCR; the sample cost ledger stays the source and no journal is posted, so the expense is never counted twice.</p>
-      {(q.data?.data ?? []).length === 0 && <div className="card p-8 text-center text-[13px] text-slate-500">No allocation yet.</div>}
+      <p className="text-small text-slate-500">Accounting mode: <b>analytical</b> — the allocation appears as "Sample dev" in the order's Budget vs Actuals / OCR; the sample cost ledger stays the source and no journal is posted, so the expense is never counted twice.</p>
+      {(q.data?.data ?? []).length === 0 && <div className="card p-8 text-center text-body text-slate-500">No allocation yet.</div>}
       {(q.data?.data ?? []).map((b) => (
         <Card key={b.id} title={<span className="flex flex-wrap items-center gap-2"><span className="tabular-nums">{b.batch_no}</span><Badge tone={ALLOC_STATUS_TONE[b.status] ?? 'slate'}>{b.status.replace(/_/g, ' ').toLowerCase()}</Badge>
-          <span className="text-[12px] font-normal text-slate-500">{ALLOC_METHODS.find((x) => x.value === b.method)?.label} · {inr(b.total_allocated)} · {fmtDateTime(b.created_at)} {b.created_by_name}</span></span>}
+          <span className="text-small font-normal text-slate-500">{ALLOC_METHODS.find((x) => x.value === b.method)?.label} · {inr(b.total_allocated)} · {fmtDateTime(b.created_at)} {b.created_by_name}</span></span>}
           subtitle={<>{b.reason}{b.override_reason && <span className="text-amber-700"> · Override: {b.override_reason}</span>}{b.reject_reason && <span className="text-red-600"> · {b.reject_reason}</span>}</>}
           actions={<div className="flex flex-wrap gap-1" data-batch={b.batch_no}>
             {can('SAMPLE.ALLOCATE') && b.status === 'DRAFT' && <><Button size="sm" variant="secondary" onClick={() => setWizard(b)}>Edit</Button>
@@ -291,11 +291,11 @@ export function AllocationTab({ s, refresh }: { s: any; refresh: () => void }) {
             <tbody>
               {b.lines.map((l: any) => (
                 <tr key={l.id} className={clsx(l.status === 'REVERSED' && 'opacity-60')}>
-                  <td className="td"><Link className="tabular-nums text-[12px] text-brand-700 hover:underline" to={`/sales/orders/${l.so_id}`}>{l.so_no}</Link>{Number(l.is_override) ? <Badge tone="amber" className="ml-1">override</Badge> : null}</td>
-                  <td className="td text-[12px]">{l.buyer_name}{l.buyer_po_no ? ` · ${l.buyer_po_no}` : ''}</td>
-                  <td className="td text-right text-[12px] tabular-nums">{fmtNumber(l.basis_pct, 2)}%{l.basis_qty != null ? <p className="text-slate-500">{fmtNumber(l.basis_qty)} pcs · {inr(l.basis_value, '—')}</p> : null}</td>
+                  <td className="td"><Link className="tabular-nums text-small text-brand-700 hover:underline" to={`/sales/orders/${l.so_id}`}>{l.so_no}</Link>{Number(l.is_override) ? <Badge tone="amber" className="ml-1">override</Badge> : null}</td>
+                  <td className="td text-small">{l.buyer_name}{l.buyer_po_no ? ` · ${l.buyer_po_no}` : ''}</td>
+                  <td className="td text-right text-small tabular-nums">{fmtNumber(l.basis_pct, 2)}%{l.basis_qty != null ? <p className="text-slate-500">{fmtNumber(l.basis_qty)} pcs · {inr(l.basis_value, '—')}</p> : null}</td>
                   <td className="td text-right tabular-nums font-semibold">{fmtNumber(l.allocated_amount, 2)}</td>
-                  <td className="td text-[12px]">{l.status === 'REVERSED' ? <span className="text-red-600">reversed {fmtDate(l.reversed_at)} · {l.reverse_reason}</span> : 'active'}</td>
+                  <td className="td text-small">{l.status === 'REVERSED' ? <span className="text-red-600">reversed {fmtDate(l.reversed_at)} · {l.reverse_reason}</span> : 'active'}</td>
                   <td className="td text-right">{can('SAMPLE.ALLOC_APPROVE') && l.status === 'ACTIVE' && ['POSTED', 'PARTIALLY_REVERSED'].includes(b.status) && b.lines.filter((x: any) => x.status === 'ACTIVE').length > 1 &&
                     <Button size="sm" variant="ghost" className="text-red-600" onClick={() => setReasonFor({ b, action: 'reverse', lineIds: [l.id] })}>Reverse</Button>}</td>
                 </tr>
@@ -360,11 +360,11 @@ function AllocationWizard({ s, batch, onClose, onDone }: { s: any; batch: any | 
         <Button loading={busy} id="alloc-save-submit" disabled={!preview} onClick={() => void save(true)}>Send for approval</Button></>}>
       {el.isLoading ? <LoadingBlock rows={4} /> : d && (
         <div className="space-y-3" id="alloc-wizard">
-          <div className="grid grid-cols-2 gap-2 text-[12.5px] sm:grid-cols-4">
-            <div className="rounded border border-slate-200 p-2">Posted, allocatable <b className="block text-[15px]">{inr(d.balance.eligible, '₹ 0')}</b></div>
-            <div className="rounded border border-slate-200 p-2">Already allocated <b className="block text-[15px]">{inr(d.balance.allocated, '₹ 0')}</b></div>
-            <div className="rounded border border-slate-200 p-2">Awaiting approval <b className="block text-[15px]">{inr(d.balance.reserved, '₹ 0')}</b></div>
-            <div className="rounded border border-brand-200 bg-brand-50 p-2">Free to allocate <b className="block text-[15px]" id="alloc-available">{inr(d.balance.available, '₹ 0')}</b></div>
+          <div className="grid grid-cols-2 gap-2 text-body sm:grid-cols-4">
+            <div className="rounded border border-slate-200 p-2">Posted, allocatable <b className="block text-title">{inr(d.balance.eligible, '₹ 0')}</b></div>
+            <div className="rounded border border-slate-200 p-2">Already allocated <b className="block text-title">{inr(d.balance.allocated, '₹ 0')}</b></div>
+            <div className="rounded border border-slate-200 p-2">Awaiting approval <b className="block text-title">{inr(d.balance.reserved, '₹ 0')}</b></div>
+            <div className="rounded border border-brand-200 bg-brand-50 p-2">Free to allocate <b className="block text-title" id="alloc-available">{inr(d.balance.available, '₹ 0')}</b></div>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <Select label="Method" id="alloc-method" value={method} onChange={(e) => { setMethod(e.target.value); setPreview(null); }} options={ALLOC_METHODS.map((m) => ({ value: m.value, label: m.label }))}
@@ -375,9 +375,9 @@ function AllocationWizard({ s, batch, onClose, onDone }: { s: any; batch: any | 
           </div>
           <div>
             <div className="mb-1 flex items-center justify-between">
-              <p className="text-[12px] font-semibold text-slate-600">Confirmed orders of {s.buyer_name} with style {s.style_code}</p>
+              <p className="text-small font-semibold text-slate-600">Confirmed orders of {s.buyer_name} with style {s.style_code}</p>
               <div className="flex items-center gap-1">
-                <input className="input h-8 w-56 py-0 text-[12px]" placeholder="Other order (SO / PO no) — override" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && setTerm(search.trim())} />
+                <input className="input h-8 w-56 py-0 text-small" placeholder="Other order (SO / PO no) — override" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && setTerm(search.trim())} />
                 <Button size="sm" variant="secondary" onClick={() => setTerm(search.trim())}><Search size={13} /></Button>
               </div>
             </div>
@@ -385,17 +385,17 @@ function AllocationWizard({ s, batch, onClose, onDone }: { s: any; batch: any | 
               <table className="w-full" id="alloc-orders">
                 <thead className="sticky top-0 bg-white"><tr><th className="th w-8" /><th className="th">Order</th><th className="th">Buyer · PO · ship</th><th className="th text-right">Style qty</th><th className="th text-right">Value ₹</th><th className="th text-right">Already from this sample</th><th className="th text-right w-32">{method === 'PERCENT' ? '%' : method === 'MANUAL' ? 'Amount ₹' : ''}</th></tr></thead>
                 <tbody>
-                  {!orders.length && <tr><td className="td py-6 text-center text-[12px] text-slate-400" colSpan={7}>No confirmed (approved / closed) order of this buyer has this style yet. Search another order to allocate on override.</td></tr>}
+                  {!orders.length && <tr><td className="td py-6 text-center text-small text-slate-400" colSpan={7}>No confirmed (approved / closed) order of this buyer has this style yet. Search another order to allocate on override.</td></tr>}
                   {orders.map((o: any) => (
                     <tr key={o.so_id} className={clsx(lines[o.so_id] && 'bg-brand-50/40')}>
                       <td className="td"><input type="checkbox" data-so={o.so_no} checked={!!lines[o.so_id]} onChange={(e) => toggle(o, e.target.checked)} /></td>
-                      <td className="td tabular-nums text-[12px]">{o.so_no}{o.override && <Badge tone="amber" className="ml-1">override</Badge>}<p className="font-sans text-[11px] text-slate-400">{String(o.approval_state).toLowerCase()}</p></td>
-                      <td className="td text-[12px]">{o.buyer_name}{o.buyer_po_no ? ` · ${o.buyer_po_no}` : ''}<p className="text-slate-400">{fmtDate(o.ship_date)}</p></td>
-                      <td className="td text-right text-[12px] tabular-nums">{fmtNumber(o.basis_qty)}</td>
-                      <td className="td text-right text-[12px] tabular-nums">{o.basis_value == null ? <span className="text-amber-700">no ₹ rate</span> : fmtNumber(o.basis_value, 0)}</td>
-                      <td className="td text-right text-[12px] tabular-nums">{o.already_allocated ? fmtNumber(o.already_allocated, 2) : '—'}</td>
-                      <td className="td text-right">{lines[o.so_id] && method === 'PERCENT' && <input className="input h-8 w-24 py-0 text-right text-[12px]" type="number" min={0} max={100} step="0.01" data-pct={o.so_no} value={lines[o.so_id].pct} onChange={(e) => setLine(o.so_id, 'pct', e.target.value)} />}
-                        {lines[o.so_id] && method === 'MANUAL' && <input className="input h-8 w-28 py-0 text-right text-[12px]" type="number" min={0} step="0.01" data-amt={o.so_no} value={lines[o.so_id].manual_amount} onChange={(e) => setLine(o.so_id, 'manual_amount', e.target.value)} />}</td>
+                      <td className="td tabular-nums text-small">{o.so_no}{o.override && <Badge tone="amber" className="ml-1">override</Badge>}<p className="font-sans text-caption text-slate-400">{String(o.approval_state).toLowerCase()}</p></td>
+                      <td className="td text-small">{o.buyer_name}{o.buyer_po_no ? ` · ${o.buyer_po_no}` : ''}<p className="text-slate-400">{fmtDate(o.ship_date)}</p></td>
+                      <td className="td text-right text-small tabular-nums">{fmtNumber(o.basis_qty)}</td>
+                      <td className="td text-right text-small tabular-nums">{o.basis_value == null ? <span className="text-amber-700">no ₹ rate</span> : fmtNumber(o.basis_value, 0)}</td>
+                      <td className="td text-right text-small tabular-nums">{o.already_allocated ? fmtNumber(o.already_allocated, 2) : '—'}</td>
+                      <td className="td text-right">{lines[o.so_id] && method === 'PERCENT' && <input className="input h-8 w-24 py-0 text-right text-small" type="number" min={0} max={100} step="0.01" data-pct={o.so_no} value={lines[o.so_id].pct} onChange={(e) => setLine(o.so_id, 'pct', e.target.value)} />}
+                        {lines[o.so_id] && method === 'MANUAL' && <input className="input h-8 w-28 py-0 text-right text-small" type="number" min={0} step="0.01" data-amt={o.so_no} value={lines[o.so_id].manual_amount} onChange={(e) => setLine(o.so_id, 'manual_amount', e.target.value)} />}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -406,11 +406,11 @@ function AllocationWizard({ s, batch, onClose, onDone }: { s: any; batch: any | 
             hint={!d.buyer_approved ? 'The sample is not buyer-approved yet' : 'An order of another buyer / without this style is included'} />}
           {preview && (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3" id="alloc-preview-box">
-              <p className="mb-1 text-[12.5px] font-semibold text-emerald-900">Split worked out by the server — total {inr(preview.total)}</p>
-              <table className="w-full text-[12.5px]"><tbody>
+              <p className="mb-1 text-body font-semibold text-emerald-900">Split worked out by the server — total {inr(preview.total)}</p>
+              <table className="w-full text-body"><tbody>
                 {preview.lines.map((l: any) => <tr key={l.so_id}><td className="py-0.5 tabular-nums">{l.so_no}</td><td className="text-right tabular-nums">{fmtNumber(l.basis_pct, 2)}%</td><td className="text-right font-semibold tabular-nums">{inr(l.allocated_amount)}</td></tr>)}
               </tbody></table>
-              {preview.warnings?.map((w: string) => <p key={w} className="mt-1 text-[12px] text-amber-800">{w}</p>)}
+              {preview.warnings?.map((w: string) => <p key={w} className="mt-1 text-small text-amber-800">{w}</p>)}
             </div>
           )}
         </div>

@@ -40,9 +40,9 @@ export function ShippingBillsPage() {
       <DataTable rows={list.data?.data ?? []} loading={list.isLoading} error={list.error} onRetry={() => void list.refetch()} rowKey={(r: any) => r.id}
         onRowClick={(r: any) => nav(`/export/shipping-bills/${r.id}`)} pagination={list.data?.pagination} onPage={setPage} emptyTitle="No shipping bills"
         columns={[
-          { key: 'sb_no', header: 'S.B. No · Date', render: (r: any) => <div><p className="tabular-nums text-[12px] font-semibold text-brand-700">{r.sb_no}</p><p className="text-[11px] text-slate-500">{fmtDate(r.sb_date)}</p></div> },
-          { key: 'port_code', header: 'Port · Mode', render: (r: any) => <span className="text-[12px]">{r.port_code ?? '—'}{r.mode ? ` · ${r.mode === 'AIR' ? 'Air' : r.mode === 'SEA' ? 'Sea' : r.mode}` : ''}</span> },
-          { key: 'invoice_no', header: 'Inv. No & Date', render: (r: any) => <div><p className="tabular-nums text-[12px]">{r.invoice_no ?? r.ci_invoice_no}</p><p className="text-[11px] text-slate-500">{fmtDate(r.invoice_date)} · {r.buyer_name ?? ''}</p></div> },
+          { key: 'sb_no', header: 'S.B. No · Date', render: (r: any) => <div><p className="tabular-nums text-small font-semibold text-brand-700">{r.sb_no}</p><p className="text-caption text-slate-500">{fmtDate(r.sb_date)}</p></div> },
+          { key: 'port_code', header: 'Port · Mode', render: (r: any) => <span className="text-small">{r.port_code ?? '—'}{r.mode ? ` · ${r.mode === 'AIR' ? 'Air' : r.mode === 'SEA' ? 'Sea' : r.mode}` : ''}</span> },
+          { key: 'invoice_no', header: 'Inv. No & Date', render: (r: any) => <div><p className="tabular-nums text-small">{r.invoice_no ?? r.ci_invoice_no}</p><p className="text-caption text-slate-500">{fmtDate(r.invoice_date)} · {r.buyer_name ?? ''}</p></div> },
           { key: 'invoice_value_fc', header: 'Inv. Value', align: 'right', render: (r: any) => `${r.currency_code ?? ''} ${fmtDecimal(r.invoice_value_fc, 2)}` },
           { key: 'exchange_rate', header: 'Ex. Rate', align: 'right', render: (r: any) => fmtDecimal(r.exchange_rate, 2) },
           { key: 'fob_inr', header: 'FOB ₹', align: 'right', render: (r: any) => fmtDecimal(r.fob_inr, 2) },
@@ -179,7 +179,7 @@ export function ShippingBillDetailPage() {
         </div>} />
       <div className="space-y-4" id="sb-form">
         <Card title="Shipping bill" actions={<div className="flex items-center gap-2" id="sb-pdf">
-          {v.sb_pdf_url && <a className="flex items-center gap-1 text-[12.5px] text-brand-700 hover:underline" id="sb-pdf-link" href={v.sb_pdf_url} target="_blank" rel="noreferrer">
+          {v.sb_pdf_url && <a className="flex items-center gap-1 text-body text-brand-700 hover:underline" id="sb-pdf-link" href={v.sb_pdf_url} target="_blank" rel="noreferrer">
             <FileText size={14} />{v.sb_pdf_name || 'Shipping bill PDF'}{v.sb_pdf_pages ? ` · ${v.sb_pdf_pages} pages` : ''}</a>}
           {v.sb_pdf_url && editable && <button type="button" className="text-slate-400 hover:text-red-600" title="Remove the PDF (saved on Save)" id="sb-pdf-remove"
             onClick={() => { setV((o: any) => ({ ...o, sb_pdf_url: null, sb_pdf_name: null, sb_pdf_pages: null })); setPdfRead(null); setPdfNote(null); }}><X size={14} /></button>}
@@ -188,7 +188,7 @@ export function ShippingBillDetailPage() {
             <input type="file" className="hidden" id="sb-pdf-file" accept=".pdf,application/pdf" disabled={pdfBusy} onChange={(e) => { const f = e.target.files?.[0]; if (f) void importPdf(f); e.target.value = ''; }} /></label>}
         </div>}>
           {pdfNote && (
-            <div id="sb-pdf-note" className={clsx('mx-4 mt-3 rounded-md border px-3 py-2 text-[12.5px]', pdfNote.parse_error || pdfNote.warnings.length ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-emerald-200 bg-emerald-50 text-emerald-900')}>
+            <div id="sb-pdf-note" className={clsx('mx-4 mt-3 rounded-md border px-3 py-2 text-body', pdfNote.parse_error || pdfNote.warnings.length ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-emerald-200 bg-emerald-50 text-emerald-900')}>
               {pdfNote.parse_error ? <p>PDF attached for reference — {pdfNote.parse_error}.</p>
                 : <p>{pdfNote.found} fields read from the PDF and filled below — check them against the PDF, correct anything wrong, then Save.</p>}
               {pdfNote.warnings.map((w) => <p key={w}>• {w}</p>)}
@@ -243,7 +243,7 @@ function BenefitGrid({ meta, v, setV, extra, setExtra, claims, lut, editable, pd
   return (
     <div className="border-t border-slate-100" id="sb-benefits">
       <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-3">
-        <p className="text-[12.5px] font-semibold text-slate-700">Export benefits <span className="font-normal text-slate-500">— each is tracked on its own (received on its own date); cash and scrip kept apart</span></p>
+        <p className="text-body font-semibold text-slate-700">Export benefits <span className="font-normal text-slate-500">— each is tracked on its own (received on its own date); cash and scrip kept apart</span></p>
         {editable && addable.length > 0 && <div className="flex items-center gap-2"><Select className="w-56" id="sb-add-benefit" value={add} placeholder="Add benefit…" options={addable.map((s) => ({ value: s.id, label: s.display_name }))} onChange={(e) => setAdd(e.target.value)} />
           <Button size="sm" variant="secondary" id="sb-add-benefit-btn" disabled={!add} onClick={() => { setExtra((o: any) => ({ ...o, [Number(add)]: { declared_amount: '', cf: {} } })); setAdd(''); }}><Plus size={13} />Add</Button></div>}
       </div>
@@ -256,24 +256,24 @@ function BenefitGrid({ meta, v, setV, extra, setExtra, claims, lut, editable, pd
             const igstLut = s.sb_field === 'igst_amount' && lut;
             return (
               <tr key={s.id} data-sb-inc={s.code} className="align-top">
-                <td className="td text-[12.5px] font-semibold">{s.display_name}<p className="text-[10.5px] font-normal text-slate-400">{s.tracking_mode === 'CASH' ? 'cash' : s.tracking_mode === 'SCRIP' ? 'scrip' : s.tracking_mode.toLowerCase()}{!s.is_active && ' · inactive'}</p></td>
+                <td className="td text-body font-semibold">{s.display_name}<p className="text-caption font-normal text-slate-400">{s.tracking_mode === 'CASH' ? 'cash' : s.tracking_mode === 'SCRIP' ? 'scrip' : s.tracking_mode.toLowerCase()}{!s.is_active && ' · inactive'}</p></td>
                 <td className="td">{igstLut ? <Input id="sb-igst_amount" value="0 — export under LUT" disabled />
                   : s.sb_field ? <Input type="number" step="any" min={0} id={`sb-${s.sb_field}`} value={v[s.sb_field] ?? ''} disabled={!editable} hint={pdfHint(s.sb_field)} onChange={(e) => setV((o: any) => ({ ...o, [s.sb_field!]: e.target.value }))} />
                     : <Input type="number" step="any" min={0} id={`sb-benefit-${s.code}`} value={row(s.id).declared_amount} disabled={!editable} placeholder="not known yet"
                       onChange={(e) => setExtra((o: any) => ({ ...o, [s.id]: { ...row(s.id), declared_amount: e.target.value } }))} />}</td>
                 <td className="td">{claimFields.length ? <div className="grid gap-2 sm:grid-cols-2"><DynamicFields fields={claimFields} values={row(s.id).cf} disabled={!editable} idPrefix={`sb-cf-${s.code}`}
-                  onChange={(cf) => setExtra((o: any) => ({ ...o, [s.id]: { ...row(s.id), cf } }))} /></div> : <span className="text-[12px] text-slate-300">—</span>}</td>
+                  onChange={(cf) => setExtra((o: any) => ({ ...o, [s.id]: { ...row(s.id), cf } }))} /></div> : <span className="text-small text-slate-300">—</span>}</td>
                 <td className="td text-right tabular-nums">{c ? fmtDecimal(c.received_amount, 2) : '—'}</td>
                 <td className="td text-right tabular-nums text-indigo-700">{c && s.tracking_mode !== 'CASH' ? fmtDecimal(c.scrip_issued, 2) : '—'}</td>
                 <td className={clsx('td text-right tabular-nums', c?.outstanding > 0 && 'font-semibold text-amber-700')}>{c ? fmtDecimal(c.outstanding, 2) : '—'}</td>
                 <td className="td">{c ? <button className="text-left" title="Open — record receipts / scrip on their dates" data-open-claim={c.id} onClick={() => onOpen(c.id)}><StatusPill status={c.status} label={c.status_label} tone={c.status_tone} />
-                  {c.receipts?.length > 0 && <span className="block text-[10.5px] text-slate-500">{c.receipts.map((r: any) => `${fmtDate(r.receipt_date)} ₹${fmtDecimal(r.amount, 2)}`).join(' · ')}</span>}</button>
-                  : <span className="text-[11px] text-slate-400">{extra[s.id] || Number(s.sb_field ? v[s.sb_field] : 0) > 0 ? 'made on save' : 'no claim (0)'}</span>}</td>
+                  {c.receipts?.length > 0 && <span className="block text-caption text-slate-500">{c.receipts.map((r: any) => `${fmtDate(r.receipt_date)} ₹${fmtDecimal(r.amount, 2)}`).join(' · ')}</span>}</button>
+                  : <span className="text-caption text-slate-400">{extra[s.id] || Number(s.sb_field ? v[s.sb_field] : 0) > 0 ? 'made on save' : 'no claim (0)'}</span>}</td>
               </tr>
             );
           })}
         </tbody>
-        <tfoot><tr className="border-t border-slate-200"><td className="td text-[12px] font-semibold">Total declared</td><td className="td text-[12.5px] font-semibold tabular-nums" id="sb-inc-total">{inr(total)}</td><td colSpan={5} className="td text-[11.5px] text-slate-500">Order profit uses each scheme’s policy (IGST refund is not income)</td></tr></tfoot>
+        <tfoot><tr className="border-t border-slate-200"><td className="td text-small font-semibold">Total declared</td><td className="td text-body font-semibold tabular-nums" id="sb-inc-total">{inr(total)}</td><td colSpan={5} className="td text-small text-slate-500">Order profit uses each scheme’s policy (IGST refund is not income)</td></tr></tfoot>
       </table>
     </div>
   );

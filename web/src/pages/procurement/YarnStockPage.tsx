@@ -274,25 +274,25 @@ export default function YarnStockPage() {
         <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
           <div className="text-xs font-medium text-slate-500">Yarn Lots Listed</div>
           <div className="text-2xl font-bold text-slate-900 mt-1">{fmtNumber(kpis.lots)}</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">GRN lot lines {hasFilters ? '(filtered)' : ''}</div>
+          <div className="text-caption text-slate-400 mt-0.5">GRN lot lines {hasFilters ? '(filtered)' : ''}</div>
         </div>
         <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
           <div className="text-xs font-medium text-slate-500">Available to Issue</div>
           <div className="text-2xl font-bold text-violet-600 mt-1">
             {fmtDecimal(kpis.availableKg)} <span className="text-sm font-semibold">{totalUom ?? 'KG'}</span>
           </div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Balance of available + partly issued lots</div>
+          <div className="text-caption text-slate-400 mt-0.5">Balance of available + partly issued lots</div>
         </div>
         <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
           <div className="text-xs font-medium text-slate-500">Lots by Stock Status</div>
           <div className="flex flex-wrap gap-1.5 mt-2">
             {STOCK_STATUSES.filter((s) => kpis.byStatus[s.value]).map((s) => (
               <button key={s.value} onClick={() => setStatusFilter(statusFilter === s.value ? '' : s.value)}
-                className={`text-[11px] px-2 py-0.5 rounded-full border ${statusFilter === s.value ? 'bg-violet-600 text-white border-violet-600' : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'}`}>
+                className={`text-caption px-2 py-0.5 rounded-full border ${statusFilter === s.value ? 'bg-violet-600 text-white border-violet-600' : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'}`}>
                 {s.label}: <strong>{kpis.byStatus[s.value]}</strong>
               </button>
             ))}
-            {!kpis.lots && <span className="text-[11px] text-slate-400">—</span>}
+            {!kpis.lots && <span className="text-caption text-slate-400">—</span>}
           </div>
         </div>
         <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
@@ -300,7 +300,7 @@ export default function YarnStockPage() {
           <div className="text-lg font-bold text-emerald-600 mt-1">
             {fmtDecimal(totals.accepted)} <span className="text-xs text-slate-400">/ {fmtDecimal(totals.issued)} {totalUom ?? ''}</span>
           </div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Issued includes purchase returns</div>
+          <div className="text-caption text-slate-400 mt-0.5">Issued includes purchase returns</div>
         </div>
       </div>
 
@@ -411,21 +411,21 @@ export default function YarnStockPage() {
                   <tr key={b.id} className="hover:bg-slate-50/70 transition">
                     <td className="py-3 px-4">
                       <div className="font-semibold text-violet-800">{b.yarn_name || 'Yarn Item'}</div>
-                      <div className="text-[10px] text-slate-400 tabular-nums">{b.yarn_code || ''}</div>
+                      <div className="text-micro text-slate-400 tabular-nums">{b.yarn_code || ''}</div>
                     </td>
                     <td className="py-3 px-3">
-                      <div className="tabular-nums font-bold text-slate-800 text-[11px]">{b.lot_no || '—'}</div>
+                      <div className="tabular-nums font-bold text-slate-800 text-caption">{b.lot_no || '—'}</div>
                       {(b.shade || b.color_name) && (
-                        <div className="text-[10px] text-slate-500 mt-0.5">
+                        <div className="text-micro text-slate-500 mt-0.5">
                           {[b.shade, b.color_name].filter(Boolean).join(' · ')}
                         </div>
                       )}
                     </td>
-                    <td className="py-3 px-3 text-[11px] text-slate-600">
+                    <td className="py-3 px-3 text-caption text-slate-600">
                       <div className="font-medium">{b.count_str || '—'}</div>
-                      <div className="text-[10px] text-slate-400">{b.yarn_type || b.grn_yarn_type || ''}</div>
+                      <div className="text-micro text-slate-400">{b.yarn_type || b.grn_yarn_type || ''}</div>
                     </td>
-                    <td className="py-3 px-3 text-[11px]">
+                    <td className="py-3 px-3 text-caption">
                       {b.internal_ir_no ? (
                         <button onClick={() => setIoFilter(b.internal_ir_no!)} className="tabular-nums font-semibold text-indigo-700 hover:underline" title="Filter by this IO">
                           {b.internal_ir_no}
@@ -434,33 +434,33 @@ export default function YarnStockPage() {
                         <span className="text-slate-300">No IO</span>
                       )}
                       {b.style_code && (
-                        <div className="text-[10px] text-slate-500 mt-0.5" title={b.style_name ?? ''}>{b.style_code}</div>
+                        <div className="text-micro text-slate-500 mt-0.5" title={b.style_name ?? ''}>{b.style_code}</div>
                       )}
-                      {b.so_no && <div className="text-[10px] text-slate-400">{b.so_no}</div>}
+                      {b.so_no && <div className="text-micro text-slate-400">{b.so_no}</div>}
                     </td>
-                    <td className="py-3 px-3 text-right whitespace-nowrap">{fmtDecimal(b.received_qty, 3)} <span className="text-[10px] text-slate-400">{uom(b)}</span></td>
-                    <td className="py-3 px-3 text-right whitespace-nowrap text-emerald-700">{fmtDecimal(b.accepted_qty, 3)} <span className="text-[10px] text-slate-400">{uom(b)}</span></td>
-                    <td className="py-3 px-3 text-right whitespace-nowrap text-red-600">{num(b.rejected_qty) ? <>{fmtDecimal(b.rejected_qty, 3)} <span className="text-[10px] text-slate-400">{uom(b)}</span></> : '—'}</td>
+                    <td className="py-3 px-3 text-right whitespace-nowrap">{fmtDecimal(b.received_qty, 3)} <span className="text-micro text-slate-400">{uom(b)}</span></td>
+                    <td className="py-3 px-3 text-right whitespace-nowrap text-emerald-700">{fmtDecimal(b.accepted_qty, 3)} <span className="text-micro text-slate-400">{uom(b)}</span></td>
+                    <td className="py-3 px-3 text-right whitespace-nowrap text-red-600">{num(b.rejected_qty) ? <>{fmtDecimal(b.rejected_qty, 3)} <span className="text-micro text-slate-400">{uom(b)}</span></> : '—'}</td>
                     <td className="py-3 px-3 text-right whitespace-nowrap text-slate-600" title={num(b.returned_qty) ? `Includes ${fmtDecimal(b.returned_qty, 3)} returned to supplier` : undefined}>
-                      {num(b.issued_qty) + num(b.returned_qty) ? <>{fmtDecimal(num(b.issued_qty) + num(b.returned_qty), 3)} <span className="text-[10px] text-slate-400">{uom(b)}</span></> : '—'}
+                      {num(b.issued_qty) + num(b.returned_qty) ? <>{fmtDecimal(num(b.issued_qty) + num(b.returned_qty), 3)} <span className="text-micro text-slate-400">{uom(b)}</span></> : '—'}
                     </td>
-                    <td className="py-3 px-3 text-right whitespace-nowrap font-bold text-violet-700">{fmtDecimal(b.balance_qty, 3)} <span className="text-[10px] font-normal text-slate-400">{uom(b)}</span></td>
+                    <td className="py-3 px-3 text-right whitespace-nowrap font-bold text-violet-700">{fmtDecimal(b.balance_qty, 3)} <span className="text-micro font-normal text-slate-400">{uom(b)}</span></td>
                     <td className="py-3 px-3 text-right whitespace-nowrap text-indigo-700">
                       {b.weight_kg != null ? `${fmtDecimal(b.weight_kg, 3)} KG` : '—'}
-                      {b.packs ? <div className="text-[10px] text-slate-400">{b.packs} bags</div> : null}
+                      {b.packs ? <div className="text-micro text-slate-400">{b.packs} bags</div> : null}
                     </td>
                     <td className="py-3 px-3">
                       <div className="text-slate-800 font-medium">{b.warehouse_name || '—'}</div>
-                      <span className={`tabular-nums text-[10px] px-1 py-0.5 rounded ${b.location_bin ? 'bg-slate-100 text-slate-600' : 'bg-amber-50 text-amber-700'}`}>
+                      <span className={`tabular-nums text-micro px-1 py-0.5 rounded ${b.location_bin ? 'bg-slate-100 text-slate-600' : 'bg-amber-50 text-amber-700'}`}>
                         Bin: {b.location_bin || 'Unassigned'}
                       </span>
                     </td>
-                    <td className="py-3 px-3 text-[11px]">
+                    <td className="py-3 px-3 text-caption">
                       <button onClick={() => nav(`/procurement/yarn/grn/${b.grn_id}`)} className="text-violet-700 hover:underline font-medium">
                         {b.grn_no}
                       </button>
-                      <div className="text-slate-400 text-[10px]">{fmtDate(b.grn_date)}{b.po_no ? ` · ${b.po_no}` : ''}</div>
-                      {b.supplier_name && <div className="text-slate-500 text-[10px] truncate max-w-[160px]">{b.supplier_name}</div>}
+                      <div className="text-slate-400 text-micro">{fmtDate(b.grn_date)}{b.po_no ? ` · ${b.po_no}` : ''}</div>
+                      {b.supplier_name && <div className="text-slate-500 text-micro truncate max-w-[160px]">{b.supplier_name}</div>}
                     </td>
                     <td className="py-3 px-3 text-center">{getQcBadge(b.qc_status)}</td>
                     <td className="py-3 px-3 text-center">{getStockBadge(b.stock_status)}</td>
@@ -482,7 +482,7 @@ export default function YarnStockPage() {
                 <tr className="bg-slate-50 font-semibold text-slate-800 border-t-2 border-slate-200">
                   <td className="py-2.5 px-4" colSpan={4}>
                     Total — {fmtNumber(batches.length)} lot{batches.length === 1 ? '' : 's'}
-                    {!totalUom && <span className="ml-2 text-[10px] font-normal text-amber-700">(mixed units — totals are indicative)</span>}
+                    {!totalUom && <span className="ml-2 text-micro font-normal text-amber-700">(mixed units — totals are indicative)</span>}
                   </td>
                   <td className="py-2.5 px-3 text-right whitespace-nowrap">{fmtDecimal(totals.received, 3)} {totalUom}</td>
                   <td className="py-2.5 px-3 text-right whitespace-nowrap">{fmtDecimal(totals.accepted, 3)} {totalUom}</td>
@@ -516,7 +516,7 @@ export default function YarnStockPage() {
           }
         >
           <div className="space-y-4 text-xs">
-            <div className="p-3 bg-slate-50 rounded-lg text-slate-700 grid grid-cols-2 gap-2 text-[11px]">
+            <div className="p-3 bg-slate-50 rounded-lg text-slate-700 grid grid-cols-2 gap-2 text-caption">
               <div>Yarn: <strong>{editBatch.yarn_name}</strong></div>
               <div>Count: <strong>{editBatch.count_str || '—'}</strong></div>
               <div>GRN: <strong>{editBatch.grn_no}</strong></div>
@@ -531,7 +531,7 @@ export default function YarnStockPage() {
             </div>
 
             <div>
-              <label className="block text-[11px] font-medium text-slate-600 mb-1">Bin / Rack</label>
+              <label className="block text-caption font-medium text-slate-600 mb-1">Bin / Rack</label>
               {binsQuery.isLoading ? (
                 <LoadingBlock label="Loading bins…" rows={1} />
               ) : binsQuery.error ? (

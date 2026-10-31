@@ -23,7 +23,7 @@ const STATUS: Record<string, [string, string]> = {
   POSTED: ['Approved & posted', 'bg-emerald-100 text-emerald-800'], SEND_BACK: ['Sent back', 'bg-orange-100 text-orange-800'],
   REJECTED: ['Rejected', 'bg-rose-100 text-rose-700'], CANCELLED: ['Cancelled', 'bg-slate-200 text-slate-600'],
 };
-const Chip = ({ s }: { s: string }) => <span className={`rounded px-1.5 py-0.5 text-[10.5px] font-bold ${STATUS[s]?.[1] ?? 'bg-slate-100'}`}>{STATUS[s]?.[0] ?? s}</span>;
+const Chip = ({ s }: { s: string }) => <span className={`rounded px-1.5 py-0.5 text-caption font-bold ${STATUS[s]?.[1] ?? 'bg-slate-100'}`}>{STATUS[s]?.[0] ?? s}</span>;
 
 export default function YarnSubstitutionPage() {
   const [tab, setTab] = useState<'requests' | 'new' | 'rules' | 'ledger'>('requests');
@@ -76,18 +76,18 @@ function RequestList() {
                 <td className="px-2 py-1.5 tabular-nums font-semibold text-brand-700">{r.request_no}</td><td className="px-2 py-1.5">{fmtDate(r.request_date)}</td>
                 <td className="px-2 py-1.5 font-semibold">{r.io_no}</td><td className="px-2 py-1.5">{r.program_no}</td>
                 <td className="px-2 py-1.5">{r.required_yarn}</td><td className="px-2 py-1.5 font-semibold text-purple-700">{r.substitute_yarn}</td>
-                <td className="px-2 py-1.5">{r.lot_no || '—'} <span className="text-slate-400">{r.grn_no}</span></td><td className="px-2 py-1.5">{r.from_job}{r.transfer_no ? <span className="block text-[10px] text-slate-400">{r.transfer_no}</span> : null}</td>
+                <td className="px-2 py-1.5">{r.lot_no || '—'} <span className="text-slate-400">{r.grn_no}</span></td><td className="px-2 py-1.5">{r.from_job}{r.transfer_no ? <span className="block text-micro text-slate-400">{r.transfer_no}</span> : null}</td>
                 <td className="px-2 py-1.5 text-right">{kg(r.qty_kg)}</td><td className="px-2 py-1.5 text-right">{kg(r.equivalent_kg)}</td>
-                <td className="px-2 py-1.5">{r.reason}{r.decision_remarks ? <span className="block text-[10.5px] text-slate-500">↳ {r.decision_remarks}</span> : null}</td>
-                <td className="px-2 py-1.5">{r.requested_by}{r.approved_by_name ? <span className="block text-[10px] text-slate-400">appr. {r.approved_by_name}</span> : null}</td>
+                <td className="px-2 py-1.5">{r.reason}{r.decision_remarks ? <span className="block text-caption text-slate-500">↳ {r.decision_remarks}</span> : null}</td>
+                <td className="px-2 py-1.5">{r.requested_by}{r.approved_by_name ? <span className="block text-micro text-slate-400">appr. {r.approved_by_name}</span> : null}</td>
                 <td className="px-2 py-1.5"><Chip s={r.status} /></td>
                 <td className="whitespace-nowrap px-2 py-1.5">
                   {r.status === 'PENDING_APPROVAL' && canApprove && <>
-                    <button className="mr-1 rounded bg-emerald-600 px-2 py-0.5 text-[11px] font-semibold text-white" onClick={() => act(r, 'approve')} id={`ys-approve-${r.id}`}>Approve</button>
-                    <button className="mr-1 rounded border border-amber-400 px-2 py-0.5 text-[11px] text-amber-800" onClick={() => act(r, 'send-back')}>Send back</button>
-                    <button className="mr-1 rounded border border-rose-400 px-2 py-0.5 text-[11px] text-rose-700" onClick={() => act(r, 'reject')} id={`ys-reject-${r.id}`}>Reject</button>
+                    <button className="mr-1 rounded bg-emerald-600 px-2 py-0.5 text-caption font-semibold text-white" onClick={() => act(r, 'approve')} id={`ys-approve-${r.id}`}>Approve</button>
+                    <button className="mr-1 rounded border border-amber-400 px-2 py-0.5 text-caption text-amber-800" onClick={() => act(r, 'send-back')}>Send back</button>
+                    <button className="mr-1 rounded border border-rose-400 px-2 py-0.5 text-caption text-rose-700" onClick={() => act(r, 'reject')} id={`ys-reject-${r.id}`}>Reject</button>
                   </>}
-                  {['PENDING_APPROVAL', 'SEND_BACK'].includes(r.status) && (Number(r.created_by) === Number(user?.id) || canApprove) && <button className="rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600" onClick={() => act(r, 'cancel')}>Cancel</button>}
+                  {['PENDING_APPROVAL', 'SEND_BACK'].includes(r.status) && (Number(r.created_by) === Number(user?.id) || canApprove) && <button className="rounded border border-slate-300 px-2 py-0.5 text-caption text-slate-600" onClick={() => act(r, 'cancel')}>Cancel</button>}
                 </td>
               </tr>
             ))}
@@ -159,7 +159,7 @@ function NewRequest({ onDone }: { onDone: () => void }) {
                     <tr key={k} className={`border-t border-slate-100 ${lotKey === k ? 'bg-brand-50' : ''}`}>
                       <td className="px-2 py-1"><input type="radio" name="ys-lot" checked={lotKey === k} onChange={() => setLotKey(k)} id={`ys-lot-${l.grn_line_id}`} /></td>
                       <td className="px-2 py-1 font-semibold text-purple-700">{l.yarn_name}</td><td className="px-2 py-1">{l.lot_no || '—'}</td><td className="px-2 py-1">{l.grn_no}</td><td className="px-2 py-1">{l.supplier_name}</td>
-                      <td className="px-2 py-1">{l.own ? <b>This job</b> : l.holder_job}{!l.own && <span className="block text-[10px] text-amber-700">moves to this job on approval</span>}</td>
+                      <td className="px-2 py-1">{l.own ? <b>This job</b> : l.holder_job}{!l.own && <span className="block text-micro text-amber-700">moves to this job on approval</span>}</td>
                       <td className="px-2 py-1 text-right">{kg(l.available_kg)}</td><td className="px-2 py-1 text-right">{fmtDecimal(l.conversion_ratio, 3)}</td><td className="px-2 py-1 text-right">{fmtDecimal(l.max_pct, 2)}%</td>
                     </tr>
                   ); })}

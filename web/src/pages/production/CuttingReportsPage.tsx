@@ -241,11 +241,11 @@ export default function CuttingReportsPage() {
         <div className="card space-y-3 p-3 lg:self-start">
           {GROUPS.map((g) => (
             <div key={g}>
-              <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">{g}</p>
+              <p className="mb-1 text-micro font-bold uppercase tracking-wider text-slate-400">{g}</p>
               <div className="space-y-0.5">
                 {REPORTS.filter((r) => r.group === g).map((r) => (
                   <button key={r.key} id={`cr-${r.key}`}
-                    className={`block w-full rounded px-2 py-1.5 text-left text-[12px] transition ${
+                    className={`block w-full rounded px-2 py-1.5 text-left text-small transition ${
                       active.key === r.key ? 'bg-brand-50 font-semibold text-brand-700' : 'text-slate-600 hover:bg-slate-50'}`}
                     onClick={() => pick(r)}>
                     {r.label}
@@ -259,8 +259,8 @@ export default function CuttingReportsPage() {
         <div className="min-w-0 space-y-3">
           {/* Filters */}
           <div className="card p-3">
-            <h3 className="text-[13px] font-bold text-slate-800">{active.label}</h3>
-            <p className="mt-0.5 text-[11px] text-slate-500">{active.hint}</p>
+            <h3 className="text-body font-bold text-slate-800">{active.label}</h3>
+            <p className="mt-0.5 text-caption text-slate-500">{active.hint}</p>
             <form className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5"
               onSubmit={(e) => { e.preventDefault(); apply(); }}>
               {has('dates') && <>
@@ -299,14 +299,14 @@ export default function CuttingReportsPage() {
             ) : (
               <div className="card p-0">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 py-2">
-                  <span className="text-[11px] font-semibold text-slate-500">
+                  <span className="text-caption font-semibold text-slate-500">
                     {data.meta.total.toLocaleString('en-IN')} row{data.meta.total === 1 ? '' : 's'}
                     {data.meta.truncated && ` (first ${data.meta.max_rows.toLocaleString('en-IN')} — narrow the filters)`}
                   </span>
-                  {isFetching && <span className="text-[11px] text-slate-400">Updating…</span>}
+                  {isFetching && <span className="text-caption text-slate-400">Updating…</span>}
                 </div>
                 <div className="max-h-[65vh] overflow-auto">
-                  <table className="w-full text-[11.5px]">
+                  <table className="w-full text-small">
                     <thead className="sticky top-0 z-10 bg-slate-50">
                       <tr>
                         {columns.map((c) => (
@@ -344,7 +344,7 @@ export default function CuttingReportsPage() {
                 <Pager page={page} pageSize={pageSize} total={data.meta.total}
                   totalPages={Math.ceil(data.meta.total / pageSize)} onPage={setPage} />
                 {data.notes.length > 0 && (
-                  <div className="space-y-0.5 border-t border-slate-100 px-3 py-2 text-[11px] text-slate-500">
+                  <div className="space-y-0.5 border-t border-slate-100 px-3 py-2 text-caption text-slate-500">
                     {data.notes.map((nt) => <p key={nt}>{nt}</p>)}
                   </div>
                 )}

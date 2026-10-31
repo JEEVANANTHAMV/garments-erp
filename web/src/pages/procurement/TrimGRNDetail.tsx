@@ -552,7 +552,7 @@ export default function TrimGRNDetailPage() {
               </h1>
               {!isNew && <Badge variant="success">{head.status}</Badge>}
               {isForeignCurrency && (
-                <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
+                <span className="px-2 py-0.5 text-caption font-bold rounded-full bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
                   <Globe size={11} /> IMPORT GRN ({currCode})
                 </span>
               )}
@@ -581,38 +581,38 @@ export default function TrimGRNDetailPage() {
       {/* KPI Cards Strip */}
       <div className={`grid grid-cols-2 ${isForeignCurrency ? 'sm:grid-cols-7' : 'sm:grid-cols-6'} gap-3`}>
         <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-          <div className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider">Total Received</div>
+          <div className="text-caption font-semibold text-slate-600 uppercase tracking-wider">Total Received</div>
           <div className="text-lg font-bold text-slate-900 mt-0.5 tabular-nums">{fmtDecimal(totals.totalReceived)}</div>
         </div>
         <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-200">
-          <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">Accepted Net</div>
+          <div className="text-caption font-semibold text-emerald-700 uppercase tracking-wider">Accepted Net</div>
           <div className="text-lg font-bold text-emerald-900 mt-0.5 tabular-nums">{fmtDecimal(totals.totalAccepted)}</div>
         </div>
         <div className="p-3 bg-rose-50/70 rounded-xl border border-rose-200">
-          <div className="text-[11px] font-semibold text-rose-700 uppercase tracking-wider">Rejected / Hold</div>
+          <div className="text-caption font-semibold text-rose-700 uppercase tracking-wider">Rejected / Hold</div>
           <div className="text-lg font-bold text-rose-900 mt-0.5 tabular-nums">{fmtDecimal(totals.totalRejected + totals.totalHold)}</div>
         </div>
         <div className="p-3 bg-sky-50/70 rounded-xl border border-sky-200">
-          <div className="text-[11px] font-semibold text-sky-700 uppercase tracking-wider">Taxable Value</div>
+          <div className="text-caption font-semibold text-sky-700 uppercase tracking-wider">Taxable Value</div>
           <div className="text-lg font-bold text-sky-900 mt-0.5 tabular-nums">{currSymbol}{fmtDecimal(totals.taxableAmount, 2)}</div>
         </div>
         <div className="p-3 bg-purple-50/70 rounded-xl border border-purple-200">
-          <div className="text-[11px] font-semibold text-purple-700 uppercase tracking-wider">
+          <div className="text-caption font-semibold text-purple-700 uppercase tracking-wider">
             {head.is_interstate ? 'IGST Amount' : 'CGST + SGST'}
           </div>
           <div className="text-lg font-bold text-purple-900 mt-0.5 tabular-nums">{currSymbol}{fmtDecimal(totals.taxAmount, 2)}</div>
         </div>
         <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-200">
-          <div className="text-[11px] font-semibold text-indigo-700 uppercase tracking-wider">
+          <div className="text-caption font-semibold text-indigo-700 uppercase tracking-wider">
             Grand Total ({currCode})
           </div>
           <div className="text-lg font-bold text-indigo-950 mt-0.5 tabular-nums">{currSymbol}{fmtDecimal(totals.grandTotal, 2)}</div>
         </div>
         {isForeignCurrency && (
           <div className="p-3 bg-amber-50/70 rounded-xl border border-amber-200">
-            <div className="text-[11px] font-semibold text-amber-800 uppercase tracking-wider">INR Converted</div>
+            <div className="text-caption font-semibold text-amber-800 uppercase tracking-wider">INR Converted</div>
             <div className="text-lg font-bold text-amber-950 mt-0.5 tabular-nums">₹{fmtDecimal(totals.inrGrandTotal, 2)}</div>
-            <div className="text-[10px] text-amber-600 mt-0.5">@ ₹{head.exchange_rate}/{currCode}</div>
+            <div className="text-micro text-amber-600 mt-0.5">@ ₹{head.exchange_rate}/{currCode}</div>
           </div>
         )}
       </div>
@@ -635,7 +635,7 @@ export default function TrimGRNDetailPage() {
               className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
             />
             <span className="font-semibold text-slate-700">Inter-State Supply (IGST Applicable)</span>
-            <span className="text-[10px] text-slate-400 font-normal">
+            <span className="text-micro text-slate-400 font-normal">
               {head.is_interstate ? 'Single IGST rate applied' : 'Split CGST + SGST applied'}
             </span>
           </label>
@@ -671,7 +671,7 @@ export default function TrimGRNDetailPage() {
                 <div className="flex items-center justify-between mb-1">
                   <label className="label">Link Trim POs ({selectedPoIds.length} selected)</label>
                   {selectedPoIds.length > 0 && (
-                    <span className="text-[10px] text-indigo-700 font-semibold">Multi-PO active</span>
+                    <span className="text-micro text-indigo-700 font-semibold">Multi-PO active</span>
                   )}
                 </div>
                 <select
@@ -700,7 +700,7 @@ export default function TrimGRNDetailPage() {
                       return (
                         <span key={pId} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-800 border border-indigo-300">
                           <span>📋 {label}</span>
-                          {lineCnt > 0 && <span className="text-[10px] bg-indigo-200 text-indigo-900 px-1 rounded tabular-nums">{lineCnt} items</span>}
+                          {lineCnt > 0 && <span className="text-micro bg-indigo-200 text-indigo-900 px-1 rounded tabular-nums">{lineCnt} items</span>}
                           <button
                             type="button"
                             onClick={() => handleRemovePo(pId)}
@@ -909,7 +909,7 @@ export default function TrimGRNDetailPage() {
               <Layers size={14} className="text-indigo-600" />
               <span>Inspection, Amount Details & Job Allocation ({lines.length})</span>
             </h3>
-            <p className="text-[11px] text-slate-500">
+            <p className="text-caption text-slate-500">
               Columns strictly ordered: # → IO No (Job) → Style No → Trim Item → Specifications & Quantities
             </p>
           </div>
@@ -968,11 +968,11 @@ export default function TrimGRNDetailPage() {
                   {/* PO Ref */}
                   <td className="py-2 px-2">
                     {line.po_no || line.po_id ? (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] tabular-nums font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-caption tabular-nums font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
                         {line.po_no || `PO #${line.po_id}`}
                       </span>
                     ) : (
-                      <span className="text-slate-400 text-[11px]">—</span>
+                      <span className="text-slate-400 text-caption">—</span>
                     )}
                   </td>
 
@@ -1095,7 +1095,7 @@ export default function TrimGRNDetailPage() {
                   <td className="py-2 px-2 text-right">
                     <span className="tabular-nums text-slate-500">{fmtDecimal(line.po_qty)}</span>
                     {Number(line.prev_received) > 0 && (
-                      <div className="text-[10px] text-slate-500">
+                      <div className="text-micro text-slate-500">
                         {fmtDecimal(line.prev_received)} recd earlier · <b className="text-amber-700">{fmtDecimal(Math.max(0, line.po_qty - Number(line.prev_received)))} pending</b>
                       </div>
                     )}
@@ -1270,7 +1270,7 @@ export default function TrimGRNDetailPage() {
                 <td className="py-3 px-2 text-right tabular-nums">{currSymbol}{fmtDecimal(totals.taxableAmount, 2)}</td>
                 <td className="py-3 px-2"></td>
                 <td className="py-3 px-2 text-right tabular-nums text-purple-700">{currSymbol}{fmtDecimal(totals.taxAmount, 2)}</td>
-                <td className="py-3 px-2 text-right tabular-nums text-sm font-black text-slate-900">
+                <td className="py-3 px-2 text-right tabular-nums text-sm font-bold text-slate-900">
                   {currSymbol}{fmtDecimal(totals.grandTotal, 2)}
                 </td>
                 <td colSpan={isNew ? 3 : 2}></td>

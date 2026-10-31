@@ -90,7 +90,7 @@ function Dashboard({ openRegister }: { openRegister: (f: Record<string, string>)
         <Select label="Sample type" className="w-48" placeholder="All types" options={toOptions(types.data)} value={f.sample_type_id} onChange={(e) => setF('sample_type_id', e.target.value)} />
         <Input label="Requested from" type="date" className="w-40" value={f.from} onChange={(e) => setF('from', e.target.value)} />
         <Input label="to" type="date" className="w-40" value={f.to} onChange={(e) => setF('to', e.target.value)} />
-        {d && <span className="ml-auto text-[11.5px] text-slate-400">As of {fmtDate(d.as_of)} · costs approved / posted, INR</span>}
+        {d && <span className="ml-auto text-small text-slate-400">As of {fmtDate(d.as_of)} · costs approved / posted, INR</span>}
       </div>
       {q.isLoading ? <div className="card"><LoadingBlock rows={6} /></div> : q.error ? <div className="card"><ErrorState error={q.error} onRetry={() => void q.refetch()} /></div> : d && (
         <>
@@ -113,9 +113,9 @@ function Dashboard({ openRegister }: { openRegister: (f: Record<string, string>)
                 {d.exceptions.map((e: any) => (
                   <button key={e.key} type="button" onClick={() => openRegister({ kpi: e.key })}
                     className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-left hover:border-amber-400">
-                    <p className="text-[12px] font-semibold text-amber-900">{e.label}</p>
-                    <p className="text-[20px] font-bold text-amber-800">{e.count}</p>
-                    <p className="truncate text-[11px] text-amber-700">{e.samples.map((s: any) => s.sample_no).join(', ')}{e.count > e.samples.length ? ' …' : ''}</p>
+                    <p className="text-small font-semibold text-amber-900">{e.label}</p>
+                    <p className="text-page font-bold text-amber-800">{e.count}</p>
+                    <p className="truncate text-caption text-amber-700">{e.samples.map((s: any) => s.sample_no).join(', ')}{e.count > e.samples.length ? ' …' : ''}</p>
                   </button>
                 ))}
               </div>
@@ -164,20 +164,20 @@ function Dashboard({ openRegister }: { openRegister: (f: Record<string, string>)
 
 /* ================================================================ register */
 const REG_COLS: (Column<any> & { csv?: (r: any) => unknown })[] = [
-  { key: 'sample_no', header: 'Sample no', sortable: true, render: (r) => <Link className="tabular-nums text-[12px] font-semibold text-brand-700 hover:underline" to={`/sales/samples/${r.id}`}>{r.sample_no}</Link> },
-  { key: 'buyer_name', header: 'Buyer / style', sortable: true, render: (r) => <div><p className="font-medium">{r.buyer_name}</p><p className="text-[11px] text-slate-500">{r.style_code} · {r.type_name ?? r.sample_type}{r.revision_no ? ` · rev ${r.revision_no}` : ''}</p></div> },
+  { key: 'sample_no', header: 'Sample no', sortable: true, render: (r) => <Link className="tabular-nums text-small font-semibold text-brand-700 hover:underline" to={`/sales/samples/${r.id}`}>{r.sample_no}</Link> },
+  { key: 'buyer_name', header: 'Buyer / style', sortable: true, render: (r) => <div><p className="font-medium">{r.buyer_name}</p><p className="text-caption text-slate-500">{r.style_code} · {r.type_name ?? r.sample_type}{r.revision_no ? ` · rev ${r.revision_no}` : ''}</p></div> },
   { key: 'priority', header: 'Priority', render: (r) => r.priority === 'NORMAL' ? <span className="text-slate-500">Normal</span> : <Badge tone={r.priority === 'CRITICAL' ? 'red' : 'amber'}>{r.priority === 'CRITICAL' ? 'Critical' : 'High'}</Badge> },
-  { key: 'target_date', header: 'Requested / target', sortable: true, render: (r) => <div className="text-[12px]"><p>{fmtDate(r.request_date)}</p><p className={r.overdue ? 'font-semibold text-red-600' : 'text-slate-500'}>→ {fmtDate(r.target_date)}{r.completed_date ? ` · done ${fmtDate(r.completed_date)}` : ''}</p></div> },
+  { key: 'target_date', header: 'Requested / target', sortable: true, render: (r) => <div className="text-small"><p>{fmtDate(r.request_date)}</p><p className={r.overdue ? 'font-semibold text-red-600' : 'text-slate-500'}>→ {fmtDate(r.target_date)}{r.completed_date ? ` · done ${fmtDate(r.completed_date)}` : ''}</p></div> },
   { key: 'status', header: 'Status', sortable: true, render: (r) => <SampleStatus value={r.status} /> },
-  { key: 'current_stage', header: 'Current stage / owner', render: (r) => r.current_stage ? <div className="text-[12px]"><p className="font-medium">{r.current_stage}{r.current_stage_status === 'ON_HOLD' ? ' (on hold)' : ''}</p>
+  { key: 'current_stage', header: 'Current stage / owner', render: (r) => r.current_stage ? <div className="text-small"><p className="font-medium">{r.current_stage}{r.current_stage_status === 'ON_HOLD' ? ' (on hold)' : ''}</p>
     <p className="text-slate-500">{r.pending_department ?? '—'} · {r.pending_owner ?? <span className="font-semibold text-red-600">no owner</span>}</p></div> : <span className="text-slate-400">—</span> },
-  { key: 'elapsed_days', header: 'Elapsed / delay', sortable: true, align: 'right', render: (r) => <div className="text-[12px] tabular-nums"><p title={`${r.elapsed_working_days ?? '—'} working days`}>{daysLabel(r.elapsed_days)} <span className="text-slate-400">({r.elapsed_working_days ?? '—'} wd)</span></p>
+  { key: 'elapsed_days', header: 'Elapsed / delay', sortable: true, align: 'right', render: (r) => <div className="text-small tabular-nums"><p title={`${r.elapsed_working_days ?? '—'} working days`}>{daysLabel(r.elapsed_days)} <span className="text-slate-400">({r.elapsed_working_days ?? '—'} wd)</span></p>
     {r.delay_days ? <p className="font-semibold text-red-600">+{r.delay_days} d late</p> : null}{r.process_age_days != null ? <p className="text-slate-500">stage {r.process_age_days} d</p> : null}</div> },
-  { key: 'stages_done', header: 'Progress', align: 'right', render: (r) => <div className="text-[12px] tabular-nums"><p>{r.stages_done}/{r.stages_total}</p><p className="text-slate-500">{fmtNumber(r.good_qty_total)} good · {fmtNumber(r.reject_qty_total)} rej · {fmtNumber(r.rework_qty_total)} rw</p></div> },
-  { key: 'cumulative_cost', header: 'Today / cumulative', sortable: true, align: 'right', render: (r) => <div className="text-[12px] tabular-nums"><p className="text-slate-500">{inr(r.today_cost, '₹ 0')}</p><p className="font-semibold">{inr(r.cumulative_cost, '₹ 0')}</p></div> },
-  { key: 'cost_per_piece', header: '₹ / piece · avg / day', sortable: true, align: 'right', render: (r) => <div className="text-[12px] tabular-nums"><p>{inr(r.cost_per_piece)}</p><p className="text-slate-500">{inr(r.avg_daily_cost_per_piece)}</p></div> },
-  { key: 'allocation_state', header: 'Order allocation', render: (r) => <div className="text-[12px]"><AllocState value={r.allocation_state} />{r.allocated_cost > 0 && <p className="mt-0.5 tabular-nums text-slate-500">{inr(r.allocated_cost)} to {r.allocated_orders} order(s)</p>}</div> },
-  { key: 'next_action', header: 'Next action', render: (r) => <span className="text-[12px] text-slate-600">{r.next_action}</span> },
+  { key: 'stages_done', header: 'Progress', align: 'right', render: (r) => <div className="text-small tabular-nums"><p>{r.stages_done}/{r.stages_total}</p><p className="text-slate-500">{fmtNumber(r.good_qty_total)} good · {fmtNumber(r.reject_qty_total)} rej · {fmtNumber(r.rework_qty_total)} rw</p></div> },
+  { key: 'cumulative_cost', header: 'Today / cumulative', sortable: true, align: 'right', render: (r) => <div className="text-small tabular-nums"><p className="text-slate-500">{inr(r.today_cost, '₹ 0')}</p><p className="font-semibold">{inr(r.cumulative_cost, '₹ 0')}</p></div> },
+  { key: 'cost_per_piece', header: '₹ / piece · avg / day', sortable: true, align: 'right', render: (r) => <div className="text-small tabular-nums"><p>{inr(r.cost_per_piece)}</p><p className="text-slate-500">{inr(r.avg_daily_cost_per_piece)}</p></div> },
+  { key: 'allocation_state', header: 'Order allocation', render: (r) => <div className="text-small"><AllocState value={r.allocation_state} />{r.allocated_cost > 0 && <p className="mt-0.5 tabular-nums text-slate-500">{inr(r.allocated_cost)} to {r.allocated_orders} order(s)</p>}</div> },
+  { key: 'next_action', header: 'Next action', render: (r) => <span className="text-small text-slate-600">{r.next_action}</span> },
 ];
 const CSV_COLS = [
   { key: 'sample_no', header: 'Sample no' }, { key: 'buyer_name', header: 'Buyer' }, { key: 'style_code', header: 'Style' }, { key: 'type_name', header: 'Type' },
@@ -229,7 +229,7 @@ function Register() {
         <Button variant="secondary" className="ml-auto" onClick={() => void exportCsv()}><Download size={14} />Export</Button>
       </div>
       {get('kpi') && (
-        <div className="flex items-center gap-2 text-[12.5px]" id="register-kpi-chip">
+        <div className="flex items-center gap-2 text-body" id="register-kpi-chip">
           <Badge tone="indigo">{KPI_LABEL[get('kpi')] ?? get('kpi')}</Badge>
           <button className="inline-flex items-center gap-1 text-slate-500 hover:text-slate-800" onClick={() => setF('kpi', '')}><X size={13} />clear</button>
         </div>
@@ -239,7 +239,7 @@ function Register() {
         sort={sort} onSort={(k) => { const n = new URLSearchParams(sp); n.set('sort', k); n.set('dir', sort?.key === k && sort.dir === 'desc' ? 'asc' : 'desc'); setSp(n, { replace: true }); }}
         pagination={list.data?.pagination} onPage={(p) => setF('page', String(p))} stickyFirst />
       {list.data?.totals && (
-        <p className="text-right text-[12px] text-slate-500" id="register-totals">
+        <p className="text-right text-small text-slate-500" id="register-totals">
           {list.data.pagination.total} samples · {fmtNumber(list.data.totals.qty)} pcs · today {inr(list.data.totals.today_cost, '₹ 0')} · cumulative {inr(list.data.totals.cumulative_cost, '₹ 0')} ·
           allocated {inr(list.data.totals.allocated_cost, '₹ 0')} · not allocated {inr(list.data.totals.unallocated_cost, '₹ 0')}
         </p>
@@ -278,7 +278,7 @@ function Allocations() {
           { value: 'POSTED,PARTIALLY_REVERSED', label: 'Posted' }, { value: 'REVERSED,REJECTED,CANCELLED', label: 'Reversed / rejected / cancelled' }, { value: '', label: 'All' },
         ]} />
         <SearchInput className="w-64" value={q} onChange={setQ} placeholder="Batch, sample, style, buyer, order…" />
-        <span className="ml-auto text-[11.5px] text-slate-500">Analytical allocation: shown in the order's Budget vs Actuals; no GL journal (the sample expense is counted once).</span>
+        <span className="ml-auto text-small text-slate-500">Analytical allocation: shown in the order's Budget vs Actuals; no GL journal (the sample expense is counted once).</span>
       </div>
       <div className="card overflow-x-auto">
         <table className="w-full" id="alloc-register">
@@ -288,16 +288,16 @@ function Allocations() {
             {!list.isLoading && !rows.length && <tr><td className="td py-8 text-center text-slate-400" colSpan={8}>Nothing here</td></tr>}
             {rows.map((b) => (
               <tr key={b.id} className="row-hover align-top">
-                <td className="td tabular-nums text-[12px] font-semibold">{b.batch_no}<p className="font-sans text-[11px] font-normal text-slate-400">{fmtDateTime(b.created_at)}</p></td>
-                <td className="td"><Link className="tabular-nums text-[12px] text-brand-700 hover:underline" to={`/sales/samples/${b.sample_id}?tab=allocation`}>{b.sample_no}</Link><p className="text-[11px] text-slate-500">{b.buyer_name} · {b.style_code}</p></td>
-                <td className="td text-[12px]">{b.lines.map((l: any) => (
+                <td className="td tabular-nums text-small font-semibold">{b.batch_no}<p className="font-sans text-caption font-normal text-slate-400">{fmtDateTime(b.created_at)}</p></td>
+                <td className="td"><Link className="tabular-nums text-small text-brand-700 hover:underline" to={`/sales/samples/${b.sample_id}?tab=allocation`}>{b.sample_no}</Link><p className="text-caption text-slate-500">{b.buyer_name} · {b.style_code}</p></td>
+                <td className="td text-small">{b.lines.map((l: any) => (
                   <p key={l.id} className={l.status === 'REVERSED' ? 'text-slate-400 line-through' : ''}>
                     <Link to={`/sales/orders/${l.so_id}`} className="hover:underline">{l.so_no}</Link> · {inr(l.allocated_amount)}{l.is_override ? <Badge tone="amber" className="ml-1">override</Badge> : null}
                   </p>))}</td>
-                <td className="td text-[12px]">{b.method}</td>
-                <td className="td text-right tabular-nums font-semibold">{inr(b.total_allocated)}{Number(b.live_amount) !== Number(b.total_allocated) && ['POSTED', 'PARTIALLY_REVERSED', 'REVERSED'].includes(b.status) ? <p className="text-[11px] font-normal text-slate-500">live {inr(b.live_amount)}</p> : null}</td>
+                <td className="td text-small">{b.method}</td>
+                <td className="td text-right tabular-nums font-semibold">{inr(b.total_allocated)}{Number(b.live_amount) !== Number(b.total_allocated) && ['POSTED', 'PARTIALLY_REVERSED', 'REVERSED'].includes(b.status) ? <p className="text-caption font-normal text-slate-500">live {inr(b.live_amount)}</p> : null}</td>
                 <td className="td"><Badge tone={ALLOC_STATUS_TONE[b.status] ?? 'slate'}>{b.status.replace(/_/g, ' ')}</Badge></td>
-                <td className="td max-w-[260px] text-[12px] text-slate-600">{b.reason}{b.override_reason ? <p className="text-amber-700">Override: {b.override_reason}</p> : null}{b.reject_reason ? <p className="text-red-600">{b.reject_reason}</p> : null}<p className="text-[11px] text-slate-400">{b.created_by_name}{b.posted_by_name ? ` · posted ${b.posted_by_name}` : ''}</p></td>
+                <td className="td max-w-[260px] text-small text-slate-600">{b.reason}{b.override_reason ? <p className="text-amber-700">Override: {b.override_reason}</p> : null}{b.reject_reason ? <p className="text-red-600">{b.reject_reason}</p> : null}<p className="text-caption text-slate-400">{b.created_by_name}{b.posted_by_name ? ` · posted ${b.posted_by_name}` : ''}</p></td>
                 <td className="td whitespace-nowrap">
                   {can('SAMPLE.ALLOC_APPROVE') && b.status === 'PENDING_APPROVAL' && <Button size="sm" variant="secondary" loading={busy === b.id} onClick={() => void act(b, 'approve')}>Approve</Button>}
                   {can('SAMPLE.ALLOC_APPROVE') && ['PENDING_APPROVAL', 'APPROVED'].includes(b.status) && <Button size="sm" className="ml-1" loading={busy === b.id} id={`alloc-post-${b.id}`} onClick={() => void act(b, 'post')}>Post</Button>}
@@ -361,7 +361,7 @@ function Reports() {
             {rows.map((r) => (
               <tr key={r.id} className="row-hover">
                 {def.cols.map((c) => (
-                  <td key={c.key} className={`td text-[12px] ${c.money ? 'text-right tabular-nums' : ''}`}>
+                  <td key={c.key} className={`td text-small ${c.money ? 'text-right tabular-nums' : ''}`}>
                     {c.link ? <Link className="tabular-nums text-brand-700 hover:underline" to={`/sales/samples/${r.id}`}>{r[c.key]}</Link>
                       : c.key === 'status' ? <SampleStatus value={r.status} /> : c.money ? inr(r[c.key], r[c.key] === undefined ? '—' : 'N/A')
                         : /_date$/.test(c.key) ? fmtDate(r[c.key]) : r[c.key] ?? '—'}
@@ -372,7 +372,7 @@ function Reports() {
           </tbody>
           {rows.length > 0 && (
             <tfoot><tr className="bg-slate-50 font-semibold">{def.cols.map((c, i) => (
-              <td key={c.key} className={`td text-[12px] ${c.money ? 'text-right tabular-nums' : ''}`}>
+              <td key={c.key} className={`td text-small ${c.money ? 'text-right tabular-nums' : ''}`}>
                 {i === 0 ? `${rows.length} samples` : c.money && !/per_|piece/.test(c.key) ? inr(rows.reduce((t, r) => t + (Number(r[c.key]) || 0), 0), '₹ 0') : ''}
               </td>))}</tr></tfoot>
           )}

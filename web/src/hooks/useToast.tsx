@@ -51,7 +51,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               className={`animate-fade-in flex items-start gap-2.5 rounded-lg border px-3.5 py-3 shadow-popover ${style[t.kind]}`}
               role="status">
               <I size={17} className="mt-px shrink-0" />
-              <p className="flex-1 text-[13px] leading-snug">{t.message}</p>
+              <p className="flex-1 text-body leading-snug">{t.message}</p>
               <button onClick={() => dismiss(t.id)} className="shrink-0 opacity-50 hover:opacity-100"
                 aria-label="Dismiss">
                 <X size={15} />

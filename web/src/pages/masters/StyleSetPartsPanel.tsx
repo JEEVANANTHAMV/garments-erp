@@ -44,16 +44,16 @@ export function StyleSetPartsPanel({ styleId, editable }: { styleId: number; edi
     <div className="card p-4" data-set-parts-panel>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h3 className="text-[13px] font-bold uppercase tracking-wider text-slate-700">Set composition</h3>
-          <p className="text-[11.5px] text-slate-500">
+          <h3 className="text-body font-bold uppercase tracking-wider text-slate-700">Set composition</h3>
+          <p className="text-small text-slate-500">
             Sold as a set (e.g. TOP + BOTTOM)? List its parts and the pieces of each per set. The sales order can then be
             entered in sets; each part is still cut, sewn and checked as pieces and paired at packing. Leave empty for a piece style.
           </p>
         </div>
-        {isSet && <span className="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[11.5px] font-semibold text-indigo-800">1 SET = {pcs} pcs</span>}
+        {isSet && <span className="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-small font-semibold text-indigo-800">1 SET = {pcs} pcs</span>}
       </div>
       {rows.length > 0 && (
-        <table className="mb-2 text-[12.5px]">
+        <table className="mb-2 text-body">
           <thead><tr><th className="th">#</th><th className="th">Part</th><th className="th">Pieces per set</th><th className="th" /></tr></thead>
           <tbody>
             {rows.map((r, i) => (
@@ -94,11 +94,11 @@ export function StyleSetPartsPanel({ styleId, editable }: { styleId: number; edi
               {busy ? 'Saving…' : 'Save set composition'}
             </button>
           )}
-          {rows.length === 1 && <span className="text-[11.5px] text-red-600">A set needs at least two parts</span>}
+          {rows.length === 1 && <span className="text-small text-red-600">A set needs at least two parts</span>}
         </div>
       )}
       {(cur.data?.set_orders?.length ?? 0) > 0 && (
-        <p className="mt-2 text-[11px] text-slate-500">
+        <p className="mt-2 text-caption text-slate-500">
           Orders entered in sets ({cur.data!.set_orders.join(', ')}) keep the composition they were entered with.
         </p>
       )}

@@ -79,9 +79,9 @@ export function Tile({ label, value, sub, tone, onClick, id }: { label: string; 
   const cls = clsx('card px-3 py-2 text-left', onClick && 'cursor-pointer transition hover:border-brand-300 hover:shadow');
   const body = (
     <>
-      <p className="text-[11px] uppercase tracking-wide text-slate-500">{label}</p>
-      <p className={clsx('text-[16px] font-semibold tabular-nums', tone === 'green' && 'text-emerald-700', tone === 'amber' && 'text-amber-700', tone === 'red' && 'text-red-700', tone === 'indigo' && 'text-indigo-700')}>{value}</p>
-      {sub && <p className="text-[11px] text-slate-400">{sub}</p>}
+      <p className="text-caption uppercase tracking-wide text-slate-500">{label}</p>
+      <p className={clsx('text-title-lg font-semibold tabular-nums', tone === 'green' && 'text-emerald-700', tone === 'amber' && 'text-amber-700', tone === 'red' && 'text-red-700', tone === 'indigo' && 'text-indigo-700')}>{value}</p>
+      {sub && <p className="text-caption text-slate-400">{sub}</p>}
     </>
   );
   return onClick ? <button type="button" id={id} className={cls} onClick={onClick}>{body}</button> : <div id={id} className={cls}>{body}</div>;
@@ -139,7 +139,7 @@ export function ClaimDrawer({ id, onClose }: { id: number; onClose: () => void }
             <Tile label={scrip ? 'Pending (not issued)' : 'Pending'} value={inr(x.pending_amount)} tone="amber" sub={x.days_pending != null ? `${x.days_pending} days · from ${x.ageing_label}` : x.last_event_date ? `last event ${fmtDate(x.last_event_date)}` : undefined} />
             <div className="card flex flex-col justify-center gap-1 px-3 py-2"><StatusPill status={x.status} label={x.status_label} tone={x.status_tone} />
               {x.excess_amount > 0 && <Badge tone="red">Excess {inr(x.excess_amount)}</Badge>}
-              {(x.not_applicable_reason || x.closed_reason) && <p className="text-[11px] text-slate-500">{x.not_applicable_reason ?? x.closed_reason}</p>}</div>
+              {(x.not_applicable_reason || x.closed_reason) && <p className="text-caption text-slate-500">{x.not_applicable_reason ?? x.closed_reason}</p>}</div>
           </div>
           {stage && <StageForm stage={stage} sv={sv} setSv={setSv} users={users.data ?? []} busy={busy} onCancel={() => setStage(null)}
             onSave={async () => { const ok = stage === 'NA' ? await run(() => http.post(`/export-benefits/claims/${id}/applicability`, { applicable: false, reason: sv.reason }), 'Marked Not applicable')
@@ -154,18 +154,18 @@ export function ClaimDrawer({ id, onClose }: { id: number; onClose: () => void }
                   <thead><tr><th className="th">Actual date</th><th className="th">Event</th><th className="th text-right">Amount ₹</th><th className="th">Bank / UTR · scrip</th>
                     <th className="th">Entered · posted</th><th className="th">Status</th><th className="th" /></tr></thead>
                   <tbody>
-                    {!x.events.length && <tr><td colSpan={7} className="td py-6 text-center text-[12px] text-slate-400">Nothing recorded yet — add the receipt or scrip on the day it comes</td></tr>}
+                    {!x.events.length && <tr><td colSpan={7} className="td py-6 text-center text-small text-slate-400">Nothing recorded yet — add the receipt or scrip on the day it comes</td></tr>}
                     {x.events.map((e: any) => (
                       <tr key={e.id} data-event={e.event_type} data-event-id={e.id} className={clsx(e.status === 'REVERSED' && 'text-slate-400 line-through decoration-slate-300', e.event_type === 'REVERSAL' && 'bg-red-50/40')}>
-                        <td className="td whitespace-nowrap text-[12px] font-semibold">{fmtDate(e.event_date)}</td>
-                        <td className="td text-[12px]">{e.label}{e.is_exception ? <span className="ml-1"><Badge tone="red">exception</Badge></span> : null}
-                          {e.remarks && <p className="text-[11px] text-slate-500 no-underline">{e.remarks}</p>}
-                          {e.custom_field_values && <p className="text-[11px] text-slate-500">{Object.entries(e.custom_field_values).map(([k, v]) => `${k}: ${String(v)}`).join(' · ')}</p>}</td>
-                        <td className="td text-right tabular-nums">{e.event_type === 'REVERSAL' ? '−' : ''}{fmtDecimal(e.base_amount, 2)}{e.currency_code !== 'INR' && <p className="text-[10.5px] text-slate-400">{e.currency_code} {fmtDecimal(e.amount, 2)} @ {e.exchange_rate}</p>}</td>
-                        <td className="td text-[12px]">{e.bank_label && <span>{e.bank_label}</span>}{e.bank_reference && <p className="tabular-nums text-[11px]">{e.bank_reference}</p>}
-                          {e.scrip_number && <p className="tabular-nums text-[11px]">Scrip {e.scrip_number}</p>}{e.is_cash && e.status === 'POSTED' && <p className="text-[10.5px] text-slate-400">bank match {inr(e.matched_amount)}</p>}
-                          {e.documents?.map((d: any) => <button key={d.id} className="mr-1 inline-flex items-center gap-0.5 text-[11px] text-brand-700 hover:underline" onClick={() => void openDocument(d.id, d.original_name).catch((er) => toast(errMsg(er), 'error'))}><Paperclip size={11} />{d.original_name}</button>)}</td>
-                        <td className="td whitespace-nowrap text-[11px] text-slate-500">{fmtDateTime(e.created_at)} · {e.created_by_name ?? ''}{e.posted_at && <p>posted {fmtDateTime(e.posted_at)}{e.posted_by_name ? ` · ${e.posted_by_name}` : ''}</p>}</td>
+                        <td className="td whitespace-nowrap text-small font-semibold">{fmtDate(e.event_date)}</td>
+                        <td className="td text-small">{e.label}{e.is_exception ? <span className="ml-1"><Badge tone="red">exception</Badge></span> : null}
+                          {e.remarks && <p className="text-caption text-slate-500 no-underline">{e.remarks}</p>}
+                          {e.custom_field_values && <p className="text-caption text-slate-500">{Object.entries(e.custom_field_values).map(([k, v]) => `${k}: ${String(v)}`).join(' · ')}</p>}</td>
+                        <td className="td text-right tabular-nums">{e.event_type === 'REVERSAL' ? '−' : ''}{fmtDecimal(e.base_amount, 2)}{e.currency_code !== 'INR' && <p className="text-caption text-slate-400">{e.currency_code} {fmtDecimal(e.amount, 2)} @ {e.exchange_rate}</p>}</td>
+                        <td className="td text-small">{e.bank_label && <span>{e.bank_label}</span>}{e.bank_reference && <p className="tabular-nums text-caption">{e.bank_reference}</p>}
+                          {e.scrip_number && <p className="tabular-nums text-caption">Scrip {e.scrip_number}</p>}{e.is_cash && e.status === 'POSTED' && <p className="text-caption text-slate-400">bank match {inr(e.matched_amount)}</p>}
+                          {e.documents?.map((d: any) => <button key={d.id} className="mr-1 inline-flex items-center gap-0.5 text-caption text-brand-700 hover:underline" onClick={() => void openDocument(d.id, d.original_name).catch((er) => toast(errMsg(er), 'error'))}><Paperclip size={11} />{d.original_name}</button>)}</td>
+                        <td className="td whitespace-nowrap text-caption text-slate-500">{fmtDateTime(e.created_at)} · {e.created_by_name ?? ''}{e.posted_at && <p>posted {fmtDateTime(e.posted_at)}{e.posted_by_name ? ` · ${e.posted_by_name}` : ''}</p>}</td>
                         <td className="td"><Badge tone={e.status === 'POSTED' ? 'green' : e.status === 'DRAFT' ? 'amber' : 'slate'}>{e.status.toLowerCase()}</Badge></td>
                         <td className="td whitespace-nowrap">
                           {e.status === 'DRAFT' && rights?.post && <button className="mr-2 text-brand-700 hover:underline" title="Post" data-post={e.id} onClick={() => void run(() => http.post(`/export-benefits/events/${e.id}/post`, {}), 'Posted')}><Send size={14} /></button>}
@@ -180,7 +180,7 @@ export function ClaimDrawer({ id, onClose }: { id: number; onClose: () => void }
               </div>
               {rev && (
                 <div className="rounded-lg border border-red-200 bg-red-50 p-3" id="bc-reverse-form">
-                  <p className="mb-2 text-[12.5px] text-red-900">Reverse {rev.label}? The original stays in the history; a reversal row nets it out.</p>
+                  <p className="mb-2 text-body text-red-900">Reverse {rev.label}? The original stays in the history; a reversal row nets it out.</p>
                   <Textarea label="Reason" required id="bc-reverse-reason" rows={2} value={rev.reason} onChange={(e) => setRev({ ...rev, reason: e.target.value })} />
                   <div className="mt-2 flex justify-end gap-2"><button className="btn-secondary" onClick={() => setRev(null)}>Cancel</button>
                     <Button variant="danger" loading={busy} id="bc-reverse-save" disabled={rev.reason.trim().length < 3}
@@ -202,9 +202,9 @@ export function ClaimDrawer({ id, onClose }: { id: number; onClose: () => void }
           {tab === 'followups' && (
             <div className="space-y-2">
               <table className="w-full" id="bc-followups"><thead><tr><th className="th">Reason</th><th className="th">Next action</th><th className="th">Owner</th><th className="th">Due</th><th className="th">Status</th><th className="th" /></tr></thead>
-                <tbody>{!x.followups.length && <tr><td colSpan={6} className="td py-4 text-center text-[12px] text-slate-400">No follow-ups</td></tr>}
-                  {x.followups.map((f: any) => <tr key={f.id}><td className="td text-[12px]">{f.reason_code.toLowerCase().replace('_', ' ')}</td><td className="td text-[12px]">{f.action_note}{f.done_note && <p className="text-slate-500">done: {f.done_note}</p>}</td>
-                    <td className="td text-[12px]">{f.owner_name ?? '—'}</td><td className={clsx('td text-[12px]', f.overdue && 'font-semibold text-red-600')}>{fmtDate(f.due_date)}</td>
+                <tbody>{!x.followups.length && <tr><td colSpan={6} className="td py-4 text-center text-small text-slate-400">No follow-ups</td></tr>}
+                  {x.followups.map((f: any) => <tr key={f.id}><td className="td text-small">{f.reason_code.toLowerCase().replace('_', ' ')}</td><td className="td text-small">{f.action_note}{f.done_note && <p className="text-slate-500">done: {f.done_note}</p>}</td>
+                    <td className="td text-small">{f.owner_name ?? '—'}</td><td className={clsx('td text-small', f.overdue && 'font-semibold text-red-600')}>{fmtDate(f.due_date)}</td>
                     <td className="td"><Badge tone={f.status === 'OPEN' ? (f.overdue ? 'red' : 'amber') : 'green'}>{f.status.toLowerCase()}</Badge></td>
                     <td className="td">{f.status === 'OPEN' && (rights?.export || rights?.post) && <Button size="sm" variant="secondary" onClick={() => void run(() => http.post(`/export-benefits/followups/${f.id}/done`, {}), 'Follow-up done')}>Done</Button>}</td></tr>)}</tbody></table>
               {(rights?.export || rights?.post) && (fu ? (
@@ -219,13 +219,13 @@ export function ClaimDrawer({ id, onClose }: { id: number; onClose: () => void }
           )}
           {tab === 'history' && (
             <table className="w-full"><thead><tr><th className="th">When</th><th className="th">From → to</th><th className="th">Reason</th><th className="th">By</th></tr></thead>
-              <tbody>{x.status_history.map((h: any) => <tr key={h.id}><td className="td text-[12px]">{fmtDateTime(h.changed_at)}</td>
-                <td className="td text-[12px]">{h.old_status ? `${statusLabel(M, h.old_status)} → ` : ''}<b>{statusLabel(M, h.new_status)}</b></td><td className="td text-[12px]">{h.reason ?? ''}</td><td className="td text-[12px]">{h.changed_by_name ?? ''}</td></tr>)}</tbody></table>
+              <tbody>{x.status_history.map((h: any) => <tr key={h.id}><td className="td text-small">{fmtDateTime(h.changed_at)}</td>
+                <td className="td text-small">{h.old_status ? `${statusLabel(M, h.old_status)} → ` : ''}<b>{statusLabel(M, h.new_status)}</b></td><td className="td text-small">{h.reason ?? ''}</td><td className="td text-small">{h.changed_by_name ?? ''}</td></tr>)}</tbody></table>
           )}
           {tab === 'audit' && (
             <table className="w-full" id="bc-audit"><thead><tr><th className="th">When</th><th className="th">What</th><th className="th">Change</th><th className="th">By</th></tr></thead>
-              <tbody>{x.audit.map((a: any) => <tr key={a.id} className="align-top"><td className="td whitespace-nowrap text-[12px]">{fmtDateTime(a.changed_at)}</td><td className="td text-[12px]">{a.table_name.replace('trx_export_', '').replace(/_/g, ' ')} #{a.record_id} · {a.action.toLowerCase()}</td>
-                <td className="td max-w-[480px] break-words tabular-nums text-[10.5px] text-slate-600">{a.old_values ? `${JSON.stringify(a.old_values).slice(0, 200)} → ` : ''}{a.new_values ? JSON.stringify(a.new_values).slice(0, 300) : ''}</td><td className="td text-[12px]">{a.changed_by_name ?? ''}</td></tr>)}</tbody></table>
+              <tbody>{x.audit.map((a: any) => <tr key={a.id} className="align-top"><td className="td whitespace-nowrap text-small">{fmtDateTime(a.changed_at)}</td><td className="td text-small">{a.table_name.replace('trx_export_', '').replace(/_/g, ' ')} #{a.record_id} · {a.action.toLowerCase()}</td>
+                <td className="td max-w-[480px] break-words tabular-nums text-caption text-slate-600">{a.old_values ? `${JSON.stringify(a.old_values).slice(0, 200)} → ` : ''}{a.new_values ? JSON.stringify(a.new_values).slice(0, 300) : ''}</td><td className="td text-small">{a.changed_by_name ?? ''}</td></tr>)}</tbody></table>
           )}
         </div>
       )}
@@ -239,7 +239,7 @@ function StageForm({ stage, sv, setSv, users, busy, onCancel, onSave }: { stage:
     REJECT: 'The whole claim is rejected — nothing will come. A follow-up is kept with the owner and due date.', SHORT_CLOSE: 'The balance will not come — it stops showing as pending.' };
   return (
     <div className="rounded-lg border border-amber-200 bg-amber-50 p-3" id="bc-stage-form">
-      <p className="mb-2 text-[12.5px] text-amber-900">{text[stage]}</p>
+      <p className="mb-2 text-body text-amber-900">{text[stage]}</p>
       <div className="grid gap-3 sm:grid-cols-4">
         <Textarea className="sm:col-span-2" label="Reason" required id="bc-stage-reason" rows={2} value={sv.reason} onChange={(e) => setSv({ ...sv, reason: e.target.value })} />
         {(stage === 'QUERY' || stage === 'REJECT') && <>
@@ -293,8 +293,8 @@ function EventForm({ claim, meta, type, onCancel, onSaved }: { claim: any; meta:
   const isClaim = ['CLAIM_FILED', 'APPROVAL'].includes(type);
   return (
     <div className="rounded-lg border border-brand-200 bg-brand-50/30 p-3" id="bc-event-form" data-type={type}>
-      <p className="mb-2 text-[13px] font-semibold text-slate-800">{t.label} — {claim.scheme_name}{!t.settles && !isClaim && t.kind !== 'SCRIP_OUT' && t.kind !== 'PROCEEDS' ? '' : ''}</p>
-      {t.kind === 'SCRIP_IN' && <p className="mb-2 text-[11.5px] text-indigo-700">A scrip issue is not cash — it shows as scrip available until it is utilised or sold.</p>}
+      <p className="mb-2 text-body font-semibold text-slate-800">{t.label} — {claim.scheme_name}{!t.settles && !isClaim && t.kind !== 'SCRIP_OUT' && t.kind !== 'PROCEEDS' ? '' : ''}</p>
+      {t.kind === 'SCRIP_IN' && <p className="mb-2 text-small text-indigo-700">A scrip issue is not cash — it shows as scrip available until it is utilised or sold.</p>}
       <div className="grid gap-3 sm:grid-cols-4">
         <Input label={isClaim ? 'Date' : 'Actual date (bank credit / issue)'} type="date" required id="ev-date" value={v.event_date} max={todayIst()} error={errors.event_date}
           hint={early ? `Before the SB date ${fmtDate(claim.sb_date)} — exception needed` : 'Date of the source document, not today\'s entry'} onChange={(e) => set('event_date', e.target.value)} />
@@ -310,12 +310,12 @@ function EventForm({ claim, meta, type, onCancel, onSaved }: { claim: any; meta:
         <Input label={type === 'APPROVAL' ? 'Sanction / approval ref' : 'Source document no'} id="ev-srcdoc" value={v.source_document_no} onChange={(e) => set('source_document_no', e.target.value)} />
         <DynamicFields fields={fields} values={v.cf} errors={errors} idPrefix="ev-cf" onChange={(cf) => set('cf', cf)} />
         <Input className="sm:col-span-2" label={t.needs_reason ? 'Reason / remarks' : 'Remarks'} required={t.needs_reason} id="ev-remarks" value={v.remarks} error={errors.remarks} onChange={(e) => set('remarks', e.target.value)} />
-        {!isClaim && <label className="flex flex-col gap-1 text-[12px] text-slate-600 sm:col-span-2"><span className="font-medium">Attachment (bank advice / scrip ledger …)</span>
-          <span className="flex gap-2"><input type="file" id="ev-file" accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.csv" className="text-[12px]" onChange={(e) => set('file', e.target.files?.[0] ?? null)} />
+        {!isClaim && <label className="flex flex-col gap-1 text-small text-slate-600 sm:col-span-2"><span className="font-medium">Attachment (bank advice / scrip ledger …)</span>
+          <span className="flex gap-2"><input type="file" id="ev-file" accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.csv" className="text-small" onChange={(e) => set('file', e.target.files?.[0] ?? null)} />
             <input className="input w-36" value={v.doc_type} onChange={(e) => set('doc_type', e.target.value.toUpperCase())} title="Document type" /></span></label>}
       </div>
       {(overBy > meta.settings.tolerance || overAvail || early || !claim.config.is_active) && (
-        <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-2 text-[12px] text-amber-900" id="ev-warnings">
+        <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-2 text-small text-amber-900" id="ev-warnings">
           {overBy > meta.settings.tolerance && <p>• {inr(overBy)} more than pending — an over-receipt is an exception (shown as excess, never hidden).</p>}
           {overAvail && <p>• More than the scrip available ({inr(claim.scrip_available)}) — this will be blocked.</p>}
           {early && <p>• The date is before the shipping bill date.</p>}
@@ -328,8 +328,8 @@ function EventForm({ claim, meta, type, onCancel, onSaved }: { claim: any; meta:
           </div>}
         </div>
       )}
-      {warn.length > 0 && !dup && <p className="mt-2 text-[12px] text-red-700" id="ev-error">{warn.join(' · ')}</p>}
-      {dup && <div className="mt-2 rounded-md border border-red-200 bg-red-50 p-2 text-[12px] text-red-800" id="ev-dup">{dup}
+      {warn.length > 0 && !dup && <p className="mt-2 text-small text-red-700" id="ev-error">{warn.join(' · ')}</p>}
+      {dup && <div className="mt-2 rounded-md border border-red-200 bg-red-50 p-2 text-small text-red-800" id="ev-dup">{dup}
         <div className="mt-1 flex gap-2"><Button size="sm" variant="danger" id="ev-dup-confirm" loading={busy} onClick={() => void save(true)}>Record anyway</Button><button className="btn-secondary btn-sm" onClick={() => setDup(null)}>Change UTR</button></div></div>}
       <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
         {meta.rights.post && !isClaim && <Checkbox label="Post now (posted events can only be reversed)" checked={v.post} onChange={(c: boolean) => set('post', c)} />}
@@ -352,11 +352,11 @@ function DocsTab({ claim, canEdit, onChanged }: { claim: any; canEdit: boolean; 
   };
   return (
     <div className="space-y-2" id="bc-docs">
-      {required.length > 0 && <p className="text-[12px] text-slate-500">Required by the scheme: {required.map((r) => `${r.label} (${r.stage.toLowerCase()}, ${r.policy === 'BLOCK' ? 'must' : 'should'})`).join(' · ')}</p>}
+      {required.length > 0 && <p className="text-small text-slate-500">Required by the scheme: {required.map((r) => `${r.label} (${r.stage.toLowerCase()}, ${r.policy === 'BLOCK' ? 'must' : 'should'})`).join(' · ')}</p>}
       <table className="w-full"><thead><tr><th className="th">File</th><th className="th">Type</th><th className="th">For</th><th className="th">Uploaded</th><th className="th" /></tr></thead>
-        <tbody>{!claim.all_documents.length && <tr><td colSpan={5} className="td py-4 text-center text-[12px] text-slate-400">No documents</td></tr>}
-          {claim.all_documents.map((d: any) => <tr key={d.id}><td className="td text-[12px]"><button className="inline-flex items-center gap-1 text-brand-700 hover:underline" data-doc={d.id} onClick={() => void openDocument(d.id, d.original_name).catch((er) => toast(errMsg(er), 'error'))}><FileText size={13} />{d.original_name}</button></td>
-            <td className="td text-[12px]">{d.doc_type}</td><td className="td text-[12px]">{d.event_id ? `event #${d.event_id}` : 'claim'}</td><td className="td text-[12px]">{fmtDateTime(d.uploaded_at)} · {d.uploaded_by_name ?? ''}</td>
+        <tbody>{!claim.all_documents.length && <tr><td colSpan={5} className="td py-4 text-center text-small text-slate-400">No documents</td></tr>}
+          {claim.all_documents.map((d: any) => <tr key={d.id}><td className="td text-small"><button className="inline-flex items-center gap-1 text-brand-700 hover:underline" data-doc={d.id} onClick={() => void openDocument(d.id, d.original_name).catch((er) => toast(errMsg(er), 'error'))}><FileText size={13} />{d.original_name}</button></td>
+            <td className="td text-small">{d.doc_type}</td><td className="td text-small">{d.event_id ? `event #${d.event_id}` : 'claim'}</td><td className="td text-small">{fmtDateTime(d.uploaded_at)} · {d.uploaded_by_name ?? ''}</td>
             <td className="td">{canEdit && !d.event_id && <button className="text-slate-400 hover:text-red-600" title="Remove" onClick={() => void http.del(`/export-benefits/documents/${d.id}`).then(() => { toast('Removed'); onChanged(); }, (er) => toast(errMsg(er), 'error'))}><Trash2 size={14} /></button>}</td></tr>)}</tbody></table>
       {canEdit && <div className="flex items-end gap-2"><Input className="w-44" label="Document type" value={docType} onChange={(e) => setDocType(e.target.value.toUpperCase())} />
         <label className={clsx('btn-secondary btn-sm cursor-pointer', busy && 'opacity-60')}><Paperclip size={13} />{busy ? 'Uploading…' : 'Attach file'}

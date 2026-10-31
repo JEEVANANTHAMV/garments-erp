@@ -14,7 +14,7 @@ export const RECEIPT_LABEL: Record<string, [string, string]> = {
 };
 export function ReceiptStatusBadge({ value }: { value?: string | null }) {
   const [l, c] = RECEIPT_LABEL[String(value ?? 'PENDING')] ?? RECEIPT_LABEL.PENDING;
-  return <span className={`inline-block whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-bold ${c}`}>{l}</span>;
+  return <span className={`inline-block whitespace-nowrap rounded px-1.5 py-0.5 text-micro font-bold ${c}`}>{l}</span>;
 }
 
 /** Where a PO line stands after this receipt. */
@@ -30,13 +30,13 @@ export function LineReceiptChip({ ordered, prev, accepted, type }: { ordered?: n
   const r = lineAfterReceipt(ordered, prev, accepted, type);
   if (!r) return null;
   const [, c] = RECEIPT_LABEL[r.status];
-  return <div className={`mt-0.5 inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold ${c}`} title={r.text}>{r.text}</div>;
+  return <div className={`mt-0.5 inline-block rounded px-1.5 py-0.5 text-micro font-semibold ${c}`} title={r.text}>{r.text}</div>;
 }
 
 /** Partial / Final chooser for the GRN header. */
 export function ReceiptTypeChooser({ value, onChange, disabled, id = 'grn-receipt' }: { value: ReceiptType; onChange: (v: ReceiptType) => void; disabled?: boolean; id?: string }) {
   return (
-    <div className="flex flex-wrap items-center gap-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[12px]" id={id}>
+    <div className="flex flex-wrap items-center gap-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-small" id={id}>
       <span className="font-semibold text-slate-700">This delivery is:</span>
       <label className="flex items-center gap-1.5"><input type="radio" disabled={disabled} checked={value === 'PARTIAL'} onChange={() => onChange('PARTIAL')} id={`${id}-partial`} /> Partial — more to come on the PO</label>
       <label className="flex items-center gap-1.5"><input type="radio" disabled={disabled} checked={value === 'FINAL'} onChange={() => onChange('FINAL')} id={`${id}-final`} /> Final — last delivery; close what is still pending</label>
@@ -51,7 +51,7 @@ export function ReceiptTypeChooser({ value, onChange, disabled, id = 'grn-receip
 export function LineReceiptSelect({ value, onChange, disabled, id }: { value?: ReceiptType | null; onChange: (v: ReceiptType) => void; disabled?: boolean; id?: string }) {
   const v = value === 'FINAL' ? 'FINAL' : 'PARTIAL';
   return (
-    <div className="mt-1 inline-flex overflow-hidden rounded border border-slate-300 text-[10px] font-semibold" id={id} title="Partial = more to come on this PO line · Final = last delivery, close what is still pending">
+    <div className="mt-1 inline-flex overflow-hidden rounded border border-slate-300 text-micro font-semibold" id={id} title="Partial = more to come on this PO line · Final = last delivery, close what is still pending">
       {(['PARTIAL', 'FINAL'] as ReceiptType[]).map((t) => (
         <button key={t} type="button" disabled={disabled} id={id ? `${id}-${t.toLowerCase()}` : undefined} onClick={() => onChange(t)}
           className={`px-1.5 py-0.5 ${v === t ? (t === 'FINAL' ? 'bg-slate-700 text-white' : 'bg-amber-500 text-white') : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
@@ -65,13 +65,13 @@ export function LineReceiptSelect({ value, onChange, disabled, id }: { value?: R
 /** Badge for a saved GRN line. */
 export function LineReceiptBadge({ value }: { value?: string | null }) {
   if (value !== 'FINAL' && value !== 'PARTIAL') return null;
-  return <span className={`ml-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-bold ${value === 'FINAL' ? 'bg-slate-200 text-slate-700' : 'bg-amber-100 text-amber-800'}`}>{value === 'FINAL' ? 'Final' : 'Partial'}</span>;
+  return <span className={`ml-1 inline-block rounded px-1.5 py-0.5 text-micro font-bold ${value === 'FINAL' ? 'bg-slate-200 text-slate-700' : 'bg-amber-100 text-amber-800'}`}>{value === 'FINAL' ? 'Final' : 'Partial'}</span>;
 }
 
 /** Header strip: the choice is per line; quick buttons set every PO line at once. */
 export function ReceiptAllLines({ onSet, finals, total, id = 'grn-receipt' }: { onSet: (v: ReceiptType) => void; finals: number; total: number; id?: string }) {
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[12px]" id={id}>
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-small" id={id}>
       <span className="font-semibold text-slate-700">Partial / Final is set on each line below</span>
       <span className="text-slate-500">({finals} of {total} line{total === 1 ? '' : 's'} final)</span>
       <span className="ml-auto text-slate-500">Set all:</span>

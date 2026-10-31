@@ -673,7 +673,7 @@ export default function FabricPurchaseOrderDetailPage() {
               </h1>
               <StatusBadge value={head.approval_state} />
               {isForeignCurrency && (
-                <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
+                <span className="px-2 py-0.5 text-caption font-bold rounded-full bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
                   <Globe size={11} /> IMPORT PO ({currCode})
                 </span>
               )}
@@ -872,12 +872,12 @@ export default function FabricPurchaseOrderDetailPage() {
                     Bill of Materials (BOM) Fabric Integration
                   </h4>
                   {bomData?.bom && (
-                    <span className="bg-sky-100 text-sky-800 text-[10.5px] font-bold px-2 py-0.5 rounded border border-sky-300">
+                    <span className="bg-sky-100 text-sky-800 text-caption font-bold px-2 py-0.5 rounded border border-sky-300">
                       BOM: {bomData.bom.bom_no} · v{bomData.bom.version}
                     </span>
                   )}
                 </div>
-                <p className="text-[11px] text-slate-600 mt-0.5">
+                <p className="text-caption text-slate-600 mt-0.5">
                   {bomLoading
                     ? 'Loading the BOM of this job…'
                     : bomData
@@ -926,13 +926,13 @@ export default function FabricPurchaseOrderDetailPage() {
               <button
                 type="button"
                 onClick={() => setHead((h) => ({ ...h, billing_address: COMPANY_DEFAULT_ADDRESS }))}
-                className="text-[11px] text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                className="text-caption text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
                 title="Reset to Head Office address"
               >
                 <RotateCcw size={11} /> Reset Default
               </button>
             </div>
-            <p className="text-[11px] text-slate-500 mb-2.5">
+            <p className="text-caption text-slate-500 mb-2.5">
               Buyer / Company legal office address billed by the fabric mill
             </p>
           </div>
@@ -958,7 +958,7 @@ export default function FabricPurchaseOrderDetailPage() {
               <button
                 type="button"
                 onClick={() => setHead((h) => ({ ...h, shipping_to_party_id: '', shipping_address: head.billing_address }))}
-                className="text-[11px] text-slate-600 hover:text-slate-800 font-medium flex items-center gap-1"
+                className="text-caption text-slate-600 hover:text-slate-800 font-medium flex items-center gap-1"
                 title="Copy from Billing Address"
               >
                 Same as Billing
@@ -992,7 +992,7 @@ export default function FabricPurchaseOrderDetailPage() {
               <Layers size={14} className="text-emerald-600" />
               <span>Fabric Line Items ({lines.length})</span>
             </h3>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-caption text-slate-400">
               Multiple jobs supported: assign each line item to a Sales Order or Stock, with live tax and amount details
             </p>
           </div>
@@ -1007,7 +1007,7 @@ export default function FabricPurchaseOrderDetailPage() {
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-100/70 border-b border-slate-200 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
+            <thead className="bg-slate-100/70 border-b border-slate-200 text-caption font-semibold text-slate-600 uppercase tracking-wider">
               <tr>
                 <th className="py-2.5 px-2 w-8 text-center">#</th>
                 <th className="py-2.5 px-2 min-w-[130px]">IO No</th>
@@ -1045,7 +1045,7 @@ export default function FabricPurchaseOrderDetailPage() {
                 return (
                 <tr key={l._key} className="hover:bg-slate-50/50">
                   {/* # S NO */}
-                  <td className="py-2 px-2 text-center text-slate-400 tabular-nums text-[11px]">{idx + 1}</td>
+                  <td className="py-2 px-2 text-center text-slate-400 tabular-nums text-caption">{idx + 1}</td>
                   {/* I/O Num (Sales Order / Job) */}
                   <td className="py-2 px-2">
                     <select
@@ -1156,7 +1156,7 @@ export default function FabricPurchaseOrderDetailPage() {
                         className="input py-1 text-xs w-full tabular-nums text-purple-700 bg-purple-50/30"
                       />
                     ) : (
-                      <span className="text-slate-300 text-[11px] block text-center">—</span>
+                      <span className="text-slate-300 text-caption block text-center">—</span>
                     )}
                   </td>
                   {/* Composition */}
@@ -1300,7 +1300,7 @@ export default function FabricPurchaseOrderDetailPage() {
                     </td>
                   </>
                 )}
-                <td className="py-3 px-2 text-right tabular-nums text-base font-black text-slate-900">
+                <td className="py-3 px-2 text-right tabular-nums text-base font-bold text-slate-900">
                   ₹{fmtDecimal(totals.grandTotal, 2)}
                 </td>
                 <td></td>
@@ -1313,7 +1313,7 @@ export default function FabricPurchaseOrderDetailPage() {
         <div className="mt-4 border-t border-slate-200 bg-slate-50/70 p-4 rounded-xl">
           <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 items-end">
             <div>
-              <label className="label text-[11px] font-bold text-slate-700">Freight / Transport Charges (₹)</label>
+              <label className="label text-caption font-bold text-slate-700">Freight / Transport Charges (₹)</label>
               <input
                 type="number"
                 step="10"
@@ -1325,7 +1325,7 @@ export default function FabricPurchaseOrderDetailPage() {
             </div>
 
             <div>
-              <label className="label text-[11px] font-bold text-slate-700">Other / Unloading Charges (₹)</label>
+              <label className="label text-caption font-bold text-slate-700">Other / Unloading Charges (₹)</label>
               <input
                 type="number"
                 step="10"
@@ -1337,7 +1337,7 @@ export default function FabricPurchaseOrderDetailPage() {
             </div>
 
             <div>
-              <label className="label text-[11px] font-bold text-slate-700">Round Off (₹)</label>
+              <label className="label text-caption font-bold text-slate-700">Round Off (₹)</label>
               <input
                 type="number"
                 step="0.01"
@@ -1350,7 +1350,7 @@ export default function FabricPurchaseOrderDetailPage() {
 
             <div className="p-2.5 rounded-lg border border-amber-200 bg-amber-50/60 space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="flex items-center gap-1.5 text-[11px] font-bold text-amber-900 cursor-pointer">
+                <label className="flex items-center gap-1.5 text-caption font-bold text-amber-900 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={head.tcs_applicable}
@@ -1360,17 +1360,17 @@ export default function FabricPurchaseOrderDetailPage() {
                   <span>TCS Applicable</span>
                 </label>
                 {head.tcs_applicable && (
-                  <span className="text-[11px] font-bold tabular-nums text-amber-800">
+                  <span className="text-caption font-bold tabular-nums text-amber-800">
                     + ₹{fmtDecimal(totals.tcsAmt)}
                   </span>
                 )}
               </div>
               {head.tcs_applicable && (
-                <div className="flex items-center gap-1.5 text-[11px]">
+                <div className="flex items-center gap-1.5 text-caption">
                   <select
                     value={head.tcs_section}
                     onChange={(e) => setHead((h) => ({ ...h, tcs_section: e.target.value }))}
-                    className="input py-0.5 px-1.5 text-[10px] w-24"
+                    className="input py-0.5 px-1.5 text-micro w-24"
                   >
                     <option value="206C(1H)">206C(1H)</option>
                     <option value="206C(1)">206C(1)</option>
@@ -1380,7 +1380,7 @@ export default function FabricPurchaseOrderDetailPage() {
                     step="0.01"
                     value={head.tcs_rate}
                     onChange={(e) => setHead((h) => ({ ...h, tcs_rate: parseFloat(e.target.value) || 0 }))}
-                    className="input py-0.5 px-1.5 text-[10px] text-right tabular-nums w-16"
+                    className="input py-0.5 px-1.5 text-micro text-right tabular-nums w-16"
                     placeholder="0.10"
                   />
                   <span className="text-slate-500">%</span>
@@ -1389,8 +1389,8 @@ export default function FabricPurchaseOrderDetailPage() {
             </div>
 
             <div className="flex flex-col items-end justify-center bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
-              <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider block">Net Payable Amount ({currCode})</span>
-              <span className="text-xl font-black text-brand-900 tabular-nums">{currSymbol}{fmtDecimal(totals.grandTotal)}</span>
+              <span className="text-caption text-slate-500 font-bold uppercase tracking-wider block">Net Payable Amount ({currCode})</span>
+              <span className="text-xl font-bold text-brand-900 tabular-nums">{currSymbol}{fmtDecimal(totals.grandTotal)}</span>
               {isForeignCurrency && (
                 <span className="text-xs font-bold text-amber-900 mt-0.5">
                   INR Converted: ₹{fmtDecimal(totals.grandTotal * Number(head.exchange_rate), 2)}

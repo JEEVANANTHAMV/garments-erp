@@ -37,19 +37,19 @@ export function PackingRulesPage() {
       <PackingNav active="/logistics/packing/rules" />
       <Card>
         {rules.isLoading ? <LoadingBlock /> : !rules.data?.length ? <EmptyState title="No packing rules" message="Add a company default rule first (no buyer / style / PO)." /> : (
-          <table className="w-full text-[12.5px]" id="rules-table">
+          <table className="w-full text-body" id="rules-table">
             <thead><tr><th className="th">Code</th><th className="th">Name</th><th className="th">Applies to</th><th className="th">Mode</th><th className="th text-right">Pcs / bag</th><th className="th text-right">Pcs / carton</th>
               <th className="th">Mixing</th><th className="th">Packaging</th><th className="th">Valid</th><th className="th">Used</th><th className="th" /></tr></thead>
             <tbody>{rules.data.map((r) => (
               <tr key={r.id} className={n(r.is_active) ? '' : 'opacity-50'}>
                 <td className="td tabular-nums">{r.rule_code} <span className="text-slate-400">r{r.revision}</span></td><td className="td">{r.rule_name}</td><td className="td">{scope(r)}</td>
                 <td className="td">{UNIT_LABEL[r.packing_unit ?? 'SINGLE']}{r.packing_unit === 'MASTER_POLYBAG' && r.pieces_per_master_bag ? ` (${r.pieces_per_master_bag} / bag)` : ''}
-                  <div className="text-[11px] text-slate-500">{r.packing_mode === 'INDIVIDUAL_PIECE' ? 'bag each piece' : 'bundle / qty'}</div></td><td className="td text-right">{r.pieces_per_polybag}</td><td className="td text-right">{r.standard_pieces_per_carton}</td>
+                  <div className="text-caption text-slate-500">{r.packing_mode === 'INDIVIDUAL_PIECE' ? 'bag each piece' : 'bundle / qty'}</div></td><td className="td text-right">{r.pieces_per_polybag}</td><td className="td text-right">{r.standard_pieces_per_carton}</td>
                 <td className="td">{[n(r.allow_mixed_sizes) && 'sizes', n(r.allow_mixed_colours) && 'colours'].filter(Boolean).join(' + ') || 'solid'}{n(r.allow_partial_carton) ? ' · partial' : ''}{n(r.allow_overpack) ? ' · overpack' : ''}</td>
                 <td className="td">{r.polybag_trim_name ?? '—'} / {r.carton_trim_name ?? '—'}</td>
                 <td className="td">{r.effective_from ? fmtDate(r.effective_from) : '…'} – {r.effective_to ? fmtDate(r.effective_to) : '…'}</td>
                 <td className="td">{n(r.used_by) ? `${r.used_by} order(s)` : '—'}
-                  {n(r.open_old_rev) ? <div className="text-[11px] text-amber-700" data-old-rev={r.id} title="Open packing orders made before the last change keep the older revision — open the order → Apply latest rule">{r.open_old_rev} open on an older revision</div> : null}</td>
+                  {n(r.open_old_rev) ? <div className="text-caption text-amber-700" data-old-rev={r.id} title="Open packing orders made before the last change keep the older revision — open the order → Apply latest rule">{r.open_old_rev} open on an older revision</div> : null}</td>
                 <td className="td whitespace-nowrap text-right">
                   {can('PACKING.UPDATE') && <button className="mr-2 text-brand-700 hover:underline" onClick={() => setEditing(r)}>Edit</button>}
                   {can('PACKING.UPDATE') && <button className="text-slate-600 hover:underline" onClick={() => toggle(r)}>{n(r.is_active) ? 'Deactivate' : 'Activate'}</button>}
@@ -97,7 +97,7 @@ export function RuleModal({ rule, onClose, onSaved }: { rule: Partial<Rule>; onC
         ? 'Saving makes a new revision. New packing orders use it; orders already made keep their copy until you open them and click "Apply latest rule" (only before polybags / cartons).'
         : 'Leave buyer / style / PO blank for the company default.'}
       footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button id="save-rule" loading={busy} onClick={save}>Save rule</Button></>}>
-      {err && <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-700">{err}</div>}
+      {err && <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-body text-red-700">{err}</div>}
       <FormSection title="Rule" cols={4}>
         <Input id="rule-name" label="Rule name" required className="sm:col-span-2" value={f.rule_name ?? ''} onChange={set('rule_name')} />
         <Input label="Effective from" type="date" value={f.effective_from} onChange={set('effective_from')} />

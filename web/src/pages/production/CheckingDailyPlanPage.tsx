@@ -406,11 +406,11 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
                         <td className="px-2 py-1.5 tabular-nums font-semibold text-brand-700">{l.line_code}</td>
                         <td className="px-2 py-1.5 font-medium">{l.line_name}</td>
                         <td className="px-2 py-1.5">
-                          <input list={`sup-${proc}`} className="input h-7 w-32 text-[11px]" disabled={!editable} value={st?.supervisor_name ?? ''}
+                          <input list={`sup-${proc}`} className="input h-7 w-32 text-caption" disabled={!editable} value={st?.supervisor_name ?? ''}
                             onChange={(e) => patchSetting(l.id, { supervisor_name: e.target.value })} />
                         </td>
                         <td className="px-2 py-1.5 text-right">
-                          <input type="number" min={0} className="input h-7 w-24 text-right text-[11px]" disabled={!editable} value={st?.target_qty ?? 0}
+                          <input type="number" min={0} className="input h-7 w-24 text-right text-caption" disabled={!editable} value={st?.target_qty ?? 0}
                             onChange={(e) => patchSetting(l.id, { target_qty: Math.max(0, Number(e.target.value) || 0) })} />
                         </td>
                         <td className="px-2 py-1.5 text-right font-medium text-emerald-700" title={l.planned_other ? `${l.planned_other} PCS on other plans of this date/shift` : undefined}>
@@ -419,7 +419,7 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
                         <td className={`px-2 py-1.5 text-right font-medium ${s.balance < 0 ? 'text-red-600' : ''}`}>{fmtNumber(s.balance)}</td>
                         <td className="px-2 py-1.5"><UtilBar value={s.util} /></td>
                         <td className="px-2 py-1.5 text-right">
-                          <input type="number" min={0} className="input h-7 w-16 text-right text-[11px]" disabled={!editable} value={st?.operators ?? 0}
+                          <input type="number" min={0} className="input h-7 w-16 text-right text-caption" disabled={!editable} value={st?.operators ?? 0}
                             onChange={(e) => patchSetting(l.id, { operators: Math.max(0, Number(e.target.value) || 0) })} />
                         </td>
                         <td className="px-2 py-1.5">
@@ -497,18 +497,18 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
                               <td className="px-2 py-1 text-right text-slate-500">{fmtNumber(maxOf(r))}</td>
                               <td className="px-2 py-1 text-right">
                                 {editable ? (
-                                  <input type="number" min={1} max={maxOf(r)} className="input h-6 w-20 text-right text-[11px]" value={r.planned_qty}
+                                  <input type="number" min={1} max={maxOf(r)} className="input h-6 w-20 text-right text-caption" value={r.planned_qty}
                                     onChange={(e) => patchRow(r.allocation_detail_id, { planned_qty: Math.max(1, Math.min(Math.floor(Number(e.target.value)) || 1, maxOf(r))) })} />
                                 ) : fmtNumber(r.planned_qty)}
                               </td>
                               <td className="px-2 py-1">
-                                <select className="input h-6 w-24 text-[11px]" disabled={!editable} value={r.priority}
+                                <select className="input h-6 w-24 text-caption" disabled={!editable} value={r.priority}
                                   onChange={(e) => patchRow(r.allocation_detail_id, { priority: Number(e.target.value) })}>
                                   <option value={0}>Normal</option><option value={1}>Urgent</option>
                                 </select>
                               </td>
                               <td className="px-2 py-1">
-                                <input className="input h-6 w-36 text-[11px]" disabled={!editable} value={r.remarks}
+                                <input className="input h-6 w-36 text-caption" disabled={!editable} value={r.remarks}
                                   onChange={(e) => patchRow(r.allocation_detail_id, { remarks: e.target.value })} />
                               </td>
                               <td className="px-2 py-1 text-center">
@@ -626,7 +626,7 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
           <div className="flex gap-6">
             {[['Bundles', rows.length], ['Planned (PCS)', fmtNumber(totals.planned)], ['Unplanned (PCS)', fmtNumber(totals.unplanned)], ['Planned %', `${pct(totals.planned, totals.total)}%`]].map(([k, v]) => (
               <div key={k as string} className="text-center">
-                <p className="text-[10px] uppercase tracking-wider opacity-80">{k}</p>
+                <p className="text-micro uppercase tracking-wider opacity-80">{k}</p>
                 <p className="text-xl font-bold">{v}</p>
               </div>
             ))}

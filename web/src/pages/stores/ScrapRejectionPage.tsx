@@ -115,7 +115,7 @@ function EntryEditor({ doc, kind, canPost, onClose, onSaved }: { doc: any | null
           <tbody>
             {lines.map((l, i) => (
               <tr key={l.source_ref ?? `g${i}`} className="border-t border-slate-100 scrap-line">
-                <td className={`${TD} font-medium`}>{l.source_ref ? <>{l.item_name}<span className="ml-1 text-[10.5px] text-slate-400">{l.material_type.toLowerCase()}</span></> : <span className="text-slate-500">Garment / WIP</span>}</td>
+                <td className={`${TD} font-medium`}>{l.source_ref ? <>{l.item_name}<span className="ml-1 text-caption text-slate-400">{l.material_type.toLowerCase()}</span></> : <span className="text-slate-500">Garment / WIP</span>}</td>
                 <td className={TD}><input className="input w-48 line-desc" value={l.item_description} placeholder={l.source_ref ? '' : 'e.g. Sewing rejects — style / part'} onChange={(e) => set(i, { item_description: e.target.value })} /></td>
                 <td className={TD}><input className="input w-24" value={l.color_name} onChange={(e) => set(i, { color_name: e.target.value })} /></td>
                 <td className={TD}><input className="input w-16" value={l.sizes} onChange={(e) => set(i, { sizes: e.target.value })} /></td>

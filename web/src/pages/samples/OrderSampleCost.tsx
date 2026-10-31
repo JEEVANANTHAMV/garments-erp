@@ -17,28 +17,28 @@ export function OrderSampleCost({ soId }: { soId: number }) {
     <div className="card overflow-hidden" id="order-sample-cost">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-border px-4 py-3">
         <div>
-          <h3 className="text-[13.5px] font-semibold text-slate-800">Sample development cost in this order</h3>
-          <p className="text-[12px] text-slate-500">{q.data?.basis}</p>
+          <h3 className="text-body-lg font-semibold text-slate-800">Sample development cost in this order</h3>
+          <p className="text-small text-slate-500">{q.data?.basis}</p>
         </div>
-        <div className="text-right text-[12.5px]">
-          <p>In the order P&amp;L: <b className="text-[15px]">{inr(q.data?.total_posted ?? 0, '₹ 0')}</b></p>
+        <div className="text-right text-body">
+          <p>In the order P&amp;L: <b className="text-title">{inr(q.data?.total_posted ?? 0, '₹ 0')}</b></p>
           {Number(q.data?.total_pending) > 0 && <p className="text-amber-700">Awaiting approval {inr(q.data?.total_pending)}</p>}
         </div>
       </div>
-      {!rows.length ? <p className="py-10 text-center text-[13px] text-slate-400">No sample cost is allocated to this order.</p> : (
+      {!rows.length ? <p className="py-10 text-center text-body text-slate-400">No sample cost is allocated to this order.</p> : (
         <table className="w-full">
           <thead><tr><th className="th">Sample</th><th className="th">Allocation</th><th className="th text-right">Share</th><th className="th text-right">Amount ₹</th><th className="th">State</th></tr></thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.line_id} className={r.line_status === 'REVERSED' ? 'opacity-60' : 'row-hover'}>
-                <td className="td"><Link className="tabular-nums text-[12px] font-semibold text-brand-700 hover:underline" to={`/sales/samples/${r.sample_id}?tab=costing`}>{r.sample_no}</Link>
-                  <p className="text-[11px] text-slate-500">{r.sample_type} · {r.style_code} · {fmtNumber(r.sample_qty)} pcs</p></td>
-                <td className="td text-[12px]"><Link className="tabular-nums hover:underline" to={`/sales/samples/${r.sample_id}?tab=allocation`}>{r.batch_no}</Link> · {String(r.method).toLowerCase()}
+                <td className="td"><Link className="tabular-nums text-small font-semibold text-brand-700 hover:underline" to={`/sales/samples/${r.sample_id}?tab=costing`}>{r.sample_no}</Link>
+                  <p className="text-caption text-slate-500">{r.sample_type} · {r.style_code} · {fmtNumber(r.sample_qty)} pcs</p></td>
+                <td className="td text-small"><Link className="tabular-nums hover:underline" to={`/sales/samples/${r.sample_id}?tab=allocation`}>{r.batch_no}</Link> · {String(r.method).toLowerCase()}
                   <p className="text-slate-500">{r.posted_at ? `posted ${fmtDate(r.posted_at)}` : ''} {r.reason}</p></td>
-                <td className="td text-right text-[12px] tabular-nums">{fmtNumber(r.basis_pct, 2)}%</td>
+                <td className="td text-right text-small tabular-nums">{fmtNumber(r.basis_pct, 2)}%</td>
                 <td className="td text-right tabular-nums font-semibold">{fmtNumber(r.allocated_amount, 2)}</td>
                 <td className="td">{r.line_status === 'REVERSED' ? <Badge tone="gray">reversed {fmtDate(r.reversed_at)}</Badge> : <Badge tone={ALLOC_STATUS_TONE[r.batch_status] ?? 'slate'}>{String(r.batch_status).replace(/_/g, ' ').toLowerCase()}</Badge>}
-                  {r.reverse_reason && <p className="text-[11px] text-slate-500">{r.reverse_reason}</p>}</td>
+                  {r.reverse_reason && <p className="text-caption text-slate-500">{r.reverse_reason}</p>}</td>
               </tr>
             ))}
           </tbody>

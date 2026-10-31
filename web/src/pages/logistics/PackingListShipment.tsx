@@ -461,7 +461,7 @@ export function ShipmentDetailPage() {
           <div>
             <JobSelect label="I/O No" value={header.io_no || ''} disabled={Boolean(header.packing_list_id)} id="shp-io"
               onPick={(j) => setHeader((p: any) => ({ ...p, io_no: j?.job_no ?? '', so_id: j ? j.id : p.so_id, ...(j?.buyer_id && !p.buyer_id ? { buyer_id: j.buyer_id } : {}) }))} />
-            {header.packing_list_id && <span className="text-[10px] text-indigo-600 font-medium">🔒 Inherited from Packing List</span>}
+            {header.packing_list_id && <span className="text-micro text-indigo-600 font-medium">🔒 Inherited from Packing List</span>}
           </div>
 
           <div>
@@ -469,7 +469,7 @@ export function ShipmentDetailPage() {
               onChange={e => handlePlSelect(e.target.value)}
               options={[{ value: '', label: isNew ? '— Select confirmed packing list —' : '—' }, ...packingLists.map((p: any) => ({ value: p.id,
                 label: `${p.pl_no} (I/O: ${p.io_no || 'N/A'}) · ${fmtNumber(p.total_cartons)} ctns / ${fmtNumber(p.total_qty)} pcs` }))]} />
-            {!isNew && header.package_basis === 'PACKING_LIST' && <span className="text-[10px] font-medium text-amber-700">Totals from the packing list rows (hand-made list, no physical cartons)</span>}
+            {!isNew && header.package_basis === 'PACKING_LIST' && <span className="text-micro font-medium text-amber-700">Totals from the packing list rows (hand-made list, no physical cartons)</span>}
           </div>
 
           <Select label="Sales Order" value={header.so_id || ''}
@@ -792,17 +792,17 @@ export function ShipmentDetailPage() {
                 <span className="text-xs font-bold text-slate-800">TEXTILE EXPORTS</span>
                 <span className="tabular-nums text-xs font-bold text-indigo-700">{pkg.carton_no}</span>
               </div>
-              <div className="text-[11px] space-y-0.5">
+              <div className="text-caption space-y-0.5">
                 <p><strong>I/O:</strong> {header.io_no || 'N/A'}</p>
                 <p><strong>Shipment:</strong> {header.shipment_no}</p>
                 <p><strong>Qty:</strong> {pkg.allocated_qty} PCS</p>
                 <p><strong>Gross Wt:</strong> {pkg.carton_gross || pkg.gross_weight_kg} KG</p>
               </div>
               <div className="pt-2 text-center border-t">
-                <div className="tabular-nums text-lg font-black tracking-widest bg-slate-100 py-1 rounded">
+                <div className="tabular-nums text-lg font-bold tracking-widest bg-slate-100 py-1 rounded">
                   ||| | |||| | |||||
                 </div>
-                <span className="tabular-nums text-[10px] text-slate-500">{pkg.carton_no}</span>
+                <span className="tabular-nums text-micro text-slate-500">{pkg.carton_no}</span>
               </div>
             </div>
           ))}
@@ -964,7 +964,7 @@ export function DispatchDetailPage() {
           <div>
             <JobSelect label="I/O No" value={header.io_no || ''} disabled={Boolean(header.shipment_id)} id="dsp-io"
               onPick={(j) => setHeader((p: any) => ({ ...p, io_no: j?.job_no ?? '', so_id: j ? j.id : p.so_id, ...(j?.buyer_id && !p.buyer_id ? { buyer_id: j.buyer_id } : {}) }))} />
-            {header.shipment_id && <span className="text-[10px] text-indigo-600 font-medium">🔒 Inherited from Shipment</span>}
+            {header.shipment_id && <span className="text-micro text-indigo-600 font-medium">🔒 Inherited from Shipment</span>}
           </div>
 
           <Select label="Shipment Reference *" value={header.shipment_id || ''}

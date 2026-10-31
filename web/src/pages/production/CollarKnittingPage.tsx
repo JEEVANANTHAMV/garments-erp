@@ -266,7 +266,7 @@ export default function CollarKnittingPage() {
       ) : (
         <>
           <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-            <table className="w-full text-[12px]">
+            <table className="w-full text-small">
               <thead className="bg-slate-50">
                 <tr>
                   <th className="th text-left">Program No</th>
@@ -374,12 +374,12 @@ export default function CollarKnittingPage() {
             </Select>
           </FormSection>
           {form.io_no && cadPlan === null && (
-            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11.5px] text-amber-900" id="c-cad-none">
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-small text-amber-900" id="c-cad-none">
               No CAD with a flat-knit collar / cuff spec for {form.io_no}{form.style_id !== '' ? ' and this style' : ''} — enter the sizes below.
             </div>
           )}
           {cadPlan && (
-            <div className="flex flex-wrap items-center gap-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11.5px] text-emerald-900" id="c-cad-info">
+            <div className="flex flex-wrap items-center gap-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-small text-emerald-900" id="c-cad-info">
               <span>Sizes loaded from CAD <b>{cadPlan.req_no}</b>{cadPlan.style_code ? ` (${cadPlan.style_code})` : ''}{cadPlan.color ? ` · ${cadPlan.color}` : ''}</span>
               {cadPlan.components.length > 1 && (
                 <label className="flex items-center gap-1">Component
@@ -431,7 +431,7 @@ export default function CollarKnittingPage() {
           {/* Size-wise planning grid */}
           <div>
             <div className="mb-2 flex items-center justify-between border-b border-slate-100 pb-1.5">
-              <h4 className="text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">
+              <h4 className="text-small font-semibold uppercase tracking-wider text-slate-500">
                 Size-wise Planning (PCS → KG)
               </h4>
               <button className="btn-secondary btn-sm"
@@ -441,7 +441,7 @@ export default function CollarKnittingPage() {
             </div>
 
             <div className="overflow-x-auto rounded-lg border border-slate-200">
-              <table className="w-full text-[12px]">
+              <table className="w-full text-small">
                 <thead className="bg-slate-50">
                   <tr>
                     <th className="th text-left">Size</th>
@@ -458,7 +458,7 @@ export default function CollarKnittingPage() {
                     return (
                       <tr key={z._key} className="border-t border-slate-100">
                         <td className="td p-1">
-                          <select className="input text-[12px]" value={z.size_id}
+                          <select className="input text-small" value={z.size_id}
                             onChange={(e) => {
                               const sz = sizes.find((x: any) => x.id === Number(e.target.value));
                               setSize(z._key, {
@@ -471,18 +471,18 @@ export default function CollarKnittingPage() {
                           </select>
                         </td>
                         <td className="td p-1">
-                          <input className="input text-[12px]" value={z.measurement} placeholder={'e.g. 16.75" X 5.875"'}
+                          <input className="input text-small" value={z.measurement} placeholder={'e.g. 16.75" X 5.875"'}
                             onChange={(e) => setSize(z._key, { measurement: e.target.value })} id={`sz-ms-${i}`} />
                         </td>
                         <td className="td p-1">
-                          <input className="input text-[12px]" type="number" step="0.001" min="0"
+                          <input className="input text-small" type="number" step="0.001" min="0"
                             value={z.std_weight_gm} placeholder="25"
                             onChange={(e) => setSize(z._key, {
                               std_weight_gm: e.target.value === '' ? '' : Number(e.target.value),
                             })} id={`sz-wt-${i}`} />
                         </td>
                         <td className="td p-1">
-                          <input className="input text-[12px]" type="number" min="0"
+                          <input className="input text-small" type="number" min="0"
                             value={z.planned_pcs} placeholder="0"
                             onChange={(e) => setSize(z._key, {
                               planned_pcs: e.target.value === '' ? '' : Number(e.target.value),
@@ -517,7 +517,7 @@ export default function CollarKnittingPage() {
                 </tfoot>
               </table>
             </div>
-            <p className="mt-1 text-[10px] text-slate-500">
+            <p className="mt-1 text-micro text-slate-500">
               These are planning figures. Actual consumption is recorded per production entry,
               and the actual weight per piece is derived from actual KG ÷ actual PCS.
             </p>
@@ -550,7 +550,7 @@ export default function CollarKnittingPage() {
         title={detail ? `Collar Program ${detail.program_no}` : 'Collar Program'}
         subtitle="Plan, production, stock receipts and yarn issues" icon={<Shirt size={16} />}>
         {!detail ? <LoadingBlock /> : (
-          <div className="space-y-4 text-[12px]">
+          <div className="space-y-4 text-small">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Info label="Status" value={<Badge tone={STATUS_TONE[detail.status] ?? 'slate'}>{detail.status.replace(/_/g, ' ')}</Badge>} />
               <Info label="Style" value={detail.style_code ?? '—'} />
@@ -614,7 +614,7 @@ export default function CollarKnittingPage() {
                     <Badge tone={r.qc_status === 'PASSED' ? 'emerald' : 'amber'}>{r.qc_status}</Badge>,
                     r.is_stock_posted ? 'Yes' : r.qc_status === 'PASSED' ? (
                       // QC passed later (on "Collar – Yarn Issue / QC") → post the good PCS now
-                      <button className="btn-secondary !px-2 !py-0.5 text-[11px]" data-post-receipt={r.id}
+                      <button className="btn-secondary !px-2 !py-0.5 text-caption" data-post-receipt={r.id}
                         onClick={async () => {
                           try {
                             await http.post(`/collar-receipts/${r.id}/post-stock`, {});
@@ -845,14 +845,14 @@ function ReceiptModal({ program, sizes, warehouses, onClose, onSaved }: {
             {['PENDING', 'PASSED', 'HOLD', 'REJECTED'].map((q) => <option key={q} value={q}>{q}</option>)}
           </Select>
           <div className="flex items-end pb-2">
-            <label className="flex items-center gap-2 text-[12px] text-slate-700">
+            <label className="flex items-center gap-2 text-small text-slate-700">
               <input type="checkbox" checked={f.post_stock}
                 disabled={f.qc_status !== 'PASSED'}
                 onChange={(e) => setF((s) => ({ ...s, post_stock: e.target.checked }))}
                 id="cr-post" />
               Post to stock now
               {f.qc_status !== 'PASSED' && (
-                <span className="text-[10px] text-slate-400">(needs QC passed)</span>
+                <span className="text-micro text-slate-400">(needs QC passed)</span>
               )}
             </label>
           </div>
@@ -868,26 +868,26 @@ function ReceiptModal({ program, sizes, warehouses, onClose, onSaved }: {
 function Info({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
-      <p className="mt-0.5 text-[12px] text-slate-800">{value}</p>
+      <p className="text-micro font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="mt-0.5 text-small text-slate-800">{value}</p>
     </div>
   );
 }
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h4 className="mb-2 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">{title}</h4>
+      <h4 className="mb-2 border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">{title}</h4>
       {children}
     </div>
   );
 }
 function Muted({ children }: { children: React.ReactNode }) {
-  return <p className="py-3 text-center text-[12px] text-slate-400">{children}</p>;
+  return <p className="py-3 text-center text-small text-slate-400">{children}</p>;
 }
 function SimpleTable({ head, rows }: { head: string[]; rows: React.ReactNode[][] }) {
   return (
     <div className="overflow-x-auto rounded border border-slate-200">
-      <table className="w-full text-[11px]">
+      <table className="w-full text-caption">
         <thead className="bg-slate-50">
           <tr>{head.map((h) => <th key={h} className="th text-left">{h}</th>)}</tr>
         </thead>

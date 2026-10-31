@@ -103,7 +103,7 @@ function DcScanBar({ mode, onLoad }: { mode: 'OUT' | 'IN'; onLoad: (values: Reco
     <div className="card mb-3 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <ScanLine size={18} className="text-brand-600" />
-        <span className="text-[13px] font-semibold text-slate-800">{mode === 'OUT' ? 'Scan DC barcode → gate pass' : 'Scan our DC barcode (job-work return) → gate entry'}</span>
+        <span className="text-body font-semibold text-slate-800">{mode === 'OUT' ? 'Scan DC barcode → gate pass' : 'Scan our DC barcode (job-work return) → gate entry'}</span>
         <input ref={ref} id={`dc-scan-${mode}`} className="input w-72 py-1.5 tabular-nums text-sm" placeholder="Scan or type DC no and press Enter" value={code} autoFocus
           onChange={(e) => setCode(e.target.value)}
           onPaste={(e) => { const t = e.clipboardData.getData('text').trim(); if (t) { e.preventDefault(); setCode(t); void scan(t); } }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void scan(); } }} />
@@ -147,7 +147,7 @@ export function GateInwardsPage() {
           header: 'Entry No',
           sortable: true,
           render: (r: any) => (
-            <span className="tabular-nums text-[12px] font-bold text-brand-700">{r.entry_no}</span>
+            <span className="tabular-nums text-small font-bold text-brand-700">{r.entry_no}</span>
           ),
         },
         {
@@ -287,7 +287,7 @@ export function GateOutwardsPage() {
           header: 'Pass No',
           sortable: true,
           render: (r: any) => (
-            <span className="tabular-nums text-[12px] font-bold text-brand-700">{r.pass_no}</span>
+            <span className="tabular-nums text-small font-bold text-brand-700">{r.pass_no}</span>
           ),
         },
         {

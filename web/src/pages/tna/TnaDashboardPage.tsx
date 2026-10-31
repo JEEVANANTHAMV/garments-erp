@@ -70,7 +70,7 @@ export default function TnaDashboardPage() {
       {/* 2. Top Executive Metrics (Section 19) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Orders</span>
+          <span className="text-caption font-bold uppercase tracking-wider text-slate-400">Total Orders</span>
           <div className="flex items-baseline justify-between mt-2">
             <span className="text-3xl font-bold text-slate-900 tabular-nums">{d.total_orders}</span>
             <span className="text-xs text-slate-500 font-medium">In Production</span>
@@ -78,7 +78,7 @@ export default function TnaDashboardPage() {
         </div>
 
         <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 shadow-xs">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1">
+          <span className="text-caption font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1">
             <CheckCircle2 size={13} /> On Track
           </span>
           <div className="flex items-baseline justify-between mt-2">
@@ -90,7 +90,7 @@ export default function TnaDashboardPage() {
         </div>
 
         <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4 shadow-xs">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-amber-800 flex items-center gap-1">
+          <span className="text-caption font-bold uppercase tracking-wider text-amber-800 flex items-center gap-1">
             <Clock size={13} /> At Risk
           </span>
           <div className="flex items-baseline justify-between mt-2">
@@ -100,7 +100,7 @@ export default function TnaDashboardPage() {
         </div>
 
         <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-4 shadow-xs">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-rose-800 flex items-center gap-1">
+          <span className="text-caption font-bold uppercase tracking-wider text-rose-800 flex items-center gap-1">
             <AlertTriangle size={13} /> Critical Orders
           </span>
           <div className="flex items-baseline justify-between mt-2">
@@ -110,7 +110,7 @@ export default function TnaDashboardPage() {
         </div>
 
         <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 shadow-xs">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-800 flex items-center gap-1">
+          <span className="text-caption font-bold uppercase tracking-wider text-indigo-800 flex items-center gap-1">
             <TrendingUp size={13} /> Avg Completion
           </span>
           <div className="flex items-baseline justify-between mt-2">
@@ -132,7 +132,7 @@ export default function TnaDashboardPage() {
               <Layers size={20} />
             </div>
             <div>
-              <p className="text-[11px] font-semibold text-slate-500">Fabric Delays</p>
+              <p className="text-caption font-semibold text-slate-500">Fabric Delays</p>
               <p className="text-xl font-bold text-slate-900 tabular-nums">{d.fabric_delays}</p>
             </div>
           </div>
@@ -142,7 +142,7 @@ export default function TnaDashboardPage() {
               <Scissors size={20} />
             </div>
             <div>
-              <p className="text-[11px] font-semibold text-slate-500">Trim Delays</p>
+              <p className="text-caption font-semibold text-slate-500">Trim Delays</p>
               <p className="text-xl font-bold text-slate-900 tabular-nums">{d.trim_delays}</p>
             </div>
           </div>
@@ -152,7 +152,7 @@ export default function TnaDashboardPage() {
               <PackageCheck size={20} />
             </div>
             <div>
-              <p className="text-[11px] font-semibold text-slate-500">Sample Approval Delays</p>
+              <p className="text-caption font-semibold text-slate-500">Sample Approval Delays</p>
               <p className="text-xl font-bold text-slate-900 tabular-nums">{d.sample_delays}</p>
             </div>
           </div>
@@ -162,7 +162,7 @@ export default function TnaDashboardPage() {
               <Scissors size={20} />
             </div>
             <div>
-              <p className="text-[11px] font-semibold text-slate-500">Production Delays</p>
+              <p className="text-caption font-semibold text-slate-500">Production Delays</p>
               <p className="text-xl font-bold text-slate-900 tabular-nums">{d.production_delays}</p>
             </div>
           </div>
@@ -172,7 +172,7 @@ export default function TnaDashboardPage() {
               <Ship size={20} />
             </div>
             <div>
-              <p className="text-[11px] font-semibold text-slate-500">Shipment At Risk</p>
+              <p className="text-caption font-semibold text-slate-500">Shipment At Risk</p>
               <p className="text-xl font-bold text-rose-600 tabular-nums">{d.shipment_risk_orders}</p>
             </div>
           </div>
@@ -196,7 +196,7 @@ export default function TnaDashboardPage() {
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[11px]">
+            <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-caption">
               <tr>
                 <th className="py-2.5 px-3">T&A No</th>
                 <th className="py-2.5 px-3">Buyer</th>
@@ -227,11 +227,11 @@ export default function TnaDashboardPage() {
                     <td className="py-3 px-3 font-semibold text-slate-900">{row.buyer_name}</td>
                     <td className="py-3 px-3">
                       <div className="tabular-nums font-medium">{row.style_code}</div>
-                      <div className="text-[11px] text-slate-500">{row.style_name}</div>
+                      <div className="text-caption text-slate-500">{row.style_name}</div>
                     </td>
                     <td className="py-3 px-3 tabular-nums text-slate-600">
                       <div>{row.so_no}</div>
-                      <div className="text-[11px] text-slate-400">IO: {row.io_no || '—'}</div>
+                      <div className="text-caption text-slate-400">IO: {row.io_no || '—'}</div>
                     </td>
                     <td className="py-3 px-3 text-right tabular-nums font-medium">
                       {fmtNumber(row.order_qty)}
@@ -241,7 +241,7 @@ export default function TnaDashboardPage() {
                     </td>
                     <td className="py-3 px-3">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-[11px]">{row.completion_percentage}%</span>
+                        <span className="font-semibold text-caption">{row.completion_percentage}%</span>
                         <div className="w-16 bg-slate-200 rounded-full h-1.5 overflow-hidden">
                           <div
                             className="h-1.5 rounded-full bg-rose-500"
@@ -251,7 +251,7 @@ export default function TnaDashboardPage() {
                       </div>
                     </td>
                     <td className="py-3 px-3 text-center">
-                      <span className="rounded-full bg-rose-100 border border-rose-200 text-rose-800 font-bold px-2 py-0.5 text-[10px]">
+                      <span className="rounded-full bg-rose-100 border border-rose-200 text-rose-800 font-bold px-2 py-0.5 text-micro">
                         {row.shipment_risk}
                       </span>
                     </td>

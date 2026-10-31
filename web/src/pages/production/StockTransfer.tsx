@@ -20,7 +20,7 @@ export function StockTransfersPage() {
           header: 'Transfer no',
           sortable: true,
           render: (r: any) => (
-            <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.transfer_no}</span>
+            <span className="tabular-nums text-small font-medium text-brand-700">{r.transfer_no}</span>
           ),
         },
         { key: 'transfer_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.transfer_date) },

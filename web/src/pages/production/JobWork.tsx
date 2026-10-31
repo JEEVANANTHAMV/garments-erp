@@ -34,7 +34,7 @@ export function JobWorkInsPage() {
           header: 'JW In no',
           sortable: true,
           render: (r: any) => (
-            <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.jwin_no}</span>
+            <span className="tabular-nums text-small font-medium text-brand-700">{r.jwin_no}</span>
           ),
         },
         { key: 'jwin_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.jwin_date) },
@@ -98,7 +98,7 @@ export function JobWorkInvoicesPage() {
           header: 'Invoice no',
           sortable: true,
           render: (r: any) => (
-            <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.invoice_no}</span>
+            <span className="tabular-nums text-small font-medium text-brand-700">{r.invoice_no}</span>
           ),
         },
         { key: 'invoice_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.invoice_date) },
@@ -129,7 +129,7 @@ export function JobWorkInvoicesPage() {
           render: (r: any) => (
             <button
               type="button"
-              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[12px] text-brand-700 hover:bg-brand-50"
+              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-small text-brand-700 hover:bg-brand-50"
               title="Print invoice"
               onClick={(e) => { e.stopPropagation(); setPrintId(r.id); }}
             >

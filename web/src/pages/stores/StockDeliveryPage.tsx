@@ -153,7 +153,7 @@ function DeliveryEditor({ kind, doc, onClose, onSaved }: { kind: Kind; doc: any 
           <tbody>
             {lines.map((l, i) => (
               <tr key={l.source_ref ?? `free${i}`} className="border-t border-slate-100 delivery-line">
-                <td className={`${TD} font-medium`}>{l.source_ref ? <>{l.item_name}<span className="ml-1 text-[10.5px] text-slate-400">{l.material_type.toLowerCase()}</span></> : <span className="text-slate-400">Not from stock</span>}</td>
+                <td className={`${TD} font-medium`}>{l.source_ref ? <>{l.item_name}<span className="ml-1 text-caption text-slate-400">{l.material_type.toLowerCase()}</span></> : <span className="text-slate-400">Not from stock</span>}</td>
                 <td className={TD}><input className="input w-48 line-desc" value={l.item_description} placeholder={l.source_ref ? '' : 'Item / description'} onChange={(e) => set(i, { item_description: e.target.value })} /></td>
                 <td className={TD}><input className="input w-24" value={l.color_name} onChange={(e) => set(i, { color_name: e.target.value })} /></td>
                 <td className={TD}><input className="input w-16" value={l.sizes} onChange={(e) => set(i, { sizes: e.target.value })} /></td>

@@ -151,7 +151,7 @@ function OrderEditor({ order, onClose, onSaved }: { order: any; onClose: () => v
         <Input label="Remarks" className="sm:col-span-2" value={h.remarks} onChange={(e) => setH({ ...h, remarks: e.target.value })} />
       </FormSection>
       <div className="mt-5 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-1.5">
-        <h3 className="mr-auto text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Process route</h3>
+        <h3 className="mr-auto text-small font-semibold uppercase tracking-wider text-slate-500">Process route</h3>
         <Button size="sm" id="jw-add-line" onClick={() => setLines([...lines, blankLine()])}><Plus size={12} className="mr-1 inline" />Add process</Button>
       </div>
       <div className="mt-2 overflow-x-auto">
@@ -183,7 +183,7 @@ function OrderEditor({ order, onClose, onSaved }: { order: any; onClose: () => v
             </tr>
           ))}</tbody>
         </table>
-        <p className="mt-2 text-[11px] text-slate-500">Fabric rolls in → garments / packed garments back (cutting + stitching + packing by the contractor). Rate fills from the process rate master when one is on file. Leave the tolerance blank to use the process / company setting.</p>
+        <p className="mt-2 text-caption text-slate-500">Fabric rolls in → garments / packed garments back (cutting + stitching + packing by the contractor). Rate fills from the process rate master when one is on file. Leave the tolerance blank to use the process / company setting.</p>
       </div>
     </Modal>
   );
@@ -312,7 +312,7 @@ function OrderDetail({ id, onClose, onEdit }: { id: number; onClose: () => void;
                 ))}</tbody>
               </table>
             )}
-            <p className="text-[11px] text-slate-500">Bundle DCs are inwarded (good / reject / loss / return / rework, QC) from <Link className="text-brand-700 underline" to="/production/jobwork-challans">Process Outward</Link>; bills from <Link className="text-brand-700 underline" to="/production/process-master">Contractor Bills</Link>.</p>
+            <p className="text-caption text-slate-500">Bundle DCs are inwarded (good / reject / loss / return / rework, QC) from <Link className="text-brand-700 underline" to="/production/jobwork-challans">Process Outward</Link>; bills from <Link className="text-brand-700 underline" to="/production/process-master">Contractor Bills</Link>.</p>
           </div>
         )}
         {tab === 'genealogy' && (gen ? <Genealogy g={gen} /> : <LoadingBlock rows={3} />)}
@@ -342,7 +342,7 @@ function OrderDetail({ id, onClose, onEdit }: { id: number; onClose: () => void;
 }
 
 function Info({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div><div className="text-[11px] uppercase tracking-wide text-slate-400">{label}</div><div className="font-medium text-slate-800">{children}</div></div>;
+  return <div><div className="text-caption uppercase tracking-wide text-slate-400">{label}</div><div className="font-medium text-slate-800">{children}</div></div>;
 }
 
 function Genealogy({ g }: { g: any }) {
@@ -411,7 +411,7 @@ function FabricOutwardModal({ order, line, onClose, onDone }: { order: any; line
       </FormSection>
       <div className="mt-5 grid grid-cols-1 items-start gap-5 xl:grid-cols-2">
         <div>
-          <h3 className="mb-2.5 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Fabric rolls (free stock of the job)</h3>
+          <h3 className="mb-2.5 border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Fabric rolls (free stock of the job)</h3>
           {!opts ? <LoadingBlock rows={3} /> : opts.rolls.length === 0 ? <p className="text-xs text-slate-500">No free QC-accepted roll for this job.</p> : (
             <table className="w-full text-xs">
               <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-1 text-left">Roll</th><th className="px-2 py-1 text-left">Lot</th><th className="px-2 py-1 text-left">Fabric</th>
@@ -422,14 +422,14 @@ function FabricOutwardModal({ order, line, onClose, onDone }: { order: any; line
                   <td className="px-2 py-1 text-right">{num(r.free_kg)}</td>
                   <td className="px-2 py-1 text-right"><div className="flex justify-end gap-1">
                     <input className={`input h-7 w-20 text-right ${num(kg[r.id]) > num(r.free_kg) ? 'input-error' : ''}`} type="number" min={0} step="0.001" id={`jwf-roll-${r.id}`} value={kg[r.id] ?? ''} onChange={(e) => setKg({ ...kg, [r.id]: e.target.value })} />
-                    <button className="text-[11px] text-brand-700" onClick={() => setKg({ ...kg, [r.id]: String(num(r.free_kg)) })}>all</button></div></td>
+                    <button className="text-caption text-brand-700" onClick={() => setKg({ ...kg, [r.id]: String(num(r.free_kg)) })}>all</button></div></td>
                 </tr>
               ))}</tbody>
             </table>
           )}
         </div>
         <div>
-          <h3 className="mb-2.5 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Garments expected back (colour × size)</h3>
+          <h3 className="mb-2.5 border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Garments expected back (colour × size)</h3>
           {!opts ? null : opts.skus.length === 0 ? <p className="text-xs text-slate-500">The style has no SKUs — generate them on the style first.</p> : (
             <table className="w-full text-xs">
               <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-1 text-left">Colour</th>{sizes.map((s) => <th key={s.size_id} className="px-2 py-1 text-right">{s.size_code}</th>)}</tr></thead>
@@ -484,7 +484,7 @@ function FabricInwardModal({ dcId, onClose, onDone }: { dcId: number; onClose: (
       </FormSection>
       <div className="mt-5 grid grid-cols-1 items-start gap-5 xl:grid-cols-2">
         <div>
-          <h3 className="mb-2.5 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Garments received</h3>
+          <h3 className="mb-2.5 border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Garments received</h3>
           <table className="w-full text-xs">
             <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-1 text-left">Colour</th><th className="px-2 py-1 text-left">Size</th><th className="px-2 py-1 text-right">Expected</th>
               <th className="px-2 py-1 text-right">Pending</th><th className="px-2 py-1 text-right">Good</th><th className="px-2 py-1 text-right">Reject</th><th className="px-2 py-1 text-left">Reject reason</th></tr></thead>
@@ -499,7 +499,7 @@ function FabricInwardModal({ dcId, onClose, onDone }: { dcId: number; onClose: (
           </table>
         </div>
         <div>
-          <h3 className="mb-2.5 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Fabric reconciliation per roll (KG)</h3>
+          <h3 className="mb-2.5 border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Fabric reconciliation per roll (KG)</h3>
           <table className="w-full text-xs">
             <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-1 text-left">Roll</th><th className="px-2 py-1 text-right">Issued</th><th className="px-2 py-1 text-right">With contractor</th>
               <th className="px-2 py-1 text-right">Used</th><th className="px-2 py-1 text-right">Returned</th><th className="px-2 py-1 text-right">Waste</th></tr></thead>
@@ -510,7 +510,7 @@ function FabricInwardModal({ dcId, onClose, onDone }: { dcId: number; onClose: (
                   disabled={!(num(r.balance_kg) > 0)} value={v[k]} onChange={(e) => setRolls({ ...rolls, [r.id]: { ...v, [k]: e.target.value } })} /></td>)}
               </tr>); })}</tbody>
           </table>
-          <p className="mt-1 text-[11px] text-slate-500">Returned KG goes back to the same roll in our stock; used + returned + waste must not exceed what the contractor holds.</p>
+          <p className="mt-1 text-caption text-slate-500">Returned KG goes back to the same roll in our stock; used + returned + waste must not exceed what the contractor holds.</p>
         </div>
       </div>
       {dc.inwards.length > 0 && <p className="mt-3 text-xs text-slate-500">Earlier inwards: {dc.inwards.map((i: any) => `${i.inward_no} (${i.good_qty} good, used ${num(i.consumed_kg)} KG)`).join(', ')}</p>}
@@ -597,7 +597,7 @@ export function JobWorkDashboardPage() {
 function Tile({ label, value, tone }: { label: string; value: React.ReactNode; tone: string }) {
   const c: Record<string, string> = { red: 'border-red-100 bg-red-50 text-red-800', amber: 'border-amber-100 bg-amber-50 text-amber-800', violet: 'border-violet-100 bg-violet-50 text-violet-800',
     blue: 'border-blue-100 bg-blue-50 text-blue-800', slate: 'border-slate-200 bg-slate-50 text-slate-700' };
-  return <div className={`rounded-xl border px-3 py-2 ${c[tone]}`}><div className="text-[11px] font-semibold uppercase tracking-wide opacity-70">{label}</div><div className="text-lg font-bold">{value}</div></div>;
+  return <div className={`rounded-xl border px-3 py-2 ${c[tone]}`}><div className="text-caption font-semibold uppercase tracking-wide opacity-70">{label}</div><div className="text-lg font-bold">{value}</div></div>;
 }
 
 // ───────────────────────────── Process rate master ─────────────────────────────

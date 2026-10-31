@@ -151,27 +151,27 @@ export default function FabricRollStockPage() {
         <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
           <div className="text-xs font-medium text-slate-500">Total Rolls in Store</div>
           <div className="text-2xl font-bold text-slate-900 mt-1">{fmtNumber(kpis.totalRolls)}</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Physical roll units</div>
+          <div className="text-caption text-slate-400 mt-0.5">Physical roll units</div>
         </div>
         <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
           <div className="text-xs font-medium text-slate-500">Available Rolls</div>
           <div className="text-2xl font-bold text-emerald-600 mt-1">{fmtNumber(kpis.availableRolls)}</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Ready for issue</div>
+          <div className="text-caption text-slate-400 mt-0.5">Ready for issue</div>
         </div>
         <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
           <div className="text-xs font-medium text-slate-500">Reserved for Cutting</div>
           <div className="text-2xl font-bold text-amber-600 mt-1">{fmtNumber(kpis.reservedRolls)}</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Allocated to jobs</div>
+          <div className="text-caption text-slate-400 mt-0.5">Allocated to jobs</div>
         </div>
         <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
           <div className="text-xs font-medium text-slate-500">Total Stocked Meters</div>
           <div className="text-2xl font-bold text-sky-600 mt-1">{fmtDecimal(kpis.totalMeters)} m</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Cumulative length</div>
+          <div className="text-caption text-slate-400 mt-0.5">Cumulative length</div>
         </div>
         <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
           <div className="text-xs font-medium text-slate-500">Total Stocked Weight</div>
           <div className="text-2xl font-bold text-indigo-600 mt-1">{fmtDecimal(kpis.totalWeight)} kg</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Physical gross weight</div>
+          <div className="text-caption text-slate-400 mt-0.5">Physical gross weight</div>
         </div>
       </div>
 
@@ -304,15 +304,15 @@ export default function FabricRollStockPage() {
                   <tr key={r.id} className="hover:bg-slate-50/70 transition">
                     <td className="py-3 px-4">
                       <div className="tabular-nums font-bold text-sky-700">{r.roll_no}</div>
-                      <div className="text-[10px] text-slate-400">ID #{r.id}</div>
+                      <div className="text-micro text-slate-400">ID #{r.id}</div>
                     </td>
                     <td className="py-3 px-3 font-semibold text-slate-900">
                       {r.fabric_name || 'Fabric Item'}
-                      <div className="text-[10px] text-slate-400 font-normal">{r.fabric_code || ''}</div>
+                      <div className="text-micro text-slate-400 font-normal">{r.fabric_code || ''}</div>
                     </td>
-                    <td className="py-3 px-3 tabular-nums text-slate-700 text-[11px]">{r.lot_no || '—'}</td>
+                    <td className="py-3 px-3 tabular-nums text-slate-700 text-caption">{r.lot_no || '—'}</td>
                     <td className="py-3 px-3 font-medium text-slate-800">{r.shade || '—'}</td>
-                    <td className="py-3 px-3 text-center text-slate-600 text-[11px]">
+                    <td className="py-3 px-3 text-center text-slate-600 text-caption">
                       {r.gsm} gsm / {r.dia || '30"'}
                     </td>
                     <td className="py-3 px-3 text-right font-medium text-emerald-700">
@@ -321,16 +321,16 @@ export default function FabricRollStockPage() {
                     <td className="py-3 px-3 text-right font-medium text-indigo-700">
                       {fmtDecimal(r.weight_kg)} kg
                       {Number(r.issued_kg) > 0 && (
-                        <div className="text-[10px] text-slate-500 font-normal">Bal {fmtDecimal(r.balance_kg)} kg</div>
+                        <div className="text-micro text-slate-500 font-normal">Bal {fmtDecimal(r.balance_kg)} kg</div>
                       )}
                     </td>
                     <td className="py-3 px-3">
                       <div className="text-slate-800 font-medium">{r.warehouse_name || 'Main Fabric Store'}</div>
-                      <span className="tabular-nums text-[10px] bg-slate-100 px-1 py-0.5 rounded text-slate-600">
+                      <span className="tabular-nums text-micro bg-slate-100 px-1 py-0.5 rounded text-slate-600">
                         Bin: {r.location_bin || 'Unassigned'}
                       </span>
                     </td>
-                    <td className="py-3 px-3 text-[11px]">
+                    <td className="py-3 px-3 text-caption">
                       {r.internal_ir_no ? (
                         <button onClick={() => setIoFilter(r.internal_ir_no)} title="Filter by this IO"
                           className="tabular-nums font-semibold text-indigo-700 hover:underline">{r.internal_ir_no}</button>
@@ -338,11 +338,11 @@ export default function FabricRollStockPage() {
                         <span className="text-slate-300">No IO</span>
                       )}
                       {r.style_code && (
-                        <div className="text-[10px] text-slate-500 mt-0.5" title={r.style_name ?? ''}>{r.style_code}</div>
+                        <div className="text-micro text-slate-500 mt-0.5" title={r.style_name ?? ''}>{r.style_code}</div>
                       )}
-                      {r.so_no && <div className="text-[10px] text-slate-400">{r.so_no}</div>}
+                      {r.so_no && <div className="text-micro text-slate-400">{r.so_no}</div>}
                     </td>
-                    <td className="py-3 px-3 text-[11px]">
+                    <td className="py-3 px-3 text-caption">
                       {r.grn_no && (
                         <div
                           onClick={() => nav(`/procurement/fabric/grn/${r.grn_id}`)}
@@ -351,11 +351,11 @@ export default function FabricRollStockPage() {
                           {r.grn_no}
                         </div>
                       )}
-                      {r.po_no && <div className="text-slate-400 text-[10px]">{r.po_no}</div>}
+                      {r.po_no && <div className="text-slate-400 text-micro">{r.po_no}</div>}
                     </td>
                     <td className="py-3 px-3 text-center">
                       <span
-                        className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                        className={`text-micro px-1.5 py-0.5 rounded font-semibold ${
                           r.qc_status === 'ACCEPTED'
                             ? 'bg-emerald-100 text-emerald-800'
                             : r.qc_status === 'REJECTED'
@@ -400,7 +400,7 @@ export default function FabricRollStockPage() {
           </>}
         >
           <div className="space-y-4 text-xs">
-            <div className="p-3 bg-slate-50 rounded-lg text-slate-700 grid grid-cols-2 gap-2 text-[11px]">
+            <div className="p-3 bg-slate-50 rounded-lg text-slate-700 grid grid-cols-2 gap-2 text-caption">
               <div>Fabric: <strong>{editRoll.fabric_name}</strong></div>
               <div>Lot No: <strong>{editRoll.lot_no}</strong></div>
               <div>Length: <strong>{editRoll.meters} m</strong></div>
@@ -409,7 +409,7 @@ export default function FabricRollStockPage() {
 
             <div className="space-y-3">
               <div>
-                <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                <label className="block text-caption font-medium text-slate-600 mb-1">
                   Stock Status
                 </label>
                 <select
@@ -426,7 +426,7 @@ export default function FabricRollStockPage() {
               </div>
 
               <div>
-                <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                <label className="block text-caption font-medium text-slate-600 mb-1">
                   QC Status
                 </label>
                 <select

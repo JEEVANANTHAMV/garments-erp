@@ -112,7 +112,7 @@ export function WipDashboardPage() {
                     : 'bg-slate-100 text-slate-400'}`}>
                   {fmtNumber(stage.wip_qty)}
                 </div>
-                <p className="mt-1 text-[11px] font-medium text-slate-600 truncate">{stage.stage_name}</p>
+                <p className="mt-1 text-caption font-medium text-slate-600 truncate">{stage.stage_name}</p>
               </div>
               {idx < wipStages.length - 1 && (
                 <div className="flex items-center -mx-1">

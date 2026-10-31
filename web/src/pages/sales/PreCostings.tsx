@@ -51,38 +51,38 @@ export default function PreCostingsPage() {
       <div className="mb-4 grid grid-cols-1 md:grid-cols-4 gap-3">
         <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Active Styles Costed</span>
-          <p className="text-2xl font-black text-slate-900 mt-1 tabular-nums">{rows.length}</p>
-          <p className="text-[11px] text-slate-500 mt-0.5">Commercial pre-orders</p>
+          <p className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">{rows.length}</p>
+          <p className="text-caption text-slate-500 mt-0.5">Commercial pre-orders</p>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Avg Cost / Piece</span>
-          <p className="text-2xl font-black text-slate-800 mt-1 tabular-nums">
+          <p className="text-2xl font-bold text-slate-800 mt-1 tabular-nums">
             ₹{fmtDecimal(
               rows.length > 0 ? rows.reduce((s: number, r: any) => s + (Number(r.total_cost) || 0), 0) / rows.length : 0,
               2
             )}
           </p>
-          <p className="text-[11px] text-slate-500 mt-0.5">Calculated target cost</p>
+          <p className="text-caption text-slate-500 mt-0.5">Calculated target cost</p>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Avg Quoted FOB</span>
-          <p className="text-2xl font-black text-brand-700 mt-1 tabular-nums">
+          <p className="text-2xl font-bold text-brand-700 mt-1 tabular-nums">
             ₹{fmtDecimal(
               rows.length > 0 ? rows.reduce((s: number, r: any) => s + (Number(r.fob_price) || 0), 0) / rows.length : 0,
               2
             )}
           </p>
-          <p className="text-[11px] text-slate-500 mt-0.5">Average selling target</p>
+          <p className="text-caption text-slate-500 mt-0.5">Average selling target</p>
         </div>
 
         <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3.5 shadow-xs">
           <span className="text-xs font-bold uppercase tracking-wider text-emerald-800">Avg Margin Target</span>
-          <p className="text-2xl font-black text-emerald-900 mt-1 tabular-nums">
+          <p className="text-2xl font-bold text-emerald-900 mt-1 tabular-nums">
             {rows.length > 0 ? (rows.reduce((s: number, r: any) => s + (Number(r.margin_pct) || 0), 0) / rows.length).toFixed(1) : '15.0'}%
           </p>
-          <p className="text-[11px] text-emerald-700 mt-0.5">Target commercial profitability</p>
+          <p className="text-caption text-emerald-700 mt-0.5">Target commercial profitability</p>
         </div>
       </div>
 
@@ -137,7 +137,7 @@ export default function PreCostingsPage() {
             header: 'Costing No',
             sortable: true,
             render: (r: any) => (
-              <span className="tabular-nums text-[12.5px] font-bold text-brand-700">{r.costing_no}</span>
+              <span className="tabular-nums text-body font-bold text-brand-700">{r.costing_no}</span>
             ),
           },
           {
@@ -145,7 +145,7 @@ export default function PreCostingsPage() {
             header: 'Rev',
             align: 'center',
             render: (r: any) => (
-              <span className="rounded bg-slate-100 px-1.5 py-0.5 tabular-nums text-[11px] font-bold text-slate-700">
+              <span className="rounded bg-slate-100 px-1.5 py-0.5 tabular-nums text-caption font-bold text-slate-700">
                 v{r.version || 1}
               </span>
             ),
@@ -162,7 +162,7 @@ export default function PreCostingsPage() {
             render: (r: any) => (
               <div>
                 <p className="font-bold text-slate-900">{r.style_code || '—'}</p>
-                <p className="text-[11px] text-slate-500">{r.style_name || '—'}</p>
+                <p className="text-caption text-slate-500">{r.style_name || '—'}</p>
               </div>
             ),
           },
@@ -196,7 +196,7 @@ export default function PreCostingsPage() {
             header: 'Quoted FOB',
             align: 'right',
             render: (r: any) => (
-              <span className="tabular-nums font-black text-emerald-700 text-[13px]">
+              <span className="tabular-nums font-bold text-emerald-700 text-body">
                 ₹{fmtDecimal(r.fob_price || 0, 2)}
               </span>
             ),

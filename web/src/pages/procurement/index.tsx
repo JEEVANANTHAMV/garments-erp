@@ -23,7 +23,7 @@ export function PurchaseOrdersPage() {
     defaultSort={{ key: 'po_date', dir: 'desc' }}
     columns={[
       { key: 'po_no', header: 'PO no', sortable: true,
-        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.po_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-small font-medium text-brand-700">{r.po_no}</span> },
       { key: 'po_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.po_date) },
       { key: 'supplier_name', header: 'Supplier' },
       { key: 'po_type', header: 'Type', render: (r: any) => <Badge tone="violet">{humanize(r.po_type)}</Badge> },
@@ -97,7 +97,7 @@ export function MrpPage() {
       <DataTable
         columns={[
           { key: 'mrp_no', header: 'MRP no',
-            render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.mrp_no}</span> },
+            render: (r: any) => <span className="tabular-nums text-small font-medium text-brand-700">{r.mrp_no}</span> },
           { key: 'run_date', header: 'Run date', render: (r: any) => fmtDate(r.run_date) },
           { key: 'so_no', header: 'Sales order' },
           { key: 'requirement_count', header: 'Requirements', align: 'right',
@@ -179,7 +179,7 @@ function MrpDetailModal({ id, onClose }: { id: number | null; onClose: () => voi
         </>}>
         {detail.isLoading ? <LoadingBlock rows={6} /> : (
           <>
-            <div className="mb-3 flex flex-wrap gap-4 rounded-lg bg-surface-muted px-3.5 py-2.5 text-[12.5px]">
+            <div className="mb-3 flex flex-wrap gap-4 rounded-lg bg-surface-muted px-3.5 py-2.5 text-body">
               <span>Sales order: <strong>{detail.data?.so_no ?? '—'}</strong></span>
               <span>Run date: <strong>{fmtDate(detail.data?.run_date)}</strong></span>
               <span>Total lines: <strong>{detail.data?.requirements?.length ?? 0}</strong></span>
@@ -287,11 +287,11 @@ export function GrnPage() {
       <DataTable
         columns={[
           { key: 'grn_no', header: 'GRN no',
-            render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.grn_no}</span> },
+            render: (r: any) => <span className="tabular-nums text-small font-medium text-brand-700">{r.grn_no}</span> },
           { key: 'grn_date', header: 'Date', render: (r: any) => fmtDate(r.grn_date) },
           { key: 'gate_entry_no', header: 'Gate entry',
             render: (r: any) => r.gate_entry_no ? (
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-caption font-semibold bg-amber-50 text-amber-700 border border-amber-200">
                 {r.gate_entry_no}
               </span>
             ) : <span className="text-slate-400">—</span> },
@@ -467,7 +467,7 @@ function GrnModal({ open, onClose, onDone }: { open: boolean; onClose: () => voi
         <Select label="Supplier" required options={toOptions(suppliers.data)} placeholder="— Select —"
           value={head.supplier_id ?? ''} onChange={(e) => setHead((s) => ({ ...s, supplier_id: e.target.value }))} />
         <div>
-          <label className="block text-[11px] font-medium text-slate-700 mb-1">
+          <label className="block text-caption font-medium text-slate-700 mb-1">
             Against Purchase Orders ({selectedPoIds.length})
           </label>
           <select
@@ -492,9 +492,9 @@ function GrnModal({ open, onClose, onDone }: { open: boolean; onClose: () => voi
                 const pLabel = pObj?.label || pObj?.code || `PO #${pId}`;
                 const count = lines.filter((l) => l.po_id === pId).length;
                 return (
-                  <span key={pId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-brand-50 text-brand-700 border border-brand-200">
+                  <span key={pId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-caption font-semibold bg-brand-50 text-brand-700 border border-brand-200">
                     <span>📋 {pLabel}</span>
-                    {count > 0 && <span className="text-[10px] bg-brand-100 text-brand-900 px-1 rounded">{count}</span>}
+                    {count > 0 && <span className="text-micro bg-brand-100 text-brand-900 px-1 rounded">{count}</span>}
                     <button
                       type="button"
                       onClick={() => handleRemovePo(pId)}
@@ -517,7 +517,7 @@ function GrnModal({ open, onClose, onDone }: { open: boolean; onClose: () => voi
       </FormSection>
 
       <div className="mb-2.5 mt-5 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-1.5">
-        <h3 className="mr-auto text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Receipt lines</h3>
+        <h3 className="mr-auto text-small font-semibold uppercase tracking-wider text-slate-500">Receipt lines</h3>
         <button className="btn-secondary btn-sm" onClick={() => setLines((s) => [...s, emptyGrnLine()])}>
           <Plus size={14} /> Add line
         </button>
@@ -538,14 +538,14 @@ function GrnModal({ open, onClose, onDone }: { open: boolean; onClose: () => voi
               return (
                 <tr key={l._key}>
                   <td className="td p-1.5">
-                    <select className="input py-1.5 text-[12.5px]" value={l.material_type}
+                    <select className="input py-1.5 text-body" value={l.material_type}
                       onChange={(e) => setLine(l._key, {
                         material_type: e.target.value as GrnLine['material_type'], material_id: '' })}>
                       {['YARN','FABRIC','TRIM'].map((m) => <option key={m} value={m}>{m}</option>)}
                     </select>
                   </td>
                   <td className="td p-1.5">
-                    <select className="input py-1.5 text-[12.5px]" value={l.material_id}
+                    <select className="input py-1.5 text-body" value={l.material_id}
                       onChange={(e) => {
                         const picked = (src ?? []).find((x: any) => x.id === Number(e.target.value));
                         setLine(l._key, {
@@ -559,7 +559,7 @@ function GrnModal({ open, onClose, onDone }: { open: boolean; onClose: () => voi
                     </select>
                   </td>
                   <td className="td p-1.5">
-                    <input type="number" step="0.001" className="input py-1.5 text-right text-[12.5px]"
+                    <input type="number" step="0.001" className="input py-1.5 text-right text-body"
                       value={l.received_qty}
                       onChange={(e) => {
                         const q = e.target.value === '' ? '' : Number(e.target.value);
@@ -567,29 +567,29 @@ function GrnModal({ open, onClose, onDone }: { open: boolean; onClose: () => voi
                       }} />
                   </td>
                   <td className="td p-1.5">
-                    <input type="number" step="0.001" className="input py-1.5 text-right text-[12.5px]"
+                    <input type="number" step="0.001" className="input py-1.5 text-right text-body"
                       value={l.accepted_qty}
                       onChange={(e) => setLine(l._key, { accepted_qty: e.target.value === '' ? '' : Number(e.target.value) })} />
                   </td>
                   <td className="td p-1.5">
-                    <input type="number" step="0.001" className="input py-1.5 text-right text-[12.5px]"
+                    <input type="number" step="0.001" className="input py-1.5 text-right text-body"
                       value={l.rejected_qty}
                       onChange={(e) => setLine(l._key, { rejected_qty: e.target.value === '' ? '' : Number(e.target.value) })} />
                   </td>
                   <td className="td p-1.5">
-                    <select className="input py-1.5 text-[12.5px]" value={l.uom_id}
+                    <select className="input py-1.5 text-body" value={l.uom_id}
                       onChange={(e) => setLine(l._key, { uom_id: e.target.value ? Number(e.target.value) : '' })}>
                       <option value="">—</option>
                       {(uoms.data ?? []).map((u: any) => <option key={u.id} value={u.id}>{u.code}</option>)}
                     </select>
                   </td>
                   <td className="td p-1.5">
-                    <input type="number" step="0.0001" className="input py-1.5 text-right text-[12.5px]"
+                    <input type="number" step="0.0001" className="input py-1.5 text-right text-body"
                       value={l.rate}
                       onChange={(e) => setLine(l._key, { rate: e.target.value === '' ? '' : Number(e.target.value) })} />
                   </td>
                   <td className="td p-1.5">
-                    <input className="input py-1.5 text-[12.5px]" placeholder="Optional"
+                    <input className="input py-1.5 text-body" placeholder="Optional"
                       value={l.new_batch_no}
                       onChange={(e) => setLine(l._key, { new_batch_no: e.target.value })} />
                   </td>
@@ -637,7 +637,7 @@ export function MaterialIssuePage() {
       <DataTable
         columns={[
           { key: 'issue_no', header: 'Issue no',
-            render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.issue_no}</span> },
+            render: (r: any) => <span className="tabular-nums text-small font-medium text-brand-700">{r.issue_no}</span> },
           { key: 'issue_date', header: 'Date', render: (r: any) => fmtDate(r.issue_date) },
           { key: 'warehouse_name', header: 'From warehouse' },
           { key: 'po_prod_no', header: 'Work order' },
@@ -721,7 +721,7 @@ function IssueModal({ open, onClose, onDone }: { open: boolean; onClose: () => v
       </FormSection>
 
       <div className="mb-2.5 mt-5 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-1.5">
-        <h3 className="mr-auto text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Issue lines</h3>
+        <h3 className="mr-auto text-small font-semibold uppercase tracking-wider text-slate-500">Issue lines</h3>
         <button className="btn-secondary btn-sm" onClick={() => setLines((s) => [...s, emptyGrnLine()])}>
           <Plus size={14} /> Add line
         </button>
@@ -740,14 +740,14 @@ function IssueModal({ open, onClose, onDone }: { open: boolean; onClose: () => v
               return (
                 <tr key={l._key}>
                   <td className="td p-1.5">
-                    <select className="input py-1.5 text-[12.5px]" value={l.material_type}
+                    <select className="input py-1.5 text-body" value={l.material_type}
                       onChange={(e) => setLine(l._key, {
                         material_type: e.target.value as GrnLine['material_type'], material_id: '' })}>
                       {['YARN','FABRIC','TRIM'].map((m) => <option key={m} value={m}>{m}</option>)}
                     </select>
                   </td>
                   <td className="td p-1.5">
-                    <select className="input py-1.5 text-[12.5px]" value={l.material_id}
+                    <select className="input py-1.5 text-body" value={l.material_id}
                       onChange={(e) => {
                         const picked = (src ?? []).find((x: any) => x.id === Number(e.target.value));
                         setLine(l._key, {
@@ -759,12 +759,12 @@ function IssueModal({ open, onClose, onDone }: { open: boolean; onClose: () => v
                     </select>
                   </td>
                   <td className="td p-1.5">
-                    <input type="number" step="0.001" className="input py-1.5 text-right text-[12.5px]"
+                    <input type="number" step="0.001" className="input py-1.5 text-right text-body"
                       value={l.received_qty}
                       onChange={(e) => setLine(l._key, { received_qty: e.target.value === '' ? '' : Number(e.target.value) })} />
                   </td>
                   <td className="td p-1.5">
-                    <select className="input py-1.5 text-[12.5px]" value={l.uom_id}
+                    <select className="input py-1.5 text-body" value={l.uom_id}
                       onChange={(e) => setLine(l._key, { uom_id: e.target.value ? Number(e.target.value) : '' })}>
                       <option value="">—</option>
                       {(uoms.data ?? []).map((u: any) => <option key={u.id} value={u.id}>{u.code}</option>)}

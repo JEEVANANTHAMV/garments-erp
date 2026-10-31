@@ -162,11 +162,11 @@ export default function ProcessReportsPage() {
             if (!items.length) return null;
             return (
               <div key={g}>
-                <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">{g}</p>
+                <p className="mb-1 text-micro font-bold uppercase tracking-wider text-slate-400">{g}</p>
                 <div className="space-y-0.5">
                   {items.map((r) => (
                     <button key={r.key}
-                      className={`block w-full rounded px-2 py-1.5 text-left text-[12px] transition ${
+                      className={`block w-full rounded px-2 py-1.5 text-left text-small transition ${
                         active.key === r.key
                           ? 'bg-brand-50 font-semibold text-brand-700'
                           : 'text-slate-600 hover:bg-slate-50'
@@ -185,8 +185,8 @@ export default function ProcessReportsPage() {
         {/* Report body */}
         <div className="space-y-3">
           <div className="card p-3">
-            <h3 className="text-[13px] font-bold text-slate-800">{active.label}</h3>
-            <p className="mt-0.5 text-[11px] text-slate-500">{active.hint}</p>
+            <h3 className="text-body font-bold text-slate-800">{active.label}</h3>
+            <p className="mt-0.5 text-caption text-slate-500">{active.hint}</p>
 
             {active.filter === 'dates' && (
               <div className="mt-2 flex flex-wrap items-end gap-2">
@@ -213,13 +213,13 @@ export default function ProcessReportsPage() {
             ) : (
               <div className="card p-0">
                 <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
-                  <span className="text-[11px] font-semibold text-slate-500">
+                  <span className="text-caption font-semibold text-slate-500">
                     {rows.length.toLocaleString()} row{rows.length === 1 ? '' : 's'}
                   </span>
-                  {isFetching && <span className="text-[11px] text-slate-400">Updating…</span>}
+                  {isFetching && <span className="text-caption text-slate-400">Updating…</span>}
                 </div>
                 <div className="max-h-[65vh] overflow-auto">
-                  <table className="w-full text-[11.5px]">
+                  <table className="w-full text-small">
                     <thead className="sticky top-0 bg-slate-50">
                       <tr>
                         {columns.map((c) => (

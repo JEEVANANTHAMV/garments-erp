@@ -131,7 +131,7 @@ function IntakeModal({ doc, onClose, onSaved }: { doc?: any; onClose: () => void
       </FormSection>
       {!doc && <div className="flex items-center gap-3 px-1">
         <FilePick id="din-file" label={file ? 'Change file' : 'Attach scan / file'} onPick={setFile} />
-        {file && <span className="text-[12.5px]">{file.filename}</span>}
+        {file && <span className="text-body">{file.filename}</span>}
       </div>}
     </Modal>
   );
@@ -164,19 +164,19 @@ function InwardView({ id, onClose }: { id: number; onClose: () => void }) {
         {edit && active && billable && <Button id="din-create-bill" onClick={() => setDlg('bill')}><FilePlus2 size={13} className="mr-1 inline" />Register as bill</Button>}
       </>}>
       {!doc ? <LoadingBlock /> : <>
-        {doc.duplicate_note && <div className={`mb-3 rounded-lg px-3 py-2 text-[12.5px] ${Number(doc.duplicate_cleared) ? 'bg-slate-50 text-slate-600' : 'bg-red-50 text-red-800'}`}>
+        {doc.duplicate_note && <div className={`mb-3 rounded-lg px-3 py-2 text-body ${Number(doc.duplicate_cleared) ? 'bg-slate-50 text-slate-600' : 'bg-red-50 text-red-800'}`}>
           {Number(doc.duplicate_cleared) ? 'Duplicate flag cleared: ' : 'Duplicate suspected: '}{doc.duplicate_note}</div>}
         <InfoGrid items={[['Received', `${fmtDate(doc.receipt_date)} (entered ${fmtDateTime(doc.received_at)})`], ['By', `${doc.received_by_name ?? ''}${doc.received_dept ? ` · ${doc.received_dept}` : ''}`],
           ['Channel', labelOf(CHANNEL_OPTIONS, doc.channel)], ['Sender', doc.sender_name], ['Party', doc.party_name], ['Doc no / date', `${doc.doc_no ?? '—'} · ${doc.doc_date ? fmtDate(doc.doc_date) : '—'}`],
           ['Amount', doc.amount === null ? '—' : `₹${fmtDecimal(doc.amount, 2)}`], ['Owner / due', doc.completeness === 'COMPLETE' ? '—' : `${doc.owner_name ?? '—'} · ${fmtDate(doc.due_date)}`],
           ...(doc.channel === 'EMAIL' ? [['Email from', doc.email_from], ['Email received', doc.email_received_at ? fmtDateTime(doc.email_received_at) : '—'], ['Subject', doc.email_subject], ['Message ID', doc.email_message_id]] as [string, any][] : []),
           ['Notes', doc.notes], ['Tags', doc.tags], ['Status', <StatusBadge value={doc.status} />], ['Reason', doc.status_reason]]} />
-        <div className="mb-1 text-[13px] font-semibold">Bills</div>
+        <div className="mb-1 text-body font-semibold">Bills</div>
         {doc.bills.length ? <table className="mb-3 w-full text-xs"><tbody>{doc.bills.map((b: any) => (
           <tr key={b.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => navigate(`/stores/bill-tracker/${b.id}`)}>
             <td className="py-1.5 tabular-nums text-brand-700">{b.entry_no}</td><td>{b.party_name}</td><td>{b.bill_no}</td><td className="text-right">₹{fmtDecimal(b.amount, 2)}</td><td><StatusBadge value={b.workflow_status} /></td></tr>))}</tbody></table>
-          : <div className="mb-3 text-[12.5px] text-slate-400">{['DC', 'PROCESS_CHALLAN', 'GRN_COPY'].includes(doc.doc_type) ? 'Bill not received yet (a DC never creates a bill or a GRN)' : 'Not registered as a bill yet'}</div>}
-        <div className="mb-1 text-[13px] font-semibold">Linked documents</div>
+          : <div className="mb-3 text-body text-slate-400">{['DC', 'PROCESS_CHALLAN', 'GRN_COPY'].includes(doc.doc_type) ? 'Bill not received yet (a DC never creates a bill or a GRN)' : 'Not registered as a bill yet'}</div>}
+        <div className="mb-1 text-body font-semibold">Linked documents</div>
         <table className="mb-3 w-full text-xs"><tbody>
           {doc.links.map((l: any) => (
             <tr key={l.id} className={`border-t border-slate-100 ${l.removed_at ? 'text-slate-400 line-through' : ''}`}><td className="py-1.5">{l.type_label}</td><td className="tabular-nums">{l.target_no}</td><td>{l.note}</td><td>{l.linked_by_name}</td>
@@ -184,18 +184,18 @@ function InwardView({ id, onClose }: { id: number; onClose: () => void }) {
           {doc.linked_from.map((l: any) => <tr key={`f${l.id}`} className="border-t border-slate-100"><td className="py-1.5">Linked from</td><td className="tabular-nums">{l.source_no}</td><td>{labelOf(DOC_TYPE_OPTIONS, l.source_type)}</td><td /><td /></tr>)}
           {!doc.links.length && !doc.linked_from.length && <tr><td className="py-2 text-slate-400">None</td></tr>}
         </tbody></table>
-        <div className="mb-1 flex items-center justify-between"><div className="text-[13px] font-semibold">Files</div>
+        <div className="mb-1 flex items-center justify-between"><div className="text-body font-semibold">Files</div>
           {edit && active && <FilePick id="din-view-file" busy={act.isPending} onPick={(f) => act.mutate({ url: `/stores/document-inward/${id}/attachments`, body: f })} />}</div>
         <AttachmentList rows={doc.attachments} onRemove={edit ? (a) => { setSel({ ...a, attachment: true }); setDlg('unlink'); } : undefined} />
-        {doc.followups.length > 0 && <><div className="mb-1 mt-3 text-[13px] font-semibold">Follow-ups</div>
-          {doc.followups.map((f: any) => <div key={f.id} className="text-[12.5px]">{fmtDate(f.due_date)} · {f.issue_type} · {f.reason} · <StatusBadge value={f.status} /></div>)}</>}
+        {doc.followups.length > 0 && <><div className="mb-1 mt-3 text-body font-semibold">Follow-ups</div>
+          {doc.followups.map((f: any) => <div key={f.id} className="text-body">{fmtDate(f.due_date)} · {f.issue_type} · {f.reason} · <StatusBadge value={f.status} /></div>)}</>}
       </>}
       {dlg === 'edit' && doc && <IntakeModal doc={doc} onClose={() => setDlg(null)} onSaved={() => setDlg(null)} />}
       {dlg === 'bill' && doc && <Modal open onClose={() => setDlg(null)} title={`Register ${doc.inward_no} as a bill`} size="sm"
         footer={<><Button variant="secondary" onClick={() => setDlg(null)}>Cancel</Button><Button id="din-bill-save" loading={act.isPending}
           onClick={() => act.mutate({ url: `/stores/document-inward/${id}/create-bill`, body: { bill_category: cat } }, { onSuccess: (r) => { setDlg(null); navigate(`/stores/bill-tracker/${r.data.id}`); } })}>Register bill</Button></>}>
         <Select label="Bill category" id="din-bill-cat" value={cat} onChange={(e) => setCat(e.target.value)} options={CATEGORY_OPTIONS} />
-        <div className="mt-2 text-[12px] text-slate-500">Supplier {doc.party_name ?? '—'}, invoice {doc.doc_no ?? '—'} dated {doc.doc_date ? fmtDate(doc.doc_date) : '—'}, ₹{fmtDecimal(doc.amount ?? 0, 2)}. The duplicate check runs first.</div>
+        <div className="mt-2 text-small text-slate-500">Supplier {doc.party_name ?? '—'}, invoice {doc.doc_no ?? '—'} dated {doc.doc_date ? fmtDate(doc.doc_date) : '—'}, ₹{fmtDecimal(doc.amount ?? 0, 2)}. The duplicate check runs first.</div>
       </Modal>}
       {dlg === 'linkbill' && doc && <LinkBillModal doc={doc} onClose={() => setDlg(null)} />}
       {dlg === 'link' && doc && <DocLinkModal doc={doc} onClose={() => setDlg(null)} />}

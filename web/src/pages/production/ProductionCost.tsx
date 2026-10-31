@@ -64,10 +64,10 @@ export function ProductionCostsPage() {
             <span className="text-xs font-semibold uppercase tracking-wider">Total Actual Cost</span>
             <Calculator size={16} className="text-brand-600" />
           </div>
-          <span className="text-2xl font-black text-slate-900 tabular-nums">
+          <span className="text-2xl font-bold text-slate-900 tabular-nums">
             ₹{fmtDecimal(totalCost, 0)}
           </span>
-          <p className="text-[11px] text-slate-500 mt-1">Across all filtered cost sheets</p>
+          <p className="text-caption text-slate-500 mt-1">Across all filtered cost sheets</p>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
@@ -75,10 +75,10 @@ export function ProductionCostsPage() {
             <span className="text-xs font-semibold uppercase tracking-wider">Produced Volume</span>
             <Boxes size={16} className="text-slate-400" />
           </div>
-          <span className="text-2xl font-black text-slate-900 tabular-nums">
+          <span className="text-2xl font-bold text-slate-900 tabular-nums">
             {fmtNumber(totalProduced)}
           </span>
-          <p className="text-[11px] text-slate-500 mt-1">Total pieces completed</p>
+          <p className="text-caption text-slate-500 mt-1">Total pieces completed</p>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
@@ -86,10 +86,10 @@ export function ProductionCostsPage() {
             <span className="text-xs font-semibold uppercase tracking-wider">Weighted Cost / Pc</span>
             <FileText size={16} className="text-slate-400" />
           </div>
-          <span className="text-2xl font-black text-brand-700 tabular-nums">
+          <span className="text-2xl font-bold text-brand-700 tabular-nums">
             ₹{fmtDecimal(avgCostPerPc, 2)}
           </span>
-          <p className="text-[11px] text-slate-500 mt-1">Average per garment execution</p>
+          <p className="text-caption text-slate-500 mt-1">Average per garment execution</p>
         </div>
 
         <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3.5 shadow-xs">
@@ -97,10 +97,10 @@ export function ProductionCostsPage() {
             <span className="text-xs font-bold uppercase tracking-wider">Cost Sheets Count</span>
             <ArrowDownRight size={16} className="text-emerald-600" />
           </div>
-          <span className="text-2xl font-black text-emerald-900 tabular-nums">
+          <span className="text-2xl font-bold text-emerald-900 tabular-nums">
             {rows.length}
           </span>
-          <p className="text-[11px] text-emerald-700 font-medium mt-1">Controlled & Auditable</p>
+          <p className="text-caption text-emerald-700 font-medium mt-1">Controlled & Auditable</p>
         </div>
       </div>
 
@@ -175,8 +175,8 @@ export function ProductionCostsPage() {
             sortable: true,
             render: (r: any) => (
               <div>
-                <span className="tabular-nums text-[12.5px] font-bold text-brand-700">{r.cost_no}</span>
-                <span className="ml-2 rounded bg-slate-100 px-1 py-0.5 text-[10px] font-bold text-slate-600 tabular-nums">
+                <span className="tabular-nums text-body font-bold text-brand-700">{r.cost_no}</span>
+                <span className="ml-2 rounded bg-slate-100 px-1 py-0.5 text-micro font-bold text-slate-600 tabular-nums">
                   v{r.version || 1}
                 </span>
               </div>
@@ -201,7 +201,7 @@ export function ProductionCostsPage() {
             render: (r: any) => (
               <div>
                 <p className="font-bold text-slate-900 text-xs">{r.style_code || '—'}</p>
-                <p className="text-[11px] text-slate-500">{r.style_name || '—'}</p>
+                <p className="text-caption text-slate-500">{r.style_name || '—'}</p>
               </div>
             ),
           },
@@ -235,7 +235,7 @@ export function ProductionCostsPage() {
             header: 'Actual / Pc',
             align: 'right',
             render: (r: any) => (
-              <span className="tabular-nums font-black text-brand-700 text-xs">
+              <span className="tabular-nums font-bold text-brand-700 text-xs">
                 ₹{fmtDecimal(r.cost_per_piece, 2)}
               </span>
             ),

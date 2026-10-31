@@ -83,7 +83,7 @@ export function FgReceiptsPage() {
             { key: 'status', header: 'Status', render: (r: any) => (
               <span className="flex items-center gap-1">
                 <Badge color={r.status === 'CANCELLED' ? 'red' : r.status === 'RECEIVED' ? 'emerald' : 'slate'}>{r.status}</Badge>
-                {!Number(r.fg_posted) && r.status !== 'CANCELLED' && <span className="text-[10px] text-slate-400" title="Entered before the FG store gate — history only">history</span>}
+                {!Number(r.fg_posted) && r.status !== 'CANCELLED' && <span className="text-micro text-slate-400" title="Entered before the FG store gate — history only">history</span>}
               </span>
             ) },
           ]}
@@ -109,7 +109,7 @@ export function FgReceiptsPage() {
               ))}
             </tbody>
           </table>
-          {view.bundles?.length > 0 && <p className="mt-2 text-[11px] text-slate-500">From bundles: {view.bundles.map((b: any) => `${b.bundle_no} (${b.good_qty}${b.reject_qty ? ` + ${b.reject_qty} rej` : ''})`).join(', ')}</p>}
+          {view.bundles?.length > 0 && <p className="mt-2 text-caption text-slate-500">From bundles: {view.bundles.map((b: any) => `${b.bundle_no} (${b.good_qty}${b.reject_qty ? ` + ${b.reject_qty} rej` : ''})`).join(', ')}</p>}
         </Modal>
       )}
 
@@ -215,7 +215,7 @@ function NewReceiptModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
             <div id="fg-grid">
             {parts.map((part) => colorsOf(part).length > 0 && (
             <div key={part ?? 'all'} data-fg-part={part ?? ''} className="mb-3">
-            {part && <div className="mb-1 rounded bg-indigo-50 px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-indigo-800">{part}</div>}
+            {part && <div className="mb-1 rounded bg-indigo-50 px-2 py-1 text-caption font-bold uppercase tracking-wider text-indigo-800">{part}</div>}
             <table className="w-full text-xs">
               <thead className="bg-slate-50 text-slate-600">
                 <tr>
@@ -240,23 +240,23 @@ function NewReceiptModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
                         const over = cap != null && (Number(v.good) || 0) + (head.source_type === 'IN_HOUSE' ? Number(v.reject) || 0 : 0) > cap;
                         // in-house: a size with nothing finished on the job's bundles cannot be received yet
                         if (head.source_type === 'IN_HOUSE' && !cl!.in_house_ready) {
-                          return <td key={s.id} className="px-2 py-2 text-center text-[10px] text-slate-400" data-fg-cell={k} title="Nothing of this colour / size has finished ironing yet">ready 0<br />in FG {cl!.on_hand}</td>;
+                          return <td key={s.id} className="px-2 py-2 text-center text-micro text-slate-400" data-fg-cell={k} title="Nothing of this colour / size has finished ironing yet">ready 0<br />in FG {cl!.on_hand}</td>;
                         }
                         return (
                           <td key={s.id} className="px-1.5 py-1.5 text-center" data-fg-cell={k}>
                             <div className="inline-flex flex-col items-end gap-1">
-                              <label className="flex items-center gap-1 text-[10px] text-emerald-700">G
+                              <label className="flex items-center gap-1 text-micro text-emerald-700">G
                                 <input type="number" min={0} placeholder="good" value={v.good} data-fg-good={k}
                                   onChange={(e) => setQty({ ...qty, [k]: { ...v, good: e.target.value } })}
                                   className={`input h-7 w-20 text-right text-xs ${over ? 'border-red-400 bg-red-50' : ''}`} />
                               </label>
-                              <label className="flex items-center gap-1 text-[10px] text-red-600">R
+                              <label className="flex items-center gap-1 text-micro text-red-600">R
                                 <input type="number" min={0} placeholder="reject" value={v.reject} data-fg-reject={k}
                                   onChange={(e) => setQty({ ...qty, [k]: { ...v, reject: e.target.value } })}
                                   className="input h-7 w-20 text-right text-xs" />
                               </label>
                             </div>
-                            <div className="mt-0.5 text-[10px] text-slate-500" title={`Order ${cl!.order_qty} · received ${cl!.received} · packed ${cl!.packed} · in store ${cl!.on_hand}`}>
+                            <div className="mt-0.5 text-micro text-slate-500" title={`Order ${cl!.order_qty} · received ${cl!.received} · packed ${cl!.packed} · in store ${cl!.on_hand}`}>
                               {cap == null ? `ord ${cl!.order_qty}` : head.source_type === 'IN_HOUSE' ? `ready ${cap}` : `bal ${cap}`} · in FG {cl!.on_hand}
                             </div>
                           </td>
@@ -273,7 +273,7 @@ function NewReceiptModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
             ))}
             </div>
           )}
-          <p className="mt-2 text-[11px] text-slate-500">
+          <p className="mt-2 text-caption text-slate-500">
             {head.source_type === 'IN_HOUSE'
               ? '"ready" = PCS that finished ironing (Final QC when required) on the job\'s bundles and are not yet in the FG store. Good + reject cannot exceed it.'
               : head.source_type === 'SURPLUS' ? 'Surplus pieces are not limited by the order quantity.'

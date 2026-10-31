@@ -64,13 +64,13 @@ export function EwayBillButton({ sourceType, sourceId, compact }: {
 
   if (isLoading) {
     return compact
-      ? <span className="text-[11px] text-slate-400" data-ewb-source={sourceType}>…</span>
+      ? <span className="text-caption text-slate-400" data-ewb-source={sourceType}>…</span>
       : null;
   }
 
   if (!ewb) {
     if (!can('EWAY.CREATE')) {
-      return compact ? <span className="text-[11px] text-slate-400" data-ewb-source={sourceType}>—</span> : null;
+      return compact ? <span className="text-caption text-slate-400" data-ewb-source={sourceType}>—</span> : null;
     }
     const go = (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -79,7 +79,7 @@ export function EwayBillButton({ sourceType, sourceId, compact }: {
     return compact ? (
       <button type="button" id={`ewb-btn-${sourceType.toLowerCase()}-${id}`} data-ewb-source={sourceType} onClick={go}
         title="Generate e-way bill"
-        className="inline-flex items-center gap-1 whitespace-nowrap text-[11px] font-medium text-brand-600 hover:text-brand-700 hover:underline">
+        className="inline-flex items-center gap-1 whitespace-nowrap text-caption font-medium text-brand-600 hover:text-brand-700 hover:underline">
         <Truck size={12} /> Generate
       </button>
     ) : (
@@ -100,10 +100,10 @@ export function EwayBillButton({ sourceType, sourceId, compact }: {
   return compact ? (
     <Link to={`/logistics/eway-bills/${ewb.id}`} id={`ewb-btn-${sourceType.toLowerCase()}-${id}`} data-ewb-source={sourceType}
       data-ewb-status={ewb.view_status} onClick={stop} title={title}
-      className={clsx('inline-flex items-center gap-1 whitespace-nowrap text-[11px] font-medium hover:underline',
+      className={clsx('inline-flex items-center gap-1 whitespace-nowrap text-caption font-medium hover:underline',
         expired ? 'text-red-600' : 'text-slate-700')}>
       <Truck size={12} /> {ewb.ewb_no ?? ewb.doc_no}
-      <Badge tone={v.tone} className="!px-1.5 !py-0 !text-[10px]">{v.label}</Badge>
+      <Badge tone={v.tone} className="!px-1.5 !py-0 !text-micro">{v.label}</Badge>
     </Link>
   ) : (
     <Link to={`/logistics/eway-bills/${ewb.id}`} id="ewb-btn" data-ewb-source={sourceType}

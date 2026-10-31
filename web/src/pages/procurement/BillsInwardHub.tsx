@@ -27,7 +27,7 @@ export default function BillsInwardHub() {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-white p-1.5">
-        <span className="px-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">Bills Inward</span>
+        <span className="px-2 text-caption font-bold uppercase tracking-wider text-slate-500">Bills Inward</span>
         {tabs.map((t) => (
           <button key={t.key} type="button" id={`bills-tab-${t.key}`}
             onClick={() => setParams({ tab: t.key })}

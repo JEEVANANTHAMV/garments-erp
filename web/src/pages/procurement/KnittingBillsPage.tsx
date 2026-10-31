@@ -50,7 +50,7 @@ function KnittingBillList({ onOpen }: { onOpen: (v: 'new' | number) => void }) {
                   <td className="px-3 py-2 text-right">{b.line_count}</td><td className="px-3 py-2 text-right">{fmtDecimal(b.fabric_kg, 3)}</td>
                   <td className="px-3 py-2 text-right">{money(b.gross_amount)}</td><td className="px-3 py-2 text-right">{money(b.gst_amount)}</td>
                   <td className="px-3 py-2 text-right font-semibold">{money(b.net_amount)}</td>
-                  <td className="px-3 py-2"><span className={`rounded px-1.5 py-0.5 text-[10.5px] font-bold ${b.status === 'CANCELLED' ? 'bg-slate-200 text-slate-600' : 'bg-emerald-100 text-emerald-800'}`}>{b.status}</span></td>
+                  <td className="px-3 py-2"><span className={`rounded px-1.5 py-0.5 text-caption font-bold ${b.status === 'CANCELLED' ? 'bg-slate-200 text-slate-600' : 'bg-emerald-100 text-emerald-800'}`}>{b.status}</span></td>
                 </tr>
               ))}
               {!(list.data ?? []).length && <tr><td colSpan={10} className="px-3 py-10 text-center text-slate-400">No knitting bills yet</td></tr>}
@@ -122,7 +122,7 @@ function KnittingBillEditor({ onBack, onDone }: { onBack: () => void; onDone: (i
                   const diff = r.quotation_rate != null && Math.abs(n(r.quotation_rate) - n(sel[r.receipt_id])) > 0.005;
                   return (
                     <tr key={r.receipt_id} className="border-t border-slate-100">
-                      <td className="px-2 py-1 tabular-nums">{r.receipt_no}{r.grn_no && <span className="block text-[10px] text-slate-400">{r.grn_no}</span>}</td><td className="px-2 py-1">{fmtDate(r.receipt_date)}</td>
+                      <td className="px-2 py-1 tabular-nums">{r.receipt_no}{r.grn_no && <span className="block text-micro text-slate-400">{r.grn_no}</span>}</td><td className="px-2 py-1">{fmtDate(r.receipt_date)}</td>
                       <td className="px-2 py-1">{r.program_no}</td><td className="px-2 py-1">{r.io_no || '—'}</td><td className="px-2 py-1">{[r.fabric_type, r.fabric_colour ? `Kora / Raw for ${r.fabric_colour}` : ''].filter(Boolean).join(' · ') || '—'}</td>
                       <td className="px-2 py-1 tabular-nums">{r.dc_nos || '—'}</td><td className="px-2 py-1">{r.party_dc_no || '—'}</td><td className="px-2 py-1">{r.gate_entry_no ? `${r.gate_entry_no}${r.vehicle_no ? ` · ${r.vehicle_no}` : ''}` : '—'}</td>
                       <td className="px-2 py-1">{r.receipt_type === 'FINAL' ? 'Final' : 'Partial'}</td><td className="px-2 py-1 text-right">{r.rolls || '—'}</td>
@@ -165,7 +165,7 @@ function KnittingBillView({ id, onBack }: { id: number; onBack: () => void }) {
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-base font-bold text-slate-800">Knitting bill {b.bill_no} <span className={`ml-2 rounded px-1.5 py-0.5 text-[11px] ${b.status === 'CANCELLED' ? 'bg-slate-200' : 'bg-emerald-100 text-emerald-800'}`}>{b.status}</span></h2>
+        <h2 className="text-base font-bold text-slate-800">Knitting bill {b.bill_no} <span className={`ml-2 rounded px-1.5 py-0.5 text-caption ${b.status === 'CANCELLED' ? 'bg-slate-200' : 'bg-emerald-100 text-emerald-800'}`}>{b.status}</span></h2>
         <div className="flex gap-2">
           {b.status !== 'CANCELLED' && (can('PURCHASE.DELETE') || can('PURCHASE.APPROVE') || can('PRODUCTION.APPROVE')) && <Button variant="secondary" onClick={cancel}><XCircle size={14} className="mr-1" /> Cancel bill</Button>}
           <Button variant="secondary" onClick={onBack}><ArrowLeft size={14} className="mr-1" /> Back</Button>
@@ -191,7 +191,7 @@ function KnittingBillView({ id, onBack }: { id: number; onBack: () => void }) {
         </table>
         <div className="border-t border-slate-100 p-3"><ProcessBillTotalsView b={b} /></div>
       </div>
-      {b.remarks && <pre className="card mt-3 whitespace-pre-wrap p-3 text-[11px] text-slate-600">{b.remarks}</pre>}
+      {b.remarks && <pre className="card mt-3 whitespace-pre-wrap p-3 text-caption text-slate-600">{b.remarks}</pre>}
     </div>
   );
 }

@@ -179,7 +179,7 @@ export default function TrimGRNsPage() {
                       <td className="py-3 px-4 text-center">
                         <button
                           onClick={() => nav(`/procurement/trim/grn/${g.id}`)}
-                          className="btn-secondary text-[11px] py-1 px-2.5 flex items-center gap-1 mx-auto"
+                          className="btn-secondary text-caption py-1 px-2.5 flex items-center gap-1 mx-auto"
                         >
                           <Eye size={13} /> View
                         </button>
@@ -223,7 +223,7 @@ export default function TrimGRNsPage() {
                     <tr key={s.id} className="hover:bg-slate-50/70 transition">
                       <td className="py-3 px-4 font-semibold text-slate-900">{s.trim_name}</td>
                       <td className="py-3 px-4">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-100 font-medium text-slate-700">
+                        <span className="px-2 py-0.5 rounded-full text-micro bg-slate-100 font-medium text-slate-700">
                           {s.trim_type || s.trim_code}
                         </span>
                       </td>

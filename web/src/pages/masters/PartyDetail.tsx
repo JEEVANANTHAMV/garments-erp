@@ -822,7 +822,7 @@ export function PartyDetailPage() {
               <Icon size={14} />
               <span>{t.label}</span>
               {t.count !== undefined && t.count > 0 && (
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                <span className={`px-1.5 py-0.2 rounded-full text-micro ${
                   isActive ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
                 }`}>
                   {t.count}
@@ -847,7 +847,7 @@ export function PartyDetailPage() {
                   </div>
                   <div>
                     <h4 className="text-xs font-bold text-slate-900 tracking-tight">GSTIN Quick Lookup & Auto-Fill</h4>
-                    <p className="text-[11px] text-slate-500">
+                    <p className="text-caption text-slate-500">
                       Enter a 15-digit GSTIN to auto-fetch Legal Name, Trade Name, PAN, and Registered Business Address.
                     </p>
                   </div>
@@ -905,7 +905,7 @@ export function PartyDetailPage() {
                   ) : (
                     <AlertCircle size={16} className="text-red-600 shrink-0 mt-0.5" />
                   )}
-                  <div className="flex-1 text-[11px] leading-relaxed">
+                  <div className="flex-1 text-caption leading-relaxed">
                     {gstFeedback.message}
                   </div>
                 </div>
@@ -965,7 +965,7 @@ export function PartyDetailPage() {
                           .toUpperCase();
                         handleField('io_prefix', candidate);
                       }}
-                      className="text-[11px] text-brand-700 hover:text-brand-900 bg-brand-100 hover:bg-brand-200 px-2 py-0.5 rounded font-medium border border-brand-300 transition-colors"
+                      className="text-caption text-brand-700 hover:text-brand-900 bg-brand-100 hover:bg-brand-200 px-2 py-0.5 rounded font-medium border border-brand-300 transition-colors"
                     >
                       ⚡ Auto-Suggest from Code / Name
                     </button>
@@ -987,7 +987,7 @@ export function PartyDetailPage() {
                     onChange={(e) => handleField('short_code', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3))}
                     placeholder="Short code, e.g. ACT"
                   />
-                  <div className="text-[12px] text-slate-500">
+                  <div className="text-small text-slate-500">
                     Prefix used when auto-generating Sales Internal Orders (e.g. <span className="tabular-nums font-bold text-brand-700">{form.io_prefix || 'PREFIX'}-IO-2026-001</span>);
                     the 3-letter short code is the buyer block of the SO number (<span className="tabular-nums font-bold text-brand-700">G01E26{form.short_code || 'ACT'}0001</span>).
                   </div>
@@ -1043,7 +1043,7 @@ export function PartyDetailPage() {
                 ))}
               </div>
               {hasAnyRole ? (
-                <p className="mt-2 flex items-center gap-1.5 text-[11px] text-slate-500">
+                <p className="mt-2 flex items-center gap-1.5 text-caption text-slate-500">
                   <AlertCircle size={12} className="shrink-0 text-brand-500" />
                   Detail tabs shown for the selected role(s):
                   <span className="font-semibold text-brand-700">
@@ -1057,7 +1057,7 @@ export function PartyDetailPage() {
                   </span>
                 </p>
               ) : (
-                <p className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-700">
+                <p className="mt-2 flex items-center gap-1.5 text-caption text-amber-700">
                   <AlertCircle size={12} className="shrink-0" />
                   Select at least one role — this decides which detail tabs appear.
                 </p>
@@ -1214,7 +1214,7 @@ export function PartyDetailPage() {
           <div className="card p-3 space-y-2">
             <div className="flex items-center justify-between pb-2 border-b border-surface-border">
               <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">Addresses</span>
-              <button onClick={addAddress} className="btn-primary btn-sm py-1 px-2 text-[11px] flex items-center gap-1">
+              <button onClick={addAddress} className="btn-primary btn-sm py-1 px-2 text-caption flex items-center gap-1">
                 <Plus size={12} /> Add
               </button>
             </div>
@@ -1239,14 +1239,14 @@ export function PartyDetailPage() {
                       <div className="min-w-0">
                         <div className="truncate">{addr.address_name || `${addr.address_type} Address`}</div>
                         {(addr.city || addr.country_id) ? (
-                          <div className="truncate text-[10px] font-normal text-slate-500">
+                          <div className="truncate text-micro font-normal text-slate-500">
                             {[addr.city, countryLabel(addr.country_id)].filter(Boolean).join(', ')}
                           </div>
                         ) : null}
                       </div>
                     </div>
                     {addr.is_default ? (
-                      <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">Primary</span>
+                      <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-micro font-bold">Primary</span>
                     ) : null}
                   </div>
                 ))}
@@ -1264,7 +1264,7 @@ export function PartyDetailPage() {
                       {currentAddress.address_name || 'Address Details'}
                     </h3>
                     {currentAddress.is_default ? (
-                      <span className="badge bg-emerald-100 text-emerald-800 text-[10px]">Primary Address</span>
+                      <span className="badge bg-emerald-100 text-emerald-800 text-micro">Primary Address</span>
                     ) : null}
                   </div>
                   <button
@@ -1459,7 +1459,7 @@ export function PartyDetailPage() {
 
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-surface-border bg-slate-50 text-slate-500 font-bold uppercase text-[11px]">
+                <tr className="border-b border-surface-border bg-slate-50 text-slate-500 font-bold uppercase text-caption">
                   <th className="p-3 text-left">#</th>
                   <th className="p-3 text-left">Name</th>
                   <th className="p-3 text-left">Designation</th>
@@ -1660,8 +1660,8 @@ export function PartyDetailPage() {
                   value={primaryIfsc} onChange={(e) => setPrimaryBank('ifsc_code', e.target.value.toUpperCase().replace(/\s/g, ''))}
                   placeholder="HDFC0001234" />
                 {ifscInvalid
-                  ? <p className="mt-1 text-[11.5px] text-red-600" id="party-ifsc-error">11 characters: 4 letters, 0, then 6 letters / digits</p>
-                  : <p className="mt-1 text-[11px] text-slate-400">e.g. HDFC0001234</p>}
+                  ? <p className="mt-1 text-small text-red-600" id="party-ifsc-error">11 characters: 4 letters, 0, then 6 letters / digits</p>
+                  : <p className="mt-1 text-caption text-slate-400">e.g. HDFC0001234</p>}
               </div>
               <div>
                 <label className="label">Account Number</label>
@@ -1715,7 +1715,7 @@ export function PartyDetailPage() {
                   </div>
                 </>
               ) : (
-                <p className="self-end pb-2 text-[12px] text-slate-400 sm:col-span-1 lg:col-span-3">Not an MSME — category, number and valid-from are not needed.</p>
+                <p className="self-end pb-2 text-small text-slate-400 sm:col-span-1 lg:col-span-3">Not an MSME — category, number and valid-from are not needed.</p>
               )}
 
               <div>
@@ -1726,7 +1726,7 @@ export function PartyDetailPage() {
                   {TDS_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
               </div>
-              <div className="sm:col-span-1 lg:col-span-3 self-end pb-2 text-[12px] text-slate-500">
+              <div className="sm:col-span-1 lg:col-span-3 self-end pb-2 text-small text-slate-500">
                 GSTIN / PAN are under <strong>GST &amp; Direct Tax</strong>; TDS section and rate under <strong>TDS &amp; TCS Applicability</strong> below.
               </div>
             </FormSection>
@@ -1815,7 +1815,7 @@ export function PartyDetailPage() {
                 <div className="flex items-center justify-between pb-1 border-b border-slate-200/60">
                   <div>
                     <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Tax Deducted at Source (TDS)</h4>
-                    <p className="text-[11px] text-slate-500">Applicable on payments made to suppliers, CMT job workers & contractors</p>
+                    <p className="text-caption text-slate-500">Applicable on payments made to suppliers, CMT job workers & contractors</p>
                   </div>
                   <select
                     className="input py-1 text-xs font-bold w-24 bg-white"
@@ -1890,7 +1890,7 @@ export function PartyDetailPage() {
                 <div className="flex items-center justify-between pb-1 border-b border-slate-200/60">
                   <div>
                     <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Tax Collected at Source (TCS)</h4>
-                    <p className="text-[11px] text-slate-500">Applicable on domestic sales & scrap sales under Income Tax</p>
+                    <p className="text-caption text-slate-500">Applicable on domestic sales & scrap sales under Income Tax</p>
                   </div>
                   <select
                     className="input py-1 text-xs font-bold w-24 bg-white"
@@ -1980,7 +1980,7 @@ export function PartyDetailPage() {
 
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-surface-border bg-slate-50 text-slate-500 font-bold uppercase text-[11px]">
+                <tr className="border-b border-surface-border bg-slate-50 text-slate-500 font-bold uppercase text-caption">
                   <th className="p-3 text-left">#</th>
                   <th className="p-3 text-left">Bank Name</th>
                   <th className="p-3 text-left">Branch</th>
@@ -2329,7 +2329,7 @@ export function PartyDetailPage() {
                   onChange={(e) => handleField('lead_time_days', e.target.value)}
                   placeholder="e.g. 21"
                 />
-                <p className="mt-1 text-[11px] text-slate-400">Used when planning purchase order delivery dates.</p>
+                <p className="mt-1 text-caption text-slate-400">Used when planning purchase order delivery dates.</p>
               </div>
               <div>
                 <label className="label">Minimum Order Qty</label>
@@ -2339,7 +2339,7 @@ export function PartyDetailPage() {
                   onChange={(e) => handleField('min_order_qty', e.target.value)}
                   placeholder="e.g. 500"
                 />
-                <p className="mt-1 text-[11px] text-slate-400">In the supplier&rsquo;s base unit of measure.</p>
+                <p className="mt-1 text-caption text-slate-400">In the supplier&rsquo;s base unit of measure.</p>
               </div>
               <div>
                 <label className="label">Supplier Rating</label>
@@ -2409,7 +2409,7 @@ export function PartyDetailPage() {
                   onChange={(e) => handleField('jobwork_process', e.target.value)}
                   placeholder="e.g. Stitching, Printing, Embroidery, Washing"
                 />
-                <p className="mt-1 text-[11px] text-slate-400">Comma-separate where the vendor handles more than one stage.</p>
+                <p className="mt-1 text-caption text-slate-400">Comma-separate where the vendor handles more than one stage.</p>
               </div>
               <div>
                 <label className="label">Capacity / Day (pcs)</label>
@@ -2445,7 +2445,7 @@ export function PartyDetailPage() {
                   onChange={(e) => handleField('jobwork_rate', e.target.value)}
                   placeholder="e.g. 18.50"
                 />
-                <p className="mt-1 text-[11px] text-slate-400">Default rate applied to job-work purchase orders.</p>
+                <p className="mt-1 text-caption text-slate-400">Default rate applied to job-work purchase orders.</p>
               </div>
               <div className="sm:col-span-2">
                 <label className="label">Gate / Documentation Terms</label>
@@ -2553,7 +2553,7 @@ export function PartyDetailPage() {
                   onChange={(e) => handleField('group_code', e.target.value.toUpperCase())}
                   placeholder="e.g. G11"
                 />
-                <p className="text-[11px] text-slate-400 mt-1">
+                <p className="text-caption text-slate-400 mt-1">
                   G + 2 digits. Starts the SO number (e.g. <span className="tabular-nums font-bold text-brand-700">{form.group_code || 'G11'}E26CAPE0001</span>).
                 </p>
               </div>

@@ -57,7 +57,7 @@ function OutwardList({ onOpen }: { onOpen: (id: number | 'new') => void }) {
               <tbody>
                 {rows.map((o) => (
                   <tr key={o.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => onOpen(o.id)}>
-                    <td className="px-3 py-2 tabular-nums font-semibold text-brand-700">{o.ypo_no}{o.is_reprocess ? <span className="ml-1 rounded bg-purple-100 px-1 text-[10px] text-purple-800">Reprocess</span> : null}</td>
+                    <td className="px-3 py-2 tabular-nums font-semibold text-brand-700">{o.ypo_no}{o.is_reprocess ? <span className="ml-1 rounded bg-purple-100 px-1 text-micro text-purple-800">Reprocess</span> : null}</td>
                     <td className="px-3 py-2">{fmtDate(o.ypo_date)}</td><td className="px-3 py-2">{o.process_name || o.process_code}</td><td className="px-3 py-2">{o.vendor_name}</td>
                     <td className="px-3 py-2">{o.jobs || '—'} <span className="text-slate-400">({o.job_count})</span></td>
                     <td className="px-3 py-2 text-right">{o.line_count}</td><td className="px-3 py-2 text-right">{o.cones || '—'}</td>
@@ -222,7 +222,7 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
             {editable && quote.quotation_id && <Button size="sm" variant="secondary" id="btn-load-quote" onClick={() => void loadPlan(quote.quotation_id, false)}><Download size={13} className="mr-1" /> Load quotation jobs</Button>}
           </div>
           {plan && (
-            <table className="mt-2 w-full text-[11.5px]" id="ypo-plan">
+            <table className="mt-2 w-full text-small" id="ypo-plan">
               <thead className="text-slate-500"><tr>{['Quotation line', 'Job', 'Dye colour', 'Rate', 'Quoted KG', 'Sent earlier', 'Balance', 'Job has', 'Short'].map((h) => <th key={h} className={`px-2 py-1 ${/KG|earlier|Balance|has|Short|Rate/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
               <tbody>{plan.lines.map((l: any) => (
                 <tr key={l.line_id} className="border-t border-slate-100">
@@ -238,7 +238,7 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
 
       <div className="card overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-border px-4 py-2.5">
-          <h3 className="text-[13px] font-semibold text-slate-800">Job / lot / cone entry <span className="font-normal text-slate-500">· {groups.length} job(s), {rows.length} line(s), {cones} cone(s)</span></h3>
+          <h3 className="text-body font-semibold text-slate-800">Job / lot / cone entry <span className="font-normal text-slate-500">· {groups.length} job(s), {rows.length} line(s), {cones} cone(s)</span></h3>
           {editable && <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={() => setPicker('job')}><Plus size={13} className="mr-1" /> Add Job</Button>
             <Button size="sm" variant="secondary" onClick={() => setPicker('scan')}><ScanLine size={13} className="mr-1" /> Scan Cone / Lot</Button>
@@ -265,7 +265,7 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
 
       {d && d.status !== 'DRAFT' && (
         <div className="card mt-3 space-y-3 p-4">
-          <h3 className="text-[13px] font-semibold text-slate-800">Job-wise reconciliation — Outward = Good + Reject + Loss + Balance</h3>
+          <h3 className="text-body font-semibold text-slate-800">Job-wise reconciliation — Outward = Good + Reject + Loss + Balance</h3>
           <ReconCards t={d.reconciliation.total} />
           <table className="w-full text-xs">
             <thead className="bg-slate-50 text-slate-500"><tr>{['Job', 'PO', 'Style', 'Lines', 'Outward KG', 'Good KG', 'Reject KG', 'Loss KG', 'Balance', 'Status'].map((h) => <th key={h} className={`px-2 py-1.5 ${/KG|Balance|Lines/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
@@ -300,7 +300,7 @@ function JobRows({ g, editable, shade, set, remove, programs }: { g: { io_no: st
   const inp = 'input py-0.5 text-xs';
   return (
     <>
-      <tr className="bg-sky-50/70"><td colSpan={shade ? 12 : 11} className="px-2 py-1.5 text-[11.5px] font-semibold text-sky-900">Job {g.io_no}{g.rows[0].buyer_po_no ? ` · PO ${g.rows[0].buyer_po_no}` : ''}</td></tr>
+      <tr className="bg-sky-50/70"><td colSpan={shade ? 12 : 11} className="px-2 py-1.5 text-small font-semibold text-sky-900">Job {g.io_no}{g.rows[0].buyer_po_no ? ` · PO ${g.rows[0].buyer_po_no}` : ''}</td></tr>
       {g.rows.map((r, i) => (
         <tr key={r.key} className="border-t border-slate-100">
           <td className="px-2 py-1 text-slate-400">{i + 1}</td><td className="px-2 py-1">{r.yarn_name}</td><td className="px-2 py-1">{r.shade || '—'}</td>
@@ -394,7 +394,7 @@ function LotPicker({ mode, jobs, taken, onClose, onAdd }: {
               return (
                 <tr key={K(l)} className={`border-t border-slate-100 ${on ? 'bg-emerald-50' : ''}`}>
                   {mode === 'job' && <td className="px-2 py-1"><input type="checkbox" checked={on} onChange={() => setSel((s) => { const x = { ...s }; if (on) delete x[K(l)]; else x[K(l)] = { kg: l.available_kg, cone: l.cone_no ?? '', cones: l.cones ?? 0 }; return x; })} /></td>}
-                  <td className="px-2 py-1 tabular-nums font-semibold">{l.lot_no}{l.processed ? <span className="ml-1 rounded bg-purple-100 px-1 text-[10px] text-purple-800">processed</span> : null}</td>
+                  <td className="px-2 py-1 tabular-nums font-semibold">{l.lot_no}{l.processed ? <span className="ml-1 rounded bg-purple-100 px-1 text-micro text-purple-800">processed</span> : null}</td>
                   <td className="px-2 py-1">{l.yarn_name}{l.count_str ? ` ${l.count_str}` : ''}</td><td className="px-2 py-1">{l.color_name || l.shade || '—'}</td>
                   <td className="px-2 py-1">{l.holder_job}</td><td className="px-2 py-1 tabular-nums">{l.grn_no}</td><td className="px-2 py-1">{l.po_no || '—'}</td><td className="px-2 py-1">{l.supplier_name || '—'}</td>
                   <td className="px-2 py-1">{l.warehouse_name || '—'}</td><td className="px-2 py-1 text-right tabular-nums">{kg(l.available_kg)}</td>

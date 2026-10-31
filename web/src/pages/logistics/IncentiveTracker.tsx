@@ -70,18 +70,18 @@ function Dashboard({ onFilter }: { onFilter: (f: Record<string, unknown>) => voi
       </div>
       <div className="grid gap-3 lg:grid-cols-3">
         <div className="card overflow-x-auto lg:col-span-2">
-          <p className="border-b border-slate-100 px-3 py-2 text-[12.5px] font-semibold text-slate-700">By scheme</p>
+          <p className="border-b border-slate-100 px-3 py-2 text-body font-semibold text-slate-700">By scheme</p>
           <table className="w-full" id="eb-by-scheme"><thead><tr><th className="th">Scheme</th><th className="th text-right">Claims</th><th className="th text-right">Basis ₹</th><th className="th text-right">Cash ₹</th>
             <th className="th text-right">Scrip issued / available</th><th className="th text-right">Pending ₹</th></tr></thead>
             <tbody>{!d.by_scheme.length && <tr><td colSpan={6} className="td py-6 text-center text-slate-400">No claims yet — they come from the shipping bills</td></tr>}
               {d.by_scheme.map((r: any) => <tr key={r.scheme_id} className="row-hover cursor-pointer" data-scheme={r.code} onClick={() => onFilter({ scheme_id: r.scheme_id })}>
-                <td className="td text-[12.5px] font-semibold">{r.display_name}<p className="text-[11px] font-normal text-slate-400">{r.mode_label}</p></td>
+                <td className="td text-body font-semibold">{r.display_name}<p className="text-caption font-normal text-slate-400">{r.mode_label}</p></td>
                 <td className="td text-right tabular-nums">{r.claims}{r.open_claims ? <span className="text-amber-700"> · {r.open_claims} open</span> : null}</td>
                 <td className="td text-right tabular-nums">{fmtDecimal(r.basis, 2)}</td><td className="td text-right tabular-nums text-emerald-700">{fmtDecimal(r.cash + r.proceeds, 2)}</td>
                 <td className="td text-right tabular-nums text-indigo-700">{r.tracking_mode === 'CASH' ? '—' : `${fmtDecimal(r.scrip_issued, 2)} / ${fmtDecimal(r.scrip_available, 2)}`}</td>
                 <td className="td text-right font-semibold tabular-nums text-amber-700">{fmtDecimal(r.pending, 2)}</td></tr>)}</tbody></table>
         </div>
-        <div className="card p-3 text-[12.5px]" id="eb-queues">
+        <div className="card p-3 text-body" id="eb-queues">
           <p className="mb-2 font-semibold text-slate-700">Needs attention</p>
           {[['Follow-ups open', d.queues.followups_open, { followup: 'OPEN' }], ['Follow-ups overdue', d.queues.followups_overdue, { followup: 'OVERDUE' }], ['Under query', d.queues.query, { status: 'QUERY' }],
             ['Rejected', d.queues.rejected, { status: 'REJECTED' }], ['Not applicable', d.queues.not_applicable, { status: 'NOT_APPLICABLE' }]].map(([l, c, f]: any) => (
@@ -92,14 +92,14 @@ function Dashboard({ onFilter }: { onFilter: (f: Record<string, unknown>) => voi
       </div>
       <div className="grid gap-3 lg:grid-cols-2">
         <div className="card overflow-x-auto">
-          <p className="border-b border-slate-100 px-3 py-2 text-[12.5px] font-semibold text-slate-700">Pending ageing (days, as on {fmtDate(d.as_of)})</p>
+          <p className="border-b border-slate-100 px-3 py-2 text-body font-semibold text-slate-700">Pending ageing (days, as on {fmtDate(d.as_of)})</p>
           <AgeingTable data={d.ageing} onFilter={onFilter} />
         </div>
         <div className="card overflow-x-auto">
-          <p className="border-b border-slate-100 px-3 py-2 text-[12.5px] font-semibold text-slate-700">Last 6 months — cash vs scrip</p>
+          <p className="border-b border-slate-100 px-3 py-2 text-body font-semibold text-slate-700">Last 6 months — cash vs scrip</p>
           <table className="w-full"><thead><tr><th className="th">Month</th><th className="th text-right">Bank / refund ₹</th><th className="th text-right">Sale proceeds ₹</th><th className="th text-right">Scrip issued ₹ (not cash)</th></tr></thead>
             <tbody>{!d.trend.length && <tr><td colSpan={4} className="td py-4 text-center text-slate-400">Nothing received yet</td></tr>}
-              {d.trend.map((t: any) => <tr key={t.month}><td className="td text-[12px]">{t.month}</td><td className="td text-right tabular-nums">{fmtDecimal(t.cash, 2)}</td>
+              {d.trend.map((t: any) => <tr key={t.month}><td className="td text-small">{t.month}</td><td className="td text-right tabular-nums">{fmtDecimal(t.cash, 2)}</td>
                 <td className="td text-right tabular-nums">{fmtDecimal(t.proceeds, 2)}</td><td className="td text-right tabular-nums text-indigo-700">{fmtDecimal(t.scrip, 2)}</td></tr>)}</tbody></table>
         </div>
       </div>
@@ -111,8 +111,8 @@ function AgeingTable({ data, onFilter }: { data: any; onFilter: (f: Record<strin
   return (
     <table className="w-full" id="eb-ageing"><thead><tr><th className="th">Scheme · aged from</th>{data.buckets.map((b: string) => <th key={b} className="th text-right">{b}</th>)}<th className="th text-right">Pending ₹</th></tr></thead>
       <tbody>{!data.by_scheme.length && <tr><td colSpan={6} className="td py-4 text-center text-slate-400">Nothing pending</td></tr>}
-        {data.by_scheme.map((s: any) => <tr key={s.scheme_id}><td className="td text-[12px] font-semibold">{s.display_name}<p className="text-[10.5px] font-normal text-slate-400">{s.ageing_label}</p></td>
-          {data.buckets.map((b: string) => <td key={b} className="td text-right text-[12px]">{s.buckets[b].count ? <button className={clsx('tabular-nums hover:underline', b === '90+' && 'font-semibold text-red-600')} data-bucket={`${s.code}-${b}`}
+        {data.by_scheme.map((s: any) => <tr key={s.scheme_id}><td className="td text-small font-semibold">{s.display_name}<p className="text-caption font-normal text-slate-400">{s.ageing_label}</p></td>
+          {data.buckets.map((b: string) => <td key={b} className="td text-right text-small">{s.buckets[b].count ? <button className={clsx('tabular-nums hover:underline', b === '90+' && 'font-semibold text-red-600')} data-bucket={`${s.code}-${b}`}
             onClick={() => onFilter({ scheme_id: s.scheme_id, pending: 1, bucket: b })}>{fmtDecimal(s.buckets[b].amount, 2)}<span className="text-slate-400"> ({s.buckets[b].count})</span></button> : <span className="text-slate-300">—</span>}</td>)}
           <td className="td text-right font-semibold tabular-nums">{fmtDecimal(s.pending, 2)}</td></tr>)}
         {data.by_scheme.length > 0 && <tr className="border-t-2 border-slate-200 font-semibold"><td className="td">Total</td>{data.buckets.map((b: string) => <td key={b} className="td text-right tabular-nums">
@@ -153,7 +153,7 @@ function Register({ meta, onOpen }: { meta: Meta; onOpen: (id: number) => void }
         <Input className="w-36" type="date" label="to" value={f.to} onChange={(e) => setF('to', e.target.value)} />
         <div className="pb-2"><Checkbox label="Pending only" checked={!!f.pending} onChange={(c) => setF('pending', c ? '1' : '')} /></div>
         {extra.length > 0 && <div className="flex flex-wrap items-center gap-1 pb-1.5" id="eb-f-extra">{extra.map((k) => <Badge key={k} tone="blue">{k.replace('_', ' ')}: {f[k]}</Badge>)}
-          <button className="text-[12px] text-brand-700 hover:underline" onClick={() => { const p = new URLSearchParams({ tab: 'register' }); for (const k of ['q', 'scheme_id', 'status', 'from', 'to', 'pending']) if (f[k]) p.set(k, f[k]); setSp(p); }}>clear</button></div>}
+          <button className="text-small text-brand-700 hover:underline" onClick={() => { const p = new URLSearchParams({ tab: 'register' }); for (const k of ['q', 'scheme_id', 'status', 'from', 'to', 'pending']) if (f[k]) p.set(k, f[k]); setSp(p); }}>clear</button></div>}
         <div className="ml-auto pb-0.5"><Button variant="secondary" id="eb-reg-excel" onClick={() => void download('/export-benefits/claims', params, `export_benefit_register_${todayIst()}.xlsx`, toast)}><Download size={14} />Excel</Button></div>
       </div>
       {T && T.by_scheme.length > 0 && (
@@ -174,18 +174,18 @@ function Register({ meta, onOpen }: { meta: Meta; onOpen: (id: number) => void }
                 <Fragment key={r.id}>
                   <tr className="row-hover align-top" data-claim={r.id} data-scheme={r.scheme_code} data-sb={r.sb_no}>
                     <td className="td"><button className="text-slate-400 hover:text-slate-700" title="Show every event" data-expand={r.id} onClick={() => setExp((e) => ({ ...e, [r.id]: !e[r.id] }))}>{exp[r.id] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</button></td>
-                    <td className="td whitespace-nowrap text-[12px]">{r.shipping_bill_id ? <Link className="tabular-nums font-semibold text-brand-700 hover:underline" to={`/export/shipping-bills/${r.shipping_bill_id}`}>{r.sb_no}</Link> : <span className="text-slate-400">no SB</span>}
+                    <td className="td whitespace-nowrap text-small">{r.shipping_bill_id ? <Link className="tabular-nums font-semibold text-brand-700 hover:underline" to={`/export/shipping-bills/${r.shipping_bill_id}`}>{r.sb_no}</Link> : <span className="text-slate-400">no SB</span>}
                       <p className="text-slate-500">{fmtDate(r.sb_date ?? r.claim_date)}</p></td>
-                    <td className="td text-[12px]">{r.invoice_no ?? '—'}<p className="text-slate-500">{r.so_no ?? ''} · {r.buyer_name ?? ''}</p></td>
-                    <td className="td text-[12px]"><button className="text-left font-semibold text-brand-700 hover:underline" data-open={r.id} onClick={() => onOpen(r.id)}>{r.scheme_name}</button><p className="text-[10.5px] text-slate-400">{r.mode_label}</p></td>
-                    <td className="td text-right text-[12px] tabular-nums">{r.declared_amount == null ? <span className="text-slate-400">not known</span> : fmtDecimal(r.declared_amount, 2)}
-                      {r.basis_amount != null && r.basis_source !== 'DECLARED' && <p className="text-[10.5px] text-slate-500">{r.basis_source?.toLowerCase()} {fmtDecimal(r.basis_amount, 2)}</p>}</td>
-                    <td className="td text-right tabular-nums text-emerald-700">{fmtDecimal(r.net_cash, 2)}{r.adjusted_amount > 0 && <p className="text-[10.5px] text-slate-500">adj. {fmtDecimal(r.adjusted_amount, 2)}</p>}</td>
-                    <td className="td text-right text-[12px] tabular-nums text-indigo-700">{r.scrip_capable ? `${fmtDecimal(r.scrip_issued, 0)} / ${fmtDecimal(r.scrip_available, 0)} / ${fmtDecimal(r.scrip_utilised, 0)} / ${fmtDecimal(r.scrip_sold, 0)}` : <span className="text-slate-300">—</span>}</td>
-                    <td className={clsx('td text-right tabular-nums', r.pending_amount > 0 && 'font-semibold text-amber-700')}>{fmtDecimal(r.pending_amount, 2)}{r.excess_amount > 0 && <p className="text-[10.5px] font-semibold text-red-600">excess {fmtDecimal(r.excess_amount, 2)}</p>}</td>
-                    <td className="td whitespace-nowrap text-[12px]">{r.last_event_date ? fmtDate(r.last_event_date) : '—'}</td>
-                    <td className={clsx('td text-right text-[12px] tabular-nums', (r.days_pending ?? 0) > 90 && 'font-semibold text-red-600')} title={r.days_pending != null ? `from ${r.ageing_label}` : undefined}>{r.days_pending ?? '—'}</td>
-                    <td className="td"><StatusPill status={r.status} label={r.status_label} tone={r.status_tone} />{r.open_followups > 0 && <p className="text-[10.5px] text-violet-700">{r.open_followups} follow-up</p>}</td>
+                    <td className="td text-small">{r.invoice_no ?? '—'}<p className="text-slate-500">{r.so_no ?? ''} · {r.buyer_name ?? ''}</p></td>
+                    <td className="td text-small"><button className="text-left font-semibold text-brand-700 hover:underline" data-open={r.id} onClick={() => onOpen(r.id)}>{r.scheme_name}</button><p className="text-caption text-slate-400">{r.mode_label}</p></td>
+                    <td className="td text-right text-small tabular-nums">{r.declared_amount == null ? <span className="text-slate-400">not known</span> : fmtDecimal(r.declared_amount, 2)}
+                      {r.basis_amount != null && r.basis_source !== 'DECLARED' && <p className="text-caption text-slate-500">{r.basis_source?.toLowerCase()} {fmtDecimal(r.basis_amount, 2)}</p>}</td>
+                    <td className="td text-right tabular-nums text-emerald-700">{fmtDecimal(r.net_cash, 2)}{r.adjusted_amount > 0 && <p className="text-caption text-slate-500">adj. {fmtDecimal(r.adjusted_amount, 2)}</p>}</td>
+                    <td className="td text-right text-small tabular-nums text-indigo-700">{r.scrip_capable ? `${fmtDecimal(r.scrip_issued, 0)} / ${fmtDecimal(r.scrip_available, 0)} / ${fmtDecimal(r.scrip_utilised, 0)} / ${fmtDecimal(r.scrip_sold, 0)}` : <span className="text-slate-300">—</span>}</td>
+                    <td className={clsx('td text-right tabular-nums', r.pending_amount > 0 && 'font-semibold text-amber-700')}>{fmtDecimal(r.pending_amount, 2)}{r.excess_amount > 0 && <p className="text-caption font-semibold text-red-600">excess {fmtDecimal(r.excess_amount, 2)}</p>}</td>
+                    <td className="td whitespace-nowrap text-small">{r.last_event_date ? fmtDate(r.last_event_date) : '—'}</td>
+                    <td className={clsx('td text-right text-small tabular-nums', (r.days_pending ?? 0) > 90 && 'font-semibold text-red-600')} title={r.days_pending != null ? `from ${r.ageing_label}` : undefined}>{r.days_pending ?? '—'}</td>
+                    <td className="td"><StatusPill status={r.status} label={r.status_label} tone={r.status_tone} />{r.open_followups > 0 && <p className="text-caption text-violet-700">{r.open_followups} follow-up</p>}</td>
                   </tr>
                   {exp[r.id] && <tr><td /><td colSpan={10} className="bg-slate-50/60 px-3 py-2"><Timeline id={r.id} /></td></tr>}
                 </Fragment>
@@ -204,10 +204,10 @@ function Timeline({ id }: { id: number }) {
   if (q.isLoading) return <LoadingBlock rows={2} />;
   if (q.error) return <ErrorState error={q.error} />;
   const ev = q.data.events.filter((e: any) => e.status !== 'DRAFT');
-  if (!ev.length) return <p className="text-[12px] text-slate-400" data-timeline={id}>Nothing received or issued yet.</p>;
+  if (!ev.length) return <p className="text-small text-slate-400" data-timeline={id}>Nothing received or issued yet.</p>;
   return (
     <div className="flex flex-wrap gap-2" data-timeline={id}>
-      {ev.map((e: any) => <span key={e.id} className={clsx('rounded border px-2 py-1 text-[11.5px]', e.status === 'REVERSED' ? 'border-slate-200 text-slate-400 line-through' : e.event_type === 'REVERSAL' ? 'border-red-200 bg-red-50 text-red-700' : e.is_cash ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-indigo-200 bg-indigo-50 text-indigo-800')}>
+      {ev.map((e: any) => <span key={e.id} className={clsx('rounded border px-2 py-1 text-small', e.status === 'REVERSED' ? 'border-slate-200 text-slate-400 line-through' : e.event_type === 'REVERSAL' ? 'border-red-200 bg-red-50 text-red-700' : e.is_cash ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-indigo-200 bg-indigo-50 text-indigo-800')}>
         <b>{fmtDate(e.event_date)}</b> · {e.label} · {e.event_type === 'REVERSAL' ? '−' : ''}₹{fmtDecimal(e.base_amount, 2)}{e.bank_reference ? ` · ${e.bank_reference}` : ''}{e.scrip_number ? ` · ${e.scrip_number}` : ''}</span>)}
     </div>
   );
@@ -238,20 +238,20 @@ function Bills({ onOpen }: { onOpen: (id: number) => void }) {
               {!t.isLoading && !rows.length && <tr><td colSpan={types.length + 4} className="td py-10 text-center text-slate-400">{status === 'OPEN' ? 'Nothing pending — every benefit is settled' : 'No shipping bills with benefits'}</td></tr>}
               {rows.map((r) => (
                 <tr key={r.shipping_bill_id} className="row-hover align-top" data-sb={r.sb_no}>
-                  <td className="td whitespace-nowrap text-[12px]"><Link className="tabular-nums font-semibold text-brand-700 hover:underline" to={`/export/shipping-bills/${r.shipping_bill_id}`}>{r.sb_no}</Link>
+                  <td className="td whitespace-nowrap text-small"><Link className="tabular-nums font-semibold text-brand-700 hover:underline" to={`/export/shipping-bills/${r.shipping_bill_id}`}>{r.sb_no}</Link>
                     <p className="text-slate-500">{fmtDate(r.sb_date)}{r.pending_days != null && <span className={clsx('ml-1', r.pending_days > 90 ? 'font-semibold text-red-600' : 'text-slate-400')}>· {r.pending_days} d</span>}</p></td>
-                  <td className="td text-[12px]">{r.invoice_no ?? '—'}<p className="text-slate-500">{r.so_no ?? ''} · {r.buyer_name ?? ''}</p></td>
+                  <td className="td text-small">{r.invoice_no ?? '—'}<p className="text-slate-500">{r.so_no ?? ''} · {r.buyer_name ?? ''}</p></td>
                   {types.map((x) => {
                     const c = r.cells[x.value];
-                    if (!c) return <td key={x.value} className="td text-right text-[12px] text-slate-300">—</td>;
+                    if (!c) return <td key={x.value} className="td text-right text-small text-slate-300">—</td>;
                     return (
-                      <td key={x.value} className="td text-right text-[12px]">
+                      <td key={x.value} className="td text-right text-small">
                         <button type="button" className="w-full rounded px-1 py-0.5 text-right hover:bg-slate-50" data-cell={`${r.sb_no}-${x.value}`} onClick={() => onOpen(c.ids[0])}>
                           {c.scrip_capable ? <><span className="tabular-nums font-semibold text-indigo-700">{fmtDecimal(c.scrip_issued, 2)}</span><span className="tabular-nums text-slate-400"> / {fmtDecimal(c.claim, 2)}</span>
-                            {c.received > 0 && <span className="block text-[10.5px] text-emerald-700">cash {fmtDecimal(c.received, 2)}</span>}</>
+                            {c.received > 0 && <span className="block text-caption text-emerald-700">cash {fmtDecimal(c.received, 2)}</span>}</>
                             : <><span className="tabular-nums font-semibold">{fmtDecimal(c.received, 2)}</span><span className="tabular-nums text-slate-400"> / {fmtDecimal(c.claim, 2)}</span></>}
                           <span className="mt-0.5 block"><StatusPill status={c.status} label={c.status_label} tone={c.status_tone} /></span>
-                          {c.last_date && <span className="block whitespace-nowrap text-[10.5px] text-slate-500">last {fmtDate(c.last_date)}</span>}
+                          {c.last_date && <span className="block whitespace-nowrap text-caption text-slate-500">last {fmtDate(c.last_date)}</span>}
                         </button>
                       </td>
                     );
@@ -289,14 +289,14 @@ function Receipts({ meta, onOpen }: { meta: Meta; onOpen: (id: number) => void }
             <table className="w-full" id="eb-receipts"><thead><tr><th className="th">Actual date</th><th className="th">Benefit</th><th className="th">Event</th><th className="th">SB · invoice</th><th className="th text-right">Amount ₹</th><th className="th">Bank · UTR / scrip</th><th className="th">Posted</th></tr></thead>
               <tbody>{q.isLoading && <tr><td colSpan={7}><LoadingBlock rows={3} /></td></tr>}
                 {!q.isLoading && !q.data?.data.length && <tr><td colSpan={7} className="td py-8 text-center text-slate-400">Nothing in this period</td></tr>}
-                {q.data?.data.map((r) => <tr key={r.id} className="row-hover cursor-pointer" onClick={() => onOpen(r.claim_id)}><td className="td text-[12px] font-semibold">{fmtDate(r.event_date)}</td><td className="td text-[12px]">{r.scheme_name}</td>
-                  <td className="td text-[12px]">{r.label}</td><td className="td text-[12px]">{r.sb_no ?? '—'}<p className="text-slate-500">{r.invoice_no ?? ''}</p></td>
+                {q.data?.data.map((r) => <tr key={r.id} className="row-hover cursor-pointer" onClick={() => onOpen(r.claim_id)}><td className="td text-small font-semibold">{fmtDate(r.event_date)}</td><td className="td text-small">{r.scheme_name}</td>
+                  <td className="td text-small">{r.label}</td><td className="td text-small">{r.sb_no ?? '—'}<p className="text-slate-500">{r.invoice_no ?? ''}</p></td>
                   <td className={clsx('td text-right tabular-nums', r.signed_amount < 0 && 'text-red-600')}>{fmtDecimal(r.signed_amount, 2)}</td>
-                  <td className="td text-[12px]">{r.bank_label ?? ''}<p className="tabular-nums text-[11px]">{r.bank_reference ?? r.scrip_number ?? ''}</p></td><td className="td text-[11px] text-slate-500">{fmtDate(r.posted_at)} · {r.posted_by_name ?? ''}</td></tr>)}</tbody>
+                  <td className="td text-small">{r.bank_label ?? ''}<p className="tabular-nums text-caption">{r.bank_reference ?? r.scrip_number ?? ''}</p></td><td className="td text-caption text-slate-500">{fmtDate(r.posted_at)} · {r.posted_by_name ?? ''}</td></tr>)}</tbody>
               {q.data && q.data.data.length > 0 && <tfoot><tr className="border-t-2 border-slate-200 font-semibold"><td className="td" colSpan={4}>Total</td><td className="td text-right tabular-nums">{fmtDecimal(q.data.total, 2)}</td><td colSpan={2} /></tr></tfoot>}</table>
           </div>
-          <div className="card overflow-x-auto"><p className="border-b border-slate-100 px-3 py-2 text-[12.5px] font-semibold text-slate-700">Daily totals</p>
-            <table className="w-full" id="eb-daily"><tbody>{q.data?.daily.map((d) => <tr key={d.date}><td className="td text-[12px]">{fmtDate(d.date)}</td><td className="td text-right tabular-nums">{fmtDecimal(d.amount, 2)}</td></tr>)}</tbody></table></div>
+          <div className="card overflow-x-auto"><p className="border-b border-slate-100 px-3 py-2 text-body font-semibold text-slate-700">Daily totals</p>
+            <table className="w-full" id="eb-daily"><tbody>{q.data?.daily.map((d) => <tr key={d.date}><td className="td text-small">{fmtDate(d.date)}</td><td className="td text-right tabular-nums">{fmtDecimal(d.amount, 2)}</td></tr>)}</tbody></table></div>
         </div>
       )}
     </div>
@@ -312,7 +312,7 @@ function Ageing({ onFilter }: { onFilter: (f: Record<string, unknown>) => void }
     <div className="space-y-3">
       <div className="card flex flex-wrap items-end gap-2.5 p-3">
         <Input className="w-40" type="date" label="As on" value={asOf} onChange={(e) => setAsOf(e.target.value || todayIst())} />
-        <p className="pb-2 text-[12px] text-slate-500">Each scheme is aged from its configured basis date (shown under its name). Settled items stop ageing.</p>
+        <p className="pb-2 text-small text-slate-500">Each scheme is aged from its configured basis date (shown under its name). Settled items stop ageing.</p>
         <div className="ml-auto"><Button variant="secondary" onClick={() => void download('/export-benefits/reports/ageing', { as_of: asOf }, `export_benefit_ageing_${asOf}.xlsx`, toast)}><Download size={14} />Excel</Button></div>
       </div>
       {q.isLoading ? <div className="card"><LoadingBlock rows={4} /></div> : q.error ? <div className="card"><ErrorState error={q.error} onRetry={() => void q.refetch()} /></div> : (
@@ -320,8 +320,8 @@ function Ageing({ onFilter }: { onFilter: (f: Record<string, unknown>) => void }
           <div className="card overflow-x-auto"><AgeingTable data={q.data} onFilter={(f) => onFilter({ ...f, as_of: asOf })} /></div>
           <div className="card overflow-x-auto">
             <table className="w-full" id="eb-ageing-rows"><thead><tr><th className="th">SB</th><th className="th">Benefit</th><th className="th">Aged from</th><th className="th text-right">Days</th><th className="th">Bucket</th><th className="th text-right">Pending ₹</th><th className="th">Status</th></tr></thead>
-              <tbody>{q.data.rows.slice(0, 300).map((r: any) => <tr key={r.id}><td className="td text-[12px] tabular-nums">{r.sb_no ?? '—'}</td><td className="td text-[12px]">{r.scheme_name}</td>
-                <td className="td text-[12px]">{fmtDate(r.ageing_date)} <span className="text-slate-400">({r.ageing_label})</span></td><td className="td text-right tabular-nums">{r.days_pending}</td><td className="td text-[12px]">{r.bucket}</td>
+              <tbody>{q.data.rows.slice(0, 300).map((r: any) => <tr key={r.id}><td className="td text-small tabular-nums">{r.sb_no ?? '—'}</td><td className="td text-small">{r.scheme_name}</td>
+                <td className="td text-small">{fmtDate(r.ageing_date)} <span className="text-slate-400">({r.ageing_label})</span></td><td className="td text-right tabular-nums">{r.days_pending}</td><td className="td text-small">{r.bucket}</td>
                 <td className="td text-right tabular-nums">{fmtDecimal(r.pending_amount, 2)}</td><td className="td"><StatusPill status={r.status} label={r.status_label} tone={r.status_tone} /></td></tr>)}</tbody></table>
           </div>
         </>
@@ -348,9 +348,9 @@ function Followups({ onOpen }: { onOpen: (id: number) => void }) {
           <table className="w-full" id="eb-followups"><thead><tr><th className="th">Benefit · SB</th><th className="th">Reason</th><th className="th">Next action</th><th className="th">Owner</th><th className="th">Due</th><th className="th text-right">Days open</th><th className="th text-right">Pending ₹</th><th className="th" /></tr></thead>
             <tbody>{q.isLoading && <tr><td colSpan={8}><LoadingBlock rows={3} /></td></tr>}
               {!q.isLoading && !q.data?.length && <tr><td colSpan={8} className="td py-8 text-center text-slate-400">No follow-ups</td></tr>}
-              {q.data?.map((f) => <tr key={f.id} className="row-hover"><td className="td text-[12px]"><button className="font-semibold text-brand-700 hover:underline" onClick={() => onOpen(f.claim_id)}>{f.scheme_name}</button><p className="tabular-nums text-slate-500">{f.sb_no ?? ''}</p></td>
-                <td className="td text-[12px]">{f.reason_code.toLowerCase().replace('_', ' ')}<p><StatusPill status={f.status} label={f.status_label} tone={f.status_tone} /></p></td><td className="td text-[12px]">{f.action_note}</td><td className="td text-[12px]">{f.owner_name ?? '—'}</td>
-                <td className={clsx('td text-[12px]', f.overdue && 'font-semibold text-red-600')}>{fmtDate(f.due_date)}</td><td className="td text-right tabular-nums">{f.days_outstanding}</td><td className="td text-right tabular-nums">{fmtDecimal(f.pending_amount, 2)}</td>
+              {q.data?.map((f) => <tr key={f.id} className="row-hover"><td className="td text-small"><button className="font-semibold text-brand-700 hover:underline" onClick={() => onOpen(f.claim_id)}>{f.scheme_name}</button><p className="tabular-nums text-slate-500">{f.sb_no ?? ''}</p></td>
+                <td className="td text-small">{f.reason_code.toLowerCase().replace('_', ' ')}<p><StatusPill status={f.status} label={f.status_label} tone={f.status_tone} /></p></td><td className="td text-small">{f.action_note}</td><td className="td text-small">{f.owner_name ?? '—'}</td>
+                <td className={clsx('td text-small', f.overdue && 'font-semibold text-red-600')}>{fmtDate(f.due_date)}</td><td className="td text-right tabular-nums">{f.days_outstanding}</td><td className="td text-right tabular-nums">{fmtDecimal(f.pending_amount, 2)}</td>
                 <td className="td">{f.status === 'OPEN' && <Button size="sm" variant="secondary" onClick={async () => { try { await http.post(`/export-benefits/followups/${f.id}/done`, {}); toast('Done'); void qc.invalidateQueries({ queryKey: ['export-benefits'] }); } catch (e) { toast(errMsg(e), 'error'); } }}>Done</Button>}</td></tr>)}</tbody></table>
         </div>
       )}
@@ -382,7 +382,7 @@ function Recon({ meta, onOpen }: { meta: Meta; onOpen: (id: number) => void }) {
         {canRecon && <label className={clsx('btn-secondary cursor-pointer', busy && 'opacity-60')} title="CSV or Excel bank statement — credit lines are imported once (re-importing the same file adds nothing)">
           <Upload size={14} />Import statement<input type="file" className="hidden" id="eb-recon-file" accept=".csv,.xlsx,.xls,.txt" onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ''; }} /></label>}
         {canRecon && <Button variant="secondary" loading={busy} id="eb-recon-auto" onClick={() => void act(async () => (await http.post<{ data: any }>('/export-benefits/reconciliation/auto', { bank_account_id: bank ? Number(bank) : null })).data, (r) => `${r.matched} matched`)}><Wand2 size={14} />Auto-match</Button>}
-        {lines.data?.totals && <p className="ml-auto pb-2 text-[12px] text-slate-600">Unmatched {lines.data.totals.unmatched.count} ({inr(lines.data.totals.unmatched.amount)}) · partial {lines.data.totals.partial.count}</p>}
+        {lines.data?.totals && <p className="ml-auto pb-2 text-small text-slate-600">Unmatched {lines.data.totals.unmatched.count} ({inr(lines.data.totals.unmatched.amount)}) · partial {lines.data.totals.partial.count}</p>}
       </div>
       {rep.data && <div className="grid gap-2 sm:grid-cols-3" id="eb-recon-summary">
         <Tile label="Receipts not in a bank statement" value={inr(rep.data.receipts.unmatched.amount)} sub={`${rep.data.receipts.unmatched.count} receipts`} tone="amber" />
@@ -394,24 +394,24 @@ function Recon({ meta, onOpen }: { meta: Meta; onOpen: (id: number) => void }) {
           <table className="w-full" id="eb-bank-lines"><thead><tr><th className="th">Date</th><th className="th">Bank</th><th className="th">Reference · narration</th><th className="th text-right">Credit ₹</th><th className="th text-right">Unallocated ₹</th><th className="th">Matched to</th><th className="th">Status</th><th className="th" /></tr></thead>
             <tbody>{lines.isLoading && <tr><td colSpan={8}><LoadingBlock rows={3} /></td></tr>}
               {!lines.isLoading && !lines.data?.data.length && <tr><td colSpan={8} className="td py-8 text-center text-slate-400">No bank lines — import a statement (CSV / Excel with Date, Credit, Reference / Narration columns)</td></tr>}
-              {lines.data?.data.map((l) => <tr key={l.id} className="align-top" data-line={l.id}><td className="td text-[12px]">{fmtDate(l.txn_date)}</td><td className="td text-[12px]">{l.bank_label ?? '—'}</td>
-                <td className="td text-[12px]"><span className="tabular-nums">{l.reference ?? '—'}</span><p className="max-w-[340px] truncate text-slate-500" title={l.narration ?? ''}>{l.narration ?? ''}</p></td>
+              {lines.data?.data.map((l) => <tr key={l.id} className="align-top" data-line={l.id}><td className="td text-small">{fmtDate(l.txn_date)}</td><td className="td text-small">{l.bank_label ?? '—'}</td>
+                <td className="td text-small"><span className="tabular-nums">{l.reference ?? '—'}</span><p className="max-w-[340px] truncate text-slate-500" title={l.narration ?? ''}>{l.narration ?? ''}</p></td>
                 <td className="td text-right tabular-nums">{fmtDecimal(l.amount, 2)}</td><td className="td text-right tabular-nums">{fmtDecimal(l.unallocated, 2)}</td>
-                <td className="td text-[12px]">{l.matches.map((m: any) => <p key={m.id}><button className="text-brand-700 hover:underline" onClick={() => onOpen(m.claim_id)}>{m.scheme_name} {m.sb_no ?? ''}</button> {inr(m.matched_amount)}
-                  <span className="text-slate-400"> {m.match_type.toLowerCase()}</span>{canRecon && <button className="ml-1 text-[11px] text-red-600 hover:underline" data-undo={m.id} onClick={() => { const reason = window.prompt('Reason to undo this match'); if (reason) void act(() => http.post(`/export-benefits/reconciliation/matches/${m.id}/undo`, { reason }), () => 'Match undone'); }}>undo</button>}</p>)}
+                <td className="td text-small">{l.matches.map((m: any) => <p key={m.id}><button className="text-brand-700 hover:underline" onClick={() => onOpen(m.claim_id)}>{m.scheme_name} {m.sb_no ?? ''}</button> {inr(m.matched_amount)}
+                  <span className="text-slate-400"> {m.match_type.toLowerCase()}</span>{canRecon && <button className="ml-1 text-caption text-red-600 hover:underline" data-undo={m.id} onClick={() => { const reason = window.prompt('Reason to undo this match'); if (reason) void act(() => http.post(`/export-benefits/reconciliation/matches/${m.id}/undo`, { reason }), () => 'Match undone'); }}>undo</button>}</p>)}
                   {l.ignore_reason && <p className="text-slate-500">{l.ignore_reason}</p>}</td>
                 <td className="td"><Badge tone={l.match_status === 'MATCHED' ? 'green' : l.match_status === 'PARTIAL' ? 'blue' : l.match_status === 'IGNORED' ? 'slate' : 'amber'}>{l.match_status.toLowerCase()}</Badge></td>
                 <td className="td whitespace-nowrap">{canRecon && l.unallocated > 0.005 && l.match_status !== 'IGNORED' && <Button size="sm" variant="secondary" data-match={l.id} onClick={() => setLine(l)}>Match</Button>}
-                  {canRecon && l.match_status === 'UNMATCHED' && <button className="ml-2 text-[11px] text-slate-500 hover:underline" onClick={() => { const reason = window.prompt('Why is this not a benefit credit?'); if (reason) void act(() => http.post(`/export-benefits/bank-lines/${l.id}/ignore`, { ignore: true, reason }), () => 'Marked'); }}>not a benefit</button>}
-                  {canRecon && l.match_status === 'IGNORED' && <button className="text-[11px] text-brand-700 hover:underline" onClick={() => void act(() => http.post(`/export-benefits/bank-lines/${l.id}/ignore`, { ignore: false }), () => 'Restored')}>restore</button>}</td></tr>)}</tbody></table>
+                  {canRecon && l.match_status === 'UNMATCHED' && <button className="ml-2 text-caption text-slate-500 hover:underline" onClick={() => { const reason = window.prompt('Why is this not a benefit credit?'); if (reason) void act(() => http.post(`/export-benefits/bank-lines/${l.id}/ignore`, { ignore: true, reason }), () => 'Marked'); }}>not a benefit</button>}
+                  {canRecon && l.match_status === 'IGNORED' && <button className="text-caption text-brand-700 hover:underline" onClick={() => void act(() => http.post(`/export-benefits/bank-lines/${l.id}/ignore`, { ignore: false }), () => 'Restored')}>restore</button>}</td></tr>)}</tbody></table>
         </div>
       )}
       {rep.data?.scrips?.length > 0 && (
-        <div className="card overflow-x-auto"><p className="border-b border-slate-100 px-3 py-2 text-[12.5px] font-semibold text-slate-700">Scrip register — compare with the ICEGATE e-scrip ledger</p>
+        <div className="card overflow-x-auto"><p className="border-b border-slate-100 px-3 py-2 text-body font-semibold text-slate-700">Scrip register — compare with the ICEGATE e-scrip ledger</p>
           <table className="w-full" id="eb-scrips"><thead><tr><th className="th">Scrip no</th><th className="th">Scheme</th><th className="th text-right">Issued / in</th><th className="th text-right">Utilised</th><th className="th text-right">Sold / out</th><th className="th text-right">Expired</th><th className="th text-right">Balance</th><th className="th">Last event</th></tr></thead>
-            <tbody>{rep.data.scrips.map((x: any) => <tr key={`${x.scrip_number}-${x.scheme_name}`}><td className="td tabular-nums text-[12px]">{x.scrip_number}</td><td className="td text-[12px]">{x.scheme_name}</td><td className="td text-right tabular-nums">{fmtDecimal(x.issued, 2)}</td>
+            <tbody>{rep.data.scrips.map((x: any) => <tr key={`${x.scrip_number}-${x.scheme_name}`}><td className="td tabular-nums text-small">{x.scrip_number}</td><td className="td text-small">{x.scheme_name}</td><td className="td text-right tabular-nums">{fmtDecimal(x.issued, 2)}</td>
               <td className="td text-right tabular-nums">{fmtDecimal(x.utilised, 2)}</td><td className="td text-right tabular-nums">{fmtDecimal(x.sold, 2)}</td><td className="td text-right tabular-nums">{fmtDecimal(x.expired, 2)}</td>
-              <td className={clsx('td text-right tabular-nums font-semibold', x.balance < 0 && 'text-red-600')}>{fmtDecimal(x.balance, 2)}</td><td className="td text-[12px]">{fmtDate(x.last_date)}</td></tr>)}</tbody></table></div>
+              <td className={clsx('td text-right tabular-nums font-semibold', x.balance < 0 && 'text-red-600')}>{fmtDecimal(x.balance, 2)}</td><td className="td text-small">{fmtDate(x.last_date)}</td></tr>)}</tbody></table></div>
       )}
       {line && <MatchModal line={line} onClose={() => setLine(null)} onDone={() => { setLine(null); refresh(); }} />}
     </div>
@@ -437,8 +437,8 @@ function MatchModal({ line, onClose, onDone }: { line: any; onClose: () => void;
       {c.isLoading ? <LoadingBlock rows={3} /> : c.error ? <ErrorState error={c.error} /> : !c.data?.length ? <EmptyState title="No unmatched receipts" message="Record the receipt on its benefit first (actual date, amount, UTR), then match." /> : (
         <table className="w-full" id="eb-candidates"><thead><tr><th className="th" /><th className="th">Date</th><th className="th">Benefit · SB</th><th className="th">UTR</th><th className="th text-right">Unmatched ₹</th></tr></thead>
           <tbody>{c.data.map((e) => <tr key={e.id} className={clsx('row-hover cursor-pointer', pick?.id === e.id && 'bg-brand-50')} data-candidate={e.id} onClick={() => { setPick(e); setAmount(String(Math.min(e.unmatched, line.unallocated))); }}>
-            <td className="td"><input type="radio" readOnly checked={pick?.id === e.id} /></td><td className="td text-[12px]">{fmtDate(e.event_date)}</td><td className="td text-[12px]">{e.scheme_name} <span className="tabular-nums">{e.sb_no ?? ''}</span><p className="text-slate-500">{e.label} · {e.bank_label ?? ''}</p></td>
-            <td className="td tabular-nums text-[12px]">{e.bank_reference ?? '—'}</td><td className="td text-right tabular-nums">{fmtDecimal(e.unmatched, 2)}</td></tr>)}</tbody></table>
+            <td className="td"><input type="radio" readOnly checked={pick?.id === e.id} /></td><td className="td text-small">{fmtDate(e.event_date)}</td><td className="td text-small">{e.scheme_name} <span className="tabular-nums">{e.sb_no ?? ''}</span><p className="text-slate-500">{e.label} · {e.bank_label ?? ''}</p></td>
+            <td className="td tabular-nums text-small">{e.bank_reference ?? '—'}</td><td className="td text-right tabular-nums">{fmtDecimal(e.unmatched, 2)}</td></tr>)}</tbody></table>
       )}
       {pick && <div className="mt-3 grid gap-3 sm:grid-cols-3">
         <Input label="Amount to allocate" type="number" step="any" id="eb-match-amount" value={amount} onChange={(e) => setAmount(e.target.value)} hint={`Line unallocated ${inr(line.unallocated)}`} />

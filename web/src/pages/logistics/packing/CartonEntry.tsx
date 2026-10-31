@@ -119,10 +119,10 @@ export function CartonEntryPage() {
           {!cartons.length ? <EmptyState title="No cartons yet" message="Use Generate cartons to make every carton the order needs at once, or New carton for one." /> : (
             <>
               {/* bulk bar: fill weights / dimensions for the ticked cartons, save, verify + seal, post, delete */}
-              <div className="flex flex-wrap items-end gap-2 border-b border-surface-border p-3 text-[12.5px]" id="bulk-bar">
+              <div className="flex flex-wrap items-end gap-2 border-b border-surface-border p-3 text-body" id="bulk-bar">
                 <span className="mr-1 self-center text-slate-600"><b>{selected.length}</b> selected</span>
                 {DIM_KEYS.map(([k, , label]) => (
-                  <label key={k} className="flex flex-col text-[11px] text-slate-500">{label}
+                  <label key={k} className="flex flex-col text-caption text-slate-500">{label}
                     <input className="input !h-8 w-20 text-right" inputMode="decimal" id={`fill-${k}`} value={fill[k]} onChange={(e) => setFill({ ...fill, [k]: e.target.value.replace(/[^0-9.]/g, '') })} /></label>
                 ))}
                 <Button size="sm" variant="secondary" id="fill-apply" disabled={!selected.length} onClick={applyFill}>Fill selected</Button>
@@ -139,7 +139,7 @@ export function CartonEntryPage() {
                 <Button size="sm" variant="danger" id="bulk-void" disabled={!selected.length} onClick={() => setVoiding(true)}><Trash2 size={13} />Delete</Button>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-[12.5px]" id="carton-list">
+                <table className="w-full text-body" id="carton-list">
                   <thead><tr>
                     <th className="th w-8"><input type="checkbox" id="sel-all" checked={!!selectable.length && selectable.every((c) => sel.has(c.id))}
                       onChange={(e) => setSel(e.target.checked ? new Set(selectable.map((c) => c.id)) : new Set())} /></th>
@@ -152,9 +152,9 @@ export function CartonEntryPage() {
                       <tr key={c.id} className={clsx(c.carton_status === 'VOID' && 'opacity-50', sel.has(c.id) && 'bg-brand-50/40')} data-row={c.carton_no}>
                         <td className="td">{c.carton_status !== 'VOID' && !n(c.is_posted) && <input type="checkbox" data-sel={c.carton_no} checked={sel.has(c.id)} onChange={() => toggle(c.id)} />}</td>
                         <td className="td">{c.carton_seq}</td>
-                        <td className="td tabular-nums">{c.carton_no}{c.pl_plan_no && <div className="font-sans text-[11px] text-blue-700" data-plan-ctn={c.carton_no}>{c.pl_plan_no} · ctn {c.pl_ctn_no}</div>}</td>
+                        <td className="td tabular-nums">{c.carton_no}{c.pl_plan_no && <div className="font-sans text-caption text-blue-700" data-plan-ctn={c.carton_no}>{c.pl_plan_no} · ctn {c.pl_ctn_no}</div>}</td>
                         <td className="td whitespace-nowrap" title={c.contents ?? ''}>{shortContents(c.contents)}</td>
-                        <td className="td text-right">{c.pieces_total}{n(c.is_partial) ? <span className="ml-1 text-[11px] text-amber-700">partial</span> : null}</td>
+                        <td className="td text-right">{c.pieces_total}{n(c.is_partial) ? <span className="ml-1 text-caption text-amber-700">partial</span> : null}</td>
                         <td className="td text-right">{c.polybag_qty} <span className="text-slate-400">({c.std_polybag_qty})</span></td>
                         {DIM_KEYS.map(([k, f]) => (
                           <td key={k} className="td w-20 text-right">{ed
@@ -224,7 +224,7 @@ function GenerateModal({ order, onClose, onDone }: { order: Order; onClose: () =
         <Button variant="secondary" id="gen-preview" loading={busy && !preview} onClick={() => run(true)}>Preview</Button>
         <Button id="gen-create" loading={busy && !!preview} disabled={!preview?.cartons?.length} onClick={() => run(false)}>Make {preview?.cartons?.length ?? ''} cartons</Button>
       </>}>
-      {err && <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-700" id="gen-error">{err}</div>}
+      {err && <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-body text-red-700" id="gen-error">{err}</div>}
       <FormSection title="What to make" cols={3}>
         <Select id="gen-colour" label="Colour" value={f.color_id} onChange={set('color_id')} placeholder="All colours" options={colours.map(([c, name]) => ({ value: c, label: name }))} />
         <Select label="Carton type" value={f.carton_trim_id} onChange={set('carton_trim_id')} placeholder="— Carton item —"
@@ -241,14 +241,14 @@ function GenerateModal({ order, onClose, onDone }: { order: Order; onClose: () =
       </FormSection>
       {preview && (!preview.cartons.length
         ? <EmptyState title="Nothing to put in cartons" message={order.packing_mode === 'INDIVIDUAL_PIECE' ? 'Every bagged piece is already in a carton — bag more on the Polybag screen.' : 'The planned pieces are already in cartons.'} />
-        : <div className="max-h-80 overflow-auto"><table className="w-full text-[12.5px]" id="gen-table">
+        : <div className="max-h-80 overflow-auto"><table className="w-full text-body" id="gen-table">
             <thead><tr><th className="th">#</th><th className="th">Contents</th><th className="th text-right">Pcs</th><th className="th" /></tr></thead>
             <tbody>{preview.cartons.map((c: any) => (
               <tr key={c.seq}><td className="td">{c.seq}</td><td className="td">{c.lines.map((l: any) => `${l.color_name} ${l.size_code} ${l.qty}`).join(' · ')}</td>
-                <td className="td text-right">{c.total}</td><td className="td">{c.partial ? <span className="text-[11px] text-amber-700">partial</span> : <span className="text-[11px] text-emerald-700">full</span>}</td></tr>
+                <td className="td text-right">{c.total}</td><td className="td">{c.partial ? <span className="text-caption text-amber-700">partial</span> : <span className="text-caption text-emerald-700">full</span>}</td></tr>
             ))}</tbody>
           </table></div>)}
-      {preview?.skipped_not_in_ratio > 0 && <p className="mt-2 text-[12px] text-amber-700">{preview.skipped_not_in_ratio} pcs are of sizes not in the size ratio — pack them with New carton.</p>}
+      {preview?.skipped_not_in_ratio > 0 && <p className="mt-2 text-small text-amber-700">{preview.skipped_not_in_ratio} pcs are of sizes not in the size ratio — pack them with New carton.</p>}
     </Modal>
   );
 }

@@ -27,11 +27,11 @@ interface InvoiceSummaryProps {
 }
 
 const numCls =
-  'w-24 text-[11px] text-right tabular-nums border border-slate-300 rounded px-1.5 py-0.5 bg-white focus:border-brand-500 focus:outline-none disabled:bg-slate-50';
+  'w-24 text-caption text-right tabular-nums border border-slate-300 rounded px-1.5 py-0.5 bg-white focus:border-brand-500 focus:outline-none disabled:bg-slate-50';
 const pctCls =
-  'w-14 text-[11px] text-right border border-slate-300 rounded px-1 py-0.5 bg-white focus:border-brand-500 focus:outline-none disabled:bg-slate-50';
+  'w-14 text-caption text-right border border-slate-300 rounded px-1 py-0.5 bg-white focus:border-brand-500 focus:outline-none disabled:bg-slate-50';
 const selCls =
-  'text-[11px] border border-slate-300 rounded px-1 py-0.5 bg-white max-w-[9.5rem] focus:border-brand-500 focus:outline-none disabled:bg-slate-50';
+  'text-caption border border-slate-300 rounded px-1 py-0.5 bg-white max-w-[9.5rem] focus:border-brand-500 focus:outline-none disabled:bg-slate-50';
 
 const GST_MODE_LABEL: Record<GstMode, string> = {
   INTRA_STATE: 'CGST + SGST',
@@ -68,7 +68,7 @@ export function InvoiceSummary({
     <div className={`p-4 bg-brand-50/40 rounded-xl border border-brand-200/80 space-y-1.5 text-xs ${className}`}>
       <div className="flex items-center justify-between pb-1 border-b border-brand-200/60">
         <h4 className="text-xs font-bold text-brand-900 uppercase tracking-wider">{title}</h4>
-        <span className="font-semibold text-[11px] text-brand-700">{GST_MODE_LABEL[gstMode]}</span>
+        <span className="font-semibold text-caption text-brand-700">{GST_MODE_LABEL[gstMode]}</span>
       </div>
 
       <div className="flex items-center justify-between py-0.5">
@@ -110,9 +110,9 @@ export function InvoiceSummary({
           value={v.other_charges_label ?? ''}
           placeholder="Other charges"
           onChange={(e) => onChange({ other_charges_label: e.target.value })}
-          className="flex-1 min-w-0 text-[11px] border border-slate-300 rounded px-1.5 py-0.5 bg-white focus:border-brand-500 focus:outline-none disabled:bg-slate-50"
+          className="flex-1 min-w-0 text-caption border border-slate-300 rounded px-1.5 py-0.5 bg-white focus:border-brand-500 focus:outline-none disabled:bg-slate-50"
         />
-        <div className="flex rounded border border-slate-300 overflow-hidden text-[11px] font-bold">
+        <div className="flex rounded border border-slate-300 overflow-hidden text-caption font-bold">
           {([1, -1] as const).map((sg) => (
             <button
               key={sg} type="button" disabled={readOnly}
@@ -152,7 +152,7 @@ export function InvoiceSummary({
             onChange={(e) => onChange({ tcs_pct: num(e.target.value) })}
             className={pctCls}
           />
-          <span className="text-[10px] text-slate-400">%</span>
+          <span className="text-micro text-slate-400">%</span>
         </div>
         <span className="font-bold text-emerald-700 tabular-nums">+ {money(t.tcs)}</span>
       </div>
@@ -177,7 +177,7 @@ export function InvoiceSummary({
             onChange={(e) => onChange({ tds_pct: num(e.target.value) })}
             className={pctCls}
           />
-          <span className="text-[10px] text-slate-400">%</span>
+          <span className="text-micro text-slate-400">%</span>
         </div>
         <span className="font-bold text-red-600 tabular-nums">− {money(t.tds)}</span>
       </div>
@@ -189,7 +189,7 @@ export function InvoiceSummary({
             <button
               type="button"
               onClick={() => onChange({ round_off: autoRoundOff(t) })}
-              className="text-[10px] font-semibold text-brand-700 hover:underline"
+              className="text-micro font-semibold text-brand-700 hover:underline"
             >
               Auto
             </button>
@@ -204,12 +204,12 @@ export function InvoiceSummary({
       </div>
 
       <div className="flex items-center justify-between pt-2 border-t border-brand-200 text-sm">
-        <span className="font-extrabold text-brand-900">Net Payable ({currencyCode})</span>
-        <span className="font-extrabold text-brand-900 text-base tabular-nums">{money(t.net)}</span>
+        <span className="font-bold text-brand-900">Net Payable ({currencyCode})</span>
+        <span className="font-bold text-brand-900 text-base tabular-nums">{money(t.net)}</span>
       </div>
 
       {fx !== 1 && (
-        <div className="flex items-center justify-between pt-1 text-[11px] font-bold text-emerald-900">
+        <div className="flex items-center justify-between pt-1 text-caption font-bold text-emerald-900">
           <span>INR equivalent @ {fx}</span>
           <span className="tabular-nums">₹{fmtDecimal(t.net * fx, 2)}</span>
         </div>

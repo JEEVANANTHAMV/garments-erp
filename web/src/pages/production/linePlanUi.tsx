@@ -70,7 +70,7 @@ export function JobHeaderRow({ group, colSpan, qty, extra, checked, onCheck, ope
   return (
     <tr className="border-t border-brand-100 bg-brand-50/70">
       <td colSpan={colSpan} className="px-2 py-1.5">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-caption">
           {onToggle && (
             <button type="button" onClick={onToggle} className="text-brand-700">
               {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -95,9 +95,9 @@ export function SummaryCard({ icon, label, value, tone, sub }: { icon: ReactNode
     <div className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${tone}`}>
       <span className="opacity-70">{icon}</span>
       <div>
-        <p className="text-[11px] font-medium opacity-80">{label}</p>
+        <p className="text-caption font-medium opacity-80">{label}</p>
         <p className="text-xl font-bold leading-tight">{value}</p>
-        {sub && <p className="text-[10px] opacity-75">{sub}</p>}
+        {sub && <p className="text-micro opacity-75">{sub}</p>}
       </div>
     </div>
   );
@@ -110,7 +110,7 @@ export function UtilBar({ value, width = 'w-20' }: { value: number; width?: stri
       <div className={`h-2.5 ${width} overflow-hidden rounded-full bg-slate-100`}>
         <div className={`h-full rounded-full ${tone}`} style={{ width: `${Math.min(100, value)}%` }} />
       </div>
-      <span className={`text-[11px] font-medium ${value > 100 ? 'text-red-600' : ''}`}>{value}%</span>
+      <span className={`text-caption font-medium ${value > 100 ? 'text-red-600' : ''}`}>{value}%</span>
     </div>
   );
 }

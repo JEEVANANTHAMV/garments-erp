@@ -136,7 +136,7 @@ export function PurchaseReturnsPage() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-600">
-              <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200 text-[11px] uppercase tracking-wider">
+              <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200 text-caption uppercase tracking-wider">
                 <tr>
                   <th className="py-3 px-4">Return No</th>
                   <th className="py-3 px-4">Date</th>
@@ -186,7 +186,7 @@ export function PurchaseReturnsPage() {
                       </td>
                       <td className="py-3 px-4">
                         {r.return_dc_no ? (
-                          <span className="tabular-nums text-[11px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded border border-indigo-200">
+                          <span className="tabular-nums text-caption bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded border border-indigo-200">
                             {r.return_dc_no}
                           </span>
                         ) : (

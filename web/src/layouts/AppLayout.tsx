@@ -110,25 +110,25 @@ export default function AppLayout() {
   // Every screen: where you are in the flow, the other screens of this step, and the steps either side.
   const stepBar = step && match && activeTo !== '/' && (
     <div id="step-bar" className="mb-4 rounded-xl border border-surface-border bg-white px-3.5 py-2.5 shadow-card">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[12px]">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-small">
         <span className="font-bold text-slate-700">{step.label.replace(/^(\d+) · /, 'Step $1 · ')}</span>
         <ChevronRight size={12} className="text-slate-400" />
         {match.detail ? (
           <Link to={match.item.to} className="inline-flex items-center gap-1 font-bold text-brand-700 hover:underline" id="step-back">
             <ArrowLeft size={12} /> {match.item.label}
           </Link>
-        ) : <span className="font-extrabold text-slate-900">{match.item.label}</span>}
+        ) : <span className="font-bold text-slate-900">{match.item.label}</span>}
         {!match.detail && (prevStep || nextStep) && (
           <div className="ml-auto flex gap-1.5">
             {prevStep && (
               <Link to={prevStep.items[0].to} id="step-prev" title={`Previous step: ${prevStep.label}`}
-                className="inline-flex items-center gap-1 rounded-lg border border-surface-border bg-white px-2.5 py-1 text-[11.5px] font-semibold text-slate-700 hover:border-slate-300 hover:text-slate-900 shadow-subtle transition-all">
+                className="inline-flex items-center gap-1 rounded-lg border border-surface-border bg-white px-2.5 py-1 text-small font-semibold text-slate-700 hover:border-slate-300 hover:text-slate-900 shadow-subtle transition-all">
                 <ArrowLeft size={12} /> {prevStep.label}
               </Link>
             )}
             {nextStep && (
               <Link to={nextStep.items[0].to} id="step-next" title={`Next step: ${nextStep.label}`}
-                className="inline-flex items-center gap-1 rounded-lg border border-brand-200 bg-brand-50 px-2.5 py-1 text-[11.5px] font-bold text-brand-700 hover:bg-brand-100 shadow-subtle transition-all">
+                className="inline-flex items-center gap-1 rounded-lg border border-brand-200 bg-brand-50 px-2.5 py-1 text-small font-bold text-brand-700 hover:bg-brand-100 shadow-subtle transition-all">
                 {nextStep.label} <ArrowRight size={12} />
               </Link>
             )}
@@ -139,7 +139,7 @@ export default function AppLayout() {
         <div className="mt-2.5 flex gap-1.5 overflow-x-auto pb-0.5" id="step-screens">
           {step.items.map((i) => (
             <Link key={i.to} to={i.to} aria-current={i.to === activeTo ? 'page' : undefined}
-              className={clsx('whitespace-nowrap rounded-lg border px-3 py-1 text-[11.5px] font-semibold transition-colors',
+              className={clsx('whitespace-nowrap rounded-lg border px-3 py-1 text-small font-semibold transition-colors',
                 i.to === activeTo
                   ? 'border-brand-600 bg-brand-600 text-white shadow-subtle'
                   : 'border-surface-border bg-white text-slate-700 hover:border-slate-400 hover:text-slate-900')}>
@@ -193,7 +193,7 @@ export default function AppLayout() {
       <div className="flex h-[62px] shrink-0 items-center border-b border-surface-border px-4">
         <Link to="/" onClick={() => setMobileOpen(false)} className="flex-1" aria-label="C-ONE ERP home">
           <p className="text-[23px] leading-7 tracking-tight text-ink-heading"><strong>C-ONE</strong> <span className="font-normal">ERP</span></p>
-          <p className="text-[10px] text-ink-secondary">Garment Manufacturing</p>
+          <p className="text-micro text-ink-secondary">Garment Manufacturing</p>
         </Link>
         <button className="rounded-md p-1 text-ink-secondary hover:bg-brand-100 lg:hidden" onClick={() => setMobileOpen(false)} aria-label="Close menu">
           <X size={18} />
@@ -240,7 +240,7 @@ export default function AppLayout() {
                   {section.label === currentSection && <span className="absolute inset-y-1 left-0 w-[3px] rounded-full bg-brand-600" />}
                   {open ? <ChevronDown size={12} className="shrink-0 text-slate-600" /> : <ChevronRight size={12} className="shrink-0 text-slate-600" />}
                   <span className="min-w-0 flex-1 whitespace-normal">{section.label}</span>
-                  <span className={clsx('rounded-full px-1.5 text-[9.5px] font-bold',
+                  <span className={clsx('rounded-full px-1.5 text-micro font-bold',
                     section.label === currentSection ? 'bg-brand-200 text-brand-900' : open ? 'bg-slate-200 text-slate-800' : 'bg-slate-200/70 text-slate-700')}>
                     {section.items.length}
                   </span>
@@ -297,7 +297,7 @@ export default function AppLayout() {
             {searchOpen && globalSearch.trim() && (
               <div className="absolute left-0 top-full z-30 mt-1 max-h-80 w-[min(535px,80vw)] overflow-y-auto rounded-lg border border-surface-border bg-white p-1 shadow-popover">
                 {Array.from(new Map(steps.flatMap((s) => s.items).filter((i) => i.label.toLowerCase().includes(globalSearch.trim().toLowerCase())).map((i) => [i.to, i])).values()).slice(0, 12).map((i) => (
-                  <Link key={i.to} to={i.to} onClick={() => { setSearchOpen(false); setGlobalSearch(''); }} className="flex items-center gap-2 rounded px-3 py-2 text-[13px] hover:bg-brand-100"><i.icon size={16} />{i.label}</Link>
+                  <Link key={i.to} to={i.to} onClick={() => { setSearchOpen(false); setGlobalSearch(''); }} className="flex items-center gap-2 rounded px-3 py-2 text-body hover:bg-brand-100"><i.icon size={16} />{i.label}</Link>
                 ))}
                 {!steps.some((s) => s.items.some((i) => i.label.toLowerCase().includes(globalSearch.trim().toLowerCase()))) && <p className="p-3 text-ink-secondary">No matching screens</p>}
               </div>
@@ -312,7 +312,7 @@ export default function AppLayout() {
               title="Small font size"
               onClick={() => setTextSize('sm')}
               className={clsx(
-                'rounded px-2 py-0.5 text-[11px] font-semibold transition-all',
+                'rounded px-2 py-0.5 text-caption font-semibold transition-all',
                 textSize === 'sm' ? 'bg-white text-brand-700 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-800'
               )}
             >
@@ -323,7 +323,7 @@ export default function AppLayout() {
               title="Default font size"
               onClick={() => setTextSize('md')}
               className={clsx(
-                'rounded px-2 py-0.5 text-[12px] font-semibold transition-all',
+                'rounded px-2 py-0.5 text-small font-semibold transition-all',
                 textSize === 'md' ? 'bg-white text-brand-700 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-800'
               )}
             >
@@ -334,7 +334,7 @@ export default function AppLayout() {
               title="Large font size"
               onClick={() => setTextSize('lg')}
               className={clsx(
-                'rounded px-2 py-0.5 text-[13px] font-semibold transition-all',
+                'rounded px-2 py-0.5 text-body font-semibold transition-all',
                 textSize === 'lg' ? 'bg-white text-brand-700 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-800'
               )}
             >
@@ -347,7 +347,7 @@ export default function AppLayout() {
             <Bell size={17} />
             {unread > 0 && (
               <span className="absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full
-                               bg-red-500 px-1 text-[9px] font-semibold text-white">
+                               bg-red-500 px-1 text-micro font-semibold text-white">
                 {unread > 9 ? '9+' : unread}
               </span>
             )}
@@ -356,18 +356,18 @@ export default function AppLayout() {
             <>
               <div className="fixed inset-0 z-10" onClick={() => setBellOpen(false)} />
               <div className="absolute right-0 top-full z-20 mt-1.5 w-[min(384px,90vw)] animate-fade-in rounded-xl border border-surface-border bg-white p-1.5 shadow-popover" id="bell-panel">
-                <p className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Alerts</p>
+                <p className="px-3 py-2 text-caption font-semibold uppercase tracking-wider text-slate-500">Alerts</p>
                 {(alerts ?? []).map((a) => (
                   <button key={a.key} onClick={() => { setBellOpen(false); goto(a.link); }}
                     className="flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left hover:bg-surface-hover">
                     <span className={clsx('mt-1 h-2 w-2 shrink-0 rounded-full', a.severity === 'danger' ? 'bg-red-500' : a.severity === 'warning' ? 'bg-amber-500' : 'bg-sky-500')} />
-                    <span><span className="block text-[12.5px] font-semibold text-slate-800">{a.title}</span><span className="block text-[11.5px] text-slate-500">{a.body}</span></span>
+                    <span><span className="block text-body font-semibold text-slate-800">{a.title}</span><span className="block text-small text-slate-500">{a.body}</span></span>
                   </button>
                 ))}
-                {!(alerts ?? []).length && <p className="px-3 py-2 text-[12px] text-slate-400">No alerts</p>}
-                {(notifications ?? []).length > 0 && <p className="mt-1 border-t border-surface-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Notifications</p>}
+                {!(alerts ?? []).length && <p className="px-3 py-2 text-small text-slate-400">No alerts</p>}
+                {(notifications ?? []).length > 0 && <p className="mt-1 border-t border-surface-border px-3 py-2 text-caption font-semibold uppercase tracking-wider text-slate-500">Notifications</p>}
                 {(notifications ?? []).slice(0, 8).map((n) => (
-                  <div key={n.id} className={clsx('rounded-lg px-3 py-1.5 text-[12px]', n.is_read ? 'text-slate-500' : 'font-medium text-slate-800')}>{n.title}{n.body ? <span className="block text-[11px] font-normal text-slate-500">{n.body}</span> : null}</div>
+                  <div key={n.id} className={clsx('rounded-lg px-3 py-1.5 text-small', n.is_read ? 'text-slate-500' : 'font-medium text-slate-800')}>{n.title}{n.body ? <span className="block text-caption font-normal text-slate-500">{n.body}</span> : null}</div>
                 ))}
               </div>
             </>
@@ -385,11 +385,11 @@ export default function AppLayout() {
             >
               <Building2 size={15} className="shrink-0 text-brand-600" />
               <div className="hidden max-w-[170px] truncate md:block">
-                <p className="truncate text-[12px] font-bold leading-tight text-slate-900">
+                <p className="truncate text-small font-bold leading-tight text-slate-900">
                   {company?.trade_name || company?.legal_name || 'Select Company'}
                 </p>
                 {company?.gstin && (
-                  <p className="tabular-nums text-[10px] font-semibold leading-tight text-slate-600">
+                  <p className="tabular-nums text-micro font-semibold leading-tight text-slate-600">
                     GST: {company.gstin}
                   </p>
                 )}
@@ -403,7 +403,7 @@ export default function AppLayout() {
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setCompanyDropdown(false)} />
                 <div className="absolute right-0 top-full z-20 mt-1.5 w-72 animate-fade-in rounded-xl border border-surface-border bg-white p-1.5 shadow-popover">
-                  <p className="px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wider text-slate-600">
+                  <p className="px-2.5 py-1 text-caption font-bold uppercase tracking-wider text-slate-600">
                     Switch Company
                   </p>
                   <div className="mt-1 space-y-1">
@@ -430,18 +430,18 @@ export default function AppLayout() {
                             className={clsx('mt-0.5 shrink-0', isCurrent ? 'text-brand-600' : 'text-slate-400')}
                           />
                           <div className="flex-1 min-w-0">
-                            <p className="truncate text-[12.5px] font-bold text-slate-900">
+                            <p className="truncate text-body font-bold text-slate-900">
                               {c.legal_name}
                             </p>
                             {c.trade_name && (
-                              <p className="text-[11px] font-medium text-slate-600">{c.trade_name}</p>
+                              <p className="text-caption font-medium text-slate-600">{c.trade_name}</p>
                             )}
                             {c.gstin && (
-                              <p className="tabular-nums text-[10px] font-medium text-slate-500">GST: {c.gstin}</p>
+                              <p className="tabular-nums text-micro font-medium text-slate-500">GST: {c.gstin}</p>
                             )}
                           </div>
                           {isCurrent && (
-                            <span className="shrink-0 rounded bg-brand-200/60 px-1.5 py-0.5 text-[9.5px] font-bold text-brand-800">
+                            <span className="shrink-0 rounded bg-brand-200/60 px-1.5 py-0.5 text-micro font-bold text-brand-800">
                               Active
                             </span>
                           )}
@@ -461,10 +461,10 @@ export default function AppLayout() {
                 {initials(user?.fullName ?? '?')}
               </div>
               <div className="hidden text-left sm:block">
-                <p className="max-w-[140px] truncate text-[12.5px] font-bold leading-tight text-slate-900">
+                <p className="max-w-[140px] truncate text-body font-bold leading-tight text-slate-900">
                   {user?.fullName}
                 </p>
-                <p className="text-[10.5px] font-semibold leading-tight text-slate-600">
+                <p className="text-caption font-semibold leading-tight text-slate-600">
                   {user?.roles?.[0]?.replace(/_/g, ' ') ?? 'User'}
                 </p>
               </div>
@@ -477,26 +477,26 @@ export default function AppLayout() {
                 <div className="absolute right-0 top-full z-20 mt-1.5 w-64 animate-fade-in rounded-xl border
                                 border-surface-border bg-white p-1.5 shadow-popover">
                   <div className="border-b border-surface-border px-3 py-2.5">
-                    <p className="text-[13px] font-medium text-slate-800">{user?.fullName}</p>
-                    <p className="text-[11px] text-slate-500">@{user?.username}</p>
+                    <p className="text-body font-medium text-slate-800">{user?.fullName}</p>
+                    <p className="text-caption text-slate-500">@{user?.username}</p>
                     <div className="mt-1.5 flex flex-wrap gap-1">
                       {user?.roles.map((r) => (
-                        <span key={r} className="rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-medium text-brand-700">
+                        <span key={r} className="rounded bg-brand-50 px-1.5 py-0.5 text-micro font-medium text-brand-700">
                           {r.replace(/_/g, ' ')}
                         </span>
                       ))}
                     </div>
                   </div>
-                  <div className="border-b border-surface-border px-3 py-2 text-[11px] text-slate-500">
+                  <div className="border-b border-surface-border px-3 py-2 text-caption text-slate-500">
                     <span className="flex items-center gap-1.5 font-medium text-slate-700">
                       <Building2 size={12} className="text-brand-600" />{company?.trade_name || company?.legal_name}
                     </span>
-                    {company?.gstin && <p className="mt-0.5 tabular-nums text-[10px] text-slate-400">GST: {company.gstin}</p>}
+                    {company?.gstin && <p className="mt-0.5 tabular-nums text-micro text-slate-400">GST: {company.gstin}</p>}
                   </div>
 
                   {companies.length > 1 && (
                     <div className="border-b border-surface-border p-1.5">
-                      <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                      <p className="px-2 py-1 text-micro font-semibold uppercase tracking-wider text-slate-400">
                         Switch Company
                       </p>
                       {companies.map((c) => (
@@ -509,7 +509,7 @@ export default function AppLayout() {
                             void switchCompany(c.id);
                           }}
                           className={clsx(
-                            'flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-[12px]',
+                            'flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-small',
                             c.id === company?.id
                               ? 'bg-brand-50 font-semibold text-brand-700'
                               : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
@@ -517,7 +517,7 @@ export default function AppLayout() {
                         >
                           <span className="truncate">{c.trade_name || c.legal_name}</span>
                           {c.id === company?.id && (
-                            <span className="rounded bg-brand-200/60 px-1 text-[9px] font-bold text-brand-800">
+                            <span className="rounded bg-brand-200/60 px-1 text-micro font-bold text-brand-800">
                               Current
                             </span>
                           )}
@@ -532,7 +532,7 @@ export default function AppLayout() {
                   </div>
 
                   <button onClick={() => void logout()}
-                    className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px]
+                    className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-body
                                text-red-600 hover:bg-red-50">
                     <LogOut size={15} /> Sign out
                   </button>
@@ -549,7 +549,7 @@ export default function AppLayout() {
               // Sewing / Checking / Ironing / Packing versions of the same screen, one click apart
               <div className="mb-4 flex gap-1 overflow-x-auto border-b border-surface-border" id="process-tabs">
                 {tabGroup.tabs.filter((t) => allowed(t.to)).map((t) => (
-                  <NavLink key={t.to} to={t.to} className={({ isActive }) => clsx('-mb-px whitespace-nowrap border-b-2 px-3.5 py-2 text-[13px] font-medium',
+                  <NavLink key={t.to} to={t.to} className={({ isActive }) => clsx('-mb-px whitespace-nowrap border-b-2 px-3.5 py-2 text-body font-medium',
                     isActive ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-800')}>
                     {t.label}
                   </NavLink>

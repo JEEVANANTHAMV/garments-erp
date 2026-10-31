@@ -46,7 +46,7 @@ function VarianceTab() {
       {q.isLoading ? <LoadingBlock /> : (
         <>
           <div className="card overflow-x-auto">
-            <div className="px-4 pt-3 text-[13px] font-semibold text-slate-800">By fabric / Dia — how far the auto meter is from the real one</div>
+            <div className="px-4 pt-3 text-body font-semibold text-slate-800">By fabric / Dia — how far the auto meter is from the real one</div>
             <table className="mt-2 w-full text-xs" id="gv-summary">
               <thead className="bg-slate-50 text-slate-500"><tr>{['Fabric', 'Form', 'Dia (inch)', 'Rolls', 'Measured', 'KG', 'Meter variance', 'Avg GSM variance', 'Rule factor', 'Suggested factor', 'Out of tolerance'].map((h) => <th key={h} className={`px-3 py-2 ${/Rolls|Measured|KG|variance|factor|tolerance/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
               <tbody>
@@ -67,7 +67,7 @@ function VarianceTab() {
             </table>
           </div>
           <div className="card overflow-x-auto">
-            <div className="px-4 pt-3 text-[13px] font-semibold text-slate-800">Rolls ({rows.length})</div>
+            <div className="px-4 pt-3 text-body font-semibold text-slate-800">Rolls ({rows.length})</div>
             <table className="mt-2 w-full text-xs" id="gv-rolls">
               <thead className="bg-slate-50 text-slate-500"><tr>{['Roll', 'GRN', 'Date', 'Job', 'Fabric', 'Dia', 'Width M', 'KG', 'Target GSM', 'Actual GSM', 'GSM var', 'Calc Mtr', 'Actual Mtr', 'Mtr var', 'QC'].map((h) => <th key={h} className={`px-2 py-2 ${/KG|GSM|Mtr|var|Width/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
               <tbody>
@@ -128,7 +128,7 @@ function RulesTab() {
               <td className="px-3 py-1.5 tabular-nums font-semibold">{r.rule_code}</td><td className="px-3 py-1.5">{FORM_LABEL[r.fabric_form as keyof typeof FORM_LABEL]}</td>
               <td className="px-3 py-1.5">{r.dia_definition}</td><td className="px-3 py-1.5">{r.formula_type}</td><td className="px-3 py-1.5 tabular-nums">{fmtDecimal(k(r), 4)}</td>
               <td className="px-3 py-1.5">{fmtDate(r.effective_from)}{r.effective_to ? ` – ${fmtDate(r.effective_to)}` : ' →'}</td>
-              <td className="px-3 py-1.5"><span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${r.approval_status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{r.approval_status}</span>{!r.is_active ? <span className="ml-1 text-slate-400">inactive</span> : null}</td>
+              <td className="px-3 py-1.5"><span className={`rounded px-1.5 py-0.5 text-micro font-bold ${r.approval_status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{r.approval_status}</span>{!r.is_active ? <span className="ml-1 text-slate-400">inactive</span> : null}</td>
               <td className="px-3 py-1.5">{r.in_use ? <CheckCircle2 size={14} className="text-emerald-600" /> : ''}</td>
               <td className="px-3 py-1.5 text-right whitespace-nowrap">
                 {can('MATERIAL.UPDATE') && <button className="mr-2 text-sky-700 hover:underline" onClick={() => setEdit({ id: r.id, approved: r.approval_status === 'APPROVED', v: { rule_code: r.rule_code, fabric_form: r.fabric_form, dia_definition: r.dia_definition, formula_type: r.formula_type, factor: Number(r.factor), effective_from: String(r.effective_from).slice(0, 10), effective_to: r.effective_to ? String(r.effective_to).slice(0, 10) : '', is_active: !!r.is_active, remarks: r.remarks ?? '' } })}>Edit</button>}
@@ -140,7 +140,7 @@ function RulesTab() {
       {edit && (
         <Modal open onClose={() => setEdit(null)} title={edit.id ? `Edit rule ${edit.v.rule_code}` : 'New Dia / width rule'} size="md"
           footer={<><Button variant="secondary" onClick={() => setEdit(null)}>Cancel</Button><Button loading={busy} onClick={save} id="btn-save-rule"><Save size={14} className="mr-1" /> Save</Button></>}>
-          {edit.approved && <p className="mb-2 rounded bg-amber-50 px-2 py-1 text-[11.5px] text-amber-900">Approved rule: only the end date, active flag and notes can change. For a new factor add a new rule.</p>}
+          {edit.approved && <p className="mb-2 rounded bg-amber-50 px-2 py-1 text-small text-amber-900">Approved rule: only the end date, active flag and notes can change. For a new factor add a new rule.</p>}
           <FormSection title="Rule" cols={2}>
             <Input label="Rule code *" value={edit.v.rule_code} disabled={edit.approved} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, rule_code: e.target.value } })} id="rule-code" />
             <Select label="Fabric form *" value={edit.v.fabric_form} disabled={edit.approved} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, fabric_form: e.target.value } })} options={[{ value: 'TUBULAR', label: 'Tubular' }, { value: 'OPEN_WIDTH', label: 'Open width' }]} id="rule-form" />

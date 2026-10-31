@@ -109,12 +109,12 @@ export function ImageUpload({
     <div className={className}>
       {label && (
         <div className="mb-1.5 flex items-center justify-between">
-          <label className="text-[12px] font-semibold text-slate-700">{label}</label>
+          <label className="text-small font-semibold text-slate-700">{label}</label>
           {!disabled && (
             <button
               type="button"
               onClick={() => setShowUrlInput((s) => !s)}
-              className="inline-flex items-center gap-1 text-[11px] font-medium text-brand-600 hover:text-brand-700"
+              className="inline-flex items-center gap-1 text-caption font-medium text-brand-600 hover:text-brand-700"
             >
               <LinkIcon size={12} />
               {showUrlInput ? 'Cancel URL' : 'Use web URL'}
@@ -227,7 +227,7 @@ export function ImageUpload({
               <p className="text-xs font-semibold text-slate-800">
                 <span className="text-brand-600 hover:underline">Click to upload</span> or drag and drop
               </p>
-              <p className="mt-1 text-[11px] text-slate-400">{hint}</p>
+              <p className="mt-1 text-caption text-slate-400">{hint}</p>
             </div>
           )}
         </div>

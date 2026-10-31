@@ -349,7 +349,7 @@ export function FabricsPage() {
               render: (r: any) => (
                 <div>
                   <div className="font-bold text-slate-900">{r.base_name}</div>
-                  <div className="text-[11px] text-slate-500 font-medium">
+                  <div className="text-caption text-slate-500 font-medium">
                     {r.composition_desc || r.composition || '100% Cotton'}
                   </div>
                 </div>
@@ -369,7 +369,7 @@ export function FabricsPage() {
               key: 'fabric_type',
               header: 'Type',
               render: (r: any) => (
-                <span className={`inline-flex rounded px-2 py-0.5 text-[11px] font-bold ${
+                <span className={`inline-flex rounded px-2 py-0.5 text-caption font-bold ${
                   r.fabric_type === 'KNIT' ? 'bg-indigo-50 text-indigo-700' :
                   r.fabric_type === 'WOVEN' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-700'
                 }`}>
@@ -390,7 +390,7 @@ export function FabricsPage() {
               key: 'certification',
               header: 'Certification',
               render: (r: any) => (
-                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-caption font-bold ${
                   r.certification === 'GOTS' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
                   r.certification === 'OEKO-TEX' ? 'bg-blue-100 text-blue-800 border border-blue-300' :
                   r.certification === 'BCI' ? 'bg-teal-100 text-teal-800 border border-teal-300' :
@@ -456,7 +456,7 @@ export function FabricsPage() {
                 <div>
                   <div className="font-bold text-slate-900">{r.fabric_name}</div>
                   {r.base_name && (
-                    <div className="text-[11px] text-slate-500 font-medium">
+                    <div className="text-caption text-slate-500 font-medium">
                       Base: {r.base_name} ({r.base_code})
                     </div>
                   )}
@@ -1212,7 +1212,7 @@ export function FabricDetailPage() {
                 <Sparkles size={14} className="text-brand-600" />
                 Standard Auto-Generated Description (ERP Formula)
               </span>
-              <span className="text-[10px] text-brand-600 font-medium bg-brand-100 px-2 py-0.5 rounded-full">
+              <span className="text-micro text-brand-600 font-medium bg-brand-100 px-2 py-0.5 rounded-full">
                 Formula: Composition + Effect + Construction / Structure
               </span>
             </div>
@@ -1280,7 +1280,7 @@ export function FabricDetailPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-surface-border bg-slate-50/75 text-[11px] font-bold uppercase text-slate-500">
+                  <tr className="border-b border-surface-border bg-slate-50/75 text-caption font-bold uppercase text-slate-500">
                     <th className="py-2 px-2 w-8">#</th>
                     <th className="py-2 px-2">Fibre Name</th>
                     <th className="py-2 px-2 w-32 text-right">Ratio (%)</th>
@@ -1338,7 +1338,7 @@ export function FabricDetailPage() {
                     <td colSpan={2} className="py-2.5 px-2 text-right text-xs uppercase text-slate-600">
                       Total Percentage:
                     </td>
-                    <td className={`py-2.5 px-2 text-right tabular-nums font-black text-sm ${isValid100 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                    <td className={`py-2.5 px-2 text-right tabular-nums font-bold text-sm ${isValid100 ? 'text-emerald-700' : 'text-rose-600'}`}>
                       {totalPercentage.toFixed(1)}%
                     </td>
                     {editable && <td />}
@@ -1357,11 +1357,11 @@ export function FabricDetailPage() {
                 <PieIcon size={14} className="text-brand-600" /> Live Composition Visualizer
               </h3>
               {isValid100 ? (
-                <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-700">
+                <span className="flex items-center gap-1 text-caption font-bold text-emerald-700">
                   <CheckCircle2 size={13} /> 100% Balanced
                 </span>
               ) : (
-                <span className="text-[11px] font-bold text-rose-600">
+                <span className="text-caption font-bold text-rose-600">
                   {totalPercentage > 100 ? `Over by ${(totalPercentage - 100).toFixed(1)}%` : `Under by ${(100 - totalPercentage).toFixed(1)}%`}
                 </span>
               )}
@@ -1400,10 +1400,10 @@ export function FabricDetailPage() {
                   })()}
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
-                  <span className={`text-xl font-black tabular-nums ${isValid100 ? 'text-slate-800' : 'text-rose-600'}`}>
+                  <span className={`text-xl font-bold tabular-nums ${isValid100 ? 'text-slate-800' : 'text-rose-600'}`}>
                     {totalPercentage.toFixed(0)}%
                   </span>
-                  <span className="text-[10px] uppercase font-bold text-slate-400">Composition</span>
+                  <span className="text-micro uppercase font-bold text-slate-400">Composition</span>
                 </div>
               </div>
 
@@ -1416,7 +1416,7 @@ export function FabricDetailPage() {
                   return (
                     <div
                       key={item._key}
-                      className="flex items-center gap-1.5 rounded-full bg-slate-50 border border-slate-200 px-2.5 py-0.5 text-[11px] font-medium text-slate-700"
+                      className="flex items-center gap-1.5 rounded-full bg-slate-50 border border-slate-200 px-2.5 py-0.5 text-caption font-medium text-slate-700"
                     >
                       <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
                       <span className="truncate max-w-[110px]">{item.fibre_name || 'Fibre'}</span>
@@ -1508,7 +1508,7 @@ export function FabricDetailPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-surface-border bg-slate-100/60 text-[11px] font-bold uppercase text-slate-600">
+              <tr className="border-b border-surface-border bg-slate-100/60 text-caption font-bold uppercase text-slate-600">
                 <th className="py-2.5 px-3 w-8">#</th>
                 <th className="py-2.5 px-2 min-w-[150px]">Item SKU Code *</th>
                 <th className="py-2.5 px-2 min-w-[180px]">Fabric Item Name *</th>
@@ -1618,7 +1618,7 @@ export function FabricDetailPage() {
                       value={v.width_form || 'TUBULAR'}
                       disabled={!editable}
                       onChange={(e) => handleUpdateVariant(v._key, 'width_form', e.target.value)}
-                      className="select py-1 px-1 text-[11px] font-semibold text-slate-700 w-full"
+                      className="select py-1 px-1 text-caption font-semibold text-slate-700 w-full"
                     >
                       <option value="TUBULAR">Tubular</option>
                       <option value="OPEN_WIDTH">Open Width</option>
@@ -1665,7 +1665,7 @@ export function FabricDetailPage() {
                       type="button"
                       disabled={!editable}
                       onClick={() => handleUpdateVariant(v._key, 'is_active', v.is_active ? 0 : 1)}
-                      className={`inline-flex rounded px-2 py-0.5 text-[10px] font-bold ${
+                      className={`inline-flex rounded px-2 py-0.5 text-micro font-bold ${
                         v.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
                       }`}
                     >
@@ -1703,18 +1703,18 @@ export function FabricDetailPage() {
         {/* Bottom Summary KPI Cards */}
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3 pt-3 border-t border-slate-100">
           <div className="rounded-lg bg-blue-50/60 border border-blue-200 p-3 text-center">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-blue-700">Total Variants</span>
-            <div className="text-xl font-black text-blue-900 mt-0.5">{variants.length}</div>
+            <span className="text-caption font-bold uppercase tracking-wider text-blue-700">Total Variants</span>
+            <div className="text-xl font-bold text-blue-900 mt-0.5">{variants.length}</div>
           </div>
           <div className="rounded-lg bg-emerald-50/60 border border-emerald-200 p-3 text-center">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">Active SKUs</span>
-            <div className="text-xl font-black text-emerald-900 mt-0.5">
+            <span className="text-caption font-bold uppercase tracking-wider text-emerald-700">Active SKUs</span>
+            <div className="text-xl font-bold text-emerald-900 mt-0.5">
               {variants.filter((v) => v.is_active).length}
             </div>
           </div>
           <div className="rounded-lg bg-amber-50/60 border border-amber-200 p-3 text-center">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700">Inactive / Drafts</span>
-            <div className="text-xl font-black text-amber-900 mt-0.5">
+            <span className="text-caption font-bold uppercase tracking-wider text-amber-700">Inactive / Drafts</span>
+            <div className="text-xl font-bold text-amber-900 mt-0.5">
               {variants.filter((v) => !v.is_active).length}
             </div>
           </div>

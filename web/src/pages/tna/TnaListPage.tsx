@@ -153,7 +153,7 @@ export default function TnaListPage() {
       {/* 2. Top Summary KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
-          <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Live Orders</p>
+          <p className="text-caption font-semibold text-slate-500 uppercase tracking-wide">Live Orders</p>
           <div className="flex items-baseline justify-between mt-1">
             <span className="text-2xl font-bold text-slate-900">{stats.total_orders}</span>
             <span className="text-xs text-slate-400">Tracked</span>
@@ -161,7 +161,7 @@ export default function TnaListPage() {
         </div>
 
         <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3.5 shadow-xs">
-          <p className="text-[11px] font-semibold text-emerald-800 uppercase tracking-wide flex items-center gap-1">
+          <p className="text-caption font-semibold text-emerald-800 uppercase tracking-wide flex items-center gap-1">
             <CheckCircle2 size={13} /> On Track
           </p>
           <div className="flex items-baseline justify-between mt-1">
@@ -171,7 +171,7 @@ export default function TnaListPage() {
         </div>
 
         <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3.5 shadow-xs">
-          <p className="text-[11px] font-semibold text-amber-800 uppercase tracking-wide flex items-center gap-1">
+          <p className="text-caption font-semibold text-amber-800 uppercase tracking-wide flex items-center gap-1">
             <Clock size={13} /> At Risk
           </p>
           <div className="flex items-baseline justify-between mt-1">
@@ -181,7 +181,7 @@ export default function TnaListPage() {
         </div>
 
         <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-3.5 shadow-xs">
-          <p className="text-[11px] font-semibold text-rose-800 uppercase tracking-wide flex items-center gap-1">
+          <p className="text-caption font-semibold text-rose-800 uppercase tracking-wide flex items-center gap-1">
             <AlertTriangle size={13} /> Critical Delay
           </p>
           <div className="flex items-baseline justify-between mt-1">
@@ -191,7 +191,7 @@ export default function TnaListPage() {
         </div>
 
         <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-3.5 shadow-xs">
-          <p className="text-[11px] font-semibold text-indigo-800 uppercase tracking-wide">Avg Completion</p>
+          <p className="text-caption font-semibold text-indigo-800 uppercase tracking-wide">Avg Completion</p>
           <div className="flex items-baseline justify-between mt-1">
             <span className="text-2xl font-bold text-indigo-700">{stats.avg_completion}%</span>
             <span className="text-xs font-medium text-indigo-600">Overall progress</span>
@@ -314,20 +314,20 @@ export default function TnaListPage() {
                       <td className="py-3 px-3 tabular-nums font-bold text-brand-700">
                         {row.tna_no}
                         {row.version > 1 && (
-                          <span className="ml-1 rounded bg-indigo-50 border border-indigo-200 px-1 text-[10px] text-indigo-700">
+                          <span className="ml-1 rounded bg-indigo-50 border border-indigo-200 px-1 text-micro text-indigo-700">
                             v{row.version}
                           </span>
                         )}
                       </td>
                       <td className="py-3 px-3">
                         <div className="font-semibold text-slate-900">{row.buyer_name || 'Buyer'}</div>
-                        <div className="text-[11px] text-slate-500 tabular-nums">
+                        <div className="text-caption text-slate-500 tabular-nums">
                           {row.style_code} {row.style_name ? `• ${row.style_name}` : ''}
                         </div>
                       </td>
                       <td className="py-3 px-3">
                         <div className="font-medium text-slate-800">{row.so_no}</div>
-                        <div className="text-[11px] text-slate-500 tabular-nums">IO: {row.io_no || '—'}</div>
+                        <div className="text-caption text-slate-500 tabular-nums">IO: {row.io_no || '—'}</div>
                       </td>
                       <td className="py-3 px-3 text-right tabular-nums font-medium">
                         {fmtNumber(row.order_qty)} pcs
@@ -339,7 +339,7 @@ export default function TnaListPage() {
                         {row.template_name || 'Basic T-Shirt'}
                       </td>
                       <td className="py-3 px-3 min-w-[120px]">
-                        <div className="flex items-center justify-between text-[11px] font-semibold mb-1">
+                        <div className="flex items-center justify-between text-caption font-semibold mb-1">
                           <span>{pct.toFixed(0)}%</span>
                         </div>
                         <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
@@ -355,7 +355,7 @@ export default function TnaListPage() {
                       </td>
                       <td className="py-3 px-3 text-center">
                         <span
-                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
+                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-caption font-bold ${
                             isCritical
                               ? 'bg-rose-100 text-rose-800 border border-rose-200'
                               : isAtRisk
@@ -478,7 +478,7 @@ export default function TnaListPage() {
               />
             </div>
 
-            <div className="sm:col-span-2 rounded-lg bg-amber-50 border border-amber-200 p-3 text-[11px] text-amber-800">
+            <div className="sm:col-span-2 rounded-lg bg-amber-50 border border-amber-200 p-3 text-caption text-amber-800">
               <span className="font-bold">Backward Planning Note:</span> Milestones will be automatically scheduled backward from your Shipment Date, taking into account Sunday weekly-offs and factory lead times.
             </div>
           </FormSection>

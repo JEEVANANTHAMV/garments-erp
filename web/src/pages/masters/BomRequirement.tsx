@@ -40,13 +40,13 @@ export function BomOrderStrip({ info }: { info: OrderInfo }) {
       <div className="flex flex-wrap items-stretch gap-x-6 gap-y-2 text-xs">
         {[['Job / IO No', info.job_no], ['Buyer', info.buyer_name], ['Buyer PO', info.buyer_po_no], ['Style', [info.style_code, info.style_name].filter(Boolean).join(' — ')]].map(([k, v]) => (
           <div key={k as string}>
-            <div className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-500">{k}</div>
+            <div className="text-caption font-semibold uppercase tracking-wider text-slate-500">{k}</div>
             <div className="font-semibold text-slate-900">{v || '—'}</div>
           </div>
         ))}
         <table className="ml-auto text-right tabular-nums">
           <thead>
-            <tr className="text-[10.5px] uppercase tracking-wider text-slate-500">
+            <tr className="text-caption uppercase tracking-wider text-slate-500">
               <th className="px-2 text-left font-semibold">Size</th>
               {info.sizes.map((s) => <th key={s.size_id} className="px-2 font-semibold">{s.code}</th>)}
               <th className="px-2 font-semibold text-slate-700">Total</th>
@@ -140,26 +140,26 @@ export function BomRequirementTable({ lines, info, materialName, uomCode }: {
     <div className="card mb-4 overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-border px-4 py-3">
         <div>
-          <h3 className="text-[13.5px] font-semibold text-slate-800">
+          <h3 className="text-body-lg font-semibold text-slate-800">
             Total Requirement — {info.job_no} · {info.style_code} <span className="font-normal text-slate-500">(one line per material, plan-cut PCS incl. size-wise excess)</span>
           </h3>
           <div className="flex items-center gap-2 mt-1">
-            <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+            <span className="text-caption font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
               🛒 Purchase Demand (PO): {purchaseCount} lines
             </span>
             {productionCount > 0 && (
-              <span className="text-[11px] font-bold text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+              <span className="text-caption font-bold text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
                 ⚙️ In-House Knitting (Production): {productionCount} lines
               </span>
             )}
             {stockCount > 0 && (
-              <span className="text-[11px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+              <span className="text-caption font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
                 📦 Stock Allocation: {stockCount} lines
               </span>
             )}
           </div>
         </div>
-        <span className="text-[11px] text-slate-500">Same figures as MRP and the PO / quotation BOM pick</span>
+        <span className="text-caption text-slate-500">Same figures as MRP and the PO / quotation BOM pick</span>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs tabular-nums">
@@ -193,18 +193,18 @@ export function BomRequirementTable({ lines, info, materialName, uomCode }: {
               return (
                 <tr key={i} className={`border-t border-slate-100 ${tone.row}`}>
                   <td className={`td border-l-4 text-center text-slate-400 ${tone.bar}`}>{i + 1}</td>
-                  <td className="td"><span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold ${tone.badge}`}>{r.l0.material_type}</span></td>
+                  <td className="td"><span className={`rounded border px-1.5 py-0.5 text-micro font-bold ${tone.badge}`}>{r.l0.material_type}</span></td>
                   <td className="td">
                     {src === 'PRODUCTION' ? (
-                      <span className="rounded border px-1.5 py-0.5 text-[10px] font-bold bg-indigo-100 text-indigo-800 border-indigo-300">
+                      <span className="rounded border px-1.5 py-0.5 text-micro font-bold bg-indigo-100 text-indigo-800 border-indigo-300">
                         ⚙️ PRODUCTION (Knitting)
                       </span>
                     ) : src === 'STOCK' ? (
-                      <span className="rounded border px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 border-amber-300">
+                      <span className="rounded border px-1.5 py-0.5 text-micro font-bold bg-amber-100 text-amber-800 border-amber-300">
                         📦 STOCK
                       </span>
                     ) : (
-                      <span className="rounded border px-1.5 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-800 border-emerald-300">
+                      <span className="rounded border px-1.5 py-0.5 text-micro font-bold bg-emerald-100 text-emerald-800 border-emerald-300">
                         🛒 PURCHASE (PO)
                       </span>
                     )}
@@ -212,7 +212,7 @@ export function BomRequirementTable({ lines, info, materialName, uomCode }: {
                   <td className="td">
                     <div className="font-semibold text-slate-900">{r.name}</div>
                     {(r.l0.specification || r.lineCount > 1) && (
-                      <div className="text-[10.5px] text-slate-500">{[r.l0.specification, r.lineCount > 1 ? `${r.lineCount} BOM lines (size / colour wise)` : ''].filter(Boolean).join(' · ')}</div>
+                      <div className="text-caption text-slate-500">{[r.l0.specification, r.lineCount > 1 ? `${r.lineCount} BOM lines (size / colour wise)` : ''].filter(Boolean).join(' · ')}</div>
                     )}
                   </td>
                   <td className="td">{r.l0.color_id ? colorName(r.l0.color_id) : 'All'}</td>
@@ -235,7 +235,7 @@ export function BomRequirementTable({ lines, info, materialName, uomCode }: {
           </tbody>
         </table>
       </div>
-      {rows.some((r) => r.mixedWaste) && <p className="px-4 py-2 text-[11px] text-slate-500">* the material's lines carry different wastage % — the weighted % is shown; each line's own % is used in the quantities.</p>}
+      {rows.some((r) => r.mixedWaste) && <p className="px-4 py-2 text-caption text-slate-500">* the material's lines carry different wastage % — the weighted % is shown; each line's own % is used in the quantities.</p>}
     </div>
   );
 }

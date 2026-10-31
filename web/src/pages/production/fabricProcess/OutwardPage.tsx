@@ -59,7 +59,7 @@ function OutwardList({ onOpen }: { onOpen: (id: number | 'new') => void }) {
               <tbody>
                 {rows.map((o) => (
                   <tr key={o.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => onOpen(o.id)}>
-                    <td className="px-3 py-2 tabular-nums font-semibold text-brand-700">{o.fpo_no}{o.is_reprocess ? <span className="ml-1 rounded bg-purple-100 px-1 text-[10px] text-purple-800">Reprocess</span> : null}</td>
+                    <td className="px-3 py-2 tabular-nums font-semibold text-brand-700">{o.fpo_no}{o.is_reprocess ? <span className="ml-1 rounded bg-purple-100 px-1 text-micro text-purple-800">Reprocess</span> : null}</td>
                     <td className="px-3 py-2">{fmtDate(o.fpo_date)}</td>
                     <td className="px-3 py-2">{o.process_name || o.sub_process}</td>
                     <td className="px-3 py-2">{o.vendor_name}</td>
@@ -239,7 +239,7 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
             {editable && quote.quotation_id && <Button size="sm" variant="secondary" id="btn-load-quote" onClick={() => void loadPlan(quote.quotation_id, false)}><Download size={13} className="mr-1" /> Load quotation jobs</Button>}
           </div>
           {plan && (
-            <table className="mt-2 w-full text-[11.5px]" id="fpo-plan">
+            <table className="mt-2 w-full text-small" id="fpo-plan">
               <thead className="text-slate-500"><tr>{['Quotation line', 'Job', 'Dye colour', 'Rate', 'Quoted KG', 'Sent earlier', 'Balance', 'Job has', 'Short'].map((h) => <th key={h} className={`px-2 py-1 ${/KG|earlier|Balance|has|Short|Rate/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
               <tbody>{plan.lines.map((l: any) => (
                 <tr key={l.line_id} className="border-t border-slate-100">
@@ -255,7 +255,7 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
 
       <div className="card overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-border px-4 py-2.5">
-          <h3 className="text-[13px] font-semibold text-slate-800">Job entry <span className="font-normal text-slate-500">· {groups.length} job(s), {rows.length} roll(s)</span></h3>
+          <h3 className="text-body font-semibold text-slate-800">Job entry <span className="font-normal text-slate-500">· {groups.length} job(s), {rows.length} roll(s)</span></h3>
           {editable && <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={() => setPicker('job')}><Plus size={13} className="mr-1" /> Add Job</Button>
             <Button size="sm" variant="secondary" onClick={() => setPicker('scan')}><ScanLine size={13} className="mr-1" /> Scan Roll</Button>
@@ -283,7 +283,7 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
 
       {d && d.status !== 'DRAFT' && (
         <div className="card mt-3 space-y-3 p-4">
-          <h3 className="text-[13px] font-semibold text-slate-800">Reconciliation — DC vs GRN</h3>
+          <h3 className="text-body font-semibold text-slate-800">Reconciliation — DC vs GRN</h3>
           <ReconCards t={d.reconciliation.total} />
           <table className="w-full text-xs">
             <thead className="bg-slate-50 text-slate-500"><tr>{['Job', 'PO', 'Style', dyeing ? 'Dye colour' : 'Colour', 'Rolls', 'Outward KG', 'Good KG', 'Reject KG', 'Loss KG', 'Balance'].map((h) => <th key={h} className={`px-2 py-1.5 ${/KG|Balance|Rolls/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
@@ -316,7 +316,7 @@ function JobGroup({ g, editable, dyeing, set, remove }: { g: { io_no: string; ro
   const cols = dyeing ? 12 : 11;
   return (
     <>
-      <tr className="bg-sky-50/70"><td colSpan={cols} className="px-2 py-1.5 text-[11.5px] font-semibold text-sky-900">Job {g.io_no}{g.rows[0].buyer_po_no ? ` · PO ${g.rows[0].buyer_po_no}` : ''}{g.rows[0].style_code ? ` · Style ${g.rows[0].style_code}` : ''}</td></tr>
+      <tr className="bg-sky-50/70"><td colSpan={cols} className="px-2 py-1.5 text-small font-semibold text-sky-900">Job {g.io_no}{g.rows[0].buyer_po_no ? ` · PO ${g.rows[0].buyer_po_no}` : ''}{g.rows[0].style_code ? ` · Style ${g.rows[0].style_code}` : ''}</td></tr>
       {g.rows.map((r, i) => (
         <tr key={r.fabric_roll_id} className="border-t border-slate-100">
           <td className="px-2 py-1 text-slate-400">{i + 1}</td>
@@ -342,7 +342,7 @@ function JobGroup({ g, editable, dyeing, set, remove }: { g: { io_no: string; ro
         </tr>
       ))}
       {editable && dyeing && g.rows.length > 1 && (
-        <tr><td colSpan={cols} className="px-2 py-1 text-[11px]">
+        <tr><td colSpan={cols} className="px-2 py-1 text-caption">
           <button className="text-sky-700 hover:underline" onClick={() => { const c = g.rows.find((r) => r.color_name.trim())?.color_name; if (c) g.rows.forEach((r) => set(r.fabric_roll_id, { color_name: c })); }}>Copy the first dye colour to every roll of job {g.io_no}</button>
         </td></tr>
       )}
@@ -425,7 +425,7 @@ function RollPicker({ mode, jobs, warehouseId, quotationId, taken, onClose, onAd
                   {mode === 'job' && <td className="px-2 py-1"><input type="checkbox" checked={on} onChange={() => setSel((s) => { const x = { ...s }; if (on) delete x[r.id]; else x[r.id] = r.balance_kg; return x; })} /></td>}
                   <td className="px-2 py-1 tabular-nums font-semibold">{r.roll_no}</td><td className="px-2 py-1">{r.lot_no || '—'}</td><td className="px-2 py-1">{r.fabric_name}</td>
                   <td className="px-2 py-1">{r.so_id ? r.io_no : <span className="text-slate-400">no job</span>}</td>
-                  <td className="px-2 py-1"><span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${r.process_state === 'GREY' ? 'bg-slate-100 text-slate-600' : 'bg-purple-100 text-purple-800'}`}>{stateLabel(r.process_state)}</span></td>
+                  <td className="px-2 py-1"><span className={`rounded px-1.5 py-0.5 text-micro font-bold ${r.process_state === 'GREY' ? 'bg-slate-100 text-slate-600' : 'bg-purple-100 text-purple-800'}`}>{stateLabel(r.process_state)}</span></td>
                   <td className="px-2 py-1">{r.color_name || (r.process_state === 'GREY' ? RAW_COLOUR : '—')}</td><td className="px-2 py-1">{r.gsm || '—'}</td><td className="px-2 py-1">{r.dia || '—'}</td>
                   <td className="px-2 py-1 tabular-nums">{r.grn_no}</td><td className="px-2 py-1">{r.warehouse_name || '—'}</td>
                   <td className="px-2 py-1 text-right tabular-nums">{kg(r.balance_kg)}</td>

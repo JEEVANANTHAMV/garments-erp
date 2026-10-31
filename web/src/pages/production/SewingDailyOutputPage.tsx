@@ -417,16 +417,16 @@ function DailyOutputPage({ proc }: { proc: OutProc }) {
                         <td className="px-2 py-1 text-right"><NumCell v={r.rework_qty} disabled={!editable} onChange={(v) => patch(r.bundle_id, { rework_qty: v })} /></td>
                         <td className="px-2 py-1 text-right"><NumCell v={r.reject_qty} disabled={!editable} onChange={(v) => patch(r.bundle_id, { reject_qty: v })} /></td>
                         <td className="px-2 py-1">
-                          <select className="input h-6 w-32 text-[11px]" disabled={!editable} value={r.defect_id} onChange={(e) => patch(r.bundle_id, { defect_id: e.target.value })}>
+                          <select className="input h-6 w-32 text-caption" disabled={!editable} value={r.defect_id} onChange={(e) => patch(r.bundle_id, { defect_id: e.target.value })}>
                             <option value="">—</option>
                             {(defects.data || []).map((d: any) => <option key={d.id} value={d.id}>{d.label}</option>)}
                           </select>
                         </td>
                         <td className="px-2 py-1">
-                          <input className="input h-6 w-24 text-[11px]" disabled={!editable} value={r.operator_name} onChange={(e) => patch(r.bundle_id, { operator_name: e.target.value })} />
+                          <input className="input h-6 w-24 text-caption" disabled={!editable} value={r.operator_name} onChange={(e) => patch(r.bundle_id, { operator_name: e.target.value })} />
                         </td>
-                        <td className="px-2 py-1"><input type="time" className="input h-6 w-24 text-[11px]" disabled={!editable} value={r.start_time} onChange={(e) => patch(r.bundle_id, { start_time: e.target.value })} /></td>
-                        <td className="px-2 py-1"><input type="time" className="input h-6 w-24 text-[11px]" disabled={!editable} value={r.end_time} onChange={(e) => patch(r.bundle_id, { end_time: e.target.value })} /></td>
+                        <td className="px-2 py-1"><input type="time" className="input h-6 w-24 text-caption" disabled={!editable} value={r.start_time} onChange={(e) => patch(r.bundle_id, { start_time: e.target.value })} /></td>
+                        <td className="px-2 py-1"><input type="time" className="input h-6 w-24 text-caption" disabled={!editable} value={r.end_time} onChange={(e) => patch(r.bundle_id, { end_time: e.target.value })} /></td>
                         <td className="px-2 py-1 text-center">
                           {editable && <button className="text-red-500 hover:text-red-700" onClick={() => setRows((x) => x.filter((y) => y.bundle_id !== r.bundle_id))}><Trash2 size={14} /></button>}
                         </td>
@@ -539,7 +539,7 @@ function DailyOutputPage({ proc }: { proc: OutProc }) {
 
 function NumCell({ v, onChange, disabled }: { v: number; onChange: (v: number) => void; disabled?: boolean }) {
   if (disabled) return <span>{fmtNumber(v)}</span>;
-  return <input type="number" min={0} className="input h-6 w-16 text-right text-[11px]" value={v}
+  return <input type="number" min={0} className="input h-6 w-16 text-right text-caption" value={v}
     onChange={(e) => onChange(Math.max(0, Math.floor(Number(e.target.value)) || 0))} />;
 }
 

@@ -106,7 +106,7 @@ export function YarnConeTrackingPage() {
       {d && (
         <>
           <div className="card mb-3 overflow-x-auto">
-            <h3 className="px-4 pt-3 text-[13px] font-semibold text-slate-800">Lots / cones in this chain ({d.lots.length})</h3>
+            <h3 className="px-4 pt-3 text-body font-semibold text-slate-800">Lots / cones in this chain ({d.lots.length})</h3>
             <table className="mt-2 w-full text-xs">
               <thead className="bg-slate-50 text-slate-500"><tr>{['Lot', 'Cone', 'Yarn', 'Type', 'Shade', 'Job', 'GRN', 'Store', 'Status', 'In KG', 'Balance KG'].map((x) => <th key={x} className={`px-2 py-1.5 ${/KG/.test(x) ? 'text-right' : 'text-left'}`}>{x}</th>)}</tr></thead>
               <tbody>{d.lots.map((l: any) => (
@@ -118,7 +118,7 @@ export function YarnConeTrackingPage() {
             </table>
           </div>
           <div className="card overflow-x-auto">
-            <h3 className="px-4 pt-3 text-[13px] font-semibold text-slate-800">Cone history</h3>
+            <h3 className="px-4 pt-3 text-body font-semibold text-slate-800">Cone history</h3>
             <table className="mt-2 w-full text-xs">
               <thead className="bg-slate-50 text-slate-500"><tr>{['When', 'Event', 'Reference', 'Lot / cone', 'Process', 'From', 'To', 'Qty KG', 'Job', 'Remarks', 'User'].map((x) => <th key={x} className={`px-2 py-1.5 ${/KG/.test(x) ? 'text-right' : 'text-left'}`}>{x}</th>)}</tr></thead>
               <tbody>{d.timeline.map((e: any, i: number) => (
@@ -173,7 +173,7 @@ export function YarnProcessReportsPage() {
         <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-6">
           {[['Yarn outward', `${kg(s.outward_kg)} KG`], ['Yarn inward (good)', `${kg(s.inward_kg)} KG`], ['Reject', `${kg(s.reject_kg)} KG`], ['Process loss', `${kg(s.loss_kg)} KG`], ['Pending at units', `${kg(s.pending_kg)} KG`], ['Reprocess', `${kg(s.reprocess_kg)} KG`],
             ['Billable reprocess', `${kg(s.billable_reprocess_kg)} KG · ₹${fmtDecimal(s.billable_reprocess_amount, 2)}`], ['Non-billable reprocess', `${kg(s.non_billable_reprocess_kg)} KG`], ['Contractor bill pending', `${s.bill_pending_grns} GRN · ${kg(s.bill_pending_kg)} KG`]].map(([k, v]) => (
-            <div key={k} className="rounded-lg border border-slate-200 bg-white px-3 py-2"><div className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-500">{k}</div><div className="text-[13px] font-bold">{v}</div></div>))}
+            <div key={k} className="rounded-lg border border-slate-200 bg-white px-3 py-2"><div className="text-caption font-semibold uppercase tracking-wider text-slate-500">{k}</div><div className="text-body font-bold">{v}</div></div>))}
         </div>
       )}
       <div className="card mb-3 px-4 pt-2"><Tabs tabs={REPORTS.map((r) => ({ key: r.key, label: r.label }))} active={tab} onChange={setTab} /></div>
@@ -242,12 +242,12 @@ export function YarnProcessTypesPage() {
           {(types.data ?? []).map((x) => (
             <div key={x.id} className={`card overflow-hidden ${yes(x.is_active) ? '' : 'opacity-60'}`}>
               <div className="flex flex-wrap items-center gap-2 border-b border-surface-border px-4 py-2.5 text-xs">
-                <span className="tabular-nums font-bold text-brand-700">{x.code}</span><span className="text-[13px] font-semibold">{x.name}</span>
-                <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10.5px] font-bold text-sky-800">{MODE_LABEL[x.process_mode]}</span>
-                {x.default_ply ? <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10.5px] font-bold">{x.default_ply}-ply{x.ply_options ? ` (${x.ply_options})` : ''}</span> : null}
+                <span className="tabular-nums font-bold text-brand-700">{x.code}</span><span className="text-body font-semibold">{x.name}</span>
+                <span className="rounded bg-sky-100 px-1.5 py-0.5 text-caption font-bold text-sky-800">{MODE_LABEL[x.process_mode]}</span>
+                {x.default_ply ? <span className="rounded bg-slate-100 px-1.5 py-0.5 text-caption font-bold">{x.default_ply}-ply{x.ply_options ? ` (${x.ply_options})` : ''}</span> : null}
                 {n(x.loss_tolerance_pct) > 0 && <span className="text-slate-600">loss ≤ {x.loss_tolerance_pct}%</span>}
-                {yes(x.requires_qc) && <span className="rounded bg-orange-100 px-1.5 py-0.5 text-[10.5px] font-bold text-orange-800">QC before posting</span>}
-                {yes(x.is_reprocess) && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[10.5px] font-bold text-purple-800">Reprocess</span>}
+                {yes(x.requires_qc) && <span className="rounded bg-orange-100 px-1.5 py-0.5 text-caption font-bold text-orange-800">QC before posting</span>}
+                {yes(x.is_reprocess) && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-caption font-bold text-purple-800">Reprocess</span>}
                 {!yes(x.billable) && <span className="text-slate-500">not billable</span>}
                 {master && <span className="ml-auto flex gap-1">
                   <Button size="sm" variant="secondary" onClick={() => edit(x)}><Pencil size={12} className="mr-1" /> Edit</Button>
@@ -263,7 +263,7 @@ export function YarnProcessTypesPage() {
                       <td className="px-3 py-1.5 text-right">{master && <button className="p-1 text-slate-400 hover:text-brand-700" onClick={() => setP({ ...q, uom: q.uom ?? '', min_value: q.min_value ?? '', max_value: q.max_value ?? '', target_value: q.target_value ?? '', is_mandatory: yes(q.is_mandatory), is_active: yes(q.is_active) })}><Pencil size={13} /></button>}</td></tr>
                   ))}</tbody>
                 </table>
-              ) : <div className="px-4 py-2 text-[11.5px] text-slate-400">No QC parameters</div>}
+              ) : <div className="px-4 py-2 text-small text-slate-400">No QC parameters</div>}
             </div>
           ))}
         </div>

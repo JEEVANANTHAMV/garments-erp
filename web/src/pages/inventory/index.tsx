@@ -51,7 +51,7 @@ export function StockPage() {
       <DataTable
         columns={[
           { key: 'item_code', header: 'Item code',
-            render: (r: any) => <span className="tabular-nums text-[12px] text-brand-700">{r.item_code}</span> },
+            render: (r: any) => <span className="tabular-nums text-small text-brand-700">{r.item_code}</span> },
           { key: 'item_name', header: 'Item', render: (r: any) => <span className="font-medium">{r.item_name}</span> },
           { key: 'material_type', header: 'Type', render: (r: any) => <Badge tone="blue">{humanize(r.material_type)}</Badge> },
           { key: 'warehouse_name', header: 'Warehouse' },
@@ -190,7 +190,7 @@ export function StockLedgerPage() {
               ? <span className="tabular-nums text-xs text-brand-700">{r.batch_no}{r.shade_lot ? ` (${r.shade_lot})` : ''}</span>
               : <span className="text-slate-400">—</span> },
           { key: 'ref', header: 'Reference',
-            render: (r: any) => <span className="text-[11.5px] text-slate-500">{r.ref_type} #{r.ref_id}</span> },
+            render: (r: any) => <span className="text-small text-slate-500">{r.ref_type} #{r.ref_id}</span> },
           { key: 'qty_in', header: 'In', align: 'right',
             render: (r: any) => Number(r.qty_in) > 0
               ? <span className="font-medium text-emerald-600">+{fmtDecimal(r.qty_in, 3)}</span> : '—' },

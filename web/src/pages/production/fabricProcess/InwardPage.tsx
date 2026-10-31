@@ -60,7 +60,7 @@ function InwardList({ onOpen, onNew }: { onOpen: (id: number) => void; onNew: ()
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => onOpen(r.id)}>
-                  <td className="px-3 py-2 tabular-nums font-semibold text-brand-700">{r.inward_no}{r.is_reprocess ? <span className="ml-1 rounded bg-purple-100 px-1 text-[10px] text-purple-800">Reprocess</span> : null}</td>
+                  <td className="px-3 py-2 tabular-nums font-semibold text-brand-700">{r.inward_no}{r.is_reprocess ? <span className="ml-1 rounded bg-purple-100 px-1 text-micro text-purple-800">Reprocess</span> : null}</td>
                   <td className="px-3 py-2">{fmtDate(r.inward_date)}</td><td className="px-3 py-2"><FpStatus value={r.status} /></td><td className="px-3 py-2 tabular-nums">{r.fpo_no}</td><td className="px-3 py-2">{r.process_name || r.sub_process}</td>
                   <td className="px-3 py-2">{r.vendor_name}</td><td className="px-3 py-2">{r.jobs || '—'}</td><td className="px-3 py-2 text-right">{r.roll_count}</td>
                   <td className="px-3 py-2 text-right text-emerald-700">{kg(r.good_kg)}</td><td className="px-3 py-2 text-right text-red-700">{kg(r.reject_kg)}</td><td className="px-3 py-2 text-right text-amber-700">{kg(r.loss_kg)}</td>
@@ -228,7 +228,7 @@ function InwardEditor({ editId, fpoId: fpoParam, onBack, onDone, onPickDc }: { e
               </table>
             )}
           </div>
-          {recon && <div className="card mt-3 p-4"><h3 className="mb-2 text-[13px] font-semibold text-slate-800">Reconciliation with DC {d.fpo_no} (after this GRN)</h3><ReconCards t={recon} /></div>}
+          {recon && <div className="card mt-3 p-4"><h3 className="mb-2 text-body font-semibold text-slate-800">Reconciliation with DC {d.fpo_no} (after this GRN)</h3><ReconCards t={recon} /></div>}
           <div className="mt-3 flex justify-end gap-2">
             <Button variant="secondary" onClick={onBack}>Cancel</Button>
             <Button variant="secondary" loading={busy} onClick={() => save('DRAFT')}><Save size={14} className="mr-1" /> Save Draft</Button>
@@ -245,7 +245,7 @@ function GrnJobRows({ g, dyeing, rules, reasons, set, split, remove, accounted }
   const inp = 'input py-0.5 text-xs';
   return (
     <>
-      <tr className="bg-sky-50/70"><td colSpan={dyeing ? 15 : 14} className="px-2 py-1.5 text-[11.5px] font-semibold text-sky-900">Job {g.io_no}{g.rows[0].buyer_po_no ? ` · PO ${g.rows[0].buyer_po_no}` : ''}{g.rows[0].style_code ? ` · Style ${g.rows[0].style_code}` : ''}</td></tr>
+      <tr className="bg-sky-50/70"><td colSpan={dyeing ? 15 : 14} className="px-2 py-1.5 text-small font-semibold text-sky-900">Job {g.io_no}{g.rows[0].buyer_po_no ? ` · PO ${g.rows[0].buyer_po_no}` : ''}{g.rows[0].style_code ? ` · Style ${g.rows[0].style_code}` : ''}</td></tr>
       {g.rows.map((l, i) => {
         const first = i === 0 || g.rows[i - 1].roll_in_id !== l.roll_in_id;
         const over = accounted(l.roll_in_id) > l.open_kg + 0.0005;
@@ -269,7 +269,7 @@ function GrnJobRows({ g, dyeing, rules, reasons, set, split, remove, accounted }
             <td className="px-1 py-1"><input type="number" step="0.01" className={`${inp} w-20 text-right`} value={l.meters} onChange={(e) => set(l.key, { meters: e.target.value === '' ? '' : Number(e.target.value) })} /></td>
             {(() => { const pv = previewRoll({ weight_kg: l.good_kg, target_gsm: l.gsm, dia: l.dia, form: null, actual_meters: l.meters }, rules); return (
               <td className="px-2 py-1 text-right tabular-nums text-sky-800" title={pv.meter_var_pct !== null ? `measured vs calculated ${fmtPct(pv.meter_var_pct)}` : 'KG × 1000 ÷ (GSM × width M)'}>
-                {pv.calc_meters ? pv.calc_meters.toFixed(2) : '—'}{pv.meter_var_pct !== null ? <span className={`ml-1 text-[10px] ${pctCls(pv.meter_var_pct)}`}>{fmtPct(pv.meter_var_pct)}</span> : null}</td>); })()}
+                {pv.calc_meters ? pv.calc_meters.toFixed(2) : '—'}{pv.meter_var_pct !== null ? <span className={`ml-1 text-micro ${pctCls(pv.meter_var_pct)}`}>{fmtPct(pv.meter_var_pct)}</span> : null}</td>); })()}
             <td className="px-1 py-1"><input className={`${inp} w-14`} value={l.gsm} onChange={(e) => set(l.key, { gsm: e.target.value })} /></td>
             <td className="px-1 py-1"><input className={`${inp} w-14`} value={l.dia} onChange={(e) => set(l.key, { dia: e.target.value })} /></td>
             <td className="px-1 py-1"><input className={`${inp} w-16`} value={l.shade_no} onChange={(e) => set(l.key, { shade_no: e.target.value })} /></td>
@@ -304,7 +304,7 @@ function InwardView({ id, onBack, onEdit }: { id: number; onBack: () => void; on
         actions={<><FpStatus value={g.bill_id ? 'BILLED' : 'POSTED'} /><Button variant="secondary" onClick={print}><Printer size={14} className="mr-1" /> Print GRN</Button><Button variant="secondary" onClick={onBack}><ArrowLeft size={14} className="mr-1" /> Back</Button></>} />
       <div className="card mb-3 grid grid-cols-2 gap-3 p-4 text-xs md:grid-cols-6">
         {[['GRN date', fmtDate(g.inward_date)], ['Challan', g.challan_no || '—'], ['Vehicle', g.vehicle_no || '—'], ['Received by', g.received_by || '—'], ['Store', g.warehouse_name], ['Reject store', g.reject_store || '—']].map(([k, v]) => (
-          <div key={k}><div className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-500">{k}</div><div className="font-semibold">{v}</div></div>))}
+          <div key={k}><div className="text-caption font-semibold uppercase tracking-wider text-slate-500">{k}</div><div className="font-semibold">{v}</div></div>))}
       </div>
       <div className="card overflow-x-auto">
         <table className="w-full text-xs">
@@ -318,7 +318,7 @@ function InwardView({ id, onBack, onEdit }: { id: number; onBack: () => void; on
           <tfoot className="bg-slate-100 font-bold"><tr><td colSpan={isDyeing(g.sub_process) ? 8 : 7} className="px-2 py-2 text-right">Total</td><td className="px-2 py-2 text-right">{kg(g.good_kg)}</td><td className="px-2 py-2 text-right">{kg(g.reject_kg)}</td><td className="px-2 py-2 text-right">{kg(g.loss_kg)}</td><td colSpan={3} /></tr></tfoot>
         </table>
       </div>
-      <div className="card mt-3 p-4"><h3 className="mb-2 text-[13px] font-semibold text-slate-800">DC {g.fpo_no} reconciliation</h3><ReconCards t={g.reconciliation.total} /></div>
+      <div className="card mt-3 p-4"><h3 className="mb-2 text-body font-semibold text-slate-800">DC {g.fpo_no} reconciliation</h3><ReconCards t={g.reconciliation.total} /></div>
     </div>
   );
 }
@@ -372,10 +372,10 @@ function DraftView({ g, onBack, onEdit }: { g: any; onBack: () => void; onEdit: 
       {g.status === 'DRAFT' && <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-700">Draft — no stock has moved.{g.requires_qc ? ' This process requires QC: send it for QC before posting.' : ''}</div>}
       <div className="card mb-3 grid grid-cols-2 gap-3 p-4 text-xs md:grid-cols-6">
         {[['GRN date', fmtDate(g.inward_date)], ['Challan', g.challan_no || '—'], ['Vehicle', g.vehicle_no || '—'], ['Received by', g.received_by || '—'], ['Store', g.warehouse_name], ['QC', g.qc_at ? `${fmtDate(g.qc_at)}${g.qc_remarks ? ` · ${g.qc_remarks}` : ''}` : '—']].map(([k, v]) => (
-          <div key={k}><div className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-500">{k}</div><div className="font-semibold">{v}</div></div>))}
+          <div key={k}><div className="text-caption font-semibold uppercase tracking-wider text-slate-500">{k}</div><div className="font-semibold">{v}</div></div>))}
       </div>
       <div className="card overflow-x-auto">
-        <div className="flex items-center gap-2 px-4 pt-3 text-[13px] font-semibold text-slate-800"><ClipboardCheck size={15} /> Received rolls{params.length ? ' & QC' : ''}</div>
+        <div className="flex items-center gap-2 px-4 pt-3 text-body font-semibold text-slate-800"><ClipboardCheck size={15} /> Received rolls{params.length ? ' & QC' : ''}</div>
         <table className="mt-2 w-full text-xs">
           <thead className="bg-slate-50 text-slate-500"><tr>
             {['Job', 'Input roll', 'Output roll', ...(isDyeing(g.sub_process) ? ['Fabric colour', 'Dye colour'] : ['Colour']), 'Good KG', 'Reject KG', 'Loss KG'].map((h) => <th key={h} className={`px-2 py-2 ${/KG/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}
@@ -410,14 +410,14 @@ function DraftView({ g, onBack, onEdit }: { g: any; onBack: () => void; onEdit: 
         </table>
         {qcOpen && (
           <div className="flex flex-wrap items-end justify-end gap-2 border-t border-surface-border p-3">
-            {!params.length && <span className="mr-auto text-[11.5px] text-slate-500">No QC parameters for this process — set them on Process Types & QC; you can still accept / hold / reject each roll.</span>}
+            {!params.length && <span className="mr-auto text-small text-slate-500">No QC parameters for this process — set them on Process Types & QC; you can still accept / hold / reject each roll.</span>}
             <Input label="QC remarks" className="w-72" value={qcRemarks} onChange={(e) => setQcRemarks(e.target.value)} />
             <Button loading={busy === 'qc'} onClick={saveQc}><ClipboardCheck size={14} className="mr-1" /> Save QC result</Button>
           </div>
         )}
       </div>
-      <p className="mt-2 text-[11.5px] text-slate-500">On posting, QC-rejected rolls go to the reject store with the failed parameters as the reason; rolls on hold go to the store on QC hold.</p>
-      <div className="card mt-3 p-4"><h3 className="mb-2 text-[13px] font-semibold text-slate-800">DC {g.fpo_no} reconciliation (posted GRNs)</h3><ReconCards t={g.reconciliation.total} /></div>
+      <p className="mt-2 text-small text-slate-500">On posting, QC-rejected rolls go to the reject store with the failed parameters as the reason; rolls on hold go to the store on QC hold.</p>
+      <div className="card mt-3 p-4"><h3 className="mb-2 text-body font-semibold text-slate-800">DC {g.fpo_no} reconciliation (posted GRNs)</h3><ReconCards t={g.reconciliation.total} /></div>
     </div>
   );
 }

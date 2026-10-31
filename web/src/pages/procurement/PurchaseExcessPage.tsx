@@ -41,7 +41,7 @@ function Defaults({ editable }: { editable: boolean }) {
   };
   return (
     <div className="card p-4">
-      <h3 className="mb-3 text-[13px] font-semibold text-slate-800">Company defaults (every job, unless the job has its own)</h3>
+      <h3 className="mb-3 text-body font-semibold text-slate-800">Company defaults (every job, unless the job has its own)</h3>
       <div className="mb-3 flex flex-wrap items-center gap-4 text-xs">
         <span className="font-semibold text-slate-700">When a PO goes above the limit:</span>
         {[['BLOCK', 'Refuse the PO'], ['WARN', 'Save, but warn'], ['OFF', 'No check']].map(([k, l]) => (
@@ -90,7 +90,7 @@ function JobLimits({ editable }: { editable: boolean }) {
             <option value="">— Select job —</option>
             {(jobs.data ?? []).map((j: any) => <option key={j.id} value={j.id}>{j.job_no}{j.buyer_name ? ` · ${j.buyer_name}` : ''}</option>)}
           </select></label>
-        {d && <span className={`rounded px-2 py-1 text-[11px] font-semibold ${d.control === 'BLOCK' ? 'bg-red-50 text-red-800' : d.control === 'WARN' ? 'bg-amber-50 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>
+        {d && <span className={`rounded px-2 py-1 text-caption font-semibold ${d.control === 'BLOCK' ? 'bg-red-50 text-red-800' : d.control === 'WARN' ? 'bg-amber-50 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>
           <ShieldCheck size={12} className="mr-1 inline" />{d.control === 'BLOCK' ? 'POs above the limit are refused' : d.control === 'WARN' ? 'POs above the limit save with a warning' : 'No check'}</span>}
       </div>
       {soId && st.isLoading && <LoadingBlock />}
@@ -129,13 +129,13 @@ function JobLimits({ editable }: { editable: boolean }) {
                     <td className="px-2 py-1.5 text-right tabular-nums">{fmtDecimal(r.ordered, 3)}</td>
                     <td className={`px-2 py-1.5 text-right tabular-nums ${r.balance < 0 ? 'text-red-700' : 'text-emerald-700'}`}>{fmtDecimal(Math.max(0, r.balance), 3)}</td>
                     <td className="px-2 py-1.5 text-right tabular-nums font-semibold text-red-700">{r.over > 0 ? fmtDecimal(r.over, 3) : ''}</td>
-                    <td className="px-2 py-1.5 tabular-nums text-[11px] text-slate-500">{r.pos ?? '—'}</td>
+                    <td className="px-2 py-1.5 tabular-nums text-caption text-slate-500">{r.pos ?? '—'}</td>
                   </tr>))}
                 {!d.rows.length && <tr><td colSpan={10} className="px-3 py-6 text-center text-slate-400">No BOM materials for this job</td></tr>}
               </tbody>
             </table>
           </div>
-          {d.notes?.length > 0 && <ul className="mt-2 list-disc pl-5 text-[11px] text-slate-500">{d.notes.map((n: string, i: number) => <li key={i}>{n}</li>)}</ul>}
+          {d.notes?.length > 0 && <ul className="mt-2 list-disc pl-5 text-caption text-slate-500">{d.notes.map((n: string, i: number) => <li key={i}>{n}</li>)}</ul>}
         </>
       )}
     </div>

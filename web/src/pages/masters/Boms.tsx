@@ -567,21 +567,21 @@ export function BomsPage() {
       <DataTable
         columns={[
           { key: 'bom_no', header: 'BOM no',
-            render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.bom_no}</span> },
+            render: (r: any) => <span className="tabular-nums text-small font-medium text-brand-700">{r.bom_no}</span> },
           { key: 'version', header: 'Version', render: (r: any) => `v${r.version}` },
           { key: 'style_code', header: 'Style',
             render: (r: any) => <div><p className="font-medium">{r.style_code}</p>
-              <p className="text-[11px] text-slate-500">{r.style_name}</p></div> },
+              <p className="text-caption text-slate-500">{r.style_name}</p></div> },
           { key: 'so_no', header: 'Mapped Order',
             render: (r: any) => r.so_no ? (
               <div>
-                <span className="inline-flex items-center gap-1 tabular-nums text-[11.5px] font-semibold text-brand-800 bg-brand-50 px-2 py-0.5 rounded border border-brand-200">
+                <span className="inline-flex items-center gap-1 tabular-nums text-small font-semibold text-brand-800 bg-brand-50 px-2 py-0.5 rounded border border-brand-200">
                   {r.so_no}
                 </span>
-                {r.buyer_po_no && <p className="text-[10.5px] text-slate-400">PO: {r.buyer_po_no}</p>}
+                {r.buyer_po_no && <p className="text-caption text-slate-400">PO: {r.buyer_po_no}</p>}
               </div>
             ) : (
-              <span className="inline-flex items-center text-[11px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+              <span className="inline-flex items-center text-caption font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                 Master (All Orders)
               </span>
             ) },
@@ -1057,16 +1057,16 @@ export function BomDetailPage() {
                     CAD Auto-Consumption Integration
                   </h4>
                   {latestCad?.has_approved_cad ? (
-                    <span className="bg-emerald-100 text-emerald-800 text-[10.5px] font-bold px-2 py-0.5 rounded border border-emerald-300">
+                    <span className="bg-emerald-100 text-emerald-800 text-caption font-bold px-2 py-0.5 rounded border border-emerald-300">
                       Approved Marker: {latestCad.marker_name || 'CAD-MKR'} ({latestCad.efficiency_pct}% Eff)
                     </span>
                   ) : (
-                    <span className="bg-slate-200 text-slate-700 text-[10.5px] font-medium px-2 py-0.5 rounded">
+                    <span className="bg-slate-200 text-slate-700 text-caption font-medium px-2 py-0.5 rounded">
                       No Approved CAD Requirement
                     </span>
                   )}
                 </div>
-                <p className="text-[11.5px] mt-0.5 text-slate-600">
+                <p className="text-small mt-0.5 text-slate-600">
                   {latestCad?.has_approved_cad
                     ? `Per Garment Fabric: ${fmtDecimal(latestCad.fabric_consumption_per_pc, 4)} kg | Derived Yarn: ${fmtDecimal(latestCad.yarn_req_per_pc, 4)} kg.`
                     : 'Once CAD marker consumption is approved in CAD module, Yarn and Fabric will automatically link to this BOM.'}
@@ -1127,8 +1127,8 @@ export function BomDetailPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-surface-border px-4 py-3 gap-2">
           <div className="flex items-center gap-2">
             <Layers size={15} className="text-brand-600" />
-            <h3 className="text-[13.5px] font-semibold text-slate-800">Components & Tech Pack Materials</h3>
-            <span className="text-[12px] text-slate-500">· consumption per garment</span>
+            <h3 className="text-body-lg font-semibold text-slate-800">Components & Tech Pack Materials</h3>
+            <span className="text-small text-slate-500">· consumption per garment</span>
           </div>
 
           {/* Component Tabs */}
@@ -1239,7 +1239,7 @@ export function BomDetailPage() {
                 return (
                   <tr key={l._key} className={`${tone.row} hover:brightness-[0.98]`}>
                     <td className={`td border-l-4 p-1.5 ${tone.bar}`}>
-                      <select className={`input py-1 text-[11px] font-bold ${tone.badge}`} value={l.material_type} disabled={!editable}
+                      <select className={`input py-1 text-caption font-bold ${tone.badge}`} value={l.material_type} disabled={!editable}
                         onChange={(e) => setLine(l._key, {
                           material_type: e.target.value as BomLine['material_type'],
                           source_type: e.target.value === 'FABRIC' ? 'PRODUCTION' : 'PURCHASE',
@@ -1251,7 +1251,7 @@ export function BomDetailPage() {
                     </td>
                     <td className="td p-1.5">
                       <select
-                        className={`input py-1 text-[11px] font-bold ${
+                        className={`input py-1 text-caption font-bold ${
                           l.source_type === 'PRODUCTION' ? 'bg-indigo-100 text-indigo-850 border-indigo-300' :
                           l.source_type === 'STOCK' ? 'bg-amber-100 text-amber-850 border-amber-300' :
                           l.source_type === 'TRANSFER' ? 'bg-cyan-100 text-cyan-850 border-cyan-300' :
@@ -1286,20 +1286,20 @@ export function BomDetailPage() {
                         <div className="flex items-center gap-1">
                           <input
                             type="text"
-                            className="input py-1 text-[11.5px]"
+                            className="input py-1 text-small"
                             placeholder="e.g. Polybag, Carton, Tape..."
                             value={l.item_description || ''}
                             disabled={!editable}
                             onChange={(e) => setLine(l._key, { item_description: e.target.value })}
                           />
-                          <select className="input py-1 text-[11px] w-28 shrink-0" value={l.trim_id} disabled={!editable}
+                          <select className="input py-1 text-caption w-28 shrink-0" value={l.trim_id} disabled={!editable}
                             onChange={(e) => setLine(l._key, { trim_id: e.target.value ? Number(e.target.value) : '' })}>
                             <option value="">(or Master)</option>
                             {(trims.data ?? []).map((t: any) => <option key={t.id} value={t.id}>{t.label || t.trim_name}</option>)}
                           </select>
                         </div>
                       ) : (
-                        <select className="input py-1 text-[11.5px]" value={matValue} disabled={!editable}
+                        <select className="input py-1 text-small" value={matValue} disabled={!editable}
                           onChange={(e) => {
                             if (isYarnLine) {
                               if (e.target.value.startsWith('y:')) return;
@@ -1335,7 +1335,7 @@ export function BomDetailPage() {
                     <td className="td p-1.5">
                       <input
                         type="text"
-                        className="input py-1 text-[11.5px]"
+                        className="input py-1 text-small"
                         maxLength={255}
                         placeholder={l.material_type === 'FABRIC' || l.material_type === 'YARN' ? 'Spec (optional)' : 'e.g. 12 x 16 in / 100% Cotton'}
                         value={l.specification}
@@ -1346,14 +1346,14 @@ export function BomDetailPage() {
                     {/* Dia (fabric) / Count (yarn) — from the Dia and Yarn Count masters */}
                     <td className="td p-1.5">
                       {l.material_type === 'FABRIC' ? (
-                        <select className="input py-1 text-[11px]" value={l.dia || ''} disabled={!editable} title="Dia (Dia master)"
+                        <select className="input py-1 text-caption" value={l.dia || ''} disabled={!editable} title="Dia (Dia master)"
                           onChange={(e) => setLine(l._key, { dia: e.target.value })}>
                           <option value="">Dia —</option>
                           {l.dia && !(dias.data ?? []).some((d: any) => Number(d.code) === Number(l.dia)) && <option value={l.dia}>{l.dia}"</option>}
                           {(dias.data ?? []).map((d: any) => <option key={d.id} value={String(Number(d.code))}>{Number(d.code)}"</option>)}
                         </select>
                       ) : isYarnLine ? (
-                        <select className="input py-1 text-[11px]" value={yarnCountOf(l)} disabled={!editable} title="Count (Yarn Count master)"
+                        <select className="input py-1 text-caption" value={yarnCountOf(l)} disabled={!editable} title="Count (Yarn Count master)"
                           onChange={(e) => setLine(l._key, { yarn_count_id: e.target.value ? Number(e.target.value) : '', yarn_base_id: yarnBaseOf(l), yarn_id: '' })}>
                           <option value="">Count —</option>
                           {(yarnCounts.data ?? []).map((c: any) => <option key={c.id} value={c.id}>{c.label}</option>)}
@@ -1363,7 +1363,7 @@ export function BomDetailPage() {
                     {/* GSM (fabric) — GSM master */}
                     <td className="td p-1.5">
                       {l.material_type === 'FABRIC' ? (
-                        <select className="input py-1 text-[11px]" value={l.gsm || ''} disabled={!editable} title="GSM (GSM master)"
+                        <select className="input py-1 text-caption" value={l.gsm || ''} disabled={!editable} title="GSM (GSM master)"
                           onChange={(e) => setLine(l._key, { gsm: e.target.value ? Number(e.target.value) : '' })}>
                           <option value="">GSM —</option>
                           {l.gsm && !(gsms.data ?? []).some((g: any) => Number(g.code) === Number(l.gsm)) && <option value={l.gsm}>{l.gsm}</option>}
@@ -1374,7 +1374,7 @@ export function BomDetailPage() {
                     {/* Grey / Dyed (fabric + yarn) */}
                     <td className="td p-1.5">
                       {fabricOrYarn ? (
-                        <select className={`input py-1 text-[11px] font-semibold ${l.dye_type === 'DYED' ? 'text-purple-700' : l.dye_type === 'GREY' ? 'text-slate-600' : ''}`}
+                        <select className={`input py-1 text-caption font-semibold ${l.dye_type === 'DYED' ? 'text-purple-700' : l.dye_type === 'GREY' ? 'text-slate-600' : ''}`}
                           value={l.dye_type || ''} disabled={!editable}
                           onChange={(e) => {
                             const v = e.target.value as BomLine['dye_type'];
@@ -1389,7 +1389,7 @@ export function BomDetailPage() {
                     {/* Colour of the dyed fabric / yarn — only when Dyed */}
                     <td className="td p-1.5">
                       {fabricOrYarn && l.dye_type === 'DYED' ? (
-                        <select className="input py-1 text-[11px]" value={l.material_color_id || ''} disabled={!editable}
+                        <select className="input py-1 text-caption" value={l.material_color_id || ''} disabled={!editable}
                           onChange={(e) => setLine(l._key, { material_color_id: e.target.value ? Number(e.target.value) : '' })}>
                           <option value="">— Colour —</option>
                           {(allColors.data ?? []).map((c: any) => <option key={c.id} value={c.id}>{c.label}</option>)}
@@ -1400,7 +1400,7 @@ export function BomDetailPage() {
                     <td className="td p-1.5">
                       <div className="flex items-center gap-1">
                         <select
-                          className="input py-1 text-[11px]"
+                          className="input py-1 text-caption"
                           value={l.applicability || 'ALL'}
                           disabled={!editable}
                           onChange={(e) => {
@@ -1454,7 +1454,7 @@ export function BomDetailPage() {
                     </td>
                     {/* Colour */}
                     <td className="td p-1.5">
-                      <select className="input py-1 text-[11px]" value={l.color_id} disabled={!editable}
+                      <select className="input py-1 text-caption" value={l.color_id} disabled={!editable}
                         onChange={(e) => setLine(l._key, { color_id: e.target.value ? Number(e.target.value) : '' })}>
                         <option value="">All Colours</option>
                         {scope.colors.map((c: any) => <option key={c.id} value={c.id}>{c.label}</option>)}
@@ -1465,7 +1465,7 @@ export function BomDetailPage() {
                     </td>
                     {/* Size */}
                     <td className="td p-1.5">
-                      <select className="input py-1 text-[11px]" value={l.size_id} disabled={!editable}
+                      <select className="input py-1 text-caption" value={l.size_id} disabled={!editable}
                         onChange={(e) => setLine(l._key, { size_id: e.target.value ? Number(e.target.value) : '' })}>
                         <option value="">All Sizes</option>
                         {scope.sizes.map((s: any) => <option key={s.id} value={s.id}>{s.label}</option>)}
@@ -1476,7 +1476,7 @@ export function BomDetailPage() {
                     </td>
                     {/* Consumption Basis */}
                     <td className="td p-1.5">
-                      <select className="input py-1 text-[11px]" value={l.consumption_basis || 'PER_PIECE'} disabled={!editable}
+                      <select className="input py-1 text-caption" value={l.consumption_basis || 'PER_PIECE'} disabled={!editable}
                         onChange={(e) => setLine(l._key, { consumption_basis: e.target.value })}>
                         <option value="PER_PIECE">Per Piece</option>
                         <option value="PER_DOZEN">Per Dozen</option>
@@ -1487,21 +1487,21 @@ export function BomDetailPage() {
                     </td>
                     {/* Consumption */}
                     <td className="td p-1.5">
-                      <input type="number" step="0.00001" className="input py-1 text-right text-[11.5px] tabular-nums font-semibold"
+                      <input type="number" step="0.00001" className="input py-1 text-right text-small tabular-nums font-semibold"
                         value={l.consumption} disabled={!editable}
                         placeholder="0.00"
                         onChange={(e) => setLine(l._key, { consumption: e.target.value === '' ? '' : Number(e.target.value) })} />
                     </td>
                     {/* Additional Qty */}
                     <td className="td p-1.5">
-                      <input type="number" step="0.01" className="input py-1 text-right text-[11.5px] tabular-nums"
+                      <input type="number" step="0.01" className="input py-1 text-right text-small tabular-nums"
                         value={l.additional_qty} disabled={!editable}
                         placeholder="0"
                         onChange={(e) => setLine(l._key, { additional_qty: e.target.value === '' ? '' : Number(e.target.value) })} />
                     </td>
                     {/* UOM */}
                     <td className="td p-1.5">
-                      <select className="input py-1 text-[11px]" value={l.uom_id} disabled={!editable}
+                      <select className="input py-1 text-caption" value={l.uom_id} disabled={!editable}
                         onChange={(e) => setLine(l._key, { uom_id: e.target.value ? Number(e.target.value) : '' })}>
                         <option value="">—</option>
                         {(uoms.data ?? []).map((u: any) => <option key={u.id} value={u.id}>{u.code}</option>)}
@@ -1509,21 +1509,21 @@ export function BomDetailPage() {
                     </td>
                     {/* Wastage % */}
                     <td className="td p-1.5">
-                      <input type="number" step="0.01" className="input py-1 text-right text-[11px] tabular-nums"
+                      <input type="number" step="0.01" className="input py-1 text-right text-caption tabular-nums"
                         value={l.wastage_pct} disabled={!editable}
                         placeholder="0"
                         onChange={(e) => setLine(l._key, { wastage_pct: e.target.value === '' ? '' : Number(e.target.value) })} />
                     </td>
                     <td className="td text-right tabular-nums text-slate-700" title={rateTitle(l)}>
                       {l.material_type === 'FABRIC' && (l.source_type || 'PRODUCTION') === 'PRODUCTION' ? (
-                        <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold text-indigo-800" title="Knitted from Yarn in-house — Raw material purchase cost is captured in Yarn line">
+                        <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-micro font-bold text-indigo-800" title="Knitted from Yarn in-house — Raw material purchase cost is captured in Yarn line">
                           In-House Knit
                         </span>
                       ) : rate > 0 ? (
                         <>₹{fmtDecimal(lineCost, 3)}{rateInfo(l)?.source && !['STD', 'NONE'].includes(rateInfo(l)!.source)
-                          ? <span className="ml-1 rounded bg-sky-100 px-1 text-[9px] font-bold text-sky-800">{rateInfo(l)!.source === 'QUOTATION' ? 'QTN' : 'PO'}</span> : null}</>
+                          ? <span className="ml-1 rounded bg-sky-100 px-1 text-micro font-bold text-sky-800">{rateInfo(l)!.source === 'QUOTATION' ? 'QTN' : 'PO'}</span> : null}</>
                       ) : (
-                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">no rate</span>
+                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-micro font-semibold text-amber-800">no rate</span>
                       )}
                     </td>
                     {editable && (
@@ -1570,7 +1570,7 @@ export function BomDetailPage() {
                 <Plus size={13} /> Add General
               </button>
             </div>
-            <span className="text-[11px] text-slate-400">
+            <span className="text-caption text-slate-400">
               CAD feeds Fabric/Yarn; Merchandiser enters Trims, Accessories, Packing & General Materials
             </span>
           </div>
@@ -1580,7 +1580,7 @@ export function BomDetailPage() {
       {orderInfo.data ? (
         <BomRequirementTable lines={lines} info={orderInfo.data} materialName={materialName} uomCode={(id: unknown) => String(uomCode(id) ?? "")} />
       ) : (
-        <p className="mb-4 text-[11.5px] text-slate-500">Select the sales order to see the size-wise order qty and the total requirement of every material.</p>
+        <p className="mb-4 text-small text-slate-500">Select the sales order to see the size-wise order qty and the total requirement of every material.</p>
       )}
 
       {/* Cost roll-up */}
@@ -1588,8 +1588,8 @@ export function BomDetailPage() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="label">Material cost per garment</p>
-            <p className="text-[24px] font-semibold tabular-nums text-slate-900">₹{fmtDecimal(costPerGarment, 4)}</p>
-            <p className="mt-0.5 text-[11.5px] text-slate-500">Standard rates · wastage & additional qty included · fixed-qty items spread over {costPcs.toLocaleString('en-IN')} PCS{orderPcs > 0 ? ' (job plan cut)' : (orderInfo.data as any)?.so_order_qty ? ' (job order qty)' : ' (explode qty)'} · size / colour lines by their share</p>
+            <p className="text-page font-semibold tabular-nums text-slate-900">₹{fmtDecimal(costPerGarment, 4)}</p>
+            <p className="mt-0.5 text-small text-slate-500">Standard rates · wastage & additional qty included · fixed-qty items spread over {costPcs.toLocaleString('en-IN')} PCS{orderPcs > 0 ? ' (job plan cut)' : (orderInfo.data as any)?.so_order_qty ? ' (job order qty)' : ' (explode qty)'} · size / colour lines by their share</p>
           </div>
           <div className="flex items-end gap-3">
             <div>
@@ -1602,7 +1602,7 @@ export function BomDetailPage() {
             </div>
             <div className="text-right">
               <p className="label">Total material cost</p>
-              <p className="text-[24px] font-semibold tabular-nums text-brand-700">
+              <p className="text-page font-semibold tabular-nums text-brand-700">
                 ₹{fmtDecimal(explodeTotal, 2)}
               </p>
             </div>
@@ -1657,7 +1657,7 @@ export function BomDetailPage() {
               <div className="text-xs">
                 <div className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
                   🧶 Yarn Purchase + Knitting (In-House &amp; Job Work DC)
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                  <span className="text-micro font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
                     Standard / Recommended (95%+)
                   </span>
                 </div>

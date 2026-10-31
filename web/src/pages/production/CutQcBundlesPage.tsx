@@ -400,12 +400,12 @@ export function CutQcBundlesPage() {
                   <div className="flex items-center gap-1.5">
                     <span className="tabular-nums text-xs font-bold text-brand-700">{r.bundle_no}</span>
                     {r.bundle_seq ? (
-                      <span className="rounded bg-slate-100 text-slate-700 px-1.5 py-0.5 text-[10px] tabular-nums font-bold">
+                      <span className="rounded bg-slate-100 text-slate-700 px-1.5 py-0.5 text-micro tabular-nums font-bold">
                         #{r.bundle_seq} / {r.total_bundles || '?'}
                       </span>
                     ) : null}
                   </div>
-                  {r.barcode && <p className="tabular-nums text-[10px] text-slate-400">{r.barcode}</p>}
+                  {r.barcode && <p className="tabular-nums text-micro text-slate-400">{r.barcode}</p>}
                 </div>
               ) },
               { key: 'part_name', header: 'Part', sortable: true, render: (r: any) => {
@@ -424,14 +424,14 @@ export function CutQcBundlesPage() {
               { key: 'color_name', header: 'Colour' },
               { key: 'size_code', header: 'Size' },
               { key: 'lay_no', header: 'Cut Order / Lay', render: (r: any) => (
-                <div className="text-[11px]"><p className="tabular-nums">{r.plan_no || r.cut_no || '—'}</p>
+                <div className="text-caption"><p className="tabular-nums">{r.plan_no || r.cut_no || '—'}</p>
                   <p className="text-slate-400">{r.lay_no || ''}{r.marker_no ? ` · ${r.marker_no} v${r.marker_version}` : ''}</p></div>) },
               { key: 'qty', header: 'Qty', align: 'right' as const, render: (r: any) => <Qty v={r.qty} uom="PCS" className="font-semibold text-blue-700" /> },
               { key: 'balance_qty', header: 'Balance', align: 'right' as const, render: (r: any) => <Qty v={r.balance_qty ?? r.qty} uom="PCS" /> },
               { key: 'allocated_kg', header: 'Allocated KG*', align: 'right' as const, render: (r: any) => (
                 <span title={`${ALLOCATED_KG_LABEL}${r.allocation_source ? ' — ' + r.allocation_source : ''}`}>
                   <Qty v={r.allocated_kg} uom="KG" dp={3} />
-                  {r.allocation_method && <span className="block text-[9px] text-slate-400">{r.allocation_method === 'LAY_AVERAGE' ? 'lay average' : 'size consumption'}</span>}
+                  {r.allocation_method && <span className="block text-micro text-slate-400">{r.allocation_method === 'LAY_AVERAGE' ? 'lay average' : 'size consumption'}</span>}
                 </span>) },
               { key: 'status', header: 'Stage', render: (r: any) => {
                 const colors: Record<string, string> = {
@@ -563,7 +563,7 @@ export function CutQcBundlesPage() {
           icon={<Boxes size={16} />}
           footerStart={genMode === 'LEGACY'
             ? <>Will create <b>{Math.ceil(bundleForm.total_qty / (bundleForm.bundle_size || 1))}</b> bundles for <b>Part: {bundleForm.part_name === 'CUSTOM' ? bundleForm.custom_part || 'CUSTOM' : bundleForm.part_name || 'TOP'}</b>
-                {' '}<span className="rounded bg-blue-100 px-2 py-0.5 tabular-nums text-[11px] font-bold text-blue-800">B01 to B{String(Math.ceil(bundleForm.total_qty / (bundleForm.bundle_size || 1))).padStart(2, '0')}</span></>
+                {' '}<span className="rounded bg-blue-100 px-2 py-0.5 tabular-nums text-caption font-bold text-blue-800">B01 to B{String(Math.ceil(bundleForm.total_qty / (bundleForm.bundle_size || 1))).padStart(2, '0')}</span></>
             : preview ? <><b>{preview.bundle_count}</b> bundles · <b>{fmtNumber(preview.qty)}</b> PCS</> : null}
           footer={<>
             <Button variant="secondary" onClick={() => setShowBundleModal(false)}>Cancel</Button>
@@ -615,7 +615,7 @@ export function CutQcBundlesPage() {
                         <MetricTile label="KG / PC" value={preview.kg_per_pc != null ? fmtNumber(preview.kg_per_pc, 4) : '—'} uom="KG" />
                         <MetricTile label={`Per ${preview.bundle_size}-PC bundle`} value={preview.allocated_kg_per_full_bundle != null ? fmtNumber(preview.allocated_kg_per_full_bundle, 3) : '—'} uom="KG" tone="indigo" />
                       </div>
-                      <p className="text-[11px] text-blue-900"><b>{ALLOCATED_KG_LABEL}.</b> Basis: {preview.allocation_method || 'none'} — {preview.allocation_source || 'no consumption source available'}.</p>
+                      <p className="text-caption text-blue-900"><b>{ALLOCATED_KG_LABEL}.</b> Basis: {preview.allocation_method || 'none'} — {preview.allocation_source || 'no consumption source available'}.</p>
                     </div>
                   )}
                 </div>
@@ -680,7 +680,7 @@ export function CutQcBundlesPage() {
                   value={bundleForm.components}
                   onChange={e => setBundleForm({ ...bundleForm, components: e.target.value })}
                 />
-                <p className="text-[11px] text-slate-400 mt-1">Each bundle will create piece tickets for every listed component.</p>
+                <p className="text-caption text-slate-400 mt-1">Each bundle will create piece tickets for every listed component.</p>
                 </div>
               </FormSection>
             </div>

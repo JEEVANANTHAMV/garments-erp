@@ -12,7 +12,7 @@ import { type EwbMeta, TRANSPORT_MODES, VEHICLE_TYPES, nowLocalInput, localToIso
 export function ErrorBox({ err, id }: { err: { message: string; problems: string[] } | null; id?: string }) {
   if (!err) return null;
   return (
-    <div id={id} className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-[12.5px] text-red-700" role="alert">
+    <div id={id} className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-body text-red-700" role="alert">
       <div className="font-semibold">{err.message}</div>
       {!!err.problems.length && <ul className="mt-1 list-disc space-y-0.5 pl-5">{err.problems.map((p, i) => <li key={i}>{p}</li>)}</ul>}
     </div>
@@ -52,7 +52,7 @@ export function SourcePickerModal({ open, onClose, meta }: { open: boolean; onCl
       <div className="mb-3 flex flex-wrap gap-2" id="ewb-src-types">
         {(meta?.source_types ?? []).map((t) => (
           <button key={t.value} type="button" data-src-type={t.value} onClick={() => { setType(t.value); setQ(''); }}
-            className={clsx('rounded-lg border px-3 py-1.5 text-[12.5px] font-medium transition-colors',
+            className={clsx('rounded-lg border px-3 py-1.5 text-body font-medium transition-colors',
               type === t.value ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-surface-border text-slate-600 hover:bg-slate-50')}>
             {t.label}
           </button>
@@ -63,7 +63,7 @@ export function SourcePickerModal({ open, onClose, meta }: { open: boolean; onCl
           <SearchInput value={q} onChange={setQ} placeholder="Search document no / party" className="mb-3" />
           {docs.isLoading ? <LoadingBlock rows={4} /> : !docs.data?.length ? <EmptyState title="No documents" message="Nothing of this kind matches." /> : (
             <div className="max-h-[420px] overflow-y-auto rounded-lg border border-surface-border">
-              <table className="w-full text-[12.5px]" id="ewb-src-list">
+              <table className="w-full text-body" id="ewb-src-list">
                 <thead><tr><th className="th">Document</th><th className="th">Date</th><th className="th">Party</th></tr></thead>
                 <tbody>{docs.data.map((d) => (
                   <tr key={d.id} data-src-id={d.id} className="cursor-pointer hover:bg-brand-50/50"
@@ -97,7 +97,7 @@ export function GenerateModal({ open, onClose, meta, run, total }: { open: boole
       footer={<><Button variant="secondary" onClick={onClose} disabled={a.busy}>Cancel</Button>
         <Button id="ewb-confirm-generate" loading={a.busy} onClick={submit}>{meta.online ? 'Generate' : 'Record e-way bill'}</Button></>}>
       <ErrorBox err={a.err} id="ewb-gen-error" />
-      {meta.online ? <p className="text-[13px] text-slate-600">The e-way bill is generated on the portal and cannot be edited afterwards — only the vehicle updated, the validity extended or (within 24 h) cancelled.</p> : (
+      {meta.online ? <p className="text-body text-slate-600">The e-way bill is generated on the portal and cannot be edited afterwards — only the vehicle updated, the validity extended or (within 24 h) cancelled.</p> : (
         <div className="grid gap-3">
           <Input label="E-way bill no" required id="ewb-no-input" inputMode="numeric" maxLength={12} placeholder="12 digits" value={f.ewb_no}
             onChange={(e) => setF({ ...f, ewb_no: e.target.value.replace(/\D/g, '').slice(0, 12) })} />

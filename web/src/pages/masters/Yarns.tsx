@@ -211,7 +211,7 @@ export function YarnsPage() {
               header: 'Base Code',
               sortable: true,
               render: (r: any) => (
-                <span className="tabular-nums text-[12px] font-semibold text-brand-700">
+                <span className="tabular-nums text-small font-semibold text-brand-700">
                   {r.base_code}
                 </span>
               ),
@@ -224,7 +224,7 @@ export function YarnsPage() {
                 <div>
                   <span className="font-medium text-slate-800">{r.base_name}</span>
                   {r.certification && r.certification !== 'NONE' && (
-                    <span className="ml-2 inline-block rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.2 text-[10px] font-bold text-emerald-700">
+                    <span className="ml-2 inline-block rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.2 text-micro font-bold text-emerald-700">
                       {r.certification}
                     </span>
                   )}
@@ -300,7 +300,7 @@ export function YarnsPage() {
               header: 'Item SKU Code',
               sortable: true,
               render: (r: any) => (
-                <span className="tabular-nums text-[12px] font-semibold text-brand-700">
+                <span className="tabular-nums text-small font-semibold text-brand-700">
                   {r.yarn_code}
                 </span>
               ),
@@ -313,7 +313,7 @@ export function YarnsPage() {
                 <div>
                   <span className="font-medium text-slate-800">{r.yarn_name}</span>
                   {r.base_name && (
-                    <span className="block text-[11px] text-slate-400 font-normal">
+                    <span className="block text-caption text-slate-400 font-normal">
                       Base: {r.base_name} ({r.base_code})
                     </span>
                   )}
@@ -626,7 +626,7 @@ export function YarnDetailPage() {
               </span>
             )}
             {head.is_active === 0 && (
-              <span className="rounded-full bg-amber-100 text-amber-800 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider">
+              <span className="rounded-full bg-amber-100 text-amber-800 px-2.5 py-0.5 text-caption font-bold uppercase tracking-wider">
                 Draft
               </span>
             )}
@@ -662,11 +662,11 @@ export function YarnDetailPage() {
         <div className="flex items-center justify-between border-b border-surface-border pb-2.5">
           <div className="flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full bg-brand-600" />
-            <h3 className="text-[13px] font-bold uppercase tracking-wider text-slate-800">
+            <h3 className="text-body font-bold uppercase tracking-wider text-slate-800">
               1. Yarn Base Specifications (Parent Identity)
             </h3>
           </div>
-          <span className="text-[11px] text-slate-400 font-medium">
+          <span className="text-caption text-slate-400 font-medium">
             Single master entry for this yarn category &amp; fibre identity
           </span>
         </div>
@@ -689,7 +689,7 @@ export function YarnDetailPage() {
               disabled={!editable}
               hint={countInName ? 'Leave the count out — 30s / 40s is chosen on the PO, so the item and its count always match' : 'Composition only; the count is chosen on the PO / program'}
             />
-            {countInName && <p className="mt-1 text-[11px] font-semibold text-amber-700" id="yarn-count-warning">This name has a count in it.</p>}
+            {countInName && <p className="mt-1 text-caption font-semibold text-amber-700" id="yarn-count-warning">This name has a count in it.</p>}
           </div>
           <Select
             label="Material Category"
@@ -770,7 +770,7 @@ export function YarnDetailPage() {
                 <Sparkles size={14} className="text-brand-600" />
                 Standard Auto-Generated Description (ERP Formula)
               </span>
-              <span className="text-[10px] text-brand-600 font-medium bg-brand-100 px-2 py-0.5 rounded-full">
+              <span className="text-micro text-brand-600 font-medium bg-brand-100 px-2 py-0.5 rounded-full">
                 Formula: Composition + Cert + Yarn Type
               </span>
             </div>
@@ -789,7 +789,7 @@ export function YarnDetailPage() {
             <div className="flex items-center justify-between border-b border-surface-border bg-slate-50/70 px-4 py-2.5">
               <div className="flex items-center gap-2">
                 <Layers size={15} className="text-brand-600" />
-                <h3 className="text-[13px] font-bold uppercase tracking-wider text-slate-800">
+                <h3 className="text-body font-bold uppercase tracking-wider text-slate-800">
                   2. Fibre Composition Breakdown
                 </h3>
               </div>
@@ -803,7 +803,7 @@ export function YarnDetailPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-surface-border bg-slate-100/60 text-[11px] font-bold uppercase text-slate-600">
+                  <tr className="border-b border-surface-border bg-slate-100/60 text-caption font-bold uppercase text-slate-600">
                     <th className="py-2 px-2.5 w-8">#</th>
                     <th className="py-2 px-2 min-w-[200px]">Fibre Type</th>
                     <th className="py-2 px-2 w-28 text-right">Share (%)</th>
@@ -857,7 +857,7 @@ export function YarnDetailPage() {
                     <td colSpan={2} className="py-2.5 px-3 text-slate-800 uppercase tracking-wider">
                       Total Composition
                     </td>
-                    <td className={`py-2.5 px-2 text-right tabular-nums font-black text-sm ${isValid100 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                    <td className={`py-2.5 px-2 text-right tabular-nums font-bold text-sm ${isValid100 ? 'text-emerald-700' : 'text-rose-600'}`}>
                       {totalPercentage.toFixed(1)}%
                     </td>
                     {editable && <td />}
@@ -876,11 +876,11 @@ export function YarnDetailPage() {
                 <PieIcon size={14} className="text-brand-600" /> Live Composition Visualizer
               </h3>
               {isValid100 ? (
-                <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-700">
+                <span className="flex items-center gap-1 text-caption font-bold text-emerald-700">
                   <CheckCircle2 size={13} /> 100% Balanced
                 </span>
               ) : (
-                <span className="text-[11px] font-bold text-rose-600">
+                <span className="text-caption font-bold text-rose-600">
                   {totalPercentage > 100 ? `Over by ${(totalPercentage - 100).toFixed(1)}%` : `Under by ${(100 - totalPercentage).toFixed(1)}%`}
                 </span>
               )}
@@ -918,8 +918,8 @@ export function YarnDetailPage() {
                   })()}
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="text-2xl font-black text-slate-800 tabular-nums">{totalPercentage.toFixed(0)}%</span>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total</span>
+                  <span className="text-2xl font-bold text-slate-800 tabular-nums">{totalPercentage.toFixed(0)}%</span>
+                  <span className="text-micro font-bold uppercase tracking-wider text-slate-400">Total</span>
                 </div>
               </div>
 

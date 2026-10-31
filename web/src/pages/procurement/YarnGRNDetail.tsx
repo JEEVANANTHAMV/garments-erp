@@ -521,29 +521,29 @@ export default function YarnGRNDetailPage() {
       {/* KPI Summary Strip (6 cards: Qty, Packs, Taxable, GST/IGST, Net) */}
       <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
         <div className="p-3 bg-amber-50/70 rounded-xl border border-amber-200">
-          <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Total Weighed</div>
+          <div className="text-caption font-semibold text-amber-700 uppercase tracking-wider">Total Weighed</div>
           <div className="text-lg font-bold text-amber-900 mt-0.5 tabular-nums">{fmtDecimal(totals.totalKg)} KG</div>
         </div>
         <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-200">
-          <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">Accepted Net Qty</div>
+          <div className="text-caption font-semibold text-emerald-700 uppercase tracking-wider">Accepted Net Qty</div>
           <div className="text-lg font-bold text-emerald-900 mt-0.5 tabular-nums">{fmtDecimal(totals.acceptedKg)} KG</div>
         </div>
         <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-200">
-          <div className="text-[11px] font-semibold text-indigo-700 uppercase tracking-wider">Bags / Packs</div>
+          <div className="text-caption font-semibold text-indigo-700 uppercase tracking-wider">Bags / Packs</div>
           <div className="text-lg font-bold text-indigo-900 mt-0.5 tabular-nums">{totals.totalPacks} Bags</div>
         </div>
         <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-          <div className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider">Taxable Value</div>
+          <div className="text-caption font-semibold text-slate-600 uppercase tracking-wider">Taxable Value</div>
           <div className="text-lg font-bold text-slate-900 mt-0.5 tabular-nums">₹{fmtDecimal(totals.taxableAmount, 2)}</div>
         </div>
         <div className="p-3 bg-purple-50/70 rounded-xl border border-purple-200">
-          <div className="text-[11px] font-semibold text-purple-700 uppercase tracking-wider">
+          <div className="text-caption font-semibold text-purple-700 uppercase tracking-wider">
             {header.is_interstate ? 'IGST Amount' : 'CGST + SGST'}
           </div>
           <div className="text-lg font-bold text-purple-900 mt-0.5 tabular-nums">₹{fmtDecimal(totals.totalTax, 2)}</div>
         </div>
         <div className="p-3 bg-amber-100/60 rounded-xl border border-amber-300">
-          <div className="text-[11px] font-semibold text-amber-900 uppercase tracking-wider">Net Payable</div>
+          <div className="text-caption font-semibold text-amber-900 uppercase tracking-wider">Net Payable</div>
           <div className="text-lg font-bold text-amber-950 mt-0.5 tabular-nums">₹{fmtDecimal(totals.grandTotal, 2)}</div>
         </div>
       </div>
@@ -566,7 +566,7 @@ export default function YarnGRNDetailPage() {
               className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
             />
             <span className="font-semibold text-slate-700">Inter-State Supply (IGST Applicable)</span>
-            <span className="text-[10px] text-slate-400 font-normal">
+            <span className="text-micro text-slate-400 font-normal">
               {header.is_interstate ? 'Single IGST rate applied' : 'Split CGST + SGST applied'}
             </span>
           </label>
@@ -591,11 +591,11 @@ export default function YarnGRNDetailPage() {
           {isNew ? (
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-[11px] font-medium text-slate-600">
+                <label className="text-caption font-medium text-slate-600">
                   Link Yarn POs ({selectedPoIds.length} selected)
                 </label>
                 {selectedPoIds.length > 0 && (
-                  <span className="text-[10px] text-amber-700 font-semibold">Multi-PO active</span>
+                  <span className="text-micro text-amber-700 font-semibold">Multi-PO active</span>
                 )}
               </div>
               <select
@@ -625,7 +625,7 @@ export default function YarnGRNDetailPage() {
                     return (
                       <span key={pId} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-300">
                         <span>📋 {label}</span>
-                        {lineCnt > 0 && <span className="text-[10px] bg-amber-200 text-amber-900 px-1 rounded tabular-nums">{lineCnt} items</span>}
+                        {lineCnt > 0 && <span className="text-micro bg-amber-200 text-amber-900 px-1 rounded tabular-nums">{lineCnt} items</span>}
                         <button
                           type="button"
                           onClick={() => handleRemovePO(pId)}
@@ -642,7 +642,7 @@ export default function YarnGRNDetailPage() {
             </div>
           ) : (
             <div>
-              <label className="block text-[11px] font-medium text-slate-600 mb-1">
+              <label className="block text-caption font-medium text-slate-600 mb-1">
                 Linked Purchase Orders ({selectedPoIds.length || (header.po_id ? 1 : 0)})
               </label>
               <div className="flex flex-wrap items-center gap-1.5">
@@ -660,7 +660,7 @@ export default function YarnGRNDetailPage() {
 
           {isNew ? (
             <div>
-              <label className="block text-[11px] font-medium text-slate-600 mb-1">
+              <label className="block text-caption font-medium text-slate-600 mb-1">
                 Map Gate Entry (Auto-fills details)
               </label>
               <select
@@ -738,7 +738,7 @@ export default function YarnGRNDetailPage() {
           />
 
           <div>
-            <label className="block text-[11px] font-medium text-slate-600 mb-1">
+            <label className="block text-caption font-medium text-slate-600 mb-1">
               Overall QC Status
             </label>
             <select
@@ -773,7 +773,7 @@ export default function YarnGRNDetailPage() {
               <Layers size={14} className="text-amber-600" />
               <span>Yarn Inward Items & Amount Details ({lines.length})</span>
             </h2>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-caption text-slate-400">
               Multiple jobs supported: assign each line item to a Sales Order or Stock, with live tax and amount details
             </p>
           </div>
@@ -822,16 +822,16 @@ export default function YarnGRNDetailPage() {
                 return (
                   <tr key={l._key || idx} className="hover:bg-slate-50/70 transition">
                     {/* # S.No */}
-                    <td className="py-2.5 px-2 text-center text-slate-400 tabular-nums text-[11px]">{idx + 1}</td>
+                    <td className="py-2.5 px-2 text-center text-slate-400 tabular-nums text-caption">{idx + 1}</td>
 
                     {/* PO Ref */}
                     <td className="py-2.5 px-2">
                       {l.po_no || l.po_id ? (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] tabular-nums font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-caption tabular-nums font-semibold bg-amber-50 text-amber-800 border border-amber-200">
                           {l.po_no || `PO #${l.po_id}`}
                         </span>
                       ) : (
-                        <span className="text-slate-400 text-[11px]">—</span>
+                        <span className="text-slate-400 text-caption">—</span>
                       )}
                     </td>
 
@@ -925,7 +925,7 @@ export default function YarnGRNDetailPage() {
                           <option value="Dyed Yarn">Dyed Yarn</option>
                         </select>
                       ) : (
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                        <span className={`text-micro font-bold px-1.5 py-0.5 rounded ${
                           l.yarn_type === 'Dyed Yarn'
                             ? 'bg-purple-100 text-purple-700'
                             : 'bg-amber-100 text-amber-800'
@@ -968,9 +968,9 @@ export default function YarnGRNDetailPage() {
                     <td className="py-2.5 px-2 text-right text-slate-500 whitespace-nowrap">
                       {l.ordered_qty != null ? (
                         <div className="leading-tight">
-                          <div>{fmtDecimal(l.ordered_qty)} <span className="text-[10px] text-slate-400">ordered</span></div>
-                          {Number(l.prev_received) > 0 && <div>{fmtDecimal(l.prev_received)} <span className="text-[10px]">recd earlier</span></div>}
-                          <div className="font-semibold text-amber-700">{fmtDecimal(l.po_qty)} <span className="text-[10px] font-normal">pending</span></div>
+                          <div>{fmtDecimal(l.ordered_qty)} <span className="text-micro text-slate-400">ordered</span></div>
+                          {Number(l.prev_received) > 0 && <div>{fmtDecimal(l.prev_received)} <span className="text-micro">recd earlier</span></div>}
+                          <div className="font-semibold text-amber-700">{fmtDecimal(l.po_qty)} <span className="text-micro font-normal">pending</span></div>
                           {isNew && l.po_line_id && <div><LineReceiptSelect id={`ygrn-line-${idx}-receipt`} value={l.receipt_type} onChange={(v) => setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, receipt_type: v } : x)))} /></div>}
                           {isNew && <LineReceiptChip ordered={l.ordered_qty} prev={l.prev_received} accepted={Number(l.accepted_qty) || 0} type={l.receipt_type ?? 'PARTIAL'} />}
                           {!isNew && <LineReceiptBadge value={l.receipt_type} />}
@@ -1094,7 +1094,7 @@ export default function YarnGRNDetailPage() {
                         <select
                           value={l.qc_status}
                           onChange={(e) => updateLine(idx, { qc_status: e.target.value })}
-                          className="text-[11px] rounded border border-slate-300 py-0.5 px-1 font-semibold"
+                          className="text-caption rounded border border-slate-300 py-0.5 px-1 font-semibold"
                         >
                           <option value="ACCEPTED">ACCEPTED</option>
                           <option value="CONDITIONAL">CONDITIONAL</option>
@@ -1133,7 +1133,7 @@ export default function YarnGRNDetailPage() {
                   {header.is_interstate ? 'IGST:' : 'CGST+SGST:'}
                 </td>
                 <td className="py-3 px-2 text-right tabular-nums text-purple-700">₹{fmtDecimal(totals.totalTax, 2)}</td>
-                <td className="py-3 px-2 text-right tabular-nums text-sm font-black text-slate-900">
+                <td className="py-3 px-2 text-right tabular-nums text-sm font-bold text-slate-900">
                   ₹{fmtDecimal(totals.grandTotal, 2)}
                 </td>
                 <td colSpan={2}></td>

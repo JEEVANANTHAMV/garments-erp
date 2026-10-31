@@ -129,14 +129,14 @@ export function YarnProcessDcPanel({ process, yarns, parties, warehouses, onChan
   return (
     <div className="rounded-lg border border-slate-200">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-3 py-2">
-        <p className="text-[12px] font-semibold text-slate-700">
+        <p className="text-small font-semibold text-slate-700">
           Outward DC / Inward <span className="font-normal text-slate-500">— pending at processor: <b className="text-amber-700">{fmtDecimal(pendingTotal, 3)} KG</b></span>
         </p>
         <Button size="sm" onClick={openOutward} disabled={['DRAFT', 'CANCELLED', 'COMPLETED'].includes(process.status)}>
           <Truck size={13} className="mr-1" /> Outward DC
         </Button>
       </div>
-      <table className="w-full text-[11px]">
+      <table className="w-full text-caption">
         <thead className="text-slate-500">
           <tr>{['DC No', 'Date', 'Supplier / Vendor', 'Jobs', 'Cones', 'Sent KG', 'Received KG', 'Output KG', 'Pending KG', 'Status', ''].map((h) => <th key={h} className="px-2 py-1.5 text-left">{h}</th>)}</tr>
         </thead>
@@ -175,14 +175,14 @@ export function YarnProcessDcPanel({ process, yarns, parties, warehouses, onChan
           <Input label="Vehicle no" value={out.vehicle_no} onChange={(e) => setOut({ ...out, vehicle_no: e.target.value })} />
         </FormSection>
         <div className="mt-5 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-1.5">
-          <h3 className="mr-auto text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Jobs & yarn</h3>
+          <h3 className="mr-auto text-small font-semibold uppercase tracking-wider text-slate-500">Jobs & yarn</h3>
           <Select label="Add another job (same process) to this DC" className="w-80" value={addId} placeholder="— Released job —" onChange={(e) => setAddId(e.target.value)}
             options={others.filter((p) => !jobs.some((j) => j.process_id === p.id)).map((p) => ({ value: p.id, label: `${p.process_no} · ${p.io_no ?? 'stock'}` }))} />
           <Button size="sm" disabled={!addId} onClick={addJob}><Plus size={12} className="mr-1" /> Add job</Button>
         </div>
         {jobs.map((j, ji) => (
           <div key={j.process_id} className="mt-3 rounded border border-slate-200">
-            <div className="flex items-center justify-between bg-sky-50 px-2 py-1.5 text-[12px] font-semibold text-sky-900">
+            <div className="flex items-center justify-between bg-sky-50 px-2 py-1.5 text-small font-semibold text-sky-900">
               <span>Job {j.io_no ?? 'stock'} · {j.process_no}</span>
               {ji > 0 && <button className="text-slate-500 hover:text-red-600" onClick={() => setJobs(jobs.filter((_, a) => a !== ji))}><Trash2 size={13} /></button>}
             </div>

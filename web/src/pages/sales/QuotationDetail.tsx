@@ -493,7 +493,7 @@ export default function QuotationDetailPage() {
 
   /* ── helpers ── */
   const hSet = (k: string, v: any) => setHead(h => ({ ...h, [k]: v }));
-  const err = (k: string) => errors[k] ? <p className="text-[11px] text-red-500 mt-0.5">{errors[k]}</p> : null;
+  const err = (k: string) => errors[k] ? <p className="text-caption text-red-500 mt-0.5">{errors[k]}</p> : null;
 
   /* ── line helpers ── */
   const addLine = () => setLines(ls => [...ls, newLine(ls.length)]);
@@ -891,10 +891,10 @@ export default function QuotationDetailPage() {
       {/* ── Quotation Type Switcher Banner ── */}
       <div className="card mb-4 p-3 bg-white">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+          <span className="text-caption font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
             <Layers size={13} className="text-brand-600" /> Select Quotation Classification
           </span>
-          <span className="text-[11px] text-slate-400 font-medium">Fields and calculations adapt automatically</span>
+          <span className="text-caption text-slate-400 font-medium">Fields and calculations adapt automatically</span>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
@@ -942,7 +942,7 @@ export default function QuotationDetailPage() {
                     {active && <span className="h-1 w-1 rounded-full bg-white" />}
                   </span>
                 </div>
-                <p className="text-[10.5px] text-slate-500 leading-snug line-clamp-2">{t.desc}</p>
+                <p className="text-caption text-slate-500 leading-snug line-clamp-2">{t.desc}</p>
               </button>
             );
           })}
@@ -990,7 +990,7 @@ export default function QuotationDetailPage() {
               </div>
 
               {head.quotation_category === 'PROCESS' && (
-                <span className="text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-300 px-2.5 py-0.5 rounded-full">
+                <span className="text-caption font-medium text-amber-800 bg-amber-50 border border-amber-300 px-2.5 py-0.5 rounded-full">
                   Rates represent Job Work / Processing charges ({currSymbol}/Kg or {currSymbol}/Unit)
                 </span>
               )}
@@ -1022,7 +1022,7 @@ export default function QuotationDetailPage() {
                     );
                   })}
                   <div className="ml-auto flex items-center gap-1">
-                    <span className="text-[11px] text-amber-800 font-medium">Other Process:</span>
+                    <span className="text-caption text-amber-800 font-medium">Other Process:</span>
                     <input
                       type="text"
                       placeholder="e.g. Specialty Finish"
@@ -1044,7 +1044,7 @@ export default function QuotationDetailPage() {
               <Sparkles size={16} className="text-brand-600 shrink-0" />
               <div>
                 <p className="text-xs font-bold text-slate-800">General Quotation Mode</p>
-                <p className="text-[11px] text-slate-500">
+                <p className="text-caption text-slate-500">
                   {head.is_io_wise
                     ? '🎯 I/O Wise Mode: Sample materials or testing cones/buttons charged to a specific Internal Job Order'
                     : '🏢 Normal Mode: General administration, consumables & stock materials'}
@@ -1087,11 +1087,11 @@ export default function QuotationDetailPage() {
                 <span className={`h-2.5 w-2.5 rounded-full ${
                   isBuyer ? 'bg-emerald-500' : isImport ? 'bg-violet-500' : isFabric ? 'bg-sky-500' : isYarn ? 'bg-amber-500' : isTrims ? 'bg-rose-500' : 'bg-slate-500'
                 }`} />
-                <h4 className="text-[12px] font-bold uppercase tracking-wider text-slate-700">
+                <h4 className="text-small font-bold uppercase tracking-wider text-slate-700">
                   {typeLabel} Header
                 </h4>
               </div>
-              <span className="text-[11px] font-semibold text-slate-500">
+              <span className="text-caption font-semibold text-slate-500">
                 Currency: <strong className="text-slate-800">{currCode} ({currSymbol})</strong>
               </span>
             </div>
@@ -1100,7 +1100,7 @@ export default function QuotationDetailPage() {
               {/* Supplier or Customer */}
               {isBuyer ? (
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                  <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
                     Customer / Buyer *
                   </label>
                   <select
@@ -1117,7 +1117,7 @@ export default function QuotationDetailPage() {
                 </div>
               ) : (
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                  <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
                     Supplier / Vendor *
                   </label>
                   <select
@@ -1136,13 +1136,13 @@ export default function QuotationDetailPage() {
 
               {/* Currency */}
               <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
                   Currency *
                 </label>
                 {isDomesticLike ? (
                   <div className="flex items-center justify-between rounded-lg border border-surface-border bg-slate-50 px-3 py-1.5 text-xs text-slate-700 font-medium">
                     <span>INR — Indian Rupee (₹)</span>
-                    <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-sky-800">INR</span>
+                    <span className="rounded bg-sky-100 px-1.5 py-0.5 text-micro font-bold text-sky-800">INR</span>
                   </div>
                 ) : (
                   <select
@@ -1163,7 +1163,7 @@ export default function QuotationDetailPage() {
 
               {/* Quotation Date */}
               <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
                   Quotation Date *
                 </label>
                 <input
@@ -1177,7 +1177,7 @@ export default function QuotationDetailPage() {
 
               {/* Valid Till */}
               <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
                   Valid Till
                 </label>
                 <input
@@ -1190,7 +1190,7 @@ export default function QuotationDetailPage() {
 
               {/* Payment Terms */}
               <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
                   Payment Terms
                 </label>
                 <input
@@ -1204,7 +1204,7 @@ export default function QuotationDetailPage() {
 
               {/* Incoterms */}
               <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
                   Delivery / Incoterms
                 </label>
                 <select
@@ -1220,7 +1220,7 @@ export default function QuotationDetailPage() {
               {!isDomesticLike && (
                 <>
                   <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                    <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
                       Port of Loading
                     </label>
                     <input
@@ -1233,7 +1233,7 @@ export default function QuotationDetailPage() {
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                    <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
                       Port of Discharge
                     </label>
                     <input
@@ -1246,7 +1246,7 @@ export default function QuotationDetailPage() {
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                    <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
                       Forex Rate (1 {currCode} to INR)
                     </label>
                     <input
@@ -1263,7 +1263,7 @@ export default function QuotationDetailPage() {
               {/* Optional Buyer / Customer reference for procurement */}
               {isDomesticLike && (
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                  <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
                     Buyer / Customer Reference
                   </label>
                   <select
@@ -1281,7 +1281,7 @@ export default function QuotationDetailPage() {
 
               {/* Enquiry Ref */}
               <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
                   Enquiry / PO Reference
                 </label>
                 <input
@@ -1295,7 +1295,7 @@ export default function QuotationDetailPage() {
 
               {/* Sales Person / Agent */}
               <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
                   Sales Person / Agent
                 </label>
                 <select
@@ -1312,7 +1312,7 @@ export default function QuotationDetailPage() {
 
               {/* Branch */}
               <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
                   Branch
                 </label>
                 <select
@@ -1335,11 +1335,11 @@ export default function QuotationDetailPage() {
               <div className="flex items-center justify-between border-b border-surface-border bg-slate-50/70 px-4 py-2.5">
                 <div className="flex items-center gap-2">
                   <Sparkles size={13} className="text-brand-600" />
-                  <h4 className="text-[12px] font-bold uppercase tracking-wider text-slate-700">
+                  <h4 className="text-small font-bold uppercase tracking-wider text-slate-700">
                     {isProcessQuote ? `Load the job's actual ${bomMaterial.label.toLowerCase()}` : 'Load from Bill of Material'}
                   </h4>
                 </div>
-                <span className="text-[11px] text-slate-500">
+                <span className="text-caption text-slate-500">
                   {isProcessQuote
                     ? `Job-work on what the job really has: ${head.quotation_type === 'FABRIC' ? 'the fabric rolls its knitting produced (or bought for it)' : 'the yarn lots bought for / transferred to it'} — no fabric BOM needed`
                     : `Picks only the job's BOM ${bomMaterial.label.toLowerCase()} items with the planned requirement`}
@@ -1347,7 +1347,7 @@ export default function QuotationDetailPage() {
               </div>
               <div className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-3 items-end">
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                  <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
                     IO No (Internal Order)
                   </label>
                   <select
@@ -1366,7 +1366,7 @@ export default function QuotationDetailPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                  <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
                     Style No
                   </label>
                   <select
@@ -1395,7 +1395,7 @@ export default function QuotationDetailPage() {
                 {isProcessQuote && head.quotation_type === 'FABRIC' && (
                   <div className="md:col-span-full flex items-end gap-2 border-t border-dashed border-slate-200 pt-2">
                     <label className="block flex-1 max-w-xs">
-                      <span className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1">Or scan / type a roll no</span>
+                      <span className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">Or scan / type a roll no</span>
                       <input value={scanRoll} onChange={(e) => setScanRoll(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addScannedRoll(); } }}
                         placeholder="Roll no — fills job, PO, style, buyer, fabric" id="q-scan-roll" className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs" />
                     </label>
@@ -1478,14 +1478,14 @@ export default function QuotationDetailPage() {
                 <span className={`h-2.5 w-2.5 rounded-full ${
                   isBuyer ? 'bg-emerald-500' : isFabric ? 'bg-sky-500' : isYarn ? 'bg-amber-500' : isTrims ? 'bg-rose-500' : 'bg-brand-500'
                 }`} />
-                <h4 className="text-[12px] font-bold uppercase tracking-wider text-slate-700">
+                <h4 className="text-small font-bold uppercase tracking-wider text-slate-700">
                   {typeLabel} Line Items
                 </h4>
-                <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-700">
+                <span className="rounded-full bg-slate-200 px-2 py-0.5 text-micro font-bold text-slate-700">
                   {lines.length} {lines.length === 1 ? 'Item' : 'Items'}
                 </span>
               </div>
-              <span className="text-[11px] text-slate-500">
+              <span className="text-caption text-slate-500">
                 Amount uses <strong>Confirm Rate</strong> (falls back to Quotation Rate if unconfirmed)
               </span>
             </div>
@@ -1499,7 +1499,7 @@ export default function QuotationDetailPage() {
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-left text-xs">
                 <thead>
-                  <tr className="border-b border-surface-border bg-slate-100/80 font-semibold uppercase tracking-wider text-slate-600 text-[11px]">
+                  <tr className="border-b border-surface-border bg-slate-100/80 font-semibold uppercase tracking-wider text-slate-600 text-caption">
                     <th className="w-8 px-2 py-2 text-center">S.No</th>
                     
                     {/* I/O Num / Job No */}
@@ -1584,7 +1584,7 @@ export default function QuotationDetailPage() {
                     return (
                       <Fragment key={l._key}>
                       <tr className="hover:bg-slate-50/80 transition-colors">
-                        <td className="px-2 py-1.5 text-center tabular-nums text-[11px] text-slate-400">
+                        <td className="px-2 py-1.5 text-center tabular-nums text-caption text-slate-400">
                           {i + 1}
                         </td>
 
@@ -2001,7 +2001,7 @@ export default function QuotationDetailPage() {
                       {isProcessQuote && ((l.rolls ?? []).length > 0 || true) && (
                         <tr className="bg-slate-50/60" data-line={i + 1}>
                           <td />
-                          <td colSpan={99} className="px-2 pb-2 pt-0.5 text-[11px]">
+                          <td colSpan={99} className="px-2 pb-2 pt-0.5 text-caption">
                             {(l.rolls ?? []).length > 0 && (
                               <div className="mb-1 flex flex-wrap items-center gap-1.5" id={`q-rolls-${i + 1}`}>
                                 <span className="font-semibold text-slate-600">Rolls:</span>
@@ -2046,7 +2046,7 @@ export default function QuotationDetailPage() {
                     </td>
                   </tr>
                   <tr className="border-t-2 border-surface-border bg-slate-50/90 font-bold text-slate-800">
-                    <td colSpan={colsBeforeQty} className="px-3 py-2.5 text-right uppercase tracking-wider text-[11px] text-slate-600">
+                    <td colSpan={colsBeforeQty} className="px-3 py-2.5 text-right uppercase tracking-wider text-caption text-slate-600">
                       Total Basic Value
                     </td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-xs">
@@ -2101,7 +2101,7 @@ export default function QuotationDetailPage() {
           {/* ── Notes & Terms Card ── */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="card p-3.5">
-              <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-2">
+              <h4 className="text-caption font-bold uppercase tracking-wider text-slate-600 mb-2">
                 Internal Remarks / Notes
               </h4>
               <textarea
@@ -2114,7 +2114,7 @@ export default function QuotationDetailPage() {
             </div>
 
             <div className="card p-3.5">
-              <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-2">
+              <h4 className="text-caption font-bold uppercase tracking-wider text-slate-600 mb-2">
                 Terms &amp; Conditions
               </h4>
               <textarea
@@ -2136,11 +2136,11 @@ export default function QuotationDetailPage() {
             }`}>
               <div className="flex items-center gap-2">
                 <FileText size={15} />
-                <h4 className="text-[12.5px] font-bold">
+                <h4 className="text-body font-bold">
                   {isBuyer ? 'Buyer Export Pricing Summary' : isImport ? 'Import Cost & Landing Summary' : 'Quotation Pricing Summary'}
                 </h4>
               </div>
-              <span className="rounded bg-white/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+              <span className="rounded bg-white/20 px-2 py-0.5 text-micro font-bold uppercase tracking-wider">
                 {currSymbol}
               </span>
             </div>
@@ -2230,7 +2230,7 @@ export default function QuotationDetailPage() {
 
                       {/* Realization in INR */}
                       <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-2.5 space-y-1">
-                        <div className="flex justify-between text-[11px] text-emerald-800">
+                        <div className="flex justify-between text-caption text-emerald-800">
                           <span>Exchange Rate (1 {currCode})</span>
                           <span className="tabular-nums font-bold">₹ {fmtDecimal(head.exchange_rate || 1, 2)}</span>
                         </div>
@@ -2241,7 +2241,7 @@ export default function QuotationDetailPage() {
                       </div>
 
                       {/* Tax Note */}
-                      <div className="rounded bg-slate-50 border border-slate-200 px-2 py-1 text-[11px] text-slate-600 flex items-center justify-between">
+                      <div className="rounded bg-slate-50 border border-slate-200 px-2 py-1 text-caption text-slate-600 flex items-center justify-between">
                         <span>Export Tax Scheme:</span>
                         <span className="font-semibold text-slate-800">LUT Export (0% GST)</span>
                       </div>
@@ -2322,14 +2322,14 @@ export default function QuotationDetailPage() {
 
                     {/* Per-line GST & IGST breakdown */}
                     <div className="rounded-lg bg-amber-50/70 border border-amber-200 p-2.5 space-y-1.5">
-                      <div className="text-[11px] font-bold text-amber-900 uppercase tracking-wider flex items-center justify-between">
+                      <div className="text-caption font-bold text-amber-900 uppercase tracking-wider flex items-center justify-between">
                         <span>GST &amp; IGST Breakdown</span>
-                        <span className="text-[10px] tabular-nums text-amber-800">Per-Line</span>
+                        <span className="text-micro tabular-nums text-amber-800">Per-Line</span>
                       </div>
 
                       {/* CGST + SGST (Intrastate) */}
                       {totalGstBreakdown.map((g: any) => (
-                        <div key={`cgst-${g.rate}`} className="text-[11px] space-y-0.5 border-b border-amber-200/60 pb-1">
+                        <div key={`cgst-${g.rate}`} className="text-caption space-y-0.5 border-b border-amber-200/60 pb-1">
                           <div className="flex justify-between text-slate-600">
                             <span>CGST @ {(g.rate / 2).toFixed(1)}% (on ₹{fmtDecimal(g.baseAmt, 2)})</span>
                             <span className="tabular-nums font-semibold">₹ {fmtDecimal(g.cgst, 2)}</span>
@@ -2343,7 +2343,7 @@ export default function QuotationDetailPage() {
 
                       {/* IGST (Interstate) */}
                       {totalIgstBreakdown.map((ig: any) => (
-                        <div key={`igst-${ig.rate}`} className="text-[11px] space-y-0.5 border-b border-amber-200/60 pb-1">
+                        <div key={`igst-${ig.rate}`} className="text-caption space-y-0.5 border-b border-amber-200/60 pb-1">
                           <div className="flex justify-between text-slate-600">
                             <span>IGST @ {ig.rate}% (on ₹{fmtDecimal(ig.baseAmt, 2)})</span>
                             <span className="tabular-nums font-semibold text-amber-900">₹ {fmtDecimal(ig.igst, 2)}</span>
@@ -2352,7 +2352,7 @@ export default function QuotationDetailPage() {
                       ))}
 
                       {totalGstBreakdown.length === 0 && totalIgstBreakdown.length === 0 && (
-                        <div className="text-[11px] text-slate-500 italic">0% GST / IGST applied</div>
+                        <div className="text-caption text-slate-500 italic">0% GST / IGST applied</div>
                       )}
 
                       <div className="flex justify-between pt-1 font-bold text-amber-950 border-t border-amber-200">
@@ -2518,7 +2518,7 @@ export default function QuotationDetailPage() {
                           {currSymbol} {fmtDecimal(d.finalSelling, 2)}
                         </span>
                       </div>
-                      <div className="flex justify-between items-center text-[11px] text-slate-500 mt-1">
+                      <div className="flex justify-between items-center text-caption text-slate-500 mt-1">
                         <span>INR Equivalent (@ ₹{fmtDecimal(head.exchange_rate || 1, 2)})</span>
                         <span className="tabular-nums font-semibold">
                           ₹ {fmtDecimal(d.finalSelling * (Number(head.exchange_rate) || 1), 2)}
@@ -2533,7 +2533,7 @@ export default function QuotationDetailPage() {
 
           {/* Workflow Status Card */}
           <div className="card p-4">
-            <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+            <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
               Workflow Status
             </label>
             <select

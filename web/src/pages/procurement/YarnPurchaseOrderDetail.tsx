@@ -685,7 +685,7 @@ export default function YarnPurchaseOrderDetailPage() {
               </h1>
               {!isNew && <StatusBadge value={header.approval_state} />}
               {isForeignCurrency && (
-                <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
+                <span className="px-2 py-0.5 text-caption font-bold rounded-full bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
                   <Globe size={11} /> IMPORT PO ({currCode})
                 </span>
               )}
@@ -866,12 +866,12 @@ export default function YarnPurchaseOrderDetailPage() {
                     Bill of Materials (BOM) Yarn Integration
                   </h4>
                   {bomData?.bom && (
-                    <span className="bg-amber-100 text-amber-800 text-[10.5px] font-bold px-2 py-0.5 rounded border border-amber-300">
+                    <span className="bg-amber-100 text-amber-800 text-caption font-bold px-2 py-0.5 rounded border border-amber-300">
                       BOM: {bomData.bom.bom_no} · v{bomData.bom.version}
                     </span>
                   )}
                 </div>
-                <p className="text-[11px] text-slate-600 mt-0.5">
+                <p className="text-caption text-slate-600 mt-0.5">
                   {bomLoading
                     ? 'Loading the BOM of this job…'
                     : bomData
@@ -920,13 +920,13 @@ export default function YarnPurchaseOrderDetailPage() {
               <button
                 type="button"
                 onClick={() => setHeader((h) => ({ ...h, billing_address: COMPANY_DEFAULT_ADDRESS }))}
-                className="text-[11px] text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                className="text-caption text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
                 title="Reset to Head Office address"
               >
                 <RotateCcw size={11} /> Reset Default
               </button>
             </div>
-            <p className="text-[11px] text-slate-500 mb-2.5">
+            <p className="text-caption text-slate-500 mb-2.5">
               Buyer company legal entity billed by the spinning mill
             </p>
           </div>
@@ -952,7 +952,7 @@ export default function YarnPurchaseOrderDetailPage() {
               <button
                 type="button"
                 onClick={() => setHeader((h) => ({ ...h, shipping_to_party_id: '', shipping_address: header.billing_address }))}
-                className="text-[11px] text-slate-600 hover:text-slate-800 font-medium flex items-center gap-1"
+                className="text-caption text-slate-600 hover:text-slate-800 font-medium flex items-center gap-1"
                 title="Copy from Billing Address"
               >
                 Same as Billing
@@ -986,7 +986,7 @@ export default function YarnPurchaseOrderDetailPage() {
               <Disc size={14} className="text-amber-600" />
               <span>Yarn Line Items ({lines.length})</span>
             </h2>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-caption text-slate-400">
               Select Grey or Dyed Yarn, specify Direct KG or Pack/Bag basis (auto-multiplies Total KG)
             </p>
           </div>
@@ -1002,7 +1002,7 @@ export default function YarnPurchaseOrderDetailPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 text-[11px] uppercase tracking-wider">
+              <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 text-caption uppercase tracking-wider">
                 <th className="py-2.5 px-2 w-8 text-center">#</th>
                 <th className="py-2.5 px-2 min-w-[130px]">IO No</th>
                 <th className="py-2.5 px-2 min-w-[110px]">Style</th>
@@ -1041,7 +1041,7 @@ export default function YarnPurchaseOrderDetailPage() {
                 return (
                   <tr key={l._key || idx} className="hover:bg-slate-50/70 transition">
                     {/* # S NO */}
-                    <td className="py-2.5 px-2 text-center text-slate-400 tabular-nums text-[11px]">{idx + 1}</td>
+                    <td className="py-2.5 px-2 text-center text-slate-400 tabular-nums text-caption">{idx + 1}</td>
 
                     {/* I/O Num (Sales Order / Job) */}
                     <td className="py-2.5 px-2 min-w-[130px]">
@@ -1173,7 +1173,7 @@ export default function YarnPurchaseOrderDetailPage() {
                           placeholder="Shade / Color"
                         />
                       ) : (
-                        <span className="text-slate-400 text-[11px] block text-center">—</span>
+                        <span className="text-slate-400 text-caption block text-center">—</span>
                       )}
                     </td>
 
@@ -1258,7 +1258,7 @@ export default function YarnPurchaseOrderDetailPage() {
                           />
                         </div>
                       ) : (
-                        <span className="text-slate-400 text-[11px]">—</span>
+                        <span className="text-slate-400 text-caption">—</span>
                       )}
                     </td>
 
@@ -1399,7 +1399,7 @@ export default function YarnPurchaseOrderDetailPage() {
           {/* Footer Financial Adjustments & TCS */}
           <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 items-end">
             <div>
-              <label className="label text-[11px] font-bold text-slate-700">Freight / Transport Charges (₹)</label>
+              <label className="label text-caption font-bold text-slate-700">Freight / Transport Charges (₹)</label>
               <input
                 type="number"
                 step="10"
@@ -1411,7 +1411,7 @@ export default function YarnPurchaseOrderDetailPage() {
             </div>
 
             <div>
-              <label className="label text-[11px] font-bold text-slate-700">Other / Unloading Charges (₹)</label>
+              <label className="label text-caption font-bold text-slate-700">Other / Unloading Charges (₹)</label>
               <input
                 type="number"
                 step="10"
@@ -1423,7 +1423,7 @@ export default function YarnPurchaseOrderDetailPage() {
             </div>
 
             <div>
-              <label className="label text-[11px] font-bold text-slate-700">Round Off (₹)</label>
+              <label className="label text-caption font-bold text-slate-700">Round Off (₹)</label>
               <input
                 type="number"
                 step="0.01"
@@ -1436,7 +1436,7 @@ export default function YarnPurchaseOrderDetailPage() {
 
             <div className="p-2.5 rounded-lg border border-amber-200 bg-amber-50/60 space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="flex items-center gap-1.5 text-[11px] font-bold text-amber-900 cursor-pointer">
+                <label className="flex items-center gap-1.5 text-caption font-bold text-amber-900 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={header.tcs_applicable}
@@ -1446,17 +1446,17 @@ export default function YarnPurchaseOrderDetailPage() {
                   <span>TCS Applicable</span>
                 </label>
                 {header.tcs_applicable && (
-                  <span className="text-[11px] font-bold tabular-nums text-amber-800">
+                  <span className="text-caption font-bold tabular-nums text-amber-800">
                     + ₹{fmtDecimal(totals.tcsAmt)}
                   </span>
                 )}
               </div>
               {header.tcs_applicable && (
-                <div className="flex items-center gap-1.5 text-[11px]">
+                <div className="flex items-center gap-1.5 text-caption">
                   <select
                     value={header.tcs_section}
                     onChange={(e) => setHeader((h) => ({ ...h, tcs_section: e.target.value }))}
-                    className="input py-0.5 px-1.5 text-[10px] w-24"
+                    className="input py-0.5 px-1.5 text-micro w-24"
                   >
                     <option value="206C(1H)">206C(1H)</option>
                     <option value="206C(1)">206C(1)</option>
@@ -1466,7 +1466,7 @@ export default function YarnPurchaseOrderDetailPage() {
                     step="0.01"
                     value={header.tcs_rate}
                     onChange={(e) => setHeader((h) => ({ ...h, tcs_rate: parseFloat(e.target.value) || 0 }))}
-                    className="input py-0.5 px-1.5 text-[10px] text-right tabular-nums w-16"
+                    className="input py-0.5 px-1.5 text-micro text-right tabular-nums w-16"
                     placeholder="0.10"
                   />
                   <span className="text-slate-500">%</span>
@@ -1475,8 +1475,8 @@ export default function YarnPurchaseOrderDetailPage() {
             </div>
 
             <div className="flex flex-col items-end justify-center bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
-              <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider block">Net Payable Amount ({currCode})</span>
-              <span className="text-xl font-black text-brand-900 tabular-nums">{currSymbol}{fmtDecimal(totals.grandTotal)}</span>
+              <span className="text-caption text-slate-500 font-bold uppercase tracking-wider block">Net Payable Amount ({currCode})</span>
+              <span className="text-xl font-bold text-brand-900 tabular-nums">{currSymbol}{fmtDecimal(totals.grandTotal)}</span>
               {isForeignCurrency && (
                 <span className="text-xs font-bold text-amber-900 mt-0.5">
                   INR Converted: ₹{fmtDecimal(totals.grandTotal * Number(header.exchange_rate), 2)}
@@ -1504,7 +1504,7 @@ export default function YarnPurchaseOrderDetailPage() {
         >
           <div className="space-y-3 text-xs">
             <div className="flex flex-wrap items-end gap-2 border-b border-slate-100 pb-1.5">
-              <h3 className="mr-auto text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Approved quotations</h3>
+              <h3 className="mr-auto text-small font-semibold uppercase tracking-wider text-slate-500">Approved quotations</h3>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -1515,7 +1515,7 @@ export default function YarnPurchaseOrderDetailPage() {
                       setSelectedQuoteIds(approvedQuotes.map((q: any) => String(q.id)));
                     }
                   }}
-                  className="text-[11px] font-semibold text-amber-700 hover:text-amber-800 underline"
+                  className="text-caption font-semibold text-amber-700 hover:text-amber-800 underline"
                 >
                   {selectedQuoteIds.length === approvedQuotes.length ? 'Deselect All' : 'Select All'}
                 </button>
@@ -1552,12 +1552,12 @@ export default function YarnPurchaseOrderDetailPage() {
                           <span className="font-bold text-slate-900 tabular-nums">{q.quotation_no}</span>
                           <span className="font-bold text-slate-900">₹{fmtDecimal(q.total_amount || 0)}</span>
                         </div>
-                        <div className="text-[11px] text-slate-500 flex items-center justify-between mt-0.5">
+                        <div className="text-caption text-slate-500 flex items-center justify-between mt-0.5">
                           <span>{q.supplier_name || q.buyer_name || 'Spinning Mill'}</span>
                           <span>{q.quotation_date?.slice(0, 10)}</span>
                         </div>
                         {q.remarks && (
-                          <div className="text-[10.5px] text-slate-400 truncate mt-0.5 italic">{q.remarks}</div>
+                          <div className="text-caption text-slate-400 truncate mt-0.5 italic">{q.remarks}</div>
                         )}
                       </div>
                     </label>

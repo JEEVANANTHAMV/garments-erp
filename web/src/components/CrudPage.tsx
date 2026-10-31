@@ -203,7 +203,7 @@ export function CrudPage<T extends { id: number }>(cfg: CrudConfig<T>) {
             onClick={() => setShowFilters((v) => !v)}>
             <FilterIcon size={14} /> Filters
             {activeFilters.length > 0 && (
-              <span className="ml-0.5 rounded-full bg-brand-600 px-1.5 text-[10px] text-white">
+              <span className="ml-0.5 rounded-full bg-brand-600 px-1.5 text-micro text-white">
                 {activeFilters.length}
               </span>
             )}

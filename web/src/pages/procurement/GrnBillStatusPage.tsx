@@ -42,7 +42,7 @@ export default function GrnBillStatusPage() {
             ['Partly billed', `${sm.partial.count} GRN${sm.partial.value ? ` · ₹${fmtDecimal(sm.partial.value, 0)} open` : ''}`, 'border-amber-200 bg-amber-50 text-amber-900'],
             [`Overdue (> ${sm.alert_days} days)`, `${sm.overdue} GRN`, 'border-orange-300 bg-orange-50 text-orange-900'],
             ['Bill received', `${sm.received.count} GRN`, 'border-emerald-200 bg-emerald-50 text-emerald-900']].map(([k, v, cls]) => (
-            <div key={k} className={`rounded-lg border px-3 py-2 ${cls}`}><div className="text-[10.5px] font-semibold uppercase tracking-wider opacity-75">{k}</div><div className="text-[15px] font-bold">{v}</div></div>))}
+            <div key={k} className={`rounded-lg border px-3 py-2 ${cls}`}><div className="text-caption font-semibold uppercase tracking-wider opacity-75">{k}</div><div className="text-title font-bold">{v}</div></div>))}
         </div>
       )}
       <div className="card mb-3 px-4 pt-2"><Tabs tabs={[{ key: 'OPEN', label: 'Bill pending (all open)' }, { key: 'PENDING', label: 'Not received' }, { key: 'PARTIAL', label: 'Partly billed' }, { key: 'RECEIVED', label: 'Received' }, { key: 'ALL', label: 'All GRNs' }]} active={tab} onChange={setTab} /></div>
@@ -69,8 +69,8 @@ export default function GrnBillStatusPage() {
                   <td className="px-3 py-1.5 text-right tabular-nums">{r.grn_value ? `₹${fmtDecimal(r.grn_value, 2)}` : '—'}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums">{r.billed_value ? `₹${fmtDecimal(r.billed_value, 2)}` : '—'}</td>
                   <td className="px-3 py-1.5">{r.bill_nos ? <span className="tabular-nums">{r.bill_nos}</span> : '—'}{r.bill_status ? <span className="ml-1 text-slate-400">({String(r.bill_status).toLowerCase()})</span> : null}</td>
-                  <td className="px-3 py-1.5"><Badge tone={r.status === 'RECEIVED' ? 'green' : r.status === 'PARTIAL' ? 'amber' : 'red'}>{r.status === 'RECEIVED' ? 'Bill received' : r.status === 'PARTIAL' ? 'Partly billed' : 'Bill pending'}</Badge>{r.overdue ? <span className="ml-1 text-[10.5px] font-bold text-red-700">overdue</span> : null}</td>
-                  <td className="px-3 py-1.5 text-right">{r.status !== 'RECEIVED' && <Link to={BOOK[r.source]} className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-700 hover:underline"><Receipt size={12} /> Book bill</Link>}</td>
+                  <td className="px-3 py-1.5"><Badge tone={r.status === 'RECEIVED' ? 'green' : r.status === 'PARTIAL' ? 'amber' : 'red'}>{r.status === 'RECEIVED' ? 'Bill received' : r.status === 'PARTIAL' ? 'Partly billed' : 'Bill pending'}</Badge>{r.overdue ? <span className="ml-1 text-caption font-bold text-red-700">overdue</span> : null}</td>
+                  <td className="px-3 py-1.5 text-right">{r.status !== 'RECEIVED' && <Link to={BOOK[r.source]} className="inline-flex items-center gap-1 text-caption font-semibold text-brand-700 hover:underline"><Receipt size={12} /> Book bill</Link>}</td>
                 </tr>
               ))}
               {!rows.length && <tr><td colSpan={13} className="px-3 py-10 text-center text-slate-400">Nothing here</td></tr>}

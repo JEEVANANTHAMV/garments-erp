@@ -60,14 +60,14 @@ export default function TnaTemplatesPage() {
               }`}
             >
               <div className="flex justify-between items-start">
-                <span className="tabular-nums text-[11px] font-bold text-slate-400">{tpl.template_code}</span>
-                <span className="rounded bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 text-[10px] font-bold text-indigo-700">
+                <span className="tabular-nums text-caption font-bold text-slate-400">{tpl.template_code}</span>
+                <span className="rounded bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 text-micro font-bold text-indigo-700">
                   {tpl.product_type}
                 </span>
               </div>
               <h4 className="font-bold text-slate-900 mt-1 text-sm">{tpl.template_name}</h4>
-              <p className="text-[11px] text-slate-500 mt-1 line-clamp-2">{tpl.description}</p>
-              <div className="flex justify-between items-center mt-3 pt-2 border-t border-slate-100 text-[11px] text-slate-600">
+              <p className="text-caption text-slate-500 mt-1 line-clamp-2">{tpl.description}</p>
+              <div className="flex justify-between items-center mt-3 pt-2 border-t border-slate-100 text-caption text-slate-600">
                 <span>{tpl.activity_count || 21} Activities</span>
                 <span className="font-semibold text-brand-600 flex items-center gap-0.5">
                   View Sequence <ChevronRight size={13} />
@@ -93,7 +93,7 @@ export default function TnaTemplatesPage() {
 
           <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
             <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-slate-100/80 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[11px] sticky top-0">
+              <thead className="bg-slate-100/80 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-caption sticky top-0">
                 <tr>
                   <th className="py-2.5 px-3 w-12 text-center">Seq</th>
                   <th className="py-2.5 px-3">Milestone Activity</th>
@@ -122,7 +122,7 @@ export default function TnaTemplatesPage() {
                         {act.activity_name}
                       </td>
                       <td className="py-2.5 px-3">
-                        <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-slate-100 text-slate-700">
+                        <span className="rounded px-1.5 py-0.5 text-micro font-semibold bg-slate-100 text-slate-700">
                           {act.category}
                         </span>
                       </td>

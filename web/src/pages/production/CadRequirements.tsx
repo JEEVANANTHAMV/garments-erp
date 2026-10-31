@@ -106,17 +106,17 @@ export default function CadRequirementsPage() {
         <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
           <div className="text-xs font-medium text-slate-500">Total CAD Requirements</div>
           <div className="text-2xl font-bold text-slate-900 mt-1">{fmtNumber(kpis.totalReqs)}</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Style marker calculations</div>
+          <div className="text-caption text-slate-400 mt-0.5">Style marker calculations</div>
         </div>
         <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
           <div className="text-xs font-medium text-slate-500">Total Order Volume</div>
           <div className="text-2xl font-bold text-indigo-600 mt-1">{fmtNumber(kpis.totalPcs)} Pcs</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Garment pieces planned</div>
+          <div className="text-caption text-slate-400 mt-0.5">Garment pieces planned</div>
         </div>
         <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
           <div className="text-xs font-medium text-slate-500">Approved for Production</div>
           <div className="text-2xl font-bold text-emerald-600 mt-1">{fmtNumber(kpis.approved)}</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Handed off to PPC & Sourcing</div>
+          <div className="text-caption text-slate-400 mt-0.5">Handed off to PPC & Sourcing</div>
         </div>
         <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
           <div className="text-2xl font-bold text-sky-600 mt-1">
@@ -127,7 +127,7 @@ export default function CadRequirementsPage() {
               </span>
             )}
           </div>
-          <div className="text-[11px] text-slate-400 mt-0.5">Auto-consumption output</div>
+          <div className="text-caption text-slate-400 mt-0.5">Auto-consumption output</div>
         </div>
       </div>
 
@@ -224,28 +224,28 @@ export default function CadRequirementsPage() {
                       <div className="flex items-center gap-1.5 font-semibold text-indigo-700">
                         <span>{r.req_no}</span>
                         {r.cad_version && (
-                          <span className="text-[10px] tabular-nums font-bold px-1.5 py-0.2 rounded bg-indigo-50 border border-indigo-200 text-indigo-800">
+                          <span className="text-micro tabular-nums font-bold px-1.5 py-0.2 rounded bg-indigo-50 border border-indigo-200 text-indigo-800">
                             {r.cad_version}
                           </span>
                         )}
                         {!showOldVersions && olderCount[r.req_no || `#${r.id}`] > 0 && (
-                          <span className="text-[10px] font-normal text-slate-400" title="Tick 'Show old versions' to see them">
+                          <span className="text-micro font-normal text-slate-400" title="Tick 'Show old versions' to see them">
                             +{olderCount[r.req_no || `#${r.id}`]} older
                           </span>
                         )}
                       </div>
-                      <div className="text-[11px] text-slate-400">{fmtDate(r.req_date)}</div>
+                      <div className="text-caption text-slate-400">{fmtDate(r.req_date)}</div>
                     </td>
                     <td className="py-3 px-3">
                       <div className="font-semibold text-slate-800">{r.style_code}</div>
-                      <div className="text-[11px] text-slate-400">{r.style_name || 'T-Shirt / Polo'}</div>
+                      <div className="text-caption text-slate-400">{r.style_name || 'T-Shirt / Polo'}</div>
                     </td>
                     <td className="py-3 px-3">
                       <Badge tone={r.cad_type === 'WOVEN' ? 'amber' : r.cad_type === 'KNIT_FLEECE' ? 'purple' : 'indigo'}>
                         {r.cad_type || 'KNIT_SJ'}
                       </Badge>
                     </td>
-                    <td className="py-3 px-3 tabular-nums text-[11px] text-slate-700">
+                    <td className="py-3 px-3 tabular-nums text-caption text-slate-700">
                       {r.internal_ir_no || '—'}
                     </td>
                     <td className="py-3 px-3 text-slate-800 font-medium">

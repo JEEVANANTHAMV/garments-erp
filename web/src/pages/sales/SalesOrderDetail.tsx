@@ -429,11 +429,11 @@ export default function SalesOrderDetail() {
         </>} />
 
       {locked && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[13px] text-amber-900">
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-body text-amber-900">
           This order is <strong>{head.approval_state?.toLowerCase()}</strong> and is locked for editing.
           {canAmend ? <> Use <strong>Amend order</strong> to add or cancel quantity.</> : ' Change its state to make further changes.'}
           {d?.closure_type && (
-            <div id="so-closure" className="mt-1 text-[12.5px]">
+            <div id="so-closure" className="mt-1 text-body">
               {CLOSURE_LABEL[d.closure_type] ?? d.closure_type} on {fmtDate(d.closed_date)}{d.close_reason ? ` — ${d.close_reason}` : ''}
             </div>
           )}
@@ -441,7 +441,7 @@ export default function SalesOrderDetail() {
       )}
 
       {!isNew && !locked && head.approval_state === 'DRAFT' && (
-        <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-[13px] text-blue-900">
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-body text-blue-900">
           <div className="flex items-center gap-2">
             <FileText size={14} className="shrink-0 text-blue-600" />
             <span>This order is saved as a <strong>Draft</strong>. Complete the details and click <strong>Submit Order</strong> when ready.</span>
@@ -456,11 +456,11 @@ export default function SalesOrderDetail() {
       <div className="card mb-3 overflow-hidden">
         <div className="flex items-center gap-2 border-b border-surface-border bg-slate-50/60 px-4 py-2.5">
           <span className="h-2 w-2 rounded-full bg-brand-500" />
-          <h4 className="text-[12px] font-bold uppercase tracking-wider text-slate-700">Order &amp; Buyer Details</h4>
+          <h4 className="text-small font-bold uppercase tracking-wider text-slate-700">Order &amp; Buyer Details</h4>
         </div>
         <div className="grid grid-cols-1 gap-x-4 gap-y-3 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           <div>
-            <label className="mb-1 block text-[12px] font-medium text-slate-700">SO number</label>
+            <label className="mb-1 block text-small font-medium text-slate-700">SO number</label>
             <input
               className="input tabular-nums font-semibold w-full"
               placeholder={isNew ? (soPreview.data?.so_no ?? 'Auto-generated') : undefined}
@@ -469,9 +469,9 @@ export default function SalesOrderDetail() {
               disabled={!editable}
             />
             {errors.so_no ? (
-              <p className="text-[12px] text-red-600 mt-1">{errors.so_no}</p>
+              <p className="text-small text-red-600 mt-1">{errors.so_no}</p>
             ) : isNew ? (
-              <p className="text-[11px] text-slate-400 mt-1">
+              <p className="text-caption text-slate-400 mt-1">
                 {head.so_no?.trim()
                   ? 'Manual number — clear to auto-generate'
                   : soPreview.data?.so_no
@@ -482,12 +482,12 @@ export default function SalesOrderDetail() {
           </div>
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-[12px] font-medium text-slate-700">IO number (Internal Order)</label>
+              <label className="text-small font-medium text-slate-700">IO number (Internal Order)</label>
               {editable && (
                 <button
                   type="button"
                   onClick={() => void handleGenerateIo()}
-                  className="text-[11px] font-semibold text-brand-600 hover:text-brand-800 bg-brand-50 hover:bg-brand-100 px-1.5 py-0.5 rounded border border-brand-200 transition-colors"
+                  className="text-caption font-semibold text-brand-600 hover:text-brand-800 bg-brand-50 hover:bg-brand-100 px-1.5 py-0.5 rounded border border-brand-200 transition-colors"
                   title="Auto-generate based on Buyer code / prefix"
                 >
                   ⚡ Auto-Gen
@@ -502,9 +502,9 @@ export default function SalesOrderDetail() {
               disabled={!editable}
             />
             {errors.io_no ? (
-              <p className="text-[12px] text-red-600 mt-1">{errors.io_no}</p>
+              <p className="text-small text-red-600 mt-1">{errors.io_no}</p>
             ) : (
-              <p className="text-[11px] text-slate-400 mt-1">Master factory production &amp; procurement reference</p>
+              <p className="text-caption text-slate-400 mt-1">Master factory production &amp; procurement reference</p>
             )}
           </div>
           <Select
@@ -554,7 +554,7 @@ export default function SalesOrderDetail() {
       <div className="card mb-3 overflow-hidden">
         <div className="flex items-center gap-2 border-b border-surface-border bg-slate-50/60 px-4 py-2.5">
           <span className="h-2 w-2 rounded-full bg-amber-500" />
-          <h4 className="text-[12px] font-bold uppercase tracking-wider text-slate-700">Commercial Terms &amp; Tolerances</h4>
+          <h4 className="text-small font-bold uppercase tracking-wider text-slate-700">Commercial Terms &amp; Tolerances</h4>
         </div>
         <div className="grid grid-cols-1 gap-x-4 gap-y-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
           <Select label="Currency" required options={toOptions(currencies.data)} placeholder="— Select —"
@@ -606,7 +606,7 @@ export default function SalesOrderDetail() {
       <div className="card mb-4 overflow-hidden">
         <div className="flex items-center gap-2 border-b border-surface-border bg-slate-50/60 px-4 py-2.5">
           <span className="h-2 w-2 rounded-full bg-emerald-500" />
-          <h4 className="text-[12px] font-bold uppercase tracking-wider text-slate-700">Shipping &amp; Letter of Credit</h4>
+          <h4 className="text-small font-bold uppercase tracking-wider text-slate-700">Shipping &amp; Letter of Credit</h4>
         </div>
         <div className="grid grid-cols-1 gap-x-4 gap-y-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
           <Input label="Port of loading" value={head.port_of_loading ?? ''}
@@ -692,7 +692,7 @@ export default function SalesOrderDetail() {
                     <span className="tabular-nums font-bold text-slate-900">
                       {fmtNumber(totals.minShipment)} – {fmtNumber(totals.maxShipment)} pcs
                     </span>
-                    <span className="text-[11px] font-medium text-slate-400">
+                    <span className="text-caption font-medium text-slate-400">
                       (-{totals.tolMinusPct}% / +{totals.tolPlusPct}%)
                     </span>
                   </div>
@@ -709,68 +709,68 @@ export default function SalesOrderDetail() {
               {/* Tile 1: Order Qty */}
               <div className="flex flex-col justify-between px-3 pt-2 sm:pt-0">
                 <div>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                  <span className="text-caption font-bold uppercase tracking-wider text-slate-500 block mb-1">
                     Order Qty
                   </span>
                   <div className="flex items-baseline gap-1.5">
-                    <span className="text-2xl font-black tabular-nums text-slate-900">
+                    <span className="text-2xl font-bold tabular-nums text-slate-900">
                       {fmtNumber(totals.qty)}
                     </span>
                     <span className="text-xs font-semibold text-slate-400">pcs</span>
                   </div>
                   {totals.sets > 0 && (
-                    <div className="text-[12px] font-semibold text-indigo-700" data-order-sets>= {fmtNumber(totals.sets)} sets</div>
+                    <div className="text-small font-semibold text-indigo-700" data-order-sets>= {fmtNumber(totals.sets)} sets</div>
                   )}
                 </div>
-                <p className="mt-1.5 text-[11px] text-slate-400">Buyer invoice contracted volume</p>
+                <p className="mt-1.5 text-caption text-slate-400">Buyer invoice contracted volume</p>
               </div>
 
               {/* Tile 2: Excess Buffer */}
               <div className="flex flex-col justify-between px-3 pt-2 sm:pt-0 sm:pl-5">
                 <div>
                   <div className="flex items-center justify-between gap-1 mb-1">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-amber-800">
+                    <span className="text-caption font-bold uppercase tracking-wider text-amber-800">
                       Cutting Buffer
                     </span>
-                    <span className="rounded bg-amber-100/80 px-1.5 py-0.5 text-[10.5px] font-bold text-amber-800 border border-amber-200">
+                    <span className="rounded bg-amber-100/80 px-1.5 py-0.5 text-caption font-bold text-amber-800 border border-amber-200">
                       +{totals.excessPct.toFixed(1)}%
                     </span>
                   </div>
                   <div className="flex items-baseline gap-1.5">
-                    <span className="text-2xl font-black tabular-nums text-amber-700">
+                    <span className="text-2xl font-bold tabular-nums text-amber-700">
                       +{fmtNumber(totals.excessQty)}
                     </span>
                     <span className="text-xs font-semibold text-amber-600">pcs</span>
                   </div>
                 </div>
-                <p className="mt-1.5 text-[11px] text-amber-700/80">Factory reject & defect buffer</p>
+                <p className="mt-1.5 text-caption text-amber-700/80">Factory reject & defect buffer</p>
               </div>
 
               {/* Tile 3: Planned Cut Qty */}
               <div className="flex flex-col justify-between px-3 pt-2 sm:pt-0 sm:pl-5">
                 <div>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-brand-800 block mb-1">
+                  <span className="text-caption font-bold uppercase tracking-wider text-brand-800 block mb-1">
                     Planned Cut Qty
                   </span>
                   <div className="flex items-baseline gap-1.5">
-                    <span className="text-2xl font-black tabular-nums text-brand-900">
+                    <span className="text-2xl font-bold tabular-nums text-brand-900">
                       {fmtNumber(totals.planCutQty)}
                     </span>
                     <span className="text-xs font-semibold text-brand-600">pcs</span>
                   </div>
                 </div>
-                <p className="mt-1.5 text-[11px] text-brand-700/80">Feeds fabric & trims MRP explosion</p>
+                <p className="mt-1.5 text-caption text-brand-700/80">Feeds fabric & trims MRP explosion</p>
               </div>
 
               {/* Tile 4: Total Value in Foreign Currency */}
               <div className="flex flex-col justify-between px-3 pt-2 sm:pt-0 sm:pl-5">
                 <div>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                  <span className="text-caption font-bold uppercase tracking-wider text-slate-500 block mb-1">
                     Total Value ({currencyCode})
                   </span>
                   <div className="flex items-baseline gap-1">
                     <span className="text-sm font-bold text-slate-500">{currencySymbol}</span>
-                    <span className="text-2xl font-black tabular-nums text-slate-900">
+                    <span className="text-2xl font-bold tabular-nums text-slate-900">
                       {totals.amount.toLocaleString(isForeign ? 'en-US' : 'en-IN', {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
@@ -778,19 +778,19 @@ export default function SalesOrderDetail() {
                     </span>
                   </div>
                 </div>
-                <p className="mt-1.5 text-[11px] text-slate-400">Order Qty × Unit Price</p>
+                <p className="mt-1.5 text-caption text-slate-400">Order Qty × Unit Price</p>
               </div>
 
               {/* Tile 5: Total Value in INR */}
               {isForeign ? (
                 <div className="flex flex-col justify-between rounded-xl bg-gradient-to-br from-brand-50 to-brand-100/50 p-3.5 border border-brand-200/80 sm:ml-3">
                   <div>
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-brand-800 block mb-1">
+                    <span className="text-caption font-bold uppercase tracking-wider text-brand-800 block mb-1">
                       Total Value in INR (₹)
                     </span>
                     <div className="flex items-baseline gap-1">
                       <span className="text-sm font-bold text-brand-700">₹</span>
-                      <span className="text-2xl font-black tabular-nums text-brand-950">
+                      <span className="text-2xl font-bold tabular-nums text-brand-950">
                         {inrAmount.toLocaleString('en-IN', {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
@@ -798,21 +798,21 @@ export default function SalesOrderDetail() {
                       </span>
                     </div>
                   </div>
-                  <p className="mt-1.5 text-[11px] font-medium text-brand-700">
+                  <p className="mt-1.5 text-caption font-medium text-brand-700">
                     Converted at 1 {currencyCode} = ₹{exchangeRate.toFixed(2)}
                   </p>
                 </div>
               ) : (
                 <div className="flex flex-col justify-between px-3 pt-2 sm:pt-0 sm:pl-5">
                   <div>
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                    <span className="text-caption font-bold uppercase tracking-wider text-slate-500 block mb-1">
                       Settlement Mode
                     </span>
                     <div className="flex items-baseline gap-1.5">
                       <span className="text-lg font-bold text-slate-800">Domestic (INR)</span>
                     </div>
                   </div>
-                  <p className="mt-1.5 text-[11px] text-slate-400">Direct INR billing without FX</p>
+                  <p className="mt-1.5 text-caption text-slate-400">Direct INR billing without FX</p>
                 </div>
               )}
             </div>
@@ -841,7 +841,7 @@ export default function SalesOrderDetail() {
           {d?.production_orders?.length ? (
             <>
               <div className="border-b border-slate-100 px-4 py-3">
-                <span className="text-[12px] font-semibold text-slate-700">{d.production_orders.length} work order{d.production_orders.length !== 1 ? 's' : ''} linked to this order</span>
+                <span className="text-small font-semibold text-slate-700">{d.production_orders.length} work order{d.production_orders.length !== 1 ? 's' : ''} linked to this order</span>
               </div>
               <table className="w-full">
                 <thead><tr>
@@ -856,7 +856,7 @@ export default function SalesOrderDetail() {
                     const pct = p.order_qty > 0 ? Math.min(100, Math.round((Number(p.produced_qty) / Number(p.order_qty)) * 100)) : 0;
                     return (
                       <tr key={p.id} className="row-hover">
-                        <td className="td tabular-nums text-[12px] text-brand-700 font-semibold">{p.po_prod_no}</td>
+                        <td className="td tabular-nums text-small text-brand-700 font-semibold">{p.po_prod_no}</td>
                         <td className="td text-right tabular-nums">{fmtNumber(p.order_qty)}</td>
                         <td className="td text-right tabular-nums">{fmtNumber(p.produced_qty)}</td>
                         <td className="td">
@@ -867,7 +867,7 @@ export default function SalesOrderDetail() {
                                 style={{ width: `${pct}%` }}
                               />
                             </div>
-                            <span className="text-[11.5px] tabular-nums text-slate-600 font-medium">{pct}%</span>
+                            <span className="text-small tabular-nums text-slate-600 font-medium">{pct}%</span>
                           </div>
                         </td>
                         <td className="td"><StatusBadge value={p.approval_state} /></td>
@@ -882,8 +882,8 @@ export default function SalesOrderDetail() {
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
                 <Layers size={22} />
               </div>
-              <p className="text-[13px] font-medium text-slate-500">No production orders raised yet</p>
-              <p className="text-[12px] text-slate-400">Production orders will appear here once they are created against this sales order.</p>
+              <p className="text-body font-medium text-slate-500">No production orders raised yet</p>
+              <p className="text-small text-slate-400">Production orders will appear here once they are created against this sales order.</p>
             </div>
           )}
         </div>
@@ -901,7 +901,7 @@ export default function SalesOrderDetail() {
               <tbody>
                 {d.invoices.map((i: any) => (
                   <tr key={i.id} className="row-hover">
-                    <td className="td tabular-nums text-[12px] text-brand-700 font-semibold">{i.invoice_no}</td>
+                    <td className="td tabular-nums text-small text-brand-700 font-semibold">{i.invoice_no}</td>
                     <td className="td">{fmtDate(i.invoice_date)}</td>
                     <td className="td text-right tabular-nums font-medium">{fmtDecimal(i.total_value, 2)}</td>
                   </tr>
@@ -913,7 +913,7 @@ export default function SalesOrderDetail() {
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
                 <PackageSearch size={22} />
               </div>
-              <p className="text-[13px] font-medium text-slate-500">No invoices raised yet</p>
+              <p className="text-body font-medium text-slate-500">No invoices raised yet</p>
             </div>
           )}
         </div>
@@ -941,7 +941,7 @@ export default function SalesOrderDetail() {
       <Modal open={stateModal} onClose={() => setStateModal(false)} title="Change order state" size="sm"
         subtitle="Pick the new approval state for this order"
         footer={<button className="btn-secondary" onClick={() => setStateModal(false)}>Cancel</button>}>
-        <p className="mb-3 text-[13px] text-slate-600">
+        <p className="mb-3 text-body text-slate-600">
           Current state: <StatusBadge value={head.approval_state} />
         </p>
         <div className="grid grid-cols-2 gap-2">
@@ -998,7 +998,7 @@ function BomTab({ lines }: { lines: Line[]; soId?: number }) {
     return (
       <div className="card flex flex-col items-center justify-center gap-3 py-14">
         <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-400"><PackageSearch size={22} /></div>
-        <p className="text-[13px] text-slate-500">Add order lines to see Bill of Materials.</p>
+        <p className="text-body text-slate-500">Add order lines to see Bill of Materials.</p>
       </div>
     );
   }
@@ -1019,11 +1019,11 @@ function BomTab({ lines }: { lines: Line[]; soId?: number }) {
                   <Layers size={14} />
                 </div>
                 <div>
-                  <span className="text-[13px] font-bold text-slate-900">
+                  <span className="text-body font-bold text-slate-900">
                     {bom ? `${bom.style_code} — ${bom.style_name}` : `Style ID ${sid}`}
                   </span>
                   {bom && (
-                    <span className="ml-2 text-[11px] text-slate-400">BOM {bom.bom_no} · v{bom.version}</span>
+                    <span className="ml-2 text-caption text-slate-400">BOM {bom.bom_no} · v{bom.version}</span>
                   )}
                 </div>
               </div>
@@ -1032,7 +1032,7 @@ function BomTab({ lines }: { lines: Line[]; soId?: number }) {
                   <Badge tone="blue">{bom.lines?.length ?? 0} components</Badge>
                   <a
                     href={`/masters/boms/${bom.id}`}
-                    className="inline-flex items-center gap-1 text-[12px] font-medium text-brand-600 hover:text-brand-800"
+                    className="inline-flex items-center gap-1 text-small font-medium text-brand-600 hover:text-brand-800"
                     target="_blank" rel="noreferrer"
                   >
                     Open BOM <ExternalLink size={11} />
@@ -1041,7 +1041,7 @@ function BomTab({ lines }: { lines: Line[]; soId?: number }) {
               ) : (
                 <a
                   href={`/masters/boms/new`}
-                  className="inline-flex items-center gap-1 text-[12px] font-medium text-amber-700 hover:text-amber-900 rounded-lg bg-amber-50 px-2.5 py-1 border border-amber-200"
+                  className="inline-flex items-center gap-1 text-small font-medium text-amber-700 hover:text-amber-900 rounded-lg bg-amber-50 px-2.5 py-1 border border-amber-200"
                   target="_blank" rel="noreferrer"
                 >
                   <Plus size={12} /> Create BOM
@@ -1087,12 +1087,12 @@ function BomTab({ lines }: { lines: Line[]; soId?: number }) {
                 </tbody>
               </table>
             ) : !bom ? (
-              <div className="flex items-center gap-2.5 px-4 py-5 text-[12.5px] text-amber-800 bg-amber-50">
+              <div className="flex items-center gap-2.5 px-4 py-5 text-body text-amber-800 bg-amber-50">
                 <AlertCircle size={15} />
                 No active BOM found for this style. Create a BOM to enable MRP explosion and material planning.
               </div>
             ) : (
-              <p className="px-4 py-5 text-[12.5px] text-slate-400">This BOM has no component lines yet.</p>
+              <p className="px-4 py-5 text-body text-slate-400">This BOM has no component lines yet.</p>
             )}
           </div>
         );
@@ -1159,8 +1159,8 @@ function RequirementsTab({ soId, soNo }: { soId: number; soNo: string }) {
             <PlayCircle size={28} />
           </div>
           <div className="text-center">
-            <p className="text-[15px] font-bold text-slate-800">No MRP run for this order</p>
-            <p className="mt-1 text-[13px] text-slate-500 max-w-sm">
+            <p className="text-title font-bold text-slate-800">No MRP run for this order</p>
+            <p className="mt-1 text-body text-slate-500 max-w-sm">
               Run Material Requirements Planning to explode the BOM against this order's quantities
               and calculate yarn, fabric and accessory needs.
             </p>
@@ -1181,15 +1181,15 @@ function RequirementsTab({ soId, soNo }: { soId: number; soNo: string }) {
       {/* Run summary bar */}
       <div className="card p-0 overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/60 px-4 py-3">
-          <div className="flex flex-wrap items-center gap-4 text-[12.5px]">
+          <div className="flex flex-wrap items-center gap-4 text-body">
             <span className="tabular-nums font-bold text-brand-700">{latestRun.mrp_no}</span>
             <span className="text-slate-500">Run date: <strong className="text-slate-800">{fmtDate(latestRun.run_date)}</strong></span>
             {shortfalls > 0 ? (
-              <span className="inline-flex items-center gap-1 rounded-md bg-red-50 border border-red-200 px-2 py-0.5 text-[11.5px] font-semibold text-red-700">
+              <span className="inline-flex items-center gap-1 rounded-md bg-red-50 border border-red-200 px-2 py-0.5 text-small font-semibold text-red-700">
                 <AlertCircle size={12} /> {shortfalls} shortfall{shortfalls !== 1 ? 's' : ''}
               </span>
             ) : requirements.length > 0 ? (
-              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[11.5px] font-semibold text-emerald-700">
+              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-small font-semibold text-emerald-700">
                 <CheckCircle size={12} /> All materials covered
               </span>
             ) : null}
@@ -1219,7 +1219,7 @@ function RequirementsTab({ soId, soNo }: { soId: number; soNo: string }) {
             <button
               key={key}
               onClick={() => setFilter(key)}
-              className={`rounded-full px-3 py-1 text-[12px] font-semibold transition-all border ${
+              className={`rounded-full px-3 py-1 text-small font-semibold transition-all border ${
                 filter === key
                   ? 'bg-brand-600 text-white border-brand-600 shadow-xs'
                   : 'bg-white text-slate-600 border-slate-200 hover:border-brand-300 hover:text-brand-700'
@@ -1258,7 +1258,7 @@ function RequirementsTab({ soId, soNo }: { soId: number; soNo: string }) {
                       <Badge tone={typeColor[r.material_type] as any ?? 'blue'}>{r.material_type}</Badge>
                     </td>
                     <td className="td font-medium text-slate-900">{name}</td>
-                    <td className="td text-[12px] tabular-nums text-slate-500">{r.style_code ?? '—'}</td>
+                    <td className="td text-small tabular-nums text-slate-500">{r.style_code ?? '—'}</td>
                     <td className="td text-right tabular-nums">{fmtDecimal(r.gross_required, 3)}</td>
                     <td className="td text-right tabular-nums text-emerald-700">{fmtDecimal(r.in_stock, 3)}</td>
                     <td className="td text-right tabular-nums text-blue-700">{fmtDecimal(r.on_order, 3)}</td>
@@ -1278,7 +1278,7 @@ function RequirementsTab({ soId, soNo }: { soId: number; soNo: string }) {
         ) : (
           <div className="flex flex-col items-center justify-center gap-2 py-10">
             <CheckCircle className="text-emerald-500" size={22} />
-            <p className="text-[13px] text-slate-500">No {filter !== 'ALL' ? filter.toLowerCase() : ''} requirements for this filter.</p>
+            <p className="text-body text-slate-500">No {filter !== 'ALL' ? filter.toLowerCase() : ''} requirements for this filter.</p>
           </div>
         )}
       </div>
@@ -1499,7 +1499,7 @@ function RatioSplitAssistant({
       <div className="mt-3.5 grid grid-cols-1 md:grid-cols-3 gap-3.5">
         {/* Mode Selector */}
         <div>
-          <label className="text-[11.5px] font-bold text-slate-700 uppercase tracking-wide block mb-1.5">
+          <label className="text-small font-bold text-slate-700 uppercase tracking-wide block mb-1.5">
             Distribution Mode
           </label>
           <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-lg border border-slate-200">
@@ -1530,7 +1530,7 @@ function RatioSplitAssistant({
 
         {/* Input Target */}
         <div>
-          <label className="text-[11.5px] font-bold text-slate-700 uppercase tracking-wide block mb-1.5">
+          <label className="text-small font-bold text-slate-700 uppercase tracking-wide block mb-1.5">
             {mode === 'target' ? 'Target Total Quantity (pcs)' : 'Number of Packs / Cartons'}
           </label>
           <input
@@ -1542,7 +1542,7 @@ function RatioSplitAssistant({
             placeholder={mode === 'target' ? 'e.g. 10000' : 'e.g. 500'}
           />
           {mode === 'target' && Number(targetQty) > 0 && excessPct > 0 && (
-            <p className="mt-1 text-[11px] text-amber-800 font-medium">
+            <p className="mt-1 text-caption text-amber-800 font-medium">
               +{excessPct}% Cutting Buffer: +{fmtNumber(Math.round(Number(targetQty) * excessPct / 100))} pcs → <strong className="font-bold">{fmtNumber(Math.round(Number(targetQty) * (1 + excessPct / 100)))} pcs Planned Cut</strong>
             </p>
           )}
@@ -1551,7 +1551,7 @@ function RatioSplitAssistant({
         {/* Colour Scope */}
         {colorGroups.length > 1 && !activeColorId ? (
           <div>
-            <label className="text-[11.5px] font-bold text-slate-700 uppercase tracking-wide block mb-1.5">
+            <label className="text-small font-bold text-slate-700 uppercase tracking-wide block mb-1.5">
               Apply to Colour
             </label>
             <select
@@ -1565,7 +1565,7 @@ function RatioSplitAssistant({
               ))}
             </select>
             {selectedColor === 'ALL' && mode === 'target' && (
-              <div className="mt-1.5 flex items-center gap-3 text-[11px] text-slate-600">
+              <div className="mt-1.5 flex items-center gap-3 text-caption text-slate-600">
                 <label className="flex items-center gap-1 cursor-pointer">
                   <input
                     type="radio"
@@ -1599,11 +1599,11 @@ function RatioSplitAssistant({
       {/* Preset Quick Buttons & Text Parser */}
       <div className="mt-3 pt-3 border-t border-slate-200">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-          <span className="text-[11.5px] font-bold text-slate-700 uppercase tracking-wide">
+          <span className="text-small font-bold text-slate-700 uppercase tracking-wide">
             Industry Ratio Presets:
           </span>
           <div className="flex items-center gap-1.5">
-            <span className="text-[11px] text-slate-500 font-medium">Quick Paste Ratio:</span>
+            <span className="text-caption text-slate-500 font-medium">Quick Paste Ratio:</span>
             <input
               type="text"
               placeholder="e.g. 1:2:3:2:1"
@@ -1646,9 +1646,9 @@ function RatioSplitAssistant({
                 key={s.size_code}
                 className="flex flex-col rounded-lg bg-white p-2 border border-slate-200 shadow-2xs text-center"
               >
-                <span className="text-xs font-extrabold text-slate-900 mb-1">{s.size_code}</span>
+                <span className="text-xs font-bold text-slate-900 mb-1">{s.size_code}</span>
                 <div className="flex items-center justify-center gap-1 mb-1.5">
-                  <span className="text-[11px] text-slate-400 font-semibold">Ratio:</span>
+                  <span className="text-caption text-slate-400 font-semibold">Ratio:</span>
                   <input
                     type="number"
                     min="0"
@@ -1660,9 +1660,9 @@ function RatioSplitAssistant({
                     className="w-12 rounded border border-slate-300 py-0.5 px-1 text-center font-bold text-brand-700 text-sm focus:border-brand-500 focus:outline-none"
                   />
                 </div>
-                <div className="mt-auto border-t border-slate-100 pt-1 text-[11px]">
+                <div className="mt-auto border-t border-slate-100 pt-1 text-caption">
                   <p className="font-bold text-slate-800 tabular-nums">{fmtNumber(pieces)} pcs</p>
-                  <p className="text-[10px] text-slate-400 font-medium">{pct}%</p>
+                  <p className="text-micro text-slate-400 font-medium">{pct}%</p>
                 </div>
               </div>
             );
@@ -1792,16 +1792,16 @@ function LineCard({
     <div className="card p-4">
       <div className="mb-3 flex items-center justify-between">
         <span className="flex items-center gap-1.5">
-          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-caption font-semibold text-slate-600">
             Line {index + 1}
           </span>
           {line.is_additional ? (
-            <span data-additional-tag className="rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+            <span data-additional-tag className="rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-caption font-semibold text-amber-800">
               Additional · {line.amendment_no ?? 'A?'}
             </span>
           ) : null}
           {line.cancelled_qty ? (
-            <span className="rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+            <span className="rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-caption font-semibold text-red-700">
               {fmtNumber(line.cancelled_qty)} cancelled
             </span>
           ) : null}
@@ -1832,18 +1832,18 @@ function LineCard({
         {/* Part Name — TOP / BOTTOM / COLLAR / CUFF / FOLDING; a set line covers every part of the set */}
         {setE ? (
           <div data-set-line>
-            <label className="mb-1 block text-[12px] font-medium text-slate-700">Sold as</label>
-            <div className="rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-[12px] font-semibold text-indigo-800"
+            <label className="mb-1 block text-small font-medium text-slate-700">Sold as</label>
+            <div className="rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-small font-semibold text-indigo-800"
               title="Saved as one line per part: pieces = sets × pieces per set">
               SET = {setLabel(setE)}
             </div>
           </div>
         ) : (
         <div>
-          <label className="mb-1 block text-[12px] font-medium text-slate-700">
+          <label className="mb-1 block text-small font-medium text-slate-700">
             Part
             {line.part_name && (
-              <span className={`ml-2 inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-bold ${
+              <span className={`ml-2 inline-flex items-center rounded border px-1.5 py-0.5 text-micro font-bold ${
                 line.part_name === 'TOP'    ? 'bg-sky-100 text-sky-800 border-sky-200' :
                 line.part_name === 'BOTTOM' ? 'bg-violet-100 text-violet-800 border-violet-200' :
                 line.part_name === 'COLLAR' ? 'bg-rose-100 text-rose-800 border-rose-200' :
@@ -1905,9 +1905,9 @@ function LineCard({
       <div className="mt-4">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-3">
-            <p className="text-[12px] font-semibold text-slate-700">Size-wise breakdown{setE ? ' — in SETS' : ''}</p>
+            <p className="text-small font-semibold text-slate-700">Size-wise breakdown{setE ? ' — in SETS' : ''}</p>
             {isSetStyle && editable && (
-              <label className="flex cursor-pointer items-center gap-1.5 rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[11.5px] font-semibold text-indigo-800"
+              <label className="flex cursor-pointer items-center gap-1.5 rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-small font-semibold text-indigo-800"
                 title="A set style is sold in sets; untick to enter one part (TOP / BOTTOM …) in pieces on this line">
                 <input type="checkbox" id={`line-as-set-${line._key}`} checked={!!setE}
                   onChange={(e) => onChange(e.target.checked
@@ -1936,7 +1936,7 @@ function LineCard({
             )}
           </div>
           {lineQty > 0 && (
-            <div className="flex flex-wrap items-center gap-2.5 text-[11.5px]">
+            <div className="flex flex-wrap items-center gap-2.5 text-small">
               <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 font-medium text-slate-700 border border-slate-200">
                 Order: <strong className="font-bold text-slate-900">{fmtNumber(lineQty)}</strong> {unitWord}
                 {setE && <> = <strong className="font-bold text-slate-900">{fmtNumber(lineQty * pps)}</strong> pcs</>}
@@ -1983,13 +1983,13 @@ function LineCard({
         )}
 
         {!line.style_id ? (
-          <p className="rounded-lg bg-surface-muted px-3 py-3 text-[12.5px] text-slate-400">
+          <p className="rounded-lg bg-surface-muted px-3 py-3 text-body text-slate-400">
             Select a style to enter size-wise quantities.
           </p>
         ) : skus.isLoading ? (
           <div className="skeleton h-14" />
         ) : visibleSkus.length === 0 ? (
-          <p className="rounded-lg bg-amber-50 px-3 py-3 text-[12.5px] text-amber-800">
+          <p className="rounded-lg bg-amber-50 px-3 py-3 text-body text-amber-800">
             This style has no SKUs yet. Generate them from the style screen first.
           </p>
         ) : (
@@ -2022,7 +2022,7 @@ function LineCard({
                         <td key={s.id} className="td p-1 text-center">
                           <input type="number" min={0} disabled={!editable}
                             className="w-[68px] rounded-md border border-surface-border px-1.5 py-1 text-center
-                                       text-[12.5px] tabular-nums focus:border-brand-500 focus:outline-none
+                                       text-body tabular-nums focus:border-brand-500 focus:outline-none
                                        focus:ring-1 focus:ring-brand-500/25 disabled:bg-slate-50"
                             value={line.skus[s.id] ?? ''}
                             placeholder="0"
@@ -2039,13 +2039,13 @@ function LineCard({
                 {/* Size-wise excess %: blank = line / header default */}
                 <tr className="bg-amber-50/50">
                   {!line.color_id && (
-                    <td className="td whitespace-nowrap text-[11.5px] font-semibold text-amber-800">Excess %</td>
+                    <td className="td whitespace-nowrap text-small font-semibold text-amber-800">Excess %</td>
                   )}
                   {distinctSizes.map((sz) => (
                     <td key={sz.size_code} className="td p-1 text-center">
                       <input type="number" min={0} max={100} step="0.1" disabled={!editable}
                         className="w-[68px] rounded-md border border-amber-200 bg-white px-1.5 py-1 text-center
-                                   text-[12px] tabular-nums focus:border-amber-500 focus:outline-none
+                                   text-small tabular-nums focus:border-amber-500 focus:outline-none
                                    focus:ring-1 focus:ring-amber-500/25 disabled:bg-slate-50"
                         value={sizeExcessValue(sz.size_code)}
                         placeholder={`${lineExcessPct}`}
@@ -2053,16 +2053,16 @@ function LineCard({
                         onChange={(e) => setSizeExcess(sz.size_code, e.target.value)} />
                     </td>
                   ))}
-                  <td className="td text-right text-[11px] text-amber-800">
+                  <td className="td text-right text-caption text-amber-800">
                     {line.color_id ? 'Excess %' : ''}
                   </td>
                 </tr>
                 <tr className="bg-brand-50/40">
                   {!line.color_id && (
-                    <td className="td whitespace-nowrap text-[11.5px] font-semibold text-brand-800">Planned cut</td>
+                    <td className="td whitespace-nowrap text-small font-semibold text-brand-800">Planned cut</td>
                   )}
                   {distinctSizes.map((sz) => (
-                    <td key={sz.size_code} className="td text-center text-[12px] font-semibold tabular-nums text-brand-900">
+                    <td key={sz.size_code} className="td text-center text-small font-semibold tabular-nums text-brand-900">
                       {fmtNumber(sizePlanCut(sz.size_code))}
                     </td>
                   ))}
@@ -2081,13 +2081,13 @@ function LineCard({
           const lead = setE.parts[0]?.part_name;
           return (
             <div className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50/40 p-3" data-set-parts>
-              <p className="mb-2 text-[12px] font-semibold text-indigo-900">
+              <p className="mb-2 text-small font-semibold text-indigo-900">
                 Parts of each set — saved as {setE.parts.length} part lines ({setE.parts.map((p) => `${p.part_name} ${fmtNumber(lineQty * p.qty_per_set)} pcs`).join(' · ')})
               </p>
               {setColours.length === 0 ? (
-                <p className="text-[11.5px] text-slate-500">Enter the sets per colour and size above; the set colour is the {lead} colour.</p>
+                <p className="text-small text-slate-500">Enter the sets per colour and size above; the set colour is the {lead} colour.</p>
               ) : (
-                <table className="text-[12px]">
+                <table className="text-small">
                   <thead>
                     <tr>
                       <th className="th">Set colour ({lead})</th>
@@ -2100,7 +2100,7 @@ function LineCard({
                         <td className="td font-medium">{cname}</td>
                         {setE.parts.slice(1).map((p) => (
                           <td key={p.part_name} className="td p-1">
-                            <select className="input py-1 text-[12px]" disabled={!editable} id={`set-colour-${line._key}-${p.part_name}-${cid}`}
+                            <select className="input py-1 text-small" disabled={!editable} id={`set-colour-${line._key}-${p.part_name}-${cid}`}
                               value={setE.color_map[p.part_name]?.[cid] ?? cid}
                               onChange={(e) => onChange({ set: { ...setE, color_map: { ...setE.color_map, [p.part_name]: { ...(setE.color_map[p.part_name] ?? {}), [cid]: Number(e.target.value) } } } })}>
                               {(colors.data ?? []).map((c) => <option key={c.id} value={c.id}>{c.label}{Number(c.id) === cid ? ' (same)' : ''}</option>)}
@@ -2131,7 +2131,7 @@ function SetStatusTab({ soId }: { soId: number }) {
     queryFn: async () => (await http.get<{ data: any }>(`/sales-orders/${soId}/set-status`)).data,
   });
   if (q.isLoading) return <div className="skeleton h-40" />;
-  if (q.isError || !q.data) return <p className="text-[12.5px] text-red-600">Could not load the set status.</p>;
+  if (q.isError || !q.data) return <p className="text-body text-red-600">Could not load the set status.</p>;
   const T = q.data.totals;
   const STAGES: [string, string][] = [['ordered', 'Ordered'], ['cut', 'Cut'], ['qc_passed', 'Final QC passed'], ['fg_received', 'FG received'], ['ready', 'Ready to pack'], ['packed', 'Packed'], ['balance', 'Balance to pack']];
   return (
@@ -2139,20 +2139,20 @@ function SetStatusTab({ soId }: { soId: number }) {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
         {[...STAGES, ['invoiced', 'Invoiced'] as [string, string]].map(([k, label]) => (
           <div key={k} className="card px-3 py-2">
-            <div className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-500">{label}</div>
-            <div className="text-lg font-bold tabular-nums text-slate-900" data-total={k}>{fmtNumber(T[k] ?? 0)} <span className="text-[11px] font-medium text-slate-400">sets</span></div>
+            <div className="text-caption font-semibold uppercase tracking-wider text-slate-500">{label}</div>
+            <div className="text-lg font-bold tabular-nums text-slate-900" data-total={k}>{fmtNumber(T[k] ?? 0)} <span className="text-caption font-medium text-slate-400">sets</span></div>
           </div>
         ))}
       </div>
-      <p className="text-[11.5px] text-slate-500">
+      <p className="text-small text-slate-500">
         Each stage counts complete sets: the smallest number of sets every part can make (pieces ÷ pieces per set). Unmatched = pieces of a part in the FG store waiting for their partner part.
       </p>
       {q.data.groups.map((g: any) => (
         <div key={g.set_group} className="card overflow-x-auto p-0">
-          <div className="border-b border-slate-100 px-4 py-2 text-[12.5px] font-semibold text-slate-800">
+          <div className="border-b border-slate-100 px-4 py-2 text-body font-semibold text-slate-800">
             {g.style_code} · Set {g.set_group} = {g.parts.map((p: any) => `${p.qty_per_set > 1 ? `${p.qty_per_set} ` : ''}${p.part}`).join(' + ')}
           </div>
-          <table className="w-full text-[12.5px]">
+          <table className="w-full text-body">
             <thead>
               <tr>
                 <th className="th">Set colour</th><th className="th">Size</th>
@@ -2166,7 +2166,7 @@ function SetStatusTab({ soId }: { soId: number }) {
                   <td className="td font-medium">{r.set_colour}</td>
                   <td className="td">{r.size_code}</td>
                   {STAGES.map(([k]) => <td key={k} className={`td text-right tabular-nums ${k === 'balance' && r[k] > 0 ? 'font-semibold text-amber-700' : ''}`}>{fmtNumber(r[k])}</td>)}
-                  <td className="td text-[11.5px]">
+                  <td className="td text-small">
                     {r.parts.filter((p: any) => p.unmatched_pcs > 0).map((p: any) => (
                       <span key={p.part} className="mr-1.5 inline-block rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-amber-800"
                         title={`${p.part} ${p.color_name ?? ''}: ${p.on_hand_pcs} in FG store`}>{p.part} +{fmtNumber(p.unmatched_pcs)}</span>
@@ -2179,7 +2179,7 @@ function SetStatusTab({ soId }: { soId: number }) {
           </table>
         </div>
       ))}
-      {!q.data.groups.length && <p className="text-[12.5px] text-slate-500">This order has no set lines.</p>}
+      {!q.data.groups.length && <p className="text-body text-slate-500">This order has no set lines.</p>}
     </div>
   );
 }

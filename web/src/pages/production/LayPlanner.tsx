@@ -30,7 +30,7 @@ function FlowChip({ status }: { status: string }) {
     READY_FOR_CUTTING: 'bg-orange-100 text-orange-800', CUT: 'bg-emerald-100 text-emerald-800', APPROVED: 'bg-emerald-200 text-emerald-900',
     CANCELLED: 'bg-red-100 text-red-700',
   };
-  return <span className={`inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${tone[status] ?? 'bg-slate-100 text-slate-700'}`}>{flowLabel(status)}</span>;
+  return <span className={`inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-caption font-semibold ${tone[status] ?? 'bg-slate-100 text-slate-700'}`}>{flowLabel(status)}</span>;
 }
 
 /* ================================================================== workbench */
@@ -171,9 +171,9 @@ export function LayPlannerTab({ initialPlanId, onExecute, onChanged, reloadSigna
                           onChange={(e) => setSel((s) => (e.target.checked ? [...s, m.usable.id] : s.filter((x) => x !== m.usable.id)))} /></td>
                         <td className="p-2 font-semibold">{m.marker_ref} <span className="font-normal text-slate-400">{m.source}</span></td>
                         <td className="p-2">{v ? `v${v.version}` : '—'}{m.versions.length > 1 && <span className="text-slate-400"> ({m.versions.length})</span>}</td>
-                        <td className="p-2">{v ? <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${v.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{v.status}</span> : <span className="text-amber-700">not imported</span>}
-                          {v?.approved_by_name && <span className="block text-[10px] text-slate-400">{v.approved_by_name}</span>}</td>
-                        <td className="p-2">{m.fabric_type || '—'}{m.fabric_match === false && <span className="block text-[10px] text-red-600">other fabric</span>}{!m.has_colour && <span className="block text-[10px] text-red-600">colour not on marker</span>}</td>
+                        <td className="p-2">{v ? <span className={`rounded px-1.5 py-0.5 text-micro font-bold ${v.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{v.status}</span> : <span className="text-amber-700">not imported</span>}
+                          {v?.approved_by_name && <span className="block text-micro text-slate-400">{v.approved_by_name}</span>}</td>
+                        <td className="p-2">{m.fabric_type || '—'}{m.fabric_match === false && <span className="block text-micro text-red-600">other fabric</span>}{!m.has_colour && <span className="block text-micro text-red-600">colour not on marker</span>}</td>
                         <td className="p-2 tabular-nums">{ratioText(m.sizes, m.ratios)}</td>
                         <td className="p-2 text-right"><Qty v={m.ppm} uom="PCS" /></td>
                         <td className="p-2 text-right"><Qty v={v?.length_m ?? m.length_m} uom="M" dp={3} /></td>
@@ -277,7 +277,7 @@ export function LayPlannerTab({ initialPlanId, onExecute, onChanged, reloadSigna
                         <td className="p-1 text-right">{fmtNumber(x.planned)}</td><td className={`p-1 text-right ${x.residual > 0 ? 'font-semibold text-amber-700' : ''}`}>{fmtNumber(x.residual)}</td>
                         <td className="p-1 text-right">{x.over > 0 ? `+${fmtNumber(x.over)} (${x.over_pct}%)` : '—'}</td></tr>))}</tbody>
                   </table>
-                  <p className="mt-1 text-[11px] text-slate-500">Tolerance {preview.settings?.size_tolerance_pct}% per size (Admin › Settings › CUT_SIZE_TOLERANCE_PCT).</p>
+                  <p className="mt-1 text-caption text-slate-500">Tolerance {preview.settings?.size_tolerance_pct}% per size (Admin › Settings › CUT_SIZE_TOLERANCE_PCT).</p>
                 </div>
                 <div className="space-y-2">
                   {preview.markers.map((m: any) => <p key={m.marker_version_id} className="text-xs">Marker <b>{m.marker_no} v{m.version}</b>: {m.ppm} PCS/marker · required marker units <b>{m.required_marker_units}</b> · {m.plies} plies in {m.lays} lay(s) · {fmtNumber(m.output_pcs)} PCS</p>)}
@@ -435,7 +435,7 @@ function RollAllocationModal({ lay, onClose, onSaved }: { lay: any; onClose: () 
           <MetricTile label="Not eligible" value={ineligible.length} tone={ineligible.length ? 'amber' : 'slate'} />
         </div>
         <p className="text-slate-500">Rule (doc §8–§10): same job, colour, fabric, QC passed, GSM / width within tolerance; same shade / lot for one lay first, then FIFO; the last roll is taken partly and keeps its balance. Nothing is consumed until the lay is cut.</p>
-        <h3 className="border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Eligible rolls</h3>
+        <h3 className="border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Eligible rolls</h3>
         <table className="w-full border" id="alloc-rolls">
           <thead className="bg-slate-50 text-left text-slate-600"><tr><th className="p-1.5">Roll</th><th className="p-1.5">Shade / Lot</th><th className="p-1.5">GRN</th><th className="p-1.5 text-right">GSM</th><th className="p-1.5 text-right">Width</th>
             <th className="p-1.5 text-right">Roll KG</th><th className="p-1.5 text-right">Free KG</th><th className="p-1.5 text-right">Free M</th><th className="p-1.5">Store</th><th className="p-1.5 w-36">Allocate (KG)</th><th className="p-1.5 text-right">Balance after</th></tr></thead>
@@ -495,7 +495,7 @@ function IssueModal({ lay, onClose, onSaved }: { lay: any; onClose: () => void; 
           <Input label="From" value={f.from_location} onChange={(e) => setF({ ...f, from_location: e.target.value })} />
           <Input label="To" value={f.to_location} onChange={(e) => setF({ ...f, to_location: e.target.value })} />
         </FormSection>
-        <h3 className="border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Reserved rolls</h3>
+        <h3 className="border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Reserved rolls</h3>
         <table className="w-full border"><thead className="bg-slate-50 text-left"><tr><th className="p-1.5">Roll</th><th className="p-1.5">Shade / Lot</th><th className="p-1.5">Store</th><th className="p-1.5 text-right">Issue KG</th><th className="p-1.5 text-right">Issue M</th><th className="p-1.5 text-right">Stays on roll</th></tr></thead>
           <tbody>{allocs.map((a) => <tr key={a.id} className="border-t"><td className="p-1.5 tabular-nums">{a.roll_no}</td><td className="p-1.5">{a.shade || '—'} / {a.lot_no || '—'}</td><td className="p-1.5">{a.warehouse_name}{a.location_bin ? ` · ${a.location_bin}` : ''}</td>
             <td className="p-1.5 text-right font-semibold"><Qty v={a.alloc_kg} uom="KG" dp={3} /></td><td className="p-1.5 text-right"><Qty v={a.alloc_m} uom="M" dp={1} /></td><td className="p-1.5 text-right"><Qty v={a.roll_balance_kg} uom="KG" dp={3} /></td></tr>)}</tbody>
@@ -577,7 +577,7 @@ function FlowSpreadingModal({ lay, onClose, onSaved }: { lay: any; onClose: () =
             <Input className="sm:col-span-2" label={`Variance reason${plyChanged || overFabric ? ' *' : ''}`} value={reason} onChange={(e) => setReason(e.target.value)} id="sp-reason"
               hint={plyChanged ? `Ply ${ply} differs from the planned ${sp.ply_planned}` : overFabric ? 'Fabric is over the plan' : 'Only when the ply or fabric differs from the plan'} />
           </FormSection>
-          <h3 className="border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Roll-wise actuals</h3>
+          <h3 className="border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Roll-wise actuals</h3>
           <table className="w-full border" id="sp-rolls">
             <thead className="bg-slate-50 text-left text-slate-600"><tr><th className="p-1.5">Roll</th><th className="p-1.5 text-right">Planned KG</th><th className="p-1.5 text-right">Planned M</th>
               <th className="p-1.5 w-24">Plies</th><th className="p-1.5 w-32">Actual KG</th><th className="p-1.5 w-32">Actual M</th><th className="p-1.5 w-28">End loss M</th><th className="p-1.5 w-28">Splice loss M</th></tr></thead>
@@ -680,7 +680,7 @@ export function PlannedVsActual({ planId }: { planId: string }) {
   useEffect(() => { if (planId) api.get(`/cutting-plans/${planId}/planned-vs-actual`).then((r) => setD(r.data.data)); }, [planId]);
   if (!d || !d.lays.length) return null;
   const pa = (x: { planned: any; actual: any }, dp = 0, uom = '') => (
-    <span className="whitespace-nowrap">{x.planned != null ? fmtNumber(x.planned, dp) : '—'} <span className="text-slate-400">/</span> <b className={x.actual != null && x.planned != null && n(x.actual) !== n(x.planned) ? 'text-amber-700' : 'text-emerald-700'}>{x.actual != null ? fmtNumber(x.actual, dp) : '—'}</b>{uom ? <span className="text-[10px] text-slate-400"> {uom}</span> : null}</span>
+    <span className="whitespace-nowrap">{x.planned != null ? fmtNumber(x.planned, dp) : '—'} <span className="text-slate-400">/</span> <b className={x.actual != null && x.planned != null && n(x.actual) !== n(x.planned) ? 'text-amber-700' : 'text-emerald-700'}>{x.actual != null ? fmtNumber(x.actual, dp) : '—'}</b>{uom ? <span className="text-micro text-slate-400"> {uom}</span> : null}</span>
   );
   return (
     <Card title="Planned vs actual (CAD plan / actual)" subtitle={d.notes}>
@@ -692,7 +692,7 @@ export function PlannedVsActual({ planId }: { planId: string }) {
             <tr key={l.lay_id} className="border-b"><td className="p-2 tabular-nums">{l.lay_no}</td><td className="p-2"><FlowChip status={l.status} /></td>
               <td className="p-2">{pa(l.garment_qty, 0, 'PCS')}</td><td className="p-2">{pa(l.marker_length_m, 3, 'm')}</td><td className="p-2">{pa(l.ply)}</td>
               <td className="p-2">{pa(l.fabric_m, 2, 'm')}</td><td className="p-2">{pa(l.fabric_kg, 3, 'KG')}</td>
-              <td className="p-2">{pa(l.waste_kg, 3, 'KG')}{l.waste_kg.recorded_losses ? <div className="text-[10px] text-slate-500">recorded loss {l.waste_kg.recorded_losses} KG</div> : null}</td>
+              <td className="p-2">{pa(l.waste_kg, 3, 'KG')}{l.waste_kg.recorded_losses ? <div className="text-micro text-slate-500">recorded loss {l.waste_kg.recorded_losses} KG</div> : null}</td>
               <td className="p-2">{pa(l.efficiency_pct, 2)}</td><td className="p-2 text-slate-600">{l.variance_reason || ''}</td></tr>
           ))}</tbody>
           <tfoot><tr className="font-semibold"><td className="p-2" colSpan={2}>Total</td><td className="p-2">{pa({ planned: d.totals.garment_planned, actual: d.totals.garment_actual })}</td><td />
