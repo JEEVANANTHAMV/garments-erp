@@ -120,7 +120,7 @@
      the table scrolls. Dropdowns in cells keep room for their value next to the chevron. */
   td input:is([type="text"], :not([type])) { field-sizing: content; inline-size: auto; min-inline-size: 100%; }
   td:has(> input:is([type="text"], :not([type])), > div > input:is([type="text"], :not([type]))) { min-width: 5rem; }
-  td select, td select.input { min-inline-size: 5.5rem; }
+  td select, td select.input { field-sizing: content; inline-size: auto; min-inline-size: max(5.5rem, 100%); }
   td.text-right, th.text-right { white-space: nowrap; font-variant-numeric: tabular-nums; }
   td.text-right { overflow: visible; text-overflow: clip; max-width: none; }
   .app-sidebar { background: theme('colors.surface.sidebar'); }
