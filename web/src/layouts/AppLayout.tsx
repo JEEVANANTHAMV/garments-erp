@@ -354,7 +354,7 @@ export default function AppLayout() {
             onClick={() => setDesktopOpen((v) => !v)} aria-label={desktopOpen ? 'Collapse navigation' : 'Expand navigation'} aria-expanded={desktopOpen}>
             <Menu size={18} />
           </button>
-          <div className="relative min-w-0 flex-1 max-w-[535px]" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setSearchOpen(false); }}>
+          <div className="relative min-w-0 flex-initial basis-[535px]" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setSearchOpen(false); }}>
             <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-secondary" />
             <input className="input pl-9" id="global-search" aria-label="Search records and screens" placeholder="Search anything (PO, Style, Job, Fabric, etc...)"
               value={globalSearch} onFocus={() => setSearchOpen(true)} autoComplete="off"

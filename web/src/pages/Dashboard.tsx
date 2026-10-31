@@ -142,7 +142,7 @@ export default function Dashboard() {
           {can('PRODUCTION.VIEW') && <Kpi icon={Package} color={chartColors.packing} label="Production Jobs" value={fmtNumber(data.production.total_prod_orders)} caption={`${fmtNumber(data.production.in_progress)} in progress`} trend={trend(jobsNow.data, jobsPrev.data)} />}
           {can('PRODUCTION.VIEW') && <Kpi icon={Factory} color={chartColors.finishing} label="Today Output" value={recentOutput.data ? fmtNumber(sewnOn(date)) : '—'} unit="Pcs" caption="Sewn today · all lines" query={recentOutput} trend={recentOutput.data ? trendPct(sewnOn(date), sewnOn(yesterday)) : null} trendLabel="vs yesterday" />}
           {can('DISPATCH.VIEW') && <Kpi icon={Truck} color={chartColors.dispatch} label="Dispatches" value={fmtNumber(dispatches.data?.total)} caption={`${fmtNumber(dispatches.data?.now ?? 0)} this month`} query={dispatches} trend={dispatches.data ? trendPct(dispatches.data.now, dispatches.data.prev) : null} />}
-          {can('INVENTORY.VIEW') && <Kpi icon={Layers} color={chartColors.inventory} label="Fabric Stock" value={stock.data ? (fabric.totals.length ? fabric.totals.map((t) => `${fmtNumber(t.value, 2)} ${t.unit}`).join(' / ') : '0') : '—'} caption="Current balance by unit" query={stock} />}
+          {can('INVENTORY.VIEW') && <Kpi icon={Layers} color={chartColors.inventory} label="Fabric Stock" value={stock.data ? (fabric.totals.length ? fabric.totals.map((t) => fmtNumber(t.value, 2)).join(' / ') : '0') : '—'} unit={fabric.totals.map((t) => t.unit).join(' / ') || undefined} caption="Current balance by unit" query={stock} />}
         </div>
         <div className="dashboard-grid dashboard-charts">
           {can('PRODUCTION.VIEW') && <Panel title="Production Progress" action={<Period value={period} onChange={setPeriod} />}>
@@ -265,7 +265,8 @@ function Kpi({ icon: Icon, color, label, value, unit, caption, query, trend, tre
       {query?.isLoading ? <div className="skeleton my-1 h-7 w-20" aria-label={`Loading ${label}`} />
         : query?.error ? <button className="py-1 text-xs text-brand-700 underline" onClick={() => void query.refetch()}>Unable to load · Retry</button>
         : <div className="flex flex-wrap items-baseline gap-x-2">
-            <p tabIndex={0} className="dashboard-kpi-value font-bold leading-tight text-ink-heading">{value}{unit && <span className="ml-1 text-small font-normal text-ink-secondary">{unit}</span>}</p>
+            <p tabIndex={0} className="dashboard-kpi-value font-bold leading-tight text-ink-heading">{value}</p>
+            {unit && <span className="text-small text-ink-secondary">{unit}</span>}
             {trend != null && <span title={trendLabel} className={`inline-flex items-center gap-0.5 text-small font-semibold ${up ? 'text-status-success-text' : 'text-status-error-text'}`}>
               {up ? <ArrowUp size={12} /> : <ArrowDown size={12} />}{up ? '+' : ''}{trend}%<span className="sr-only"> {trendLabel}</span></span>}
           </div>}
